@@ -41,7 +41,7 @@ def parse_summary(markdown):
     blocks = {key: '\n'.join(lines).strip() for key, lines in sections.items()}
     text = blocks['characters']
     markers = list(re.finditer(r'^(?:#{1,6}\s*)?(?:\*\*)?👤\s*(.+)$', text, re.M))
-    if len(markers) != 7:
+    if len(markers) != 8:
         raise ValueError(f'Ожидается 7 персонажей с маркером 👤, найдено: {len(markers)}.')
     characters = []
     for i, marker in enumerate(markers):
@@ -59,7 +59,7 @@ def parse_summary(markdown):
                            'text': body, 'fields': fields})
     if sum(c['is_player'] for c in characters) != 1 or not characters[0]['is_player']:
         raise ValueError('Первый персонаж должен быть единственным ГГ с отметкой (ГГ).')
-    if len({c['name'].casefold() for c in characters}) != 7:
+    if len({c['name'].casefold() for c in characters}) != 8:
         raise ValueError('Имена персонажей повторяются.')
     relationships = [{'source_id': c['id'], 'target_name': key[len('Отношение к '):], 'text': value}
                      for c in characters for key, value in c['fields'].items()
