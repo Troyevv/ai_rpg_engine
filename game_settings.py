@@ -7,7 +7,7 @@ def render_game_settings():
     with st.sidebar:
         st.header('Настройки игры')
         st.toggle('Выделять имена персонажей', value=True, key='game_link_names')
-        st.slider('Размер текста', 14, 24, 17, key='game_font_size')
+        st.caption('Размер и интервалы текста — в «Настройках текста» над чатом.')
         with st.expander('Модель ведущего'):
             # Browsing the game makes no network requests until explicitly requested.
             if st.button('Обновить список моделей', key='game_refresh_models'):

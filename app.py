@@ -11,6 +11,7 @@ if notice:
 # Preserve mode-specific widget choices when their tab/panel is not mounted.
 for key in list(st.session_state):
     if key.startswith(('gen_', 'save_picker_')) or key in {
+        'game_line_height', 'game_reading_width', 'game_character_search', 'game_character_scope',
         'world_picker', 'game_selected_character', 'game_panel_section',
         'game_link_names', 'game_font_size', 'game_model', 'game_context',
         'game_batch', 'game_flash', 'game_kv', 'game_temperature', 'game_max_tokens',

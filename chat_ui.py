@@ -11,6 +11,8 @@ def open_character(character_id, characters):
         return False
     st.session_state.game_selected_character = character_id
     st.session_state.game_panel_section = 'Персонажи'
+    st.session_state.game_character_search = ''
+    st.session_state.game_character_scope = 'Все'
     st.session_state.game_panel_open = True
     return True
 
@@ -25,7 +27,8 @@ def narrative(text, characters, key, context):
     npc_links = components.component('rpg_npc_links', js=(UI / 'npc_links.js').read_text(),
                                       css=(UI / 'npc_links.css').read_text())
     npc_links(data={'html': linked_markdown(text, characters if st.session_state.get('game_link_names', True) else []),
-                    'font_size': st.session_state.get('game_font_size', 17)}, key=key,
+                    'font_size': st.session_state.get('game_font_size', 17),
+                    'line_height': st.session_state.get('game_line_height', 1.7)}, key=key,
               on_character_change=on_character)
 
 

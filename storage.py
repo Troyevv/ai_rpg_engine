@@ -107,3 +107,17 @@ class Storage:
         with self.connect() as db:
             return [dict(row) for row in db.execute(
                 'SELECT id,sequence,user_text,assistant_text FROM turns WHERE save_id=? ORDER BY sequence', (save_id,))]
+
+    def update_scene_meta(self, save_id, metadata):
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT state_json FROM saves WHERE id=?', (save_id,)).fetchone()
+            if row is None:
+                raise ValueError('Прохождение не найдено.')
+            state = json.loads(row['state_json'])
+            known = {c['id'] for c in state['characters']}
+            if any(cid not in known for cid in metadata['present_ids']):
+                raise ValueError('В сцене указан неизвестный персонаж.')
+            state['scene_meta'] = metadata
+            db.execute("UPDATE saves SET state_json=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+                       (json.dumps(state, ensure_ascii=False), save_id))

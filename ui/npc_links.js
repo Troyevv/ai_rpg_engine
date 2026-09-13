@@ -2,6 +2,7 @@ export default function(component) {
     const {data, parentElement, setTriggerValue} = component;
     const article = document.createElement('article');
     article.className = 'narrative';
+    article.style.lineHeight = String(Number(data.line_height) || 1.7);
     article.style.fontSize = `${Number(data.font_size) || 17}px`;
     // HTML is rendered by MarkdownIt with raw HTML disabled on the Python side.
     article.innerHTML = data.html;
