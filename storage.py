@@ -102,3 +102,8 @@ class Storage:
             result = dict(row)
             result['state'] = json.loads(result.pop('state_json'))
             return result
+
+    def list_turns(self, save_id):
+        with self.connect() as db:
+            return [dict(row) for row in db.execute(
+                'SELECT id,sequence,user_text,assistant_text FROM turns WHERE save_id=? ORDER BY sequence', (save_id,))]

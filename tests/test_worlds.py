@@ -91,7 +91,9 @@ def test_streamlit_offline_world_selection_and_save(tmp_path, monkeypatch):
     world_id = db.save_world('Тестовый мир', summary())
     with patch('generator_ui.get_available_models', side_effect=ConnectionError('offline')), \
          patch('generator_ui.get_loaded_models', return_value=[]):
-        app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py')).run()
+        app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py'))
+        app.session_state['app_mode'] = 'Игра'
+        app.run()
         assert not app.exception
         assert [tab.label for tab in app.tabs] == ['Генерация выжимки', 'Игра']
         assert app.selectbox(key='world_picker').value == world_id
@@ -115,6 +117,7 @@ def test_generator_save_form(tmp_path, monkeypatch):
         next(button for button in app.button if button.label == 'Сохранить выжимку').click().run()
         assert not app.exception
         assert Storage().list_worlds()[0]['name'] == 'Новый мир'
+        app.session_state['app_mode'] = 'Игра'
         app.run()
         assert not app.exception
         assert app.selectbox(key='world_picker').value == Storage().list_worlds()[0]['id']

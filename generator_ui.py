@@ -374,6 +374,7 @@ def render_generator():
         selected_model = st.selectbox(
             "Модель",
             available_models,
+            key="gen_model",
         )
 
         st.subheader(
@@ -382,6 +383,7 @@ def render_generator():
 
         context_length = st.selectbox(
             "Контекст",
+            key="gen_context",
             options=[
                 8192,
                 16384,
@@ -395,6 +397,7 @@ def render_generator():
 
         eval_batch_size = st.selectbox(
             "Eval Batch Size",
+            key="gen_batch",
             options=[
                 256,
                 512,
@@ -406,11 +409,13 @@ def render_generator():
 
         flash_attention = st.toggle(
             "Flash Attention",
+            key="gen_flash",
             value=True,
         )
 
         kv_cache_gpu = st.toggle(
             "KV-cache на GPU",
+            key="gen_kv",
             value=True,
         )
 
@@ -497,6 +502,7 @@ def render_generator():
 
         idea_temperature = st.slider(
             "Temperature сценариста",
+            key="gen_idea_temperature",
             min_value=0.0,
             max_value=1.5,
             value=1.0,
@@ -505,6 +511,7 @@ def render_generator():
 
         summary_temperature = st.slider(
             "Temperature выжимки",
+            key="gen_summary_temperature",
             min_value=0.0,
             max_value=1.5,
             value=0.8,
@@ -513,6 +520,7 @@ def render_generator():
 
         idea_max_tokens = st.number_input(
             "Max tokens сценариста",
+            key="gen_idea_max_tokens",
             min_value=1000,
             max_value=16000,
             value=6000,
@@ -521,6 +529,7 @@ def render_generator():
 
         summary_max_tokens = st.number_input(
             "Max tokens выжимки",
+            key="gen_summary_max_tokens",
             min_value=2000,
             max_value=32000,
             value=12000,
