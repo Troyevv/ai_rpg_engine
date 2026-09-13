@@ -6,10 +6,6 @@ LM_STUDIO_URL = "http://localhost:1234"
 OPENAI_BASE_URL = f"{LM_STUDIO_URL}/v1"
 
 
-client = OpenAI(
-    base_url=OPENAI_BASE_URL,
-    api_key="lm-studio",
-)
 
 
 # =========================================================
@@ -206,19 +202,25 @@ def chat_stream(
     messages: list[dict],
     temperature: float = 0.7,
     max_tokens: int = 8000,
+    require_complete: bool = False,
 ):
-    stream = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        stream=True,
-    )
-
+    client = OpenAI(base_url=OPENAI_BASE_URL, api_key="lm-studio")
+    stream = None
+    finish_reason = None
     try:
+        stream = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=True,
+        )
         for chunk in stream:
             if not chunk.choices:
                 continue
+
+            if chunk.choices[0].finish_reason is not None:
+                finish_reason = chunk.choices[0].finish_reason
 
             delta = chunk.choices[0].delta
 
@@ -231,11 +233,16 @@ def chat_stream(
             if content:
                 yield content
 
+        if require_complete and finish_reason != "stop":
+            raise RuntimeError("Выжимка не завершена: увеличь лимит ответа/контекста и повтори генерацию.")
+
     finally:
         # Важно для кнопки остановки:
         # если Streamlit прервёт текущий run,
         # соединение с LM Studio будет закрыто.
         try:
-            stream.close()
+            if stream is not None:
+                stream.close()
         except Exception:
             pass
+        client.close()
