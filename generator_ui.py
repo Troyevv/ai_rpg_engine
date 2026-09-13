@@ -274,6 +274,10 @@ def ensure_selected_model_loaded(
 
 
 def render_generator():
+    import engine
+    if engine.busy():
+        st.info('Идёт игровой ход. Дождись завершения или останови его во вкладке «Игра».')
+        return
     global IDEA_PROMPT, SUMMARY_PROMPT, SUMMARY_TEMPLATE
     # =========================================================
     # Prompts

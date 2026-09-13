@@ -1,5 +1,6 @@
 """Controls scoped to game mode, independent of generator settings."""
 import streamlit as st
+import engine
 from llm import get_available_models, get_loaded_models, load_model, unload_all_models
 
 
@@ -23,7 +24,7 @@ def render_game_settings():
             flash = st.toggle('Flash Attention', value=True, key='game_flash')
             kv = st.toggle('KV-cache на GPU', value=True, key='game_kv')
             load, unload = st.columns(2)
-            if load.button('Загрузить', disabled=not model, key='game_load'):
+            if load.button('Загрузить', disabled=not model or engine.busy(), key='game_load'):
                 try:
                     with st.spinner('Загрузка модели…'):
                         unload_all_models()
@@ -31,7 +32,7 @@ def render_game_settings():
                         st.session_state.game_loaded = get_loaded_models()
                 except Exception as exc:
                     st.error(f'Ошибка загрузки: {exc}')
-            if unload.button('Выгрузить', key='game_unload'):
+            if unload.button('Выгрузить', key='game_unload', disabled=engine.busy()):
                 try:
                     unload_all_models()
                     st.session_state.game_loaded = []
@@ -41,4 +42,4 @@ def render_game_settings():
                 st.caption('Загружена: ' + str(loaded.get('display_name') or loaded.get('model_key')))
             st.slider('Temperature ведущего', 0.0, 1.5, 0.8, step=0.05, key='game_temperature')
             st.number_input('Max tokens ведущего', 256, 16000, 2000, step=256, key='game_max_tokens')
-            st.caption('Параметры ведущего сохранены для подключения генерации игровых ходов.')
+            st.number_input('Max tokens обработки состояния', 1024, 16000, 4096, step=512, key='game_update_tokens')

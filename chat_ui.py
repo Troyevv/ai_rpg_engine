@@ -2,6 +2,7 @@ from pathlib import Path
 import streamlit as st
 import streamlit.components.v2 as components
 from character_links import linked_markdown
+from turn_ui import controls
 
 UI = Path(__file__).resolve().parent / 'ui'
 
@@ -37,14 +38,19 @@ def render_chat(storage, world, save):
     context = (world['id'], save['id'] if save else None)
     identity = f"{world['id']}_{save['id'] if save else 'world'}"
     st.subheader('Игровой чат')
+    turns = storage.list_turns(save['id']) if save else []
     with st.container(height=600, key='game_chat_scroll'):
-        with st.chat_message('assistant'):
-            narrative(world['state']['scene'], state['characters'], f'scene_{identity}', context)
-        if save:
-            for turn in storage.list_turns(save['id']):
+        if not turns:
+            st.caption('Исходная ситуация')
+            with st.chat_message('assistant'):
+                narrative(world['state']['scene'], state['characters'], f'scene_{identity}', context)
+        for turn in turns:
+            if turn['kind'] != 'start':
                 with st.chat_message('user'):
                     narrative(turn['user_text'], state['characters'], f'user_{identity}_{turn["id"]}', context)
-                with st.chat_message('assistant'):
-                    narrative(turn['assistant_text'], state['characters'], f'assistant_{identity}_{turn["id"]}', context)
-    st.chat_input('Игровые ходы будут доступны после подключения ведущего', disabled=True, key='game_chat_input')
-    st.caption('Пока доступен просмотр стартовой сцены и сохранённой истории. Нажми на имя персонажа, чтобы открыть карточку справа.')
+            with st.chat_message('assistant'):
+                narrative(turn['assistant_text'], state['characters'], f'assistant_{identity}_{turn["id"]}', context)
+    if save:
+        controls(storage, save, turns)
+    else:
+        st.info('Создай прохождение в правой панели, затем нажми «Начать игру».')

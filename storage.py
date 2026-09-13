@@ -6,11 +6,12 @@ import os
 from pathlib import Path
 import sqlite3
 from world_parser import parse_summary
+from engine_storage import EngineStorage
 
 DEFAULT_DB = Path(__file__).resolve().parent / 'data' / 'rpg.sqlite3'
 
 
-class Storage:
+class Storage(EngineStorage):
     def __init__(self, path=None):
         self.path = Path(path or os.environ.get('RPG_DB_PATH', DEFAULT_DB))
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -36,6 +37,8 @@ class Storage:
                     before_json TEXT NOT NULL, after_json TEXT NOT NULL,
                     UNIQUE(save_id, sequence));
             ''')
+
+        self.init_engine()
 
     @contextmanager
     def connect(self):
@@ -106,11 +109,12 @@ class Storage:
     def list_turns(self, save_id):
         with self.connect() as db:
             return [dict(row) for row in db.execute(
-                'SELECT id,sequence,user_text,assistant_text FROM turns WHERE save_id=? ORDER BY sequence', (save_id,))]
+                'SELECT id,sequence,user_text,assistant_text,kind,choices_json,changes_json FROM turns WHERE save_id=? ORDER BY sequence', (save_id,))]
 
     def update_scene_meta(self, save_id, metadata):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
+            self._assert_idle(db, save_id)
             row = db.execute('SELECT state_json FROM saves WHERE id=?', (save_id,)).fetchone()
             if row is None:
                 raise ValueError('Прохождение не найдено.')
@@ -119,5 +123,5 @@ class Storage:
             if any(cid not in known for cid in metadata['present_ids']):
                 raise ValueError('В сцене указан неизвестный персонаж.')
             state['scene_meta'] = metadata
-            db.execute("UPDATE saves SET state_json=?, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+            db.execute("UPDATE saves SET state_json=?, revision=revision+1, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
                        (json.dumps(state, ensure_ascii=False), save_id))

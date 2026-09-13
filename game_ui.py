@@ -70,7 +70,9 @@ def render_world_data(world, save, storage):
     section = st.selectbox('Раздел', ['Мир', 'Сцена', 'Персонажи', 'Отношения', 'Тайны', 'Сюжет'], key='game_panel_section')
     if section == 'Мир':
         st.markdown(state['sections']['tone'])
-        st.markdown(state['sections']['locations'])
+        for location in state['locations']:
+            st.markdown('**' + location['name'] + '**')
+            st.markdown(location['text'])
     elif section == 'Сцена':
         st.markdown(state['scene'])
         render_scene_editor(storage, save)
@@ -91,9 +93,19 @@ def render_world_data(world, save, storage):
         render_relationships(state)
     elif section == 'Тайны':
         st.caption('Данные ведущего — спойлеры.')
+        st.caption('Знания и тайны на старте')
         st.markdown(state['sections']['knowledge'])
+        if state.get('facts'):
+            st.markdown('**Что стало известно во время игры**')
+        for fact in state.get('facts', []):
+            st.markdown(fact['text'])
+            names = {c['id']: c['name'] for c in state['characters']}
+            st.caption('Знают: ' + ', '.join(names[cid] for cid in fact['known_by']))
     else:
         st.markdown(state['story_notes'])
+        for plan in state.get('plans', []):
+            st.markdown(plan['text'])
+            st.caption({'open': 'Открыто', 'done': 'Выполнено', 'cancelled': 'Отменено'}[plan['status']])
 
 
 def selected_data(storage, worlds):
