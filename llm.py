@@ -6,10 +6,6 @@ LM_STUDIO_URL = "http://localhost:1234"
 OPENAI_BASE_URL = f"{LM_STUDIO_URL}/v1"
 
 
-client = OpenAI(
-    base_url=OPENAI_BASE_URL,
-    api_key="lm-studio",
-)
 
 
 # =========================================================
@@ -206,19 +202,36 @@ def chat_stream(
     messages: list[dict],
     temperature: float = 0.7,
     max_tokens: int = 8000,
+    require_complete: bool = False,
+    cancel_event=None,
+    on_stream=None,
+    response_format=None,
 ):
-    stream = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        stream=True,
-    )
-
+    client = OpenAI(base_url=OPENAI_BASE_URL, api_key="lm-studio", timeout=60.0, max_retries=0)
+    stream = None
+    finish_reason = None
     try:
+        extra = {"response_format": response_format} if response_format else {}
+        if cancel_event is not None and cancel_event.is_set():
+            raise RuntimeError("Генерация остановлена.")
+        stream = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=True,
+            **extra,
+        )
+        if on_stream is not None:
+            on_stream(stream)
         for chunk in stream:
+            if cancel_event is not None and cancel_event.is_set():
+                raise RuntimeError("Генерация остановлена.")
             if not chunk.choices:
                 continue
+
+            if chunk.choices[0].finish_reason is not None:
+                finish_reason = chunk.choices[0].finish_reason
 
             delta = chunk.choices[0].delta
 
@@ -231,11 +244,16 @@ def chat_stream(
             if content:
                 yield content
 
+        if require_complete and finish_reason != "stop":
+            raise RuntimeError("Ответ не завершён: увеличь лимит ответа/контекста и повтори генерацию.")
+
     finally:
         # Важно для кнопки остановки:
         # если Streamlit прервёт текущий run,
         # соединение с LM Studio будет закрыто.
         try:
-            stream.close()
+            if stream is not None:
+                stream.close()
         except Exception:
             pass
+        client.close()

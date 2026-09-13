@@ -1,0 +1,12 @@
+.narrative {color: var(--st-text-color); font-family: var(--st-font); line-height: 1.7; overflow-wrap: anywhere;}
+.narrative > :first-child {margin-top: 0;}
+.narrative > :last-child {margin-bottom: 0;}
+.narrative img {max-width: 100%;}
+.narrative pre {overflow-x: auto; padding: 1rem; background: var(--st-secondary-background-color); border-radius: .5rem;}
+.narrative blockquote {border-left: 3px solid var(--st-border-color); margin-left: 0; padding-left: 1rem;}
+.narrative table {border-collapse: collapse;}
+.narrative th, .narrative td {padding: .4rem; border: 1px solid var(--st-border-color);}
+.narrative a, .npc-link {color: var(--st-link-color);}
+.npc-link {font: inherit; padding: 0; border: 0; background: none; text-decoration: underline dotted; text-underline-offset: .2em; cursor: pointer;}
+.npc-link:hover {text-decoration-style: solid;}
+.npc-link:focus-visible {outline: 2px solid var(--st-primary-color); outline-offset: 3px; border-radius: 2px;}
