@@ -5,11 +5,12 @@ import engine
 from engine_storage import ACTIVE
 from state_updates import choice_input
 from storage import Storage
+from provider_ui import provider_config, api_key
 
 
 def config():
-    return {'model': st.session_state.get('game_model'),
-            'context_length': int(st.session_state.get('game_context', 16384)),
+    return {**provider_config('game', st.session_state.get('game_model')),
+            'context_length': int(st.session_state.get('game_api_context', 32768) if st.session_state.get('game_provider') == 'deepseek' else st.session_state.get('game_context', 16384)),
             'temperature': float(st.session_state.get('game_temperature', 0.8)),
             'max_tokens': int(st.session_state.get('game_max_tokens', 2000)),
             'update_tokens': int(st.session_state.get('game_update_tokens', 4096))}
@@ -21,7 +22,7 @@ def start_turn(path, save_id, kind='turn', choice=None, expected_revision=None):
         settings = config()
         if expected_revision is not None:
             settings['expected_revision'] = expected_revision
-        engine.submit(Storage(path), save_id, player_input if kind != 'start' else '', kind, settings)
+        engine.submit(Storage(path), save_id, player_input if kind != 'start' else '', kind, settings, api_key=api_key() if settings['provider'] == 'deepseek' else None)
         if kind == 'turn' and choice is None:
             st.session_state[f'player_draft_{save_id}'] = ''
     except Exception as exc:
@@ -65,7 +66,7 @@ def controls(storage, save, turns):
         if job['narrative_complete'] and job['revision'] == save['revision']:
             if st.button('Повторить обработку состояния', disabled=engine.live(job['id']), key=f'retry_job_{job["id"]}'):
                 try:
-                    engine.retry(storage, job['id'], config())
+                    engine.retry(storage, job['id'], config(), api_key=api_key())
                     st.rerun()
                 except Exception as exc:
                     st.error(str(exc))

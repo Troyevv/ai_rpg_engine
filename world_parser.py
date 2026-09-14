@@ -42,7 +42,7 @@ def parse_summary(markdown):
     text = blocks['characters']
     markers = list(re.finditer(r'^(?:#{1,6}\s*)?(?:\*\*)?👤\s*(.+)$', text, re.M))
     if len(markers) != 8:
-        raise ValueError(f'Ожидается 7 персонажей с маркером 👤, найдено: {len(markers)}.')
+        raise ValueError(f'Ожидается 8 персонажей с маркером 👤, найдено: {len(markers)}.')
     characters = []
     for i, marker in enumerate(markers):
         name = clean(marker[1])

@@ -5,7 +5,7 @@ import threading
 import time
 
 from context_builder import build_context
-from llm import chat_stream, find_loaded_model
+from llm import chat_stream, find_loaded_model, deepseek_key
 from state_updates import apply_updates
 from storage import Storage
 
@@ -18,6 +18,7 @@ WORKERS = {}
 class Worker:
     cancelled: threading.Event = field(default_factory=threading.Event)
     stream: object = None
+    api_key: str | None = field(default=None, repr=False)
 
 
 def busy():
@@ -31,31 +32,43 @@ def live(job_id):
 
 
 def check_config(config):
+    if config.get('provider', 'local') not in ('local', 'deepseek'):
+        raise ValueError('Неизвестный провайдер модели.')
     if not isinstance(config.get('model'), str) or not config['model']:
-        raise ValueError('Выбери и загрузи модель ведущего в левой панели.')
+        raise ValueError('Выбери модель ведущего в левой панели.')
     for key in ('context_length', 'max_tokens', 'update_tokens'):
         if type(config.get(key)) is not int or config[key] < 256:
             raise ValueError('Некорректные параметры модели.')
 
 
-def submit(storage, save_id, user_text='', kind='turn', config=None):
+def submit(storage, save_id, user_text='', kind='turn', config=None, api_key=None):
     config = config or {}
     check_config(config)
+    if config.get('provider') == 'deepseek':
+        api_key = deepseek_key(api_key)
     job_id = storage.begin_job(save_id, user_text, kind, config)
-    launch(storage.path, job_id)
+    if config.get('provider') == 'deepseek':
+        launch(storage.path, job_id, api_key=api_key)
+    else:
+        launch(storage.path, job_id)
     return job_id
 
 
-def retry(storage, job_id, config):
+def retry(storage, job_id, config, api_key=None):
     check_config(config)
     if live(job_id):
         raise ValueError('Предыдущий запрос ещё останавливается. Подожди немного.')
+    if config.get('provider') == 'deepseek':
+        api_key = deepseek_key(api_key)
     storage.retry_job(job_id, config)
-    launch(storage.path, job_id)
+    if config.get('provider') == 'deepseek':
+        launch(storage.path, job_id, api_key=api_key)
+    else:
+        launch(storage.path, job_id)
 
 
-def launch(path, job_id):
-    handle = Worker()
+def launch(path, job_id, api_key=None):
+    handle = Worker(api_key=api_key)
     with REGISTRY_LOCK:
         WORKERS[job_id] = handle
     threading.Thread(target=run_job, args=(path, job_id, handle), daemon=True, name=f'rpg-{job_id[:8]}').start()
@@ -88,11 +101,13 @@ def run_job(path, job_id, handle):
             if job['status'] not in ('generating', 'extracting'):
                 return
             config = json.loads(job['config_json'])
-            model = find_loaded_model(config['model'])
-            if model is None:
-                raise ValueError('Выбранная модель не загружена. Загрузи её в настройках игры.')
-            actual_context = model.get('config', {}).get('context_length') or config['context_length']
-            context = min(int(actual_context), config['context_length'])
+            context = config['context_length']
+            if config.get('provider', 'local') == 'local':
+                model = find_loaded_model(config['model'])
+                if model is None:
+                    raise ValueError('Выбранная модель не загружена. Загрузи её в настройках игры.')
+                actual_context = model.get('config', {}).get('context_length') or config['context_length']
+                context = min(int(actual_context), config['context_length'])
             before = json.loads(job['before_json'])
             history = storage.list_turns(job['save_id'])
             if job['replaces_id'] is not None:
@@ -106,7 +121,8 @@ def run_job(path, job_id, handle):
                     stream.close()
 
             common = {'model': config['model'], 'require_complete': True,
-                      'cancel_event': handle.cancelled, 'on_stream': on_stream}
+                      'cancel_event': handle.cancelled, 'on_stream': on_stream,
+                      'provider': config.get('provider', 'local'), 'api_key': handle.api_key}
             if not job['narrative_complete']:
                 messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'])
                 last_write = 0.0
