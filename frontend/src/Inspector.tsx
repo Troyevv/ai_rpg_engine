@@ -339,7 +339,8 @@ export function Inspector({
         )}
         {panel === "Память" && (
           <>
-            {state.memory && <section><h3>Актуальная память · по ход {state.memory.through_sequence}</h3><Markdown text={state.memory.summary}/></section>}
+            {state.memory && <section><h3>Объективная память ведущего · по ход {state.memory.through_sequence}</h3><Markdown text={state.memory.summary}/></section>}
+            {state.memory?.per_actor&&<section><h3>Память управляемого персонажа</h3><Markdown text={state.memory.per_actor[state.controlled_actor_id||state.characters.find(c=>c.is_player)?.id||""]?.summary||"Сжатой памяти для этого POV ещё нет."}/></section>}
             {state.events?.length ? (
               state.events.map((e, i) => (
                 <section key={i}>

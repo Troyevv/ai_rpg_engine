@@ -12,6 +12,7 @@ class RuntimeStorage:
     def init_runtime(self):
         with self.connect() as db:
             db.executescript('''
+            CREATE TABLE IF NOT EXISTS actor_switches(id INTEGER PRIMARY KEY,save_id INTEGER NOT NULL,revision INTEGER NOT NULL,before_json TEXT NOT NULL,after_json TEXT NOT NULL,parent_variant_id TEXT);
             CREATE TABLE IF NOT EXISTS play_sessions (
               id TEXT PRIMARY KEY, save_id INTEGER NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS response_variants (
@@ -35,8 +36,8 @@ class RuntimeStorage:
             ''')
             db.execute('BEGIN IMMEDIATE')
             for table, columns in {
-                'turns': {'node_id': 'TEXT', 'active_variant_id': 'TEXT', 'memory_archived': 'INTEGER NOT NULL DEFAULT 0'},
-                'game_jobs': {'context_json': 'TEXT', 'memory_before_json': 'TEXT', 'warnings_json': "TEXT NOT NULL DEFAULT '[]'", 'session_id': 'TEXT'},
+                'turns': {'pov_actor_id':'TEXT', 'audience_json':"TEXT NOT NULL DEFAULT '[]'", 'node_id': 'TEXT', 'active_variant_id': 'TEXT', 'memory_archived': 'INTEGER NOT NULL DEFAULT 0'},
+                'game_jobs': {'pov_actor_id':'TEXT', 'audience_json':"TEXT NOT NULL DEFAULT '[]'", 'context_json': 'TEXT', 'memory_before_json': 'TEXT', 'warnings_json': "TEXT NOT NULL DEFAULT '[]'", 'session_id': 'TEXT'},
             }.items():
                 existing = {r['name'] for r in db.execute(f'PRAGMA table_info({table})')}
                 for name, declaration in columns.items():
@@ -146,8 +147,8 @@ class RuntimeStorage:
                 return
             self._rollback_after(db, save_id, turn['sequence'], rollback)
             p = json.loads(variant['payload'])
-            for key in ('user_text','assistant_text','before_json','after_json','kind','choices_json','changes_json'):
-                db.execute(f'UPDATE turns SET {key}=? WHERE id=?', (p[key],turn_id))
+            for key in ('user_text','assistant_text','before_json','after_json','kind','choices_json','changes_json','pov_actor_id','audience_json'):
+                db.execute(f'UPDATE turns SET {key}=? WHERE id=?', (p.get(key,'[]' if key=='audience_json' else None),turn_id))
             db.execute('UPDATE turns SET active_variant_id=? WHERE id=?', (variant_id,turn_id))
             db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?', (p['after_json'],save_id))
             self._archive_memory(db, save_id, json.loads(p['after_json']))
@@ -163,3 +164,37 @@ class RuntimeStorage:
     def _archive_memory(self, db, save_id, state):
         through = state.get('memory',{}).get('through_sequence',-1)
         db.execute('UPDATE turns SET memory_archived=(sequence<=?) WHERE save_id=?', (through,save_id))
+
+    def switch_actor(self,save_id,actor,revision):
+        from copy import deepcopy
+        from backend.services.pov import protagonist,controlled
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            self._assert_idle(db,save_id)
+            row=db.execute('SELECT * FROM saves WHERE id=?',(save_id,)).fetchone()
+            if not row or row['revision']!=revision:
+                raise ValueError('Сейв изменился. Обнови страницу.')
+            state=json.loads(row['state_json'])
+            cards={c['id']:c for c in state['characters']}
+            if actor not in cards or cards[actor].get('available') is False:
+                raise ValueError('Персонаж недоступен.')
+            main,old=protagonist(state),controlled(state)
+            if old==actor:
+                return
+            scenes=state.setdefault('actor_scenes',{})
+            meta=deepcopy(state.get('scene_meta',{}))
+            scenes[old]={'text':state['scene'],'meta':meta}
+            target=scenes.get(actor)
+            if target is None and actor in meta.get('present_ids',[]):
+                target={'text':state['scene'],'meta':meta}
+            if target is None:
+                target={'text':cards[actor]['fields'].get('Сейчас','Место не установлено.'),
+                        'meta':{'time':state.get('world_clock',{}).get('last_event_time',meta.get('time','Не указано')),
+                                'location':'Не указано','present_ids':[actor]}}
+            state['protagonist_id'],state['controlled_actor_id']=main,actor
+            state['scene'],state['scene_meta']=target['text'],deepcopy(target['meta'])
+            state['sections']['scene']=state['scene']
+            parent=db.execute('SELECT active_variant_id FROM turns WHERE save_id=? ORDER BY sequence DESC LIMIT 1',(save_id,)).fetchone()
+            after=dump(state)
+            db.execute('INSERT INTO actor_switches(save_id,revision,before_json,after_json,parent_variant_id) VALUES(?,?,?,?,?)',(save_id,revision,row['state_json'],after,parent[0] if parent else None))
+            db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?',(after,save_id))

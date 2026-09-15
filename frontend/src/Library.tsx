@@ -30,6 +30,7 @@ export function Library({
   const [name, setName] = useState("Новое прохождение");
   const [worldName, setWorldName] = useState("");
   const [markdown, setMarkdown] = useState("");
+  const [removed,setRemoved] = useState<WorldItem[]>([]);
   const [busy, setBusy] = useState(false);
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -101,6 +102,7 @@ export function Library({
         {selected && (
           <section className="save-list">
             <h3>Прохождения</h3>
+            <Button variant="ghost" disabled={busy} onClick={()=>{if(window.confirm("Удалить эту версию выжимки из библиотеки? Сейвы сохранятся; выжимку можно восстановить."))void run(async()=>{await api(`/worlds/${selected}`,undefined,"DELETE");setWorlds(await api("/worlds"));setSelected(undefined)})}}>Удалить версию выжимки</Button>
             {saves.map((s) => (
               <button
                 key={s.id}
@@ -145,6 +147,7 @@ export function Library({
             </div>
           </section>
         )}
+        <details><summary>Удалённые выжимки</summary><Button variant="ghost" onClick={()=>void api<WorldItem[]>("/worlds?deleted=true").then(setRemoved).catch(e=>toast.error(e.message))}>Обновить корзину</Button>{removed.map(w=><div key={w.id}>{w.name} · v{w.version}<Button size="sm" onClick={()=>void run(async()=>{await api(`/worlds/${w.id}/restore`,{});setWorlds(await api("/worlds"));setRemoved(await api("/worlds?deleted=true"));setSelected(w.id)})}>Восстановить</Button></div>)}</details>
         <details>
           <summary>
             <Upload size={16} />

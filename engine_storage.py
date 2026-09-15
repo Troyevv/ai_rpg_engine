@@ -43,7 +43,7 @@ class EngineStorage:
             return dict(row)
 
     def begin_job(self, save_id, user_text, kind, config):
-        if kind not in ('start', 'turn', 'regenerate'):
+        if kind not in ('start', 'turn', 'regenerate','background'):
             raise ValueError('Неизвестный тип хода.')
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -70,19 +70,27 @@ class EngineStorage:
                     later = db.execute('SELECT 1 FROM turns WHERE save_id=? AND sequence>?', (save_id,last['sequence'])).fetchone()
                     if later and not config.get('rollback_following'):
                         raise ValueError('Подтверди откат последующих ходов.')
-                v = db.execute('SELECT context_json,memory_before_json FROM response_variants WHERE id=?', (last['active_variant_id'],)).fetchone()
+                v = db.execute('SELECT context_json,memory_before_json,job_id FROM response_variants WHERE id=?', (last['active_variant_id'],)).fetchone()
                 context_json, memory_before = (v[0],v[1]) if v else (None,None)
+                if v and v['job_id']:
+                    original=db.execute('SELECT config_json FROM game_jobs WHERE id=?',(v['job_id'],)).fetchone()
+                    if original and '_prompts' in json.loads(original[0]):
+                        config=dict(config,_prompts=json.loads(original[0])['_prompts'])
                 if context_json is None:
                     raise ValueError('У старого хода нет снимка исходного контекста. Точная перегенерация недоступна.')
                 before, replaces, user_text, kind = last['before_json'], last['id'], last['user_text'], last['kind']
             if kind == 'turn' and not user_text.strip():
                 raise ValueError('Напиши действие.')
+            from backend.services.pov import controlled
+            config = dict(config)
+            config.setdefault('_prompts',self.prompt_snapshot(db))
             job_id = uuid.uuid4().hex
             db.execute('''INSERT INTO game_jobs(id,save_id,revision,before_json,user_text,kind,replaces_id,status,config_json)
                           VALUES(?,?,?,?,?,?,?,'generating',?)''',
                        (job_id, save_id, save['revision'], before, user_text, kind, replaces, json.dumps(config)))
             session_id = self.ensure_session(db, save_id)
             db.execute('UPDATE game_jobs SET context_json=?,memory_before_json=?,session_id=? WHERE id=?', (context_json,memory_before,session_id,job_id))
+            db.execute('UPDATE game_jobs SET pov_actor_id=? WHERE id=?',(None if kind=='background' else controlled(json.loads(before)),job_id))
         return job_id
 
     @staticmethod
@@ -111,7 +119,7 @@ class EngineStorage:
                 raise ValueError('Сейв изменился. Этот черновик устарел.')
             settings = json.loads(job['config_json'])
             if config:
-                settings.update({k:v for k,v in config.items() if k not in ('target_turn_id','rollback_following','expected_revision')})
+                settings.update({k:v for k,v in config.items() if k not in ('target_turn_id','rollback_following','expected_revision','_prompts')})
             session_id = self.ensure_session(db, job['save_id'])
             db.execute("UPDATE game_jobs SET status='extracting',error='',warnings_json='[]',config_json=?,session_id=? WHERE id=?", (json.dumps(settings),session_id,job_id))
 
@@ -140,6 +148,7 @@ class EngineStorage:
                 db.execute('UPDATE turns SET user_text=?,assistant_text=?,before_json=?,after_json=?,kind=?,choices_json=?,changes_json=? WHERE id=?', (*values,tid))
             else:
                 tid = db.execute('INSERT INTO turns(user_text,assistant_text,before_json,after_json,kind,choices_json,changes_json,save_id,sequence) VALUES(?,?,?,?,?,?,?,?,?)', (*values,job['save_id'],sequence)).lastrowid
+            db.execute('UPDATE turns SET pov_actor_id=?,audience_json=? WHERE id=?',(job['pov_actor_id'],job['audience_json'],tid))
             record = dict(db.execute('SELECT * FROM turns WHERE id=?', (tid,)).fetchone())
             self._variant(db, record, job_id, job['context_json'], job['memory_before_json'])
             self._archive_memory(db, job['save_id'], state)

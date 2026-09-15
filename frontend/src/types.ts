@@ -49,7 +49,10 @@ export interface Scene {
   present_ids: string[];
 }
 export interface State {
-  memory?: {id: string; summary: string; through_sequence: number};
+  protagonist_id?: string;
+  controlled_actor_id?: string;
+  world_clock?: {last_event_time:string};
+  memory?: {id: string; summary: string; through_sequence: number; per_actor?:Record<string,{summary:string;through_sequence:number}>};
   scene: string;
   scene_meta?: Scene;
   sections: Record<string, string>;
@@ -86,6 +89,8 @@ export interface Choice {
   speech: string;
 }
 export interface Turn {
+  pov_actor_id?: string|null;
+  audience_json?: string;
   node_id: string;
   active_variant_id: string;
   memory_archived: boolean;

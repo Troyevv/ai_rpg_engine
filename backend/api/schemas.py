@@ -29,7 +29,7 @@ class Generation(Credential):
 class Turn(Credential):
     target_turn_id: int | None = None
     rollback_following: bool = False
-    kind: Literal['start', 'turn', 'regenerate'] = 'turn'
+    kind: Literal['start', 'turn', 'regenerate','background'] = 'turn'
     text: str = Field(default='', max_length=100000)
     revision: int = Field(ge=0)
     config: ModelConfig
@@ -81,3 +81,11 @@ class Markdown(DTO):
 class VariantSelection(Revision):
     variant_id: str
     rollback_following: bool = False
+
+class Actor(Revision):
+    actor_id: str
+
+class DocumentChange(DTO):
+    content: str = Field(default='',max_length=2000000)
+    expected_head: int | None = None
+    source_id: int | None = None

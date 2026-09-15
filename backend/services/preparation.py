@@ -1,4 +1,5 @@
 """Durable scenario/summary generation, independent from any HTTP or UI session."""
+import json
 import threading
 import time
 from dataclasses import dataclass, field
@@ -60,8 +61,10 @@ class Preparation:
                     return
                 if config['provider'] == 'local' and not find_loaded_model(config['model']):
                     raise ValueError('Сначала загрузи выбранную локальную модель.')
+                config = json.loads(job['config_json'])
+                prompts = config.get('_prompts')
                 w = self.repo.workspace(job['workspace_id'])
-                messages = build_idea_messages(w) if job['kind'] == 'idea' else build_summary_messages(w)
+                messages = build_idea_messages(w,prompts) if job['kind'] == 'idea' else build_summary_messages(w,prompts)
                 def on_stream(stream):
                     handle.stream = stream
                     if handle.cancel.is_set():

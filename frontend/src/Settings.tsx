@@ -1,3 +1,4 @@
+import {Versions} from "./Versions";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { api } from "./api";
@@ -29,12 +30,15 @@ export function Settings({
   const [draft, setDraft] = useState(value);
   const [models, setModels] = useState<string[]>([]);
   const [loaded, setLoaded] = useState<string[]>([]);
+  const [promptNames,setPromptNames] = useState<string[]>([]);
+  const [prompt,setPrompt] = useState("");
   const [stored, setStored] = useState(false);
   const [capabilities, setCapabilities] = useState<Record<string,{thinking_models:string[]}>>({});
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     if (open) {
       setDraft(value);
+      api<Record<string,unknown>>("/prompts").then(v=>setPromptNames(Object.keys(v))).catch(e=>toast.error(e.message));
       api<{deepseek:boolean}>("/credentials").then(v=>setStored(v.deepseek)).catch(e=>toast.error(e.message));
       api<Record<string,{thinking_models:string[]}>>("/capabilities").then(setCapabilities).catch(e=>toast.error(e.message));
     }
@@ -68,6 +72,8 @@ export function Settings({
             Модели работают за сценой. Здесь можно настроить каждую задачу.
           </DialogDescription>
         </DialogHeader>
+        <details><summary>Основные промпты и версии</summary>{promptNames.map(name=><Button key={name} size="sm" variant="ghost" onClick={()=>setPrompt(name)}>{name}</Button>)}</details>
+        <Versions kind="prompt" owner={prompt} open={!!prompt} close={()=>setPrompt("")}/>
         <label>
           API-ключ DeepSeek
           <Input

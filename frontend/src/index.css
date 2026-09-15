@@ -1258,3 +1258,8 @@ details > label:first-of-type {
 .diagnostics details {padding:.7rem 0;border-bottom:1px solid #333}
 .context-content,.warning pre {white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-height:400px;overflow:auto}
 .diagnostics select {width:100%;min-width:0}
+
+.pov-controls {display:flex;align-items:center;flex-wrap:wrap;gap:.6rem;padding:.5rem 1rem;border-bottom:1px solid #333;font:13px system-ui}
+.pov-controls label {display:flex;align-items:center;gap:.5rem;min-width:0}
+.pov-controls select {max-width:250px;min-width:0}
+@media(max-width:600px){.pov-controls label{width:100%;flex-wrap:wrap}.pov-controls select{flex:1}}

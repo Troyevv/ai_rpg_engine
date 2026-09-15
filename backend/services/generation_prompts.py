@@ -2,15 +2,17 @@ from pathlib import Path
 
 PROMPTS = Path(__file__).resolve().parents[2] / "prompts"
 
-def load_prompt(name):
+def load_prompt(name, prompts=None):
+    if prompts and name in prompts:
+        return prompts[name]["content"]
     return (PROMPTS / name).read_text(encoding="utf-8")
 
-def build_idea_messages(workspace) -> list[dict]:
+def build_idea_messages(workspace, prompts=None) -> list[dict]:
 
     messages = [
         {
             "role": "system",
-            "content": load_prompt('idea_prompt.md'),
+            "content": load_prompt('idea_prompt.md',prompts),
         }
     ]
 
@@ -53,12 +55,12 @@ def build_idea_messages(workspace) -> list[dict]:
     return messages
 
 
-def build_summary_messages(workspace) -> list[dict]:
+def build_summary_messages(workspace, prompts=None) -> list[dict]:
 
     return [
         {
             "role": "system",
-            "content": load_prompt('summary_prompt.md'),
+            "content": load_prompt('summary_prompt.md',prompts),
         },
         {
             "role": "user",
@@ -76,7 +78,7 @@ def build_summary_messages(workspace) -> list[dict]:
 ОБЯЗАТЕЛЬНЫЙ ШАБЛОН
 ==================================================
 
-{load_prompt('summary_template.md')}
+{load_prompt('summary_template.md',prompts)}
 
 ==================================================
 ЗАДАЧА
