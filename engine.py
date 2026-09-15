@@ -6,7 +6,7 @@ import time
 
 from context_builder import build_context
 from llm import chat_stream, find_loaded_model, deepseek_key, PROVIDERS
-from state_updates import apply_updates
+from state_updates import apply_updates, EvidenceError
 from storage import Storage
 
 from backend.services.coordinator import LOCAL_MODEL_LOCK, model_lease
@@ -143,14 +143,26 @@ def run_job(path, job_id, handle):
                 storage.job_progress(job_id, 'extracting', narrative=narrative, complete=True)
             if handle.cancelled.is_set() or storage.get_job(job_id)['status'] != 'extracting':
                 return
-            messages = build_context(before, history, job['user_text'], job['kind'], context,
-                                     config['update_tokens'], extraction_text=narrative)
-            result = ''.join(chat_stream(messages=messages, temperature=0.1, max_tokens=config['update_tokens'],
-                                       response_format={'type': 'json_object'}, **common))
-            if handle.cancelled.is_set():
-                return
-            storage.job_progress(job_id, 'validating')
-            state, choices, changes = apply_updates(before, result, narrative, job['user_text'], sequence)
+            feedback = None
+            for attempt in range(2):
+                if handle.cancelled.is_set() or storage.get_job(job_id)['status'] not in ('extracting', 'validating'):
+                    return
+                storage.job_progress(job_id, 'extracting')
+                messages = build_context(before, history, job['user_text'], job['kind'], context,
+                                         config['update_tokens'], extraction_text=narrative,
+                                         validation_feedback=feedback)
+                result = ''.join(chat_stream(messages=messages, temperature=0.1, max_tokens=config['update_tokens'],
+                                           response_format={'type': 'json_object'}, **common))
+                if handle.cancelled.is_set():
+                    return
+                storage.job_progress(job_id, 'validating')
+                try:
+                    state, choices, changes = apply_updates(before, result, narrative, job['user_text'], sequence)
+                    break
+                except EvidenceError as exc:
+                    if attempt == 1:
+                        raise
+                    feedback = str(exc)
             if not handle.cancelled.is_set():
                 storage.commit_job(job_id, state, choices, changes)
     except Exception as exc:

@@ -194,3 +194,66 @@ def test_migration_of_old_database_preserves_existing_save(tmp_path):
     Storage(path)  # Idempotent initialization.
     with storage.connect() as conn:
         assert {'kind', 'choices_json', 'changes_json'} <= {r['name'] for r in conn.execute('PRAGMA table_info(turns)')}
+
+
+@pytest.mark.parametrize('quote,narrative,player,valid', [
+    ('«Садись, поговорим»', '“Садись,\n  поговорим”', '', True),
+    ('Садись, поговорим', 'Садись,\u00a0поговорим', '', True),
+    ('Я сяду здесь.', NARRATIVE, 'Я сяду здесь.', True),
+    ('Садись, поговорим', 'Не садись. Поговорим потом.', '', False),
+    ('Садись поговорим', 'Садись', 'поговорим', False),
+    ('Садись… поговорим', NARRATIVE, '', False),
+    ('', NARRATIVE, '', False),
+])
+def test_evidence_formatting_without_accepting_invented_quotes(db, quote, narrative, player, valid):
+    from state_updates import EvidenceError
+    storage, _, sid = db
+    before = storage.get_save(sid)['state']
+    payload = result()
+    payload['events'][0]['evidence'] = quote
+    if valid:
+        apply_updates(before, payload, narrative, player, 0)
+    else:
+        with pytest.raises(EvidenceError, match=r'events\[0\].evidence'):
+            apply_updates(before, payload, narrative, player, 0)
+    assert storage.get_save(sid)['state'] == before
+
+
+@pytest.mark.parametrize('outcome', ['fixed', 'invalid', 'stopped'])
+def test_evidence_repair_is_bounded_atomic_and_keeps_narrative(db, outcome):
+    storage, _, sid = db
+    before = storage.get_save(sid)['state']
+    job = storage.begin_job(sid, '', 'start', {**CONFIG, 'provider': 'deepseek'})
+    worker = engine.Worker()
+    calls = []
+    def stream(**kwargs):
+        calls.append(kwargs)
+        if not kwargs.get('response_format'):
+            yield NARRATIVE
+            return
+        payload = result()
+        if len(calls) == 2 or outcome == 'invalid':
+            payload['events'][0]['evidence'] = 'Пересказ вместо цитаты'
+        if len(calls) == 3:
+            assert 'events[0].evidence' in kwargs['messages'][0]['content']
+            assert estimate(kwargs['messages']) <= CONFIG['context_length'] - CONFIG['update_tokens'] - 256
+            if outcome == 'stopped':
+                engine.stop(storage, job)
+                worker.cancelled.set()
+        yield json.dumps(payload, ensure_ascii=False)
+    with patch('engine.chat_stream', side_effect=stream):
+        engine.run_job(storage.path, job, worker)
+    assert len(calls) == 3
+    assert storage.get_job(job)['narrative'] == NARRATIVE
+    assert storage.get_job(job)['narrative_complete']
+    if outcome == 'fixed':
+        assert storage.get_job(job)['status'] == 'saved'
+        assert len(storage.list_turns(sid)) == 1
+        assert len(json.loads(storage.list_turns(sid)[0]['choices_json'])) == 6
+    else:
+        assert storage.get_job(job)['status'] == ('stopped' if outcome == 'stopped' else 'error')
+        assert storage.list_turns(sid) == []
+        assert storage.get_save(sid)['state'] == before
+        storage.retry_job(job, CONFIG)
+        assert len(run(storage, job)) == 1
+        assert storage.get_job(job)['status'] == 'saved'
