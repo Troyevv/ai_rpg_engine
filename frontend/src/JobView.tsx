@@ -43,7 +43,7 @@ export function JobView({
             ) : (
               <span className="status-dot" />
             )}
-            {labels[job.status] || job.status}
+            {job.kind === "background" && job.status === "extracting" ? "Обновляет последствия закулисной сцены" : labels[job.status] || job.status}
           </span>
           <span className="muted">Свернуть / раскрыть</span>
         </summary>

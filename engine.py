@@ -10,6 +10,7 @@ from state_updates import apply_updates, apply_supported_updates, EvidenceError
 from storage import Storage
 from backend.services.usage import tracked_stream
 from backend.services.memory import compact
+from backend.services.pov import apply_scene_policy
 
 from backend.services.coordinator import LOCAL_MODEL_LOCK, model_lease
 
@@ -145,7 +146,7 @@ def run_job(path, job_id, handle):
                                      lambda messages: generate('memory',messages,config['update_tokens'],0.1), handle.cancelled)
                     if handle.cancelled.is_set():
                         return
-                    messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], recent_turns=config.get('recent_turns',6))
+                    messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'))
                     storage.save_context(job_id,messages,before)
                 last_write = 0.0
                 for chunk in generate('narrative',messages,config['max_tokens'],config.get('temperature',0.8)):
@@ -167,22 +168,25 @@ def run_job(path, job_id, handle):
                 storage.job_progress(job_id, 'extracting')
                 messages = build_context(before, history, job['user_text'], job['kind'], context,
                                          config['update_tokens'], extraction_text=narrative,
-                                         validation_feedback=feedback, recent_turns=config.get('recent_turns',6))
+                                         validation_feedback=feedback, recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'))
                 result = ''.join(generate('extraction' if attempt==0 else 'extraction_repair',messages,config['update_tokens'],0.1,
                                           response_format={'type':'json_object'}))
                 if handle.cancelled.is_set():
                     return
                 storage.job_progress(job_id, 'validating')
                 try:
-                    state, choices, changes = apply_updates(before, result, narrative, job['user_text'], sequence)
+                    state, choices, changes = apply_updates(before, result, narrative, job['user_text'], sequence,job['kind'])
                     break
                 except EvidenceError as exc:
                     if attempt == 1:
-                        state, choices, changes, warnings = apply_supported_updates(before,result,narrative,job['user_text'],sequence)
+                        state, choices, changes, warnings = apply_supported_updates(before,result,narrative,job['user_text'],sequence,job['kind'])
                         with storage.connect() as db:
                             db.execute('UPDATE game_jobs SET warnings_json=? WHERE id=?', (json.dumps(warnings,ensure_ascii=False),job_id))
                         break
                     feedback = str(exc)
+            state,audience = apply_scene_policy(before,state,changes,job['kind'])
+            with storage.connect() as db:
+                db.execute('UPDATE game_jobs SET audience_json=? WHERE id=?',(json.dumps(audience),job_id))
             if not handle.cancelled.is_set():
                 storage.commit_job(job_id, state, choices, changes)
     except Exception as exc:

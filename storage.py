@@ -8,11 +8,12 @@ import sqlite3
 from world_parser import parse_summary
 from engine_storage import EngineStorage
 from backend.repositories.runtime import RuntimeStorage
+from backend.repositories.documents import DocumentStorage
 
 DEFAULT_DB = Path(__file__).resolve().parent / 'data' / 'rpg.sqlite3'
 
 
-class Storage(EngineStorage, RuntimeStorage):
+class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
     def __init__(self, path=None):
         self.path = Path(path or os.environ.get('RPG_DB_PATH', DEFAULT_DB))
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -41,6 +42,7 @@ class Storage(EngineStorage, RuntimeStorage):
 
         self.init_engine()
         self.init_runtime()
+        self.init_documents()
 
     @contextmanager
     def connect(self):
@@ -63,6 +65,7 @@ class Storage(EngineStorage, RuntimeStorage):
             db.execute('BEGIN IMMEDIATE')
             existing = db.execute('SELECT id FROM worlds WHERE name_key=? AND digest=?', (name.casefold(), digest)).fetchone()
             if existing:
+                db.execute('UPDATE worlds SET deleted=0 WHERE id=?',(existing['id'],))
                 return existing['id']
             version = db.execute('SELECT COALESCE(MAX(version),0)+1 FROM worlds WHERE name_key=?', (name.casefold(),)).fetchone()[0]
             world_id = db.execute('INSERT INTO worlds(name,name_key,version,source_md,digest) VALUES(?,?,?,?,?)',
@@ -73,7 +76,7 @@ class Storage(EngineStorage, RuntimeStorage):
 
     def list_worlds(self):
         with self.connect() as db:
-            return [dict(row) for row in db.execute('SELECT id,name,version,created_at FROM worlds ORDER BY id DESC')]
+            return [dict(row) for row in db.execute('SELECT id,name,version,created_at FROM worlds WHERE deleted=0 ORDER BY id DESC')]
 
     def get_world(self, world_id):
         with self.connect() as db:
@@ -111,7 +114,7 @@ class Storage(EngineStorage, RuntimeStorage):
     def list_turns(self, save_id):
         with self.connect() as db:
             return [dict(row) for row in db.execute(
-                'SELECT id,sequence,user_text,assistant_text,kind,choices_json,changes_json,node_id,active_variant_id,memory_archived FROM turns WHERE save_id=? ORDER BY sequence', (save_id,))]
+                'SELECT id,sequence,user_text,assistant_text,kind,choices_json,changes_json,node_id,active_variant_id,memory_archived,pov_actor_id,audience_json FROM turns WHERE save_id=? ORDER BY sequence', (save_id,))]
 
     def update_scene_meta(self, save_id, metadata, expected_revision=None):
         with self.connect() as db:

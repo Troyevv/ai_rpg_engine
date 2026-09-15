@@ -14,6 +14,7 @@ import backend.services.preparation as preparation
 from backend.api.app import create_app
 from test_worlds import summary
 from test_engine import result
+from test_pov_documents import background, SECRET
 import uvicorn
 
 NARRATIVE = '''Персонаж 1 подвигает свободный стул. «Садись, поговорим».
@@ -28,7 +29,9 @@ NARRATIVE = '''Персонаж 1 подвигает свободный стул
 
 def stream(**kwargs):
     if kwargs.get('response_format'):
-        value = json.dumps(result(), ensure_ascii=False)
+        value = json.dumps(background() if 'Тип хода: background' in kwargs['messages'][0]['content'] else result(), ensure_ascii=False)
+    elif 'Тип хода: background' in kwargs['messages'][0]['content']:
+        value = SECRET
     elif 'шаблон' in kwargs['messages'][-1]['content'].lower():
         value = summary()
     elif 'сценар' in kwargs['messages'][0]['content'].lower():

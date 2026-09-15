@@ -43,6 +43,9 @@ export function Game({
   prefs: Preferences;
   apiKey: string;
 }) {
+  const mainActor=save?.state.protagonist_id||save?.state.characters.find(c=>c.is_player)?.id;
+  const actorId=save?.state.controlled_actor_id||mainActor;
+  const draftKey=`draft-${save?.id}-${actorId}`;
   const [diagnostics, setDiagnostics] = useState(false);
   const [diagnosticJob, setDiagnosticJob] = useState<string|undefined>();
   const [draft, setDraft] = useState("");
@@ -52,10 +55,10 @@ export function Game({
   const pinned = useRef(true);
   const reduced = useReducedMotion();
   useEffect(() => {
-    setDraft(sessionStorage.getItem(`draft-${save?.id}`) || "");
+    setDraft(sessionStorage.getItem(draftKey) || "");
     setSubmitted(null);
     pinned.current = true;
-  }, [save?.id]);
+  }, [save?.id,actorId]);
   const { job, reconnecting } = useJob(submitted ?? save?.job, () => {
     setSubmitted(null);
     refresh();
@@ -79,7 +82,7 @@ export function Game({
       setBusy(false);
     }
   };
-  const turn = (kind: "start" | "turn" | "regenerate", text = draft, target?:number, rollback=false) =>
+  const turn = (kind: "start" | "turn" | "regenerate" | "background", text = draft, target?:number, rollback=false) =>
     run(async () => {
       if (!save) return;
       const j = await api<Job>(`/saves/${save.id}/turns`, {
@@ -95,7 +98,7 @@ export function Game({
       pinned.current = true;
       if (kind === "turn" && text === draft) {
         setDraft("");
-        sessionStorage.removeItem(`draft-${save.id}`);
+        sessionStorage.removeItem(draftKey);
       }
     });
   const meta = save?.scene_meta ?? world?.scene_meta;
@@ -126,6 +129,11 @@ export function Game({
   return (
     <main className="game">
       {save&&<Diagnostics saveId={save.id} jobId={diagnosticJob} open={diagnostics} onOpenChange={setDiagnostics}/>}
+      {save&&<div className="pov-controls">
+        <label>Управляемый персонаж<select aria-label="Управляемый персонаж" value={actorId||""} disabled={busy||pending} onChange={e=>void run(async()=>{await api(`/saves/${save.id}/actor`,{actor_id:e.target.value,revision:save.revision});setSubmitted(null);refresh()})}>{save.state.characters.map(c=><option key={c.id} value={c.id}>{c.name}{c.id===mainActor?" · основной герой":""}</option>)}</select></label>
+        {actorId!==mainActor&&<Button variant="ghost" size="sm" disabled={busy||pending} onClick={()=>void run(async()=>{await api(`/saves/${save.id}/actor`,{actor_id:mainActor,revision:save.revision});refresh()})}>Вернуться к основному ГГ</Button>}
+        <Button variant="outline" size="sm" disabled={busy||pending||!save.turns.length} onClick={()=>void turn("background","")}>Мир без ГГ</Button>
+      </div>}
       <div className="scene-bar">
         <span>
           <Clock size={14} />
@@ -209,7 +217,8 @@ export function Game({
                     </div>
                   )}
                   <p className="turn-number">
-                    {i === 0 ? "Первая сцена" : `Ход ${t.sequence}`}
+                    {t.kind==="background"?`За кулисами · ход ${t.sequence} · не знание ГГ`:i === 0 ? "Первая сцена" : `Ход ${t.sequence}`}
+                    {t.kind!=="background"&&<span> · POV: {save.state.characters.find(c=>c.id===(t.pov_actor_id||mainActor))?.name}</span>}
                   </p>
                   <Markdown
                     text={t.assistant_text}
@@ -286,7 +295,7 @@ export function Game({
               {save.turns.length > 0 && !pending && (
                 <>
                   <div className="choices">
-                    {save.turns.at(-1)?.choices.map((c, i) => (
+                    {(save.turns.at(-1)?.kind!=="background"&&(save.turns.at(-1)?.pov_actor_id||mainActor)===actorId?save.turns.at(-1)?.choices:[])?.map((c, i) => (
                       <button
                         key={i}
                         disabled={busy}
@@ -352,7 +361,7 @@ export function Game({
               value={draft}
               onChange={(e) => {
                 setDraft(e.target.value);
-                sessionStorage.setItem(`draft-${save.id}`, e.target.value);
+                sessionStorage.setItem(draftKey, e.target.value);
               }}
               placeholder="Что ты делаешь или говоришь?"
               onKeyDown={(e) => {

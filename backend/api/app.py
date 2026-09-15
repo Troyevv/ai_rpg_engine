@@ -17,7 +17,7 @@ import engine
 import llm
 from character_links import linked_markdown
 from backend.api.schemas import (World, Named, Generation, Turn, Retry, Revision, Scene,
-                                 Models, Load, Preferences, Markdown, Credential, VariantSelection)
+                                 Models, Load, Preferences, Markdown, Credential, VariantSelection, Actor, DocumentChange)
 from backend.repositories.preparation import Repository
 from backend.services.preparation import Preparation
 from backend.services.scene import scene_metadata
@@ -96,8 +96,11 @@ def create_app(db_path=None, recover=True):
         return {'ok': True}
 
     @app.get('/api/worlds')
-    def worlds():
-        return repo.list_worlds()
+    def worlds(deleted: bool = False):
+        if not deleted:
+            return repo.list_worlds()
+        with repo.connect() as db:
+            return [dict(r) for r in db.execute('SELECT id,name,version,created_at FROM worlds WHERE deleted=1 ORDER BY id DESC')]
 
     @app.post('/api/worlds')
     def create_world(body: World):
@@ -196,8 +199,8 @@ def create_app(db_path=None, recover=True):
         return StreamingResponse(stream(), media_type='text/event-stream', headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
     @app.get('/api/workspaces')
-    def workspaces():
-        return repo.list_workspaces()
+    def workspaces(deleted: bool = False):
+        return repo.list_workspaces(deleted)
 
     @app.post('/api/workspaces')
     def create_workspace(body: Named):
@@ -222,9 +225,46 @@ def create_app(db_path=None, recover=True):
     @app.post('/api/workspaces/{wid}/world')
     def save_preparation(wid: str, body: Named):
         w = repo.workspace(wid)
-        if (w['job'] and w['job']['status'] == 'generating') or not w['summary_complete']:
+        if w['deleted'] or (w['job'] and w['job']['status'] == 'generating') or not w['summary_complete']:
             raise ValueError('Заверши генерацию выжимки перед сохранением мира.')
         return repo.get_world(repo.save_world(body.name, w['summary']))
+
+    @app.get('/api/prompts')
+    def prompts():
+        return repo.prompt_snapshot()
+
+    @app.get('/api/documents/{kind}/{owner}')
+    def document(kind: str,owner: str):
+        return repo.document_history(kind,owner)
+
+    @app.post('/api/documents/{kind}/{owner}')
+    def change_document(kind: str,owner: str,body: DocumentChange):
+        return repo.change_document(kind,owner,body.content,body.expected_head,body.source_id)
+
+    @app.delete('/api/workspaces/{wid}')
+    def remove_workspace(wid: str,body: Revision):
+        repo.remove_workspace(wid,body.revision)
+        return {'ok':True}
+
+    @app.post('/api/workspaces/{wid}/restore')
+    def restore_workspace(wid: str,body: Revision):
+        repo.remove_workspace(wid,body.revision,False)
+        return repo.workspace(wid)
+
+    @app.delete('/api/worlds/{wid}')
+    def remove_world(wid: int):
+        repo.remove_world(wid)
+        return {'ok':True}
+
+    @app.post('/api/worlds/{wid}/restore')
+    def restore_world(wid: int):
+        repo.remove_world(wid,False)
+        return repo.get_world(wid)
+
+    @app.post('/api/saves/{sid}/actor')
+    def actor(sid: int,body: Actor):
+        repo.switch_actor(sid,body.actor_id,body.revision)
+        return save(sid)
 
     @app.get('/api/credentials')
     def credential_status():

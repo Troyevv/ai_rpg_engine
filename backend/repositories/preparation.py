@@ -22,14 +22,25 @@ class Repository(Storage):
             CREATE TABLE IF NOT EXISTS client_settings (profile TEXT PRIMARY KEY, payload TEXT NOT NULL);
             ''')
 
-    def list_workspaces(self):
         with self.connect() as db:
-            return [dict(r) for r in db.execute('SELECT id,name FROM preparation_workspaces ORDER BY rowid DESC')]
+            db.execute('BEGIN IMMEDIATE')
+            if 'deleted' not in {r['name'] for r in db.execute('PRAGMA table_info(preparation_workspaces)')}:
+                db.execute('ALTER TABLE preparation_workspaces ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0')
+            for w in db.execute('SELECT * FROM preparation_workspaces').fetchall():
+                for kind in ('idea','summary'):
+                    if not db.execute('SELECT 1 FROM document_heads WHERE kind=? AND owner=?',(kind,w['id'])).fetchone():
+                        self._record_document(db,kind,w['id'],w[kind],bool(w['summary_complete']) if kind=='summary' else bool(w[kind]),'migration')
+
+    def list_workspaces(self, deleted=False):
+        with self.connect() as db:
+            return [dict(r) for r in db.execute('SELECT id,name,revision FROM preparation_workspaces WHERE deleted=? ORDER BY rowid DESC',(int(deleted),))]
 
     def create_workspace(self, name):
         wid = uuid.uuid4().hex
         with self.connect() as db:
             db.execute('INSERT INTO preparation_workspaces(id,name) VALUES(?,?)', (wid, name))
+            for kind in ('idea','summary'):
+                self._record_document(db,kind,wid,'',False,'created')
         return self.workspace(wid)
 
     def workspace(self, wid):
@@ -59,7 +70,7 @@ class Repository(Storage):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             w = db.execute('SELECT * FROM preparation_workspaces WHERE id=?', (wid,)).fetchone()
-            if not w or w['revision'] != revision:
+            if not w or w['deleted'] or w['revision'] != revision:
                 raise ValueError('Подготовка изменилась. Обнови её перед запросом.')
             if db.execute("SELECT 1 FROM preparation_jobs WHERE workspace_id=? AND status='generating'", (wid,)).fetchone():
                 raise ValueError('Подготовка уже выполняется.')
@@ -70,6 +81,7 @@ class Repository(Storage):
             if kind == 'idea':
                 messages = json.loads(w['messages_json']) + [{'role': 'user', 'content': text}]
                 db.execute('UPDATE preparation_workspaces SET messages_json=? WHERE id=?', (json.dumps(messages, ensure_ascii=False), wid))
+            config = dict(config, _prompts=self.prompt_snapshot(db))
             db.execute("INSERT INTO preparation_jobs(id,workspace_id,kind,status,revision,config_json) VALUES(?,?,?,'generating',?,?)",
                        (jid, wid, kind, revision, json.dumps(config)))
         return jid
@@ -86,8 +98,11 @@ class Repository(Storage):
                 if w['revision'] != job['revision']:
                     raise ValueError('Подготовка изменилась во время генерации.')
                 if job['kind'] == 'idea' and narrative.strip():
+                    self._record_document(db,'idea',w['id'],narrative,status=='saved','generation')
+                    self._record_document(db,'summary',w['id'],'',False,'idea_changed')
                     db.execute("UPDATE preparation_workspaces SET idea=?,summary='',summary_complete=0,revision=revision+1 WHERE id=?", (narrative, w['id']))
                 elif job['kind'] == 'summary':
+                    self._record_document(db,'summary',w['id'],narrative,status=='saved','generation')
                     db.execute('UPDATE preparation_workspaces SET summary=?,summary_complete=?,revision=revision+1 WHERE id=?', (narrative, int(status == 'saved'), w['id']))
 
     def reset_workspace(self, wid, revision):
@@ -98,7 +113,8 @@ class Repository(Storage):
             cursor = db.execute("UPDATE preparation_workspaces SET idea='',summary='',summary_complete=0,messages_json='[]',revision=revision+1 WHERE id=? AND revision=?", (wid, revision))
             if not cursor.rowcount:
                 raise ValueError('Подготовка изменилась.')
-            db.execute('DELETE FROM preparation_jobs WHERE workspace_id=?', (wid,))
+            for kind in ('idea','summary'):
+                self._record_document(db,kind,wid,'',False,'reset')
 
     def get_settings(self, profile):
         with self.connect() as db:

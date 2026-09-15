@@ -26,7 +26,8 @@ def exact_keys(obj, allowed, required=()):
         raise ValueError('Неверная структура изменений.')
 
 
-def apply_updates(before, payload, narrative, user_text, turn):
+def apply_updates(before, payload, narrative, user_text, turn, kind="turn"):
+    from backend.services.pov import controlled
     if isinstance(payload, str):
         payload = json.loads(payload)
     exact_keys(payload, ['scene', 'characters', 'relationships', 'facts', 'events', 'plans', 'locations', 'choices'], ['scene', 'choices'])
@@ -63,8 +64,9 @@ def apply_updates(before, payload, narrative, user_text, turn):
     state['scene_meta'] = {'time': text(scene['time'], 'time', 120), 'location': text(scene['location'], 'location', 200),
                            'present_ids': known(scene['present_ids'])}
     choices = payload['choices']
-    if not isinstance(choices, list) or len(choices) != 6:
-        raise ValueError('Нужно ровно 6 вариантов действий.')
+    expected_choices = 0 if kind=='background' else 6
+    if not isinstance(choices,list) or len(choices)!=expected_choices:
+        raise ValueError('Для закулисной сцены нужен пустой choices.' if kind=='background' else 'Нужно ровно 6 вариантов действий.')
     normalized = []
     for choice in choices:
         exact_keys(choice, ['action', 'speech'], ['action'])
@@ -73,7 +75,7 @@ def apply_updates(before, payload, narrative, user_text, turn):
         if not isinstance(speech, str) or len(speech) > 1000:
             raise ValueError('Некорректная реплика варианта.')
         normalized.append({'action': action, 'speech': speech.strip()})
-    if len({(c['action'].casefold(), c['speech'].casefold()) for c in normalized}) != 6:
+    if len({(c['action'].casefold(), c['speech'].casefold()) for c in normalized}) != expected_choices:
         raise ValueError('Варианты действий повторяются.')
     for change in items('characters'):
         exact_keys(change, ['id', 'now', 'goal', 'evidence'], ['id', 'evidence'])
@@ -82,7 +84,7 @@ def apply_updates(before, payload, narrative, user_text, turn):
         if 'now' in change:
             card['fields']['Сейчас'] = text(change['now'], 'now')
         if 'goal' in change:
-            if card.get('is_player'):
+            if card['id']==controlled(before):
                 raise ValueError('Нельзя менять желания ГГ за игрока.')
             card['fields']['Чего хочет'] = text(change['goal'], 'goal')
     # Arrows describe this turn only. Historical changes remain in turns.changes_json.
@@ -153,7 +155,7 @@ def choice_input(choice):
     return choice['action'] + (': «' + choice['speech'] + '»' if choice.get('speech') else '')
 
 
-def apply_supported_updates(before, payload, narrative, user_text, turn):
+def apply_supported_updates(before, payload, narrative, user_text, turn, kind="turn"):
     """After one repair, omit only unsupported patches and report each omission.
 
     All structural/ID/choice errors still fail atomically; rejected claims never
@@ -164,7 +166,7 @@ def apply_supported_updates(before, payload, narrative, user_text, turn):
     warnings = []
     while True:
         try:
-            state, choices, changes = apply_updates(before,payload,narrative,user_text,turn)
+            state, choices, changes = apply_updates(before,payload,narrative,user_text,turn,kind)
             return state,choices,changes,warnings
         except EvidenceError as exc:
             match = re.search(r'(characters|relationships|facts|events|plans|locations)\[(\d+)\]', str(exc))
