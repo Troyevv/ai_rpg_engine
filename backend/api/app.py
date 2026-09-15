@@ -17,11 +17,12 @@ import engine
 import llm
 from character_links import linked_markdown
 from backend.api.schemas import (World, Named, Generation, Turn, Retry, Revision, Scene,
-                                 Models, Load, Preferences, Markdown)
+                                 Models, Load, Preferences, Markdown, Credential, VariantSelection)
 from backend.repositories.preparation import Repository
 from backend.services.preparation import Preparation
 from backend.services.scene import scene_metadata
 from backend.services.coordinator import LOCAL_MODEL_LOCK
+from backend.services.credentials import Credentials
 
 ROOT = Path(__file__).resolve().parents[2]
 ACTIVE = ('generating', 'extracting', 'validating')
@@ -30,6 +31,7 @@ ACTIVE = ('generating', 'extracting', 'validating')
 def create_app(db_path=None, recover=True):
     repo = Repository(db_path)
     preparation = Preparation(repo)
+    credentials = Credentials(repo)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -37,6 +39,7 @@ def create_app(db_path=None, recover=True):
             with repo.connect() as db:
                 stale = [r['id'] for r in db.execute("SELECT id FROM preparation_jobs WHERE status='generating'")]
                 db.execute("UPDATE game_jobs SET status='stopped',error='Сервер перезапущен. Можно повторить запрос.' WHERE status IN ('generating','extracting','validating')")
+                db.execute("UPDATE llm_requests SET status='interrupted' WHERE status='running'")
             for jid in stale:
                 preparation.stop(jid)
         yield
@@ -122,6 +125,7 @@ def create_app(db_path=None, recover=True):
         else:
             value = repo.get_job(jid)
             value['live'] = engine.live(jid)
+        value['warnings'] = json.loads(value.get('warnings_json','[]'))
         return repo.public_job(value)
 
     @app.get('/api/saves/{sid}')
@@ -129,6 +133,8 @@ def create_app(db_path=None, recover=True):
         value = repo.get_save(sid)
         value['scene_meta'] = scene_metadata(value['state'])
         value['turns'] = [{**t, 'choices': json.loads(t['choices_json']), 'changes': json.loads(t['changes_json'])} for t in repo.list_turns(sid)]
+        for t in value['turns']:
+            t['variants'] = repo.variants(t['node_id'])
         latest = repo.latest_job(sid)
         value['job'] = job(latest['id']) if latest else None
         return value
@@ -142,7 +148,9 @@ def create_app(db_path=None, recover=True):
     def turn(sid: int, body: Turn):
         settings = body.config.model_dump()
         settings['expected_revision'] = body.revision
-        jid = engine.submit(repo, sid, body.text, body.kind, settings, api_key=body.key())
+        settings['target_turn_id'] = body.target_turn_id
+        settings['rollback_following'] = body.rollback_following
+        jid = engine.submit(repo, sid, body.text, body.kind, settings, api_key=credentials.resolve(body.config.provider, body.key()))
         return job(jid)
 
     @app.post('/api/saves/{sid}/rollback')
@@ -165,7 +173,7 @@ def create_app(db_path=None, recover=True):
 
     @app.post('/api/jobs/{jid}/retry')
     def retry(jid: str, body: Retry):
-        engine.retry(repo, jid, body.config.model_dump(), api_key=body.key())
+        engine.retry(repo, jid, body.config.model_dump(), api_key=credentials.resolve(body.config.provider, body.key()))
         return job(jid)
 
     @app.get('/api/jobs/{jid}/events')
@@ -203,7 +211,7 @@ def create_app(db_path=None, recover=True):
     def generate(wid: str, body: Generation):
         if body.kind == 'idea' and not body.text.strip():
             raise ValueError('Опиши идею или изменения.')
-        jid = preparation.submit(wid, body.kind, body.text, body.config.model_dump(), body.revision, body.key())
+        jid = preparation.submit(wid, body.kind, body.text, body.config.model_dump(), body.revision, credentials.resolve(body.config.provider, body.key()))
         return job(jid)
 
     @app.post('/api/workspaces/{wid}/reset')
@@ -218,6 +226,50 @@ def create_app(db_path=None, recover=True):
             raise ValueError('Заверши генерацию выжимки перед сохранением мира.')
         return repo.get_world(repo.save_world(body.name, w['summary']))
 
+    @app.get('/api/credentials')
+    def credential_status():
+        return credentials.status()
+
+    @app.put('/api/credentials/deepseek')
+    def store_key(body: Credential):
+        if not body.key() or not body.key().strip():
+            raise ValueError('Введи непустой API-ключ.')
+        credentials.put('deepseek',body.key())
+        return credentials.status()
+
+    @app.delete('/api/credentials/deepseek')
+    def delete_key():
+        credentials.delete('deepseek')
+        return credentials.status()
+
+    @app.get('/api/capabilities')
+    def capabilities():
+        return {key: {'thinking_models':spec.thinking_models} for key,spec in llm.PROVIDERS.items()}
+
+    @app.get('/api/saves/{sid}/accounting')
+    def accounting(sid: int):
+        return repo.accounting(sid)
+
+    @app.post('/api/saves/{sid}/sessions')
+    def new_session(sid: int):
+        return {'id':repo.start_session(sid)}
+
+    @app.get('/api/workspaces/{wid}/requests')
+    def workspace_requests(wid: str):
+        repo.workspace(wid)
+        return repo.request_log(workspace_id=wid)
+
+    @app.post('/api/saves/{sid}/turns/{tid}/variant')
+    def select_variant(sid: int, tid: int, body: VariantSelection):
+        repo.select_variant(sid,tid,body.variant_id,body.revision,body.rollback_following)
+        return save(sid)
+
+    @app.get('/api/saves/{sid}/archive')
+    def archive(sid: int):
+        repo.get_save(sid)
+        with repo.connect() as db:
+            return [dict(r) for r in db.execute('SELECT * FROM archived_turns WHERE save_id=? ORDER BY id', (sid,))]
+
     @app.get('/api/settings/{profile}')
     def settings(profile: str):
         return repo.get_settings(profile)
@@ -231,7 +283,7 @@ def create_app(db_path=None, recover=True):
     def models(body: Models):
         try:
             if body.provider == 'deepseek':
-                return {'models': llm.get_deepseek_models(body.key()), 'loaded': []}
+                return {'models': llm.get_deepseek_models(credentials.resolve('deepseek',body.key())), 'loaded': []}
             return {'models': llm.get_available_models(), 'loaded': llm.get_loaded_models()}
         except Exception:
             raise HTTPException(502, 'Не удалось получить модели. Проверь провайдера, подключение и API-ключ.') from None

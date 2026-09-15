@@ -4,10 +4,12 @@ import json
 import threading
 import time
 
-from context_builder import build_context
+from context_builder import build_context, describe_context, estimate
 from llm import chat_stream, find_loaded_model, deepseek_key, PROVIDERS
-from state_updates import apply_updates, EvidenceError
+from state_updates import apply_updates, apply_supported_updates, EvidenceError
 from storage import Storage
+from backend.services.usage import tracked_stream
+from backend.services.memory import compact
 
 from backend.services.coordinator import LOCAL_MODEL_LOCK, model_lease
 
@@ -112,10 +114,11 @@ def run_job(path, job_id, handle):
                     raise ValueError('Выбранная модель не загружена. Загрузи её в настройках игры.')
                 actual_context = model.get('config', {}).get('context_length') or config['context_length']
                 context = min(int(actual_context), config['context_length'])
-            before = json.loads(job['before_json'])
+            before = json.loads(job['memory_before_json'] or job['before_json'])
             history = storage.list_turns(job['save_id'])
             if job['replaces_id'] is not None:
-                history = [t for t in history if t['id'] != job['replaces_id']]
+                target = next(t for t in history if t['id'] == job['replaces_id'])
+                history = [t for t in history if t['sequence'] < target['sequence']]
             sequence = history[-1]['sequence'] + 1 if history else 0
             narrative = job['narrative']
 
@@ -127,11 +130,25 @@ def run_job(path, job_id, handle):
             common = {'model': config['model'], 'require_complete': True,
                       'cancel_event': handle.cancelled, 'on_stream': on_stream,
                       'provider': config.get('provider', 'local'), 'api_key': handle.api_key}
+            def generate(stage, messages, limit, temperature, **extra):
+                return tracked_stream(storage, chat_stream, job_id, stage, config, messages,
+                                      describe_context(messages), temperature=temperature,
+                                      max_tokens=limit, **extra, **common)
+
             if not job['narrative_complete']:
-                messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'])
+                if job['context_json']:
+                    messages = json.loads(job['context_json'])
+                    if estimate(messages)>context-config['max_tokens']-256:
+                        raise ValueError('Сохранённый контекст не помещается в выбранную модель. Увеличь контекст или уменьши лимит ответа.')
+                else:
+                    before = compact(storage, job, before, history, dict(config,context_length=context),
+                                     lambda messages: generate('memory',messages,config['update_tokens'],0.1), handle.cancelled)
+                    if handle.cancelled.is_set():
+                        return
+                    messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], recent_turns=config.get('recent_turns',6))
+                    storage.save_context(job_id,messages,before)
                 last_write = 0.0
-                for chunk in chat_stream(messages=messages, temperature=config.get('temperature', 0.8),
-                                         max_tokens=config['max_tokens'], **common):
+                for chunk in generate('narrative',messages,config['max_tokens'],config.get('temperature',0.8)):
                     if handle.cancelled.is_set():
                         return
                     narrative += chunk
@@ -150,9 +167,9 @@ def run_job(path, job_id, handle):
                 storage.job_progress(job_id, 'extracting')
                 messages = build_context(before, history, job['user_text'], job['kind'], context,
                                          config['update_tokens'], extraction_text=narrative,
-                                         validation_feedback=feedback)
-                result = ''.join(chat_stream(messages=messages, temperature=0.1, max_tokens=config['update_tokens'],
-                                           response_format={'type': 'json_object'}, **common))
+                                         validation_feedback=feedback, recent_turns=config.get('recent_turns',6))
+                result = ''.join(generate('extraction' if attempt==0 else 'extraction_repair',messages,config['update_tokens'],0.1,
+                                          response_format={'type':'json_object'}))
                 if handle.cancelled.is_set():
                     return
                 storage.job_progress(job_id, 'validating')
@@ -161,7 +178,10 @@ def run_job(path, job_id, handle):
                     break
                 except EvidenceError as exc:
                     if attempt == 1:
-                        raise
+                        state, choices, changes, warnings = apply_supported_updates(before,result,narrative,job['user_text'],sequence)
+                        with storage.connect() as db:
+                            db.execute('UPDATE game_jobs SET warnings_json=? WHERE id=?', (json.dumps(warnings,ensure_ascii=False),job_id))
+                        break
                     feedback = str(exc)
             if not handle.cancelled.is_set():
                 storage.commit_job(job_id, state, choices, changes)

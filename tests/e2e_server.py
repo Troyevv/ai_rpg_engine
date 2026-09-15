@@ -35,6 +35,8 @@ def stream(**kwargs):
         value = '# Вечер в общем доме\n\nКомпания друзей собирается на кухне после долгого дня. Современная драмеди: живые разговоры, дружба и открытые линии.'
     else:
         value = NARRATIVE
+    if kwargs.get('on_usage'):
+        kwargs['on_usage']({'prompt_tokens':1000,'completion_tokens':100,'prompt_cache_hit_tokens':800})
     for i in range(0, len(value), 60):
         time.sleep(.025)
         if kwargs.get('cancel_event') and kwargs['cancel_event'].is_set():
@@ -53,4 +55,11 @@ llm.unload_all_models = lambda: 1
 
 if __name__ == '__main__':
     path = os.getenv('E2E_DB_PATH') or str(Path(tempfile.mkdtemp())/'e2e.sqlite3')
-    uvicorn.run(create_app(path), host='127.0.0.1', port=int(os.getenv('E2E_PORT','8011')), log_level='warning')
+    app = create_app(path)
+    @app.post('/test/seed')
+    def seed():
+        repo = app.state.repository
+        wid = repo.save_world('Тест вариантов и памяти',summary())
+        sid = repo.create_save(wid,'Тестовое прохождение')
+        return {'world':wid,'save':sid}
+    uvicorn.run(app, host='127.0.0.1', port=int(os.getenv('E2E_PORT','8011')), log_level='warning')

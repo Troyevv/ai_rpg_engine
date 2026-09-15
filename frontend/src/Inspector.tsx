@@ -339,6 +339,7 @@ export function Inspector({
         )}
         {panel === "Память" && (
           <>
+            {state.memory && <section><h3>Актуальная память · по ход {state.memory.through_sequence}</h3><Markdown text={state.memory.summary}/></section>}
             {state.events?.length ? (
               state.events.map((e, i) => (
                 <section key={i}>

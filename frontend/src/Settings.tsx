@@ -29,9 +29,15 @@ export function Settings({
   const [draft, setDraft] = useState(value);
   const [models, setModels] = useState<string[]>([]);
   const [loaded, setLoaded] = useState<string[]>([]);
+  const [stored, setStored] = useState(false);
+  const [capabilities, setCapabilities] = useState<Record<string,{thinking_models:string[]}>>({});
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    if (open) setDraft(value);
+    if (open) {
+      setDraft(value);
+      api<{deepseek:boolean}>("/credentials").then(v=>setStored(v.deepseek)).catch(e=>toast.error(e.message));
+      api<Record<string,{thinking_models:string[]}>>("/capabilities").then(setCapabilities).catch(e=>toast.error(e.message));
+    }
   }, [open, value]);
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -69,13 +75,16 @@ export function Settings({
             autoComplete="off"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder="Или переменная DEEPSEEK_API_KEY"
+            placeholder={stored ? "Ключ сохранён на сервере. Введи новый для замены" : "Или переменная DEEPSEEK_API_KEY"}
           />
         </label>
         <p className="muted small">
-          Ключ остаётся в памяти этой вкладки. Для DeepSeek текст и контекст
-          отправляются в API.
+          Ключ сохраняется зашифрованным на сервере и работает после перезапуска и с телефона. Для DeepSeek текст и контекст отправляются в API.
         </p>
+        {stored && <Button variant="ghost" size="sm" onClick={()=>run(async()=>{
+          const status = await api<{deepseek:boolean}>("/credentials/deepseek",undefined,"DELETE");
+          setStored(status.deepseek); setApiKey(""); toast.success(status.deepseek ? "Сохранённый ключ удалён; ключ окружения остаётся доступен" : "Ключ удалён");
+        })}>Удалить сохранённый ключ</Button>}
         {(["idea", "summary", "game"] as const).map((key, index) => (
           <fieldset key={key}>
             <legend>
@@ -110,6 +119,13 @@ export function Settings({
                   onChange={(e) => update(key, { model: e.target.value })}
                 />
               </label>
+              {(capabilities[draft[key].provider]?.thinking_models || []).includes(draft[key].model) && <label>
+                Thinking
+                <select aria-label={`Thinking ${key}`} value={draft[key].thinking || "off"} onChange={e=>update(key,{thinking:e.target.value as ModelConfig["thinking"]})}>
+                  <option value="off">Off</option><option value="low">Low</option><option value="high">High</option>
+                </select>
+                <span className="muted small">Размышления входят в лимит ответа. Temperature при Thinking не применяется.</span>
+              </label>}
               <label>
                 Temperature
                 <Input
@@ -135,6 +151,8 @@ export function Settings({
               </label>
               {key === "game" && (
                 <>
+                  <label>Последних ходов в контексте<Input type="number" min="2" max="20" value={draft.game.recent_turns} onChange={e=>update(key,{recent_turns:+e.target.value})}/></label>
+                  <label>Ходов в одном пакете памяти<Input type="number" min="2" max="20" value={draft.game.memory_batch} onChange={e=>update(key,{memory_batch:+e.target.value})}/></label>
                   <label>
                     Бюджет контекста
                     <select
@@ -349,6 +367,10 @@ export function Settings({
             disabled={busy}
             onClick={() =>
               run(async () => {
+                if (apiKey.trim()) {
+                  await api("/credentials/deepseek",{api_key:apiKey},"PUT");
+                  setStored(true); setApiKey("");
+                }
                 await save(draft);
                 onOpenChange(false);
                 toast.success("Настройки сохранены");

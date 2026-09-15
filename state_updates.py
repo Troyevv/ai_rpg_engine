@@ -151,3 +151,25 @@ def apply_updates(before, payload, narrative, user_text, turn):
 
 def choice_input(choice):
     return choice['action'] + (': «' + choice['speech'] + '»' if choice.get('speech') else '')
+
+
+def apply_supported_updates(before, payload, narrative, user_text, turn):
+    """After one repair, omit only unsupported patches and report each omission.
+
+    All structural/ID/choice errors still fail atomically; rejected claims never
+    enter canonical state or memory. The full narrative is retained in the journal.
+    """
+    import re
+    payload = json.loads(payload) if isinstance(payload,str) else deepcopy(payload)
+    warnings = []
+    while True:
+        try:
+            state, choices, changes = apply_updates(before,payload,narrative,user_text,turn)
+            return state,choices,changes,warnings
+        except EvidenceError as exc:
+            match = re.search(r'(characters|relationships|facts|events|plans|locations)\[(\d+)\]', str(exc))
+            if not match:
+                raise
+            key,index = match[1],int(match[2])
+            rejected = payload[key].pop(index)
+            warnings.append({'section':key,'reason':'Нет подтверждённой цитаты текущего хода', 'rejected':rejected})

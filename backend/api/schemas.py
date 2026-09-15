@@ -10,6 +10,9 @@ class ModelConfig(DTO):
     context_length: int = Field(default=32768, ge=8192, le=131072)
     temperature: float = Field(default=0.8, ge=0, le=1.5)
     max_tokens: int = Field(default=2000, ge=256, le=32000)
+    thinking: Literal['off','low','high'] = 'off'
+    recent_turns: int = Field(default=6, ge=2, le=20)
+    memory_batch: int = Field(default=4, ge=2, le=20)
     update_tokens: int = Field(default=4096, ge=1024, le=16000)
 
 class Credential(DTO):
@@ -24,6 +27,8 @@ class Generation(Credential):
     config: ModelConfig
 
 class Turn(Credential):
+    target_turn_id: int | None = None
+    rollback_following: bool = False
     kind: Literal['start', 'turn', 'regenerate'] = 'turn'
     text: str = Field(default='', max_length=100000)
     revision: int = Field(ge=0)
@@ -72,3 +77,7 @@ class Markdown(DTO):
     save_id: int | None = None
     world_id: int | None = None
     link_names: bool = True
+
+class VariantSelection(Revision):
+    variant_id: str
+    rollback_following: bool = False

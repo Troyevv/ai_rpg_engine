@@ -7,11 +7,12 @@ from pathlib import Path
 import sqlite3
 from world_parser import parse_summary
 from engine_storage import EngineStorage
+from backend.repositories.runtime import RuntimeStorage
 
 DEFAULT_DB = Path(__file__).resolve().parent / 'data' / 'rpg.sqlite3'
 
 
-class Storage(EngineStorage):
+class Storage(EngineStorage, RuntimeStorage):
     def __init__(self, path=None):
         self.path = Path(path or os.environ.get('RPG_DB_PATH', DEFAULT_DB))
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -39,6 +40,7 @@ class Storage(EngineStorage):
             ''')
 
         self.init_engine()
+        self.init_runtime()
 
     @contextmanager
     def connect(self):
@@ -109,7 +111,7 @@ class Storage(EngineStorage):
     def list_turns(self, save_id):
         with self.connect() as db:
             return [dict(row) for row in db.execute(
-                'SELECT id,sequence,user_text,assistant_text,kind,choices_json,changes_json FROM turns WHERE save_id=? ORDER BY sequence', (save_id,))]
+                'SELECT id,sequence,user_text,assistant_text,kind,choices_json,changes_json,node_id,active_variant_id,memory_archived FROM turns WHERE save_id=? ORDER BY sequence', (save_id,))]
 
     def update_scene_meta(self, save_id, metadata, expected_revision=None):
         with self.connect() as db:

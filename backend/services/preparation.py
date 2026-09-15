@@ -4,6 +4,7 @@ import time
 from dataclasses import dataclass, field
 from llm import chat_stream, find_loaded_model, deepseek_key
 from backend.services.coordinator import model_lease
+from backend.services.usage import tracked_stream
 from backend.services.generation_prompts import build_idea_messages, build_summary_messages
 
 
@@ -66,8 +67,8 @@ class Preparation:
                     if handle.cancel.is_set():
                         stream.close()
                 last = 0.0
-                for chunk in chat_stream(model=config['model'], provider=config['provider'], api_key=api_key,
-                                         messages=messages, temperature=config['temperature'], max_tokens=config['max_tokens'],
+                for chunk in tracked_stream(self.repo,chat_stream,jid,job['kind'],config,messages,model=config['model'], provider=config['provider'], api_key=api_key,
+                                         temperature=config['temperature'], max_tokens=config['max_tokens'],
                                          require_complete=True, cancel_event=handle.cancel, on_stream=on_stream):
                     if handle.cancel.is_set():
                         return

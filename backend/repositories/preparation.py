@@ -45,7 +45,7 @@ class Repository(Storage):
 
     @staticmethod
     def public_job(job):
-        return {k: v for k, v in job.items() if k not in ('config_json', 'before_json')}
+        return {k: v for k, v in job.items() if k not in ('config_json', 'before_json', 'context_json', 'memory_before_json', 'warnings_json')}
 
     def preparation_job(self, jid):
         with self.connect() as db:

@@ -27,7 +27,12 @@ export function JobView({
   onCharacter?: (id: string) => void;
   links?: boolean;
 }) {
-  if (!job || job.status === "saved") return null;
+  if (!job) return null;
+  if (job.status === "saved") return job.warnings?.length ? <details className="job warning">
+    <summary>Ход сохранён. Не подтверждено изменений: {job.warnings.length}</summary>
+    <p>Эти пункты не добавлены в состояние мира. Текст хода сохранён полностью.</p>
+    {job.warnings.map((w,i)=><div key={i}><strong>{w.section}</strong>: {w.reason}<pre>{JSON.stringify(w.rejected,null,2)}</pre></div>)}
+  </details> : null;
   return (
     <section className="job" aria-live="polite">
       <details open>
@@ -42,6 +47,7 @@ export function JobView({
           </span>
           <span className="muted">Свернуть / раскрыть</span>
         </summary>
+        {job.user_text && <div className="player-action"><span className="eyebrow">Твоё действие</span><Markdown text={job.user_text}/></div>}
         {job.narrative && (
           <Markdown
             text={job.narrative}
