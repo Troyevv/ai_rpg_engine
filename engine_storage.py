@@ -59,7 +59,21 @@ class EngineStorage:
             if kind != 'start' and last is None:
                 raise ValueError('Сначала начни игру.')
             before, replaces = save['state_json'], None
+            context_json, memory_before = None, None
             if kind == 'regenerate':
+                target = config.get('target_turn_id')
+                if target is not None:
+                    last = db.execute('SELECT * FROM turns WHERE id=? AND save_id=?', (target,save_id)).fetchone()
+                    if not last:
+                        raise ValueError('Исходный ход не найден.')
+                    # Keep subsequent turns until a replacement commits successfully.
+                    later = db.execute('SELECT 1 FROM turns WHERE save_id=? AND sequence>?', (save_id,last['sequence'])).fetchone()
+                    if later and not config.get('rollback_following'):
+                        raise ValueError('Подтверди откат последующих ходов.')
+                v = db.execute('SELECT context_json,memory_before_json FROM response_variants WHERE id=?', (last['active_variant_id'],)).fetchone()
+                context_json, memory_before = (v[0],v[1]) if v else (None,None)
+                if context_json is None:
+                    raise ValueError('У старого хода нет снимка исходного контекста. Точная перегенерация недоступна.')
                 before, replaces, user_text, kind = last['before_json'], last['id'], last['user_text'], last['kind']
             if kind == 'turn' and not user_text.strip():
                 raise ValueError('Напиши действие.')
@@ -67,6 +81,8 @@ class EngineStorage:
             db.execute('''INSERT INTO game_jobs(id,save_id,revision,before_json,user_text,kind,replaces_id,status,config_json)
                           VALUES(?,?,?,?,?,?,?,'generating',?)''',
                        (job_id, save_id, save['revision'], before, user_text, kind, replaces, json.dumps(config)))
+            session_id = self.ensure_session(db, save_id)
+            db.execute('UPDATE game_jobs SET context_json=?,memory_before_json=?,session_id=? WHERE id=?', (context_json,memory_before,session_id,job_id))
         return job_id
 
     @staticmethod
@@ -93,7 +109,11 @@ class EngineStorage:
             revision = db.execute('SELECT revision FROM saves WHERE id=?', (job['save_id'],)).fetchone()[0]
             if revision != job['revision']:
                 raise ValueError('Сейв изменился. Этот черновик устарел.')
-            db.execute("UPDATE game_jobs SET status='extracting',error='',config_json=? WHERE id=?", (json.dumps(config) if config else job['config_json'], job_id))
+            settings = json.loads(job['config_json'])
+            if config:
+                settings.update({k:v for k,v in config.items() if k not in ('target_turn_id','rollback_following','expected_revision')})
+            session_id = self.ensure_session(db, job['save_id'])
+            db.execute("UPDATE game_jobs SET status='extracting',error='',warnings_json='[]',config_json=?,session_id=? WHERE id=?", (json.dumps(settings),session_id,job_id))
 
     def commit_job(self, job_id, state, choices, changes):
         with self.connect() as db:
@@ -110,12 +130,19 @@ class EngineStorage:
                     raise ValueError('Исходный ход уже изменён.')
                 db.execute('INSERT INTO archived_turns(save_id,reason,payload) VALUES(?,?,?)',
                            (job['save_id'], 'regenerate', json.dumps(dict(old), ensure_ascii=False)))
-                db.execute('DELETE FROM turns WHERE id=?', (old['id'],))
-            sequence = db.execute('SELECT COALESCE(MAX(sequence),-1)+1 FROM turns WHERE save_id=?', (job['save_id'],)).fetchone()[0]
+                self._rollback_after(db, job['save_id'], old['sequence'], json.loads(job['config_json']).get('rollback_following',False))
+            sequence = old['sequence'] if job['replaces_id'] is not None else db.execute('SELECT COALESCE(MAX(sequence),-1)+1 FROM turns WHERE save_id=?', (job['save_id'],)).fetchone()[0]
             after = json.dumps(state, ensure_ascii=False)
-            db.execute('''INSERT INTO turns(save_id,sequence,user_text,assistant_text,before_json,after_json,kind,choices_json,changes_json)
-                          VALUES(?,?,?,?,?,?,?,?,?)''', (job['save_id'], sequence, job['user_text'], job['narrative'], job['before_json'], after,
-                                                       job['kind'], json.dumps(choices, ensure_ascii=False), json.dumps(changes, ensure_ascii=False)))
+            values = (job['user_text'], job['narrative'], job['before_json'], after, job['kind'],
+                      json.dumps(choices,ensure_ascii=False), json.dumps(changes,ensure_ascii=False))
+            if job['replaces_id'] is not None:
+                tid = old['id']
+                db.execute('UPDATE turns SET user_text=?,assistant_text=?,before_json=?,after_json=?,kind=?,choices_json=?,changes_json=? WHERE id=?', (*values,tid))
+            else:
+                tid = db.execute('INSERT INTO turns(user_text,assistant_text,before_json,after_json,kind,choices_json,changes_json,save_id,sequence) VALUES(?,?,?,?,?,?,?,?,?)', (*values,job['save_id'],sequence)).lastrowid
+            record = dict(db.execute('SELECT * FROM turns WHERE id=?', (tid,)).fetchone())
+            self._variant(db, record, job_id, job['context_json'], job['memory_before_json'])
+            self._archive_memory(db, job['save_id'], state)
             db.execute("UPDATE saves SET state_json=?,revision=revision+1,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?", (after, job['save_id']))
             db.execute("UPDATE game_jobs SET status='saved' WHERE id=?", (job_id,))
 
@@ -132,3 +159,4 @@ class EngineStorage:
             db.execute('INSERT INTO archived_turns(save_id,reason,payload) VALUES(?,?,?)', (save_id, 'rollback', json.dumps(dict(last), ensure_ascii=False)))
             db.execute('DELETE FROM turns WHERE id=?', (last['id'],))
             db.execute("UPDATE saves SET state_json=?,revision=revision+1,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?", (last['before_json'], save_id))
+            self._archive_memory(db, save_id, json.loads(last['before_json']))

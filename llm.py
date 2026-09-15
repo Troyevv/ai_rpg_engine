@@ -16,12 +16,22 @@ class ProviderSpec:
     key_env: str = ''
     default_key: str = ''
     extra_body: dict = field(default_factory=dict)
+    thinking_models: tuple[str, ...] = ()
 
 # New compatible services can be registered here without changing game logic.
 PROVIDERS = {
     'local': ProviderSpec(OPENAI_BASE_URL, default_key='lm-studio'),
-    'deepseek': ProviderSpec(DEEPSEEK_BASE_URL, 'DEEPSEEK_API_KEY', extra_body={'thinking': {'type': 'disabled'}}),
+    'deepseek': ProviderSpec(DEEPSEEK_BASE_URL, 'DEEPSEEK_API_KEY', extra_body={'thinking': {'type': 'disabled'}}, thinking_models=('deepseek-flash','deepseek-v4-flash','deepseek-v4-flash-vision-exp','deepseek-v4-pro')),
 }
+
+
+def thinking_options(provider, model, level):
+    spec = PROVIDERS.get(provider)
+    if not spec or model not in spec.thinking_models:
+        return 'off', {}
+    level = level if level in ('off','low','high') else 'off'
+    return level, {'extra_body': {'thinking': {'type': 'disabled' if level=='off' else 'enabled'}},
+                   **({'reasoning_effort':level} if level!='off' else {})}
 
 
 def deepseek_key(api_key=None):
@@ -250,6 +260,8 @@ def chat_stream(
     response_format=None,
     provider='local',
     api_key=None,
+    thinking='off',
+    on_usage=None,
 ):
     if provider not in PROVIDERS:
         raise ValueError('Неизвестный провайдер модели.')
@@ -265,12 +277,17 @@ def chat_stream(
         extra = {"response_format": response_format} if response_format else {}
         if spec.extra_body:
             extra['extra_body'] = spec.extra_body
+        effective_thinking, thinking_args = thinking_options(provider,model,thinking)
+        extra.update(thinking_args)
+        if remote:
+            extra['stream_options'] = {'include_usage': True}
+        if effective_thinking == 'off':
+            extra['temperature'] = temperature
         if cancel_event is not None and cancel_event.is_set():
             raise RuntimeError("Генерация остановлена.")
         stream = client.chat.completions.create(
             model=model,
             messages=messages,
-            temperature=temperature,
             max_tokens=max_tokens,
             stream=True,
             **extra,
@@ -278,6 +295,11 @@ def chat_stream(
         if on_stream is not None:
             on_stream(stream)
         for chunk in stream:
+            usage = getattr(chunk, 'usage', None)
+            if on_usage and usage is not None:
+                value = usage if isinstance(usage, dict) else usage.model_dump() if hasattr(usage, 'model_dump') else None
+                if value is not None:
+                    on_usage(value)
             if cancel_event is not None and cancel_event.is_set():
                 raise RuntimeError("Генерация остановлена.")
             if not chunk.choices:

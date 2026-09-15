@@ -29,6 +29,7 @@ export default function App() {
   const [panel, setPanel] = useState<Panel>("Мир");
   const [character, setCharacter] = useState("");
   const [reading, setReading] = useState(false);
+  const [prefsLoading,setPrefsLoading] = useState(true);
   const [prefs, setPrefs] = useState<Preferences>(defaults);
   const [apiKey, setApiKey] = useState("");
   const [world, setWorld] = useState<World | null>(null);
@@ -57,8 +58,9 @@ export default function App() {
   });
   useEffect(() => {
     api<Partial<Preferences>>(`/settings/${profile}`)
-      .then((p) => setPrefs({ ...defaults, ...p }))
-      .catch((e) => toast.error(e.message));
+      .then((p) => setPrefs({ ...defaults, ...p, idea:{...defaults.idea,...p.idea}, summary:{...defaults.summary,...p.summary}, game:{...defaults.game,...p.game} }))
+      .catch((e) => toast.error(e.message))
+      .finally(()=>setPrefsLoading(false));
   }, [profile]);
   const selectedRef = useRef(selection);
   selectedRef.current = selection;
@@ -158,7 +160,7 @@ export default function App() {
             <span>Память</span>
           </button>
         </div>
-        <button className="nav-settings" onClick={() => setSettings(true)}>
+        <button className="nav-settings" disabled={prefsLoading} onClick={() => setSettings(true)}>
           <Settings2 />
           <span>Настройки</span>
         </button>
@@ -191,6 +193,7 @@ export default function App() {
             <Button
               variant="ghost"
               size="icon"
+              disabled={prefsLoading}
               aria-label="Настройки"
               onClick={() => setSettings(true)}
             >
@@ -217,7 +220,7 @@ export default function App() {
               setLibrary(true);
             }}
           />
-        ) : loading ? (
+        ) : loading || prefsLoading ? (
           <div className="skeleton-page">
             <div />
             <div />

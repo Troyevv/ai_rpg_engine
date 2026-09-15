@@ -1,3 +1,4 @@
+import {Diagnostics} from "./Diagnostics";
 import { useEffect, useState } from "react";
 import { Download, Send, Plus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -37,6 +38,7 @@ export function Preparation({
   const [text, setText] = useState("");
   const [name, setName] = useState("Новая история");
   const [saveName, setSaveName] = useState("");
+  const [diagnostics,setDiagnostics] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const refresh = () => {
@@ -87,6 +89,7 @@ export function Preparation({
     });
   return (
     <main className="preparation">
+      {workspace&&<><Diagnostics workspaceId={workspace.id} open={diagnostics} onOpenChange={setDiagnostics}/><Button variant="ghost" onClick={()=>setDiagnostics(true)}>Запросы и расходы мастерской</Button></>}
       <div className="page-heading">
         <div>
           <p className="eyebrow">Мастерская историй</p>

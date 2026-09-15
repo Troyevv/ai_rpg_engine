@@ -8,6 +8,9 @@ export interface ModelConfig {
   temperature: number;
   max_tokens: number;
   update_tokens: number;
+  thinking: "off" | "low" | "high";
+  recent_turns: number;
+  memory_batch: number;
 }
 export interface LocalConfig {
   model: string;
@@ -46,6 +49,7 @@ export interface Scene {
   present_ids: string[];
 }
 export interface State {
+  memory?: {id: string; summary: string; through_sequence: number};
   scene: string;
   scene_meta?: Scene;
   sections: Record<string, string>;
@@ -82,6 +86,10 @@ export interface Choice {
   speech: string;
 }
 export interface Turn {
+  node_id: string;
+  active_variant_id: string;
+  memory_archived: boolean;
+  variants: {id: string; ordinal: number; job_id: string | null; can_regenerate: boolean}[];
   id: number;
   sequence: number;
   user_text: string;
@@ -98,6 +106,8 @@ export interface Job {
   kind: string;
   revision: number;
   live?: boolean;
+  user_text?: string;
+  warnings?: {section: string; reason: string; rejected: unknown}[];
 }
 export interface Save extends SaveItem {
   world_id: number;
@@ -124,6 +134,9 @@ const config: ModelConfig = {
   temperature: 0.8,
   max_tokens: 2000,
   update_tokens: 4096,
+  thinking: "off",
+  recent_turns: 6,
+  memory_batch: 4,
 };
 export const defaults: Preferences = {
   idea: { ...config, temperature: 1, max_tokens: 6000 },

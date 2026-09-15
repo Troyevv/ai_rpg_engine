@@ -1247,3 +1247,14 @@ details > label:first-of-type {
     scroll-behavior: auto !important;
   }
 }
+
+/* Visible player journal and restrained diagnostic controls. */
+.player-action {border-left:3px solid var(--primary, #86bda6);background:rgba(126,177,153,.09);padding:1rem 1.2rem;margin:1.8rem 0;color:inherit}
+.player-action .prose {opacity:1}
+.variant-controls {display:flex;align-items:center;flex-wrap:wrap;gap:.35rem;margin:1rem 0 2rem;font:13px system-ui}
+.usage-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.8rem}
+.usage-grid section {display:flex;flex-direction:column;gap:.4rem;padding:.8rem;border:1px solid #333;border-radius:10px}
+.usage-grid strong {font-size:20px}
+.diagnostics details {padding:.7rem 0;border-bottom:1px solid #333}
+.context-content,.warning pre {white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-height:400px;overflow:auto}
+.diagnostics select {width:100%;min-width:0}

@@ -20,6 +20,7 @@ import {
   type Preferences,
 } from "./types";
 import { Markdown } from "./Markdown";
+import { Diagnostics } from "./Diagnostics";
 import { JobView } from "./JobView";
 import { Button } from "./components/ui/button";
 import { Textarea } from "./components/ui/textarea";
@@ -42,6 +43,8 @@ export function Game({
   prefs: Preferences;
   apiKey: string;
 }) {
+  const [diagnostics, setDiagnostics] = useState(false);
+  const [diagnosticJob, setDiagnosticJob] = useState<string|undefined>();
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState<Job | null>(null);
@@ -76,12 +79,14 @@ export function Game({
       setBusy(false);
     }
   };
-  const turn = (kind: "start" | "turn" | "regenerate", text = draft) =>
+  const turn = (kind: "start" | "turn" | "regenerate", text = draft, target?:number, rollback=false) =>
     run(async () => {
       if (!save) return;
       const j = await api<Job>(`/saves/${save.id}/turns`, {
         kind,
         text,
+        target_turn_id: target,
+        rollback_following: rollback,
         config: prefs.game,
         revision: save.revision,
         api_key: apiKey,
@@ -120,6 +125,7 @@ export function Game({
     );
   return (
     <main className="game">
+      {save&&<Diagnostics saveId={save.id} jobId={diagnosticJob} open={diagnostics} onOpenChange={setDiagnostics}/>}
       <div className="scene-bar">
         <span>
           <Clock size={14} />
@@ -161,6 +167,7 @@ export function Game({
             lineHeight: prefs.line_height,
           }}
         >
+          {save&&<Button size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Контекст ведущего · Расходы</Button>}
           <div className="story-heading">
             <p className="eyebrow">
               {save ? save.name : "Начало истории"} · Мир v{world.version}
@@ -196,7 +203,7 @@ export function Game({
                   transition={{ duration: 0.22 }}
                 >
                   {t.user_text && (
-                    <div className="player-action">
+                    <div className="player-action" data-testid="player-action">
                       <span className="eyebrow">Твоё действие</span>
                       <Markdown text={t.user_text} />
                     </div>
@@ -211,6 +218,21 @@ export function Game({
                     links={prefs.link_names}
                     onCharacter={openCharacter}
                   />
+                  <div className="variant-controls">
+                    <span className="muted small">Вариант {(t.variants||[]).find(v=>v.id===t.active_variant_id)?.ordinal||1} / {t.variants?.length||1}</span>
+                    {(t.variants||[]).map(v=><Button key={v.id} size="sm" variant={v.id===t.active_variant_id?"outline":"ghost"} disabled={busy||pending||v.id===t.active_variant_id} onClick={()=>{
+                      const later = i<save.turns.length-1;
+                      if(later&&!window.confirm("Смена варианта откатит все последующие ходы. Они сохранятся в архиве. Продолжить?"))return;
+                      void run(async()=>{await api(`/saves/${save.id}/turns/${t.id}/variant`,{variant_id:v.id,revision:save.revision,rollback_following:later});setSubmitted(null);refresh()});
+                    }}>{v.ordinal}</Button>)}
+                    <Button size="sm" variant="ghost" title={t.variants?.some(v=>v.can_regenerate) ? "" : "У старого хода нет сохранённого контекста"} disabled={busy||pending||!t.variants?.some(v=>v.can_regenerate)} onClick={()=>{
+                      const later=i<save.turns.length-1;
+                      if(later&&!window.confirm("После успешной генерации последующие ходы будут откачены в архив. Продолжить?"))return;
+                      void turn("regenerate","",t.id,later);
+                    }}>Ещё вариант</Button>
+                    <Button size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(t.variants?.find(v=>v.id===t.active_variant_id)?.job_id||undefined);setDiagnostics(true)}}>Контекст / usage</Button>
+                    {!!t.memory_archived&&<span className="muted small">В архиве памяти · полный текст сохранён</span>}
+                  </div>
                 </motion.article>
               ))}
               {!save.turns.length && !job && (
@@ -287,7 +309,7 @@ export function Game({
                     <Button
                       variant="ghost"
                       size="sm"
-                      disabled={busy}
+                      disabled={busy||!save.turns.at(-1)?.variants?.some(v=>v.can_regenerate)}
                       onClick={() => turn("regenerate", "")}
                     >
                       <RotateCcw size={14} />

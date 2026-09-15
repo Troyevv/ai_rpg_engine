@@ -246,7 +246,10 @@ def test_evidence_repair_is_bounded_atomic_and_keeps_narrative(db, outcome):
     assert len(calls) == 3
     assert storage.get_job(job)['narrative'] == NARRATIVE
     assert storage.get_job(job)['narrative_complete']
-    if outcome == 'fixed':
+    if outcome in ('fixed','invalid'):
+        if outcome == 'invalid':
+            assert json.loads(storage.get_job(job)['warnings_json'])[0]['section'] == 'events'
+            assert storage.get_save(sid)['state'].get('events',[]) == before.get('events',[])
         assert storage.get_job(job)['status'] == 'saved'
         assert len(storage.list_turns(sid)) == 1
         assert len(json.loads(storage.list_turns(sid)[0]['choices_json'])) == 6
