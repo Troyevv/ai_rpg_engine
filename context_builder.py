@@ -17,7 +17,7 @@ def estimate(messages):
 
 
 def build_context(state, history, user_text, kind, context_length, reserve, extraction_text=None):
-    rules = (PROMPTS / ('state_update_prompt.md' if extraction_text is not None else 'game_system_prompt.md')).read_text()
+    rules = (PROMPTS / ('state_update_prompt.md' if extraction_text is not None else 'game_system_prompt.md')).read_text(encoding="utf-8")
     present = set(state.get('scene_meta', {}).get('present_ids', []))
     for alias, cid in character_aliases(state['characters']).items():
         if re.search(r'(?<!\w)' + re.escape(alias) + r'(?!\w)', user_text, re.I):

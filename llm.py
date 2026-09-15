@@ -1,4 +1,5 @@
 import os
+from dataclasses import dataclass, field
 
 import requests
 from openai import OpenAI
@@ -7,6 +8,20 @@ from openai import OpenAI
 LM_STUDIO_URL = "http://localhost:1234"
 OPENAI_BASE_URL = f"{LM_STUDIO_URL}/v1"
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+
+
+@dataclass(frozen=True)
+class ProviderSpec:
+    base_url: str
+    key_env: str = ''
+    default_key: str = ''
+    extra_body: dict = field(default_factory=dict)
+
+# New compatible services can be registered here without changing game logic.
+PROVIDERS = {
+    'local': ProviderSpec(OPENAI_BASE_URL, default_key='lm-studio'),
+    'deepseek': ProviderSpec(DEEPSEEK_BASE_URL, 'DEEPSEEK_API_KEY', extra_body={'thinking': {'type': 'disabled'}}),
+}
 
 
 def deepseek_key(api_key=None):
@@ -236,17 +251,20 @@ def chat_stream(
     provider='local',
     api_key=None,
 ):
-    if provider not in ('local', 'deepseek'):
+    if provider not in PROVIDERS:
         raise ValueError('Неизвестный провайдер модели.')
-    remote = provider == 'deepseek'
-    client = OpenAI(base_url=DEEPSEEK_BASE_URL if remote else OPENAI_BASE_URL,
-                    api_key=deepseek_key(api_key) if remote else 'lm-studio', timeout=60.0, max_retries=0)
+    remote = provider != 'local'
+    spec = PROVIDERS[provider]
+    key = spec.default_key if not remote else ((api_key or '').strip() or os.getenv(spec.key_env, '').strip())
+    if not key:
+        raise ValueError('Укажи API-ключ провайдера.')
+    client = OpenAI(base_url=spec.base_url, api_key=key, timeout=60.0, max_retries=0)
     stream = None
     finish_reason = None
     try:
         extra = {"response_format": response_format} if response_format else {}
-        if remote:
-            extra['extra_body'] = {'thinking': {'type': 'disabled'}}
+        if spec.extra_body:
+            extra['extra_body'] = spec.extra_body
         if cancel_event is not None and cancel_event.is_set():
             raise RuntimeError("Генерация остановлена.")
         stream = client.chat.completions.create(

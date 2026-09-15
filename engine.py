@@ -9,7 +9,9 @@ from llm import chat_stream, find_loaded_model, deepseek_key
 from state_updates import apply_updates
 from storage import Storage
 
-MODEL_LOCK = threading.Lock()
+from backend.services.coordinator import LOCAL_MODEL_LOCK, model_lease
+
+MODEL_LOCK = LOCAL_MODEL_LOCK
 REGISTRY_LOCK = threading.Lock()
 WORKERS = {}
 
@@ -94,7 +96,9 @@ def run_job(path, job_id, handle):
     storage = Storage(path)
     narrative = ''
     try:
-        with MODEL_LOCK:
+        initial = storage.get_job(job_id)
+        provider = json.loads(initial['config_json']).get('provider', 'local')
+        with model_lease(provider):
             if handle.cancelled.is_set():
                 return
             job = storage.get_job(job_id)

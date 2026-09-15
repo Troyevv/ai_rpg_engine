@@ -1,0 +1,56 @@
+"""Browser-only fixture server. Never imported by the production application."""
+import json
+import os
+from pathlib import Path
+import sys
+import tempfile
+import time
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import engine
+import llm
+import backend.services.preparation as preparation
+from backend.api.app import create_app
+from test_worlds import summary
+from test_engine import result
+import uvicorn
+
+NARRATIVE = '''Персонаж 1 подвигает свободный стул. «Садись, поговорим».
+
+За окном медленно гаснет вечерний свет. На кухне пахнет свежим кофе, и кто-то оставил на столе раскрытую книгу. Персонаж 2 убирает телефон в карман и смотрит на собравшихся.
+
+— Ну что, — говорит он, чуть улыбаясь, — рассказывай. Мы ведь не просто так здесь собрались?
+
+Он ставит перед тобой тёплую чашку и отодвигает сахарницу. В соседней комнате затихает музыка. Несколько секунд никто не торопит разговор — только чайник щёлкает, остывая у окна.
+'''
+
+
+def stream(**kwargs):
+    if kwargs.get('response_format'):
+        value = json.dumps(result(), ensure_ascii=False)
+    elif 'шаблон' in kwargs['messages'][-1]['content'].lower():
+        value = summary()
+    elif 'сценар' in kwargs['messages'][0]['content'].lower():
+        value = '# Вечер в общем доме\n\nКомпания друзей собирается на кухне после долгого дня. Современная драмеди: живые разговоры, дружба и открытые линии.'
+    else:
+        value = NARRATIVE
+    for i in range(0, len(value), 60):
+        time.sleep(.025)
+        if kwargs.get('cancel_event') and kwargs['cancel_event'].is_set():
+            raise RuntimeError('Генерация остановлена.')
+        yield value[i:i+60]
+
+
+engine.chat_stream = stream
+preparation.chat_stream = stream
+engine.find_loaded_model = preparation.find_loaded_model = lambda _: {'config': {'context_length':32768}}
+llm.get_available_models = lambda: ['local-model']
+llm.get_loaded_models = lambda: [{'model_key':'local-model','display_name':'Test local model'}]
+llm.get_deepseek_models = lambda _: ['deepseek-flash','deepseek-v4-pro']
+llm.load_model = lambda **_: {}
+llm.unload_all_models = lambda: 1
+
+if __name__ == '__main__':
+    path = os.getenv('E2E_DB_PATH') or str(Path(tempfile.mkdtemp())/'e2e.sqlite3')
+    uvicorn.run(create_app(path), host='127.0.0.1', port=int(os.getenv('E2E_PORT','8011')), log_level='warning')

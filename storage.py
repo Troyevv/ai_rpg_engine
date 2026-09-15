@@ -111,13 +111,15 @@ class Storage(EngineStorage):
             return [dict(row) for row in db.execute(
                 'SELECT id,sequence,user_text,assistant_text,kind,choices_json,changes_json FROM turns WHERE save_id=? ORDER BY sequence', (save_id,))]
 
-    def update_scene_meta(self, save_id, metadata):
+    def update_scene_meta(self, save_id, metadata, expected_revision=None):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             self._assert_idle(db, save_id)
-            row = db.execute('SELECT state_json FROM saves WHERE id=?', (save_id,)).fetchone()
+            row = db.execute('SELECT state_json,revision FROM saves WHERE id=?', (save_id,)).fetchone()
             if row is None:
                 raise ValueError('Прохождение не найдено.')
+            if expected_revision is not None and row['revision'] != expected_revision:
+                raise ValueError('Сейв изменился. Обнови сцену.')
             state = json.loads(row['state_json'])
             known = {c['id'] for c in state['characters']}
             if any(cid not in known for cid in metadata['present_ids']):
