@@ -84,55 +84,10 @@ def test_transaction_rolls_back_parts_failure(tmp_path):
     assert db.list_worlds() == []
 
 
-def test_streamlit_offline_world_selection_and_save(tmp_path, monkeypatch):
-    from streamlit.testing.v1 import AppTest
-    monkeypatch.setenv('RPG_DB_PATH', str(tmp_path / 'ui.sqlite3'))
-    db = Storage()
-    world_id = db.save_world('Тестовый мир', summary())
-    with patch('generator_ui.get_available_models', side_effect=ConnectionError('offline')), \
-         patch('generator_ui.get_loaded_models', return_value=[]):
-        app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py'))
-        app.session_state['app_mode'] = 'Игра'
-        app.run()
-        assert not app.exception
-        assert [tab.label for tab in app.tabs] == ['Генерация выжимки', 'Игра']
-        assert app.selectbox(key='world_picker').value == world_id
-        next(button for button in app.button if button.label == 'Создать прохождение').click().run()
-        assert not app.exception
-        assert len(db.list_saves(world_id)) == 1
-        assert app.selectbox(key=f'save_picker_{world_id}').value == db.list_saves(world_id)[0]['id']
 
 
-def test_generator_save_form(tmp_path, monkeypatch):
-    from streamlit.testing.v1 import AppTest
-    monkeypatch.setenv('RPG_DB_PATH', str(tmp_path / 'ui.sqlite3'))
-    with patch('generator_ui.get_available_models', return_value=[]), \
-         patch('generator_ui.get_loaded_models', return_value=[]):
-        app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py'))
-        app.session_state['summary'] = summary()
-        app.session_state['summary_complete'] = True
-        app.run()
-        assert not app.exception
-        next(field for field in app.text_input if field.label == 'Название мира').input('Новый мир')
-        next(button for button in app.button if button.label == 'Сохранить выжимку').click().run()
-        assert not app.exception
-        assert Storage().list_worlds()[0]['name'] == 'Новый мир'
-        app.session_state['app_mode'] = 'Игра'
-        app.run()
-        assert not app.exception
-        assert app.selectbox(key='world_picker').value == Storage().list_worlds()[0]['id']
 
 
-def test_draft_cannot_be_saved(tmp_path, monkeypatch):
-    from streamlit.testing.v1 import AppTest
-    monkeypatch.setenv('RPG_DB_PATH', str(tmp_path / 'draft.sqlite3'))
-    with patch('generator_ui.get_available_models', return_value=[]), patch('generator_ui.get_loaded_models', return_value=[]):
-        app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py'))
-        app.session_state['summary'] = summary()
-        app.session_state['summary_complete'] = False
-        app.run()
-        assert not app.exception
-        assert not any(button.label == 'Сохранить выжимку' for button in app.button)
 
 
 @pytest.mark.parametrize('reason', ['stop', 'length', None])
@@ -152,19 +107,3 @@ def test_stream_completion_and_cleanup(reason):
                 list(chat_stream('model', [], require_complete=True))
     stream.close.assert_called_once()
     client.close.assert_called_once()
-
-
-def test_existing_generator_finishes_and_exposes_save(tmp_path, monkeypatch):
-    from streamlit.testing.v1 import AppTest
-    monkeypatch.setenv('RPG_DB_PATH', str(tmp_path / 'generated.sqlite3'))
-    with patch('generator_ui.get_available_models', return_value=['test-model']), \
-         patch('generator_ui.get_loaded_models', return_value=[]), \
-         patch('generator_ui.chat_stream', return_value=iter([summary()])):
-        app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py'))
-        app.session_state['idea'] = 'Согласованный сценарий'
-        app.session_state['generation_mode'] = 'summary'
-        app.run()
-        assert not app.exception
-        assert app.session_state['summary_complete'] is True
-        assert app.session_state['summary'] == summary()
-        assert any(button.label == 'Сохранить выжимку' for button in app.button)

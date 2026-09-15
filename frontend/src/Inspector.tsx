@@ -58,7 +58,7 @@ export function Inspector({
   useEffect(() => {
     setQuery("");
     setNear(false);
-  }, [character, world?.id]);
+  }, [open, world?.id]);
   if (!world || !state) return null;
   const cards = state.characters.filter(
     (c) =>

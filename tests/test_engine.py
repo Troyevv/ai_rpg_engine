@@ -156,53 +156,8 @@ def test_stop_during_stream_preserves_draft(db):
     assert storage.list_turns(sid) == []
 
 
-def test_ui_start_choices_free_input_and_reopen(db, monkeypatch):
-    from pathlib import Path
-    from streamlit.testing.v1 import AppTest
-    storage, wid, sid = db
-    monkeypatch.setenv('RPG_DB_PATH', str(storage.path))
-    with patch('engine.launch', side_effect=lambda path, job: run(storage, job)) as launch:
-        app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py'))
-        app.session_state['app_mode'] = 'Игра'
-        app.session_state['game_models'] = ['test']
-        app.session_state['game_context'] = 32768
-        app.session_state[f'save_picker_{wid}'] = sid
-        app.run()
-        app.button(key=f'start_game_{sid}').click().run()
-        assert not app.exception
-        assert len([b for b in app.button if b.key and b.key.startswith('choice_')]) == 6
-        last = storage.list_turns(sid)[-1]
-        app.button(key=f'choice_{last["id"]}_0').click().run()
-        assert not app.exception
-        assert storage.list_turns(sid)[-1]['user_text'] == 'Действие 0: «Реплика 0»'
-        app.text_area(key=f'player_draft_{sid}').input('Моё собственное действие.').run()
-        app.button(key=f'send_action_{sid}').click().run()
-        assert not app.exception
-        assert storage.list_turns(sid)[-1]['user_text'] == 'Моё собственное действие.'
-        assert app.text_area(key=f'player_draft_{sid}').value == ''
-        app.run()
-        assert launch.call_count == 3
-        assert not any(b.label == 'Начать игру' for b in app.button)
 
 
-def test_ui_editor_enabled_during_generation(db, monkeypatch):
-    from pathlib import Path
-    from streamlit.testing.v1 import AppTest
-    storage, wid, sid = db
-    monkeypatch.setenv('RPG_DB_PATH', str(storage.path))
-    job = storage.begin_job(sid, '', 'start', CONFIG)
-    with patch('engine.live', return_value=True):
-        app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py'))
-        app.session_state['app_mode'] = 'Игра'
-        app.session_state[f'save_picker_{wid}'] = sid
-        app.run()
-        assert not app.exception
-        assert app.text_area(key=f'player_draft_{sid}').disabled is False
-        assert app.button(key=f'send_action_{sid}').disabled
-        app.button(key=f'stop_job_{job}').click().run()
-        assert not app.exception
-        assert storage.get_job(job)['status'] == 'stopped'
-        assert storage.list_turns(sid) == []
 
 
 def test_commit_is_atomic_if_save_update_fails(db):

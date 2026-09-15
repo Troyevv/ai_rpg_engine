@@ -304,9 +304,7 @@ def chat_stream(
             raise RuntimeError(deepseek_error(exc)) from None
         raise
     finally:
-        # Важно для кнопки остановки:
-        # если Streamlit прервёт текущий run,
-        # соединение с LM Studio будет закрыто.
+        # Always close the provider stream, including cancellation and errors.
         try:
             if stream is not None:
                 stream.close()

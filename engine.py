@@ -1,11 +1,11 @@
-"""Background turn processing. Workers never touch Streamlit session state."""
+"""Background turn processing. Workers are independent of HTTP requests and browser sessions."""
 from dataclasses import dataclass, field
 import json
 import threading
 import time
 
 from context_builder import build_context
-from llm import chat_stream, find_loaded_model, deepseek_key
+from llm import chat_stream, find_loaded_model, deepseek_key, PROVIDERS
 from state_updates import apply_updates
 from storage import Storage
 
@@ -34,7 +34,7 @@ def live(job_id):
 
 
 def check_config(config):
-    if config.get('provider', 'local') not in ('local', 'deepseek'):
+    if config.get('provider', 'local') not in PROVIDERS:
         raise ValueError('Неизвестный провайдер модели.')
     if not isinstance(config.get('model'), str) or not config['model']:
         raise ValueError('Выбери модель ведущего в левой панели.')
