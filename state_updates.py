@@ -1,6 +1,18 @@
 """Allowlisted, source-backed state patches. No arbitrary JSON paths."""
 from copy import deepcopy
 import json
+import unicodedata
+
+
+class EvidenceError(ValueError):
+    """An extraction must be corrected before any state can be committed."""
+
+
+def normalized_evidence(value):
+    # Keep words, case and punctuation: no fuzzy semantic matching.
+    value = unicodedata.normalize("NFC", value)
+    value = value.translate(str.maketrans({c: chr(34) for c in "«»“”„"}))
+    return " ".join(value.split())
 
 
 def text(value, label, limit=12000):
@@ -21,12 +33,14 @@ def apply_updates(before, payload, narrative, user_text, turn):
     state = deepcopy(before)
     ids = {c['id'] for c in state['characters']}
     cards = {c['id']: c for c in state['characters']}
-    source = narrative + '\n' + user_text
+    sources = [normalized_evidence(narrative), normalized_evidence(user_text)]
+    evidence_path = ''
 
     def evidence(item):
-        quote = text(item.get('evidence'), 'evidence')
-        if quote not in source:
-            raise ValueError('Изменение не подтверждено цитатой из хода.')
+        quote = item.get('evidence')
+        if (not isinstance(quote, str) or not quote.strip() or len(quote) > 12000
+                or not any(normalized_evidence(quote) in source for source in sources)):
+            raise EvidenceError(f'Изменение {evidence_path} не подтверждено цитатой из хода.')
 
     def known(values):
         if not isinstance(values, list) or any(not isinstance(v, str) or v not in ids for v in values):
@@ -34,10 +48,13 @@ def apply_updates(before, payload, narrative, user_text, turn):
         return list(dict.fromkeys(values))
 
     def items(key):
+        nonlocal evidence_path
         value = payload.get(key, [])
         if not isinstance(value, list) or len(value) > 50:
             raise ValueError(f'Неверный список: {key}.')
-        return value
+        for index, item in enumerate(value):
+            evidence_path = f'{key}[{index}].evidence'
+            yield item
 
     scene = payload['scene']
     exact_keys(scene, ['text', 'time', 'location', 'present_ids'], ['text', 'time', 'location', 'present_ids'])

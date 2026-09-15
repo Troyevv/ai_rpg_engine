@@ -16,8 +16,14 @@ def estimate(messages):
     return sum((len(m['content'].encode('utf-8')) + 1) // 2 + 32 for m in messages) + 256
 
 
-def build_context(state, history, user_text, kind, context_length, reserve, extraction_text=None):
-    rules = (PROMPTS / ('state_update_prompt.md' if extraction_text is not None else 'game_system_prompt.md')).read_text()
+def build_context(state, history, user_text, kind, context_length, reserve, extraction_text=None, validation_feedback=None):
+    rules = (PROMPTS / ('state_update_prompt.md' if extraction_text is not None else 'game_system_prompt.md')).read_text(encoding="utf-8")
+    if validation_feedback:
+        rules += ('\nПредыдущее извлечение отклонено: ' + validation_feedback
+                  + '\nВерни полный исправленный JSON. Копируй evidence непрерывно из completed_narrative '
+                    'или player_input. Не используй историю и состояние мира как источник цитаты. '
+                    'Не пересказывай и не склеивай фрагменты. Если цитаты нет, исключи изменение. '
+                    'Сохрани фиксацию сцены и ровно 6 вариантов. Не продолжай сцену.')
     present = set(state.get('scene_meta', {}).get('present_ids', []))
     for alias, cid in character_aliases(state['characters']).items():
         if re.search(r'(?<!\w)' + re.escape(alias) + r'(?!\w)', user_text, re.I):
