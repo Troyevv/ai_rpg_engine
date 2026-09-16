@@ -59,8 +59,10 @@ class Preparation:
                 job = self.repo.preparation_job(jid)
                 if job['status'] != 'generating':
                     return
-                if config['provider'] == 'local' and not find_loaded_model(config['model']):
-                    raise ValueError('Сначала загрузи выбранную локальную модель.')
+                loaded=None
+                if config['provider'] == 'local':
+                    loaded=find_loaded_model(config['model'])
+                    if not loaded:raise ValueError('Сначала загрузи выбранную локальную модель.')
                 config = json.loads(job['config_json'])
                 prompts = config.get('_prompts')
                 w = self.repo.workspace(job['workspace_id'])
@@ -69,12 +71,18 @@ class Preparation:
                     handle.stream = stream
                     if handle.cancel.is_set():
                         stream.close()
+                from backend.services.continuation import stream_document
+                context=config['context_length']
+                if loaded:
+                    context=min(context,int(loaded.get('config',{}).get('context_length') or context))
+                def generate(request_messages,limit):
+                    return tracked_stream(self.repo,chat_stream,jid,job['kind'],config,request_messages,
+                        model=config['model'],provider=config['provider'],api_key=api_key,
+                        temperature=config['temperature'],max_tokens=limit,require_complete=True,
+                        cancel_event=handle.cancel,on_stream=on_stream)
                 last = 0.0
-                for chunk in tracked_stream(self.repo,chat_stream,jid,job['kind'],config,messages,model=config['model'], provider=config['provider'], api_key=api_key,
-                                         temperature=config['temperature'], max_tokens=config['max_tokens'],
-                                         require_complete=True, cancel_event=handle.cancel, on_stream=on_stream):
-                    if handle.cancel.is_set():
-                        return
+                for chunk in stream_document(messages,context,config['max_tokens'],generate,handle.cancel):
+                    if handle.cancel.is_set():return
                     narrative += chunk
                     if time.monotonic() - last > 0.1:
                         self.repo.preparation_progress(jid, narrative)
@@ -86,5 +94,7 @@ class Preparation:
         except Exception as exc:
             self.repo.preparation_progress(jid, narrative, 'stopped' if handle.cancel.is_set() else 'error', str(exc))
         finally:
+            if handle.cancel.is_set() and narrative:
+                self.repo.preparation_progress(jid,narrative,'stopped')
             with self.lock:
                 self.handles.pop(jid, None)
