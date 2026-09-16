@@ -2,14 +2,10 @@
 from copy import deepcopy
 import uuid
 import json
-from llm import OutputLimitReached
+from backend.services.memory_compactor import Compactor, MemoryDeferred
 from pathlib import Path
-from context_builder import encoded, estimate
+from context_builder import encoded
 from backend.services.pov import protagonist,visible,actor_view
-
-
-class MemoryDeferred(ValueError):
-    pass
 
 
 def compact(storage, job, state, history, config, generate, cancelled):
@@ -42,23 +38,7 @@ def _compact(storage, job, state, history, config, generate, cancelled):
     prompt=(config.get('_prompts',{}).get('memory_prompt.md') or {}).get('content')
     if prompt is None:
         prompt=(Path(__file__).resolve().parents[2]/'prompts/memory_prompt.md').read_text(encoding='utf-8')
-    def summarize(previous,turns,pov):
-        messages=[{'role':'system','content':prompt},{'role':'user','content':encoded({'POV':pov,'previous_memory':previous,
-            'turns':[{'sequence':t['sequence'],'player':t['user_text'],'narrator':t['assistant_text']} for t in turns]})}]
-        messages[0]['content']+='\nЦелевой объём 4000–6000 символов, жёсткий максимум 8000. Сожми предыдущую память и новые события вместе; не наращивай её бесконечно. Верни только итоговый текст.'
-        for attempt in range(2):
-            if cancelled.is_set():return ''
-            if estimate(messages)>config['context_length']-config['update_tokens']-256:
-                raise MemoryDeferred('Пакет не помещается в бюджет контекста.')
-            try:
-                result=''.join(generate(messages)).strip()
-            except OutputLimitReached:
-                result=''
-            if cancelled.is_set():return ''
-            if result and len(result)<=8000:return result
-            if attempt==0:
-                messages[0]['content']+='\nПредыдущая попытка не уложилась в ограничение или не дала завершённого текста. Перепиши по исходным данным значительно короче: до 4000 символов. Не объясняй процесс сжатия.'
-        raise MemoryDeferred('Модель не вернула корректную компактную память за две попытки.')
+    summarize=Compactor(prompt,config,generate,cancelled).summarize
     while candidates:
         chunk=candidates[:batch]
         summary=summarize(memory.get('summary',''),chunk,'Объективная память ведущего')

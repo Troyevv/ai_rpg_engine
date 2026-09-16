@@ -157,8 +157,12 @@ export function Settings({
               </label>
               {key === "game" && (
                 <>
+                  <details>
+                    <summary>Память — автоматически</summary>
+                    <p className="muted">Движок сам сжимает историю, уменьшает большие пакеты и повторяет неудачные попытки. Ручное обслуживание не требуется.</p>
                   <label>Последних ходов в контексте<Input type="number" min="2" max="20" value={draft.game.recent_turns} onChange={e=>update(key,{recent_turns:+e.target.value})}/></label>
-                  <label>Ходов в одном пакете памяти<Input type="number" min="2" max="20" value={draft.game.memory_batch} onChange={e=>update(key,{memory_batch:+e.target.value})}/></label>
+                  <label>Максимум ходов в пакете памяти<Input type="number" min="2" max="20" value={draft.game.memory_batch} onChange={e=>update(key,{memory_batch:+e.target.value})}/></label>
+                  </details>
                   <label>
                     Бюджет контекста
                     <select
