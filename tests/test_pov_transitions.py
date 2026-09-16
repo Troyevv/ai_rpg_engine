@@ -52,7 +52,7 @@ def test_background_participant_anchor_and_return_time(db):
     jid=intro(repo,sid,'character_1')
     assert repo.get_job(jid)['status']=='saved'
     state=repo.get_save(sid)['state']
-    assert state['scene_meta']['location']=='Кухня' and state['scene_meta']['time']=='День 1 18:25'
+    assert state['scene_meta']['location']=='Кухня' and state['scene_meta']['time']=='День 1 (Пн) 18:25'
     assert state['actor_scenes']['character_3']['meta']['location']=='Подвал'
     assert all('character_1' not in f['known_by'] for f in state['facts'])
 
@@ -74,7 +74,7 @@ def test_clock_cannot_rewind_across_pov(db):
     state['world_clock']={'last_event_time':'Пт 20:30'}
     state['actor_scenes']={'character_2':{'text':'Ждёт','meta':{'time':'Пт 19:50','location':'Дом','present_ids':['character_2']}}}
     next_state=transition(state,'character_2')
-    assert next_state['scene_meta']['time']=='День 5 20:30'
+    assert next_state['scene_meta']['time']=='День 5 (Пт) 20:30'
     assert next_state['pov_transition']['anchor']['meta']['time']=='Пт 19:50'
     with pytest.raises(ValueError,match='раньше'):
         advance(next_state,{}, {'time':'Пт 19:50'})

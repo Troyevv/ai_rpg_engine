@@ -28,6 +28,17 @@ class DocumentStorage:
                 if not db.execute("SELECT 1 FROM document_heads WHERE kind='prompt' AND owner=?",(name,)).fetchone():
                     self._record_document(db,'prompt',name,(ROOT/name).read_text(encoding='utf-8'),True,'initial')
 
+            # Upgrade only untouched bundled defaults, once. Restores and custom prompts survive restart.
+            import hashlib
+            upgrades=json.loads((ROOT/'default_updates.json').read_text(encoding='utf-8'))
+            db.execute('CREATE TABLE IF NOT EXISTS prompt_upgrades (name TEXT, old_hash TEXT, PRIMARY KEY(name,old_hash))')
+            for name,old_hash in upgrades.items():
+                if db.execute('SELECT 1 FROM prompt_upgrades WHERE name=? AND old_hash=?',(name,old_hash)).fetchone():continue
+                row=db.execute("SELECT v.* FROM document_heads h JOIN document_versions v ON v.id=h.version_id WHERE h.kind='prompt' AND h.owner=?",(name,)).fetchone()
+                if row and hashlib.sha256(row['content'].encode()).hexdigest()==old_hash:
+                    self._record_document(db,'prompt',name,(ROOT/name).read_text(encoding='utf-8'),True,'builtin_upgrade',row['id'])
+                db.execute('INSERT INTO prompt_upgrades VALUES(?,?)',(name,old_hash))
+
     def _record_document(self,db,kind,owner,content,complete=True,reason='edit',source=None):
         row=db.execute('SELECT v.* FROM document_heads h JOIN document_versions v ON v.id=h.version_id WHERE h.kind=? AND h.owner=?',(kind,str(owner))).fetchone()
         if row and row['content']==content and bool(row['complete'])==bool(complete) and source is None:

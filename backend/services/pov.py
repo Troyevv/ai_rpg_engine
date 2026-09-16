@@ -39,7 +39,7 @@ def role_rules(state,kind,extraction=False):
             'Носителями нового знания могут быть только свидетели scene.present_ids; события вне их наблюдения не дают знания.')
 
 
-def apply_scene_policy(before,after,changes,kind):
+def apply_scene_policy(before,after,changes,kind,simulation=False):
     main,actor=protagonist(before),controlled(before)
     after['protagonist_id'],after['controlled_actor_id']=main,actor
     from backend.services.timeline import advance
@@ -48,7 +48,8 @@ def apply_scene_policy(before,after,changes,kind):
         anchor=before['pov_transition']['anchor']['meta']
         if scene['location']!=anchor['location'] or set(scene['present_ids'])!=set(anchor['present_ids']):
             raise ValueError('Передача управления должна продолжать ту же сцену и участников.')
-    advance(before,after,scene)
+    advance(before,after,scene,elapsed=changes['scene'].get('elapsed_minutes'),
+            minimum=1 if kind in ('turn','background') and not simulation else 0)
     after['scene_meta']=deepcopy(scene)
     audience=set(scene['present_ids'])
     if kind!='background' and actor not in audience:
@@ -121,7 +122,7 @@ def transition(state,actor,source=None):
         target={'text':state['scene'],'meta':deepcopy(meta)}
     if target is None:
         target={'text':cards[actor]['fields'].get('Сейчас','Место пока неизвестно.'),
-                'meta':{'time':meta['time'],'location':'Не указано','present_ids':[actor]}}
+                'meta':{'time':meta['time'],'location':point.get('location') or 'Не указано','present_ids':[actor]}}
     anchor=deepcopy(target)
     now=current_time(state)
     if not chosen:

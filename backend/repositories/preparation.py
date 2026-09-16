@@ -97,6 +97,9 @@ class Repository(Storage):
                 return
             if not job or job['status'] != 'generating':
                 return
+            if status=='saved' and job['kind']=='summary':
+                from world_parser import parse_summary
+                parse_summary(narrative)
             db.execute('UPDATE preparation_jobs SET narrative=?,status=?,error=? WHERE id=?', (narrative, status, error, jid))
             if status in ('saved', 'stopped'):
                 w = db.execute('SELECT * FROM preparation_workspaces WHERE id=?', (job['workspace_id'],)).fetchone()

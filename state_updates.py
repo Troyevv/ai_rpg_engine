@@ -58,7 +58,9 @@ def apply_updates(before, payload, narrative, user_text, turn, kind="turn"):
             yield item
 
     scene = payload['scene']
-    exact_keys(scene, ['text', 'time', 'location', 'present_ids'], ['text', 'time', 'location', 'present_ids'])
+    exact_keys(scene, ['text', 'time', 'location', 'present_ids', 'elapsed_minutes'], ['text', 'time', 'location', 'present_ids'])
+    if 'elapsed_minutes' in scene and (type(scene['elapsed_minutes']) is not int or not 0<=scene['elapsed_minutes']<=10080):
+        raise ValueError('Некорректная длительность scene.elapsed_minutes.')
     state['scene'] = text(scene['text'], 'scene.text')
     state['sections']['scene'] = state['scene']
     state['scene_meta'] = {'time': text(scene['time'], 'time', 120), 'location': text(scene['location'], 'location', 200),

@@ -33,7 +33,7 @@ def stream(**kwargs):
     observer='Тип хода: background' in full or 'Режим observer:' in full
     if kwargs.get('response_format'):
         payload=background() if observer else result()
-        match=re.search(r'Единое время мира: (День \d+ \d{2}:\d{2})',full)
+        match=re.search(r'Единое время мира: (День \d+(?: \([А-Яа-я]+\))? \d{2}:\d{2})',full)
         if match and match[1]!='День 1 00:00':payload['scene']['time']=match[1]
         if 'pov' in kwargs['messages'][-1]['content'] or 'Режим observer:' in full:
             block=next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущая сцена'))

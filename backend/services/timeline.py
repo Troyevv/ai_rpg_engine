@@ -2,6 +2,8 @@
 import re
 from backend.services.scene import scene_metadata
 
+WEEKDAYS = ('Пн','Вт','Ср','Чт','Пт','Сб','Вс')
+
 DAYS = {'пн':0,'понедельник':0,'вт':1,'вторник':1,'ср':2,'среда':2,'чт':3,'четверг':3,
         'пт':4,'пятница':4,'сб':5,'суббота':5,'вс':6,'воскресенье':6}
 
@@ -31,15 +33,25 @@ def current_time(state):
 
 
 def label(minute):
-    return f'День {minute//1440+1} {minute%1440//60:02d}:{minute%60:02d}'
+    return f'День {minute//1440+1} ({WEEKDAYS[minute//1440%7]}) {minute%1440//60:02d}:{minute%60:02d}'
 
 
-def advance(before,after,scene):
+def advance(before,after,scene,elapsed=None,minimum=0):
     now=current_time(before)
     value=parse_time(scene['time'],now)
     if value is None:
         # Legacy worlds without a clock start at day 1 00:00, never invent elapsed time.
         value=now
+    if elapsed is not None:
+        if type(elapsed) is not int or not 0<=elapsed<=10080:
+            raise ValueError('Длительность сцены должна быть целым числом минут от 0 до 10080.')
+        if value%1440==(now+elapsed)%1440 and not re.search(r'день\s+\d+|'+ '|'.join(DAYS),scene['time'],re.I):
+            value=now+elapsed
+        if value not in (now, now+elapsed):
+            raise ValueError('Время сцены не совпадает с её длительностью.')
+        value=now+elapsed
+    elif value==now:
+        value=now+minimum
     if value<now:
         raise ValueError('Время сцены раньше текущего времени мира. Минимум: '+label(now))
     after['world_clock']={'minute':value,'last_event_time':label(value)}

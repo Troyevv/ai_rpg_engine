@@ -40,7 +40,14 @@ def build_context(state, history, user_text, kind, context_length, reserve, extr
     contract=(prompts or {}).get('world_state_prompt.md',{}).get('content') or (PROMPTS/'world_state_prompt.md').read_text(encoding='utf-8')
     rules += '\n'+(contract if extraction_text is not None else contract.split('ТОЛЬКО при извлечении')[0])
     from backend.services.timeline import current_time,label
-    dynamic = '\nЕдиное время мира: '+label(current_time(state))+'. Не возвращай время назад. В scene.time используй День N HH:MM. Переход POV синхронный, без флешбэка.'
+    dynamic = '\nЕдиное время мира: '+label(current_time(state))+'. Не возвращай время назад. В scene.time используй День N (день недели) HH:MM. Переход POV синхронный, без флешбэка.'
+    dynamic += ('\nПРАВИЛО ЧАСОВ: действия и разговоры занимают игровое время. При извлечении добавь в scene '
+                'elapsed_minutes — целую длительность показанного хода. Оцени по действиям (короткий обмен обычно 1–3 минуты), '
+                'учти явно прошедшее время; не сохраняй старые часы автоматически. scene.time — конечное время, '
+                'согласованное с elapsed_minutes. Ноль допустим для мгновенной реакции, стартового/POV-вступления '
+                'или параллельной симуляции до текущего времени. Не делай необоснованных таймскипов. '
+                'Неделя циклична: после воскресенья понедельник; День N продолжает расти. '
+                'Это правило уточняет старые инструкции о сохранении времени.')
     dynamic += role_rules(state,kind,extraction_text is not None)
     main,actor=protagonist(state),controlled(state)
     if validation_feedback:
