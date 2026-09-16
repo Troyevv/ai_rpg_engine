@@ -1,3 +1,4 @@
+import {nav} from "./navigation";
 import { test, expect } from "@playwright/test";
 
 test("scenario → summary → world → save → start → action → regenerate → rollback", async ({
@@ -6,15 +7,12 @@ test("scenario → summary → world → save → start → action → regenerat
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
-  await page
-    .getByRole("button", { name: "Настройки", exact: true })
-    .last()
-    .click();
+  await nav(page,'Настройки');
   for (const key of ["idea", "summary", "game"])
     await page.getByLabel("Провайдер " + key).selectOption("deepseek");
   await page.getByLabel("API-ключ DeepSeek").fill("fixture-key");
   await page.getByRole("button", { name: "Сохранить настройки" }).click();
-  await page.getByRole("button", { name: "Создать", exact: true }).click();
+  await nav(page,'Создать');
   await page.getByLabel("Название сценария").fill("Вечер в общем доме");
   await page
     .getByRole("button", { name: "Новый сценарий", exact: true })
@@ -78,11 +76,9 @@ test("scenario → summary → world → save → start → action → regenerat
   await expect(page.locator(".turn")).toHaveCount(1);
   await page.reload();
   await expect(page.locator(".turn")).toHaveCount(1);
-  await page.getByRole("button", { name: "Режим чтения", exact: true }).click();
+  await nav(page,'Режим чтения');
   await expect(page.locator(".nav-rail")).toBeHidden();
-  await page
-    .getByRole("button", { name: "Выйти из чтения", exact: true })
-    .click();
+  await nav(page,'Выйти из чтения');
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth > innerWidth,
   );
@@ -104,7 +100,7 @@ test("streaming survives disconnect; stop keeps a draft and cannot save it as a 
   ).json();
   await page.addInitScript((id) => localStorage.setItem("workspace", id), w.id);
   await page.goto("/");
-  await page.getByRole("button", { name: "Создать", exact: true }).click();
+  await nav(page,'Создать');
   await page.getByLabel("Идея или правки сценария").fill("Друзья");
   await page
     .getByRole("button", { name: "Написать сценарий", exact: true })
@@ -117,7 +113,7 @@ test("streaming survives disconnect; stop keeps a draft and cannot save it as a 
     page.getByRole("button", { name: "Остановить генерацию", exact: true }),
   ).toBeVisible();
   await page.reload();
-  await page.getByRole("button", { name: "Создать", exact: true }).click();
+  await nav(page,'Создать');
   await page
     .getByRole("button", { name: "Остановить генерацию", exact: true })
     .click();

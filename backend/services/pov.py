@@ -40,7 +40,10 @@ def role_rules(state,kind,extraction=False):
 def apply_scene_policy(before,after,changes,kind):
     main,actor=protagonist(before),controlled(before)
     after['protagonist_id'],after['controlled_actor_id']=main,actor
+    from backend.services.timeline import advance
     scene=deepcopy(after['scene_meta'])
+    advance(before,after,scene)
+    after['scene_meta']=deepcopy(scene)
     audience=set(scene['present_ids'])
     if kind=='background':
         if audience.intersection({main,actor}):
@@ -65,7 +68,6 @@ def apply_scene_policy(before,after,changes,kind):
         for entry in changes.get(key,[]):
             if kind=='background' and not set(entry['character_ids'])<=audience:
                 raise ValueError('Событие закулисья приписано отсутствующему персонажу.')
-    after.setdefault('world_clock',{})['last_event_time']=scene['time']
     after.setdefault('actor_scenes',{})
     for cid in audience:
         after['actor_scenes'][cid]={'text': changes['scene']['text'],'meta':deepcopy(scene)}
@@ -79,3 +81,33 @@ def actor_view(turn,actor,main):
     changes=json.loads(turn.get('changes_json') or '{}')
     facts=[f['text'] for f in changes.get('facts',[]) if actor in f.get('known_by',[])]
     return {**turn,'user_text':'','assistant_text':'Доступные персонажу факты:\n'+'\n'.join(facts)}
+
+
+def transition(state,actor,source=None):
+    """Prepare an introduction without committing the actor switch before its scene succeeds."""
+    from backend.services.scene import scene_metadata
+    from backend.services.timeline import current_time,label
+    state=deepcopy(state)
+    cards={c['id']:c for c in state['characters']}
+    if actor not in cards or cards[actor].get('available') is False:
+        raise ValueError('Персонаж недоступен.')
+    old=controlled(state)
+    meta=scene_metadata(state)
+    scenes=state.setdefault('actor_scenes',{})
+    scenes[old]={'text':state['scene'],'meta':deepcopy(meta)}
+    target=deepcopy(scenes.get(actor))
+    if target is None and actor in meta['present_ids']:
+        target={'text':state['scene'],'meta':deepcopy(meta)}
+    if target is None:
+        target={'text':cards[actor]['fields'].get('Сейчас','Место пока неизвестно.'),
+                'meta':{'time':meta['time'],'location':'Не указано','present_ids':[actor]}}
+    anchor=deepcopy(target)
+    now=current_time(state)
+    target['meta']['time']=label(now)
+    state['protagonist_id']=protagonist(state)
+    state['controlled_actor_id']=actor
+    state['scene'],state['scene_meta']=target['text'],target['meta']
+    state['sections']['scene']=state['scene']
+    state['world_clock']={'minute':now,'last_event_time':label(now)}
+    state['pov_transition']={'from':old,'to':actor,'anchor':anchor,'source_node_id':source}
+    return state

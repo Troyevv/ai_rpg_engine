@@ -43,7 +43,7 @@ class EngineStorage:
             return dict(row)
 
     def begin_job(self, save_id, user_text, kind, config):
-        if kind not in ('start', 'turn', 'regenerate','background'):
+        if kind not in ('start', 'turn', 'regenerate','background','pov'):
             raise ValueError('Неизвестный тип хода.')
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -56,9 +56,17 @@ class EngineStorage:
             last = db.execute('SELECT * FROM turns WHERE save_id=? ORDER BY sequence DESC LIMIT 1', (save_id,)).fetchone()
             if kind == 'start' and last:
                 raise ValueError('Игра уже начата.')
-            if kind != 'start' and last is None:
+            if kind not in ('start','pov') and last is None:
                 raise ValueError('Сначала начни игру.')
             before, replaces = save['state_json'], None
+            if kind=='pov':
+                from backend.services.pov import transition
+                target=config.get('actor_id')
+                source=config.get('source_turn_id')
+                if source is not None and (not last or last['id']!=source or last['kind']!='background' or target not in json.loads(last['audience_json'])):
+                    raise ValueError('Выбери участника последней закулисной сцены.')
+                transition(json.loads(before),target)  # Validate before starting any paid request.
+                config=dict(config,source_node_id=last['node_id'] if source is not None else None)
             context_json, memory_before = None, None
             if kind == 'regenerate':
                 target = config.get('target_turn_id')
@@ -76,6 +84,8 @@ class EngineStorage:
                     original=db.execute('SELECT config_json FROM game_jobs WHERE id=?',(v['job_id'],)).fetchone()
                     if original and '_prompts' in json.loads(original[0]):
                         config=dict(config,_prompts=json.loads(original[0])['_prompts'])
+                        for key in ('actor_id','source_turn_id','source_node_id'):
+                            if key in json.loads(original[0]):config[key]=json.loads(original[0])[key]
                 if context_json is None:
                     raise ValueError('У старого хода нет снимка исходного контекста. Точная перегенерация недоступна.')
                 before, replaces, user_text, kind = last['before_json'], last['id'], last['user_text'], last['kind']
@@ -90,7 +100,7 @@ class EngineStorage:
                        (job_id, save_id, save['revision'], before, user_text, kind, replaces, json.dumps(config)))
             session_id = self.ensure_session(db, save_id)
             db.execute('UPDATE game_jobs SET context_json=?,memory_before_json=?,session_id=? WHERE id=?', (context_json,memory_before,session_id,job_id))
-            db.execute('UPDATE game_jobs SET pov_actor_id=? WHERE id=?',(None if kind=='background' else controlled(json.loads(before)),job_id))
+            db.execute('UPDATE game_jobs SET pov_actor_id=? WHERE id=?',(None if kind=='background' else config.get('actor_id') if kind=='pov' else controlled(json.loads(before)),job_id))
         return job_id
 
     @staticmethod
@@ -119,7 +129,7 @@ class EngineStorage:
                 raise ValueError('Сейв изменился. Этот черновик устарел.')
             settings = json.loads(job['config_json'])
             if config:
-                settings.update({k:v for k,v in config.items() if k not in ('target_turn_id','rollback_following','expected_revision','_prompts')})
+                settings.update({k:v for k,v in config.items() if k not in ('target_turn_id','rollback_following','expected_revision','_prompts','actor_id','source_turn_id','source_node_id')})
             session_id = self.ensure_session(db, job['save_id'])
             db.execute("UPDATE game_jobs SET status='extracting',error='',warnings_json='[]',config_json=?,session_id=? WHERE id=?", (json.dumps(settings),session_id,job_id))
 

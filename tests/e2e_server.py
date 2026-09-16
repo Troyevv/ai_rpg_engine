@@ -1,5 +1,6 @@
 """Browser-only fixture server. Never imported by the production application."""
 import json
+import re
 import os
 from pathlib import Path
 import sys
@@ -29,7 +30,13 @@ NARRATIVE = '''Персонаж 1 подвигает свободный стул
 
 def stream(**kwargs):
     if kwargs.get('response_format'):
-        value = json.dumps(background() if 'Тип хода: background' in kwargs['messages'][0]['content'] else result(), ensure_ascii=False)
+        payload=background() if 'Тип хода: background' in kwargs['messages'][0]['content'] else result()
+        match=re.search(r'Единое время мира: (День \d+ \d{2}:\d{2})',kwargs['messages'][0]['content'])
+        if match and match[1]!='День 1 00:00':payload['scene']['time']=match[1]
+        if 'pov' in kwargs['messages'][-1]['content']:
+            block=next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущая сцена'))
+            scene=json.loads(block.split('\n',1)[1]);payload['scene'].update(scene['scene_meta']);payload['scene']['text']=scene['scene']
+        value=json.dumps(payload,ensure_ascii=False)
     elif 'Тип хода: background' in kwargs['messages'][0]['content']:
         value = SECRET
     elif 'шаблон' in kwargs['messages'][-1]['content'].lower():

@@ -1,3 +1,4 @@
+import {nav,actor} from "./navigation";
 import {test,expect} from '@playwright/test';
 test('POV, backstage and prompt versions',async({page,request})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
@@ -6,19 +7,20 @@ test('POV, backstage and prompt versions',async({page,request})=>{
  await page.goto('/');
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();
  await expect(page.locator('.turn')).toHaveCount(1);
- await page.getByLabel('Управляемый персонаж').selectOption('character_2');
- await expect(page.getByLabel('Управляемый персонаж')).toHaveValue('character_2');
- await page.getByRole('button',{name:'Мир без ГГ',exact:true}).click();
+ await actor(page,'character_2','Персонаж 1');
  await expect(page.locator('.turn')).toHaveCount(2);
+ await page.getByRole('button',{name:'Мир без ГГ',exact:true}).click();
+ await expect(page.locator('.turn')).toHaveCount(3);
  await expect(page.locator('.turn').last()).toContainText('За кулисами');
  await expect(page.locator('.choices button')).toHaveCount(0);
  let save=await (await request.get(`/api/saves/${selected.save}`)).json();
  expect(save.state.controlled_actor_id).toBe('character_2');
  expect(save.state.facts.at(-1).known_by).toEqual(['character_3','character_4']);
- await page.getByLabel('Управляемый персонаж').selectOption('character_1');
+ await page.locator('.background-exit').getByRole('button',{name:'Вернуться к Персонаж 0'}).click();
+ await expect(page.locator('.turn')).toHaveCount(4);
+ await expect(page.locator('.choices button')).toHaveCount(6);
  await page.reload();
- await expect(page.getByLabel('Управляемый персонаж')).toHaveValue('character_1');
- await page.getByRole('button',{name:'Настройки',exact:true}).last().click();
+ await nav(page,'Настройки');
  await page.getByText('Основные промпты и версии',{exact:true}).click();
  await page.getByRole('button',{name:'background_prompt.md',exact:true}).click();
  const versions=page.getByRole('dialog').last();
@@ -49,7 +51,7 @@ test('scenario and summary deletion keeps restorable versions and saves',async({
  }
  await page.addInitScript(id=>localStorage.setItem('workspace',id),w.id);
  await page.goto('/');
- await page.getByRole('button',{name:'Создать',exact:true}).click();
+ await nav(page,'Создать');
  page.once('dialog',d=>d.accept());
  await page.getByRole('button',{name:'Удалить выжимку',exact:true}).click();
  await expect(page.getByRole('button',{name:'Удалить выжимку',exact:true})).toHaveCount(0);

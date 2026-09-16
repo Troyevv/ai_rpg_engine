@@ -51,7 +51,7 @@ export interface Scene {
 export interface State {
   protagonist_id?: string;
   controlled_actor_id?: string;
-  world_clock?: {last_event_time:string};
+  world_clock?: {last_event_time:string;minute?:number};
   memory?: {id: string; summary: string; through_sequence: number; per_actor?:Record<string,{summary:string;through_sequence:number}>};
   scene: string;
   scene_meta?: Scene;

@@ -24,6 +24,7 @@ import { Diagnostics } from "./Diagnostics";
 import { JobView } from "./JobView";
 import { Button } from "./components/ui/button";
 import { Textarea } from "./components/ui/textarea";
+import {useMobile,MobileScene} from './mobile';
 export function Game({
   world,
   save,
@@ -43,12 +44,16 @@ export function Game({
   prefs: Preferences;
   apiKey: string;
 }) {
+  const mobile=useMobile();
+  const [away,setAway]=useState(false);
+  const input=useRef<HTMLTextAreaElement>(null);
   const mainActor=save?.state.protagonist_id||save?.state.characters.find(c=>c.is_player)?.id;
   const actorId=save?.state.controlled_actor_id||mainActor;
   const draftKey=`draft-${save?.id}-${actorId}`;
   const [diagnostics, setDiagnostics] = useState(false);
   const [diagnosticJob, setDiagnosticJob] = useState<string|undefined>();
   const [draft, setDraft] = useState("");
+  const draftRef=useRef(draft);draftRef.current=draft;
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState<Job | null>(null);
   const scroll = useRef<HTMLDivElement>(null);
@@ -59,11 +64,10 @@ export function Game({
     setSubmitted(null);
     pinned.current = true;
   }, [save?.id,actorId]);
-  const { job, reconnecting } = useJob(submitted ?? save?.job, () => {
-    setSubmitted(null);
-    refresh();
-  });
-  const pending = active(job);
+  const { job, reconnecting } = useJob(submitted ?? save?.job, refresh);
+  const awaitingCommit=job?.status==='saved'&&job.revision===save?.revision&&!save?.turns.some(t=>t.variants?.some(v=>v.job_id===job.id));
+  const pending = active(job)||!!awaitingCommit;
+  useEffect(()=>{if(submitted&&save?.job?.id===submitted.id&&!active(save.job))setSubmitted(null)},[save?.job,submitted]);
   useEffect(() => {
     const id = requestAnimationFrame(() => {
       if (scroll.current && pinned.current)
@@ -96,11 +100,18 @@ export function Game({
       });
       setSubmitted(j);
       pinned.current = true;
-      if (kind === "turn" && text === draft) {
+      if (kind === "turn" && text === draftRef.current) {
         setDraft("");
         sessionStorage.removeItem(draftKey);
       }
     });
+  const switchActor=(actor:string,source?:number)=>void run(async()=>{
+    if(!save)return;
+    const j=await api<Job>(`/saves/${save.id}/actor`,{actor_id:actor,source_turn_id:source,revision:save.revision,config:prefs.game,api_key:apiKey});
+    setSubmitted(j);pinned.current=true;setAway(false);
+  });
+  useEffect(()=>{if(!mobile||!input.current)return;const el=input.current;el.style.height='auto';el.style.height=Math.min(el.scrollHeight,132)+'px'},[draft,mobile]);
+  useEffect(()=>{if(!scroll.current)return;const observer=new ResizeObserver(()=>{if(pinned.current&&scroll.current)scroll.current.scrollTop=scroll.current.scrollHeight});const story=scroll.current.firstElementChild;if(story)observer.observe(story);return()=>observer.disconnect()},[world?.id,save?.id]);
   const meta = save?.scene_meta ?? world?.scene_meta;
   const state = save?.state ?? world?.state;
   if (!world)
@@ -129,9 +140,9 @@ export function Game({
   return (
     <main className="game">
       {save&&<Diagnostics saveId={save.id} jobId={diagnosticJob} open={diagnostics} onOpenChange={setDiagnostics}/>}
-      {save&&<div className="pov-controls">
-        <label>Управляемый персонаж<select aria-label="Управляемый персонаж" value={actorId||""} disabled={busy||pending} onChange={e=>void run(async()=>{await api(`/saves/${save.id}/actor`,{actor_id:e.target.value,revision:save.revision});setSubmitted(null);refresh()})}>{save.state.characters.map(c=><option key={c.id} value={c.id}>{c.name}{c.id===mainActor?" · основной герой":""}</option>)}</select></label>
-        {actorId!==mainActor&&<Button variant="ghost" size="sm" disabled={busy||pending} onClick={()=>void run(async()=>{await api(`/saves/${save.id}/actor`,{actor_id:mainActor,revision:save.revision});refresh()})}>Вернуться к основному ГГ</Button>}
+      {mobile&&save?<MobileScene save={save} meta={meta} busy={busy||pending} switchActor={switchActor} background={()=>void turn("background","")} openCharacter={openCharacter}/>:<>{save&&<div className="pov-controls">
+        <label>Управляемый персонаж<select aria-label="Управляемый персонаж" value={actorId||""} disabled={busy||pending} onChange={e=>switchActor(e.target.value)}>{save.state.characters.map(c=><option key={c.id} value={c.id}>{c.name}{c.id===mainActor?" · основной герой":""}</option>)}</select></label>
+        {actorId!==mainActor&&<Button variant="ghost" size="sm" disabled={busy||pending} onClick={()=>switchActor(mainActor!)}>Вернуться к {save.state.characters.find(c=>c.id===mainActor)?.name.replace(" (ГГ)","")}</Button>}
         <Button variant="outline" size="sm" disabled={busy||pending||!save.turns.length} onClick={()=>void turn("background","")}>Мир без ГГ</Button>
       </div>}
       <div className="scene-bar">
@@ -155,27 +166,30 @@ export function Game({
           {!meta?.present_ids.length && <span className="muted">—</span>}
         </div>
       </div>
+      </>}
       <div
         className="story-scroll"
         ref={scroll}
         onScroll={() => {
-          if (scroll.current)
+          if (scroll.current){
             pinned.current =
               scroll.current.scrollHeight -
                 scroll.current.scrollTop -
                 scroll.current.clientHeight <
-              180;
+              80;
+            setAway(!pinned.current);
+          }
         }}
       >
         <div
           className="story"
           style={{
             maxWidth: prefs.reading_width,
-            fontSize: prefs.font_size,
-            lineHeight: prefs.line_height,
+            fontSize: mobile?Math.min(prefs.font_size,18):prefs.font_size,
+            lineHeight: mobile?1.65:prefs.line_height,
           }}
         >
-          {save&&<Button size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Контекст ведущего · Расходы</Button>}
+          {save&&mobile&&<details className="mobile-story-tools"><summary>Контекст и расходы</summary><Button size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Контекст ведущего · Расходы</Button></details>}{save&&!mobile&&<Button size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Контекст ведущего · Расходы</Button>}
           <div className="story-heading">
             <p className="eyebrow">
               {save ? save.name : "Начало истории"} · Мир v{world.version}
@@ -205,7 +219,7 @@ export function Game({
               {save.turns.map((t, i) => (
                 <motion.article
                   key={t.id}
-                  className="turn"
+                  className={`turn ${t.kind==="background"?"background-turn":""}`}
                   initial={reduced ? false : { opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.22 }}
@@ -217,7 +231,7 @@ export function Game({
                     </div>
                   )}
                   <p className="turn-number">
-                    {t.kind==="background"?`За кулисами · ход ${t.sequence} · не знание ГГ`:i === 0 ? "Первая сцена" : `Ход ${t.sequence}`}
+                    {t.kind==="background"?`Тем временем… · За кулисами · ход ${t.sequence}`:i === 0 ? "Первая сцена" : `Ход ${t.sequence}`}
                     {t.kind!=="background"&&<span> · POV: {save.state.characters.find(c=>c.id===(t.pov_actor_id||mainActor))?.name}</span>}
                   </p>
                   <Markdown
@@ -227,7 +241,11 @@ export function Game({
                     links={prefs.link_names}
                     onCharacter={openCharacter}
                   />
-                  <div className="variant-controls">
+                  {mobile?<div className="mobile-variants">
+                    <Button size="icon" variant="ghost" aria-label="Ещё вариант" disabled={busy||pending||!t.variants?.some(v=>v.can_regenerate)} onClick={()=>{const later=i<save.turns.length-1;if(later&&!window.confirm('Откатить следующие ходы в архив?'))return;void turn('regenerate','',t.id,later)}}>↻</Button>
+                    {[-1,1].map((step)=>{const list=t.variants||[];const index=list.findIndex(v=>v.id===t.active_variant_id);const v=list[index+step];return <span className="variant-step" key={step}>{step===1&&<span>{index+1} / {list.length||1}</span>}<Button size="icon" variant="ghost" aria-label={step<0?'Предыдущий вариант':'Следующий вариант'} disabled={busy||pending||!v} onClick={()=>{const later=i<save.turns.length-1;if(later&&!window.confirm('Откатить следующие ходы в архив?'))return;void run(async()=>{await api(`/saves/${save.id}/turns/${t.id}/variant`,{variant_id:v.id,revision:save.revision,rollback_following:later});setSubmitted(null);refresh()})}}>{step<0?'‹':'›'}</Button></span>})}
+                    <Button size="icon" variant="ghost" aria-label="Контекст / usage" onClick={()=>{setDiagnosticJob(t.variants?.find(v=>v.id===t.active_variant_id)?.job_id||undefined);setDiagnostics(true)}}>⋯</Button>
+                  </div>:<div className="variant-controls">
                     <span className="muted small">Вариант {(t.variants||[]).find(v=>v.id===t.active_variant_id)?.ordinal||1} / {t.variants?.length||1}</span>
                     {(t.variants||[]).map(v=><Button key={v.id} size="sm" variant={v.id===t.active_variant_id?"outline":"ghost"} disabled={busy||pending||v.id===t.active_variant_id} onClick={()=>{
                       const later = i<save.turns.length-1;
@@ -241,7 +259,7 @@ export function Game({
                     }}>Ещё вариант</Button>
                     <Button size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(t.variants?.find(v=>v.id===t.active_variant_id)?.job_id||undefined);setDiagnostics(true)}}>Контекст / usage</Button>
                     {!!t.memory_archived&&<span className="muted small">В архиве памяти · полный текст сохранён</span>}
-                  </div>
+                  </div>}
                 </motion.article>
               ))}
               {!save.turns.length && !job && (
@@ -253,7 +271,7 @@ export function Game({
                 </div>
               )}
               <JobView
-                job={job}
+                job={awaitingCommit&&job?{...job,status:"validating"}:job}
                 reconnecting={reconnecting}
                 worldId={world.id}
                 saveId={save.id}
@@ -294,6 +312,10 @@ export function Game({
               )}
               {save.turns.length > 0 && !pending && (
                 <>
+                  {save.turns.at(-1)?.kind==='background'&&<div className="background-exit">
+                    <Button disabled={busy} onClick={()=>switchActor(mainActor!)}>Вернуться к {save.state.characters.find(c=>c.id===mainActor)?.name.replace(' (ГГ)','')}</Button>
+                    <label>Продолжить за персонажа…<select aria-label="Участник фоновой сцены" value="" disabled={busy} onChange={e=>switchActor(e.target.value,save.turns.at(-1)!.id)}><option value="">Выбрать участника</option>{save.state.characters.filter(c=>JSON.parse(save.turns.at(-1)?.audience_json||'[]').includes(c.id)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+                  </div>}
                   <div className="choices">
                     {(save.turns.at(-1)?.kind!=="background"&&(save.turns.at(-1)?.pov_actor_id||mainActor)===actorId?save.turns.at(-1)?.choices:[])?.map((c, i) => (
                       <button
@@ -357,6 +379,8 @@ export function Game({
         <div className="composer">
           <div className="composer-inner">
             <Textarea
+              ref={input}
+              rows={1}
               aria-label="Своё действие или реплика"
               value={draft}
               onChange={(e) => {
@@ -389,9 +413,9 @@ export function Game({
           </div>
           <div className="composer-footer">
             <span>Твоё действие всегда важнее предложенных вариантов.</span>
-            <button
+            {away&&<button
               onClick={() => {
-                pinned.current = true;
+                pinned.current = true;setAway(false);
                 scroll.current?.scrollTo({
                   top: scroll.current.scrollHeight,
                   behavior: "smooth",
@@ -399,7 +423,7 @@ export function Game({
               }}
             >
               <ArrowDown size={13} />К последней сцене
-            </button>
+            </button>}
           </div>
         </div>
       )}

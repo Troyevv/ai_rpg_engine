@@ -21,7 +21,12 @@ import { Library } from "./Library";
 import { Preparation } from "./Preparation";
 import { Game } from "./Game";
 
+import {useMobile,useMobileViewport,MobileNavigation} from './mobile';
+import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from './components/ui/dialog';
 export default function App() {
+  const mobile=useMobile();useMobileViewport(mobile);
+  const [mobileMenu,setMobileMenu]=useState(false);
+  const [branches,setBranches]=useState(false);
   const [view, setView] = useState<"game" | "prepare">("game");
   const [library, setLibrary] = useState(false);
   const [settings, setSettings] = useState(false);
@@ -123,7 +128,7 @@ export default function App() {
   return (
     <div className={`app-shell ${reading ? "reading" : ""}`}>
       <Toaster theme="dark" richColors position="top-center" />
-      <nav className="nav-rail" aria-label="Главная навигация">
+      {!mobile&&<nav className="nav-rail" aria-label="Главная навигация">
         <button
           className="brand"
           aria-label="AI RPG Engine"
@@ -164,7 +169,7 @@ export default function App() {
           <Settings2 />
           <span>Настройки</span>
         </button>
-      </nav>
+      </nav>}
       <div className="app-main">
         <header className="topbar">
           <button className="breadcrumb" onClick={() => setLibrary(true)}>
@@ -176,7 +181,7 @@ export default function App() {
             </span>
             <span className="muted">⌄</span>
           </button>
-          <div className="topbar-actions">
+          {mobile?<MobileNavigation open={mobileMenu} setOpen={setMobileMenu} world={!!world} go={setView} inspect={inspect} settings={()=>setSettings(true)} reading={reading} toggleReading={()=>setReading(!reading)} branches={()=>setBranches(true)}/>:<div className="topbar-actions">
             {view === "game" && (
               <Button
                 variant="ghost"
@@ -209,7 +214,7 @@ export default function App() {
                 <span className="desktop-label">О мире</span>
               </Button>
             )}
-          </div>
+          </div>}
         </header>
         {view === "prepare" ? (
           <Preparation
@@ -241,6 +246,7 @@ export default function App() {
           />
         )}
       </div>
+      <Dialog open={branches} onOpenChange={setBranches}><DialogContent className={mobile?'mobile-sheet':''}><DialogHeader><DialogTitle>Ветки истории</DialogTitle><DialogDescription>Варианты ответов доступны под сценами. Смена старого варианта требует отката зависимых ходов. Именованные ветки пока не реализованы.</DialogDescription></DialogHeader></DialogContent></Dialog>
       <Settings
         open={settings}
         onOpenChange={setSettings}
