@@ -26,7 +26,7 @@ def simulate(before, state, sequence, context_length, config, generate, cancelle
     payload=''.join(generate('world_simulation_delta',messages,config['update_tokens'],0.1,response_format={'type':'json_object'}))
     if cancelled.is_set():return state
     updated,_,changes=apply_updates(camera,payload,narrative,'',sequence,'background')
-    updated,audience=apply_scene_policy(camera,updated,changes,'background')
+    updated,audience=apply_scene_policy(camera,updated,changes,'background',simulation=True)
     if state.get('controlled_actor_id') in audience:
         raise ValueError('Фоновая симуляция не может действовать за управляемого персонажа.')
     if current_time(updated)!=current_time(state):

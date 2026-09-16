@@ -41,8 +41,8 @@ def parse_summary(markdown):
     blocks = {key: '\n'.join(lines).strip() for key, lines in sections.items()}
     text = blocks['characters']
     markers = list(re.finditer(r'^(?:#{1,6}\s*)?(?:\*\*)?👤\s*(.+)$', text, re.M))
-    if len(markers) != 8:
-        raise ValueError(f'Ожидается 8 персонажей с маркером 👤, найдено: {len(markers)}.')
+    if not markers:
+        raise ValueError('Не найдены персонажи с маркером 👤.')
     characters = []
     for i, marker in enumerate(markers):
         name = clean(marker[1])
@@ -51,6 +51,8 @@ def parse_summary(markdown):
         pattern = r'^[·•*\-]\s*(?:\*\*)?([^:\n]+):(?:\*\*)?\s*'
         found = list(re.finditer(pattern, body, re.M))
         for j, match in enumerate(found):
+            if clean(match[1]) in fields:
+                raise ValueError('Повтор поля персонажа: проверь маркеры 👤.')
             fields[clean(match[1])] = body[match.end():found[j+1].start() if j+1 < len(found) else len(body)].strip().rstrip('-').strip()
         required = ['Статус', 'Внешность', 'Суть', 'Сейчас', 'Чего хочет']
         if any(not fields.get(key) for key in required):
@@ -59,7 +61,7 @@ def parse_summary(markdown):
                            'text': body, 'fields': fields})
     if sum(c['is_player'] for c in characters) != 1 or not characters[0]['is_player']:
         raise ValueError('Первый персонаж должен быть единственным ГГ с отметкой (ГГ).')
-    if len({c['name'].casefold() for c in characters}) != 8:
+    if len({c['name'].casefold() for c in characters}) != len(characters):
         raise ValueError('Имена персонажей повторяются.')
     relationships = [{'source_id': c['id'], 'target_name': key[len('Отношение к '):], 'text': value}
                      for c in characters for key, value in c['fields'].items()

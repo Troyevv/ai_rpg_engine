@@ -184,15 +184,19 @@ def run_job(path, job_id, handle):
                 storage.job_progress(job_id, 'validating')
                 try:
                     state, choices, changes = apply_updates(before, result, narrative, job['user_text'], sequence,job['kind'])
+                    state,audience = apply_scene_policy(before,state,changes,job['kind'])
                     break
                 except EvidenceError as exc:
                     if attempt == 1:
                         state, choices, changes, warnings = apply_supported_updates(before,result,narrative,job['user_text'],sequence,job['kind'])
+                        state,audience = apply_scene_policy(before,state,changes,job['kind'])
                         with storage.connect() as db:
                             db.execute('UPDATE game_jobs SET warnings_json=? WHERE id=?', (json.dumps(warnings,ensure_ascii=False),job_id))
                         break
                     feedback = str(exc)
-            state,audience = apply_scene_policy(before,state,changes,job['kind'])
+                except ValueError as exc:
+                    if attempt == 1:raise
+                    feedback = str(exc)
             state = apply_legacy(state,changes,sequence,job['kind'])
             if changes.get('world_delta'):
                 from backend.services.timeline import current_time

@@ -61,6 +61,8 @@ def normalize(original):
         world['events'][eid] = dict(id=eid, text=e['text'], participants=e.get('character_ids',[]), witnesses=[],
             minute=None, scene_id=None, fact_ids=[], medium='legacy', evidence='', player_observed=True,
             source_sequence=e.get('turn'), legacy=True)
+    from backend.services.initial_world import seed
+    seed(world,state,now)
     return state
 
 

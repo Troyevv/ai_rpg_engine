@@ -105,7 +105,7 @@ def test_backstage_is_canonical_and_regenerates_without_leaking_history(db):
     state=storage.get_save(sid)['state'];turn=storage.list_turns(sid)[-1]
     assert turn['kind']=='background' and turn['pov_actor_id'] is None
     assert json.loads(turn['audience_json'])==['character_3','character_4']
-    assert state['scene']=='Тайная встреча у подвала.' and state['world_clock']['last_event_time']=='День 1 18:25'
+    assert state['scene']=='Тайная встреча у подвала.' and state['world_clock']['last_event_time']=='День 1 (Пн) 18:25'
     assert state['actor_scenes']['character_1']['text']==scene
     assert controlled(state) is None
     assert state['facts'][-1]['known_by']==['character_3','character_4']

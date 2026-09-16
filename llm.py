@@ -277,6 +277,8 @@ def chat_stream(
     client = OpenAI(base_url=spec.base_url, api_key=key, timeout=60.0, max_retries=0)
     stream = None
     finish_reason = None
+    from backend.services.answer_stream import AnswerStream
+    answer = AnswerStream()
     try:
         extra = {"response_format": response_format} if response_format else {}
         if spec.extra_body:
@@ -321,8 +323,13 @@ def chat_stream(
             )
 
             if content:
-                yield content
+                visible = answer.feed(content)
+                if visible:
+                    yield visible
 
+        tail = answer.feed("", final=True)
+        if tail:
+            yield tail
         if require_complete and finish_reason == "length":
             raise OutputLimitReached("Достигнут лимит одного ответа модели.")
         if require_complete and finish_reason != "stop":
