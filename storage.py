@@ -43,6 +43,8 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
         self.init_engine()
         self.init_runtime()
         self.init_documents()
+        from backend.repositories.living_world import migrate
+        migrate(self)
 
     @contextmanager
     def connect(self):
@@ -86,6 +88,8 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             result = dict(row)
             result['state'] = {row['kind']: json.loads(row['payload']) for row in db.execute(
                 'SELECT kind,payload FROM world_parts WHERE world_id=?', (world_id,))}
+            from backend.services.world import normalize
+            result['state'] = normalize(result['state'])
             return result
 
     def create_save(self, world_id, name):
@@ -94,8 +98,11 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             raise ValueError('Название прохождения должно содержать от 1 до 120 символов.')
         world = self.get_world(world_id)
         with self.connect() as db:
-            return db.execute('INSERT INTO saves(world_id,name,state_json) VALUES(?,?,?)',
+            sid = db.execute('INSERT INTO saves(world_id,name,state_json) VALUES(?,?,?)',
                               (world_id, name, json.dumps(world['state'], ensure_ascii=False))).lastrowid
+            from backend.repositories.living_world import project
+            project(db,sid,world['state'])
+            return sid
 
     def list_saves(self, world_id):
         with self.connect() as db:
@@ -108,7 +115,8 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             if row is None:
                 raise ValueError('Прохождение не найдено.')
             result = dict(row)
-            result['state'] = json.loads(result.pop('state_json'))
+            from backend.services.world import normalize
+            result['state'] = normalize(json.loads(result.pop('state_json')))
             return result
 
     def list_turns(self, save_id):
@@ -129,6 +137,13 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             known = {c['id'] for c in state['characters']}
             if any(cid not in known for cid in metadata['present_ids']):
                 raise ValueError('В сцене указан неизвестный персонаж.')
+            from backend.services.world import normalize, record_scene
+            from backend.services.timeline import advance
+            from backend.repositories.living_world import project
+            state = normalize(state)
+            advance(state,state,metadata)
             state['scene_meta'] = metadata
+            record_scene(state,{},'manual','background' if state['controlled_actor_id'] is None else 'turn')
+            project(db,save_id,state)
             db.execute("UPDATE saves SET state_json=?, revision=revision+1, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
                        (json.dumps(state, ensure_ascii=False), save_id))

@@ -162,39 +162,24 @@ class RuntimeStorage:
         db.execute('DELETE FROM turns WHERE save_id=? AND sequence>?', (save_id,sequence))
 
     def _archive_memory(self, db, save_id, state):
+        from backend.repositories.living_world import project
+        project(db,save_id,state)
         through = state.get('memory',{}).get('through_sequence',-1)
         db.execute('UPDATE turns SET memory_archived=(sequence<=?) WHERE save_id=?', (through,save_id))
 
     def switch_actor(self,save_id,actor,revision):
-        from copy import deepcopy
-        from backend.services.pov import protagonist,controlled
+        # Compatibility helper. HTTP transitions always use an atomic POV generation job.
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             self._assert_idle(db,save_id)
             row=db.execute('SELECT * FROM saves WHERE id=?',(save_id,)).fetchone()
             if not row or row['revision']!=revision:
                 raise ValueError('Сейв изменился. Обнови страницу.')
-            state=json.loads(row['state_json'])
-            cards={c['id']:c for c in state['characters']}
-            if actor not in cards or cards[actor].get('available') is False:
-                raise ValueError('Персонаж недоступен.')
-            main,old=protagonist(state),controlled(state)
-            if old==actor:
-                return
-            scenes=state.setdefault('actor_scenes',{})
-            meta=deepcopy(state.get('scene_meta',{}))
-            scenes[old]={'text':state['scene'],'meta':meta}
-            target=scenes.get(actor)
-            if target is None and actor in meta.get('present_ids',[]):
-                target={'text':state['scene'],'meta':meta}
-            if target is None:
-                target={'text':cards[actor]['fields'].get('Сейчас','Место не установлено.'),
-                        'meta':{'time':state.get('world_clock',{}).get('last_event_time',meta.get('time','Не указано')),
-                                'location':'Не указано','present_ids':[actor]}}
-            state['protagonist_id'],state['controlled_actor_id']=main,actor
-            state['scene'],state['scene_meta']=target['text'],deepcopy(target['meta'])
-            state['sections']['scene']=state['scene']
+            from backend.services.pov import transition
+            state=transition(json.loads(row['state_json']),actor)
             parent=db.execute('SELECT active_variant_id FROM turns WHERE save_id=? ORDER BY sequence DESC LIMIT 1',(save_id,)).fetchone()
             after=dump(state)
             db.execute('INSERT INTO actor_switches(save_id,revision,before_json,after_json,parent_variant_id) VALUES(?,?,?,?,?)',(save_id,revision,row['state_json'],after,parent[0] if parent else None))
             db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?',(after,save_id))
+            from backend.repositories.living_world import project
+            project(db,save_id,state)

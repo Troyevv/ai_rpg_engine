@@ -28,6 +28,11 @@ for(const width of [360,390,412,430])test(`mobile story layout ${width}px`,async
  await page.getByLabel('Своё действие или реплика').blur();
  await page.locator('.story-scroll').evaluate(el=>{el.scrollTop=0});
  await page.screenshot({path:`test-results/mobile-${width}.png`});
+ await page.getByRole('button',{name:'Камера и журнал мира'}).click();
+ await expect(page.getByRole('heading',{name:'Камера мира'})).toBeVisible();
+ expect(await page.getByRole('dialog').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+ await page.screenshot({path:`test-results/camera-${width}.png`});
 });
 
 test('PWA manifest, worker and offline recovery',async({page,request},info)=>{

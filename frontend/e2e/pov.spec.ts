@@ -14,7 +14,8 @@ test('POV, backstage and prompt versions',async({page,request})=>{
  await expect(page.locator('.turn').last()).toContainText('За кулисами');
  await expect(page.locator('.choices button')).toHaveCount(0);
  let save=await (await request.get(`/api/saves/${selected.save}`)).json();
- expect(save.state.controlled_actor_id).toBe('character_2');
+ expect(save.state.controlled_actor_id).toBeNull();
+ expect(save.state.camera.mode).toBe('observer');
  expect(save.state.facts.at(-1).known_by).toEqual(['character_3','character_4']);
  await page.locator('.background-exit').getByRole('button',{name:'Вернуться к Персонаж 0'}).click();
  await expect(page.locator('.turn')).toHaveCount(4);

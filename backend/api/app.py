@@ -17,7 +17,7 @@ import engine
 import llm
 from character_links import linked_markdown
 from backend.api.schemas import (World, Named, Generation, Turn, Retry, Revision, Scene,
-                                 Models, Load, Preferences, Markdown, Credential, VariantSelection, Actor, DocumentChange)
+                                 Models, Load, Preferences, Markdown, Credential, VariantSelection, Actor, DocumentChange, Camera)
 from backend.repositories.preparation import Repository
 from backend.services.preparation import Preparation
 from backend.services.scene import scene_metadata
@@ -266,6 +266,45 @@ def create_app(db_path=None, recover=True):
         settings={**body.config.model_dump(),'expected_revision':body.revision,'actor_id':body.actor_id,'source_turn_id':body.source_turn_id}
         jid=engine.submit(repo,sid,'','pov',settings,api_key=credentials.resolve(body.config.provider,body.key()))
         return job(jid)
+
+    @app.post('/api/saves/{sid}/camera')
+    def camera(sid: int, body: Camera):
+        if body.actor_id is not None and body.scene_id is not None:
+            raise ValueError('Выбери персонажа или сцену камеры, не оба сразу.')
+        settings={**body.config.model_dump(),'expected_revision':body.revision,
+                  'camera_actor_id':body.actor_id,'camera_scene_id':body.scene_id,'camera_direct':True}
+        jid=engine.submit(repo,sid,'','background',settings,api_key=credentials.resolve(body.config.provider,body.key()))
+        return job(jid)
+
+    @app.get('/api/saves/{sid}/timeline')
+    def world_timeline(sid: int, visibility: str='player'):
+        if visibility not in ('player','actor'):
+            raise ValueError('Неизвестный фильтр журнала.')
+        from backend.services.world import timeline
+        return timeline(repo.get_save(sid)['state'],visibility)
+
+    @app.get('/api/saves/{sid}/scene-records/{record_id}')
+    def scene_record(sid: int, record_id: str):
+        value=repo.get_save(sid)['state']['world']['scene_records'].get(record_id)
+        if value is None:
+            raise ValueError('Запись сцены не найдена в текущей истории.')
+        return {'mode':'playback','sequence':value['source_sequence'],'narrative':value['narrative'],
+                'user_text':'','scene':value['scene_meta'],'pov_actor_id':value['pov_actor_id']}
+
+    @app.get('/api/saves/{sid}/playback/{tid}')
+    def playback(sid: int, tid: int):
+        # Read-only historical camera: no job, clock, revision or canonical state mutation.
+        repo.get_save(sid)
+        with repo.connect() as db:
+            row=db.execute('SELECT * FROM turns WHERE id=? AND save_id=?',(tid,sid)).fetchone()
+            if row is None:
+                raise ValueError('Записанная сцена не найдена в текущей истории.')
+            from backend.services.world import normalize
+            state=normalize(json.loads(row['after_json']))
+            return {'mode':'playback','turn_id':tid,'sequence':row['sequence'],
+                    'narrative':row['assistant_text'],'user_text':row['user_text'],
+                    'scene':scene_metadata(state),'pov_actor_id':row['pov_actor_id'],
+                    'camera':state.get('camera'), 'world_clock':state.get('world_clock')}
 
     @app.get('/api/credentials')
     def credential_status():

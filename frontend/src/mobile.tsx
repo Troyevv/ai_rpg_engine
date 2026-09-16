@@ -39,14 +39,14 @@ export function MobileNavigation({open,setOpen,world,go,inspect,settings,reading
  <Button variant="ghost" onClick={()=>act(toggleReading)}>{reading?<EyeOff/>:<Eye/>}{reading?'Выйти из чтения':'Режим чтения'}</Button>
  </div></DialogContent></Dialog></>;
 }
-export function MobileScene({save,meta,busy,switchActor,background,openCharacter}:{save:Save;meta?:Scene;busy:boolean;switchActor:(id:string,source?:number)=>void;background:()=>void;openCharacter:(id:string)=>void}){
+export function MobileScene({save,meta,busy,switchActor,background,openCharacter,openCamera}:{openCamera:()=>void;save:Save;meta?:Scene;busy:boolean;switchActor:(id:string,source?:number)=>void;background:()=>void;openCharacter:(id:string)=>void}){
  const [sheet,setSheet]=useState<'pov'|'scene'|null>(null);
  const main=save.state.protagonist_id||save.state.characters.find(c=>c.is_player)?.id;
- const actor=save.state.controlled_actor_id||main;
- const name=(id?:string)=>save.state.characters.find(c=>c.id===id)?.name.replace(' (ГГ)','')||'Персонаж';
+ const actor=save.state.controlled_actor_id===undefined?main:save.state.controlled_actor_id;
+ const name=(id?:string|null)=>save.state.characters.find(c=>c.id===id)?.name.replace(' (ГГ)','')||'Персонаж';
  const nearby=meta?.present_ids.filter(id=>id!==actor)||[];
  return <div className="mobile-context">
- <div className="mobile-pov"><button disabled={busy} onClick={()=>setSheet('pov')}>{name(actor)} ▾</button><button disabled={busy||!save.turns.length} onClick={background}>Мир без ГГ</button></div>
+ <div className="mobile-pov"><button disabled={busy} onClick={()=>setSheet('pov')}>{actor===null?"Наблюдение":name(actor)} ▾</button><button disabled={busy||!save.turns.length} onClick={background}>Мир без ГГ</button><button aria-label="Камера и журнал мира" onClick={openCamera}>◎</button></div>
  <button className="mobile-scene-line" onClick={()=>setSheet('scene')}>{meta?.time||'Время не задано'} · {meta?.location||'Место не задано'}{nearby.length?` · ${nearby.map(name).join(', ')}`:''} ▾</button>
  <Dialog open={!!sheet} onOpenChange={v=>{if(!v)setSheet(null)}}><DialogContent className="mobile-sheet"><DialogHeader><DialogTitle>{sheet==='pov'?'За кого играть':'Текущая сцена'}</DialogTitle><DialogDescription>{sheet==='pov'?'Переход откроет сцену персонажа и варианты действий.':`${meta?.time||''} · ${meta?.location||''}`}</DialogDescription></DialogHeader>
  {sheet==='pov'?<div className="actor-list">{actor!==main&&<Button disabled={busy} onClick={()=>{setSheet(null);switchActor(main!)}}>Вернуться к {name(main)}</Button>}{save.state.characters.map(c=><button key={c.id} disabled={busy||c.id===actor} onClick={()=>{setSheet(null);switchActor(c.id)}}>{name(c.id)}{c.id===main?' (ГГ)':''}{c.id===actor?' · сейчас':''}</button>)}</div>:<><p>{save.state.scene}</p><div className="actor-list">{nearby.map(id=><button key={id} onClick={()=>{setSheet(null);openCharacter(id)}}>{name(id)}</button>)}</div></>}

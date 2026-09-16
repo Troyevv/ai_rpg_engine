@@ -115,10 +115,15 @@ def run_job(path, job_id, handle):
                     raise ValueError('Выбранная модель не загружена. Загрузи её в настройках игры.')
                 actual_context = model.get('config', {}).get('context_length') or config['context_length']
                 context = min(int(actual_context), config['context_length'])
-            before = json.loads(job['memory_before_json'] or job['before_json'])
+            from backend.services.world import normalize, apply_legacy, record_narrative, compatibility_view
+            from backend.services.world_delta import apply_delta
+            before = normalize(json.loads(job['memory_before_json'] or job['before_json']))
             if job['kind']=='pov' and not job['memory_before_json']:
                 from backend.services.pov import transition
                 before=transition(before,config['actor_id'],config.get('source_node_id'))
+            if job['kind']=='background' and not job['memory_before_json']:
+                from backend.services.director import observe
+                before=observe(before,config.get('camera_actor_id'),config.get('camera_scene_id'),config.get('camera_direct',False))
             history = storage.list_turns(job['save_id'])
             if job['replaces_id'] is not None:
                 target = next(t for t in history if t['id'] == job['replaces_id'])
@@ -188,6 +193,14 @@ def run_job(path, job_id, handle):
                         break
                     feedback = str(exc)
             state,audience = apply_scene_policy(before,state,changes,job['kind'])
+            state = apply_legacy(state,changes,sequence,job['kind'])
+            if changes.get('world_delta'):
+                from backend.services.timeline import current_time
+                state = apply_delta(state,changes['world_delta'],narrative,job['user_text'],sequence,since=current_time(before))
+            record_narrative(state,narrative,sequence,True,set(before['world']['events']))
+            from backend.services.simulation import simulate
+            state=simulate(before,state,sequence,context,config,generate,handle.cancelled)
+            state=compatibility_view(state)
             with storage.connect() as db:
                 db.execute('UPDATE game_jobs SET audience_json=? WHERE id=?',(json.dumps(audience),job_id))
             if not handle.cancelled.is_set():

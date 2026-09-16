@@ -1306,3 +1306,25 @@ details > label:first-of-type {
  .topbar{padding-top:env(safe-area-inset-top);height:calc(48px + env(safe-area-inset-top));min-height:calc(48px + env(safe-area-inset-top))}
  .background-exit{align-items:stretch}
 }
+
+/* World camera shares the modal/sheet shell; the story retains its viewport. */
+.world-camera { width: min(760px, calc(100vw - 32px)); }
+.camera-tabs,.camera-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.camera-cast { display:grid; gap:12px; }
+.camera-cast article { padding:14px; border:1px solid var(--line); border-radius:12px; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.camera-cast p { margin:4px 0; overflow-wrap:anywhere; }
+.camera-actions { flex-shrink:0; flex-direction:column; }
+.timeline-filter { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+.world-timeline { list-style:none; padding:0; }
+.world-timeline li { border-left:1px solid var(--line); padding:8px 16px 20px; overflow-wrap:anywhere; }
+@media(max-width:767px) {
+ .world-camera.mobile-sheet { width:100%; }
+ .camera-cast article { align-items:stretch; flex-direction:column; }
+ .camera-actions { flex-direction:row; }
+ .camera-actions button,.camera-tabs button { min-height:44px; flex:1; }
+ .camera-tabs { flex-wrap:nowrap; }
+ .camera-tabs button { white-space:normal; }
+ .mobile-pov { gap:4px; }
+ .mobile-pov>button:first-child { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+ .mobile-pov>button:last-child { flex-shrink:0; min-width:44px; }
+}

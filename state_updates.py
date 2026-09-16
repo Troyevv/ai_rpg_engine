@@ -30,7 +30,7 @@ def apply_updates(before, payload, narrative, user_text, turn, kind="turn"):
     from backend.services.pov import controlled
     if isinstance(payload, str):
         payload = json.loads(payload)
-    exact_keys(payload, ['scene', 'characters', 'relationships', 'facts', 'events', 'plans', 'locations', 'choices'], ['scene', 'choices'])
+    exact_keys(payload, ['scene', 'characters', 'relationships', 'facts', 'events', 'plans', 'locations', 'choices', 'world_delta'], ['scene', 'choices'])
     state = deepcopy(before)
     ids = {c['id'] for c in state['characters']}
     cards = {c['id']: c for c in state['characters']}
