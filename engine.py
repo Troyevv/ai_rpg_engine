@@ -10,6 +10,7 @@ from state_updates import apply_updates, apply_supported_updates, EvidenceError
 from storage import Storage
 from backend.services.usage import tracked_stream
 from backend.services.memory import compact
+from backend.services.memory_compactor import output_budget
 from backend.services.pov import apply_scene_policy
 
 from backend.services.coordinator import LOCAL_MODEL_LOCK, model_lease
@@ -151,7 +152,7 @@ def run_job(path, job_id, handle):
                         raise ValueError('Сохранённый контекст не помещается в выбранную модель. Увеличь контекст или уменьши лимит ответа.')
                 else:
                     before = compact(storage, job, before, history, dict(config,context_length=context),
-                                     lambda messages: generate('memory',messages,config['update_tokens'],0.1), handle.cancelled)
+                                     lambda messages: generate('memory',messages,output_budget(dict(config,context_length=context)),0.1), handle.cancelled)
                     if handle.cancelled.is_set():
                         return
                     messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'))

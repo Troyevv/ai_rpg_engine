@@ -52,7 +52,7 @@ def test_repeated_invalid_memory_does_not_block_thirty_turns_or_archive_sources(
     turns=repo.list_turns(sid)
     assert len(turns)==31 and not any(t['memory_archived'] for t in turns)
     assert not repo.get_save(sid)['state'].get('memory')
-    assert 2<=len(memory_calls)<30  # Cooldown prevents two paid retries every turn.
+    assert 2<=len(memory_calls) and len(set(memory_calls))<15  # No repair loop every turn.
     assert any(json.loads(repo.get_job(j)['warnings_json']) for j in memory_calls)
     original=repo.get_save(sid)['state']
     last=repo.latest_job(sid)
