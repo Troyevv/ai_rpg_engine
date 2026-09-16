@@ -32,7 +32,8 @@ class DocumentStorage:
             import hashlib
             upgrades=json.loads((ROOT/'default_updates.json').read_text(encoding='utf-8'))
             db.execute('CREATE TABLE IF NOT EXISTS prompt_upgrades (name TEXT, old_hash TEXT, PRIMARY KEY(name,old_hash))')
-            for name,old_hash in upgrades.items():
+            entries=((name,h) for name,hashes in upgrades.items() for h in (hashes if isinstance(hashes,list) else [hashes]))
+            for name,old_hash in entries:
                 if db.execute('SELECT 1 FROM prompt_upgrades WHERE name=? AND old_hash=?',(name,old_hash)).fetchone():continue
                 row=db.execute("SELECT v.* FROM document_heads h JOIN document_versions v ON v.id=h.version_id WHERE h.kind='prompt' AND h.owner=?",(name,)).fetchone()
                 if row and hashlib.sha256(row['content'].encode()).hexdigest()==old_hash:

@@ -18,7 +18,12 @@ def request_context(original, text, context_length, requested_output):
     tail_reserve=min(2048,available//3) if text else 0
     output=min(requested_output,available-tail_reserve)
     if output<256:
-        raise ValueError('Исходный сценарий/шаблон не помещается в контекст модели. Увеличь контекст загруженной модели; полученный текст сохранён.')
+        # This byte heuristic is not the model tokenizer. Never reject intact
+        # source material on its estimate alone; let the provider validate it.
+        # Use a modest output budget, and preserve a tail for continuation.
+        if text:
+            messages[-2]['content']=text[-1024:]
+        return messages,min(requested_output,1024)
     if text:
         budget=context_length-output-512
         lo,hi=0,len(text)
@@ -28,7 +33,7 @@ def request_context(original, text, context_length, requested_output):
             if estimate(messages)<=budget:lo=mid
             else:hi=mid-1
         messages[-2]['content']=text[-lo:] if lo else ''
-        if not lo:raise ValueError('Недостаточно контекста для продолжения. Полученный текст сохранён.')
+        if not lo:messages[-2]['content']=text[-1024:]
     return messages,output
 
 

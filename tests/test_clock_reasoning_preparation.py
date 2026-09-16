@@ -105,14 +105,15 @@ def test_generated_summary_can_start_game(tmp_path):
     assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
 
 
-def test_default_prompt_upgrade_preserves_custom_and_restore(tmp_path,monkeypatch):
+@pytest.mark.parametrize("hash_list",[False,True])
+def test_default_prompt_upgrade_preserves_custom_and_restore(tmp_path,monkeypatch,hash_list):
     import backend.repositories.documents as documents
     repo=Repository(tmp_path/'game.db')
     root=tmp_path/'prompts';root.mkdir()
     for name in documents.PROMPT_NAMES:(root/name).write_text('Новая версия '+name)
     names=['idea_prompt.md','summary_prompt.md']
     old='Старый встроенный промпт'
-    (root/'default_updates.json').write_text(json.dumps({n:hashlib.sha256(old.encode()).hexdigest() for n in names}))
+    (root/'default_updates.json').write_text(json.dumps({n:([hashlib.sha256(b'older').hexdigest(),hashlib.sha256(old.encode()).hexdigest()] if hash_list else hashlib.sha256(old.encode()).hexdigest()) for n in names}))
     with repo.connect() as conn:
         conn.execute('DELETE FROM prompt_upgrades')
         oldid=repo._record_document(conn,'prompt',names[0],old)
