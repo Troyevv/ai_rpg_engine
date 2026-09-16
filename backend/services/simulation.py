@@ -33,8 +33,9 @@ def simulate(before, state, sequence, context_length, config, generate, cancelle
         raise ValueError('Фоновая симуляция должна завершаться на текущем времени мира.')
     updated=apply_legacy(updated,changes,sequence,'background')
     if changes.get('world_delta'):
-        point=state['world']['characters'][candidate['actor_id']]
-        updated=apply_delta(updated,changes['world_delta'],narrative,'',sequence,since=point.get('minute') if point.get('minute') is not None else current_time(state))
+        points=[state['world']['characters'][cid].get('minute') for cid in audience]
+        since=max([minute if minute is not None else current_time(state) for minute in points]+[0])
+        updated=apply_delta(updated,changes['world_delta'],narrative,'',sequence,since=since)
     # No simulated scene enters the player's observed timeline or the main POV's memory.
     old=set(state['world']['events'])
     for eid,event in updated['world']['events'].items():

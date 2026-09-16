@@ -113,6 +113,8 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None):
         require(set(e['fact_ids'])<=set(world['facts']),'неизвестный факт события')
         minute=e.get('minute',now)
         require((since if since is not None else now)<=minute<=now,'событие вне подтверждаемого интервала сцены')
+        if camera.get('start_minute') is None or minute<camera['start_minute']:
+            camera['start_minute']=minute
         record=dict(e,minute=minute,scene_id=camera['id'],source_sequence=sequence,player_observed=True)
         world['events'][e['id']]=record
         new_events[e['id']]=record

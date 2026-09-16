@@ -179,9 +179,11 @@ def test_triggered_simulation_is_bounded_and_does_not_move_camera(db):
 def test_parallel_event_time_has_explicit_interval(db):
     repo,_,sid=db;state=ready(repo,sid)
     state['world_clock']['minute']=1200
+    state['world']['scenes'][state['camera']['scene_id']]['start_minute']=1200
     change=delta();change['events'][0]['minute']=1150
     after=apply_delta(state,change,QUOTE,'',2,since=1105)
     assert after['world']['events']['disclosure']['minute']==1150
+    assert after['world']['scenes'][after['camera']['scene_id']]['start_minute']==1150
     assert after['world_clock']['minute']==1200
     with pytest.raises(ValueError,match='интервала'):apply_delta(state,change,QUOTE,'',2,since=1160)
 

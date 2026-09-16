@@ -1,7 +1,5 @@
 name: Verify RPG Engine
 on:
-  push:
-    branches: ['codex/living-world']
   pull_request:
 permissions:
   contents: read
