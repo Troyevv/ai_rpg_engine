@@ -1,6 +1,9 @@
 {
   "idea_prompt.md": "d78197e8d5c8e9a069b50ea79e3acde6612b6e4f210776f7a0d0417e0258d1ad",
   "summary_prompt.md": "03faa0aad134219bcd93613e71c2d64ce30740c587cef5096ce4030dade2d5c2",
-  "summary_template.md": "f65205b4e9b65d995a1c250a126b06813169e4560ab63b620e0c892d0aab155c",
+  "summary_template.md": [
+    "f65205b4e9b65d995a1c250a126b06813169e4560ab63b620e0c892d0aab155c",
+    "8df5206222a36429dbaf0c9549a1acce0e3bbbe1dc4d08c9ad8c50c33f92eef2"
+  ],
   "state_update_prompt.md": "3e68b42ae37e74b608db0d94a709d540e54270c6f7da132eb5206adcb5c251cc"
 }

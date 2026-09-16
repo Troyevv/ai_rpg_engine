@@ -104,3 +104,42 @@ def test_provider_exposes_output_limit_without_hiding_other_termination(reason,e
         with pytest.raises(expected) as exc:next(output)
         if reason!='length':assert not isinstance(exc.value,OutputLimitReached)
     stream.close.assert_called_once();client.close.assert_called_once()
+
+
+def test_estimated_overflow_does_not_prevent_provider_request():
+    # UTF-8 estimate is not a tokenizer: Cyrillic can be badly overestimated.
+    original=[{'role':'system','content':'Правила'}, {'role':'user','content':'Сценарий: '+('Разговор друзей. '*3000)}]
+    calls=[]
+    def generate(messages,limit):
+        assert messages[:2]==original  # No silent source truncation/compression.
+        calls.append(limit)
+        if len(calls)==1:
+            yield 'Начало. '
+            raise OutputLimitReached('length')
+        assert messages[-2]['content']=='Начало. '
+        yield 'Завершение.'
+    output=''.join(stream_document(original,8192,12000,generate,Event()))
+    assert output=='Начало. Завершение.' and calls==[1024,1024]
+
+
+def test_real_provider_context_error_is_not_retried_forever():
+    source=[{'role':'user','content':'Сценарий '*5000}]
+    calls=[]
+    def generate(messages,limit):
+        calls.append(messages)
+        raise RuntimeError('maximum context length exceeded')
+        yield ''
+    with pytest.raises(RuntimeError,match='maximum context'):
+        list(stream_document(source,8192,12000,generate,Event()))
+    assert len(calls)==1
+
+
+def test_compact_builtin_summary_template_keeps_import_contract():
+    from backend.services.generation_prompts import build_summary_messages, PROMPTS
+    from world_parser import SECTIONS
+    template=(PROMPTS/'summary_template.md').read_text()
+    assert len(template.encode())<8000
+    assert all('# '+section in template for section in SECTIONS)
+    messages=build_summary_messages({'idea':'Мой полный сценарий'})
+    assert 'Мой полный сценарий' in messages[1]['content']
+    assert 'Знают:' in template and 'Подозревают:' in template and 'Время:' in template
