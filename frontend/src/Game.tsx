@@ -24,6 +24,7 @@ import { Diagnostics } from "./Diagnostics";
 import { JobView } from "./JobView";
 import { Button } from "./components/ui/button";
 import { Textarea } from "./components/ui/textarea";
+import {WorldCamera} from "./WorldCamera";
 import {useMobile,MobileScene} from './mobile';
 export function Game({
   world,
@@ -48,7 +49,8 @@ export function Game({
   const [away,setAway]=useState(false);
   const input=useRef<HTMLTextAreaElement>(null);
   const mainActor=save?.state.protagonist_id||save?.state.characters.find(c=>c.is_player)?.id;
-  const actorId=save?.state.controlled_actor_id||mainActor;
+  const actorId=save?.state.controlled_actor_id===undefined?mainActor:save.state.controlled_actor_id;
+  const [cameraOpen,setCameraOpen]=useState(false);
   const draftKey=`draft-${save?.id}-${actorId}`;
   const [diagnostics, setDiagnostics] = useState(false);
   const [diagnosticJob, setDiagnosticJob] = useState<string|undefined>();
@@ -110,6 +112,11 @@ export function Game({
     const j=await api<Job>(`/saves/${save.id}/actor`,{actor_id:actor,source_turn_id:source,revision:save.revision,config:prefs.game,api_key:apiKey});
     setSubmitted(j);pinned.current=true;setAway(false);
   });
+  const observe=(actor?:string,scene?:string)=>void run(async()=>{
+    if(!save)return;
+    const j=await api<Job>(`/saves/${save.id}/camera`,{actor_id:actor,scene_id:scene,revision:save.revision,config:prefs.game,api_key:apiKey});
+    setSubmitted(j);pinned.current=true;setAway(false);
+  });
   useEffect(()=>{if(!mobile||!input.current)return;const el=input.current;el.style.height='auto';el.style.height=Math.min(el.scrollHeight,132)+'px'},[draft,mobile]);
   useEffect(()=>{if(!scroll.current)return;const observer=new ResizeObserver(()=>{if(pinned.current&&scroll.current)scroll.current.scrollTop=scroll.current.scrollHeight});const story=scroll.current.firstElementChild;if(story)observer.observe(story);return()=>observer.disconnect()},[world?.id,save?.id]);
   const meta = save?.scene_meta ?? world?.scene_meta;
@@ -139,10 +146,12 @@ export function Game({
     );
   return (
     <main className="game">
+      {save&&<WorldCamera save={save} open={cameraOpen} onOpenChange={setCameraOpen} busy={busy||pending} observe={observe} control={switchActor}/>}
       {save&&<Diagnostics saveId={save.id} jobId={diagnosticJob} open={diagnostics} onOpenChange={setDiagnostics}/>}
-      {mobile&&save?<MobileScene save={save} meta={meta} busy={busy||pending} switchActor={switchActor} background={()=>void turn("background","")} openCharacter={openCharacter}/>:<>{save&&<div className="pov-controls">
-        <label>Управляемый персонаж<select aria-label="Управляемый персонаж" value={actorId||""} disabled={busy||pending} onChange={e=>switchActor(e.target.value)}>{save.state.characters.map(c=><option key={c.id} value={c.id}>{c.name}{c.id===mainActor?" · основной герой":""}</option>)}</select></label>
+      {mobile&&save?<MobileScene save={save} meta={meta} busy={busy||pending} switchActor={switchActor} background={()=>void turn("background","")} openCharacter={openCharacter} openCamera={()=>setCameraOpen(true)}/>:<>{save&&<div className="pov-controls">
+        <label>Управляемый персонаж<select aria-label="Управляемый персонаж" value={actorId||""} disabled={busy||pending} onChange={e=>switchActor(e.target.value)}>{!actorId&&<option value="">Камера наблюдателя</option>}{save.state.characters.map(c=><option key={c.id} value={c.id}>{c.name}{c.id===mainActor?" · основной герой":""}</option>)}</select></label>
         {actorId!==mainActor&&<Button variant="ghost" size="sm" disabled={busy||pending} onClick={()=>switchActor(mainActor!)}>Вернуться к {save.state.characters.find(c=>c.id===mainActor)?.name.replace(" (ГГ)","")}</Button>}
+        <Button variant="ghost" size="sm" onClick={()=>setCameraOpen(true)}>Камера · Журнал</Button>
         <Button variant="outline" size="sm" disabled={busy||pending||!save.turns.length} onClick={()=>void turn("background","")}>Мир без ГГ</Button>
       </div>}
       <div className="scene-bar">
@@ -312,7 +321,8 @@ export function Game({
               )}
               {save.turns.length > 0 && !pending && (
                 <>
-                  {save.turns.at(-1)?.kind==='background'&&<div className="background-exit">
+                  {actorId===null&&<div className="background-exit">
+                    <Button variant="outline" disabled={busy} onClick={()=>observe(undefined,save.state.camera?.scene_id)}>Продолжить наблюдать</Button>
                     <Button disabled={busy} onClick={()=>switchActor(mainActor!)}>Вернуться к {save.state.characters.find(c=>c.id===mainActor)?.name.replace(' (ГГ)','')}</Button>
                     <label>Продолжить за персонажа…<select aria-label="Участник фоновой сцены" value="" disabled={busy} onChange={e=>switchActor(e.target.value,save.turns.at(-1)!.id)}><option value="">Выбрать участника</option>{save.state.characters.filter(c=>JSON.parse(save.turns.at(-1)?.audience_json||'[]').includes(c.id)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
                   </div>}
@@ -387,11 +397,13 @@ export function Game({
                 setDraft(e.target.value);
                 sessionStorage.setItem(draftKey, e.target.value);
               }}
-              placeholder="Что ты делаешь или говоришь?"
+              disabled={actorId===null}
+              placeholder={actorId===null?"Камера наблюдает мир — выбери персонажа для управления":"Что ты делаешь или говоришь?"}
               onKeyDown={(e) => {
                 if (
                   e.key === "Enter" &&
                   (e.ctrlKey || e.metaKey) &&
+                  actorId !== null &&
                   !pending &&
                   !busy &&
                   save.turns.length &&
@@ -405,7 +417,7 @@ export function Game({
             <Button
               aria-label="Отправить действие"
               size="icon"
-              disabled={busy || pending || !save.turns.length || !draft.trim()}
+              disabled={actorId===null || busy || pending || !save.turns.length || !draft.trim()}
               onClick={() => turn("turn")}
             >
               <Send size={19} />

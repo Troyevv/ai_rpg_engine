@@ -16,6 +16,7 @@ def intro(storage,sid,actor,source=None,bad=False):
             payload=result()
             block=next(m['content'] for m in kw['messages'] if m['content'].startswith('Текущая сцена'))
             scene=json.loads(block.split('\n',1)[1]);payload['scene'].update(scene['scene_meta']);payload['scene']['text']=scene['scene']
+            payload['events']=[e for e in payload.get('events',[]) if set(e['character_ids'])<=set(payload['scene']['present_ids'])]
             if bad:payload['choices']=[]
             yield json.dumps(payload,ensure_ascii=False)
         else:yield NARRATIVE

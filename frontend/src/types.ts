@@ -50,7 +50,9 @@ export interface Scene {
 }
 export interface State {
   protagonist_id?: string;
-  controlled_actor_id?: string;
+  controlled_actor_id?: string|null;
+  camera?: {scene_id:string;mode:'actor'|'observer';scope?:'world'|'scene'};
+  world?: {version:number;characters:Record<string,{location:string|null;minute:number|null;scene_id:string|null}>;scenes:Record<string,{id:string;participants:string[];location:string;start_minute:number|null;end_minute:number|null;status:string}>};
   world_clock?: {last_event_time:string;minute?:number};
   memory?: {id: string; summary: string; through_sequence: number; per_actor?:Record<string,{summary:string;through_sequence:number}>};
   scene: string;

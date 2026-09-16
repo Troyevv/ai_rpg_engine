@@ -84,11 +84,17 @@ class EngineStorage:
                     original=db.execute('SELECT config_json FROM game_jobs WHERE id=?',(v['job_id'],)).fetchone()
                     if original and '_prompts' in json.loads(original[0]):
                         config=dict(config,_prompts=json.loads(original[0])['_prompts'])
-                        for key in ('actor_id','source_turn_id','source_node_id'):
+                        for key in ('actor_id','source_turn_id','source_node_id','camera_actor_id','camera_scene_id','camera_direct'):
                             if key in json.loads(original[0]):config[key]=json.loads(original[0])[key]
                 if context_json is None:
                     raise ValueError('У старого хода нет снимка исходного контекста. Точная перегенерация недоступна.')
                 before, replaces, user_text, kind = last['before_json'], last['id'], last['user_text'], last['kind']
+            from backend.services.pov import controlled
+            if kind == 'turn' and controlled(json.loads(before)) is None:
+                raise ValueError('Камера наблюдает мир. Выбери персонажа для управления или продолжи наблюдение.')
+            if kind == 'background':
+                from backend.services.director import observe
+                observe(json.loads(before),config.get('camera_actor_id'),config.get('camera_scene_id'),config.get('camera_direct',False))
             if kind == 'turn' and not user_text.strip():
                 raise ValueError('Напиши действие.')
             from backend.services.pov import controlled

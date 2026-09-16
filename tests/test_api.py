@@ -128,10 +128,12 @@ def test_existing_database_keeps_old_json(tmp_path):
         db.execute("INSERT INTO turns VALUES(1,1,0,'','Старая сцена',?,?)",(original,original))
     for _ in range(2):
         repo=Repository(path)
-        assert repo.get_save(1)['state']==state
+        assert all(repo.get_save(1)['state'][key]==value for key,value in state.items())
+        assert repo.get_save(1)['state']['world']['version']==2
         assert repo.list_turns(1)[0]['assistant_text']=='Старая сцена'
     with repo.connect() as db:
-        assert db.execute('SELECT state_json FROM saves').fetchone()[0]==original
+        assert db.execute('SELECT before_json FROM turns').fetchone()[0]==original
+        assert db.execute('SELECT after_json FROM turns').fetchone()[0]==original
         assert db.execute('PRAGMA foreign_key_check').fetchall()==[]
 
 

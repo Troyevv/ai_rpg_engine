@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 PROMPT_NAMES = ('game_system_prompt.md','state_update_prompt.md','idea_prompt.md','summary_prompt.md',
-                'summary_template.md','background_prompt.md','memory_prompt.md')
+                'summary_template.md','background_prompt.md','memory_prompt.md','world_state_prompt.md')
 ROOT = Path(__file__).resolve().parents[2] / 'prompts'
 
 

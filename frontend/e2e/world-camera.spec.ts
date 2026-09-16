@@ -1,0 +1,37 @@
+import {test,expect} from '@playwright/test';
+
+test('camera, observer continuation, timeline and immutable playback',async({page,request,isMobile})=>{
+ const selected=await (await request.post('/test/seed')).json();
+ await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selected);
+ await page.goto('/');
+ await page.getByRole('button',{name:'Начать игру',exact:true}).click();
+ await expect(page.locator('.turn')).toHaveCount(1);
+ const open=async()=>page.getByRole('button',{name:isMobile?'Камера и журнал мира':'Камера · Журнал',exact:true}).click();
+ await open();
+ const dialog=page.getByRole('dialog');
+ await expect(dialog.getByRole('heading',{name:'Камера мира'})).toBeVisible();
+ await dialog.getByRole('button',{name:'Журнал событий',exact:true}).click();
+ await expect(dialog.locator('.world-timeline li')).not.toHaveCount(0);
+ const before=await (await request.get(`/api/saves/${selected.save}`)).json();
+ await dialog.getByRole('button',{name:'Посмотреть сцену',exact:true}).first().click();
+ await expect(dialog.getByRole('heading',{name:'Записанная сцена'})).toBeVisible();
+ await expect(dialog).toContainText('Состояние игры и время не меняются');
+ const after=await (await request.get(`/api/saves/${selected.save}`)).json();
+ expect(after.revision).toBe(before.revision);
+ expect(after.state).toEqual(before.state);
+ await dialog.getByRole('button',{name:'← К журналу'}).click();
+ await dialog.getByRole('button',{name:'Персонажи и сцены'}).click();
+ await dialog.locator('.camera-cast article').nth(2).getByRole('button',{name:'Наблюдать',exact:true}).click();
+ await expect(page.locator('.turn')).toHaveCount(2);
+ await expect(page.getByLabel('Своё действие или реплика')).toBeDisabled();
+ await page.getByRole('button',{name:'Продолжить наблюдать',exact:true}).click();
+ await expect(page.locator('.turn')).toHaveCount(3);
+ await page.getByLabel('Участник фоновой сцены').selectOption('character_3');
+ await expect(page.locator('.turn')).toHaveCount(4);
+ await expect(page.locator('.choices button')).toHaveCount(6);
+ await expect(page.getByLabel('Своё действие или реплика')).toBeEnabled();
+ const state=(await (await request.get(`/api/saves/${selected.save}`)).json()).state;
+ expect(state.controlled_actor_id).toBe('character_3');
+ expect(state.camera.mode).toBe('actor');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+});

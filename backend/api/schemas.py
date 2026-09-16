@@ -91,3 +91,8 @@ class DocumentChange(DTO):
     content: str = Field(default='',max_length=2000000)
     expected_head: int | None = None
     source_id: int | None = None
+
+class Camera(Revision, Credential):
+    actor_id: str | None = None
+    scene_id: str | None = None
+    config: ModelConfig
