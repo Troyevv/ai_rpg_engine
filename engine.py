@@ -191,7 +191,8 @@ def run_job(path, job_id, handle):
                         state, choices, changes, warnings = apply_supported_updates(before,result,narrative,job['user_text'],sequence,job['kind'])
                         state,audience = apply_scene_policy(before,state,changes,job['kind'])
                         with storage.connect() as db:
-                            db.execute('UPDATE game_jobs SET warnings_json=? WHERE id=?', (json.dumps(warnings,ensure_ascii=False),job_id))
+                            previous=json.loads(db.execute('SELECT warnings_json FROM game_jobs WHERE id=?',(job_id,)).fetchone()[0] or '[]')
+                            db.execute('UPDATE game_jobs SET warnings_json=? WHERE id=?', (json.dumps(previous+warnings,ensure_ascii=False),job_id))
                         break
                     feedback = str(exc)
                 except ValueError as exc:

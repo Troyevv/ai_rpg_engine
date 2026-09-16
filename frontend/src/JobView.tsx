@@ -29,9 +29,9 @@ export function JobView({
 }) {
   if (!job) return null;
   if (job.status === "saved") return job.warnings?.length ? <details className="job warning">
-    <summary>Ход сохранён. Не подтверждено изменений: {job.warnings.length}</summary>
-    <p>Эти пункты не добавлены в состояние мира. Текст хода сохранён полностью.</p>
-    {job.warnings.map((w,i)=><div key={i}><strong>{w.section}</strong>: {w.reason}<pre>{JSON.stringify(w.rejected,null,2)}</pre></div>)}
+    <summary>Ход сохранён. Предупреждений: {job.warnings.length}</summary>
+    <p>Текст хода сохранён полностью. Подробности обработки:</p>
+    {job.warnings.map((w,i)=><div key={i}><strong>{w.section}</strong>: {w.reason}{w.rejected != null && <pre>{JSON.stringify(w.rejected,null,2)}</pre>}</div>)}
   </details> : null;
   return (
     <section className="job" aria-live="polite">

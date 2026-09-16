@@ -1,13 +1,40 @@
 """Objective and actor-scoped memory: private scenes never enter absent actors' input."""
 from copy import deepcopy
 import uuid
+import json
+from llm import OutputLimitReached
 from pathlib import Path
 from context_builder import encoded, estimate
 from backend.services.pov import protagonist,visible,actor_view
 
 
+class MemoryDeferred(ValueError):
+    pass
+
+
 def compact(storage, job, state, history, config, generate, cancelled):
     state=deepcopy(state)
+    sequence=max((t['sequence'] for t in history),default=-1)
+    if sequence<state.get('memory_maintenance',{}).get('retry_after_sequence',-1):
+        return state
+    try:
+        result=_compact(storage,job,state,history,config,generate,cancelled)
+        if not cancelled.is_set():result.pop('memory_maintenance',None)
+        return result
+    except MemoryDeferred as exc:
+        if cancelled.is_set():return state
+        # No cursor advancement or archival for the failed chunk. Previous
+        # successfully compacted chunks remain usable; full source stays in DB.
+        state['memory_maintenance']={'retry_after_sequence':sequence+max(1,config.get('memory_batch',4))}
+        with storage.connect() as db:
+            row=db.execute('SELECT warnings_json FROM game_jobs WHERE id=?',(job['id'],)).fetchone()
+            warnings=json.loads(row[0] or '[]')
+            warnings.append({'section':'Память','reason':'Обновление памяти отложено: '+str(exc)+' Предыдущая память и полная история сохранены.','rejected':None})
+            db.execute('UPDATE game_jobs SET warnings_json=? WHERE id=?',(encoded(warnings),job['id']))
+        return state
+
+
+def _compact(storage, job, state, history, config, generate, cancelled):
     memory=state.get('memory',{})
     recent=config.get('recent_turns',6)
     batch=config.get('memory_batch',4)
@@ -18,14 +45,20 @@ def compact(storage, job, state, history, config, generate, cancelled):
     def summarize(previous,turns,pov):
         messages=[{'role':'system','content':prompt},{'role':'user','content':encoded({'POV':pov,'previous_memory':previous,
             'turns':[{'sequence':t['sequence'],'player':t['user_text'],'narrator':t['assistant_text']} for t in turns]})}]
-        if estimate(messages)>config['context_length']-config['update_tokens']-256:
-            raise ValueError('Пакет памяти не помещается в контекст. Уменьши пакет или увеличь контекст.')
-        result=''.join(generate(messages)).strip()
-        if cancelled.is_set():
-            return ''
-        if not result or len(result)>8000:
-            raise ValueError('Выжимка памяти пуста или длиннее 8000 символов.')
-        return result
+        messages[0]['content']+='\nЦелевой объём 4000–6000 символов, жёсткий максимум 8000. Сожми предыдущую память и новые события вместе; не наращивай её бесконечно. Верни только итоговый текст.'
+        for attempt in range(2):
+            if cancelled.is_set():return ''
+            if estimate(messages)>config['context_length']-config['update_tokens']-256:
+                raise MemoryDeferred('Пакет не помещается в бюджет контекста.')
+            try:
+                result=''.join(generate(messages)).strip()
+            except OutputLimitReached:
+                result=''
+            if cancelled.is_set():return ''
+            if result and len(result)<=8000:return result
+            if attempt==0:
+                messages[0]['content']+='\nПредыдущая попытка не уложилась в ограничение или не дала завершённого текста. Перепиши по исходным данным значительно короче: до 4000 символов. Не объясняй процесс сжатия.'
+        raise MemoryDeferred('Модель не вернула корректную компактную память за две попытки.')
     while candidates:
         chunk=candidates[:batch]
         summary=summarize(memory.get('summary',''),chunk,'Объективная память ведущего')
