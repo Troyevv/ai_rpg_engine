@@ -22,7 +22,10 @@ def generate(storage,sid,kind='turn',text='Я сажусь.',config=None,story=N
         if kw.get('on_usage'):
             kw['on_usage']({'prompt_tokens':1000,'completion_tokens':100,'prompt_cache_hit_tokens':800})
         if kw.get('response_format'):
-            yield json.dumps(result(),ensure_ascii=False)
+            payload=result()
+            from backend.services.timeline import current_time,label
+            payload['scene']['time']=label(max(1100,current_time(json.loads(storage.get_job(job)['before_json']))))
+            yield json.dumps(payload,ensure_ascii=False)
         elif 'Обнови компактную память' in kw['messages'][0]['content']:
             yield 'Собеседники встретились и договорились поговорить на кухне.'
         else:

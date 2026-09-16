@@ -32,6 +32,8 @@ def build_context(state, history, user_text, kind, context_length, reserve, extr
                   validation_feedback=None, recent_turns=6, prompts=None):
     prompt_name = 'state_update_prompt.md' if extraction_text is not None else 'background_prompt.md' if kind=='background' else 'game_system_prompt.md'
     rules = prompts[prompt_name]['content'] if prompts and prompt_name in prompts else (PROMPTS/prompt_name).read_text(encoding='utf-8')
+    from backend.services.timeline import current_time,label
+    rules += '\nЕдиное время мира: '+label(current_time(state))+'. Не возвращай время назад. В scene.time используй День N HH:MM. Переход POV синхронный, без флешбэка.'
     rules += role_rules(state,kind,extraction_text is not None)
     main,actor=protagonist(state),controlled(state)
     if validation_feedback:
@@ -59,7 +61,7 @@ def build_context(state, history, user_text, kind, context_length, reserve, extr
         {'role':'system','content':'Постоянные правила\n'+rules},
         block('Выжимка мира', {'tone':state['sections'].get('tone',''), 'director_only':{'rules':state.get('story_notes',''),
                               'initial_knowledge_unstructured':state['sections'].get('knowledge','')}}),
-        block('POV и знания', {'protagonist_id':main,'controlled_actor_id':actor,'mode':kind,'world_clock':state.get('world_clock',{}),
+        block('POV и знания', {'protagonist_id':main,'controlled_actor_id':actor,'mode':kind,'world_clock':state.get('world_clock',{}),'transition':state.get('pov_transition') if kind=='pov' else None,
                                'known_facts':[f for f in state.get('facts',[]) if actor in f['known_by']][-30:]}),
         block('NPC и отношения', {'characters':cards,'cast_index':[{'id':c['id'],'name':c['name']} for c in state['characters']],
                                  'relationships':[dict(r,existing_index=i) for i,r in enumerate(state['relationships']) if r['source_id'] in present]}),
@@ -69,6 +71,8 @@ def build_context(state, history, user_text, kind, context_length, reserve, extr
               'plans':[p for p in state.get('plans',[]) if p['status']=='open'][-20:]}),
         block('Текущая сцена', {'scene':state['scene'],'scene_meta':state.get('scene_meta'),'locations':state['locations'][-20:]})]
     task = ('Разыграй стартовую сцену. Не делай ход за ГГ.' if kind=='start' else user_text)
+    if kind=='pov':
+        task='Покажи короткое POV-вступление управляемого персонажа здесь и сейчас. Опирайся на последнюю известную точку, его знания, события и открытые линии. Не решай и не действуй за него. Если source_node_id указан, продолжи именно ситуацию завершённой фоновой сцены, не начинай несвязанную. Не раскрывай чужие мысли. Остановись перед выбором игрока; обработчик подготовит 6 действий.'
     if kind=='background':
         task='Создай закулисную сцену между NPC без protagonist и controlled_actor. Учитывай world_clock и незакрытые дела.'
     if extraction_text is not None:

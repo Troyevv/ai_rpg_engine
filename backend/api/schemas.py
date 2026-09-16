@@ -82,8 +82,10 @@ class VariantSelection(Revision):
     variant_id: str
     rollback_following: bool = False
 
-class Actor(Revision):
+class Actor(Revision, Credential):
     actor_id: str
+    source_turn_id: int | None = None
+    config: ModelConfig
 
 class DocumentChange(DTO):
     content: str = Field(default='',max_length=2000000)

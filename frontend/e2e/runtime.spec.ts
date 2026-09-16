@@ -1,10 +1,11 @@
+import {nav,diagnostics} from "./navigation";
 import {test,expect} from "@playwright/test";
 test("persistent key, thinking, memory, visible player actions, variants and accounting",async({page,request})=>{
  const errors:string[]=[];page.on("pageerror",e=>errors.push(e.message));
  const selected=await (await request.post('/test/seed')).json();
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selected);
  await page.goto('/');
- await page.getByRole('button',{name:'Настройки',exact:true}).last().click();
+ await nav(page,'Настройки');
  await page.getByLabel('Провайдер game').selectOption('deepseek');
  await page.getByLabel('API-ключ DeepSeek').fill('persisted-test-key');
  await page.getByLabel('Thinking game').selectOption('low');
@@ -25,10 +26,8 @@ test("persistent key, thinking, memory, visible player actions, variants and acc
  page.once('dialog',d=>d.accept());
  await page.locator('.turn').first().getByRole('button',{name:'Ещё вариант'}).click();
  await expect(page.locator('.turn')).toHaveCount(1);
- await expect(page.getByText('Вариант 2 / 2')).toBeVisible();
- await page.locator('.variant-controls').getByRole('button',{name:'1',exact:true}).click();
- await expect(page.getByText('Вариант 1 / 2')).toBeVisible();
- await page.getByRole('button',{name:'Контекст ведущего · Расходы',exact:true}).click();
+ if(await page.locator('.mobile-variants').isVisible()){await expect(page.locator('.mobile-variants')).toContainText('2 / 2');await page.getByRole('button',{name:'Предыдущий вариант'}).click();await expect(page.locator('.mobile-variants')).toContainText('1 / 2')}else{await expect(page.getByText('Вариант 2 / 2')).toBeVisible();await page.locator('.variant-controls').getByRole('button',{name:'1',exact:true}).click();await expect(page.getByText('Вариант 1 / 2')).toBeVisible()}
+ await diagnostics(page);
  await expect(page.getByRole('dialog')).toContainText('Cached input');
  await expect(page.getByRole('dialog')).toContainText('low');
  await expect(page.getByRole('dialog')).toContainText('Текущая сцена');

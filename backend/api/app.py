@@ -263,8 +263,9 @@ def create_app(db_path=None, recover=True):
 
     @app.post('/api/saves/{sid}/actor')
     def actor(sid: int,body: Actor):
-        repo.switch_actor(sid,body.actor_id,body.revision)
-        return save(sid)
+        settings={**body.config.model_dump(),'expected_revision':body.revision,'actor_id':body.actor_id,'source_turn_id':body.source_turn_id}
+        jid=engine.submit(repo,sid,'','pov',settings,api_key=credentials.resolve(body.config.provider,body.key()))
+        return job(jid)
 
     @app.get('/api/credentials')
     def credential_status():
@@ -360,6 +361,28 @@ def create_app(db_path=None, recover=True):
     dist = ROOT / 'frontend' / 'dist'
     if (dist / 'assets').is_dir():
         app.mount('/assets', StaticFiles(directory=dist / 'assets'), name='assets')
+
+    @app.get('/sw.js', include_in_schema=False)
+    def service_worker():
+        if not (dist/'sw.js').is_file():raise HTTPException(404)
+        return FileResponse(dist/'sw.js',media_type='text/javascript',headers={'Cache-Control':'no-cache','Service-Worker-Allowed':'/'})
+
+    @app.get('/manifest.webmanifest', include_in_schema=False)
+    def manifest():
+        return FileResponse(dist/'manifest.webmanifest',media_type='application/manifest+json',headers={'Cache-Control':'no-cache'})
+
+    @app.get('/offline.html', include_in_schema=False)
+    def offline():
+        return FileResponse(dist/'offline.html',headers={'Cache-Control':'no-cache'})
+
+    if (dist/'icons').is_dir():
+        app.mount('/icons',StaticFiles(directory=dist/'icons'),name='icons')
+
+    @app.get('/api/local-ca', include_in_schema=False)
+    def local_ca():
+        cert=ROOT/'.runtime'/'tls'/'rootCA.cer'
+        if not (ROOT/'.runtime'/'https.json').is_file() or not cert.is_file():raise HTTPException(404)
+        return FileResponse(cert,media_type='application/x-x509-ca-cert',filename='AI-RPG-Local-CA.cer',headers={'Cache-Control':'no-store'})
 
     @app.get('/{path:path}', include_in_schema=False)
     def frontend(path: str):

@@ -116,6 +116,9 @@ def run_job(path, job_id, handle):
                 actual_context = model.get('config', {}).get('context_length') or config['context_length']
                 context = min(int(actual_context), config['context_length'])
             before = json.loads(job['memory_before_json'] or job['before_json'])
+            if job['kind']=='pov' and not job['memory_before_json']:
+                from backend.services.pov import transition
+                before=transition(before,config['actor_id'],config.get('source_node_id'))
             history = storage.list_turns(job['save_id'])
             if job['replaces_id'] is not None:
                 target = next(t for t in history if t['id'] == job['replaces_id'])
