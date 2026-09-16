@@ -41,7 +41,7 @@ def cost(inp,out,cached,pricing):
 
 
 def tracked_stream(storage, stream_fn, job_id, stage, config, messages, diagnostics=None, **kwargs):
-    from llm import thinking_options
+    from llm import thinking_options, OutputLimitReached
     effective = dict(config, thinking=thinking_options(config.get('provider','local'),config['model'],config.get('thinking','off'))[0])
     effective.update({k:kwargs[k] for k in ('max_tokens','temperature','response_format') if k in kwargs})
     rid = storage.begin_request(job_id,stage,effective,messages,diagnostics or {'estimated_tokens':estimate(messages),'parts':[]})
@@ -52,6 +52,9 @@ def tracked_stream(storage, stream_fn, job_id, stage, config, messages, diagnost
     try:
         yield from stream_fn(messages=messages, thinking=effective['thinking'], on_usage=received, **kwargs)
         status = 'complete'
+    except OutputLimitReached:
+        status = 'length'
+        raise
     finally:
         event = kwargs.get('cancel_event')
         if event is not None and event.is_set():

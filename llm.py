@@ -249,6 +249,10 @@ def unload_all_models() -> int:
 # Inference
 # =========================================================
 
+class OutputLimitReached(RuntimeError):
+    """A valid streamed prefix reached the provider output/context limit."""
+
+
 def chat_stream(
     model: str,
     messages: list[dict],
@@ -319,6 +323,8 @@ def chat_stream(
             if content:
                 yield content
 
+        if require_complete and finish_reason == "length":
+            raise OutputLimitReached("Достигнут лимит одного ответа модели.")
         if require_complete and finish_reason != "stop":
             raise RuntimeError("Ответ не завершён: увеличь лимит ответа/контекста и повтори генерацию.")
     except Exception as exc:

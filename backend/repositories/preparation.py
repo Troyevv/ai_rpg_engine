@@ -90,6 +90,11 @@ class Repository(Storage):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             job = db.execute('SELECT * FROM preparation_jobs WHERE id=?', (jid,)).fetchone()
+            if job and job['status']=='stopped' and status=='stopped' and narrative.startswith(job['narrative']):
+                # A worker may have received a final chunk after the timed UI flush.
+                # Keep it in the stopped draft without rewriting a newer workspace.
+                db.execute('UPDATE preparation_jobs SET narrative=? WHERE id=?',(narrative,jid))
+                return
             if not job or job['status'] != 'generating':
                 return
             db.execute('UPDATE preparation_jobs SET narrative=?,status=?,error=? WHERE id=?', (narrative, status, error, jid))
