@@ -123,7 +123,7 @@ export function Inspector({
           <>
             <SceneOverview state={state} meta={meta}/>
             {save && (
-              <details className="inspect-reveal"><summary>Уточнить строку сцены</summary><fieldset>
+              <details className="inspect-reveal"><summary><span className="inspect-title">Уточнить строку сцены</span></summary><fieldset>
                 <legend>Уточнить строку сцены</legend>
                 <label>
                   Время
