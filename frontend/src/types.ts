@@ -52,7 +52,7 @@ export interface State {
   protagonist_id?: string;
   controlled_actor_id?: string|null;
   camera?: {scene_id:string;mode:'actor'|'observer';scope?:'world'|'scene'};
-  world?: {version:number;characters:Record<string,{location:string|null;minute:number|null;scene_id:string|null}>;scenes:Record<string,{id:string;participants:string[];location:string;start_minute:number|null;end_minute:number|null;status:string}>};
+  world?: {version:number;characters:Record<string,{location:string|null;minute:number|null;scene_id:string|null;situation?:string;short_goal?:string;intentions?:string[];emotion?:string;obligations?:string[]}>;scenes:Record<string,{id:string;participants:string[];location:string;start_minute:number|null;end_minute:number|null;status:string}>;facts?:Record<string,WorldFact>;knowledge?:Record<string,Knowledge>;threads?:Record<string,Thread>;events?:Record<string,WorldEvent>;relationships?:Record<string,WorldRelation>};
   world_clock?: {last_event_time:string;minute?:number};
   memory?: {id: string; summary: string; through_sequence: number; per_actor?:Record<string,{summary:string;through_sequence:number}>};
   scene: string;
@@ -163,3 +163,9 @@ export const defaults: Preferences = {
 };
 export const active = (job: Job | null | undefined) =>
   !!job && ["generating", "extracting", "validating"].includes(job.status);
+
+export interface WorldFact {id:string;text:string;secret:boolean;character_ids:string[];evidence?:string[]}
+export interface Knowledge {actor_id:string;fact_id:string;status:string;source_event_id?:string|null}
+export interface Thread {id:string;description:string;state:string;status:string;character_ids:string[];relevance:number;last_event_id?:string|null}
+export interface WorldEvent {id:string;text:string;participants:string[];witnesses:string[];minute:number|null;source_sequence:number;player_observed:boolean;fact_ids:string[]}
+export interface WorldRelation {source_id:string;target_id:string;context:string;dimensions:Record<string,number|{direction:string;reason:string}>}

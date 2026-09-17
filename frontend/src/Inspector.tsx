@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  ArrowDown,
-  ArrowUp,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -9,7 +7,8 @@ import {
 import { toast } from "sonner";
 import { api, download } from "./api";
 import { type World, type Save, type Scene, active } from "./types";
-import { Markdown } from "./Markdown";
+import {localDate} from "./dates";
+import {WorldView,SceneOverview,CharacterView,RelationsView,SecretsView,ThreadsView,MemoryView,Reveal} from "./InspectorViews";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import {
@@ -70,33 +69,6 @@ export function Inspector({
       (!near || meta?.present_ids.includes(c.id)),
   );
   const selected = cards.find((c) => c.id === character) ?? cards[0];
-  const name = (id: string) =>
-    state.characters.find((c) => c.id === id)?.name ?? id;
-  const relations = (id?: string) =>
-    state.relationships
-      .filter((r) => !id || r.source_id === id)
-      .map((r, i) => (
-        <section className="relation" key={i}>
-          <strong>
-            {name(r.source_id)} →{" "}
-            {r.target_id ? name(r.target_id) : r.target_name}
-          </strong>
-          <Markdown text={r.text} />
-          {r.change && (
-            <p
-              className={r.change.direction === "up" ? "positive" : "negative"}
-            >
-              {r.change.direction === "up" ? (
-                <ArrowUp size={16} />
-              ) : (
-                <ArrowDown size={16} />
-              )}{" "}
-              {r.change.reason}{" "}
-              {r.change.turn !== undefined && `· Ход ${r.change.turn}`}
-            </p>
-          )}
-        </section>
-      ));
   return (
     <Dialog open={open} onOpenChange={(v) => !v && close()}>
       <DialogContent className="inspector-dialog">
@@ -108,13 +80,14 @@ export function Inspector({
         </DialogHeader>
         <details className="metadata">
           <summary>О мире и сохранении</summary>
-          <p>Мир создан: {world.created_at}</p>
+          <p>Мир создан: {localDate(world.created_at)}</p>
           {save && (
             <>
               <p>Прохождение #{save.id}</p>
-              <p>Обновлено: {save.updated_at}</p>
+              <p>Обновлено: {localDate(save.updated_at)}</p>
             </>
           )}
+          <Reveal title="Правила повествования / Стиль" text={state.sections.tone} preview={false}/><Reveal title="Особенности и правила истории" text={state.story_notes} preview={false}/>
           <Button
             size="sm"
             variant="outline"
@@ -145,22 +118,12 @@ export function Inspector({
             </button>
           ))}
         </div>
-        {panel === "Мир" && (
-          <>
-            <Markdown text={state.sections.tone} />
-            {state.locations.map((l, i) => (
-              <section key={i}>
-                <h3>{l.name}</h3>
-                <Markdown text={l.text} />
-              </section>
-            ))}
-          </>
-        )}
+        {panel === "Мир" && <WorldView state={state} meta={meta}/>}
         {panel === "Сцена" && (
           <>
-            <Markdown text={state.scene} />
+            <SceneOverview state={state} meta={meta}/>
             {save && (
-              <fieldset>
+              <details className="inspect-reveal"><summary><span className="inspect-title">Уточнить строку сцены</span></summary><fieldset>
                 <legend>Уточнить строку сцены</legend>
                 <label>
                   Время
@@ -219,7 +182,7 @@ export function Inspector({
                 >
                   Сохранить строку сцены
                 </Button>
-              </fieldset>
+              </fieldset></details>
             )}
           </>
         )}
@@ -285,77 +248,17 @@ export function Inspector({
                   {cards.indexOf(selected) + 1} / {cards.length} · Карточка
                   ведущего
                 </p>
-                <h2>{selected.name}</h2>
-                <p className="muted small">
-                  Может содержать скрытые намерения.
-                </p>
-                {Object.entries(selected.fields)
-                  .filter(([k]) => !k.startsWith("Отношение к "))
-                  .map(([k, v]) => (
-                    <section key={k}>
-                      <h3>{k}</h3>
-                      <Markdown text={v} />
-                    </section>
-                  ))}
-                <h3>Текущие отношения</h3>
-                {relations(selected.id)}
+                <CharacterView state={state} card={selected}/>
               </>
             ) : (
               <p className="muted">Персонажи не найдены.</p>
             )}
           </>
         )}
-        {panel === "Отношения" && relations()}
-        {panel === "Тайны" && (
-          <>
-            <p className="eyebrow">Данные ведущего · спойлеры</p>
-            <Markdown text={state.sections.knowledge} />
-            {state.facts?.map((f, i) => (
-              <section key={i}>
-                <Markdown text={f.text} />
-                <p className="muted small">
-                  Знают: {f.known_by.map(name).join(", ")}
-                </p>
-              </section>
-            ))}
-          </>
-        )}
-        {panel === "Сюжет" && (
-          <>
-            <Markdown text={state.story_notes} />
-            {state.plans?.map((p, i) => (
-              <section key={i}>
-                <Markdown text={p.text} />
-                <span className="pill">
-                  {{
-                    open: "Открыто",
-                    done: "Выполнено",
-                    cancelled: "Отменено",
-                  }[p.status] ?? p.status}
-                </span>
-              </section>
-            ))}
-          </>
-        )}
-        {panel === "Память" && (
-          <>
-            {state.memory && <section><h3>Объективная память ведущего · по ход {state.memory.through_sequence}</h3><Markdown text={state.memory.summary}/></section>}
-            {state.memory?.per_actor&&<section><h3>Память управляемого персонажа</h3><Markdown text={state.memory.per_actor[state.controlled_actor_id||state.characters.find(c=>c.is_player)?.id||""]?.summary||"Сжатой памяти для этого POV ещё нет."}/></section>}
-            {state.events?.length ? (
-              state.events.map((e, i) => (
-                <section key={i}>
-                  <p className="eyebrow">Ход {e.turn}</p>
-                  <Markdown text={e.text} />
-                  <p className="muted small">
-                    {e.character_ids.map(name).join(", ")}
-                  </p>
-                </section>
-              ))
-            ) : (
-              <p className="muted">События появятся после игровых ходов.</p>
-            )}
-          </>
-        )}
+        {panel === "Отношения" && <RelationsView state={state}/>}
+        {panel === "Тайны" && <SecretsView state={state}/>}
+        {panel === "Сюжет" && <ThreadsView state={state}/>}
+        {panel === "Память" && <MemoryView state={state}/>}
       </DialogContent>
     </Dialog>
   );

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { BookOpen, Plus, Upload } from "lucide-react";
+import { BookOpen, Plus, Upload, X } from "lucide-react";
 import { toast } from "sonner";
+import { localDate } from "./dates";
 import { api } from "./api";
 import type { WorldItem, SaveItem, World, Save } from "./types";
 import { Button } from "./components/ui/button";
@@ -31,6 +32,7 @@ export function Library({
   const [worldName, setWorldName] = useState("");
   const [markdown, setMarkdown] = useState("");
   const [removed,setRemoved] = useState<WorldItem[]>([]);
+  const [deleting,setDeleting]=useState<WorldItem|null>(null);
   const [busy, setBusy] = useState(false);
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -80,8 +82,8 @@ export function Library({
         </div>
         <div className="world-grid">
           {worlds.map((w) => (
-            <button
-              key={w.id}
+            <article className="world-card-wrap" key={w.id}><button
+              aria-label={`Открыть ${w.name}`}
               onClick={() => setSelected(w.id)}
               className={`world-card ${selected === w.id ? "selected" : ""}`}
             >
@@ -89,9 +91,9 @@ export function Library({
               <span className="eyebrow">Мир · версия {w.version}</span>
               <strong>{w.name}</strong>
               <span className="muted small">
-                {new Date(w.created_at + "Z").toLocaleDateString()}
+                Создана: {localDate(w.created_at)}
               </span>
-            </button>
+            </button><button className="world-remove" aria-label={`Удалить ${w.name}`} disabled={busy} onClick={e=>{e.stopPropagation();setDeleting(w)}}><X size={18}/></button></article>
           ))}
         </div>
         {!worlds.length && (
@@ -102,7 +104,7 @@ export function Library({
         {selected && (
           <section className="save-list">
             <h3>Прохождения</h3>
-            <Button variant="ghost" disabled={busy} onClick={()=>{if(window.confirm("Удалить эту версию выжимки из библиотеки? Сейвы сохранятся; выжимку можно восстановить."))void run(async()=>{await api(`/worlds/${selected}`,undefined,"DELETE");setWorlds(await api("/worlds"));setSelected(undefined)})}}>Удалить версию выжимки</Button>
+
             {saves.map((s) => (
               <button
                 key={s.id}
@@ -205,6 +207,10 @@ export function Library({
           </Button>
         </details>
       </DialogContent>
+      <Dialog open={!!deleting} onOpenChange={v=>{if(!v&&!busy)setDeleting(null)}}>
+        <DialogContent><DialogHeader><DialogTitle>Удалить «{deleting?.name}»?</DialogTitle><DialogDescription>История будет перемещена в удалённые.</DialogDescription></DialogHeader>
+        <div className="actions"><Button variant="ghost" disabled={busy} onClick={()=>setDeleting(null)}>Отмена</Button><Button disabled={busy} onClick={()=>void run(async()=>{if(!deleting)return;await api(`/worlds/${deleting.id}`,undefined,"DELETE");setWorlds(await api("/worlds"));setRemoved(await api("/worlds?deleted=true"));if(selected===deleting.id)setSelected(undefined);setDeleting(null);toast.success("История перемещена в удалённые")})}>Удалить</Button></div></DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
