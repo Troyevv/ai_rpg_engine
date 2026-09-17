@@ -1361,3 +1361,5 @@ details > label:first-of-type {
  .inspector-dialog .panel-tabs { display:flex; flex-wrap:nowrap; overflow-x:auto; max-width:100%; padding-bottom:6px; }
  .inspector-dialog .panel-tabs button { flex-shrink:0; padding:8px 12px; }
 }
+
+.inspect-reveal > summary > .small { display:block; margin-top:5px; font-weight:400; }

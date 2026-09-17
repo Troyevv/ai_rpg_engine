@@ -11,6 +11,14 @@ for(const width of [360,390,412,430,1440])test(`inspector layout ${width}px`,asy
  test.skip(info.project.name!=='desktop');await page.setViewportSize({width,height:900});
  const selected=await(await request.post('/test/seed')).json();
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selected);
+ const full='Подробная внешность без потери текста. '.repeat(35);
+ await page.route(`**/api/saves/${selected.save}`,async route=>{
+  const response=await route.fetch();const body=await response.json();
+  body.state.characters[0].fields['Внешность']=full;
+  body.state.sections.tone='Особые инструкции ведущему';
+  body.state.memory={...body.state.memory,summary:'Полная исходная память. '.repeat(35)};
+  await route.fulfill({response,json:body});
+ });
  await page.goto('/');await page.locator('.breadcrumb').click();
  const library=page.locator('.library-dialog');await expect(library.locator('.world-card').first()).toBeVisible();
  await expect(library).not.toContainText('Invalid Date');
@@ -21,10 +29,16 @@ for(const width of [360,390,412,430,1440])test(`inspector layout ${width}px`,asy
   await dialog.locator('.panel-tabs').getByRole('button',{name:tab,exact:true}).click();
   expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+  if(tab==='Персонажи'){
+   const appearance=dialog.locator('.character-profile > details').filter({has:page.locator('summary',{hasText:/^Внешность$/})});
+   await expect(appearance.locator('.prose')).not.toBeVisible();
+   await appearance.locator('summary').click();await expect(appearance).toContainText(full.trim());
+   await appearance.locator('summary').click();
+  }
   if(tab==='Память'){
    const source=dialog.locator('details').filter({has:page.locator('summary',{hasText:/^Исходная выжимка$/})});
    await expect(source.locator('.prose').first()).not.toBeVisible();
-   await source.locator('summary').first().click();await expect(source.locator('.prose').first()).toBeVisible();
+   await source.locator('summary').first().click();await expect(source.locator('.prose').first()).toBeVisible();await expect(source).toContainText('Полная исходная память.');
    await source.locator('summary').first().click();
   }
   await page.screenshot({path:`test-results/inspector-${width}-${tab}.png`});
