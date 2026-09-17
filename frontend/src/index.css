@@ -1328,3 +1328,36 @@ details > label:first-of-type {
  .mobile-pov>button:first-child { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
  .mobile-pov>button:last-child { flex-shrink:0; min-width:44px; }
 }
+
+/* World inspector: overview first, complete source on demand. */
+.world-card-wrap { position:relative; min-width:0; }
+.world-card-wrap .world-card { width:100%; height:100%; text-align:left; padding-right:44px; }
+.world-remove { position:absolute; top:4px; right:4px; display:grid; place-items:center; width:44px; height:44px; color:var(--color-muted); border-radius:50%; }
+.world-remove:hover,.world-remove:focus-visible { color:#f3c2ba; background:#573730; }
+.inspector-content { min-width:0; }
+.inspect-reveal { border-bottom:1px solid #344241; padding:10px 0; margin:0; min-width:0; }
+.inspect-reveal > summary { min-height:44px; padding:8px 2px; cursor:pointer; overflow-wrap:anywhere; }
+.inspect-reveal > summary > span:first-child { font-weight:600; }
+.inspect-preview { display:block; font-family:Georgia,serif; font-size:1rem; line-height:1.55; font-weight:400; color:var(--color-muted); margin-top:6px; }
+.inspect-detail { padding:8px 2px 12px; min-width:0; overflow-wrap:anywhere; }
+.inspect-kv { display:grid; grid-template-columns:72px minmax(0,1fr); gap:8px 12px; margin:12px 0; }
+.inspect-kv dt { color:var(--color-muted); font-size:.85rem; }
+.inspect-kv dd { margin:0; overflow-wrap:anywhere; }
+.inspect-chips { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; }
+.inspect-chips .pill { max-width:100%; white-space:normal; overflow-wrap:anywhere; }
+.inspect-more { margin:12px 0; }
+.inspect-more > summary { min-height:44px; padding:10px 0; cursor:pointer; }
+.character-lead { font-family:Georgia,serif; line-height:1.6; margin:12px 0; }
+.character-profile h2 { margin:12px 0; overflow-wrap:anywhere; }
+.inspector-dialog .panel-tabs { gap:6px; }
+.inspector-dialog .panel-tabs button { min-height:44px; }
+.inspector-dialog select { max-width:100%; }
+@media(max-width:767px) {
+ .library-dialog .world-grid { grid-template-columns:minmax(0,1fr); }
+ .world-card-wrap .world-card { gap:8px; padding:18px 48px 18px 18px; min-height:0; }
+ .world-card-wrap .world-card strong { font-size:1.45rem; }
+ .inspector-dialog .inspect-detail .prose { font-size:1rem; line-height:1.65; }
+ .inspector-dialog h2 { font-size:1.6rem; }
+ .inspector-dialog .panel-tabs { display:flex; flex-wrap:nowrap; overflow-x:auto; max-width:100%; padding-bottom:6px; }
+ .inspector-dialog .panel-tabs button { flex-shrink:0; padding:8px 12px; }
+}
