@@ -1394,3 +1394,12 @@ details > label:first-of-type {
 .inspect-reveal[open] > summary > .inspect-preview { display:none; }
 .character-profile .character-lead { font-size:16px; line-height:1.55; color:#c8d2cd; }
 .character-profile .inspect-kv { margin:18px 0; }
+.motivation-row {display:grid;grid-template-columns:minmax(0,1fr) 44px;gap:8px;border-bottom:1px solid #344241;padding:8px 0;align-items:start}
+.motivation-row p {margin:8px 0;font:16px/1.55 Georgia,serif;white-space:pre-wrap;overflow-wrap:anywhere}
+.motivation-menu {position:relative;margin:0}
+.motivation-menu > summary {display:grid;place-items:center;width:44px;height:44px;padding:0}
+.motivation-menu > summary::before {display:none}
+.motivation-menu > div {position:absolute;right:0;top:44px;z-index:3;display:grid;min-width:170px;background:#20302e;border:1px solid #53665d;border-radius:10px;box-shadow:0 6px 20px #0008;padding:6px}
+.motivation-menu button {min-height:44px;justify-content:flex-start}
+.motivation-editor h4 {margin:16px 0 8px}
+.motivation-delete-text {max-height:35vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}

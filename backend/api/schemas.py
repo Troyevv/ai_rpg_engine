@@ -96,3 +96,7 @@ class Camera(Revision, Credential):
     actor_id: str | None = None
     scene_id: str | None = None
     config: ModelConfig
+
+class Motivation(Revision):
+    short_goal: str = Field(max_length=4000)
+    intentions: list[str] = Field(max_length=20)
