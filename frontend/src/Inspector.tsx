@@ -248,7 +248,7 @@ export function Inspector({
                   {cards.indexOf(selected) + 1} / {cards.length} · Карточка
                   ведущего
                 </p>
-                <CharacterView state={state} card={selected}/>
+                <CharacterView state={state} card={selected} save={save} refresh={refresh}/>
               </>
             ) : (
               <p className="muted">Персонажи не найдены.</p>

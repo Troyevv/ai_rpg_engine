@@ -183,3 +183,19 @@ class RuntimeStorage:
             db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?',(after,save_id))
             from backend.repositories.living_world import project
             project(db,save_id,state)
+
+    def update_motivation(self, save_id, actor_id, revision, goals, intentions):
+        from backend.services.motivation import edit_motivation
+        from backend.repositories.living_world import project
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            self._assert_idle(db, save_id)
+            row = db.execute('SELECT state_json,revision FROM saves WHERE id=?', (save_id,)).fetchone()
+            if not row or row['revision'] != revision:
+                raise ValueError('Сейв изменился. Обнови карточку и повтори изменение.')
+            state = edit_motivation(json.loads(row['state_json']), actor_id, goals, intentions)
+            project(db, save_id, state)
+            db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?',
+                       (dump(state), save_id))
+            # Do not rewrite variant snapshots: regeneration keeps its original context.
+            # The next turn snapshots this edited state; other saves remain untouched.

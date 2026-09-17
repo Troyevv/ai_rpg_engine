@@ -17,7 +17,7 @@ import engine
 import llm
 from character_links import linked_markdown
 from backend.api.schemas import (World, Named, Generation, Turn, Retry, Revision, Scene,
-                                 Models, Load, Preferences, Markdown, Credential, VariantSelection, Actor, DocumentChange, Camera)
+                                 Models, Load, Preferences, Markdown, Credential, VariantSelection, Actor, DocumentChange, Camera, Motivation)
 from backend.repositories.preparation import Repository
 from backend.services.preparation import Preparation
 from backend.services.scene import scene_metadata
@@ -145,6 +145,11 @@ def create_app(db_path=None, recover=True):
     @app.patch('/api/saves/{sid}/scene')
     def scene(sid: int, body: Scene):
         repo.update_scene_meta(sid, body.model_dump(exclude={'revision'}), body.revision)
+        return save(sid)
+
+    @app.patch('/api/saves/{sid}/characters/{actor_id}/motivation')
+    def motivation(sid: int, actor_id: str, body: Motivation):
+        repo.update_motivation(sid, actor_id, body.revision, body.goals, body.intentions)
         return save(sid)
 
     @app.post('/api/saves/{sid}/turns')

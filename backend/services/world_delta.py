@@ -134,6 +134,8 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None):
             require(not set(c).intersection({'short_goal','intentions','emotion'}),'решение или чувство за игрока')
         if 'location' in c:require(c['location']==camera['location'],'место участника не совпадает со сценой')
         world['characters'][c['id']].update({k:v for k,v in c.items() if k not in ('id','evidence')})
+        if 'short_goal' in c:
+            world['characters'][c['id']]['goals']=[c['short_goal']] if c['short_goal'] else []
         world['characters'][c['id']]['minute']=now
     for r in delta['relationships']:
         refs([r['source_id'],r['target_id']])
