@@ -1363,3 +1363,34 @@ details > label:first-of-type {
 }
 
 .inspect-reveal > summary > .small { display:block; margin-top:5px; font-weight:400; }
+
+/* Inspector disclosure headings must not inherit the global flex summary row. */
+.inspect-reveal > summary {
+ display:grid;
+ grid-template-columns:16px minmax(0,1fr);
+ align-items:start;
+ gap:6px 8px;
+ font-size:14px;
+ line-height:1.5;
+ overflow-wrap:break-word;
+}
+.inspect-reveal > summary::before { grid-column:1; grid-row:1; line-height:21px; }
+.inspect-reveal > summary > span { grid-column:2; min-width:0; }
+.inspect-reveal > summary > .inspect-title {
+ color:#e5e9df;
+ font:600 14px/1.5 system-ui,sans-serif;
+}
+.inspect-reveal > summary > .inspect-preview {
+ color:#b8c7c1;
+ margin:0;
+ font-size:16px;
+ line-height:1.55;
+ display:-webkit-box;
+ -webkit-box-orient:vertical;
+ -webkit-line-clamp:2;
+ overflow:hidden;
+}
+.inspect-reveal > summary > .small { margin:0; }
+.inspect-reveal[open] > summary > .inspect-preview { display:none; }
+.character-profile .character-lead { font-size:16px; line-height:1.55; color:#c8d2cd; }
+.character-profile .inspect-kv { margin:18px 0; }

@@ -15,6 +15,7 @@ for(const width of [360,390,412,430,1440])test(`inspector layout ${width}px`,asy
  await page.route(`**/api/saves/${selected.save}`,async route=>{
   const response=await route.fetch();const body=await response.json();
   body.state.characters[0].fields['Внешность']=full;
+  body.state.locations=[{name:'Современный город, район вокруг клиники',text:full}];
   body.state.sections.tone='Особые инструкции ведущему';
   body.state.memory={...body.state.memory,summary:'Полная исходная память. '.repeat(35)};
   await route.fulfill({response,json:body});
@@ -29,6 +30,15 @@ for(const width of [360,390,412,430,1440])test(`inspector layout ${width}px`,asy
   await dialog.locator('.panel-tabs').getByRole('button',{name:tab,exact:true}).click();
   expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+  // No-overflow alone missed the previous bug: headings were squeezed beside previews.
+  for(const summary of await dialog.locator('.inspect-reveal > summary:visible').all()){
+   const title=await summary.locator('.inspect-title').boundingBox();
+   const box=await summary.boundingBox();expect(title!.width).toBeGreaterThan(box!.width-40);
+   const preview=summary.locator('.inspect-preview');
+   if(await preview.isVisible()){
+    const p=await preview.boundingBox();expect(p!.y).toBeGreaterThanOrEqual(title!.y+title!.height);
+   }
+  }
   if(tab==='Персонажи'){
    const appearance=dialog.locator('.character-profile > details').filter({has:page.locator('summary',{hasText:/^Внешность$/})});
    await expect(appearance.locator('.prose')).not.toBeVisible();
