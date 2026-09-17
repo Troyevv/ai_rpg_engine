@@ -149,7 +149,7 @@ def create_app(db_path=None, recover=True):
 
     @app.patch('/api/saves/{sid}/characters/{actor_id}/motivation')
     def motivation(sid: int, actor_id: str, body: Motivation):
-        repo.update_motivation(sid, actor_id, body.revision, body.short_goal, body.intentions)
+        repo.update_motivation(sid, actor_id, body.revision, body.goals, body.intentions)
         return save(sid)
 
     @app.post('/api/saves/{sid}/turns')

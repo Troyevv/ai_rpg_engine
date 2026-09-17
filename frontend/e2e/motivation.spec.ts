@@ -6,6 +6,15 @@ test('edit motivation within character card and persist after reload',async({pag
  await page.goto('/');await nav(page,'Персонажи');
  const panel=page.locator('.inspector-dialog');
  await panel.getByText('Цели, намерения и обязательства',{exact:true}).click();
+ await panel.getByRole('button',{name:'+ Добавить цель',exact:true}).click();
+ const goalDialog=page.getByRole('dialog').filter({has:page.getByRole('heading',{name:'Цель персонажа',exact:true})});
+ await goalDialog.getByLabel('Текст цели или намерения').fill('Найти старую карту');
+ await goalDialog.getByRole('button',{name:'Сохранить',exact:true}).click();
+ await expect(panel.locator('.motivation-editor')).toContainText('Найти старую карту');
+ await panel.getByLabel('Действия с целью 2').click();await panel.getByRole('button',{name:'Редактировать',exact:true}).click();
+ await goalDialog.getByLabel('Текст цели или намерения').fill('Изучить старую карту');
+ await goalDialog.getByRole('button',{name:'Сохранить',exact:true}).click();
+ await expect(panel.locator('.motivation-editor')).toContainText('Изучить старую карту');
  await panel.getByRole('button',{name:'+ Добавить намерение',exact:true}).click();
  const editor=page.getByRole('dialog').filter({has:page.getByRole('heading',{name:'Намерение персонажа',exact:true})});
  await editor.getByLabel('Текст цели или намерения').fill('Поговорить со смотрителем маяка');

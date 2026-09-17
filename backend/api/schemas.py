@@ -98,5 +98,5 @@ class Camera(Revision, Credential):
     config: ModelConfig
 
 class Motivation(Revision):
-    short_goal: str = Field(max_length=4000)
+    goals: list[str] = Field(max_length=20)
     intentions: list[str] = Field(max_length=20)

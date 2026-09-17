@@ -17,6 +17,8 @@ def normalize(original):
         return state  # Incomplete ancient saves remain readable, never destroyed.
     if state.get('world', {}).get('version') == 2:
         state['world'].setdefault('scene_records',{})
+        for character in state['world']['characters'].values():
+            character.setdefault('goals', [character['short_goal']] if character.get('short_goal') else [])
         return state
     from backend.services.pov import protagonist, controlled
     main, actor = protagonist(state), controlled(state)
@@ -26,7 +28,7 @@ def normalize(original):
     names = {c['name']: c['id'] for c in state['characters']}
     for c in state['characters']:
         world['characters'][c['id']] = dict(id=c['id'], location=None, situation=c['fields'].get('Сейчас',''),
-            short_goal=c['fields'].get('Чего хочет',''), intentions=[], emotion='', obligations=[],
+            short_goal=c['fields'].get('Чего хочет',''), goals=[c['fields']['Чего хочет']] if c['fields'].get('Чего хочет') else [], intentions=[], emotion='', obligations=[],
             last_event_id=None, minute=None, scene_id=None)
     points = {'initial': {'text':state['scene'], 'meta':meta}, **state.get('actor_scenes',{})}
     for key, point in points.items():
@@ -117,7 +119,9 @@ def apply_legacy(state, changes, sequence, kind):
     for c in changes.get('characters',[]):
         target = world['characters'][c['id']]
         if 'now' in c:target['situation']=c['now']
-        if 'goal' in c:target['short_goal']=c['goal']
+        if 'goal' in c:
+            target['short_goal']=c['goal']
+            target['goals']=[c['goal']] if c['goal'] else []
     for r in changes.get('relationships',[]):
         key = r['source_id']+':'+r['target_id']
         relation = world['relationships'].setdefault(key,dict(source_id=r['source_id'],target_id=r['target_id'],dimensions={}))
