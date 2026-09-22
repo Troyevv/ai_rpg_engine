@@ -1,0 +1,309 @@
+"""Pre-game operations on the existing runtime aggregate, never a second world model."""
+from copy import deepcopy
+import base64
+import hashlib
+import json
+import re
+import uuid
+from backend.services.world import normalize, KINDS
+from backend.services.timeline import label
+
+GROUPS={'actor':'characters','relationship':'relationships','fact':'facts','knowledge':'knowledge',
+        'thread':'threads','scene':'scenes','event':'events'}
+FIELDS={
+ 'campaign':{'title','setting','era','genre','tone','description','rules'},
+ 'character':{'name','aliases','fields'},
+ 'actor':{'location','situation','goals','intentions','emotion','obligations'},
+ 'relationship':{'source_id','target_id','context','dimensions'},
+ 'location':{'name','text'},
+ 'fact':{'text','secret','character_ids','evidence'},
+ 'knowledge':{'actor_id','fact_id','status','source_event_id'},
+ 'thread':{'description','state','status','character_ids','relevance'},
+ 'scene':{'location','participants','text','start_minute','end_minute','status'},
+ 'event':{'text','participants','witnesses','minute','fact_ids','player_observed'},
+ 'start':{'protagonist_id','controlled_actor_id','scene_id','minute'},
+}
+
+
+def prepare(original):
+    if not isinstance(original,dict) or not isinstance(original.get('characters'),list):
+        raise ValueError('Мир должен содержать список Characters.')
+    for card in original['characters']:
+        if not isinstance(card,dict) or not isinstance(card.get('id'),str) or not isinstance(card.get('name'),str) or not isinstance(card.get('fields'),dict):
+            raise ValueError('Некорректная карточка персонажа.')
+        if any(not isinstance(v,str) for v in card['fields'].values()):
+            raise ValueError('Поля карточки должны быть текстом.')
+    original=deepcopy(original)
+    if isinstance(original.get('world'),dict) and original['world'].get('version')==2:
+        for kind in KINDS:
+            original['world'].setdefault(kind,{})
+            if not isinstance(original['world'][kind],dict) or any(not isinstance(v,dict) for v in original['world'][kind].values()):
+                raise ValueError(f'Некорректный раздел {kind}.')
+    if not isinstance(original.get('locations',[]),list) or any(not isinstance(x,dict) for x in original.get('locations',[])):
+        raise ValueError('Места должны быть списком объектов.')
+    original.setdefault('locations',[])
+    for card in original['characters']:
+        if not isinstance(card.get('aliases',[]),list) or any(not isinstance(x,str) for x in card.get('aliases',[])):
+            raise ValueError('Другие имена должны быть списком строк.')
+    for key in ('world_clock','camera','sections','campaign'):
+        if key in original and not isinstance(original[key],dict):raise ValueError(f'{key}: нужен объект.')
+    state=normalize(original)
+    from backend.services.timeline import current_time
+    minute=current_time(state)
+    state.setdefault('world_clock',{'minute':minute,'last_event_time':label(minute)})
+    state.setdefault('campaign',{'title':'Новый мир','setting':'','era':'','genre':'',
+        'tone':state.get('sections',{}).get('tone',''),'description':'','rules':state.get('story_notes','')})
+    for i,loc in enumerate(state.get('locations',[])):
+        loc.setdefault('id',f'location_{i+1}')
+    for kind in KINDS:
+        if not isinstance(state['world'].get(kind),dict):raise ValueError(f'Некорректный раздел {kind}.')
+    if not isinstance(state['campaign'],dict) or any(not isinstance(v,str) for v in state['campaign'].values()):
+        raise ValueError('Поля кампании должны быть текстом.')
+    for c in state['world']['characters'].values():
+        for field in ('goals','intentions','obligations'):
+            if not isinstance(c.get(field,[]),list) or any(not isinstance(v,str) for v in c.get(field,[])):
+                raise ValueError(f'{field}: нужен список строк.')
+    for kind in KINDS:
+        for key,item in state['world'][kind].items():
+            if kind not in ('relationships','knowledge'):item.setdefault('id',key)
+            for field,value in item.items():
+                if field.endswith('_id') and value is not None and not isinstance(value,str):raise ValueError(f'{kind}/{key}/{field}: нужна строковая ссылка.')
+                if field in ('participants','witnesses','fact_ids','character_ids','event_ids') and (not isinstance(value,list) or any(not isinstance(x,str) for x in value)):
+                    raise ValueError(f'{kind}/{key}/{field}: нужен список ссылок.')
+    return sync(state)
+
+
+def sync(state):
+    """Update compatibility projections from canonical data; no parsing or LLM."""
+    world=state['world'];campaign=state.get('campaign',{})
+    state.setdefault('sections',{})['tone']=campaign.get('tone','')
+    state['story_notes']=campaign.get('rules','')
+    for c in state['characters']:
+        c['is_player']=c['id']==state.get('protagonist_id')
+        a=world['characters'].get(c['id'],{})
+        if 'goals' in a:a['short_goal']='\n\n'.join(a['goals'])
+        for key,field in [('short_goal','Чего хочет'),('situation','Сейчас')]:
+            if key in a:c['fields'][field]=a[key]
+        if 'intentions' in a:c['fields']['Намерения']='\n\n'.join(a['intentions'])
+    state['relationships']=[dict(source_id=r.get('source_id',''),target_id=r.get('target_id',''),text=r.get('context','')) for r in world['relationships'].values()]
+    scene=world['scenes'].get(state.get('camera',{}).get('scene_id'))
+    if scene:
+        state['scene']=scene.get('text','')
+        minute=state.get('world_clock',{}).get('minute')
+        state['scene_meta']={'time':label(minute) if type(minute) is int else '', 'location':scene.get('location',''), 'present_ids':scene.get('participants',[])}
+    return state
+
+
+def validate(state):
+    errors=[];warnings=[];world=state['world']
+    cards=state['characters'];ids={c['id'] for c in cards}
+    def require(ok,message):
+        if not ok:errors.append(message)
+    require(len(ids)==len(cards),'Повтор Character ID.')
+    require(all(re.fullmatch(r'[\w-]{1,100}',cid) for cid in ids),'Некорректный Character ID.')
+    require(len({c['name'].strip().casefold() for c in cards})==len(cards),'Повтор имени: проверь identities персонажей.')
+    require(bool(cards) and all(c['name'].strip() for c in cards),'Нужны персонажи с именами.')
+    require(state.get('protagonist_id') in ids,'Не выбран protagonist.')
+    require(state.get('controlled_actor_id') in ids,'Не выбран controlled actor для старта.')
+    require(set(world['characters'])==ids,'Character cards и character state не совпадают.')
+    minute=state.get('world_clock',{}).get('minute')
+    require(type(minute) is int and minute>=0,'Нужно игровое время (минута от начала недели).')
+    require(state.get('camera',{}).get('scene_id') in world['scenes'],'Не выбрана стартовая сцена.')
+    def refs(values,known,where):
+        require(isinstance(values,list) and all(isinstance(v,str) and v in known for v in values),f'Некорректные ссылки: {where}.')
+    for kind in KINDS:
+        for key,item in world[kind].items():
+            require(isinstance(key,str) and bool(key),f'Пустой ID в {kind}.')
+            require(isinstance(item,dict),f'Некорректная сущность {kind}/{key}.')
+            if not isinstance(item,dict):continue
+            if 'id' in item:require(item['id']==key,f'ID не совпадает: {kind}/{key}.')
+    for rid,r in world['relationships'].items():
+        require(r.get('source_id') in ids and r.get('target_id') in ids,f'Отношение {rid}: неизвестный персонаж.')
+        require(isinstance(r.get('context',''),str) and isinstance(r.get('dimensions',{}),dict),f'Отношение {rid}: некорректные поля.')
+    for fid,f in world['facts'].items():
+        require(isinstance(f.get('text'),str) and bool(f['text'].strip()),f'Факт {fid}: нужен текст.')
+        refs(f.get('character_ids',[]),ids,f'fact {fid}')
+    for kid,k in world['knowledge'].items():
+        require(k.get('actor_id') in ids and k.get('fact_id') in world['facts'],f'Знание {kid}: ссылка не существует.')
+        require(k.get('status') in ('known','suspected','unknown'),f'Знание {kid}: некорректный статус.')
+        require(not k.get('source_event_id') or k['source_event_id'] in world['events'],f'Знание {kid}: неизвестный источник.')
+    for sid,s in world['scenes'].items():
+        refs(s.get('participants',[]),ids,f'scene {sid}')
+        require(isinstance(s.get('location'),str) and bool(s['location'].strip()),f'Сцена {sid}: нужно место.')
+        require(isinstance(s.get('text',''),str),f'Сцена {sid}: некорректное описание.')
+        start,end=s.get('start_minute'),s.get('end_minute')
+        require(type(start) is int and type(end) is int and 0<=start<=end,f'Сцена {sid}: некорректный интервал.')
+    for tid,t in world['threads'].items():
+        refs(t.get('character_ids',[]),ids,f'thread {tid}')
+        require(t.get('status') in ('active','developing','dormant','resolved'),f'Линия {tid}: некорректный статус.')
+    for eid,e in world['events'].items():
+        refs(e.get('participants',[]),ids,f'event {eid}')
+        refs(e.get('witnesses',[]),ids,f'witnesses {eid}')
+        refs(e.get('fact_ids',[]),set(world['facts']),f'event facts {eid}')
+    for cid,c in world['characters'].items():
+        require(not c.get('scene_id') or c['scene_id'] in world['scenes'],f'Персонаж {cid}: неизвестная сцена.')
+        for field in ('goals','intentions','obligations'):
+            require(isinstance(c.get(field,[]),list) and all(isinstance(x,str) for x in c.get(field,[])),f'{cid}/{field}: нужен список строк.')
+    for rid,r in world['relationships'].items():
+        require(isinstance(r.get('dimensions',{}),dict) and all(isinstance(v,(int,float)) and not isinstance(v,bool) and -100<=v<=100 for v in r.get('dimensions',{}).values()),f'Отношение {rid}: показатели должны быть числами от -100 до 100.')
+    for tid,t in world['threads'].items():
+        require(isinstance(t.get('relevance'),(int,float)) and not isinstance(t.get('relevance'),bool) and 0<=t['relevance']<=1,f'Линия {tid}: значимость от 0 до 1.')
+        require(isinstance(t.get('description'),str) and isinstance(t.get('state'),str),f'Линия {tid}: нужны описание и состояние.')
+        require(not t.get('last_event_id') or t['last_event_id'] in world['events'],f'Линия {tid}: неизвестное последнее событие.')
+    for eid,e in world['scheduled_events'].items():
+        refs(e.get('participants',[]),ids,f'scheduled {eid}')
+        require(type(e.get('due_minute')) is int and e['due_minute']>=0,f'Отложенное событие {eid}: нужен срок.')
+        require(e.get('status') in ('pending','resolved','cancelled'),f'Отложенное событие {eid}: некорректный статус.')
+        require(isinstance(e.get('description'),str),f'Отложенное событие {eid}: нужно описание.')
+        require(not e.get('resolved_event_id') or e['resolved_event_id'] in world['events'],f'Отложенное событие {eid}: неизвестное событие завершения.')
+    for cid,c in world['characters'].items():
+        require(c.get('location') is None or isinstance(c['location'],str),f'Персонаж {cid}: некорректное место.')
+        require(isinstance(c.get('situation',''),str),f'Персонаж {cid}: некорректная ситуация.')
+        require(c.get('minute') is None or type(c['minute']) is int and type(minute) is int and c['minute']<=minute,f'Персонаж {cid}: временная точка в будущем.')
+    locs=state.get('locations',[])
+    require(len({loc.get('id') for loc in locs})==len(locs),'Повтор ID места.')
+    for loc in locs:require(isinstance(loc.get('name'),str) and bool(loc['name'].strip()) and isinstance(loc.get('text'),str),'Месту нужны название и описание.')
+    for eid,e in world['events'].items():
+        require(e.get('minute') is None or type(e['minute']) is int and e['minute']>=0,f'Событие {eid}: некорректное время.')
+        require(not e.get('scene_id') or e['scene_id'] in world['scenes'],f'Событие {eid}: неизвестная сцена.')
+    for sid,scene in world['scenes'].items():refs(scene.get('event_ids',[]),set(world['events']),f'scene events {sid}')
+    for cid,c in world['characters'].items():
+        require(c.get('minute') is None or type(c['minute']) is int and c['minute']>=0,f'Персонаж {cid}: некорректное время.')
+        require(not c.get('last_event_id') or c['last_event_id'] in world['events'],f'Персонаж {cid}: неизвестное последнее событие.')
+    start=world['scenes'].get(state.get('camera',{}).get('scene_id'),{})
+    require(state.get('controlled_actor_id') in start.get('participants',[]),'Управляемый персонаж должен присутствовать в стартовой сцене.')
+    require(type(start.get('end_minute')) is int and type(minute) is int and start['end_minute']<=minute,'Стартовая сцена находится позже часов мира.')
+    if not isinstance(start.get('text'),str) or not start['text'].strip():warnings.append('Стартовая ситуация пока не описана.')
+    for c in cards:
+        age=re.search(r'\b(\d{1,3})\s*(?:лет|год)',c['fields'].get('Возраст','')+' '+c['fields'].get('Статус',''))
+        if age and int(age[1])<18 and re.search(r'врач|университет|женат|замуж',json.dumps(c,ensure_ascii=False),re.I):
+            warnings.append(f"{c['id']}: возраст может противоречить профессии или биографии. Проверь связанные факты и события.")
+    return {'errors':errors,'warnings':warnings}
+
+
+def entity(state,kind,eid):
+    if kind=='campaign':return state['campaign']
+    if kind=='start':return {'protagonist_id':state['protagonist_id'],'controlled_actor_id':state['controlled_actor_id'],
+        'scene_id':state['camera']['scene_id'],'minute':state['world_clock'].get('minute')}
+    if kind in ('character','location'):
+        values=state['characters' if kind=='character' else 'locations']
+        value=next((x for x in values if x['id']==eid),None)
+    else:value=state['world'].get(GROUPS.get(kind,''),{}).get(eid)
+    if value is None:raise ValueError('Сущность не найдена.')
+    return value
+
+
+def patch(state,kind,eid,field,value):
+    state=deepcopy(state);target=entity(state,kind,eid)
+    if kind not in FIELDS:raise ValueError('Неизвестная сущность.')
+    if kind=='character' and field.startswith('fields.'):
+        key=field[7:]
+        if not key or '.' in key or len(key)>100 or not isinstance(value,str):raise ValueError('Некорректное поле карточки.')
+        target['fields'][key]=value
+    elif field in FIELDS[kind]:
+        old=target.get(field)
+        if old is not None and type(value) is not type(old):raise ValueError('Тип поля менять нельзя.')
+        if len(json.dumps(value,ensure_ascii=False))>30000:raise ValueError('Поле слишком длинное.')
+        target[field]=value
+    else:raise ValueError('Поле недоступно для изменения.')
+    if kind=='start':
+        state.update(protagonist_id=target['protagonist_id'],controlled_actor_id=target['controlled_actor_id'])
+        state['camera']={'scene_id':target['scene_id'],'mode':'actor'}
+        state['world_clock']={'minute':target['minute'],'last_event_time':label(target['minute'])}
+    return sync(state)
+
+
+def dependencies(state,kind,eid):
+    result=[]
+    if kind=='location':
+        name=entity(state,kind,eid)['name']
+        for group in ('characters','scenes'):
+            result += [{'kind':group,'id':key} for key,item in state['world'][group].items() if item.get('location')==name]
+    for group,items in state['world'].items():
+        if not isinstance(items,dict):continue
+        for key,item in items.items():
+            if group==GROUPS.get(kind) and key==eid:continue
+            if isinstance(item,dict) and any(v==eid or isinstance(v,list) and eid in v for k,v in item.items() if k.endswith('_id') or k.endswith('_ids') or k in ('participants','witnesses')):
+                result.append({'kind':group,'id':key})
+    if kind=='character' and eid in (state.get('protagonist_id'),state.get('controlled_actor_id')):result.append({'kind':'start','id':eid})
+    if kind=='scene' and eid==state.get('camera',{}).get('scene_id'):result.append({'kind':'camera','id':eid})
+    return result
+
+
+def remove(state,kind,eid):
+    entity(state,kind,eid)
+    deps=dependencies(state,kind,eid)
+    if deps:raise ValueError('Сначала измени связанные записи: '+', '.join(f"{d['kind']}/{d['id']}" for d in deps))
+    state=deepcopy(state)
+    if kind in ('character','location'):
+        key='characters' if kind=='character' else 'locations';state[key]=[x for x in state[key] if x['id']!=eid]
+        if kind=='character':state['world']['characters'].pop(eid,None)
+    elif kind in GROUPS and kind!='actor':state['world'][GROUPS[kind]].pop(eid)
+    else:raise ValueError('Эту сущность удалять нельзя.')
+    return sync(state)
+
+
+def add(state,kind):
+    state=deepcopy(state);eid=kind+'_'+uuid.uuid4().hex[:16]
+    actor=state.get('controlled_actor_id');minute=state['world_clock']['minute']
+    if kind=='character':
+        state['characters'].append({'id':eid,'name':'Новый персонаж '+eid[-4:],'is_player':False,'fields':{'Статус':'','Внешность':'','Суть':'','Биография':''},'aliases':[]})
+        state['world']['characters'][eid]={'id':eid,'location':None,'situation':'','goals':[],'short_goal':'','intentions':[],'obligations':[],'emotion':'','minute':minute,'scene_id':None,'last_event_id':None}
+    elif kind=='location':state['locations'].append({'id':eid,'name':'Новое место','text':''})
+    else:
+        templates={
+          'relationship':{'source_id':actor,'target_id':next((c['id'] for c in state['characters'] if c['id']!=actor),actor),'context':'','dimensions':{}},
+          'thread':{'id':eid,'description':'Новая линия','state':'','status':'active','character_ids':[],'relevance':0.5,'last_event_id':None},
+          'fact':{'id':eid,'text':'Новый факт','secret':False,'character_ids':[],'evidence':[]},
+          'knowledge':{'actor_id':actor,'fact_id':next(iter(state['world']['facts']),''),'status':'unknown','source_event_id':None},
+          'scene':{'id':eid,'participants':[],'location':'Не указано','text':'','start_minute':minute,'end_minute':minute,'status':'active','event_ids':[]},
+          'event':{'id':eid,'text':'Новое событие','participants':[],'witnesses':[],'minute':minute,'fact_ids':[],'source_sequence':0,'player_observed':False,'scene_id':None}}
+        if kind not in templates:raise ValueError('Тип не поддерживается.')
+        state['world'][GROUPS[kind]][eid]=templates[kind]
+    return sync(state),eid
+
+
+def player_view(state):
+    """Conservative server projection: author-only material never enters player response."""
+    actor=state['controlled_actor_id'];world=state['world'];meta=state.get('scene_meta',{})
+    known={k['fact_id'] for k in world['knowledge'].values() if k['actor_id']==actor and k['status']=='known'}
+    public=deepcopy({k:state[k] for k in ('campaign','characters','world','locations','protagonist_id','controlled_actor_id','camera','world_clock') if k in state})
+    public['sections']={};public['story_notes']='';public.pop('memory',None);public.pop('knowledge',None)
+    public.pop('facts',None);public.pop('events',None);public.pop('plans',None)
+    for key in ('description','rules'):public['campaign'][key]=''
+    public['world']={**{kind:{} for kind in KINDS},'version':2}
+    public['relationships']=[]
+    public['scene']='';public['scene_meta']={**meta,'present_ids':[actor]}
+    for c in public['characters']:
+        c.pop('text',None)
+        c['fields']={k:v for k,v in c['fields'].items() if k in ('Внешность',) or c['id']==actor and k in ('Статус','Суть','Чего хочет','Намерения')}
+        if c['id']==actor:public['world']['characters'][actor]=deepcopy(world['characters'][actor])
+    public['world']['facts']={key:deepcopy(f) for key,f in world['facts'].items() if key in known}
+    public['world']['knowledge']={key:deepcopy(k) for key,k in world['knowledge'].items() if k['actor_id']==actor}
+    public['locations']=[]
+    return public
+
+
+def export_markdown(state):
+    """Readable projection plus a versioned, integrity-checked round-trip payload."""
+    lines=['# '+state['campaign']['title'],'',state['campaign'].get('description',''),'']
+    for c in state['characters']:
+        lines+=['## '+c['name']]+[f'### {k}\n{v}' for k,v in c['fields'].items()]
+    for kind in ('relationships','facts','threads','scenes','events'):
+        lines+=['## '+kind]
+        for key,item in state['world'][kind].items():
+            lines+=['### '+key]+[f'- {k}: '+(', '.join(map(str,v)) if isinstance(v,list) else str(v)) for k,v in item.items() if not isinstance(v,dict)]
+    for loc in state['locations']:lines+=['## '+loc['name'],loc['text']]
+    body='\n\n'.join(lines)+'\n'
+    payload=base64.b64encode(json.dumps(state,ensure_ascii=False).encode()).decode()
+    return body+f'\n<!-- AI_RPG_STATE_V2 {hashlib.sha256(body.encode()).hexdigest()} {payload} -->\n'
+
+
+def exported_state(text):
+    m=re.search(r'\n<!-- AI_RPG_STATE_V2 ([a-f0-9]{64}) ([A-Za-z0-9+/=]+) -->\s*$',text)
+    if not m:return None
+    body=text[:m.start()]
+    if hashlib.sha256(body.encode()).hexdigest()!=m[1]:raise ValueError('Текст экспорта изменён вне редактора. Импортируй исходный экспорт и измени поля в редакторе мира.')
+    try:state=prepare(json.loads(base64.b64decode(m[2],validate=True)))
+    except Exception as exc:raise ValueError('Повреждён структурированный экспорт.') from exc
+    return state

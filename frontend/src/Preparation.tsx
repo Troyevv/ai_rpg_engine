@@ -28,10 +28,12 @@ export function Preparation({
   prefs,
   apiKey,
   onWorld,
+  onDraft,
 }: {
   prefs: Preferences;
   apiKey: string;
   onWorld: (id: number) => void;
+  onDraft?: (id: string) => void;
 }) {
   const [list, setList] = useState<{ id: string; name: string }[]>([]);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -136,6 +138,7 @@ export function Preparation({
       </div>
       {workspace&&<Versions kind={versionKind||"summary"} owner={workspace.id} open={!!versionKind} close={()=>setVersionKind(null)} changed={refresh}/>}
       <details><summary>Удалённые сценарии</summary><Button variant="ghost" onClick={()=>void api<typeof removed>("/workspaces?deleted=true").then(setRemoved).catch(e=>toast.error(e.message))}>Обновить корзину</Button>{removed.map(w=><div key={w.id}>{w.name}<Button size="sm" onClick={()=>void run(async()=>{await api(`/workspaces/${w.id}/restore`,{revision:w.revision});setList(await api("/workspaces"));setRemoved(await api("/workspaces?deleted=true"));setId(w.id)})}>Восстановить</Button></div>)}</details>
+      {workspace && onDraft && <Button disabled={busy || active(job) || !workspace.idea} onClick={()=>onDraft(workspace.id)}>Продолжить в редакторе мира</Button>}
       {workspace ? (
         <>
           <div className="preparation-grid">

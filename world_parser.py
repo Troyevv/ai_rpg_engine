@@ -19,6 +19,9 @@ def subsections(text):
 
 
 def parse_summary(markdown):
+    from backend.services.draft_world import exported_state
+    structured=exported_state(markdown)
+    if structured is not None:return structured
     if not markdown.strip():
         raise ValueError('Выжимка пуста.')
     sections = {}

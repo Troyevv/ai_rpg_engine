@@ -64,6 +64,9 @@ class Preparation:
                     loaded=find_loaded_model(config['model'])
                     if not loaded:raise ValueError('Сначала загрузи выбранную локальную модель.')
                 config = json.loads(job['config_json'])
+                if job['kind'].startswith('draft_'):
+                    from backend.services.draft_generation import run
+                    return run(self,jid,config,api_key,handle,loaded,chat_stream)
                 prompts = config.get('_prompts')
                 w = self.repo.workspace(job['workspace_id'])
                 messages = build_idea_messages(w,prompts) if job['kind'] == 'idea' else build_summary_messages(w,prompts)
@@ -92,6 +95,8 @@ class Preparation:
                 if not handle.cancel.is_set():
                     self.repo.preparation_progress(jid, narrative, 'saved')
         except Exception as exc:
+            if config.get('_draft_task'):
+                narrative=self.repo.preparation_job(jid)['narrative']
             self.repo.preparation_progress(jid, narrative, 'stopped' if handle.cancel.is_set() else 'error', str(exc))
         finally:
             if handle.cancel.is_set() and narrative:

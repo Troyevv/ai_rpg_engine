@@ -1403,3 +1403,32 @@ details > label:first-of-type {
 .motivation-menu button {min-height:44px;justify-content:flex-start}
 .motivation-editor h4 {margin:16px 0 8px}
 .motivation-delete-text {max-height:35vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* Preparation uses the runtime aggregate; presentation remains a reading surface. */
+.world-workshop { min-width:0; max-width:1080px; margin-inline:auto; }
+.world-workshop .actions { flex-wrap:wrap; }
+.world-workshop label { display:flex; align-items:center; gap:.6rem; padding-block:.6rem; }
+.draft-section { border-bottom:1px solid var(--border); padding-block:1rem; }
+.draft-section > summary,.draft-card > summary { display:block; cursor:pointer; font-weight:600; padding:.75rem 1.5rem .75rem 0; overflow-wrap:anywhere; }
+.draft-card { border-bottom:1px solid var(--border); padding:.5rem 0; }
+.draft-card > summary { font-family:Georgia,serif; font-size:1.1rem; }
+.draft-field { padding:.6rem 0; min-width:0; }
+.draft-field-heading { display:flex; gap:.75rem; align-items:center; justify-content:space-between; font-family:system-ui,sans-serif; font-size:.85rem; color:var(--muted-foreground); }
+.draft-field-heading > span { min-width:0; overflow-wrap:anywhere; }
+.draft-field > details > summary { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; font-family:Georgia,serif; font-weight:normal; font-size:1rem; line-height:1.6; overflow-wrap:anywhere; cursor:pointer; }
+.draft-field > details[open] > summary { display:none; }
+.draft-entity { padding:.25rem .75rem 1rem; }
+.draft-options { display:grid; gap:.5rem; max-height:40dvh; overflow:auto; }
+.draft-options label { display:flex; align-items:center; gap:.75rem; min-height:44px; }
+.workshop-back { margin:1rem; }
+@media(max-width:767px){
+ .world-workshop { padding:1rem; }
+ .world-workshop h1 { font-size:1.8rem; }
+ .world-workshop .document { padding:1rem 0; }
+ .world-workshop .workspace-bar { display:flex; flex-direction:column; align-items:stretch; }
+ .world-workshop .workspace-bar > * { max-width:100%; min-width:0; }
+ .world-workshop .draft-entity { padding-inline:0; }
+ .world-workshop button { min-height:44px; }
+ .world-workshop select { max-width:100%; }
+ .world-workshop .draft-section { min-width:0; }
+}

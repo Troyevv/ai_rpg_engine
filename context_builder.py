@@ -79,7 +79,7 @@ def build_context(state, history, user_text, kind, context_length, reserve, extr
     relevant_events=[e for e in world['events'].values() if present.intersection(e['participants'])][-12:]
     messages = [
         {'role':'system','content':'Постоянные правила\n'+rules},
-        block('Выжимка мира', {'tone':state['sections'].get('tone',''), 'director_only':{'rules':state.get('story_notes',''),
+        block('Выжимка мира', {'tone':state['sections'].get('tone',''), 'director_only':{'campaign':state.get('campaign',{}),'rules':state.get('story_notes',''),
                               'initial_knowledge_unstructured':state['sections'].get('knowledge','')}}),
         {'role':'system','content':'Роли и время текущего запроса\n'+dynamic},
         block('POV и знания', {'protagonist_id':main,'controlled_actor_id':actor,'mode':kind,'world_clock':state.get('world_clock',{}),'transition':state.get('pov_transition') if kind=='pov' else None,

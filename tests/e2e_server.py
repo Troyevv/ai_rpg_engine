@@ -31,7 +31,12 @@ NARRATIVE = '''Персонаж 1 подвигает свободный стул
 def stream(**kwargs):
     full='\n'.join(m['content'] for m in kwargs['messages'])
     observer='Тип хода: background' in full or 'Режим observer:' in full
-    if kwargs.get('response_format'):
+    if 'Ты Генератор мира' in full:
+        from test_draft_world import fixture
+        value=json.dumps(fixture(),ensure_ascii=False)
+    elif 'Ты редактор RPG' in full:
+        value=json.dumps({'value':'Обновлённая внешность'},ensure_ascii=False)
+    elif kwargs.get('response_format'):
         payload=background() if observer else result()
         match=re.search(r'Единое время мира: (День \d+(?: \([А-Яа-я]+\))? \d{2}:\d{2})',full)
         if match and match[1]!='День 1 00:00':payload['scene']['time']=match[1]
