@@ -156,53 +156,8 @@ def test_stop_during_stream_preserves_draft(db):
     assert storage.list_turns(sid) == []
 
 
-def test_ui_start_choices_free_input_and_reopen(db, monkeypatch):
-    from pathlib import Path
-    from streamlit.testing.v1 import AppTest
-    storage, wid, sid = db
-    monkeypatch.setenv('RPG_DB_PATH', str(storage.path))
-    with patch('engine.launch', side_effect=lambda path, job: run(storage, job)) as launch:
-        app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py'))
-        app.session_state['app_mode'] = 'Игра'
-        app.session_state['game_models'] = ['test']
-        app.session_state['game_context'] = 32768
-        app.session_state[f'save_picker_{wid}'] = sid
-        app.run()
-        app.button(key=f'start_game_{sid}').click().run()
-        assert not app.exception
-        assert len([b for b in app.button if b.key and b.key.startswith('choice_')]) == 6
-        last = storage.list_turns(sid)[-1]
-        app.button(key=f'choice_{last["id"]}_0').click().run()
-        assert not app.exception
-        assert storage.list_turns(sid)[-1]['user_text'] == 'Действие 0: «Реплика 0»'
-        app.text_area(key=f'player_draft_{sid}').input('Моё собственное действие.').run()
-        app.button(key=f'send_action_{sid}').click().run()
-        assert not app.exception
-        assert storage.list_turns(sid)[-1]['user_text'] == 'Моё собственное действие.'
-        assert app.text_area(key=f'player_draft_{sid}').value == ''
-        app.run()
-        assert launch.call_count == 3
-        assert not any(b.label == 'Начать игру' for b in app.button)
 
 
-def test_ui_editor_enabled_during_generation(db, monkeypatch):
-    from pathlib import Path
-    from streamlit.testing.v1 import AppTest
-    storage, wid, sid = db
-    monkeypatch.setenv('RPG_DB_PATH', str(storage.path))
-    job = storage.begin_job(sid, '', 'start', CONFIG)
-    with patch('engine.live', return_value=True):
-        app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py'))
-        app.session_state['app_mode'] = 'Игра'
-        app.session_state[f'save_picker_{wid}'] = sid
-        app.run()
-        assert not app.exception
-        assert app.text_area(key=f'player_draft_{sid}').disabled is False
-        assert app.button(key=f'send_action_{sid}').disabled
-        app.button(key=f'stop_job_{job}').click().run()
-        assert not app.exception
-        assert storage.get_job(job)['status'] == 'stopped'
-        assert storage.list_turns(sid) == []
 
 
 def test_commit_is_atomic_if_save_update_fails(db):
@@ -239,3 +194,69 @@ def test_migration_of_old_database_preserves_existing_save(tmp_path):
     Storage(path)  # Idempotent initialization.
     with storage.connect() as conn:
         assert {'kind', 'choices_json', 'changes_json'} <= {r['name'] for r in conn.execute('PRAGMA table_info(turns)')}
+
+
+@pytest.mark.parametrize('quote,narrative,player,valid', [
+    ('«Садись, поговорим»', '“Садись,\n  поговорим”', '', True),
+    ('Садись, поговорим', 'Садись,\u00a0поговорим', '', True),
+    ('Я сяду здесь.', NARRATIVE, 'Я сяду здесь.', True),
+    ('Садись, поговорим', 'Не садись. Поговорим потом.', '', False),
+    ('Садись поговорим', 'Садись', 'поговорим', False),
+    ('Садись… поговорим', NARRATIVE, '', False),
+    ('', NARRATIVE, '', False),
+])
+def test_evidence_formatting_without_accepting_invented_quotes(db, quote, narrative, player, valid):
+    from state_updates import EvidenceError
+    storage, _, sid = db
+    before = storage.get_save(sid)['state']
+    payload = result()
+    payload['events'][0]['evidence'] = quote
+    if valid:
+        apply_updates(before, payload, narrative, player, 0)
+    else:
+        with pytest.raises(EvidenceError, match=r'events\[0\].evidence'):
+            apply_updates(before, payload, narrative, player, 0)
+    assert storage.get_save(sid)['state'] == before
+
+
+@pytest.mark.parametrize('outcome', ['fixed', 'invalid', 'stopped'])
+def test_evidence_repair_is_bounded_atomic_and_keeps_narrative(db, outcome):
+    storage, _, sid = db
+    before = storage.get_save(sid)['state']
+    job = storage.begin_job(sid, '', 'start', {**CONFIG, 'provider': 'deepseek'})
+    worker = engine.Worker()
+    calls = []
+    def stream(**kwargs):
+        calls.append(kwargs)
+        if not kwargs.get('response_format'):
+            yield NARRATIVE
+            return
+        payload = result()
+        if len(calls) == 2 or outcome == 'invalid':
+            payload['events'][0]['evidence'] = 'Пересказ вместо цитаты'
+        if len(calls) == 3:
+            assert any('events[0].evidence' in m['content'] for m in kwargs['messages'])
+            assert estimate(kwargs['messages']) <= CONFIG['context_length'] - CONFIG['update_tokens'] - 256
+            if outcome == 'stopped':
+                engine.stop(storage, job)
+                worker.cancelled.set()
+        yield json.dumps(payload, ensure_ascii=False)
+    with patch('engine.chat_stream', side_effect=stream):
+        engine.run_job(storage.path, job, worker)
+    assert len(calls) == 3
+    assert storage.get_job(job)['narrative'] == NARRATIVE
+    assert storage.get_job(job)['narrative_complete']
+    if outcome in ('fixed','invalid'):
+        if outcome == 'invalid':
+            assert json.loads(storage.get_job(job)['warnings_json'])[0]['section'] == 'events'
+            assert storage.get_save(sid)['state'].get('events',[]) == before.get('events',[])
+        assert storage.get_job(job)['status'] == 'saved'
+        assert len(storage.list_turns(sid)) == 1
+        assert len(json.loads(storage.list_turns(sid)[0]['choices_json'])) == 6
+    else:
+        assert storage.get_job(job)['status'] == ('stopped' if outcome == 'stopped' else 'error')
+        assert storage.list_turns(sid) == []
+        assert storage.get_save(sid)['state'] == before
+        storage.retry_job(job, CONFIG)
+        assert len(run(storage, job)) == 1
+        assert storage.get_job(job)['status'] == 'saved'

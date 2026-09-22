@@ -1,6 +1,18 @@
 """Allowlisted, source-backed state patches. No arbitrary JSON paths."""
 from copy import deepcopy
 import json
+import unicodedata
+
+
+class EvidenceError(ValueError):
+    """An extraction must be corrected before any state can be committed."""
+
+
+def normalized_evidence(value):
+    # Keep words, case and punctuation: no fuzzy semantic matching.
+    value = unicodedata.normalize("NFC", value)
+    value = value.translate(str.maketrans({c: chr(34) for c in "«»“”„"}))
+    return " ".join(value.split())
 
 
 def text(value, label, limit=12000):
@@ -14,19 +26,22 @@ def exact_keys(obj, allowed, required=()):
         raise ValueError('Неверная структура изменений.')
 
 
-def apply_updates(before, payload, narrative, user_text, turn):
+def apply_updates(before, payload, narrative, user_text, turn, kind="turn"):
+    from backend.services.pov import controlled
     if isinstance(payload, str):
         payload = json.loads(payload)
-    exact_keys(payload, ['scene', 'characters', 'relationships', 'facts', 'events', 'plans', 'locations', 'choices'], ['scene', 'choices'])
+    exact_keys(payload, ['scene', 'characters', 'relationships', 'facts', 'events', 'plans', 'locations', 'choices', 'world_delta'], ['scene', 'choices'])
     state = deepcopy(before)
     ids = {c['id'] for c in state['characters']}
     cards = {c['id']: c for c in state['characters']}
-    source = narrative + '\n' + user_text
+    sources = [normalized_evidence(narrative), normalized_evidence(user_text)]
+    evidence_path = ''
 
     def evidence(item):
-        quote = text(item.get('evidence'), 'evidence')
-        if quote not in source:
-            raise ValueError('Изменение не подтверждено цитатой из хода.')
+        quote = item.get('evidence')
+        if (not isinstance(quote, str) or not quote.strip() or len(quote) > 12000
+                or not any(normalized_evidence(quote) in source for source in sources)):
+            raise EvidenceError(f'Изменение {evidence_path} не подтверждено цитатой из хода.')
 
     def known(values):
         if not isinstance(values, list) or any(not isinstance(v, str) or v not in ids for v in values):
@@ -34,20 +49,26 @@ def apply_updates(before, payload, narrative, user_text, turn):
         return list(dict.fromkeys(values))
 
     def items(key):
+        nonlocal evidence_path
         value = payload.get(key, [])
         if not isinstance(value, list) or len(value) > 50:
             raise ValueError(f'Неверный список: {key}.')
-        return value
+        for index, item in enumerate(value):
+            evidence_path = f'{key}[{index}].evidence'
+            yield item
 
     scene = payload['scene']
-    exact_keys(scene, ['text', 'time', 'location', 'present_ids'], ['text', 'time', 'location', 'present_ids'])
+    exact_keys(scene, ['text', 'time', 'location', 'present_ids', 'elapsed_minutes'], ['text', 'time', 'location', 'present_ids'])
+    if 'elapsed_minutes' in scene and (type(scene['elapsed_minutes']) is not int or not 0<=scene['elapsed_minutes']<=10080):
+        raise ValueError('Некорректная длительность scene.elapsed_minutes.')
     state['scene'] = text(scene['text'], 'scene.text')
     state['sections']['scene'] = state['scene']
     state['scene_meta'] = {'time': text(scene['time'], 'time', 120), 'location': text(scene['location'], 'location', 200),
                            'present_ids': known(scene['present_ids'])}
     choices = payload['choices']
-    if not isinstance(choices, list) or len(choices) != 6:
-        raise ValueError('Нужно ровно 6 вариантов действий.')
+    expected_choices = 0 if kind=='background' else 6
+    if not isinstance(choices,list) or len(choices)!=expected_choices:
+        raise ValueError('Для закулисной сцены нужен пустой choices.' if kind=='background' else 'Нужно ровно 6 вариантов действий.')
     normalized = []
     for choice in choices:
         exact_keys(choice, ['action', 'speech'], ['action'])
@@ -56,7 +77,7 @@ def apply_updates(before, payload, narrative, user_text, turn):
         if not isinstance(speech, str) or len(speech) > 1000:
             raise ValueError('Некорректная реплика варианта.')
         normalized.append({'action': action, 'speech': speech.strip()})
-    if len({(c['action'].casefold(), c['speech'].casefold()) for c in normalized}) != 6:
+    if len({(c['action'].casefold(), c['speech'].casefold()) for c in normalized}) != expected_choices:
         raise ValueError('Варианты действий повторяются.')
     for change in items('characters'):
         exact_keys(change, ['id', 'now', 'goal', 'evidence'], ['id', 'evidence'])
@@ -65,7 +86,7 @@ def apply_updates(before, payload, narrative, user_text, turn):
         if 'now' in change:
             card['fields']['Сейчас'] = text(change['now'], 'now')
         if 'goal' in change:
-            if card.get('is_player'):
+            if card['id']==controlled(before):
                 raise ValueError('Нельзя менять желания ГГ за игрока.')
             card['fields']['Чего хочет'] = text(change['goal'], 'goal')
     # Arrows describe this turn only. Historical changes remain in turns.changes_json.
@@ -134,3 +155,25 @@ def apply_updates(before, payload, narrative, user_text, turn):
 
 def choice_input(choice):
     return choice['action'] + (': «' + choice['speech'] + '»' if choice.get('speech') else '')
+
+
+def apply_supported_updates(before, payload, narrative, user_text, turn, kind="turn"):
+    """After one repair, omit only unsupported patches and report each omission.
+
+    All structural/ID/choice errors still fail atomically; rejected claims never
+    enter canonical state or memory. The full narrative is retained in the journal.
+    """
+    import re
+    payload = json.loads(payload) if isinstance(payload,str) else deepcopy(payload)
+    warnings = []
+    while True:
+        try:
+            state, choices, changes = apply_updates(before,payload,narrative,user_text,turn,kind)
+            return state,choices,changes,warnings
+        except EvidenceError as exc:
+            match = re.search(r'(characters|relationships|facts|events|plans|locations)\[(\d+)\]', str(exc))
+            if not match:
+                raise
+            key,index = match[1],int(match[2])
+            rejected = payload[key].pop(index)
+            warnings.append({'section':key,'reason':'Нет подтверждённой цитаты текущего хода', 'rejected':rejected})

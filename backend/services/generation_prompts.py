@@ -1,0 +1,104 @@
+from pathlib import Path
+
+PROMPTS = Path(__file__).resolve().parents[2] / "prompts"
+
+def load_prompt(name, prompts=None):
+    if prompts and name in prompts:
+        return prompts[name]["content"]
+    return (PROMPTS / name).read_text(encoding="utf-8")
+
+def build_idea_messages(workspace, prompts=None) -> list[dict]:
+
+    messages = [
+        {
+            "role": "system",
+            "content": load_prompt('idea_prompt.md',prompts),
+        }
+    ]
+
+    if workspace['idea']:
+
+        messages.append(
+            {
+                "role": "system",
+                "content": f"""
+Ниже находится ТЕКУЩИЙ СЦЕНАРНЫЙ ПЛАН.
+
+Он является актуальной версией концепции игры.
+
+Если пользователь просит изменить,
+дополнить или переработать что-либо:
+
+- внеси требуемые изменения;
+- сохрани остальные решения;
+- обнови связанные элементы;
+- проверь внутреннюю непротиворечивость;
+- снова верни ПОЛНЫЙ сценарный план.
+
+--- НАЧАЛО ТЕКУЩЕГО ПЛАНА ---
+
+{workspace['idea']}
+
+--- КОНЕЦ ТЕКУЩЕГО ПЛАНА ---
+""".strip(),
+            }
+        )
+
+    for message in (
+        workspace['messages']
+    ):
+        if message["role"] == "user":
+            messages.append(
+                message
+            )
+
+    return messages
+
+
+def build_summary_messages(workspace, prompts=None) -> list[dict]:
+
+    return [
+        {
+            "role": "system",
+            "content": load_prompt('summary_prompt.md',prompts),
+        },
+        {
+            "role": "user",
+            "content": f"""
+Создай полную выжимку ролевой игры
+на основе следующего сценарного плана.
+
+==================================================
+СЦЕНАРНЫЙ ПЛАН
+==================================================
+
+{workspace['idea']}
+
+==================================================
+ОБЯЗАТЕЛЬНЫЙ ШАБЛОН
+==================================================
+
+{load_prompt('summary_template.md',prompts)}
+
+==================================================
+ЗАДАЧА
+==================================================
+
+Используй сценарный план как основной источник фактов.
+
+Раскрой его подробно и естественно.
+
+Не меняй основные сценарные решения.
+
+Не добавляй дополнительных ключевых персонажей.
+
+Сохрани весь состав плана без фиксированной квоты персонажей.
+Основной ГГ единственный и идёт первым с отметкой (ГГ).
+
+Строго соблюдай структуру шаблона.
+
+Верни только готовую полную выжимку в Markdown.
+""".strip(),
+        },
+    ]
+

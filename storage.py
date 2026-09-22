@@ -7,11 +7,13 @@ from pathlib import Path
 import sqlite3
 from world_parser import parse_summary
 from engine_storage import EngineStorage
+from backend.repositories.runtime import RuntimeStorage
+from backend.repositories.documents import DocumentStorage
 
 DEFAULT_DB = Path(__file__).resolve().parent / 'data' / 'rpg.sqlite3'
 
 
-class Storage(EngineStorage):
+class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
     def __init__(self, path=None):
         self.path = Path(path or os.environ.get('RPG_DB_PATH', DEFAULT_DB))
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -39,6 +41,10 @@ class Storage(EngineStorage):
             ''')
 
         self.init_engine()
+        self.init_runtime()
+        self.init_documents()
+        from backend.repositories.living_world import migrate
+        migrate(self)
 
     @contextmanager
     def connect(self):
@@ -61,6 +67,7 @@ class Storage(EngineStorage):
             db.execute('BEGIN IMMEDIATE')
             existing = db.execute('SELECT id FROM worlds WHERE name_key=? AND digest=?', (name.casefold(), digest)).fetchone()
             if existing:
+                db.execute('UPDATE worlds SET deleted=0 WHERE id=?',(existing['id'],))
                 return existing['id']
             version = db.execute('SELECT COALESCE(MAX(version),0)+1 FROM worlds WHERE name_key=?', (name.casefold(),)).fetchone()[0]
             world_id = db.execute('INSERT INTO worlds(name,name_key,version,source_md,digest) VALUES(?,?,?,?,?)',
@@ -71,7 +78,7 @@ class Storage(EngineStorage):
 
     def list_worlds(self):
         with self.connect() as db:
-            return [dict(row) for row in db.execute('SELECT id,name,version,created_at FROM worlds ORDER BY id DESC')]
+            return [dict(row) for row in db.execute('SELECT id,name,version,created_at FROM worlds WHERE deleted=0 ORDER BY id DESC')]
 
     def get_world(self, world_id):
         with self.connect() as db:
@@ -81,6 +88,8 @@ class Storage(EngineStorage):
             result = dict(row)
             result['state'] = {row['kind']: json.loads(row['payload']) for row in db.execute(
                 'SELECT kind,payload FROM world_parts WHERE world_id=?', (world_id,))}
+            from backend.services.world import normalize
+            result['state'] = normalize(result['state'])
             return result
 
     def create_save(self, world_id, name):
@@ -89,8 +98,11 @@ class Storage(EngineStorage):
             raise ValueError('Название прохождения должно содержать от 1 до 120 символов.')
         world = self.get_world(world_id)
         with self.connect() as db:
-            return db.execute('INSERT INTO saves(world_id,name,state_json) VALUES(?,?,?)',
+            sid = db.execute('INSERT INTO saves(world_id,name,state_json) VALUES(?,?,?)',
                               (world_id, name, json.dumps(world['state'], ensure_ascii=False))).lastrowid
+            from backend.repositories.living_world import project
+            project(db,sid,world['state'])
+            return sid
 
     def list_saves(self, world_id):
         with self.connect() as db:
@@ -103,25 +115,35 @@ class Storage(EngineStorage):
             if row is None:
                 raise ValueError('Прохождение не найдено.')
             result = dict(row)
-            result['state'] = json.loads(result.pop('state_json'))
+            from backend.services.world import normalize
+            result['state'] = normalize(json.loads(result.pop('state_json')))
             return result
 
     def list_turns(self, save_id):
         with self.connect() as db:
             return [dict(row) for row in db.execute(
-                'SELECT id,sequence,user_text,assistant_text,kind,choices_json,changes_json FROM turns WHERE save_id=? ORDER BY sequence', (save_id,))]
+                'SELECT id,sequence,user_text,assistant_text,kind,choices_json,changes_json,node_id,active_variant_id,memory_archived,pov_actor_id,audience_json FROM turns WHERE save_id=? ORDER BY sequence', (save_id,))]
 
-    def update_scene_meta(self, save_id, metadata):
+    def update_scene_meta(self, save_id, metadata, expected_revision=None):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             self._assert_idle(db, save_id)
-            row = db.execute('SELECT state_json FROM saves WHERE id=?', (save_id,)).fetchone()
+            row = db.execute('SELECT state_json,revision FROM saves WHERE id=?', (save_id,)).fetchone()
             if row is None:
                 raise ValueError('Прохождение не найдено.')
+            if expected_revision is not None and row['revision'] != expected_revision:
+                raise ValueError('Сейв изменился. Обнови сцену.')
             state = json.loads(row['state_json'])
             known = {c['id'] for c in state['characters']}
             if any(cid not in known for cid in metadata['present_ids']):
                 raise ValueError('В сцене указан неизвестный персонаж.')
+            from backend.services.world import normalize, record_scene
+            from backend.services.timeline import advance
+            from backend.repositories.living_world import project
+            state = normalize(state)
+            advance(state,state,metadata)
             state['scene_meta'] = metadata
+            record_scene(state,{},'manual','background' if state['controlled_actor_id'] is None else 'turn')
+            project(db,save_id,state)
             db.execute("UPDATE saves SET state_json=?, revision=revision+1, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
                        (json.dumps(state, ensure_ascii=False), save_id))

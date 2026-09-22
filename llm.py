@@ -1,4 +1,5 @@
 import os
+from dataclasses import dataclass, field
 
 import requests
 from openai import OpenAI
@@ -7,6 +8,30 @@ from openai import OpenAI
 LM_STUDIO_URL = "http://localhost:1234"
 OPENAI_BASE_URL = f"{LM_STUDIO_URL}/v1"
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+
+
+@dataclass(frozen=True)
+class ProviderSpec:
+    base_url: str
+    key_env: str = ''
+    default_key: str = ''
+    extra_body: dict = field(default_factory=dict)
+    thinking_models: tuple[str, ...] = ()
+
+# New compatible services can be registered here without changing game logic.
+PROVIDERS = {
+    'local': ProviderSpec(OPENAI_BASE_URL, default_key='lm-studio'),
+    'deepseek': ProviderSpec(DEEPSEEK_BASE_URL, 'DEEPSEEK_API_KEY', extra_body={'thinking': {'type': 'disabled'}}, thinking_models=('deepseek-flash','deepseek-v4-flash','deepseek-v4-flash-vision-exp','deepseek-v4-pro')),
+}
+
+
+def thinking_options(provider, model, level):
+    spec = PROVIDERS.get(provider)
+    if not spec or model not in spec.thinking_models:
+        return 'off', {}
+    level = level if level in ('off','low','high') else 'off'
+    return level, {'extra_body': {'thinking': {'type': 'disabled' if level=='off' else 'enabled'}},
+                   **({'reasoning_effort':level} if level!='off' else {})}
 
 
 def deepseek_key(api_key=None):
@@ -224,6 +249,10 @@ def unload_all_models() -> int:
 # Inference
 # =========================================================
 
+class OutputLimitReached(RuntimeError):
+    """A valid streamed prefix reached the provider output/context limit."""
+
+
 def chat_stream(
     model: str,
     messages: list[dict],
@@ -235,24 +264,36 @@ def chat_stream(
     response_format=None,
     provider='local',
     api_key=None,
+    thinking='off',
+    on_usage=None,
 ):
-    if provider not in ('local', 'deepseek'):
+    if provider not in PROVIDERS:
         raise ValueError('Неизвестный провайдер модели.')
-    remote = provider == 'deepseek'
-    client = OpenAI(base_url=DEEPSEEK_BASE_URL if remote else OPENAI_BASE_URL,
-                    api_key=deepseek_key(api_key) if remote else 'lm-studio', timeout=60.0, max_retries=0)
+    remote = provider != 'local'
+    spec = PROVIDERS[provider]
+    key = spec.default_key if not remote else ((api_key or '').strip() or os.getenv(spec.key_env, '').strip())
+    if not key:
+        raise ValueError('Укажи API-ключ провайдера.')
+    client = OpenAI(base_url=spec.base_url, api_key=key, timeout=60.0, max_retries=0)
     stream = None
     finish_reason = None
+    from backend.services.answer_stream import AnswerStream
+    answer = AnswerStream()
     try:
         extra = {"response_format": response_format} if response_format else {}
+        if spec.extra_body:
+            extra['extra_body'] = spec.extra_body
+        effective_thinking, thinking_args = thinking_options(provider,model,thinking)
+        extra.update(thinking_args)
         if remote:
-            extra['extra_body'] = {'thinking': {'type': 'disabled'}}
+            extra['stream_options'] = {'include_usage': True}
+        if effective_thinking == 'off':
+            extra['temperature'] = temperature
         if cancel_event is not None and cancel_event.is_set():
             raise RuntimeError("Генерация остановлена.")
         stream = client.chat.completions.create(
             model=model,
             messages=messages,
-            temperature=temperature,
             max_tokens=max_tokens,
             stream=True,
             **extra,
@@ -260,6 +301,11 @@ def chat_stream(
         if on_stream is not None:
             on_stream(stream)
         for chunk in stream:
+            usage = getattr(chunk, 'usage', None)
+            if on_usage and usage is not None:
+                value = usage if isinstance(usage, dict) else usage.model_dump() if hasattr(usage, 'model_dump') else None
+                if value is not None:
+                    on_usage(value)
             if cancel_event is not None and cancel_event.is_set():
                 raise RuntimeError("Генерация остановлена.")
             if not chunk.choices:
@@ -277,8 +323,15 @@ def chat_stream(
             )
 
             if content:
-                yield content
+                visible = answer.feed(content)
+                if visible:
+                    yield visible
 
+        tail = answer.feed("", final=True)
+        if tail:
+            yield tail
+        if require_complete and finish_reason == "length":
+            raise OutputLimitReached("Достигнут лимит одного ответа модели.")
         if require_complete and finish_reason != "stop":
             raise RuntimeError("Ответ не завершён: увеличь лимит ответа/контекста и повтори генерацию.")
     except Exception as exc:
@@ -286,9 +339,7 @@ def chat_stream(
             raise RuntimeError(deepseek_error(exc)) from None
         raise
     finally:
-        # Важно для кнопки остановки:
-        # если Streamlit прервёт текущий run,
-        # соединение с LM Studio будет закрыто.
+        # Always close the provider stream, including cancellation and errors.
         try:
             if stream is not None:
                 stream.close()
