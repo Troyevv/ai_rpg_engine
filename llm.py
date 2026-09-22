@@ -1,9 +1,36 @@
+import os
+
 import requests
 from openai import OpenAI
 
 
 LM_STUDIO_URL = "http://localhost:1234"
 OPENAI_BASE_URL = f"{LM_STUDIO_URL}/v1"
+DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+
+
+def deepseek_key(api_key=None):
+    key = (api_key or '').strip() or os.getenv('DEEPSEEK_API_KEY', '').strip()
+    if not key:
+        raise ValueError('Укажи API-ключ DeepSeek в настройках или DEEPSEEK_API_KEY.')
+    return key
+
+
+def get_deepseek_models(api_key=None):
+    key = deepseek_key(api_key)
+    try:
+        with OpenAI(base_url=DEEPSEEK_BASE_URL, api_key=key, timeout=30.0, max_retries=0) as client:
+            return sorted(model.id for model in client.models.list().data)
+    except Exception as exc:
+        raise RuntimeError(deepseek_error(exc)) from None
+
+
+def deepseek_error(exc):
+    status = getattr(exc, 'status_code', None)
+    return {401: 'DeepSeek: неверный API-ключ.', 402: 'DeepSeek: недостаточно средств.',
+            429: 'DeepSeek: превышен лимит запросов. Повтори позже.',
+            400: 'DeepSeek: проверь имя модели и параметры запроса.'}.get(
+                status, 'DeepSeek: запрос не выполнен. Проверь соединение и доступность API.')
 
 
 
@@ -206,12 +233,20 @@ def chat_stream(
     cancel_event=None,
     on_stream=None,
     response_format=None,
+    provider='local',
+    api_key=None,
 ):
-    client = OpenAI(base_url=OPENAI_BASE_URL, api_key="lm-studio", timeout=60.0, max_retries=0)
+    if provider not in ('local', 'deepseek'):
+        raise ValueError('Неизвестный провайдер модели.')
+    remote = provider == 'deepseek'
+    client = OpenAI(base_url=DEEPSEEK_BASE_URL if remote else OPENAI_BASE_URL,
+                    api_key=deepseek_key(api_key) if remote else 'lm-studio', timeout=60.0, max_retries=0)
     stream = None
     finish_reason = None
     try:
         extra = {"response_format": response_format} if response_format else {}
+        if remote:
+            extra['extra_body'] = {'thinking': {'type': 'disabled'}}
         if cancel_event is not None and cancel_event.is_set():
             raise RuntimeError("Генерация остановлена.")
         stream = client.chat.completions.create(
@@ -246,7 +281,10 @@ def chat_stream(
 
         if require_complete and finish_reason != "stop":
             raise RuntimeError("Ответ не завершён: увеличь лимит ответа/контекста и повтори генерацию.")
-
+    except Exception as exc:
+        if remote and not isinstance(exc, RuntimeError):
+            raise RuntimeError(deepseek_error(exc)) from None
+        raise
     finally:
         # Важно для кнопки остановки:
         # если Streamlit прервёт текущий run,

@@ -3,6 +3,7 @@ from pathlib import Path
 import streamlit as st
 
 from game_ui import save_summary_form
+from provider_ui import render_provider, render_credentials, provider_config, api_key, ready
 
 from llm import (
     chat_stream,
@@ -157,7 +158,7 @@ def build_summary_messages() -> list[dict]:
 Не добавляй дополнительных ключевых персонажей.
 
 В разделе "КЛЮЧЕВЫЕ NPC" должно остаться
-ровно 7 ключевых персонажей вместе с главным героем.
+ровно 8 ключевых персонажей вместе с главным героем.
 
 Строго соблюдай структуру шаблона.
 
@@ -332,172 +333,142 @@ def render_generator():
         st.session_state.partial_summary = ""
 
 
-    # =========================================================
-    # LM Studio
-    # =========================================================
-
-    try:
-
-        available_models = (
-            get_available_models()
-        )
-
-    except Exception as e:
-
-        st.error(
-            "Не удалось подключиться к LM Studio.\n\n"
-            "Проверь, что Local Server запущен "
-            "на http://localhost:1234"
-        )
-
-        st.code(
-            str(e)
-        )
-
-        available_models = []
-
-
-    if not available_models:
-
-        st.warning(
-            "LM Studio не вернул ни одной модели."
-        )
-
-
-
-    # =========================================================
-    # Sidebar
-    # =========================================================
-
     with st.sidebar:
+        st.header('Модели генерации')
+        idea_provider = render_provider('gen_idea', 'Провайдер сценариста')
+        summary_provider = render_provider('gen_summary', 'Провайдер выжимки')
+        if 'deepseek' in (idea_provider, summary_provider):
+            render_credentials()
+        selected_model = st.session_state.get('gen_model')
+        if 'local' in (idea_provider, summary_provider):
+            st.subheader('LM Studio')
+            try:
+                available_models = get_available_models()
+            except Exception:
+                st.warning('LM Studio недоступен. Запусти сервер http://localhost:1234 для локального режима.')
+                available_models = []
+            selected_model = st.selectbox(
+                "Модель",
+                available_models,
+                key="gen_model",
+            )
 
-        st.header(
-            "LM Studio"
-        )
+            st.subheader(
+                "Загрузка"
+            )
 
-        selected_model = st.selectbox(
-            "Модель",
-            available_models,
-            key="gen_model",
-        )
-
-        st.subheader(
-            "Загрузка"
-        )
-
-        context_length = st.selectbox(
-            "Контекст",
-            key="gen_context",
-            options=[
-                8192,
-                16384,
-                32768,
-            ],
-            index=1,
-            format_func=lambda x: (
-                f"{x:,} токенов"
-            ),
-        )
-
-        eval_batch_size = st.selectbox(
-            "Eval Batch Size",
-            key="gen_batch",
-            options=[
-                256,
-                512,
-                1024,
-                2048,
-            ],
-            index=1,
-        )
-
-        flash_attention = st.toggle(
-            "Flash Attention",
-            key="gen_flash",
-            value=True,
-        )
-
-        kv_cache_gpu = st.toggle(
-            "KV-cache на GPU",
-            key="gen_kv",
-            value=True,
-        )
-
-        load_col, unload_col = (
-            st.columns(2)
-        )
-
-        with load_col:
-
-            if st.button(
-                "Загрузить",
-                use_container_width=True,
-                type="primary",
-                disabled=(
-                    not available_models or st.session_state.generation_mode
-                    is not None
+            context_length = st.selectbox(
+                "Контекст",
+                key="gen_context",
+                options=[
+                    8192,
+                    16384,
+                    32768,
+                ],
+                index=1,
+                format_func=lambda x: (
+                    f"{x:,} токенов"
                 ),
-            ):
+            )
 
-                try:
+            eval_batch_size = st.selectbox(
+                "Eval Batch Size",
+                key="gen_batch",
+                options=[
+                    256,
+                    512,
+                    1024,
+                    2048,
+                ],
+                index=1,
+            )
 
-                    unload_all_models()
+            flash_attention = st.toggle(
+                "Flash Attention",
+                key="gen_flash",
+                value=True,
+            )
 
-                    with st.spinner(
-                        "Загрузка модели..."
-                    ):
+            kv_cache_gpu = st.toggle(
+                "KV-cache на GPU",
+                key="gen_kv",
+                value=True,
+            )
 
-                        load_model(
-                            model=selected_model,
-                            context_length=int(
-                                context_length
-                            ),
-                            eval_batch_size=int(
-                                eval_batch_size
-                            ),
-                            flash_attention=(
-                                flash_attention
-                            ),
-                            offload_kv_cache_to_gpu=(
-                                kv_cache_gpu
-                            ),
+            load_col, unload_col = (
+                st.columns(2)
+            )
+
+            with load_col:
+
+                if st.button(
+                    "Загрузить",
+                    use_container_width=True,
+                    type="primary",
+                    disabled=(
+                        not available_models or st.session_state.generation_mode
+                        is not None
+                    ),
+                ):
+
+                    try:
+
+                        unload_all_models()
+
+                        with st.spinner(
+                            "Загрузка модели..."
+                        ):
+
+                            load_model(
+                                model=selected_model,
+                                context_length=int(
+                                    context_length
+                                ),
+                                eval_batch_size=int(
+                                    eval_batch_size
+                                ),
+                                flash_attention=(
+                                    flash_attention
+                                ),
+                                offload_kv_cache_to_gpu=(
+                                    kv_cache_gpu
+                                ),
+                            )
+
+                        st.rerun()
+
+                    except Exception as e:
+
+                        st.error(
+                            f"Ошибка загрузки: {e}"
                         )
 
-                    st.rerun()
+            with unload_col:
 
-                except Exception as e:
+                if st.button(
+                    "Выгрузить",
+                    use_container_width=True,
+                    disabled=(
+                        st.session_state.generation_mode
+                        is not None
+                    ),
+                ):
 
-                    st.error(
-                        f"Ошибка загрузки: {e}"
-                    )
+                    try:
 
-        with unload_col:
+                        unload_all_models()
 
-            if st.button(
-                "Выгрузить",
-                use_container_width=True,
-                disabled=(
-                    st.session_state.generation_mode
-                    is not None
-                ),
-            ):
+                        st.rerun()
 
-                try:
+                    except Exception as e:
 
-                    unload_all_models()
+                        st.error(
+                            f"Ошибка выгрузки: {e}"
+                        )
 
-                    st.rerun()
-
-                except Exception as e:
-
-                    st.error(
-                        f"Ошибка выгрузки: {e}"
-                    )
-
-        st.divider()
-
-        render_loaded_model_info()
-
+            render_loaded_model_info()
+        idea_config = provider_config('gen_idea', selected_model)
+        summary_config = provider_config('gen_summary', selected_model)
         st.divider()
 
         st.subheader(
@@ -596,7 +567,7 @@ def render_generator():
         )
 
         st.caption(
-            "Маленькая модель разрабатывает "
+            "Сценарист разрабатывает "
             "персонажей, отношения, завязку, "
             "локации и открытые линии."
         )
@@ -700,9 +671,7 @@ def render_generator():
         )
 
         st.caption(
-            "После утверждения сценария "
-            "выгрузи маленькую модель, "
-            "загрузи Mistral и создай выжимку."
+            "После утверждения сценария выбери провайдера выжимки и создай мир."
         )
 
         if (
@@ -752,12 +721,9 @@ def render_generator():
         elif st.session_state.idea:
 
             st.info(
-                "Сценарий готов.\n\n"
-                "1. Выгрузи маленькую модель.\n"
-                "2. Выбери Mistral.\n"
-                "3. Выбери 16K или 32K контекст.\n"
-                "4. Нажми «Загрузить».\n"
-                "5. Нажми «Создать выжимку»."
+                "Сценарий готов. Выбери модель выжимки в левой панели. "
+                "Для локального режима загрузи её в LM Studio; для DeepSeek укажи API-ключ. "
+                "Нажми «Создать выжимку»."
             )
 
         else:
@@ -779,20 +745,7 @@ def render_generator():
                 key="start_summary",
             ):
 
-                loaded_model = (
-                    ensure_selected_model_loaded(
-                        selected_model
-                    )
-                )
-
-                if not loaded_model:
-
-                    st.error(
-                        "Сначала загрузите выбранную "
-                        "модель кнопкой «Загрузить»."
-                    )
-
-                else:
+                if ready(summary_config, ensure_selected_model_loaded):
 
                     st.session_state.partial_summary = ""
                     st.session_state.summary_complete = False
@@ -819,19 +772,7 @@ def render_generator():
 
     if idea_input:
 
-        loaded_model = (
-            ensure_selected_model_loaded(
-                selected_model
-            )
-        )
-
-        if not loaded_model:
-
-            st.error(
-                "Сначала загрузите выбранную модель "
-                "кнопкой «Загрузить»."
-            )
-
+        if not ready(idea_config, ensure_selected_model_loaded):
             st.stop()
 
         st.session_state.idea_messages.append(
@@ -875,7 +816,9 @@ def render_generator():
                 try:
 
                     for chunk in chat_stream(
-                        model=selected_model,
+                        **idea_config,
+                        api_key=api_key() if idea_config['provider'] == 'deepseek' else None,
+                        require_complete=True,
                         messages=build_idea_messages(),
                         temperature=idea_temperature,
                         max_tokens=int(
@@ -966,7 +909,8 @@ def render_generator():
                 try:
 
                     for chunk in chat_stream(
-                        model=selected_model,
+                        **summary_config,
+                        api_key=api_key() if summary_config['provider'] == 'deepseek' else None,
                         messages=build_summary_messages(),
                         require_complete=True,
                         temperature=summary_temperature,

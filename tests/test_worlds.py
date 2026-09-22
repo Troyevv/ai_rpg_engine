@@ -8,7 +8,7 @@ from world_parser import parse_summary
 
 def summary():
     cards = []
-    for i in range(7):
+    for i in range(8):
         cards.append(f'''👤 Персонаж {i}{' (ГГ)' if i == 0 else ''}
 
 · Статус: Живёт в городе.
@@ -43,7 +43,7 @@ def summary():
 
 def test_parse_preserves_details():
     state = parse_summary(summary())
-    assert len(state['characters']) == 7
+    assert len(state['characters']) == 8
     assert 'Вторая строка' in state['characters'][0]['fields']['Суть']
     assert state['relationships'][0]['target_name'] == 'Персонаж 1'
     assert len(state['locations']) == 2
