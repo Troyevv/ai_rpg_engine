@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 import {nav} from './navigation';
-for(const width of [360,390,412,430,1440]){
+for(const width of [360,390,412,430,1280,1440,1920]){
  test(`world draft creation and editor ${width}`,async({page,request})=>{
   await page.setViewportSize({width,height:900});
   const workspace=await (await request.post('/api/workspaces',{data:{name:`Черновик ${width}`}})).json();
@@ -10,7 +10,14 @@ for(const width of [360,390,412,430,1440]){
   await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
   await expect(page.locator('main')).not.toContainText('Тайная встреча у маяка');
-  await page.getByRole('button',{name:'Редактировать мир',exact:true}).click();
+  await expect(page.locator('.workshop-view')).toContainText('Игрок');
+  await page.locator('.workshop-tabs').getByRole('button',{name:'Начало',exact:true}).click();
+  await expect(page.locator('.workshop-content')).toContainText('Кухня');
+  await page.locator('.workshop-tabs').getByRole('button',{name:'Места и факты',exact:true}).click();
+  await expect(page.locator('.workshop-content')).not.toContainText('Тайная встреча у маяка');
+  await page.locator('.workshop-tabs').getByRole('button',{name:'Обзор',exact:true}).click();
+  await expect(page.locator('.workshop-overview-grid')).toContainText('Главный герой');
+  await page.getByRole('button',{name:'Автор мира',exact:true}).click();
   await page.getByRole('button',{name:'Показать всё',exact:true}).click();
   await page.locator('.workshop-tabs').getByRole('button',{name:'Персонажи',exact:true}).click();
   const first=page.locator('.workshop-person').first();

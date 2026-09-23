@@ -31,6 +31,44 @@ def test_roundtrip_and_projection():
     with pytest.raises(ValueError):parse_summary(domain.export_markdown(state).replace('# Новый мир','# Другой мир'))
 
 
+def test_player_preview_preserves_known_world_without_spoilers():
+    state=fixture()
+    a,b,c=[x['id'] for x in state['characters'][:3]]
+    for card,name in zip(state['characters'],['Илья','Катя','Соня']):card['name']=name
+    state['locations']=[{'id':'morgue','name':'Морг','text':'Илья работает здесь.'}]
+    scene=state['world']['scenes'][state['camera']['scene_id']]
+    scene.update(location='Морг',text='Илья проводит вскрытие.',participants=[a,b])
+    state['world_clock']={'minute':5160,'last_event_time':'День 4 (Чт) 14:00'}
+    scene.update(start_minute=5160,end_minute=5160)
+    state['world']['characters'][a].update(minute=5160,location='Морг',situation='Проводит вскрытие')
+    for character in state['world']['characters'].values():
+        if character.get('minute') is not None:character['minute']=5160
+    state['world']['facts'].update(public={'id':'public','text':'Клиника открыта','secret':False,'character_ids':[]},
+        actor_only={'id':'actor_only','text':'Илья знает о дежурстве','secret':True,'character_ids':[a]},
+        private={'id':'private','text':'Соня знает про измену','secret':True,'character_ids':[c]},
+        director={'id':'director','text':'Невидимый режиссёрский факт','secret':False,'director_only':True,'character_ids':[]})
+    state['world']['knowledge'].update(ak={'actor_id':a,'fact_id':'actor_only','status':'known','source_event_id':None},
+        pk={'actor_id':c,'fact_id':'private','status':'known','source_event_id':None},
+        uk={'actor_id':a,'fact_id':'private','status':'unknown','source_event_id':None})
+    state['world']['relationships'].update(ab={'source_id':a,'target_id':b,'context':'Илья доверяет Кате','dimensions':{'trust':70}},
+        ba={'source_id':b,'target_id':a,'context':'Катя тайно влюблена','dimensions':{'attraction':80}})
+    state['world']['threads'].update(known={'id':'known','description':'Известный конфликт','state':'Режиссёрский план','public_state':'Нерешённая ссора','status':'active','character_ids':[a,b],'relevance':.5,'visible_to_ids':[a]},
+        hidden={'id':'hidden','description':'Скрытая линия Сони','state':'Секрет','status':'active','character_ids':[a,c],'relevance':.5})
+    state=domain.sync(state)
+    player=domain.player_view(state);world=player['world']
+    assert set(world['facts'])=={'public','actor_only'}
+    assert set(world['relationships'])>= {'ab'} and 'ba' not in world['relationships']
+    assert set(world['threads'])=={'known'} and world['threads']['known']['state']=='Нерешённая ссора'
+    assert player['locations'][0]['name']=='Морг'
+    assert player['scene']=='Илья проводит вскрытие.'
+    assert player['scene_meta']['location']=='Морг' and player['world_clock']['minute']==5160
+    assert 'Соня знает про измену' not in json.dumps(player,ensure_ascii=False)
+    assert 'Катя тайно влюблена' not in json.dumps(player,ensure_ascii=False)
+    author=domain.prepare(state)
+    assert set(author['world']['facts'])>set(world['facts'])
+    assert {'ab','ba'}<=set(author['world']['relationships'])
+
+
 def test_field_isolation_and_dependencies():
     state=fixture();cid=state['characters'][1]['id']
     updated=domain.patch(state,'character',cid,'fields.Внешность','Короткие волосы')

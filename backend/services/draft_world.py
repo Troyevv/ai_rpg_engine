@@ -14,11 +14,11 @@ FIELDS={
  'campaign':{'title','setting','era','genre','tone','description','public_description','rules'},
  'character':{'name','aliases','fields'},
  'actor':{'location','situation','goals','intentions','emotion','obligations'},
- 'relationship':{'source_id','target_id','context','dimensions'},
+ 'relationship':{'source_id','target_id','context','dimensions','visible_to_ids'},
  'location':{'name','text'},
  'fact':{'text','secret','character_ids','evidence'},
  'knowledge':{'actor_id','fact_id','status','source_event_id'},
- 'thread':{'description','state','status','character_ids','relevance'},
+ 'thread':{'description','state','public_state','status','character_ids','relevance','visible_to_ids'},
  'scene':{'location','participants','text','start_minute','end_minute','status'},
  'event':{'text','participants','witnesses','minute','fact_ids','player_observed'},
  'start':{'protagonist_id','controlled_actor_id','scene_id','minute'},
@@ -122,6 +122,7 @@ def validate(state):
     for rid,r in world['relationships'].items():
         require(r.get('source_id') in ids and r.get('target_id') in ids,f'Отношение {rid}: неизвестный персонаж.')
         require(isinstance(r.get('context',''),str) and isinstance(r.get('dimensions',{}),dict),f'Отношение {rid}: некорректные поля.')
+        if 'visible_to_ids' in r:refs(r['visible_to_ids'],ids,f'relationship visibility {rid}')
     for fid,f in world['facts'].items():
         require(isinstance(f.get('text'),str) and bool(f['text'].strip()),f'Факт {fid}: нужен текст.')
         refs(f.get('character_ids',[]),ids,f'fact {fid}')
@@ -137,6 +138,7 @@ def validate(state):
         require(type(start) is int and type(end) is int and 0<=start<=end,f'Сцена {sid}: некорректный интервал.')
     for tid,t in world['threads'].items():
         refs(t.get('character_ids',[]),ids,f'thread {tid}')
+        if 'visible_to_ids' in t:refs(t['visible_to_ids'],ids,f'thread visibility {tid}')
         require(t.get('status') in ('active','developing','dormant','resolved'),f'Линия {tid}: некорректный статус.')
     for eid,e in world['events'].items():
         refs(e.get('participants',[]),ids,f'event {eid}')
@@ -272,24 +274,49 @@ def add(state,kind):
 
 
 def player_view(state):
-    """Conservative server projection: author-only material never enters player response."""
+    """Server-side actor knowledge projection; hidden entries never reach the browser."""
     actor=state['controlled_actor_id'];world=state['world'];meta=state.get('scene_meta',{})
     known={k['fact_id'] for k in world['knowledge'].values() if k['actor_id']==actor and k['status']=='known'}
+    def visible(item):return not item.get('director_only') and (not item.get('secret') or actor in item.get('visible_to_ids',[]))
     public=deepcopy({k:state[k] for k in ('campaign','characters','world','locations','protagonist_id','controlled_actor_id','camera','world_clock') if k in state})
     public['sections']={};public['story_notes']='';public.pop('memory',None);public.pop('knowledge',None)
     public.pop('facts',None);public.pop('events',None);public.pop('plans',None)
     public['campaign']['description']=public['campaign'].get('public_description','')
     public['campaign']['rules']=''
     public['world']={**{kind:{} for kind in KINDS},'version':2}
-    public['relationships']=[]
-    public['scene']='';public['scene_meta']={**meta,'present_ids':[actor]}
+    scene=world['scenes'].get(state.get('camera',{}).get('scene_id'),{})
+    public['scene']=scene.get('text','');public['scene_meta']={**meta,'present_ids':scene.get('participants',[])}
+    public['characters']=[c for c in public['characters'] if not c.get('hidden') or c['id']==actor or c['id'] in scene.get('participants',[]) or actor in c.get('visible_to_ids',[])]
+    visible_ids={c['id'] for c in public['characters']}
     for c in public['characters']:
         c.pop('text',None)
-        c['fields']={k:v for k,v in c['fields'].items() if k in ('Внешность','Роль') or c['id']==actor and k in ('Статус','Суть','Чего хочет','Намерения')}
+        c.pop('hidden',None);c.pop('visible_to_ids',None)
+        c['fields']={k:v for k,v in c['fields'].items() if k in ('Внешность','Роль','Возраст') or c['id']==actor and k not in ('Секрет','Скрытые мотивы')}
         if c['id']==actor:public['world']['characters'][actor]=deepcopy(world['characters'][actor])
-    public['world']['facts']={key:deepcopy(f) for key,f in world['facts'].items() if key in known}
-    public['world']['knowledge']={key:deepcopy(k) for key,k in world['knowledge'].items() if k['actor_id']==actor}
-    public['locations']=[]
+    public['world']['facts']={key:deepcopy(f) for key,f in world['facts'].items() if (key in known or not f.get('secret')) and not f.get('director_only') and set(f.get('character_ids',[]))<=visible_ids}
+    # Knowledge records with "unknown" must not expose the existence of their facts.
+    public['world']['knowledge']={key:deepcopy(k) for key,k in world['knowledge'].items() if k['actor_id']==actor and k['fact_id'] in public['world']['facts'] and k['status'] in ('known','suspected')}
+    public['world']['relationships']={key:deepcopy(r) for key,r in world['relationships'].items() if not r.get('director_only') and (r.get('source_id')==actor or actor in r.get('visible_to_ids',[])) and r.get('source_id') in visible_ids and r.get('target_id') in visible_ids}
+    public['relationships']=[dict(source_id=r.get('source_id',''),target_id=r.get('target_id',''),text=r.get('context','')) for r in public['world']['relationships'].values()]
+    public['world']['threads']={key:deepcopy(t) for key,t in world['threads'].items() if actor in t.get('visible_to_ids',[]) and not t.get('director_only') and set(t.get('character_ids',[]))<=visible_ids}
+    for thread in public['world']['threads'].values():
+        thread['state']=thread.get('public_state','')
+        thread.pop('last_event_id',None)
+        thread.pop('relevance',None)
+    public['world']['events']={key:deepcopy(e) for key,e in world['events'].items() if (actor in e.get('participants',[]) or actor in e.get('witnesses',[]) or e.get('player_observed')) and not e.get('director_only')}
+    if scene:
+        public['world']['scenes'][state['camera']['scene_id']]=deepcopy(scene)
+        # An event might reference a hidden fact; remove its links, not its visible text.
+        public['world']['scenes'][state['camera']['scene_id']]['event_ids']=[key for key in scene.get('event_ids',[]) if key in public['world']['events']]
+    for event in public['world']['events'].values():event['fact_ids']=[key for key in event.get('fact_ids',[]) if key in public['world']['facts']]
+    for fact in public['world']['facts'].values():fact['evidence']=[]
+    # Explicitly hidden places remain author-only; generator instructions forbid secrets in public place descriptions.
+    public['locations']=[loc for loc in public['locations'] if visible(loc)]
+    for group in ('facts','relationships','threads','events','scenes'):
+        for item in public['world'][group].values():
+            for marker in ('director_only','visible_to_ids','secret_intentions','private_notes'):item.pop(marker,None)
+    for loc in public['locations']:
+        for marker in ('director_only','visible_to_ids'):loc.pop(marker,None)
     return public
 
 
