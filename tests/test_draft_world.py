@@ -20,6 +20,20 @@ def fixture():
     return domain.sync(state)
 
 
+def supplement(messages):
+    gaps=json.loads(messages[-1]['content'])['gaps']
+    return {'characters':{cid:{'goals':['Решить конкретную задачу перед сменой'],
+                                'intentions':['Поговорить с коллегой о своей задаче']} for cid in gaps['motivation_ids']},
+            'secrets':{cid:{'text':f'{cid} молча хранит старое письмо, которое не решается показать коллегам.',
+                            'known_by_ids':[]} for cid in gaps['secret_ids']},
+            'relationships':{rid:'Несколько лет вместе работают, доверяют навыкам друг друга, но по-разному относятся к риску.'
+                             for rid in gaps['shallow_relationship_ids']},
+            'new_relationships':[{'source_id':'character_1','target_id':'character_2',
+                                  'context':'Много лет коллеги доверяют друг другу, хотя нередко спорят о личном.'}],
+            'threads':[{'description':'Коллеги долго не говорят о сложной проблеме на работе.',
+                        'state':'Пока никто не решился начать разговор.','character_ids':['character_1','character_2']}]}
+
+
 def test_roundtrip_and_projection():
     state=fixture()
     assert not domain.validate(state)['errors']
@@ -126,8 +140,11 @@ def test_generation_uses_jobs_preserves_variants_and_no_json_in_public_job(api):
     client,app=api;path,draft=make(client)
     expected=fixture();expected['campaign']['title']='Маяк'
     def stream(**kwargs):
-        assert 'Ты Сценарист и Генератор мира' in kwargs['messages'][0]['content']
-        yield json.dumps(expected,ensure_ascii=False)
+        if 'Ты дополняешь' in kwargs['messages'][0]['content']:
+            yield json.dumps(supplement(kwargs['messages']),ensure_ascii=False)
+        else:
+            assert 'Ты Сценарист и Генератор мира' in kwargs['messages'][0]['content']
+            yield json.dumps(expected,ensure_ascii=False)
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         response=client.post(path+'/generate',json={'revision':draft['revision'],'task':'world','text':'Сложный мир','config':REMOTE,'api_key':'test'})
         assert response.status_code==200,response.text
@@ -136,11 +153,11 @@ def test_generation_uses_jobs_preserves_variants_and_no_json_in_public_job(api):
     updated=client.get(path+'?author=true').json()
     assert updated['state']['campaign']['title']=='Маяк'
     assert updated['outline']==''
-    assert any('сюжетных линий' in note for note in updated['validation']['warnings'])
+    assert not updated['validation']['errors']
     assert len(updated['history'])==2
     with app.state.repository.connect() as db:
         stages=[row[0] for row in db.execute('SELECT stage FROM llm_requests ORDER BY created_at,id')]
-    assert stages==['draft_world']
+    assert sorted(stages)==['draft_world','draft_world_completion']
 
 
 def test_scenario_route_stays_separate_from_quick_generation(api):
@@ -153,6 +170,8 @@ def test_scenario_route_stays_separate_from_quick_generation(api):
         calls.append(kwargs['messages'])
         if 'Ты — сценарист' in kwargs['messages'][0]['content']:
             yield '# Сценарий\n\nГерой встречает старого друга у маяка.'
+        elif 'Ты дополняешь' in kwargs['messages'][0]['content']:
+            yield json.dumps(supplement(kwargs['messages']),ensure_ascii=False)
         else:
             yield json.dumps(fixture(),ensure_ascii=False)
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
@@ -164,11 +183,11 @@ def test_scenario_route_stays_separate_from_quick_generation(api):
         generated=client.post(path+'/draft/generate',json={'revision':current['revision'],'task':'world','text':'','use_idea':True,'config':REMOTE,'api_key':'test'})
         assert generated.status_code==200,generated.text
         assert wait_job(client,generated.json()['id'])['status']=='saved'
-    assert len(calls)==2
+    assert len(calls)==3
     assert current['idea'] in calls[1][-1]['content']
     with app.state.repository.connect() as db:
         stages=[row[0] for row in db.execute('SELECT stage FROM llm_requests ORDER BY created_at,id')]
-    assert sorted(stages)==['draft_world','idea']
+    assert sorted(stages)==['draft_world','draft_world_completion','idea']
 
 
 def test_semantic_warning_and_rename_preserves_directed_relationships(api):
@@ -245,18 +264,18 @@ def test_idea_generation_expands_into_independent_world_entities(api):
     messages=[]
     def stream(**kwargs):
         messages.extend(kwargs['messages'])
-        yield json.dumps(world,ensure_ascii=False)
+        yield json.dumps(supplement(kwargs['messages']) if 'Ты дополняешь' in kwargs['messages'][0]['content'] else world,ensure_ascii=False)
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         j=client.post(f"/api/workspaces/{workspace['id']}/draft/generate",json={'revision':workspace['revision'],'task':'world','text':original,'config':REMOTE,'api_key':'fixture'}).json()
         assert wait_job(client,j['id'])['status']=='saved'
     assert 'Не ограничивайся перечислением фактов' in next(m['content'] for m in messages if 'Ты Сценарист и Генератор' in m['content'])
-    assert original in messages[-1]['content']
+    assert any(original in m['content'] for m in messages)
     draft=client.get(f"/api/workspaces/{workspace['id']}/draft?author=true").json()
     result=draft['state'];assert not draft['validation']['errors']
     assert result['world']['relationships'][a+':'+b]['context']!=result['world']['relationships'][b+':'+a]['context']
     assert 'заботится' in result['world']['relationships'][b+':'+a]['context']
-    assert {v['actor_id'] for v in result['world']['knowledge'].values()}=={c,d}
-    assert a not in {v['actor_id'] for v in result['world']['knowledge'].values()}
+    assert {v['actor_id'] for v in result['world']['knowledge'].values() if v['fact_id']=='meeting'}=={c,d}
+    assert a not in {v['actor_id'] for v in result['world']['knowledge'].values() if v['fact_id']=='meeting'}
     assert result['world_clock']['minute']==5160
     assert 'Прямая' in result['characters'][1]['fields']['Суть']
     assert result['campaign']['public_description'] != result['campaign']['description']
@@ -298,6 +317,11 @@ def test_quick_generation_creative_completion_is_playable_and_one_request(api):
     world['facts']={'birthday':{'id':'birthday','text':'Сегодня день рождения Ильи','secret':False,'character_ids':[a],'evidence':[]},
                     'cheat':{'id':'cheat','text':'Тимур изменял Соне','secret':True,'character_ids':[c,d],'evidence':[]}}
     world['knowledge']={'d:cheat':{'actor_id':d,'fact_id':'cheat','status':'known','source_event_id':None}}
+    for cid in ids:
+        fid='private_'+cid
+        world['facts'][fid]={'id':fid,'text':f'{names[ids.index(cid)]} тайно хранит письмо из прошлого.',
+                             'secret':True,'character_ids':[cid],'evidence':[]}
+        world['knowledge'][cid+':'+fid]={'actor_id':cid,'fact_id':fid,'status':'known','source_event_id':None}
     world['threads']={
         'work':{'id':'work','description':'Талант Тимура и его опоздания осложняют работу диагностической команды.',
                 'state':'Илья пока продолжает доверять его работе.','public_state':'Илья пока продолжает доверять его работе.',
@@ -344,6 +368,65 @@ def test_generation_review_is_advisory_and_import_is_unchanged(api):
     assert imported.status_code==200,imported.text
     assert imported.json()['state']==domain.player_view(sparse)
     assert not imported.json()['validation']['warnings']
+
+
+def test_sparse_generation_repairs_scene_motivations_relationships_and_private_secrets(api):
+    from unittest.mock import patch
+    client,app=api
+    w=client.post('/api/workspaces',json={'name':'Оживший мир'}).json()
+    state=fixture();state['campaign']['title']='Оживший мир'
+    state['world_clock']={'minute':5160,'last_event_time':'День 4 (Чт) 14:00'}
+    scene=state['world']['scenes'][state['camera']['scene_id']]
+    scene.update(start_minute=5160,end_minute=0,status='active')
+    for cid,c in state['world']['characters'].items():
+        if cid!=state['controlled_actor_id']:c.update(goals=[],intentions=[])
+    state['world']['relationships']={'brief':{'source_id':state['characters'][0]['id'],
+                                             'target_id':state['characters'][1]['id'], 'context':'Знакомы', 'dimensions':{}}}
+    state['world']['threads']={}
+    responses=[]
+    def stream(**kwargs):
+        response='completion' if 'Ты дополняешь' in kwargs['messages'][0]['content'] else 'world'
+        responses.append(response)
+        yield json.dumps(supplement(kwargs['messages']) if response=='completion' else state,ensure_ascii=False)
+    with patch('backend.services.preparation.chat_stream',side_effect=stream):
+        job=client.post(f"/api/workspaces/{w['id']}/draft/generate",json={
+            'revision':w['revision'],'task':'world','text':'Город, коллеги, четверг 14:00',
+            'config':REMOTE,'api_key':'fixture'})
+        assert wait_job(client,job.json()['id'])['status']=='saved'
+    assert responses==['world','completion']
+    draft=client.get(f"/api/workspaces/{w['id']}/draft?author=true").json()
+    saved=draft['state'];world=saved['world']
+    assert not draft['validation']['errors'] and not draft['validation']['warnings']
+    assert scene['end_minute']==0 and world['scenes'][saved['camera']['scene_id']]['start_minute']==5160
+    assert world['scenes'][saved['camera']['scene_id']]['end_minute']==5160
+    assert len(world['relationships']['brief']['context'])>=25
+    assert all(world['characters'][c['id']]['goals'] for c in saved['characters'] if c['id']!=saved['controlled_actor_id'])
+    assert domain.secret_holders(saved)=={c['id'] for c in saved['characters']}
+    assert 'initial_secret_'+state['characters'][1]['id'] not in client.get(f"/api/workspaces/{w['id']}/draft").json()['state']['world']['facts']
+    with app.state.repository.connect() as db:
+        assert sorted(r[0] for r in db.execute('SELECT stage FROM llm_requests'))==['draft_world','draft_world_completion']
+
+
+def test_shared_secret_does_not_count_as_every_characters_personal_secret():
+    state=fixture();b,c=[card['id'] for card in state['characters'][1:3]]
+    state['world']['knowledge'][c+':meeting']['status']='known'
+    assert b not in domain.secret_holders(state) and c not in domain.secret_holders(state)
+    state['world']['facts']['meeting']['owner_id']=b
+    assert domain.secret_holders(state)=={b}
+
+
+def test_incomplete_completion_never_overwrites_previous_draft(api):
+    from unittest.mock import patch
+    client,_=api;path,previous=make(client)
+    def stream(**kwargs):
+        yield json.dumps({} if 'Ты дополняешь' in kwargs['messages'][0]['content'] else fixture(),ensure_ascii=False)
+    with patch('backend.services.preparation.chat_stream',side_effect=stream):
+        job=client.post(path+'/generate',json={'revision':previous['revision'],'task':'world',
+                                                'text':'Пересоздай мир','config':REMOTE,'api_key':'fixture'})
+        result=wait_job(client,job.json()['id'])
+        assert result['status']=='error'
+    after=client.get(path+'?author=true').json()
+    assert after['version_id']==previous['version_id'] and after['state']==previous['state']
 
 
 def test_json_continuation_keeps_json_format():
