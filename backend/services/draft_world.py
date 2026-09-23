@@ -185,6 +185,38 @@ def validate(state):
     return {'errors':errors,'warnings':warnings}
 
 
+def review_initial(state):
+    """Advisory completeness/coherence check for generated drafts, never imported worlds."""
+    warnings=[];world=state['world'];cards=state['characters'];ids={c['id'] for c in cards}
+    scene=world['scenes'].get(state.get('camera',{}).get('scene_id'),{})
+    actor=state.get('controlled_actor_id')
+    if len(cards)>1 and not world['relationships']:
+        warnings.append('Между значимыми персонажами не описано ни одного отношения. Проверь, достаточно ли связей для начала игры.')
+    if len(cards)>2 and not world['threads']:
+        warnings.append('Не создано открытых сюжетных линий. Проверь, есть ли у мира естественный потенциал для развития.')
+    connected=set(scene.get('participants',[]))
+    connected.update(cid for r in world['relationships'].values() for cid in (r.get('source_id'),r.get('target_id')))
+    connected.update(cid for t in world['threads'].values() for cid in t.get('character_ids',[]))
+    for card in cards:
+        cid=card['id'];fields=card['fields'];character=world['characters'].get(cid,{})
+        if cid!=actor and cid not in connected:continue
+        if len(fields.get('Суть','').strip())<35 and len(fields.get('Биография','').strip())<35:
+            warnings.append(f"{card['name']}: мало информации о личности важного персонажа.")
+        if cid!=actor and not (character.get('goals') or character.get('intentions')):
+            warnings.append(f"{card['name']}: не задана цель или намерение для самостоятельных действий.")
+    for r in world['relationships'].values():
+        if r.get('source_id') in ids and r.get('target_id') in ids and len(r.get('context','').strip())<25:
+            warnings.append('Связь между персонажами описана слишком кратко: добавь мотив и динамику.')
+            break
+    if scene and actor in scene.get('participants',[]):
+        point=world['characters'].get(actor,{})
+        if point.get('location') and point['location']!=scene.get('location'):
+            warnings.append('Стартовое местоположение управляемого героя отличается от места стартовой сцены.')
+        if not (point.get('situation') or scene.get('text')):
+            warnings.append('У героя нет описания занятия и непосредственной стартовой ситуации.')
+    return warnings
+
+
 def entity(state,kind,eid):
     if kind=='campaign':return state['campaign']
     if kind=='start':return {'protagonist_id':state.get('protagonist_id'),'controlled_actor_id':state.get('controlled_actor_id'),

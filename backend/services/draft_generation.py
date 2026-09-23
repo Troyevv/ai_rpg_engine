@@ -9,9 +9,12 @@ from backend.services.usage import tracked_stream
 def messages_for(repo,job,config):
     task=config['_draft_task'];wid=job['workspace_id']
     if task=='world':
-        instructions='Исходная идея пользователя (высший приоритет):\n'+config['_draft_input']
+        instructions=('Исходная идея пользователя (высший приоритет):\n'+config['_draft_input']) if config['_draft_input'].strip() else ''
         if config.get('_use_idea'):
-            instructions+='\nУже подготовленный сценарий:\n'+repo.workspace(wid)['idea']
+            scenario=repo.workspace(wid)['idea'].strip()
+            if not scenario:raise ValueError('Сначала создай сценарий в режиме Сценариста.')
+            instructions+='\nСценарная концепция для творческого завершения в полноценный мир:\n'+scenario
+        instructions+='\nРазработай пригодный для немедленной игры мир. Недостающие детали концепции дополни обоснованно; не считай её исчерпывающей спецификацией.'
         return [{'role':'system','content':config['_prompts']['draft_world_prompt.md']['content']},
                 {'role':'user','content':instructions}]
     draft=repo.draft(wid,author=True);state=draft['state']

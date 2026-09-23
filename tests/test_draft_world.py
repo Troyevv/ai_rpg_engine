@@ -136,6 +136,7 @@ def test_generation_uses_jobs_preserves_variants_and_no_json_in_public_job(api):
     updated=client.get(path+'?author=true').json()
     assert updated['state']['campaign']['title']=='Маяк'
     assert updated['outline']==''
+    assert any('сюжетных линий' in note for note in updated['validation']['warnings'])
     assert len(updated['history'])==2
     with app.state.repository.connect() as db:
         stages=[row[0] for row in db.execute('SELECT stage FROM llm_requests ORDER BY created_at,id')]
@@ -260,6 +261,89 @@ def test_idea_generation_expands_into_independent_world_entities(api):
     assert 'Прямая' in result['characters'][1]['fields']['Суть']
     assert result['campaign']['public_description'] != result['campaign']['description']
     assert 'Тайная встреча' not in json.dumps(client.get(f"/api/workspaces/{workspace['id']}/draft").json()['state'],ensure_ascii=False)
+
+
+def test_quick_generation_creative_completion_is_playable_and_one_request(api):
+    from unittest.mock import patch
+    client,app=api
+    w=client.post('/api/workspaces',json={'name':'Клиника'}).json()
+    idea=('Илья Волков, 27, диагност и руководитель команды. Люда Воронина, 30, главврач. '
+          'Тимур Савельев, 24, талантливый, но ленивый терапевт. Соня Орлова, 25, бывшая Тимура. '
+          'Катя Соболева, 24, кардиолог, Илья часто с ней обедает. '
+          'Четверг, 14:00: у Ильи день рождения, он в морге проводит вскрытие.')
+    state=fixture();state['characters']=state['characters'][:5]
+    ids=[c['id'] for c in state['characters']];a,b,c,d,e=ids
+    names=['Илья Волков','Люда Воронина','Тимур Савельев','Соня Орлова','Катя Соболева']
+    for card,name in zip(state['characters'],names):
+        card.update(name=name,fields={'Возраст':{'Илья Волков':'27 лет','Люда Воронина':'30 лет','Тимур Савельев':'24 года','Соня Орлова':'25 лет','Катя Соболева':'24 года'}[name],
+            'Роль':{'Илья Волков':'Врач-диагност, руководитель команды','Люда Воронина':'Главврач клиники',
+                    'Тимур Савельев':'Терапевт','Соня Орлова':'Менеджер','Катя Соболева':'Кардиолог'}[name],
+            'Внешность':'Привычный рабочий образ, движения и мимика различимы даже после длинного дежурства.',
+            'Суть':f'{name} ведёт себя узнаваемо: сочетает компетентность с личными привычками и противоречиями, которые влияют на повседневное общение.',
+            'Биография':f'{name} давно работает рядом с коллегами; рабочий опыт и недавние разговоры объясняют его нынешнее поведение.'})
+    world=state['world'];world['characters']={i:world['characters'][i] for i in ids}
+    for i,item in world['characters'].items():
+        item.update(goals=['Разобраться с текущей рабочей задачей'] if i!=a else ['Завершить сегодняшнее дежурство'],
+                    intentions=['Поговорить с нужным коллегой после смены'] if i!=a else [],minute=5160,
+                    situation='Занят делами клиники',scene_id=None)
+    world['characters'][a].update(location='Морг клиники',situation='Проводит вскрытие',scene_id=state['camera']['scene_id'])
+    world['relationships']={
+        'ab':{'source_id':a,'target_id':b,'context':'Илья доверяет Люде как начальнице, но спорит о нагрузке на команду.','dimensions':{'respect':65}},
+        'ba':{'source_id':b,'target_id':a,'context':'Люда ценит Илью как диагноста, хотя считает его слишком упрямым.','dimensions':{'trust':55}},
+        'ac':{'source_id':a,'target_id':c,'context':'Илья уважает талант Тимура, но раздражён его опозданиями.','dimensions':{'respect':50,'irritation':45}},
+        'ca':{'source_id':c,'target_id':a,'context':'Тимур уважает Илью, хотя устал от постоянного контроля.','dimensions':{'respect':40}},
+        'ae':{'source_id':a,'target_id':e,'context':'Илья с удовольствием обедает с Катей и доверяет её работе.','dimensions':{'trust':60}},
+        'ea':{'source_id':e,'target_id':a,'context':'Катя ценит прямоту Ильи и часто поддерживает его в сложную смену.','dimensions':{'respect':50}},
+        'dc':{'source_id':d,'target_id':c,'context':'Соня избегает Тимура после их прежнего разрыва.','dimensions':{'trust':-40}}}
+    world['facts']={'birthday':{'id':'birthday','text':'Сегодня день рождения Ильи','secret':False,'character_ids':[a],'evidence':[]},
+                    'cheat':{'id':'cheat','text':'Тимур изменял Соне','secret':True,'character_ids':[c,d],'evidence':[]}}
+    world['knowledge']={'d:cheat':{'actor_id':d,'fact_id':'cheat','status':'known','source_event_id':None}}
+    world['threads']={
+        'work':{'id':'work','description':'Талант Тимура и его опоздания осложняют работу диагностической команды.',
+                'state':'Илья пока продолжает доверять его работе.','public_state':'Илья пока продолжает доверять его работе.',
+                'status':'active','character_ids':[a,c],'visible_to_ids':[a],'relevance':.7,'last_event_id':None},
+        'past':{'id':'past','description':'Разрыв Сони и Тимура пока не обсуждался с остальными.',
+                'state':'Соня избегает Тимура.','status':'dormant','character_ids':[c,d],'relevance':.4,'last_event_id':None}}
+    scene=world['scenes'][state['camera']['scene_id']]
+    scene.update(location='Морг клиники',participants=[a],text='Илья проводит вскрытие. Сегодня у него день рождения.',start_minute=5160,end_minute=5160)
+    state['locations']=[{'id':'morgue','name':'Морг клиники','text':'Место сегодняшнего дежурства.'}]
+    state['world_clock']={'minute':5160,'last_event_time':'День 4 (Чт) 14:00'}
+    state['campaign'].update(title='Клиника',setting='Городская клиника',public_description='История о коллегах и дежурстве.')
+    state=domain.prepare(state)
+    assert not domain.validate(state)['errors']
+    assert not domain.review_initial(state)
+    calls=[]
+    def stream(**kwargs):
+        calls.append(kwargs['messages'])
+        yield json.dumps(state,ensure_ascii=False)
+    with patch('backend.services.preparation.chat_stream',side_effect=stream):
+        job=client.post(f"/api/workspaces/{w['id']}/draft/generate",json={'revision':w['revision'],'task':'world','text':idea,'config':REMOTE,'api_key':'fixture'})
+        assert job.status_code==200,job.text
+        assert wait_job(client,job.json()['id'])['status']=='saved'
+    assert len(calls)==1 and idea in calls[0][-1]['content']
+    assert 'ПЕРВИЧНОЕ СОЗДАНИЕ' in calls[0][0]['content']
+    draft=client.get(f"/api/workspaces/{w['id']}/draft?author=true").json()
+    assert not draft['validation']['errors'] and not draft['validation']['warnings']
+    assert len(draft['state']['characters'])==5 and len(draft['state']['world']['relationships'])==7
+    assert draft['state']['world']['threads']['work']['visible_to_ids']==[a]
+    assert 'cheat' not in client.get(f"/api/workspaces/{w['id']}/draft").json()['state']['world']['facts']
+    confirmed=client.post(f"/api/workspaces/{w['id']}/draft/confirm",json={'revision':draft['revision'],'version_id':draft['version_id']})
+    assert confirmed.status_code==200,confirmed.text
+    assert client.get(f"/api/saves/{confirmed.json()['save']}").json()['state']['world_clock']['minute']==5160
+    with app.state.repository.connect() as db:
+        assert [row[0] for row in db.execute('SELECT stage FROM llm_requests')]==['draft_world']
+
+
+def test_generation_review_is_advisory_and_import_is_unchanged(api):
+    client,_=api
+    sparse=fixture();sparse['world']['relationships']={};sparse['world']['threads']={};sparse['campaign']['title']='Готовая выжимка';sparse=domain.prepare(sparse)
+    assert any('отношения' in note for note in domain.review_initial(sparse))
+    assert any('сюжетных линий' in note for note in domain.review_initial(sparse))
+    w=client.post('/api/workspaces',json={'name':'Готовая выжимка'}).json()
+    imported=client.post(f"/api/workspaces/{w['id']}/draft/import",json={'revision':w['revision'],'text':domain.export_markdown(sparse)})
+    assert imported.status_code==200,imported.text
+    assert imported.json()['state']==domain.player_view(sparse)
+    assert not imported.json()['validation']['warnings']
 
 
 def test_json_continuation_keeps_json_format():
