@@ -181,7 +181,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
       {(!state || editingIdea) && <section className="workshop-inspiration">
         <div className="workshop-inspiration-head"><span className="workshop-step">01 · ЗАМЫСЕЛ</span><h2>{mode === 'import' ? 'Загрузи готовую выжимку' : 'С чего начинается история?'}</h2></div>
         <p>{mode === 'import' ? 'Подойдёт старый .md или .txt. Можно вставить текст ниже.' : 'Пиши свободно, как Сценаристу: персонажи, атмосфера, отношения, важные события. Пробелы генератор заполнит сам.'}</p>
-        {mode === 'quick' && !useIdea && <p className="workshop-footnote">Сначала сценарный план, затем готовый мир. При выборе API это два запроса.</p>}
+        {mode === 'quick' && !useIdea && <p className="workshop-footnote">Генератор сразу превратит замысел в готовый мир и выжимку. Сценарист доступен отдельно.</p>}
         {mode === 'import' && <Input type="file" accept=".md,.txt" aria-label="Файл мира" onChange={e => { const f = e.target.files?.[0]; if (f) void f.text().then(setText); }}/ >}
         {!id && <Input aria-label="Название черновика" value={name} onChange={e => setName(e.target.value)} placeholder="Название истории (можно изменить позже)" />}
         <Textarea className="workshop-idea-input" value={text} onChange={e => setText(e.target.value)} aria-label="Описание мира или текст импорта" placeholder={mode === 'import' ? 'Вставь здесь текст выжимки…' : 'Например: современная клиника. Я играю за врача. Придумай важных коллег и напряжённые, но живые отношения. Сейчас четверг, 14:00…'} />
@@ -208,7 +208,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
         </div>
       </section>}
       {active(job) && <section className="workshop-generating" role="status">
-        <span className="workshop-pulse"/><div><strong>{reconnecting ? 'Восстанавливаем соединение…' : job?.phase === 'scenario' ? 'Сценарист развивает твою идею…' : job?.phase === 'editing' ? 'Обновляем выбранное поле…' : 'Собираем мир из сценарного плана…'}</strong><p>Персонажи, отношения, места и стартовая сцена. Можно свернуть окно — работа продолжится.</p></div>
+        <span className="workshop-pulse"/><div><strong>{reconnecting ? 'Восстанавливаем соединение…' : job?.phase === 'editing' ? 'Обновляем выбранное поле…' : 'Развиваем идею и собираем мир…'}</strong><p>Персонажи, отношения, места и стартовая сцена. Можно свернуть окно — работа продолжится.</p></div>
         <Button variant="ghost" onClick={() => void run(async () => {await api(`/jobs/${job!.id}/stop`, {}); refresh();})}>Остановить</Button>
       </section>}
       {job?.error && <p className="workshop-error" role="alert">{job.error}</p>}

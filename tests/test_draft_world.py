@@ -88,8 +88,8 @@ def test_generation_uses_jobs_preserves_variants_and_no_json_in_public_job(api):
     client,app=api;path,draft=make(client)
     expected=fixture();expected['campaign']['title']='Маяк'
     def stream(**kwargs):
-        yield ('# Сценарный план\nПерсонажи и жизнь у маяка развиваются сами.'
-               if 'Ты — сценарист' in kwargs['messages'][0]['content'] else json.dumps(expected,ensure_ascii=False))
+        assert 'Ты Сценарист и Генератор мира' in kwargs['messages'][0]['content']
+        yield json.dumps(expected,ensure_ascii=False)
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         response=client.post(path+'/generate',json={'revision':draft['revision'],'task':'world','text':'Сложный мир','config':REMOTE,'api_key':'test'})
         assert response.status_code==200,response.text
@@ -97,11 +97,39 @@ def test_generation_uses_jobs_preserves_variants_and_no_json_in_public_job(api):
         assert not job['narrative']
     updated=client.get(path+'?author=true').json()
     assert updated['state']['campaign']['title']=='Маяк'
-    assert 'Сценарный план' in updated['outline']
+    assert updated['outline']==''
     assert len(updated['history'])==2
     with app.state.repository.connect() as db:
         stages=[row[0] for row in db.execute('SELECT stage FROM llm_requests ORDER BY created_at,id')]
-    assert 'draft_scenario' in stages and 'draft_world' in stages
+    assert stages==['draft_world']
+
+
+def test_scenario_route_stays_separate_from_quick_generation(api):
+    from unittest.mock import patch
+    client,app=api
+    workspace=client.post('/api/workspaces',json={'name':'История со Сценаристом'}).json()
+    path=f"/api/workspaces/{workspace['id']}"
+    calls=[]
+    def stream(**kwargs):
+        calls.append(kwargs['messages'])
+        if 'Ты — сценарист' in kwargs['messages'][0]['content']:
+            yield '# Сценарий\n\nГерой встречает старого друга у маяка.'
+        else:
+            yield json.dumps(fixture(),ensure_ascii=False)
+    with patch('backend.services.preparation.chat_stream',side_effect=stream):
+        scenario=client.post(path+'/generate',json={'revision':workspace['revision'],'kind':'idea','text':'История у маяка','config':REMOTE,'api_key':'test'})
+        assert scenario.status_code==200,scenario.text
+        assert wait_job(client,scenario.json()['id'])['status']=='saved'
+        current=client.get(path).json()
+        assert current['idea'].startswith('# Сценарий')
+        generated=client.post(path+'/draft/generate',json={'revision':current['revision'],'task':'world','text':'','use_idea':True,'config':REMOTE,'api_key':'test'})
+        assert generated.status_code==200,generated.text
+        assert wait_job(client,generated.json()['id'])['status']=='saved'
+    assert len(calls)==2
+    assert current['idea'] in calls[1][-1]['content']
+    with app.state.repository.connect() as db:
+        stages=[row[0] for row in db.execute('SELECT stage FROM llm_requests ORDER BY created_at,id')]
+    assert sorted(stages)==['draft_world','idea']
 
 
 def test_semantic_warning_and_rename_preserves_directed_relationships(api):
@@ -178,8 +206,7 @@ def test_idea_generation_expands_into_independent_world_entities(api):
     messages=[]
     def stream(**kwargs):
         messages.extend(kwargs['messages'])
-        yield ('# Клиника\nЛюда разряжает напряжение короткими шутками, даже когда отвечает за сложное отделение.'
-               if 'Ты — сценарист' in kwargs['messages'][0]['content'] else json.dumps(world,ensure_ascii=False))
+        yield json.dumps(world,ensure_ascii=False)
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         j=client.post(f"/api/workspaces/{workspace['id']}/draft/generate",json={'revision':workspace['revision'],'task':'world','text':original,'config':REMOTE,'api_key':'fixture'}).json()
         assert wait_job(client,j['id'])['status']=='saved'
