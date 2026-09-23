@@ -1434,7 +1434,7 @@ details > label:first-of-type {
 }
 
 /* Story-first preparation. Technical controls live behind named sections. */
-.world-workshop { max-width: 880px; padding: clamp(20px,4vw,52px) clamp(16px,4vw,50px) 100px; }
+.world-workshop { width:100%; flex:1; min-width:0; max-width: 880px; overflow-x:hidden; overflow-y:auto; padding: clamp(20px,4vw,52px) clamp(16px,4vw,50px) 100px; }
 .workshop-heading { max-width: 680px; margin-bottom: 22px; }
 .workshop-heading h1 { font-size:clamp(30px,4vw,48px); margin-bottom:12px; }
 .workshop-heading > p:last-child { color:#aeb8b4; line-height:1.6; font-size:15px; }
@@ -1497,7 +1497,9 @@ details > label:first-of-type {
 .workshop-finish { border-top:1px solid var(--line); padding-top:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; }
 .workshop-finish p { color:var(--muted); max-width:420px; margin:0; font-size:13px; }
 @media(max-width:767px){
+ html,body,#root { max-width:100%; overflow-x:clip; }
  .world-workshop { padding:18px 16px 100px; }
+ .world-workshop .workshop-content,.world-workshop .draft-field,.world-workshop .draft-entity { min-width:0; max-width:100%; }
  .workshop-heading { margin-bottom:14px; }
  .workshop-heading h1 { font-size:30px; }
  .workshop-inspiration { padding:18px 16px; margin:0 -4px 22px; border-radius:17px; }

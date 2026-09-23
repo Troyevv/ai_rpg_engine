@@ -22,8 +22,13 @@ for(const width of [360,390,412,430,1440]){
   expect(draft.state.characters[0].fields.Внешность).toContain('зелёный шарф');
   const exported=await request.get(`/api/workspaces/${workspace.id}/draft/export?version_id=${draft.version_id}&format=txt`);
   expect(exported.ok()).toBeTruthy();expect(await exported.text()).toContain('зелёный шарф');
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
-  await page.screenshot({path:`test-results/draft-${width}.png`,fullPage:true});
+  await page.evaluate(()=>{window.scrollTo(0,0);document.querySelector('.world-workshop')?.scrollTo(0,0)});
+  const geometry=await page.evaluate(()=>({left:scrollX,document:document.documentElement.scrollWidth,body:document.body.scrollWidth,viewport:innerWidth,workshop:document.querySelector('.world-workshop')?.scrollWidth,client:document.querySelector('.world-workshop')?.clientWidth}));
+  expect(geometry.left,JSON.stringify(geometry)).toBe(0);
+  expect(geometry.body,JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.viewport);
+  expect(geometry.document,JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.viewport);
+  expect(geometry.workshop,JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.client!+1);
+  await page.screenshot({path:`test-results/draft-${width}.png`,fullPage:false});
   await page.reload();await nav(page,'Создать');
   await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
   await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
