@@ -202,13 +202,13 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
       <details className="workshop-continue"><summary>Мои черновики {draft ? `· ${draft.name}` : ''}</summary>
         <div className="workshop-draft-list">
           <button className={!id ? 'selected' : ''} onClick={() => { setId(''); setAuthor(false); setUseIdea(false); setText(''); }}>+ Новая история</button>
-          {list.map(w => <div className="workshop-draft-row" key={w.id}>
+          {list.map(w => <div className="workshop-draft-row" data-workspace-id={w.id} key={w.id}>
             <button className={id === w.id ? 'selected' : ''} onClick={() => { setId(w.id); setAuthor(false); setUseIdea(false); setText(''); }}>{w.name}</button>
             <Button variant="ghost" size="sm" aria-label={`Удалить черновик «${w.name}»`} disabled={locked} onClick={() => setDeleteDraft(w)}><Trash2 size={16}/></Button>
           </div>)}
         </div>
         <details className="workshop-trash" onToggle={e => { if (e.currentTarget.open) void api<WorkspacePick[]>('/workspaces?deleted=true').then(setRemoved).catch(err => toast.error(err.message)); }}><summary>Удалённые черновики</summary>
-          {removed.length === 0 ? <p>Корзина пуста.</p> : removed.map(w => <div className="workshop-draft-row" key={w.id}><span>{w.name}</span><Button variant="ghost" size="sm" disabled={locked} onClick={() => void run(async () => { await api(`/workspaces/${w.id}/restore`,{revision:w.revision}); setList(await api<WorkspacePick[]>('/workspaces')); setRemoved(await api<WorkspacePick[]>('/workspaces?deleted=true')); setId(w.id); toast.success('Черновик восстановлен'); })}>Восстановить</Button></div>)}
+          {removed.length === 0 ? <p>Корзина пуста.</p> : removed.map(w => <div className="workshop-draft-row" data-workspace-id={w.id} key={w.id}><span>{w.name}</span><Button variant="ghost" size="sm" disabled={locked} onClick={() => void run(async () => { await api(`/workspaces/${w.id}/restore`,{revision:w.revision}); setList(await api<WorkspacePick[]>('/workspaces')); setRemoved(await api<WorkspacePick[]>('/workspaces?deleted=true')); setId(w.id); toast.success('Черновик восстановлен'); })}>Восстановить</Button></div>)}
         </details>
       </details>
       {(!state || editingIdea) && <section className="workshop-inspiration">
