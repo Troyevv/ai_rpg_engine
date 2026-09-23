@@ -33,3 +33,17 @@ for(const width of [360,390,412,430,1440]){
   await expect(page.locator('.choices button')).toHaveCount(6);
  });
 }
+
+test('new visitor can begin with an idea without making a workspace', async ({page}) => {
+  await page.goto('/');
+  await nav(page,'Создать');
+  await expect(page.getByRole('heading',{name:'Придумай свою историю'})).toBeVisible();
+  await page.getByLabel('Название черновика').fill('Вечер в клинике');
+  await page.getByLabel('Описание мира или текст импорта').fill('Вечером врач заканчивает дежурство. Придумай коллег, привычки, отношения и начало истории.');
+  await page.getByRole('button',{name:'Развить идею и создать мир'}).click();
+  await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
+  await expect(page.locator('.workshop-content')).toBeVisible();
+  await expect(page.locator('main')).not.toContainText('Тайная встреча у маяка');
+  await page.reload();await nav(page,'Создать');
+  await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
+});

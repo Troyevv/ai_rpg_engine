@@ -99,6 +99,9 @@ def test_generation_uses_jobs_preserves_variants_and_no_json_in_public_job(api):
     assert updated['state']['campaign']['title']=='Маяк'
     assert 'Сценарный план' in updated['outline']
     assert len(updated['history'])==2
+    with app.state.repository.connect() as db:
+        stages=[row[0] for row in db.execute('SELECT stage FROM llm_requests ORDER BY created_at,id')]
+    assert 'draft_scenario' in stages and 'draft_world' in stages
 
 
 def test_semantic_warning_and_rename_preserves_directed_relationships(api):

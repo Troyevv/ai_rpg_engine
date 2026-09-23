@@ -57,7 +57,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     if config['_draft_task']=='world' and not config.get('_use_idea'):
         # Give a short free idea the same creative expansion as the optional
         # Scenario writer. Its output remains a private, reviewable intermediate.
-        stage='draft_scenario';prompts=config['_prompts']
+        stage='draft_scenario';prompts=config['_prompts'];repo.draft_phase(jid,'scenario')
         plan_messages=[{'role':'system','content':prompts['idea_prompt.md']['content']},
                        {'role':'user','content':config['_draft_input']}]
         for chunk in stream_document(plan_messages,context,min(config['max_tokens'],6000),generate,handle.cancel):
@@ -67,6 +67,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         if not outline.strip():raise ValueError('Сценарист не вернул план. Текущая версия мира сохранена.')
     if handle.cancel.is_set():return
     stage='draft_world'
+    repo.draft_phase(jid,'world' if config['_draft_task']=='world' else 'editing')
     messages=messages_for(repo,job,config,outline)
     last=0.0
     for chunk in stream_document(messages,context,config['max_tokens'],generate,handle.cancel,format_hint='json'):

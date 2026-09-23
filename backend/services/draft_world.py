@@ -285,7 +285,7 @@ def player_view(state):
     public['scene']='';public['scene_meta']={**meta,'present_ids':[actor]}
     for c in public['characters']:
         c.pop('text',None)
-        c['fields']={k:v for k,v in c['fields'].items() if k in ('Внешность',) or c['id']==actor and k in ('Статус','Суть','Чего хочет','Намерения')}
+        c['fields']={k:v for k,v in c['fields'].items() if k in ('Внешность','Роль') or c['id']==actor and k in ('Статус','Суть','Чего хочет','Намерения')}
         if c['id']==actor:public['world']['characters'][actor]=deepcopy(world['characters'][actor])
     public['world']['facts']={key:deepcopy(f) for key,f in world['facts'].items() if key in known}
     public['world']['knowledge']={key:deepcopy(k) for key,k in world['knowledge'].items() if k['actor_id']==actor}

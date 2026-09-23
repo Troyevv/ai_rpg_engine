@@ -8,6 +8,10 @@ def dump(value):return json.dumps(value,ensure_ascii=False)
 
 
 class DraftStorage:
+    def draft_phase(self,jid,phase):
+        with self.connect() as db:
+            db.execute("UPDATE preparation_jobs SET phase=? WHERE id=? AND status='generating'",(phase,jid))
+
     def _draft_head(self,db,wid):
         return db.execute("SELECT v.* FROM document_heads h JOIN document_versions v ON v.id=h.version_id WHERE h.kind='world_draft' AND h.owner=?",(wid,)).fetchone()
 

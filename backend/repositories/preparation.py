@@ -27,6 +27,8 @@ class Repository(DraftStorage, Storage):
             db.execute('BEGIN IMMEDIATE')
             if 'deleted' not in {r['name'] for r in db.execute('PRAGMA table_info(preparation_workspaces)')}:
                 db.execute('ALTER TABLE preparation_workspaces ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0')
+            if 'phase' not in {r['name'] for r in db.execute('PRAGMA table_info(preparation_jobs)')}:
+                db.execute("ALTER TABLE preparation_jobs ADD COLUMN phase TEXT NOT NULL DEFAULT ''")
             for w in db.execute('SELECT * FROM preparation_workspaces').fetchall():
                 for kind in ('idea','summary'):
                     if not db.execute('SELECT 1 FROM document_heads WHERE kind=? AND owner=?',(kind,w['id'])).fetchone():
