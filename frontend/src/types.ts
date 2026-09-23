@@ -105,7 +105,7 @@ export interface Turn {
   kind: string;
 }
 export interface Job {
-  phase?: "scenario" | "world" | "completing" | "editing" | "";
+  phase?: "scenario" | "designing" | "world" | "completing" | "editing" | "";
   id: string;
   status: string;
   narrative: string;

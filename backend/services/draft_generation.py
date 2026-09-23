@@ -5,15 +5,39 @@ from backend.services import draft_world as domain
 from backend.services.continuation import stream_document
 from backend.services.usage import tracked_stream
 
+DESIGN_INSTRUCTION=('Ты разрабатываешь оригинальную игровую выжимку по ЗАМЫСЛУ автора. Это внутренний творческий этап '
+    'генератора, не сценарий и не запланированные будущие ходы. Развивай идею смело: продумай уклад мира, '
+    'прошлое и повседневность каждого значимого героя, внешность, наблюдаемые привычки, противоречия характера, '
+    'его конкретные текущие желания, отношения с важными людьми в обе стороны, личный секрет и список тех, '
+    'кому он известен. Дай материал, который НЕ следует буквально из исходного текста. Придумай самостоятельные '
+    'линии и несколько других важных людей, только если они органичны миру. Для каждого персонажа — разные '
+    'причины поступать по-своему, не делай одинаковые шаблоны. Чётко опиши начало сцены, время и место. '
+    'Явные условия автора соблюдай точно. Не навязывай ГГ важные прежние решения, текущие реплики и действия; '
+    'оставь неизвестными лишь ЗАДАННЫЕ автором неразгаданные загадки, а не каждую недописанную деталь. '
+    'Не перечисляй поля БД или JSON. Напиши насыщенный связный рабочий замысел с разделами '
+    '«Мир», «Персонажи», «Отношения», «Тайны», «Открытые линии», «Начальная сцена». '
+    'Никаких «неизвестно» вместо подробностей, которые можно естественно придумать.')
 
-def messages_for(repo,job,config):
+
+def idea_text(repo,job,config):
+    instructions=('Исходная идея пользователя (высший приоритет):\n'+config['_draft_input']) if config['_draft_input'].strip() else ''
+    if config.get('_use_idea'):
+        scenario=repo.workspace(job['workspace_id'])['idea'].strip()
+        if not scenario:raise ValueError('Сначала создай сценарий в режиме Сценариста.')
+        instructions+='\nСценарная концепция для творческого завершения в полноценный мир:\n'+scenario
+    return instructions
+
+
+def design_messages(repo,job,config):
+    return [{'role':'system','content':DESIGN_INSTRUCTION}, {'role':'user','content':idea_text(repo,job,config)}]
+
+
+def messages_for(repo,job,config,design=''):
     task=config['_draft_task'];wid=job['workspace_id']
     if task=='world':
-        instructions=('Исходная идея пользователя (высший приоритет):\n'+config['_draft_input']) if config['_draft_input'].strip() else ''
-        if config.get('_use_idea'):
-            scenario=repo.workspace(wid)['idea'].strip()
-            if not scenario:raise ValueError('Сначала создай сценарий в режиме Сценариста.')
-            instructions+='\nСценарная концепция для творческого завершения в полноценный мир:\n'+scenario
+        instructions=idea_text(repo,job,config)
+        if design:
+            instructions+='\n\nВнутренняя творческая проработка (развивай и перенеси конкретику в поля World State, не копируй дословно ввод):\n'+design
         instructions+='\nРазработай пригодный для немедленной игры мир. Недостающие детали концепции дополни обоснованно; не считай её исчерпывающей спецификацией.'
         return [{'role':'system','content':config['_prompts']['draft_world_prompt.md']['content']},
                 {'role':'user','content':instructions}]
@@ -44,7 +68,7 @@ def decode_result(text,state,config):
     return domain.prepare(domain.patch(state,target['kind'],target['id'],target['field'],value['value']))
 
 
-def completion_messages(state,gaps):
+def completion_messages(state,gaps,source=''):
     """Small follow-up only when the generated aggregate omitted playable essentials."""
     world=state['world']
     cards={c['id']:{'name':c['name'],'fields':c['fields'], 'state':world['characters'].get(c['id'],{})} for c in state['characters']}
@@ -52,14 +76,20 @@ def completion_messages(state,gaps):
            'relationships':{k:{'source_id':v.get('source_id'),'target_id':v.get('target_id'),'context':v.get('context')} for k,v in world['relationships'].items()},
            'threads':world['threads'],'existing_secrets':[
                {'text':v['text'],'owner_id':v.get('owner_id'),'character_ids':v.get('character_ids',[])} for v in world['facts'].values() if v.get('secret')],
-           'scene':world['scenes'].get(state.get('camera',{}).get('scene_id'),{}),'gaps':gaps}
+           'scene':world['scenes'].get(state.get('camera',{}).get('scene_id'),{}),'gaps':gaps,
+           'original_idea':source}
     system=('Ты дополняешь уже созданный игровой мир. Верни ТОЛЬКО JSON-объект с нужными ключами: '
             '{"characters":{"id":{"goals":["..."],"intentions":["..."]}},'
+            '"card_fields":{"id":{"Внешность":"...","Суть":"...","Биография":"..."}},'
             '"secrets":{"id":{"text":"конкретная личная тайна", "about_ids":[], "known_by_ids":[]}},'
             '"relationships":{"существующий ID":"полная осмысленная динамика"},'
             '"new_relationships":[{"source_id":"...","target_id":"...","context":"..."}],'
             '"threads":[{"description":"открытая проблема","state":"текущее положение","character_ids":["..."]}]}. '
-            'Заполняй только пункты gaps; незапрошенные ключи можно опустить. Для каждого secret_ids придумай '
+            'Заполняй только пункты gaps; незапрошенные ключи можно опустить. Для card_fields '
+            'замени заглушку или дословный пересказ вводной конкретными СВОИМИ деталями. Внешность опиши '
+            'наблюдаемыми чертами, суть — манерой поведения и противоречием, биографию — осмысленной '
+            'предысторией, влияющей на нынешние связи; 2-4 предложения на каждое поле. '
+            'Для каждого secret_ids придумай '
             'РАЗНУЮ правдоподобную тайну данного персонажа, не повторяй уже существующую. Тайна известна '
             'самому владельцу; known_by_ids добавляй только при конкретном обосновании. Не выдавай её герою '
             'без события, не переписывай заданные пользователем факты и не навязывай герою новых важных решений. '
@@ -80,8 +110,17 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     def generate(messages,limit):
         return tracked_stream(repo,stream_fn,jid,stage,config,messages,model=config['model'],provider=config['provider'],api_key=api_key,
             temperature=config['temperature'],max_tokens=limit,require_complete=True,cancel_event=handle.cancel,on_stream=opened)
-    repo.draft_phase(jid,'world' if config['_draft_task']=='world' else 'editing')
-    messages=messages_for(repo,job,config)
+    design=''
+    if config['_draft_task']=='world':
+        stage='draft_world_design';repo.draft_phase(jid,'designing')
+        budget=min(config['max_tokens'],max(1800,min(6000,context//3)))
+        for chunk in stream_document(design_messages(repo,job,config),context,budget,generate,handle.cancel):
+            if handle.cancel.is_set():return
+            design+=chunk
+        if handle.cancel.is_set():return
+        if len(design.strip())<150:raise ValueError('Модель не разработала идею: ответ слишком короткий. Предыдущая версия сохранена.')
+    stage='draft_world';repo.draft_phase(jid,'world' if config['_draft_task']=='world' else 'editing')
+    messages=messages_for(repo,job,config,design)
     last=0.0
     for chunk in stream_document(messages,context,config['max_tokens'],generate,handle.cancel,format_hint='json'):
         if handle.cancel.is_set():return
@@ -91,20 +130,21 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     state=decode_result(text,original,config)
     if config['_draft_task']=='world':
         state=domain.repair_scene_interval(state)
-        gaps=domain.completion_gaps(state)
+        source=idea_text(repo,job,config)
+        gaps=domain.completion_gaps(state,source)
         if any(gaps.values()):
             stage='draft_world_completion';repo.draft_phase(jid,'completing')
             extra=''
-            for chunk in stream_document(completion_messages(state,gaps),context,config['max_tokens'],generate,handle.cancel,format_hint='json'):
+            for chunk in stream_document(completion_messages(state,gaps,source),context,config['max_tokens'],generate,handle.cancel,format_hint='json'):
                 if handle.cancel.is_set():return
                 extra+=chunk
             if handle.cancel.is_set():return
-            try:state=domain.apply_completion(state,json.loads(extra))
+            try:state=domain.apply_completion(state,json.loads(extra),source)
             except (json.JSONDecodeError,TypeError) as exc:raise ValueError('Модель не завершила доработку мира. Предыдущая версия сохранена.') from exc
         # A weak model may ignore some requested fields. Never present such a draft as complete.
-        remaining=domain.completion_gaps(state)
+        remaining=domain.completion_gaps(state,source)
         if any(remaining.values()):
-            raise ValueError('Модель не заполнила важные части мира (цели, отношения или личные тайны). Попробуй другую модель либо увеличь контекст. Предыдущая версия сохранена.')
+            raise ValueError('Модель не раскрыла важные части мира (персонажей, цели, отношения или тайны). Попробуй другую модель либо увеличь контекст. Предыдущая версия сохранена.')
     report=domain.validate(state)
     if config['_draft_task']=='world' and report['errors']:
         raise ValueError('Модель создала мир с ошибками: '+'; '.join(report['errors'])+'. Предыдущая версия сохранена.')

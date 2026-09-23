@@ -28,7 +28,7 @@ class DraftStorage:
             record=json.loads(head['content']) if head else None
             state=record['state'] if record else None
             report=domain.validate(state) if state else {'errors':[],'warnings':[]}
-            if state and record.get('generated'):report['warnings'].extend(domain.review_initial(state))
+            if state and record.get('generated'):report['warnings'].extend(domain.review_initial(state,record.get('source','')))
             history=[dict(r) for r in db.execute("SELECT id,reason,created_at FROM document_versions WHERE kind='world_draft' AND owner=? ORDER BY id DESC",(wid,))]
             latest=db.execute('SELECT * FROM preparation_jobs WHERE workspace_id=? ORDER BY rowid DESC LIMIT 1',(wid,)).fetchone()
             return {'id':wid,'name':w['name'],'revision':w['revision'],'version_id':head['id'] if head else None,

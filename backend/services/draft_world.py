@@ -186,7 +186,7 @@ def validate(state):
     return {'errors':errors,'warnings':warnings}
 
 
-def review_initial(state):
+def review_initial(state,source=''):
     """Advisory completeness/coherence check for generated drafts, never imported worlds."""
     warnings=[];world=state['world'];cards=state['characters'];ids={c['id'] for c in cards}
     scene=world['scenes'].get(state.get('camera',{}).get('scene_id'),{})
@@ -200,6 +200,8 @@ def review_initial(state):
     connected.update(cid for t in world['threads'].values() for cid in t.get('character_ids',[]))
     for card in cards:
         cid=card['id'];fields=card['fields'];character=world['characters'].get(cid,{})
+        weak=[field for field in DETAIL_MIN if weak_card_field(fields.get(field,''),field,source)]
+        if weak:warnings.append(f"{card['name']}: недостаточно раскрыты поля карточки ({', '.join(weak)}).")
         if len(fields.get('Суть','').strip())<35 and len(fields.get('Биография','').strip())<35:
             warnings.append(f"{card['name']}: мало информации о личности важного персонажа.")
         if cid!=actor and not (character.get('goals') or character.get('intentions')):
@@ -232,10 +234,26 @@ def secret_holders(state):
     return owners
 
 
-def completion_gaps(state):
+PLACEHOLDER=re.compile(r'^\s*(?:неизвестно|неизвестен|неизвестна|не указано|не задано|нет данных|\?|[-—–]|n/?a|unknown)(?:\s*[.!])?\s*$',re.I)
+DETAIL_MIN={'Возраст':2,'Роль':8,'Статус':12,'Внешность':55,'Суть':65,'Биография':105}
+
+
+def weak_card_field(value,field,source=''):
+    """Catch schema filler and verbatim idea copies; never fabricate missing details in Python."""
+    if not isinstance(value,str) or PLACEHOLDER.fullmatch(value) or len(value.strip())<DETAIL_MIN[field]:return True
+    if field in ('Внешность','Суть','Биография') and source:
+        source_words=set(re.findall(r'[\wё]{4,}',source.casefold()))
+        words=set(re.findall(r'[\wё]{4,}',value.casefold()))
+        if len(words-source_words)<4:return True
+    return False
+
+
+def completion_gaps(state,source=''):
     """Only initial generation is reviewed; imported worlds and edits remain unrestricted."""
     world=state['world'];cards=state['characters'];known=secret_holders(state)
     return {
+        'card_fields':{c['id']:[field for field in DETAIL_MIN if weak_card_field(c['fields'].get(field,''),field,source)]
+                       for c in cards if any(weak_card_field(c['fields'].get(field,''),field,source) for field in DETAIL_MIN)},
         'motivation_ids':[c['id'] for c in cards if c['id']!=state['controlled_actor_id']
                           and not (world['characters'].get(c['id'],{}).get('goals') or world['characters'].get(c['id'],{}).get('intentions'))],
         'secret_ids':[c['id'] for c in cards if c['id'] not in known],
@@ -257,12 +275,20 @@ def repair_scene_interval(state):
     return state
 
 
-def apply_completion(state, supplement):
+def apply_completion(state, supplement, source=''):
     """Apply only missing generation fields; never replace authored facts, IDs or backstory."""
     if not isinstance(supplement,dict):raise ValueError('Доработка мира должна быть JSON-объектом.')
-    state=deepcopy(state);world=state['world'];gaps=completion_gaps(state)
+    state=deepcopy(state);world=state['world'];gaps=completion_gaps(state,source)
     ids=set(world['characters']);actor_updates=supplement.get('characters',{})
     if not isinstance(actor_updates,dict):raise ValueError('Некорректная доработка персонажей.')
+    cards=supplement.get('card_fields',{})
+    if not isinstance(cards,dict):raise ValueError('Некорректная доработка карточек.')
+    for card in state['characters']:
+        updates=cards.get(card['id'],{})
+        if not isinstance(updates,dict):continue
+        for field in gaps['card_fields'].get(card['id'],[]):
+            value=updates.get(field)
+            if not weak_card_field(value,field,source):card['fields'][field]=value.strip()
     for cid in set(gaps['motivation_ids']) & actor_updates.keys():
         item=actor_updates[cid]
         if not isinstance(item,dict):continue
