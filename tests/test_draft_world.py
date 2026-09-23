@@ -157,7 +157,7 @@ def test_generation_uses_jobs_preserves_variants_and_no_json_in_public_job(api):
         elif 'Ты дополняешь' in kwargs['messages'][0]['content']:
             yield json.dumps(supplement(kwargs['messages']),ensure_ascii=False)
         else:
-            assert 'Ты Сценарист и Генератор мира' in kwargs['messages'][0]['content']
+            assert 'Ты создаёшь готовый игровой мир' in kwargs['messages'][0]['content']
             yield json.dumps(expected,ensure_ascii=False)
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         response=client.post(path+'/generate',json={'revision':draft['revision'],'task':'world','text':'Сложный мир','config':REMOTE,'api_key':'test'})
@@ -172,6 +172,32 @@ def test_generation_uses_jobs_preserves_variants_and_no_json_in_public_job(api):
     with app.state.repository.connect() as db:
         stages=[row[0] for row in db.execute('SELECT stage FROM llm_requests ORDER BY created_at,id')]
     assert sorted(stages)==['draft_world','draft_world_completion','draft_world_design']
+
+
+def test_deepseek_json_mode_and_malformed_retry_keep_previous_version(api):
+    from unittest.mock import patch
+    client,_=api;path,draft=make(client)
+    calls=[]
+    def stream(**kwargs):
+        calls.append(kwargs)
+        if 'Ты разрабатываешь оригинальную' in kwargs['messages'][0]['content']:
+            assert 'response_format' not in kwargs
+            yield DESIGN_FIXTURE
+        elif 'Ты дополняешь' in kwargs['messages'][0]['content']:
+            yield json.dumps(supplement(kwargs['messages']),ensure_ascii=False)
+        elif len([c for c in calls if 'Ты создаёшь готовый игровой мир' in c['messages'][0]['content']])==1:
+            yield '{"world":'
+        else:
+            yield json.dumps(fixture(),ensure_ascii=False)
+    with patch('backend.services.preparation.chat_stream',side_effect=stream):
+        job=client.post(path+'/generate',json={'revision':draft['revision'],'task':'world',
+                                                'text':'Сложный мир','config':REMOTE,'api_key':'fixture'})
+        assert wait_job(client,job.json()['id'])['status']=='saved'
+    structured=[c for c in calls if 'response_format' in c]
+    assert len(structured)==3
+    assert all(c['response_format']=={'type':'json_object'} for c in structured)
+    assert structured[0]['max_tokens']>REMOTE['max_tokens']
+    assert client.get(path+'?author=true').json()['version_id']!=draft['version_id']
 
 
 def test_scenario_route_stays_separate_from_quick_generation(api):
@@ -285,7 +311,7 @@ def test_idea_generation_expands_into_independent_world_entities(api):
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         j=client.post(f"/api/workspaces/{workspace['id']}/draft/generate",json={'revision':workspace['revision'],'task':'world','text':original,'config':REMOTE,'api_key':'fixture'}).json()
         assert wait_job(client,j['id'])['status']=='saved'
-    assert 'Не ограничивайся перечислением фактов' in next(m['content'] for m in messages if 'Ты Сценарист и Генератор' in m['content'])
+    assert 'развивай недосказанные детали' in next(m['content'] for m in messages if 'Ты создаёшь готовый игровой мир' in m['content'])
     assert any(original in m['content'] for m in messages)
     draft=client.get(f"/api/workspaces/{workspace['id']}/draft?author=true").json()
     result=draft['state'];assert not draft['validation']['errors']
@@ -366,7 +392,7 @@ def test_quick_generation_creative_completion_is_playable_and_one_request(api):
         assert wait_job(client,job.json()['id'])['status']=='saved'
     assert len(calls)>=2 and idea in calls[0][-1]['content']
     assert DESIGN_FIXTURE in calls[1][-1]['content']
-    assert 'ПЕРВИЧНОЕ СОЗДАНИЕ' in calls[1][0]['content']
+    assert 'Ты создаёшь готовый игровой мир' in calls[1][0]['content']
     draft=client.get(f"/api/workspaces/{w['id']}/draft?author=true").json()
     assert not draft['validation']['errors'] and not draft['validation']['warnings']
     assert len(draft['state']['characters'])==5 and len(draft['state']['world']['relationships'])==7

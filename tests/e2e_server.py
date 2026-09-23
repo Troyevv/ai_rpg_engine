@@ -37,7 +37,7 @@ def stream(**kwargs):
     elif 'Ты дополняешь уже созданный игровой мир' in full:
         from test_draft_world import supplement
         value=json.dumps(supplement(kwargs['messages']),ensure_ascii=False)
-    elif 'Ты Сценарист и Генератор мира' in full:
+    elif 'Ты создаёшь готовый игровой мир' in full:
         from test_draft_world import fixture
         value=json.dumps(fixture(),ensure_ascii=False)
     elif 'Ты редактор RPG' in full:

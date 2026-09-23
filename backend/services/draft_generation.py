@@ -39,7 +39,8 @@ def messages_for(repo,job,config,design=''):
         if design:
             instructions+='\n\nВнутренняя творческая проработка (развивай и перенеси конкретику в поля World State, не копируй дословно ввод):\n'+design
         instructions+='\nРазработай пригодный для немедленной игры мир. Недостающие детали концепции дополни обоснованно; не считай её исчерпывающей спецификацией.'
-        return [{'role':'system','content':config['_prompts']['draft_world_prompt.md']['content']},
+        system=config['_prompts']['draft_world_prompt.md']['content']+'\n\nТехнический контракт: верни ровно один завершённый JSON-объект World State v2.'
+        return [{'role':'system','content':system},
                 {'role':'user','content':instructions}]
     draft=repo.draft(wid,author=True);state=draft['state']
     if not state:raise ValueError('Сначала создай черновик.')
@@ -104,16 +105,27 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     original=repo.draft(job['workspace_id'],author=True)['state'];text='';last=0.0;stage='draft_world'
     context=config['context_length']
     if loaded:context=min(context,int(loaded.get('config',{}).get('context_length') or context))
+    # The UI's shared context preference may be only 8K, although the
+    # DeepSeek models support much more. Draft creation needs room for both
+    # the brief and a complete structured answer.
+    if config['_draft_task']=='world' and config['provider']=='deepseek':
+        context=max(context,32768)
     def opened(stream):
         handle.stream=stream
         if handle.cancel.is_set():stream.close()
     def generate(messages,limit):
+        # DeepSeek's JSON mode guarantees a syntactically valid object on a
+        # complete response. A continuation is an object suffix, so JSON mode
+        # must only be enabled for the first request, never for that suffix.
+        structured = stage != 'draft_world_design' and config['provider']=='deepseek' and not any(
+            m['role']=='assistant' for m in messages)
         return tracked_stream(repo,stream_fn,jid,stage,config,messages,model=config['model'],provider=config['provider'],api_key=api_key,
-            temperature=config['temperature'],max_tokens=limit,require_complete=True,cancel_event=handle.cancel,on_stream=opened)
+            temperature=config['temperature'],max_tokens=limit,require_complete=True,cancel_event=handle.cancel,on_stream=opened,
+            **({'response_format':{'type':'json_object'}} if structured else {}))
     design=''
     if config['_draft_task']=='world':
         stage='draft_world_design';repo.draft_phase(jid,'designing')
-        budget=min(config['max_tokens'],max(1800,min(6000,context//3)))
+        budget=min(config['max_tokens'],max(1200,min(4000,context//5)))
         for chunk in stream_document(design_messages(repo,job,config),context,budget,generate,handle.cancel):
             if handle.cancel.is_set():return
             design+=chunk
@@ -121,11 +133,29 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         if len(design.strip())<150:raise ValueError('Модель не разработала идею: ответ слишком короткий. Предыдущая версия сохранена.')
     stage='draft_world';repo.draft_phase(jid,'world' if config['_draft_task']=='world' else 'editing')
     messages=messages_for(repo,job,config,design)
-    last=0.0
-    for chunk in stream_document(messages,context,config['max_tokens'],generate,handle.cancel,format_hint='json'):
-        if handle.cancel.is_set():return
-        text+=chunk
-        if time.monotonic()-last>.1:repo.preparation_progress(jid,text);last=time.monotonic()
+    # The standard summary setting (often 2K tokens) is too small for even a
+    # modest World State object. Context budgeting below still caps each call.
+    json_budget=max(config['max_tokens'],min(12000,context//2)) if config['_draft_task']=='world' else config['max_tokens']
+    def json_answer(request,progress=False):
+        """Retry a malformed aggregate from scratch, preserving the old draft."""
+        for attempt in range(2):
+            answer='';last=0.0
+            prompt=request if not attempt else [*request,{'role':'user','content':
+                'Верни заново ОДИН законченный JSON-объект. Предыдущий ответ не удалось прочитать. '
+                'Сохрани все обязательные сущности и детали, но избегай повторов и слишком длинных строк. '
+                'Проверь закрывающие кавычки, массивы и фигурные скобки.'}]
+            for chunk in stream_document(prompt,context,json_budget,generate,handle.cancel,format_hint='json'):
+                if handle.cancel.is_set():return None,None
+                answer+=chunk
+                if progress and time.monotonic()-last>.1:
+                    repo.preparation_progress(jid,answer);last=time.monotonic()
+            if handle.cancel.is_set():return None,None
+            try:return answer,json.loads(answer)
+            except (TypeError,json.JSONDecodeError):
+                if attempt==1:raise ValueError('Модель дважды вернула некорректный JSON. Предыдущая версия сохранена.')
+        raise AssertionError('unreachable')
+
+    text,value=json_answer(messages,progress=True)
     if handle.cancel.is_set():return
     state=decode_result(text,original,config)
     if config['_draft_task']=='world':
@@ -134,13 +164,9 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         gaps=domain.completion_gaps(state,source)
         if any(gaps.values()):
             stage='draft_world_completion';repo.draft_phase(jid,'completing')
-            extra=''
-            for chunk in stream_document(completion_messages(state,gaps,source),context,config['max_tokens'],generate,handle.cancel,format_hint='json'):
-                if handle.cancel.is_set():return
-                extra+=chunk
+            extra,supplement=json_answer(completion_messages(state,gaps,source))
             if handle.cancel.is_set():return
-            try:state=domain.apply_completion(state,json.loads(extra),source)
-            except (json.JSONDecodeError,TypeError) as exc:raise ValueError('Модель не завершила доработку мира. Предыдущая версия сохранена.') from exc
+            state=domain.apply_completion(state,supplement,source)
         # A weak model may ignore some requested fields. Never present such a draft as complete.
         remaining=domain.completion_gaps(state,source)
         if any(remaining.values()):
