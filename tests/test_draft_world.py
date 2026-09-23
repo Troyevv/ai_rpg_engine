@@ -87,13 +87,17 @@ def test_generation_uses_jobs_preserves_variants_and_no_json_in_public_job(api):
     from unittest.mock import patch
     client,app=api;path,draft=make(client)
     expected=fixture();expected['campaign']['title']='Маяк'
-    with patch('backend.services.preparation.chat_stream',return_value=iter([json.dumps(expected,ensure_ascii=False)])):
+    def stream(**kwargs):
+        yield ('# Сценарный план\nПерсонажи и жизнь у маяка развиваются сами.'
+               if 'Ты — сценарист' in kwargs['messages'][0]['content'] else json.dumps(expected,ensure_ascii=False))
+    with patch('backend.services.preparation.chat_stream',side_effect=stream):
         response=client.post(path+'/generate',json={'revision':draft['revision'],'task':'world','text':'Сложный мир','config':REMOTE,'api_key':'test'})
         assert response.status_code==200,response.text
         job=wait_job(client,response.json()['id']);assert job['status']=='saved',job
         assert not job['narrative']
     updated=client.get(path+'?author=true').json()
     assert updated['state']['campaign']['title']=='Маяк'
+    assert 'Сценарный план' in updated['outline']
     assert len(updated['history'])==2
 
 
@@ -145,3 +149,54 @@ def test_first_context_uses_confirmed_revision(api):
     assert s==d['state']
     ctx=build_context(s,[],'','start',32768,4000)
     assert 'Город на плавучих островах' in str(ctx)
+
+
+def test_idea_generation_expands_into_independent_world_entities(api):
+    from unittest.mock import patch
+    from test_api import wait_job
+    client,_=api
+    workspace=client.post('/api/workspaces',json={'name':'Клиника'}).json()
+    original='Клиника. Илья — врач. Люда — его начальница, они по-дружески подкалывают друг друга. Катя скрывает встречу с Тимуром. Придумай всем интересные характеры, рабочие привычки и начало в четверг 14:00.'
+    world=fixture();actors=world['characters'][:4]
+    for card,name in zip(actors,['Илья','Люда','Катя','Тимур']):card['name']=name
+    a,b,c,d=[x['id'] for x in actors]
+    world['campaign'].update(title='Клиника',description='В клинике смена начинается с привычного шума и давнего напряжения между коллегами.',public_description='Долгая история коллег, дружбы и трудных решений в городской клинике.')
+    world['characters'][0]['fields']['Суть']='Привык скрывать усталость за короткими шутками; во время сложного дежурства спокойнее всех.'
+    world['characters'][1]['fields']['Суть']='Прямая и внимательная начальница: шутит с Ильёй, но строго разделяет работу и дружбу.'
+    world['world']['relationships'][a+':'+b]={'source_id':a,'target_id':b,'context':'Уважает как начальницу и часто подшучивает.','dimensions':{'respect':65}}
+    world['world']['relationships'][b+':'+a]={'source_id':b,'target_id':a,'context':'Ценит и заботится, хотя строгая на работе.','dimensions':{'trust':80}}
+    world['world']['facts']['meeting']['character_ids']=[c,d]
+    world['world']['knowledge']={c+':meeting':{'actor_id':c,'fact_id':'meeting','status':'known','source_event_id':None},d+':meeting':{'actor_id':d,'fact_id':'meeting','status':'known','source_event_id':None}}
+    world['world']['scenes'][world['camera']['scene_id']]['end_minute']=5160
+    world['world']['scenes'][world['camera']['scene_id']]['start_minute']=5160
+    world['world_clock']={'minute':5160,'last_event_time':'День 4 (Чт) 14:00'}
+    for item in world['world']['characters'].values():
+        if item['minute'] is not None:item['minute']=5160
+    messages=[]
+    def stream(**kwargs):
+        messages.extend(kwargs['messages'])
+        yield ('# Клиника\nЛюда разряжает напряжение короткими шутками, даже когда отвечает за сложное отделение.'
+               if 'Ты — сценарист' in kwargs['messages'][0]['content'] else json.dumps(world,ensure_ascii=False))
+    with patch('backend.services.preparation.chat_stream',side_effect=stream):
+        j=client.post(f"/api/workspaces/{workspace['id']}/draft/generate",json={'revision':workspace['revision'],'task':'world','text':original,'config':REMOTE,'api_key':'fixture'}).json()
+        assert wait_job(client,j['id'])['status']=='saved'
+    assert 'Не ограничивайся перечислением фактов' in next(m['content'] for m in messages if 'Ты Сценарист и Генератор' in m['content'])
+    assert original in messages[-1]['content']
+    draft=client.get(f"/api/workspaces/{workspace['id']}/draft?author=true").json()
+    result=draft['state'];assert not draft['validation']['errors']
+    assert result['world']['relationships'][a+':'+b]['context']!=result['world']['relationships'][b+':'+a]['context']
+    assert 'заботится' in result['world']['relationships'][b+':'+a]['context']
+    assert {v['actor_id'] for v in result['world']['knowledge'].values()}=={c,d}
+    assert a not in {v['actor_id'] for v in result['world']['knowledge'].values()}
+    assert result['world_clock']['minute']==5160
+    assert 'Прямая' in result['characters'][1]['fields']['Суть']
+    assert result['campaign']['public_description'] != result['campaign']['description']
+    assert 'Тайная встреча' not in json.dumps(client.get(f"/api/workspaces/{workspace['id']}/draft").json()['state'],ensure_ascii=False)
+
+
+def test_json_continuation_keeps_json_format():
+    from backend.services.continuation import request_context
+    messages=[{'role':'system','content':'Отвечай JSON'}]
+    result,_=request_context(messages,'{"world":',32768,500,format_hint='json')
+    assert 'JSON-объект' in result[-1]['content'] and 'Markdown' in result[-1]['content']
+    assert 'Продолжи документ' not in result[-1]['content']

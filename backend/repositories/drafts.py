@@ -30,11 +30,12 @@ class DraftStorage:
                 'validation':domain.validate(state) if state else {'errors':[],'warnings':[]},
                 'import_warnings':record.get('warnings',[]) if record and author else [],
                 'source_text':record.get('source','') if record and author else '',
+                'outline':record.get('outline','') if record and author else '',
                 'history':history,'job':self.public_job(dict(latest)) if latest else None,'author':author}
 
-    def _write_draft(self,db,wid,state,reason,source='',warnings=None,source_id=None):
+    def _write_draft(self,db,wid,state,reason,source='',warnings=None,source_id=None,outline=''):
         state=domain.prepare(state)
-        self._record_document(db,'world_draft',wid,dump({'state':state,'source':source,'warnings':warnings or []}),True,reason,source_id)
+        self._record_document(db,'world_draft',wid,dump({'state':state,'source':source,'warnings':warnings or [],'outline':outline}),True,reason,source_id)
         db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))
 
     def import_draft(self,wid,text,revision):
@@ -64,10 +65,10 @@ class DraftStorage:
             state=domain.prepare(state);after=domain.validate(state)
             new_warnings=set(after['warnings'])-set(before['warnings'])
             if new_warnings and not ack:raise ValueError('Возможные связанные противоречия: '+'; '.join(new_warnings)+'. Подтверди «Изменить всё равно».')
-            self._write_draft(db,wid,state,operation,record.get('source',''),record.get('warnings',[]),source_id)
+            self._write_draft(db,wid,state,operation,record.get('source',''),record.get('warnings',[]),source_id,record.get('outline',''))
         return eid
 
-    def finish_draft_job(self,jid,state):
+    def finish_draft_job(self,jid,state,outline=''):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             job=db.execute('SELECT * FROM preparation_jobs WHERE id=?',(jid,)).fetchone()
@@ -75,7 +76,7 @@ class DraftStorage:
             self._draft_workspace(db,job['workspace_id'],job['revision'],idle=False)
             config=json.loads(job['config_json']);old=self._draft_head(db,job['workspace_id'])
             record=json.loads(old['content']) if old else {}
-            self._write_draft(db,job['workspace_id'],state,job['kind'],config.get('_draft_input','') if config['_draft_task']=='world' else record.get('source',''),record.get('warnings',[]))
+            self._write_draft(db,job['workspace_id'],state,job['kind'],config.get('_draft_input','') if config['_draft_task']=='world' else record.get('source',''),record.get('warnings',[]),outline=outline or record.get('outline',''))
             db.execute("UPDATE preparation_jobs SET status='saved' WHERE id=?",(jid,))
 
     def confirm_draft(self,wid,revision,version_id):

@@ -11,7 +11,7 @@ from backend.services.timeline import label
 GROUPS={'actor':'characters','relationship':'relationships','fact':'facts','knowledge':'knowledge',
         'thread':'threads','scene':'scenes','event':'events'}
 FIELDS={
- 'campaign':{'title','setting','era','genre','tone','description','rules'},
+ 'campaign':{'title','setting','era','genre','tone','description','public_description','rules'},
  'character':{'name','aliases','fields'},
  'actor':{'location','situation','goals','intentions','emotion','obligations'},
  'relationship':{'source_id','target_id','context','dimensions'},
@@ -47,6 +47,8 @@ def prepare(original):
             raise ValueError('Другие имена должны быть списком строк.')
     for key in ('world_clock','camera','sections','campaign'):
         if key in original and not isinstance(original[key],dict):raise ValueError(f'{key}: нужен объект.')
+    clock=original.get('world_clock',{}).get('minute')
+    if clock is not None and (type(clock) is not int or clock<0):raise ValueError('Игровое время должно быть неотрицательным целым числом.')
     state=normalize(original)
     from backend.services.timeline import current_time
     minute=current_time(state)
@@ -183,8 +185,8 @@ def validate(state):
 
 def entity(state,kind,eid):
     if kind=='campaign':return state['campaign']
-    if kind=='start':return {'protagonist_id':state['protagonist_id'],'controlled_actor_id':state['controlled_actor_id'],
-        'scene_id':state['camera']['scene_id'],'minute':state['world_clock'].get('minute')}
+    if kind=='start':return {'protagonist_id':state.get('protagonist_id'),'controlled_actor_id':state.get('controlled_actor_id'),
+        'scene_id':state.get('camera',{}).get('scene_id'),'minute':state['world_clock'].get('minute')}
     if kind in ('character','location'):
         values=state['characters' if kind=='character' else 'locations']
         value=next((x for x in values if x['id']==eid),None)
@@ -201,6 +203,12 @@ def patch(state,kind,eid,field,value):
         if not key or '.' in key or len(key)>100 or not isinstance(value,str):raise ValueError('Некорректное поле карточки.')
         target['fields'][key]=value
     elif field in FIELDS[kind]:
+        list_fields={'goals','intentions','obligations','aliases','character_ids','participants','witnesses','fact_ids','evidence'}
+        if field in list_fields and (not isinstance(value,list) or any(not isinstance(x,str) for x in value)):
+            raise ValueError('Нужен список строк.')
+        if field in ('minute','start_minute','end_minute') and (type(value) is not int or value<0):raise ValueError('Нужно неотрицательное целое время.')
+        if field in ('secret','player_observed') and type(value) is not bool:raise ValueError('Нужно логическое значение.')
+        if field=='dimensions' and (not isinstance(value,dict) or any(type(x) not in (int,float) or not -100<=x<=100 for x in value.values())):raise ValueError('Показатели должны быть числами от -100 до 100.')
         old=target.get(field)
         if old is not None and type(value) is not type(old):raise ValueError('Тип поля менять нельзя.')
         if len(json.dumps(value,ensure_ascii=False))>30000:raise ValueError('Поле слишком длинное.')
@@ -270,7 +278,8 @@ def player_view(state):
     public=deepcopy({k:state[k] for k in ('campaign','characters','world','locations','protagonist_id','controlled_actor_id','camera','world_clock') if k in state})
     public['sections']={};public['story_notes']='';public.pop('memory',None);public.pop('knowledge',None)
     public.pop('facts',None);public.pop('events',None);public.pop('plans',None)
-    for key in ('description','rules'):public['campaign'][key]=''
+    public['campaign']['description']=public['campaign'].get('public_description','')
+    public['campaign']['rules']=''
     public['world']={**{kind:{} for kind in KINDS},'version':2}
     public['relationships']=[]
     public['scene']='';public['scene_meta']={**meta,'present_ids':[actor]}
@@ -286,13 +295,41 @@ def player_view(state):
 
 def export_markdown(state):
     """Readable projection plus a versioned, integrity-checked round-trip payload."""
-    lines=['# '+state['campaign']['title'],'',state['campaign'].get('description',''),'']
+    names={c['id']:c['name'] for c in state['characters']}
+    def person(cid):return names.get(cid,cid or 'Неизвестно')
+    campaign=state['campaign']
+    titles={'setting':'Обстановка','era':'Эпоха','genre':'Жанр','tone':'Тон','description':'Описание','public_description':'Аннотация для игрока','rules':'Правила повествования'}
+    lines=['# '+campaign['title']]+[f"## {title}\n{campaign.get(key,'')}" for key,title in titles.items() if campaign.get(key)]
+    lines += ['## Начало игры', 'Основной герой: '+person(state.get('protagonist_id')),
+              'Управление: '+person(state.get('controlled_actor_id')),label(state['world_clock']['minute'])]
     for c in state['characters']:
         lines+=['## '+c['name']]+[f'### {k}\n{v}' for k,v in c['fields'].items()]
-    for kind in ('relationships','facts','threads','scenes','events'):
-        lines+=['## '+kind]
+        if c.get('aliases'):lines+=['Другие имена: '+', '.join(c['aliases'])]
+        actor=state['world']['characters'][c['id']]
+        for key,title in [('location','Место'),('emotion','Эмоциональное состояние'),('goals','Цели'),('intentions','Намерения'),('obligations','Обязательства')]:
+            value=actor.get(key)
+            if value:lines += ['### '+title,'\n'.join('- '+v for v in value) if isinstance(value,list) else str(value)]
+    lines+=['## Направленные отношения']
+    for r in state['world']['relationships'].values():
+        lines += ['### '+person(r['source_id'])+' → '+person(r['target_id']),r.get('context','')]
+        lines += ['; '.join(f'{k}: {v}' for k,v in r.get('dimensions',{}).items())]
+    lines+=['## Факты и знания']
+    for fid,f in state['world']['facts'].items():
+        lines += ['### '+('Тайна: ' if f.get('secret') else '')+f['text']]
+        for k in state['world']['knowledge'].values():
+            if k['fact_id']==fid:lines += ['- '+person(k['actor_id'])+': '+{'known':'знает','suspected':'подозревает','unknown':'не знает'}[k['status']]]
+        if f.get('evidence'):lines += ['Основания: '+'; '.join(f['evidence'])]
+    for kind,title in [('threads','Сюжетные линии'),('scenes','Сцены'),('events','События'),('scheduled_events','Отложенные события')]:
+        lines+=['## '+title]
         for key,item in state['world'][kind].items():
-            lines+=['### '+key]+[f'- {k}: '+(', '.join(map(str,v)) if isinstance(v,list) else str(v)) for k,v in item.items() if not isinstance(v,dict)]
+            lines+=['### '+str(item.get('description') or item.get('location') or item.get('text') or key)]
+            if item.get('text') and item.get('location'):lines += [item['text']]
+            if item.get('state'):lines += [item['state']]
+            if item.get('status'):lines += ['Статус: '+item['status']]
+            people=item.get('participants',item.get('character_ids',[]))
+            if people:lines += ['Участники: '+', '.join(person(cid) for cid in people)]
+            for field in ('minute','start_minute','end_minute','due_minute'):
+                if type(item.get(field)) is int:lines += [label(item[field])]
     for loc in state['locations']:lines+=['## '+loc['name'],loc['text']]
     body='\n\n'.join(lines)+'\n'
     payload=base64.b64encode(json.dumps(state,ensure_ascii=False).encode()).decode()

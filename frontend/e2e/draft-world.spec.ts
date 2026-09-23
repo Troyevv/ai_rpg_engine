@@ -7,13 +7,13 @@ for(const width of [360,390,412,430,1440]){
   await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),workspace.id);
   await page.goto('/');await nav(page,'Создать');
   await page.getByLabel('Описание мира или текст импорта').fill('Драмеди. Восемь соседей собрались на кухне; один скрывает встречу у маяка. Сохрани направленные отношения.');
-  await page.getByRole('button',{name:'Создать мир',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'Редактор мира'})).toBeVisible();
+  await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
   await expect(page.locator('main')).not.toContainText('Тайная встреча у маяка');
-  await page.getByRole('button',{name:'Открыть вид автора',exact:true}).click();
+  await page.getByRole('button',{name:'Редактировать мир',exact:true}).click();
   await page.getByRole('button',{name:'Показать всё',exact:true}).click();
-  await page.locator('.draft-section > summary').filter({hasText:'Персонажи ·'}).click();
-  const first=page.locator('.draft-card').first();await first.locator('> summary').click();
+  await page.locator('.workshop-tabs').getByRole('button',{name:'Персонажи',exact:true}).click();
+  const first=page.locator('.workshop-person').first();
   await first.getByRole('button',{name:'Изменить fields.Внешность',exact:true}).click();
   await page.getByRole('dialog').getByLabel('Внешность',{exact:true}).fill('Рыжие волосы, зелёный шарф.');
   await page.getByRole('button',{name:'Сохранить поле',exact:true}).click();
@@ -25,7 +25,7 @@ for(const width of [360,390,412,430,1440]){
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
   await page.screenshot({path:`test-results/draft-${width}.png`,fullPage:true});
   await page.reload();await nav(page,'Создать');
-  await expect(page.getByRole('heading',{name:'Редактор мира'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
   await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
   await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
   await expect(page.getByRole('button',{name:'Начать игру',exact:true})).toBeVisible();
