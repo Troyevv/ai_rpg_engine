@@ -137,6 +137,21 @@ def test_revision_restore_confirm_and_save_isolation(api):
         assert db.execute('SELECT count(*) FROM saves').fetchone()[0]==1
 
 
+def test_draft_soft_delete_restores_versions_and_keeps_confirmed_save(api):
+    client,_=api;path,draft=make(client)
+    confirmed=client.post(path+'/confirm',json={'revision':draft['revision'],'version_id':draft['version_id']})
+    assert confirmed.status_code==200
+    save_id=confirmed.json()['save'];before=client.get(f'/api/saves/{save_id}').json()
+    wid=draft['id'];deleted=client.request('DELETE',f'/api/workspaces/{wid}',json={'revision':draft['revision']})
+    assert deleted.status_code==200
+    assert wid not in [item['id'] for item in client.get('/api/workspaces').json()]
+    removed=next(item for item in client.get('/api/workspaces?deleted=true').json() if item['id']==wid)
+    assert client.get(f'/api/saves/{save_id}').json()==before
+    assert client.post(f'/api/workspaces/{wid}/restore',json={'revision':removed['revision']}).status_code==200
+    restored=client.get(path+'?author=true').json()
+    assert restored['version_id']==draft['version_id'] and restored['state']==draft['state']
+
+
 def test_invalid_references_block_start_without_damage(api):
     client,app=api;path,draft=make(client)
     r=client.patch(path,json={'revision':draft['revision'],'operation':'patch','kind':'start','field':'controlled_actor_id','value':'missing'})
@@ -151,7 +166,10 @@ def test_generation_uses_jobs_preserves_variants_and_no_json_in_public_job(api):
     from unittest.mock import patch
     client,app=api;path,draft=make(client)
     expected=fixture();expected['campaign']['title']='Маяк'
+    phases=[]
     def stream(**kwargs):
+        with app.state.repository.connect() as db:
+            phases.append(db.execute('SELECT phase FROM preparation_jobs ORDER BY rowid DESC LIMIT 1').fetchone()[0])
         if 'Ты разрабатываешь оригинальную' in kwargs['messages'][0]['content']:
             yield DESIGN_FIXTURE
         elif 'Ты дополняешь' in kwargs['messages'][0]['content']:
@@ -169,6 +187,7 @@ def test_generation_uses_jobs_preserves_variants_and_no_json_in_public_job(api):
     assert updated['outline']==''
     assert not updated['validation']['errors']
     assert len(updated['history'])==2
+    assert phases==['designing','world','completing']
     with app.state.repository.connect() as db:
         stages=[row[0] for row in db.execute('SELECT stage FROM llm_requests ORDER BY created_at,id')]
     assert sorted(stages)==['draft_world','draft_world_completion','draft_world_design']
@@ -176,10 +195,12 @@ def test_generation_uses_jobs_preserves_variants_and_no_json_in_public_job(api):
 
 def test_deepseek_json_mode_and_malformed_retry_keep_previous_version(api):
     from unittest.mock import patch
-    client,_=api;path,draft=make(client)
-    calls=[]
+    client,app=api;path,draft=make(client)
+    calls=[];phases=[]
     def stream(**kwargs):
         calls.append(kwargs)
+        with app.state.repository.connect() as db:
+            phases.append(db.execute('SELECT phase FROM preparation_jobs ORDER BY rowid DESC LIMIT 1').fetchone()[0])
         if 'Ты разрабатываешь оригинальную' in kwargs['messages'][0]['content']:
             assert 'response_format' not in kwargs
             yield DESIGN_FIXTURE
@@ -197,6 +218,7 @@ def test_deepseek_json_mode_and_malformed_retry_keep_previous_version(api):
     assert len(structured)==3
     assert all(c['response_format']=={'type':'json_object'} for c in structured)
     assert structured[0]['max_tokens']>REMOTE['max_tokens']
+    assert phases==['designing','world','retrying','completing']
     assert client.get(path+'?author=true').json()['version_id']!=draft['version_id']
 
 

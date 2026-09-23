@@ -9,7 +9,9 @@ import { Input } from './components/ui/input';
 import { Textarea } from './components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './components/ui/dialog';
 import { Markdown } from './Markdown';
+import { Trash2 } from 'lucide-react';
 type Item = Record<string, unknown>;
+type WorkspacePick = { id: string; name: string; revision: number };
 type DraftState = {
     campaign: Item;
     characters: (Item & {
@@ -80,10 +82,9 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
     const [selectedCharacter, setSelectedCharacter] = useState('');
     const [editingIdea, setEditingIdea] = useState(false);
     const [id, setId] = useState(localStorage.getItem('draftWorkspace') || '');
-    const [list, setList] = useState<{
-        id: string;
-        name: string;
-    }[]>([]);
+    const [list, setList] = useState<WorkspacePick[]>([]);
+    const [removed, setRemoved] = useState<WorkspacePick[]>([]);
+    const [deleteDraft, setDeleteDraft] = useState<WorkspacePick | null>(null);
     const [draft, setDraft] = useState<Draft | null>(null);
     const [author, setAuthor] = useState(false);
     const [authorAsk, setAuthorAsk] = useState(false);
@@ -121,6 +122,16 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
     } }, [id, author]);
     const { job, reconnecting } = useJob(draft?.job, refresh);
     const locked = busy || active(job);
+    const phaseStatus: Record<string, [string,string]> = {
+        designing: ['Развиваем замысел…', 'Модель придумывает детали мира, персонажей и их связи.'],
+        world: ['Собираем игровой мир…', 'Модель записывает выжимку в структуру World State.'],
+        completing: ['Дополняем недостающие детали…', 'Модель заполняет обнаруженные пробелы в карточках, отношениях или тайнах.'],
+        retrying: ['Повторяем структурный ответ…', 'Первый JSON не удалось прочитать; модель создаёт ответ заново.'],
+        validating: ['Проверяем структуру мира…', 'Движок проверяет заполнение полей, ссылки и согласованность.'],
+        saving: ['Сохраняем версию…', 'Проверенный мир записывается в SQLite.'],
+        editing: ['Обновляем выбранное поле…', 'Модель подготавливает новую версию поля.'],
+    };
+    const status = phaseStatus[job?.phase || ''] || ['Ожидаем запуска генерации…', 'Задание создано и ожидает запуска модели.'];
     const run = async (fn: () => Promise<void>) => { setBusy(true); try {
         await fn();
     }
@@ -189,10 +200,16 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
         <button className={mode === 'import' ? 'selected' : ''} onClick={() => setMode('import')}>Импортировать</button>
       </nav>
       <details className="workshop-continue"><summary>Мои черновики {draft ? `· ${draft.name}` : ''}</summary>
-        <select aria-label="Черновик мира" value={id} onChange={e => { setId(e.target.value); setAuthor(false); setUseIdea(false); setText(''); }}>
-          <option value="">Новая история</option>{list.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-        </select>
-        {id && <Button variant="ghost" onClick={() => { setId(''); setAuthor(false); setText(''); }}>+ Другая история</Button>}
+        <div className="workshop-draft-list">
+          <button className={!id ? 'selected' : ''} onClick={() => { setId(''); setAuthor(false); setUseIdea(false); setText(''); }}>+ Новая история</button>
+          {list.map(w => <div className="workshop-draft-row" key={w.id}>
+            <button className={id === w.id ? 'selected' : ''} onClick={() => { setId(w.id); setAuthor(false); setUseIdea(false); setText(''); }}>{w.name}</button>
+            <Button variant="ghost" size="sm" aria-label={`Удалить черновик «${w.name}»`} disabled={locked} onClick={() => setDeleteDraft(w)}><Trash2 size={16}/></Button>
+          </div>)}
+        </div>
+        <details className="workshop-trash" onToggle={e => { if (e.currentTarget.open) void api<WorkspacePick[]>('/workspaces?deleted=true').then(setRemoved).catch(err => toast.error(err.message)); }}><summary>Удалённые черновики</summary>
+          {removed.length === 0 ? <p>Корзина пуста.</p> : removed.map(w => <div className="workshop-draft-row" key={w.id}><span>{w.name}</span><Button variant="ghost" size="sm" disabled={locked} onClick={() => void run(async () => { await api(`/workspaces/${w.id}/restore`,{revision:w.revision}); setList(await api<WorkspacePick[]>('/workspaces')); setRemoved(await api<WorkspacePick[]>('/workspaces?deleted=true')); setId(w.id); toast.success('Черновик восстановлен'); })}>Восстановить</Button></div>)}
+        </details>
       </details>
       {(!state || editingIdea) && <section className="workshop-inspiration">
         <div className="workshop-inspiration-head"><span className="workshop-step">01 · ЗАМЫСЕЛ</span><h2>{mode === 'import' ? 'Загрузи готовую выжимку' : 'С чего начинается история?'}</h2></div>
@@ -224,9 +241,10 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
         </div>
       </section>}
       {active(job) && <section className="workshop-generating" role="status">
-        <span className="workshop-pulse"/><div><strong>{reconnecting ? 'Восстанавливаем соединение…' : job?.phase === 'editing' ? 'Обновляем выбранное поле…' : job?.phase === 'designing' ? 'Придумываем мир и персонажей…' : job?.phase === 'completing' ? 'Раскрываем недостающие детали…' : 'Собираем игровой мир…'}</strong><p>Генератор сначала развивает замысел, затем записывает готовый мир. Можно свернуть окно — работа продолжится.</p></div>
+        <span className="workshop-pulse"/><div><strong>{reconnecting ? 'Восстанавливаем соединение…' : status[0]}</strong><p>{reconnecting ? 'Ожидаем связь с сервером. Генерация продолжает выполняться.' : status[1]}</p>{!reconnecting && !!job?.progress_chars && !['validating','saving'].includes(job.phase || '') && <small>Получено {job.progress_chars.toLocaleString('ru-RU')} символов ответа</small>}</div>
         <Button variant="ghost" onClick={() => void run(async () => {await api(`/jobs/${job!.id}/stop`, {}); refresh();})}>Остановить</Button>
       </section>}
+      <Dialog open={!!deleteDraft} onOpenChange={open => { if (!open) setDeleteDraft(null); }}><DialogContent><DialogHeader><DialogTitle>Удалить «{deleteDraft?.name}»?</DialogTitle><DialogDescription>Черновик переместится в удалённые. Готовые игровые сохранения не затрагиваются.</DialogDescription></DialogHeader><div className="workshop-dialog-actions"><Button variant="ghost" onClick={() => setDeleteDraft(null)}>Отмена</Button><Button disabled={busy} onClick={() => void run(async () => { if (!deleteDraft) return; await api(`/workspaces/${deleteDraft.id}`,{revision:deleteDraft.revision},'DELETE'); setList(await api<WorkspacePick[]>('/workspaces')); setRemoved(await api<WorkspacePick[]>('/workspaces?deleted=true')); if (id === deleteDraft.id) { setId(''); setDraft(null); localStorage.removeItem('draftWorkspace'); } setDeleteDraft(null); toast.success('Черновик перемещён в удалённые'); })}>Удалить</Button></div></DialogContent></Dialog>
       {job?.error && <p className="workshop-error" role="alert">{job.error}</p>}
       {state && <section className="workshop-result">
         <div className="workshop-result-heading"><div><span className="workshop-step">02 · МИР ГОТОВ</span><h2>Посмотри, что получилось</h2></div>

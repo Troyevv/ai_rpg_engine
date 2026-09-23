@@ -105,7 +105,8 @@ export interface Turn {
   kind: string;
 }
 export interface Job {
-  phase?: "scenario" | "designing" | "world" | "completing" | "editing" | "";
+  phase?: "scenario" | "designing" | "world" | "completing" | "retrying" | "validating" | "saving" | "editing" | "";
+  progress_chars?: number;
   id: string;
   status: string;
   narrative: string;

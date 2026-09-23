@@ -59,3 +59,24 @@ test('new visitor can begin with an idea without making a workspace', async ({pa
   await page.reload();await nav(page,'Создать');
   await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
 });
+
+test('draft trash and responsive workshop width', async ({page,request}) => {
+  const kept=await (await request.post('/api/workspaces',{data:{name:'Оставить этот черновик'}})).json();
+  const removed=await (await request.post('/api/workspaces',{data:{name:'Удалить этот черновик'}})).json();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),removed.id);
+  await page.setViewportSize({width:1920,height:900});
+  await page.goto('/');await nav(page,'Создать');
+  const workshop=page.locator('.world-workshop');
+  await expect.poll(()=>workshop.evaluate(node=>node.getBoundingClientRect().width)).toBeGreaterThan(1200);
+  await workshop.locator('.workshop-continue > summary').click();
+  await page.getByRole('button',{name:'Удалить черновик «Удалить этот черновик»'}).click();
+  await expect(page.getByRole('dialog')).toContainText('Готовые игровые сохранения не затрагиваются');
+  await page.getByRole('dialog').getByRole('button',{name:'Удалить',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Удалить черновик «Удалить этот черновик»'})).toHaveCount(0);
+  expect((await (await request.get('/api/workspaces')).json()).map((item:{id:string})=>item.id)).toContain(kept.id);
+  await workshop.locator('.workshop-trash > summary').click();
+  await page.getByRole('button',{name:'Восстановить'}).click();
+  await expect(page.getByRole('button',{name:'Удалить черновик «Удалить этот черновик»'})).toBeVisible();
+  await page.setViewportSize({width:390,height:844});
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});

@@ -126,20 +126,23 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     if config['_draft_task']=='world':
         stage='draft_world_design';repo.draft_phase(jid,'designing')
         budget=min(config['max_tokens'],max(1200,min(4000,context//5)))
+        last=0.0
         for chunk in stream_document(design_messages(repo,job,config),context,budget,generate,handle.cancel):
             if handle.cancel.is_set():return
             design+=chunk
+            if time.monotonic()-last>.25:repo.preparation_progress(jid,design);last=time.monotonic()
         if handle.cancel.is_set():return
         if len(design.strip())<150:raise ValueError('Модель не разработала идею: ответ слишком короткий. Предыдущая версия сохранена.')
-    stage='draft_world';repo.draft_phase(jid,'world' if config['_draft_task']=='world' else 'editing')
+    stage='draft_world';repo.draft_phase(jid,'world' if config['_draft_task']=='world' else 'editing',reset_progress=True)
     messages=messages_for(repo,job,config,design)
     # The standard summary setting (often 2K tokens) is too small for even a
     # modest World State object. Context budgeting below still caps each call.
     json_budget=max(config['max_tokens'],min(12000,context//2)) if config['_draft_task']=='world' else config['max_tokens']
-    def json_answer(request,progress=False):
+    def json_answer(request):
         """Retry a malformed aggregate from scratch, preserving the old draft."""
         for attempt in range(2):
             answer='';last=0.0
+            if attempt:repo.draft_phase(jid,'retrying',reset_progress=True)
             prompt=request if not attempt else [*request,{'role':'user','content':
                 'Верни заново ОДИН законченный JSON-объект. Предыдущий ответ не удалось прочитать. '
                 'Сохрани все обязательные сущности и детали, но избегай повторов и слишком длинных строк. '
@@ -147,25 +150,30 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             for chunk in stream_document(prompt,context,json_budget,generate,handle.cancel,format_hint='json'):
                 if handle.cancel.is_set():return None,None
                 answer+=chunk
-                if progress and time.monotonic()-last>.1:
+                if time.monotonic()-last>.25:
                     repo.preparation_progress(jid,answer);last=time.monotonic()
             if handle.cancel.is_set():return None,None
-            try:return answer,json.loads(answer)
+            try:
+                parsed=json.loads(answer)
+                if attempt:repo.draft_phase(jid,'world' if stage=='draft_world' else 'completing')
+                return answer,parsed
             except (TypeError,json.JSONDecodeError):
                 if attempt==1:raise ValueError('Модель дважды вернула некорректный JSON. Предыдущая версия сохранена.')
         raise AssertionError('unreachable')
 
-    text,value=json_answer(messages,progress=True)
+    text,_=json_answer(messages)
     if handle.cancel.is_set():return
+    repo.draft_phase(jid,'validating')
     state=decode_result(text,original,config)
     if config['_draft_task']=='world':
         state=domain.repair_scene_interval(state)
         source=idea_text(repo,job,config)
         gaps=domain.completion_gaps(state,source)
         if any(gaps.values()):
-            stage='draft_world_completion';repo.draft_phase(jid,'completing')
+            stage='draft_world_completion';repo.draft_phase(jid,'completing',reset_progress=True)
             extra,supplement=json_answer(completion_messages(state,gaps,source))
             if handle.cancel.is_set():return
+            repo.draft_phase(jid,'validating')
             state=domain.apply_completion(state,supplement,source)
         # A weak model may ignore some requested fields. Never present such a draft as complete.
         remaining=domain.completion_gaps(state,source)
@@ -177,5 +185,5 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     if config['_draft_task']!='world' and report['errors']:raise ValueError('Изменение нарушает структуру: '+'; '.join(report['errors']))
     if config['_draft_task']!='world' and report['warnings'] and not config.get('_warnings_ack'):
         raise ValueError('Возможные связанные противоречия: '+'; '.join(report['warnings'])+'. Повтори с явным подтверждением.')
-    repo.preparation_progress(jid,text)
+    repo.draft_phase(jid,'saving')
     repo.finish_draft_job(jid,state)

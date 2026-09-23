@@ -1434,7 +1434,7 @@ details > label:first-of-type {
 }
 
 /* Story-first preparation. Technical controls live behind named sections. */
-.world-workshop { width:100%; flex:1; min-width:0; max-width: 880px; overflow-x:hidden; overflow-y:auto; padding: clamp(20px,4vw,52px) clamp(16px,4vw,50px) 100px; }
+.world-workshop { width:100%; flex:1; min-width:0; max-width:none; overflow-x:hidden; overflow-y:auto; padding: clamp(20px,4vw,52px) clamp(16px,4vw,50px) 100px; }
 .workshop-heading { max-width: 680px; margin-bottom: 22px; }
 .workshop-heading h1 { font-size:clamp(30px,4vw,48px); margin-bottom:12px; }
 .workshop-heading > p:last-child { color:#aeb8b4; line-height:1.6; font-size:15px; }
@@ -1444,6 +1444,17 @@ details > label:first-of-type {
 .workshop-continue { margin:12px 0 26px; border-top:1px solid var(--line); color:var(--muted); padding-top:12px; }
 .workshop-continue > summary { cursor:pointer; font-size:13px; min-height:36px; }
 .workshop-continue select { display:block; max-width:100%; width:320px; margin:12px 0; }
+.workshop-draft-list { display:grid; gap:2px; max-height:320px; overflow:auto; margin:10px 0; }
+.workshop-draft-list > button,.workshop-draft-row > button:first-child { min-height:44px; text-align:left; border:0; background:transparent; color:#e1e5dd; padding:8px 12px; border-radius:9px; min-width:0; overflow-wrap:anywhere; }
+.workshop-draft-list .selected { background:#36392e !important; color:#f2d5a3 !important; }
+.workshop-draft-row { display:flex; align-items:center; gap:6px; min-width:0; }
+.workshop-draft-row > button:first-child { flex:1; }
+.workshop-draft-row > span { flex:1; min-width:0; overflow-wrap:anywhere; padding:8px 12px; }
+.workshop-draft-row .ui-button { flex:none; min-width:44px; min-height:44px; }
+.workshop-trash { border-top:1px solid var(--line); padding:10px 0; font-size:13px; }
+.workshop-trash > summary { cursor:pointer; min-height:44px; padding:10px 0; }
+.workshop-trash p { color:var(--muted); }
+.workshop-dialog-actions { display:flex; justify-content:flex-end; gap:10px; }
 .workshop-inspiration { padding:clamp(18px,4vw,36px); border:1px solid #4d4b3e; background:linear-gradient(145deg,#202925,#172122); border-radius:24px; margin-bottom:28px; }
 .workshop-step,.workshop-kicker { color:var(--accent); font-size:11px; letter-spacing:.13em; font-weight:700; font-family:var(--font-sans); }
 .workshop-inspiration h2 { margin:8px 0; font-size:clamp(24px,3vw,34px); }
@@ -1455,6 +1466,8 @@ details > label:first-of-type {
 .workshop-scenario-option { display:flex; align-items:center; gap:10px; color:#b6bfba; font-size:13px; }
 .workshop-generating { display:flex; gap:14px; align-items:center; padding:20px; border:1px solid #79674b; border-radius:16px; margin:16px 0; }
 .workshop-generating p { color:var(--muted); margin:6px 0 0; font-size:13px; }
+.workshop-generating > div { min-width:0; flex:1; }
+.workshop-generating small { display:block; color:var(--accent); font:12px var(--font-sans); margin-top:8px; }
 .workshop-pulse { flex:none; width:12px; height:12px; border-radius:50%; background:var(--accent); animation:workshop-pulse 1.5s ease-in-out infinite; }
 @keyframes workshop-pulse { 50% { opacity:.25; transform:scale(.7); } }
 .workshop-error { color:#ffb8aa; border-left:3px solid #a4514e; padding:12px; }
@@ -1464,7 +1477,9 @@ details > label:first-of-type {
 .workshop-mode { font-size:13px; color:#afbfaf; }
 .workshop-tabs { display:flex; flex-wrap:wrap; gap:8px; padding:16px 0; border-bottom:1px solid var(--line); }
 .workshop-tabs button { padding:9px 14px; font-size:13px; }
-.workshop-content { max-width:720px; padding:28px 0 32px; min-height:200px; overflow-wrap:anywhere; }
+.workshop-content { width:100%; max-width:none; padding:28px 0 32px; min-height:200px; overflow-wrap:anywhere; }
+.workshop-content > p,.workshop-content > .workshop-detail,.workshop-person p { max-width:80ch; }
+.workshop-content > .workshop-overview-grid,.workshop-content > .workshop-mini-list { max-width:1200px; }
 .workshop-content h3 { font-family:Georgia,serif; font-weight:400; font-size:clamp(25px,3.5vw,34px); margin:0 0 14px; }
 .workshop-content h4 { font:600 16px var(--font-sans); }
 .workshop-literary { font:400 clamp(16px,2vw,19px)/1.75 Georgia,serif; color:#e1e1d8; }
