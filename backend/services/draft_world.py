@@ -5,7 +5,7 @@ import hashlib
 import json
 import re
 import uuid
-from backend.services.world import normalize, KINDS
+from backend.services.world import normalize, KINDS, CARD_FIELDS
 from backend.services.timeline import label
 
 GROUPS={'actor':'characters','relationship':'relationships','fact':'facts','knowledge':'knowledge',
@@ -202,7 +202,7 @@ def review_initial(state,source=''):
         cid=card['id'];fields=card['fields'];character=world['characters'].get(cid,{})
         weak=[field for field in DETAIL_MIN if weak_card_field(fields.get(field,''),field,source)]
         if weak:warnings.append(f"{card['name']}: недостаточно раскрыты поля карточки ({', '.join(weak)}).")
-        if len(fields.get('Суть','').strip())<35 and len(fields.get('Биография','').strip())<35:
+        if len(fields.get('Характер','').strip())<35 and len(fields.get('Биография','').strip())<35:
             warnings.append(f"{card['name']}: мало информации о личности важного персонажа.")
         if cid!=actor and not (character.get('goals') or character.get('intentions')):
             warnings.append(f"{card['name']}: не задана цель или намерение для самостоятельных действий.")
@@ -235,13 +235,16 @@ def secret_holders(state):
 
 
 PLACEHOLDER=re.compile(r'^\s*(?:неизвестно|неизвестен|неизвестна|не указано|не задано|нет данных|\?|[-—–]|n/?a|unknown)(?:\s*[.!])?\s*$',re.I)
-DETAIL_MIN={'Возраст':1,'Роль':3,'Статус':3,'Внешность':55,'Суть':65,'Биография':105}
+DETAIL_MIN={'Возраст':1,'Роль':3,'Статус':3,'Внешность':55,'Характер':65,
+            'Стиль общения':45,'Привычки':35,'Сильные стороны':35,'Слабости':35,
+            'Страхи и уязвимости':35,'Биография':105}
 
 
 def weak_card_field(value,field,source=''):
     """Catch schema filler and verbatim idea copies; never fabricate missing details in Python."""
     if not isinstance(value,str) or PLACEHOLDER.fullmatch(value) or len(value.strip())<DETAIL_MIN[field]:return True
-    if field in ('Внешность','Суть','Биография') and source:
+    if field in ('Внешность','Характер','Стиль общения','Привычки','Сильные стороны',
+                 'Слабости','Страхи и уязвимости','Биография') and source:
         source_words=set(re.findall(r'[\wё]{4,}',source.casefold()))
         words=set(re.findall(r'[\wё]{4,}',value.casefold()))
         if len(words-source_words)<4:return True
@@ -332,7 +335,7 @@ def add(state,kind):
     state=deepcopy(state);eid=kind+'_'+uuid.uuid4().hex[:16]
     actor=state.get('controlled_actor_id');minute=state['world_clock']['minute']
     if kind=='character':
-        state['characters'].append({'id':eid,'name':'Новый персонаж '+eid[-4:],'is_player':False,'fields':{'Статус':'','Внешность':'','Суть':'','Биография':''},'aliases':[]})
+        state['characters'].append({'id':eid,'name':'Новый персонаж '+eid[-4:],'is_player':False,'fields':{key:'' for key in CARD_FIELDS},'aliases':[]})
         state['world']['characters'][eid]={'id':eid,'location':None,'situation':'','goals':[],'short_goal':'','intentions':[],'obligations':[],'emotion':'','minute':minute,'scene_id':None,'last_event_id':None}
     elif kind=='location':state['locations'].append({'id':eid,'name':'Новое место','text':''})
     else:

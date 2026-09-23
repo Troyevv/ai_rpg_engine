@@ -49,6 +49,13 @@ def build_context(state, history, user_text, kind, context_length, reserve, extr
                 'Неделя циклична: после воскресенья понедельник; День N продолжает расти. '
                 'Это правило уточняет старые инструкции о сохранении времени.')
     dynamic += role_rules(state,kind,extraction_text is not None)
+    if extraction_text is None:
+        dynamic += ('\nРЕПЛИКИ NPC: в блоке «NPC и отношения» переданы карточки только участников текущей сцены '
+                    'и персонажей, упомянутых в действии. При написании диалогов используй «Стиль общения» '
+                    'каждого персонажа: длину фраз, лексику, степень прямоты, юмор и реакцию на конфликт. '
+                    'Учитывай его характер, привычки, сильные стороны, слабости, уязвимости и относящуюся '
+                    'к ситуации биографию; не делай голоса NPC одинаковыми. Текущие эмоции и намерения '
+                    'бери отдельно из world.characters, а не из постоянной карточки.')
     main,actor=protagonist(state),controlled(state)
     if validation_feedback:
         dynamic += ('\nПредыдущее извлечение отклонено: '+validation_feedback+
@@ -65,7 +72,9 @@ def build_context(state, history, user_text, kind, context_length, reserve, extr
     if kind=='background':
         present=set(state.get('scene_meta',{}).get('present_ids',[]))
         if state['camera'].get('scope')!='scene':present.discard(main)
-    cards = [{**c,'is_player':c['id']==actor,'is_protagonist':c['id']==main,'fields':{k:v for k,v in c['fields'].items() if not k.startswith('Отношение к ')}}
+    dynamic_fields={'Место','Время','Сейчас','Чего хочет','Намерения','Обязательства'}
+    cards = [{**c,'is_player':c['id']==actor,'is_protagonist':c['id']==main,
+              'fields':{k:v for k,v in c['fields'].items() if k not in dynamic_fields and not k.startswith('Отношение к ')}}
              for c in state['characters'] if c['id'] in present]
     objective_memory = state.get('memory',{})
     per_actor=objective_memory.get('per_actor',{})

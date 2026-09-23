@@ -6,6 +6,8 @@ from test_worlds import summary
 from world_parser import parse_summary
 from backend.services import draft_world as domain
 from backend.services.draft_generation import decode_result
+from backend.services.world import CARD_FIELDS, normalize
+from context_builder import build_context
 
 
 def fixture():
@@ -18,6 +20,63 @@ def fixture():
     scene=state['world']['scenes'][state['camera']['scene_id']]
     scene.update(location='Кухня',participants=[a,b,c])
     return domain.sync(state)
+
+
+def test_legacy_character_card_migrates_without_inventing_details(api):
+    client,app=api
+    old=domain.prepare(parse_summary(summary()))
+    first=old['characters'][0]['fields']
+    legacy=first['Характер']
+    first['Суть']=first.pop('Характер')
+    updated=normalize(old)
+    assert first['Суть']==legacy  # the persisted source is never mutated
+    assert updated['characters'][0]['fields']['Характер']==legacy
+    assert 'Суть' not in updated['characters'][0]['fields']
+    assert all(updated['characters'][0]['fields'][key]=='' for key in CARD_FIELDS if key not in ('Характер','Статус','Внешность'))
+    assert normalize(updated)==updated
+    assert updated['world']['characters']==old['world']['characters']
+    assert parse_summary(domain.export_markdown(domain.prepare(updated)))==domain.prepare(updated)
+    w=client.post('/api/workspaces',json={'name':'Старый мир'}).json()
+    with app.state.repository.connect() as db:
+        app.state.repository._record_document(db,'world_draft',w['id'],json.dumps({'state':old,'source':'','generated':False},ensure_ascii=False),True,'legacy')
+    draft=client.get(f"/api/workspaces/{w['id']}/draft?author=true").json()
+    assert draft['state']['characters'][0]['fields']['Характер']==legacy
+    assert draft['state']['characters'][0]['fields']['Стиль общения']==''
+    reply=client.patch(f"/api/workspaces/{w['id']}/draft",json={'revision':draft['revision'],'operation':'patch','kind':'character','entity_id':old['characters'][0]['id'],'field':'fields.Стиль общения','value':'Говорит отрывисто.'})
+    assert reply.status_code==200,reply.text
+    assert reply.json()['state']['characters'][0]['fields']['Стиль общения']=='Говорит отрывисто.'
+
+
+def test_current_scene_voices_reach_gm_without_all_npc_cards():
+    state=fixture()
+    a,b,c=[card['id'] for card in state['characters'][:3]]
+    state['world']['scenes'][state['camera']['scene_id']]['participants']=[a,b]
+    state['scene_meta']['present_ids']=[a,b]
+    state['characters'][1]['fields'].update({'Стиль общения':'Говорит рублеными фразами, любит ироничные уточнения.',
+        'Привычки':'Поправляет рукав перед ответом.', 'Сильные стороны':'Умеет убеждать команду.',
+        'Слабости':'Не признаёт ошибки.', 'Страхи и уязвимости':'Боится повторить провал.'})
+    state['characters'][2]['fields']['Стиль общения']='Исключительный голос отсутствующего персонажа.'
+    context=build_context(state,[],'Осмотреть кабинет.','turn',32768,4000)
+    gm=next(m['content'] for m in context if m['content'].startswith('NPC и отношения'))
+    assert 'Говорит рублеными фразами' in gm
+    assert 'Исключительный голос отсутствующего персонажа' not in gm
+    assert 'Характер' in gm and 'Биография' in gm
+    assert 'При написании диалогов используй «Стиль общения»' in str(context)
+    assert [x['id'] for x in json.loads(gm.split('\n',1)[1])['characters']]==[a,b]
+
+
+def test_whole_character_regeneration_keeps_dynamic_state():
+    state=fixture();cid=state['characters'][1]['id']
+    old=deepcopy(state['world']['characters'][cid])
+    card=deepcopy(state['characters'][1]);card.setdefault('aliases',[])
+    card['fields'].update({key:f'Новая деталь: {key}' for key in CARD_FIELDS})
+    config={'_draft_task':'character','_draft_target':{'kind':'character','id':cid}}
+    updated=decode_result(json.dumps({'value':{key:card[key] for key in ('name','aliases','fields')}},ensure_ascii=False),state,config)
+    assert updated['world']['characters'][cid]==old
+    assert all(updated['characters'][1]['fields'][key]==f'Новая деталь: {key}' for key in CARD_FIELDS)
+    del card['fields']['Стиль общения']
+    with pytest.raises(ValueError,match='постоянные поля'):
+        decode_result(json.dumps({'value':{key:card[key] for key in ('name','aliases','fields')}},ensure_ascii=False),state,config)
 
 
 def test_roundtrip_and_projection():
@@ -263,15 +322,16 @@ def test_field_regeneration_instruction_and_restart(api):
     client,app=api;path,d=make(client);cid=d['state']['characters'][0]['id'];before=d['state']
     captured=[]
     def stream(**kwargs):
-        captured.extend(kwargs['messages']);yield '{"value":"Седые волосы"}'
+        captured.extend(kwargs['messages']);yield '{"value":"Говорит коротко, с сухими шутками."}'
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
-        r=client.post(path+'/generate',json={'revision':d['revision'],'task':'field','kind':'character','entity_id':cid,'field':'fields.Внешность','text':'Сохрани всё, измени только цвет волос','config':REMOTE,'api_key':'test'})
+        r=client.post(path+'/generate',json={'revision':d['revision'],'task':'field','kind':'character','entity_id':cid,'field':'fields.Стиль общения','text':'Дай персонажу узнаваемый голос','config':REMOTE,'api_key':'test'})
         assert r.status_code==200,r.text
         assert wait_job(client,r.json()['id'])['status']=='saved'
     after=client.get(path+'?author=true').json()['state']
     assert after['world']==before['world']
-    assert after['characters'][0]['fields']['Внешность']=='Седые волосы'
-    assert 'измени только цвет волос' in str(captured)
+    assert after['characters'][0]['fields']['Стиль общения']=='Говорит коротко, с сухими шутками.'
+    assert after['characters'][0]['fields']['Внешность']==before['characters'][0]['fields']['Внешность']
+    assert 'узнаваемый голос' in str(captured)
     with app.state.repository.connect() as db:path_db=db.execute('PRAGMA database_list').fetchone()[2]
     assert Repository(path_db).draft(d['id'],True)['state']==after
 
@@ -306,8 +366,8 @@ def test_idea_generation_expands_into_independent_world_entities(api):
     for card,name in zip(actors,['Илья','Люда','Катя','Тимур']):card['name']=name
     a,b,c,d=[x['id'] for x in actors]
     world['campaign'].update(title='Клиника',description='В клинике смена начинается с привычного шума и давнего напряжения между коллегами.',public_description='Долгая история коллег, дружбы и трудных решений в городской клинике.')
-    world['characters'][0]['fields']['Суть']='Привык скрывать усталость за короткими шутками; во время сложного дежурства спокойнее всех.'
-    world['characters'][1]['fields']['Суть']='Прямая и внимательная начальница: шутит с Ильёй, но строго разделяет работу и дружбу.'
+    world['characters'][0]['fields']['Характер']='Привык скрывать усталость за короткими шутками; во время сложного дежурства спокойнее всех.'
+    world['characters'][1]['fields']['Характер']='Прямая и внимательная начальница: шутит с Ильёй, но строго разделяет работу и дружбу.'
     world['world']['relationships'][a+':'+b]={'source_id':a,'target_id':b,'context':'Уважает как начальницу и часто подшучивает.','dimensions':{'respect':65}}
     world['world']['relationships'][b+':'+a]={'source_id':b,'target_id':a,'context':'Ценит и заботится, хотя строгая на работе.','dimensions':{'trust':80}}
     world['world']['facts']['meeting']['character_ids']=[c,d]
@@ -333,7 +393,7 @@ def test_idea_generation_expands_into_independent_world_entities(api):
     assert {v['actor_id'] for v in result['world']['knowledge'].values() if v['fact_id']=='meeting'}=={c,d}
     assert a not in {v['actor_id'] for v in result['world']['knowledge'].values() if v['fact_id']=='meeting'}
     assert result['world_clock']['minute']==5160
-    assert 'Прямая' in result['characters'][1]['fields']['Суть']
+    assert 'Прямая' in result['characters'][1]['fields']['Характер']
     assert result['campaign']['public_description'] != result['campaign']['description']
     assert 'Тайная встреча' not in json.dumps(client.get(f"/api/workspaces/{workspace['id']}/draft").json()['state'],ensure_ascii=False)
 
@@ -355,7 +415,7 @@ def test_quick_generation_creative_completion_is_playable_and_one_request(api):
                     'Тимур Савельев':'Терапевт','Соня Орлова':'Менеджер','Катя Соболева':'Кардиолог'}[name],
             'Статус':'Работает в клинике и отвечает за свою часть ежедневного дежурства.',
             'Внешность':'Привычный рабочий образ, движения и мимика различимы даже после длинного дежурства.',
-            'Суть':f'{name} ведёт себя узнаваемо: сочетает компетентность с личными привычками и противоречиями, которые влияют на повседневное общение.',
+            'Характер':f'{name} ведёт себя узнаваемо: сочетает компетентность с личными привычками и противоречиями, которые влияют на повседневное общение.',
             'Биография':f'{name} давно работает рядом с коллегами; рабочий опыт и недавние разговоры объясняют его нынешнее поведение.'})
     # These details were not present in the short user idea. The generated
     # aggregate must retain creative content, not merely the named roles.
@@ -377,7 +437,12 @@ def test_quick_generation_creative_completion_is_playable_and_one_request(api):
          'Катя вернулась в город ради матери и взяла больше ночных смен, чем может выдержать. С Ильёй подружилась после спорного диагноза, который они решали вместе.'),
     ]
     for card,(appearance,character,biography) in zip(state['characters'],details):
-        card['fields'].update(Внешность=appearance,Суть=character,Биография=biography)
+        card['fields'].update(Внешность=appearance,Характер=character,Биография=biography,
+            **{'Стиль общения':f'{card["name"]} говорит короткими точными фразами и редко повышает голос. С близкими позволяет себе сухие шутки, при начальстве отвечает прямо и формально.',
+               'Привычки':f'{card["name"]} перед разговором поправляет рукав халата и делает короткую паузу, прежде чем назвать диагноз. После тяжёлой смены записывает наблюдения в бумажный блокнот.',
+               'Сильные стороны':f'{card["name"]} умеет быстро выделять важный симптом и сохранять спокойствие, когда коллеги спорят. Сверяет риск с реальными последствиями для пациента.',
+               'Слабости':f'{card["name"]} болезненно принимает публичные замечания и начинает проверять чужую работу вместо того, чтобы попросить помощи. Из-за этого задерживается допоздна.',
+               'Страхи и уязвимости':f'{card["name"]} боится потерять доверие команды после ошибки и избегает разговоров о давнем провале. При намёке на него слишком быстро закрывается.'})
     world=state['world'];world['characters']={i:world['characters'][i] for i in ids}
     for i,item in world['characters'].items():
         item.update(goals=['Разобраться с текущей рабочей задачей'] if i!=a else ['Завершить сегодняшнее дежурство'],
@@ -445,6 +510,7 @@ def test_quick_generation_creative_completion_is_playable_and_one_request(api):
     assert not draft['validation']['errors'] and not draft['validation']['warnings']
     assert len(draft['state']['characters'])==5 and len(draft['state']['world']['relationships'])==7
     assert 'редкий симптом' in draft['state']['characters'][0]['fields']['Биография']
+    assert all(all(draft['state']['characters'][i]['fields'][key] for key in CARD_FIELDS) for i in range(5))
     assert len({draft['state']['world']['facts']['private_'+cid]['text'] for cid in ids})==5
     assert {tuple(draft['state']['world']['characters'][cid]['goals']) for cid in npc_goals}=={(goal,) for goal in npc_goals.values()}
     assert draft['state']['world']['threads']['work']['visible_to_ids']==[a]

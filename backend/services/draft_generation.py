@@ -31,7 +31,11 @@ def messages_for(repo,job,config):
     system=('Ты редактор RPG. Верни ровно JSON {"value": новое значение}. Никаких других ключей. '
             'Сохрани explicit данные и тип значения. Не изменяй соседние поля, отношения, знания или IDs. '
             'Учитывай пользовательскую инструкцию. Если инструкции нет — предложи новый подходящий вариант.')
-    if task=='character':system+=' value содержит только name, aliases, fields карточки. ID и состояние мира неизменны.'
+    if task=='character':
+        from backend.services.world import CARD_FIELDS
+        system+=(' value содержит только name, aliases, fields карточки. В fields верни все постоянные поля: '
+                 +', '.join(CARD_FIELDS)+'. Стиль общения должен быть пригоден для написания узнаваемых реплик. '
+                 'Сохрани дополнительные поля карточки, если они есть. ID и динамическое состояние мира неизменны.')
     else:system+=' Изменяется только поле '+target['field']+'.'
     deps=domain.dependencies(state,target['kind'],target['id'])
     related=[state['world'][d['kind']][d['id']] for d in deps if d['kind'] in state['world'] and d['id'] in state['world'][d['kind']]][:15]
@@ -47,6 +51,9 @@ def decode_result(text,state,config):
     if config['_draft_task']=='character':
         card=value['value']
         if not isinstance(card,dict) or set(card)!={'name','aliases','fields'}:raise ValueError('Некорректная карточка: разрешены name, aliases, fields.')
+        from backend.services.world import CARD_FIELDS
+        if not isinstance(card['fields'],dict) or not set(CARD_FIELDS)<=card['fields'].keys():
+            raise ValueError('Перегенерация должна вернуть все постоянные поля карточки.')
         for field,new in card.items():state=domain.patch(state,'character',target['id'],field,new)
         return domain.prepare(state)
     return domain.prepare(domain.patch(state,target['kind'],target['id'],target['field'],value['value']))

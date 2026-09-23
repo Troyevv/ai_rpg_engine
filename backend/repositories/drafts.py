@@ -26,7 +26,7 @@ class DraftStorage:
         with self.connect() as db:
             w=self._draft_workspace(db,wid,idle=False);head=self._draft_head(db,wid)
             record=json.loads(head['content']) if head else None
-            state=record['state'] if record else None
+            state=domain.prepare(record['state']) if record else None
             report=domain.validate(state) if state else {'errors':[],'warnings':[]}
             if state and record.get('generated'):report['warnings'].extend(domain.review_initial(state,record.get('source','')))
             history=[dict(r) for r in db.execute("SELECT id,reason,created_at FROM document_versions WHERE kind='world_draft' AND owner=? ORDER BY id DESC",(wid,))]
@@ -59,11 +59,11 @@ class DraftStorage:
             db.execute('BEGIN IMMEDIATE');self._draft_workspace(db,wid,revision)
             head=self._draft_head(db,wid)
             if not head:raise ValueError('Сначала создай или импортируй мир.')
-            record=json.loads(head['content']);state=record['state'];before=domain.validate(state)
+            record=json.loads(head['content']);state=domain.prepare(record['state']);before=domain.validate(state)
             if operation=='restore':
                 old=db.execute("SELECT * FROM document_versions WHERE id=? AND kind='world_draft' AND owner=?",(source_id,wid)).fetchone()
                 if not old:raise ValueError('Версия не принадлежит черновику.')
-                record=json.loads(old['content']);state=record['state']
+                record=json.loads(old['content']);state=domain.prepare(record['state'])
             elif operation=='patch':state=domain.patch(state,kind,eid,field,value)
             elif operation=='add':state,eid=domain.add(state,kind)
             elif operation=='remove':state=domain.remove(state,kind,eid)
@@ -95,7 +95,7 @@ class DraftStorage:
             if done:return json.loads(done[0])
             w=self._draft_workspace(db,wid,revision);head=self._draft_head(db,wid)
             if not head or head['id']!=version_id:raise ValueError('Подтверждённая версия устарела.')
-            state=json.loads(head['content'])['state'];report=domain.validate(state)
+            state=domain.prepare(json.loads(head['content'])['state']);report=domain.validate(state)
             if report['errors']:raise ValueError('Нельзя начать игру: '+'; '.join(report['errors']))
             name=state['campaign']['title'].strip() or w['name'];source=domain.export_markdown(state)
             digest=hashlib.sha256(dump(state).encode()).hexdigest()

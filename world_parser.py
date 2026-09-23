@@ -1,5 +1,6 @@
 """Lossless structural import of the project's Markdown summary format."""
 import re
+from backend.services.world import normalize_card_fields
 
 SECTIONS = {
     'ГЛАВНОЕ СЕЙЧАС': 'scene', 'ЖАНР И ТОН': 'tone',
@@ -57,9 +58,10 @@ def parse_summary(markdown):
             if clean(match[1]) in fields:
                 raise ValueError('Повтор поля персонажа: проверь маркеры 👤.')
             fields[clean(match[1])] = body[match.end():found[j+1].start() if j+1 < len(found) else len(body)].strip().rstrip('-').strip()
-        required = ['Статус', 'Внешность', 'Суть', 'Сейчас', 'Чего хочет']
-        if any(not fields.get(key) for key in required):
+        required = ['Статус', 'Внешность', 'Сейчас', 'Чего хочет']
+        if any(not fields.get(key) for key in required) or not (fields.get('Характер') or fields.get('Суть')):
             raise ValueError(f'У персонажа «{name}» не заполнены обязательные поля: ' + ', '.join(required))
+        fields = normalize_card_fields(fields)
         characters.append({'id': f'character_{i+1}', 'name': name, 'is_player': '(ГГ)' in name,
                            'text': body, 'fields': fields})
     if sum(c['is_player'] for c in characters) != 1 or not characters[0]['is_player']:
