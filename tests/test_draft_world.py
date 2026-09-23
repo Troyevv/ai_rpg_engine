@@ -145,7 +145,7 @@ def test_generation_uses_one_request_and_saves_valid_world(api):
         calls.append(kwargs)
         with app.state.repository.connect() as db:
             phases.append(db.execute('SELECT phase FROM preparation_jobs ORDER BY rowid DESC LIMIT 1').fetchone()[0])
-        assert 'Ты одновременно сценарист' in kwargs['messages'][0]['content']
+        assert 'Ты автор полноценного живого RPG-мира' in kwargs['messages'][0]['content']
         yield json.dumps(expected,ensure_ascii=False)
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         response=client.post(path+'/generate',json={'revision':draft['revision'],'task':'world','text':'Сложный мир','config':REMOTE,'api_key':'test'})
@@ -156,6 +156,9 @@ def test_generation_uses_one_request_and_saves_valid_world(api):
     assert updated['state']['campaign']['title']=='Маяк'
     assert not updated['validation']['errors'] and len(updated['history'])==2
     assert len(calls)==1 and phases==['world']
+    prompt=calls[0]['messages'][0]['content']
+    assert 'НЕ полная спецификация' in prompt and 'минимальными текстами' in prompt
+    assert 'A → B и B → A' in prompt and 'knowledge["k1"]' in prompt
     with app.state.repository.connect() as db:
         stages=[row[0] for row in db.execute('SELECT stage FROM llm_requests')]
     assert stages==['draft_world']
@@ -321,7 +324,7 @@ def test_idea_generation_expands_into_independent_world_entities(api):
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         j=client.post(f"/api/workspaces/{workspace['id']}/draft/generate",json={'revision':workspace['revision'],'task':'world','text':original,'config':REMOTE,'api_key':'fixture'}).json()
         assert wait_job(client,j['id'])['status']=='saved'
-    assert 'творчески разработай' in messages[0]['content']
+    assert 'придумай самостоятельно' in messages[0]['content']
     assert any(original in m['content'] for m in messages)
     draft=client.get(f"/api/workspaces/{workspace['id']}/draft?author=true").json()
     result=draft['state'];assert not draft['validation']['errors']
@@ -354,11 +357,42 @@ def test_quick_generation_creative_completion_is_playable_and_one_request(api):
             'Внешность':'Привычный рабочий образ, движения и мимика различимы даже после длинного дежурства.',
             'Суть':f'{name} ведёт себя узнаваемо: сочетает компетентность с личными привычками и противоречиями, которые влияют на повседневное общение.',
             'Биография':f'{name} давно работает рядом с коллегами; рабочий опыт и недавние разговоры объясняют его нынешнее поведение.'})
+    # These details were not present in the short user idea. The generated
+    # aggregate must retain creative content, not merely the named roles.
+    details=[
+        ('Вечно сбитая прядь и потёртые перчатки; по ночам он забывает снять очки после смены.',
+         'Говорит обрывисто и замечает мелочи в чужой речи. Боится подвести команду и потому плохо делегирует.',
+         'Несколько лет назад он пропустил редкий симптом в учебной практике. Люда тогда защищала его перед комиссией, но он до сих пор берёт сложные случаи лично.'),
+        ('Седая прядь у виска и выцветший халат с аккуратно заштопанным карманом.',
+         'Говорит мягко, пока речь не заходит о риске для пациентов. Хочет доверять команде, но слишком хорошо помнит цену поспешных решений.',
+         'До назначения главврачом она работала с Ильёй в ночных сменах. После тяжёлой смены изменила порядок дежурств и до сих пор спорит с ним о самостоятельности команды.'),
+        ('Неровно застёгнутый халат и чернильное пятно на пальце; он неизменно рисует схемы на салфетках.',
+         'Отшучивается вместо извинений, хотя первым замечает ухудшение пациента. Опоздания скрывают страх не справиться с новой должностью.',
+         'Тимур однажды вытащил сложный случай, когда команда уже сдалась. После разрыва с Соней всё чаще ночует у знакомых и не успевает к началу смены.'),
+        ('Короткая стрижка и заметное кольцо на цепочке; всегда ровно раскладывает документы.',
+         'Спокойно разговаривает с больными, а с бывшим партнёром теряет терпение. Ей трудно признаться в том, что она по-прежнему следит за его успехами.',
+         'Соня устраивала первую совместную благотворительную акцию отделения. После разрыва с Тимуром осталась работать здесь, потому что клиника стала её собственным делом.'),
+        ('Веснушки и старая брошь в виде компаса; машинально считает удары пульса.',
+         'Легко поддевает Илью за обедом, но тщательно скрывает усталость. Хочет сменить график, не признаваясь коллегам, что дома на ней держится семья.',
+         'Катя вернулась в город ради матери и взяла больше ночных смен, чем может выдержать. С Ильёй подружилась после спорного диагноза, который они решали вместе.'),
+    ]
+    for card,(appearance,character,biography) in zip(state['characters'],details):
+        card['fields'].update(Внешность=appearance,Суть=character,Биография=biography)
     world=state['world'];world['characters']={i:world['characters'][i] for i in ids}
     for i,item in world['characters'].items():
         item.update(goals=['Разобраться с текущей рабочей задачей'] if i!=a else ['Завершить сегодняшнее дежурство'],
                     intentions=['Поговорить с нужным коллегой после смены'] if i!=a else [],minute=5160,
                     situation='Занят делами клиники',scene_id=None)
+    npc_goals={b:'Перераспределить ночные смены без срыва работы отделения',
+               c:'Доказать Илье, что способен вести сложный случай самостоятельно',
+               d:'Решить, подавать ли заявление об уходе после благотворительной акции',
+               e:'Согласовать новый график, чтобы ухаживать за матерью'}
+    npc_intentions={b:'После планёрки спросить Илью, почему он снова остался сверхурочно',
+                    c:'Принести собственные записи по пациенту до разговора с Ильёй',
+                    d:'Сначала выяснить, кто возьмёт на себя организацию акции',
+                    e:'За обедом осторожно узнать, кто сможет взять её ночную смену'}
+    for cid in npc_goals:
+        world['characters'][cid].update(goals=[npc_goals[cid]],intentions=[npc_intentions[cid]])
     world['characters'][a].update(location='Морг клиники',situation='Проводит вскрытие',scene_id=state['camera']['scene_id'])
     world['relationships']={
         'ab':{'source_id':a,'target_id':b,'context':'Илья доверяет Люде как начальнице, но спорит о нагрузке на команду.','dimensions':{'respect':65}},
@@ -371,9 +405,16 @@ def test_quick_generation_creative_completion_is_playable_and_one_request(api):
     world['facts']={'birthday':{'id':'birthday','text':'Сегодня день рождения Ильи','secret':False,'character_ids':[a],'evidence':[]},
                     'cheat':{'id':'cheat','text':'Тимур изменял Соне','secret':True,'character_ids':[c,d],'evidence':[]}}
     world['knowledge']={'d:cheat':{'actor_id':d,'fact_id':'cheat','status':'known','source_event_id':None}}
-    for cid in ids:
+    private_details=[
+        'Илья скрыл от комиссии, что заметил редкий симптом уже после выписки пациента.',
+        'Люда сохранила письмо предыдущего главврача с предупреждением о неучтённых переработках.',
+        'Тимур отказался от предложения работать в другом городе, не рассказав об этом Соне.',
+        'Соня хранит черновик заявления об уходе, который так и не передала Люде.',
+        'Катя оплатила лечение матери из денег, отложенных на собственное обучение.',
+    ]
+    for cid,private_text in zip(ids,private_details):
         fid='private_'+cid
-        world['facts'][fid]={'id':fid,'text':f'{names[ids.index(cid)]} тайно хранит письмо из прошлого.',
+        world['facts'][fid]={'id':fid,'text':private_text,
                              'secret':True,'character_ids':[cid],'evidence':[]}
         world['knowledge'][cid+':'+fid]={'actor_id':cid,'fact_id':fid,'status':'known','source_event_id':None}
     world['threads']={
@@ -399,10 +440,13 @@ def test_quick_generation_creative_completion_is_playable_and_one_request(api):
         assert job.status_code==200,job.text
         assert wait_job(client,job.json()['id'])['status']=='saved'
     assert len(calls)==1 and idea in calls[0][-1]['content']
-    assert 'Ты одновременно сценарист' in calls[0][0]['content']
+    assert 'Ты автор полноценного живого RPG-мира' in calls[0][0]['content']
     draft=client.get(f"/api/workspaces/{w['id']}/draft?author=true").json()
     assert not draft['validation']['errors'] and not draft['validation']['warnings']
     assert len(draft['state']['characters'])==5 and len(draft['state']['world']['relationships'])==7
+    assert 'редкий симптом' in draft['state']['characters'][0]['fields']['Биография']
+    assert len({draft['state']['world']['facts']['private_'+cid]['text'] for cid in ids})==5
+    assert {tuple(draft['state']['world']['characters'][cid]['goals']) for cid in npc_goals}=={(goal,) for goal in npc_goals.values()}
     assert draft['state']['world']['threads']['work']['visible_to_ids']==[a]
     assert 'cheat' not in client.get(f"/api/workspaces/{w['id']}/draft").json()['state']['world']['facts']
     confirmed=client.post(f"/api/workspaces/{w['id']}/draft/confirm",json={'revision':draft['revision'],'version_id':draft['version_id']})
