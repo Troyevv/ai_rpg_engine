@@ -248,21 +248,6 @@ def weak_card_field(value,field,source=''):
     return False
 
 
-def completion_gaps(state,source=''):
-    """Only initial generation is reviewed; imported worlds and edits remain unrestricted."""
-    world=state['world'];cards=state['characters'];known=secret_holders(state)
-    return {
-        'card_fields':{c['id']:[field for field in DETAIL_MIN if weak_card_field(c['fields'].get(field,''),field,source)]
-                       for c in cards if any(weak_card_field(c['fields'].get(field,''),field,source) for field in DETAIL_MIN)},
-        'motivation_ids':[c['id'] for c in cards if c['id']!=state['controlled_actor_id']
-                          and not (world['characters'].get(c['id'],{}).get('goals') or world['characters'].get(c['id'],{}).get('intentions'))],
-        'secret_ids':[c['id'] for c in cards if c['id'] not in known],
-        'shallow_relationship_ids':[key for key,r in world['relationships'].items() if len(r.get('context','').strip())<25],
-        'needs_relationships':len(cards)>1 and not world['relationships'],
-        'needs_threads':len(cards)>2 and not world['threads'],
-    }
-
-
 def repair_scene_interval(state):
     """An unfinished active opening scene is a point in time, not an elapsed event."""
     state=deepcopy(state)
@@ -273,64 +258,6 @@ def repair_scene_interval(state):
         scene['start_minute']=now
         scene['end_minute']=now
     return state
-
-
-def apply_completion(state, supplement, source=''):
-    """Apply only missing generation fields; never replace authored facts, IDs or backstory."""
-    if not isinstance(supplement,dict):raise ValueError('Доработка мира должна быть JSON-объектом.')
-    state=deepcopy(state);world=state['world'];gaps=completion_gaps(state,source)
-    ids=set(world['characters']);actor_updates=supplement.get('characters',{})
-    if not isinstance(actor_updates,dict):raise ValueError('Некорректная доработка персонажей.')
-    cards=supplement.get('card_fields',{})
-    if not isinstance(cards,dict):raise ValueError('Некорректная доработка карточек.')
-    for card in state['characters']:
-        updates=cards.get(card['id'],{})
-        if not isinstance(updates,dict):continue
-        for field in gaps['card_fields'].get(card['id'],[]):
-            value=updates.get(field)
-            if not weak_card_field(value,field,source):card['fields'][field]=value.strip()
-    for cid in set(gaps['motivation_ids']) & actor_updates.keys():
-        item=actor_updates[cid]
-        if not isinstance(item,dict):continue
-        for field in ('goals','intentions'):
-            choices=item.get(field)
-            if not world['characters'][cid].get(field) and isinstance(choices,list):
-                world['characters'][cid][field]=[x.strip() for x in choices if isinstance(x,str) and x.strip()][:3]
-    secrets=supplement.get('secrets',{})
-    if not isinstance(secrets,dict):raise ValueError('Некорректная доработка тайн.')
-    for cid in gaps['secret_ids']:
-        item=secrets.get(cid)
-        if not isinstance(item,dict) or not isinstance(item.get('text'),str) or not item['text'].strip():continue
-        fid='initial_secret_'+cid
-        n=2
-        while fid in world['facts']:
-            fid='initial_secret_'+cid+'_'+str(n);n+=1
-        involved=[cid]+[x for x in item.get('about_ids',[]) if isinstance(x,str) and x in ids and x!=cid] if isinstance(item.get('about_ids',[]),list) else [cid]
-        world['facts'][fid]={'id':fid,'text':item['text'].strip(),'secret':True,'owner_id':cid,'character_ids':involved,'evidence':[]}
-        holders=[cid]+[x for x in item.get('known_by_ids',[]) if isinstance(x,str) and x in ids and x!=cid] if isinstance(item.get('known_by_ids',[]),list) else [cid]
-        for holder in holders:
-            world['knowledge'][holder+':'+fid]={'actor_id':holder,'fact_id':fid,'status':'known','source_event_id':None}
-    contexts=supplement.get('relationships',{})
-    if not isinstance(contexts,dict):raise ValueError('Некорректная доработка отношений.')
-    for rid in gaps['shallow_relationship_ids']:
-        value=contexts.get(rid)
-        if isinstance(value,str) and len(value.strip())>=25:world['relationships'][rid]['context']=value.strip()
-    if gaps['needs_relationships'] and isinstance(supplement.get('new_relationships'),list):
-        for r in supplement['new_relationships'][:max(2,len(ids)*2)]:
-            if not isinstance(r,dict) or not isinstance(r.get('source_id'),str) or not isinstance(r.get('target_id'),str) or r['source_id'] not in ids or r['target_id'] not in ids or r['source_id']==r['target_id']:continue
-            if not isinstance(r.get('context'),str) or len(r['context'].strip())<25:continue
-            rid=r['source_id']+':'+r['target_id']
-            world['relationships'].setdefault(rid,{'source_id':r['source_id'],'target_id':r['target_id'],'context':r['context'].strip(),'dimensions':{}})
-    if gaps['needs_threads'] and isinstance(supplement.get('threads'),list):
-        for i,t in enumerate(supplement['threads'][:3]):
-            if not isinstance(t,dict) or not isinstance(t.get('description'),str) or not t['description'].strip():continue
-            participants=t.get('character_ids',[])
-            if not isinstance(participants,list) or not participants or any(not isinstance(x,str) or x not in ids for x in participants):continue
-            tid='initial_thread_'+str(i+1)
-            if tid in world['threads']:continue
-            world['threads'][tid]={'id':tid,'description':t['description'].strip(),'state':t.get('state','') if isinstance(t.get('state'),str) else '',
-                                   'status':'active','character_ids':participants,'relevance':0.5,'last_event_id':None}
-    return prepare(state)
 
 
 def entity(state,kind,eid):

@@ -31,13 +31,7 @@ NARRATIVE = '''Персонаж 1 подвигает свободный стул
 def stream(**kwargs):
     full='\n'.join(m['content'] for m in kwargs['messages'])
     observer='Тип хода: background' in full or 'Режим observer:' in full
-    if 'Ты разрабатываешь оригинальную игровую выжимку' in full:
-        from test_draft_world import DESIGN_FIXTURE
-        value=DESIGN_FIXTURE
-    elif 'Ты дополняешь уже созданный игровой мир' in full:
-        from test_draft_world import supplement
-        value=json.dumps(supplement(kwargs['messages']),ensure_ascii=False)
-    elif 'Ты создаёшь готовый игровой мир' in full:
+    if 'Ты одновременно сценарист' in full:
         from test_draft_world import fixture
         value=json.dumps(fixture(),ensure_ascii=False)
     elif 'Ты редактор RPG' in full:
