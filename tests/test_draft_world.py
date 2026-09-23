@@ -501,19 +501,46 @@ def test_missing_appearance_and_literal_copy_are_completed_without_replacing_oth
     assert state['characters'][1]['fields']['Внешность']=='неизвестно'
 
 
-def test_incomplete_completion_never_overwrites_previous_draft(api):
+@pytest.mark.parametrize('supplement_text',['{}','{"bad":'])
+def test_incomplete_creative_enrichment_saves_valid_draft_with_warnings(api,supplement_text):
     from unittest.mock import patch
-    client,_=api;path,previous=make(client)
+    client,app=api;path,previous=make(client)
     def stream(**kwargs):
         if 'Ты разрабатываешь оригинальную' in kwargs['messages'][0]['content']:yield DESIGN_FIXTURE
-        else:yield json.dumps({} if 'Ты дополняешь' in kwargs['messages'][0]['content'] else fixture(),ensure_ascii=False)
+        else:yield supplement_text if 'Ты дополняешь' in kwargs['messages'][0]['content'] else json.dumps(fixture(),ensure_ascii=False)
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         job=client.post(path+'/generate',json={'revision':previous['revision'],'task':'world',
                                                 'text':'Пересоздай мир','config':REMOTE,'api_key':'fixture'})
         result=wait_job(client,job.json()['id'])
-        assert result['status']=='error'
+        assert result['status']=='saved',result
     after=client.get(path+'?author=true').json()
-    assert after['version_id']==previous['version_id'] and after['state']==previous['state']
+    assert after['version_id']!=previous['version_id'] and after['validation']['warnings']
+    assert not after['validation']['errors']
+    assert previous['version_id'] in [entry['id'] for entry in after['history']]
+    with app.state.repository.connect() as db:
+        assert 'draft_world_completion_focused' in {r[0] for r in db.execute('SELECT stage FROM llm_requests')}
+
+
+def test_focused_completion_repairs_omissions_from_first_enrichment(api):
+    from unittest.mock import patch
+    client,app=api;path,previous=make(client)
+    phases=[]
+    def stream(**kwargs):
+        prompt=kwargs['messages'][0]['content']
+        with app.state.repository.connect() as db:
+            phases.append(db.execute('SELECT phase FROM preparation_jobs ORDER BY rowid DESC LIMIT 1').fetchone()[0])
+        if 'Ты разрабатываешь оригинальную' in prompt:yield DESIGN_FIXTURE
+        elif 'Ты дополняешь' in prompt:
+            yield json.dumps(supplement(kwargs['messages']) if phases[-1]=='refining' else {},ensure_ascii=False)
+        else:yield json.dumps(fixture(),ensure_ascii=False)
+    with patch('backend.services.preparation.chat_stream',side_effect=stream):
+        job=client.post(path+'/generate',json={'revision':previous['revision'],'task':'world',
+                                                'text':'Пересоздай мир','config':REMOTE,'api_key':'fixture'})
+        result=wait_job(client,job.json()['id'])
+        assert result['status']=='saved',result
+    after=client.get(path+'?author=true').json()
+    assert phases==['designing','world','completing','refining']
+    assert not after['validation']['errors'] and not after['validation']['warnings']
 
 
 def test_json_continuation_keeps_json_format():

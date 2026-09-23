@@ -5,6 +5,10 @@ from backend.services import draft_world as domain
 from backend.services.continuation import stream_document
 from backend.services.usage import tracked_stream
 
+
+class MalformedDraftJSON(ValueError):
+    """Only JSON syntax failures can be treated as optional enrichment failure."""
+
 DESIGN_INSTRUCTION=('Ты разрабатываешь оригинальную игровую выжимку по ЗАМЫСЛУ автора. Это внутренний творческий этап '
     'генератора, не сценарий и не запланированные будущие ходы. Развивай идею смело: продумай уклад мира, '
     'прошлое и повседневность каждого значимого героя, внешность, наблюдаемые привычки, противоречия характера, '
@@ -69,7 +73,7 @@ def decode_result(text,state,config):
     return domain.prepare(domain.patch(state,target['kind'],target['id'],target['field'],value['value']))
 
 
-def completion_messages(state,gaps,source=''):
+def completion_messages(state,gaps,source='',focused=False):
     """Small follow-up only when the generated aggregate omitted playable essentials."""
     world=state['world']
     cards={c['id']:{'name':c['name'],'fields':c['fields'], 'state':world['characters'].get(c['id'],{})} for c in state['characters']}
@@ -79,9 +83,20 @@ def completion_messages(state,gaps,source=''):
                {'text':v['text'],'owner_id':v.get('owner_id'),'character_ids':v.get('character_ids',[])} for v in world['facts'].values() if v.get('secret')],
            'scene':world['scenes'].get(state.get('camera',{}).get('scene_id'),{}),'gaps':gaps,
            'original_idea':source}
+    if focused:
+        needed=set(gaps['card_fields']) | set(gaps['motivation_ids']) | set(gaps['secret_ids'])
+        brief['characters']={cid:{'name':card['name'],
+            'fields':{key:val[:300] for key,val in card['fields'].items()},
+            'state':{key:card['state'].get(key) for key in ('goals','intentions','situation')}}
+            for cid,card in cards.items() if cid in needed}
+        brief['character_ids']={cid:card['name'] for cid,card in cards.items()}
+        brief['campaign']={key:value for key,value in brief['campaign'].items() if key in ('title','setting','genre')}
+        brief['threads']={key:{'description':value.get('description','')} for key,value in world['threads'].items()}
+        brief['scene']={key:value for key,value in brief['scene'].items() if key in ('location','participants','text')}
+        brief['original_idea']=source if len(source)<=3000 else source[:1500]+'\n[…]\n'+source[-1500:]
     system=('Ты дополняешь уже созданный игровой мир. Верни ТОЛЬКО JSON-объект с нужными ключами: '
             '{"characters":{"id":{"goals":["..."],"intentions":["..."]}},'
-            '"card_fields":{"id":{"Внешность":"...","Суть":"...","Биография":"..."}},'
+            '"card_fields":{"id":{"Возраст":"...","Роль":"...","Статус":"...","Внешность":"...","Суть":"...","Биография":"..."}},'
             '"secrets":{"id":{"text":"конкретная личная тайна", "about_ids":[], "known_by_ids":[]}},'
             '"relationships":{"существующий ID":"полная осмысленная динамика"},'
             '"new_relationships":[{"source_id":"...","target_id":"...","context":"..."}],'
@@ -97,6 +112,10 @@ def completion_messages(state,gaps,source=''):
             'Для motivation_ids создай конкретную сегодняшнюю цель и намерение, согласованные с характером. '
             'Для shallow_relationship_ids допиши историю, причины и направленный взгляд без принудительного романа. '
             'Создавай сюжетные предпосылки, не предопределённые будущие ходы. Все ID должны существовать.')
+    if focused:
+        brief['relationships']={key:value for key,value in brief['relationships'].items() if key in gaps['shallow_relationship_ids']}
+        brief['existing_secrets']=[item for item in brief['existing_secrets'] if item.get('owner_id') in needed]
+        system+=' Это точечная доработка: предыдущий ответ оставил только перечисленные пробелы. Верни JSON исключительно для этих ID и полей; не повторяй весь мир.'
     return [{'role':'system','content':system},{'role':'user','content':json.dumps(brief,ensure_ascii=False)}]
 
 
@@ -138,9 +157,9 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     # The standard summary setting (often 2K tokens) is too small for even a
     # modest World State object. Context budgeting below still caps each call.
     json_budget=max(config['max_tokens'],min(12000,context//2)) if config['_draft_task']=='world' else config['max_tokens']
-    def json_answer(request):
+    def json_answer(request,attempts=2):
         """Retry a malformed aggregate from scratch, preserving the old draft."""
-        for attempt in range(2):
+        for attempt in range(attempts):
             answer='';last=0.0
             if attempt:repo.draft_phase(jid,'retrying',reset_progress=True)
             prompt=request if not attempt else [*request,{'role':'user','content':
@@ -158,7 +177,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
                 if attempt:repo.draft_phase(jid,'world' if stage=='draft_world' else 'completing')
                 return answer,parsed
             except (TypeError,json.JSONDecodeError):
-                if attempt==1:raise ValueError('Модель дважды вернула некорректный JSON. Предыдущая версия сохранена.')
+                if attempt==attempts-1:raise MalformedDraftJSON('Модель вернула некорректный JSON. Предыдущая версия сохранена.')
         raise AssertionError('unreachable')
 
     text,_=json_answer(messages)
@@ -171,14 +190,26 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         gaps=domain.completion_gaps(state,source)
         if any(gaps.values()):
             stage='draft_world_completion';repo.draft_phase(jid,'completing',reset_progress=True)
-            extra,supplement=json_answer(completion_messages(state,gaps,source))
+            try:
+                _,supplement=json_answer(completion_messages(state,gaps,source,focused=True),attempts=1)
+                if handle.cancel.is_set():return
+                try:state=domain.apply_completion(state,supplement,source)
+                except ValueError:pass
+            except MalformedDraftJSON:
+                # The base world is valid; failed enrichment must not erase it.
+                pass
             if handle.cancel.is_set():return
-            repo.draft_phase(jid,'validating')
-            state=domain.apply_completion(state,supplement,source)
-        # A weak model may ignore some requested fields. Never present such a draft as complete.
         remaining=domain.completion_gaps(state,source)
         if any(remaining.values()):
-            raise ValueError('Модель не раскрыла важные части мира (персонажей, цели, отношения или тайны). Попробуй другую модель либо увеличь контекст. Предыдущая версия сохранена.')
+            stage='draft_world_completion_focused';repo.draft_phase(jid,'refining',reset_progress=True)
+            try:
+                _,supplement=json_answer(completion_messages(state,remaining,source,focused=True),attempts=1)
+                if handle.cancel.is_set():return
+                try:state=domain.apply_completion(state,supplement,source)
+                except ValueError:pass
+            except MalformedDraftJSON:
+                pass
+        repo.draft_phase(jid,'validating')
     report=domain.validate(state)
     if config['_draft_task']=='world' and report['errors']:
         raise ValueError('Модель создала мир с ошибками: '+'; '.join(report['errors'])+'. Предыдущая версия сохранена.')

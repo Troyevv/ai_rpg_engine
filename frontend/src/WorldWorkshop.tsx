@@ -126,6 +126,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
         designing: ['Развиваем замысел…', 'Модель придумывает детали мира, персонажей и их связи.'],
         world: ['Собираем игровой мир…', 'Модель записывает выжимку в структуру World State.'],
         completing: ['Дополняем недостающие детали…', 'Модель заполняет обнаруженные пробелы в карточках, отношениях или тайнах.'],
+        refining: ['Уточняем оставшиеся пробелы…', 'Модель получает короткий запрос только по незаполненным полям.'],
         retrying: ['Повторяем структурный ответ…', 'Первый JSON не удалось прочитать; модель создаёт ответ заново.'],
         validating: ['Проверяем структуру мира…', 'Движок проверяет заполнение полей, ссылки и согласованность.'],
         saving: ['Сохраняем версию…', 'Проверенный мир записывается в SQLite.'],
@@ -247,6 +248,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
       <Dialog open={!!deleteDraft} onOpenChange={open => { if (!open) setDeleteDraft(null); }}><DialogContent><DialogHeader><DialogTitle>Удалить «{deleteDraft?.name}»?</DialogTitle><DialogDescription>Черновик переместится в удалённые. Готовые игровые сохранения не затрагиваются.</DialogDescription></DialogHeader><div className="workshop-dialog-actions"><Button variant="ghost" onClick={() => setDeleteDraft(null)}>Отмена</Button><Button disabled={busy} onClick={() => void run(async () => { if (!deleteDraft) return; await api(`/workspaces/${deleteDraft.id}`,{revision:deleteDraft.revision},'DELETE'); setList(await api<WorkspacePick[]>('/workspaces')); setRemoved(await api<WorkspacePick[]>('/workspaces?deleted=true')); if (id === deleteDraft.id) { setId(''); setDraft(null); localStorage.removeItem('draftWorkspace'); } setDeleteDraft(null); toast.success('Черновик перемещён в удалённые'); })}>Удалить</Button></div></DialogContent></Dialog>
       {job?.error && <p className="workshop-error" role="alert">{job.error}</p>}
       {state && <section className="workshop-result">
+        {job?.status === 'saved' && !!draft?.validation.warnings.length && <p className="workshop-hint">Мир сохранён. Некоторые творческие детали модель оставила неполными — они перечислены в «Проверке мира» и доступны для редактирования.</p>}
         <div className="workshop-result-heading"><div><span className="workshop-step">02 · МИР ГОТОВ</span><h2>Посмотри, что получилось</h2></div>
           <Button variant="ghost" disabled={locked} onClick={() => {setEditingIdea(true); setText(draft?.source_text || text);}}>Изменить замысел</Button></div>
         <div className="workshop-result-toolbar">
