@@ -2,9 +2,10 @@
 import json
 import uuid
 from storage import Storage
+from backend.repositories.drafts import DraftStorage
 
 
-class Repository(Storage):
+class Repository(DraftStorage, Storage):
     def __init__(self, path=None):
         super().__init__(path)
         with self.connect() as db:
@@ -26,6 +27,8 @@ class Repository(Storage):
             db.execute('BEGIN IMMEDIATE')
             if 'deleted' not in {r['name'] for r in db.execute('PRAGMA table_info(preparation_workspaces)')}:
                 db.execute('ALTER TABLE preparation_workspaces ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0')
+            if 'phase' not in {r['name'] for r in db.execute('PRAGMA table_info(preparation_jobs)')}:
+                db.execute("ALTER TABLE preparation_jobs ADD COLUMN phase TEXT NOT NULL DEFAULT ''")
             for w in db.execute('SELECT * FROM preparation_workspaces').fetchall():
                 for kind in ('idea','summary'):
                     if not db.execute('SELECT 1 FROM document_heads WHERE kind=? AND owner=?',(kind,w['id'])).fetchone():
@@ -56,6 +59,8 @@ class Repository(Storage):
 
     @staticmethod
     def public_job(job):
+        if job.get('kind','').startswith('draft_'):
+            job={**job,'narrative':'','progress_chars':len(job.get('narrative',''))}
         return {k: v for k, v in job.items() if k not in ('config_json', 'before_json', 'context_json', 'memory_before_json', 'warnings_json')}
 
     def preparation_job(self, jid):

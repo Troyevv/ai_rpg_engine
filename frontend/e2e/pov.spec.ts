@@ -53,6 +53,7 @@ test('scenario and summary deletion keeps restorable versions and saves',async({
  await page.addInitScript(id=>localStorage.setItem('workspace',id),w.id);
  await page.goto('/');
  await nav(page,'Создать');
+  await page.getByRole('button',{name:'Со Сценаристом',exact:true}).click();
  page.once('dialog',d=>d.accept());
  await page.getByRole('button',{name:'Удалить выжимку',exact:true}).click();
  await expect(page.getByRole('button',{name:'Удалить выжимку',exact:true})).toHaveCount(0);

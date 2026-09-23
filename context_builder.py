@@ -49,6 +49,13 @@ def build_context(state, history, user_text, kind, context_length, reserve, extr
                 'Неделя циклична: после воскресенья понедельник; День N продолжает расти. '
                 'Это правило уточняет старые инструкции о сохранении времени.')
     dynamic += role_rules(state,kind,extraction_text is not None)
+    if extraction_text is None:
+        dynamic += ('\nРЕПЛИКИ NPC: в блоке «NPC и отношения» переданы карточки только участников текущей сцены '
+                    'и персонажей, упомянутых в действии. При написании диалогов используй «Стиль общения» '
+                    'каждого персонажа: длину фраз, лексику, степень прямоты, юмор и реакцию на конфликт. '
+                    'Учитывай его характер, привычки, сильные стороны, слабости, уязвимости и относящуюся '
+                    'к ситуации биографию; не делай голоса NPC одинаковыми. Текущие эмоции и намерения '
+                    'бери отдельно из world.characters, а не из постоянной карточки.')
     main,actor=protagonist(state),controlled(state)
     if validation_feedback:
         dynamic += ('\nПредыдущее извлечение отклонено: '+validation_feedback+
@@ -65,7 +72,9 @@ def build_context(state, history, user_text, kind, context_length, reserve, extr
     if kind=='background':
         present=set(state.get('scene_meta',{}).get('present_ids',[]))
         if state['camera'].get('scope')!='scene':present.discard(main)
-    cards = [{**c,'is_player':c['id']==actor,'is_protagonist':c['id']==main,'fields':{k:v for k,v in c['fields'].items() if not k.startswith('Отношение к ')}}
+    dynamic_fields={'Место','Время','Сейчас','Чего хочет','Намерения','Обязательства'}
+    cards = [{**c,'is_player':c['id']==actor,'is_protagonist':c['id']==main,
+              'fields':{k:v for k,v in c['fields'].items() if k not in dynamic_fields and not k.startswith('Отношение к ')}}
              for c in state['characters'] if c['id'] in present]
     objective_memory = state.get('memory',{})
     per_actor=objective_memory.get('per_actor',{})
@@ -79,7 +88,7 @@ def build_context(state, history, user_text, kind, context_length, reserve, extr
     relevant_events=[e for e in world['events'].values() if present.intersection(e['participants'])][-12:]
     messages = [
         {'role':'system','content':'Постоянные правила\n'+rules},
-        block('Выжимка мира', {'tone':state['sections'].get('tone',''), 'director_only':{'rules':state.get('story_notes',''),
+        block('Выжимка мира', {'tone':state['sections'].get('tone',''), 'director_only':{'campaign':state.get('campaign',{}),'rules':state.get('story_notes',''),
                               'initial_knowledge_unstructured':state['sections'].get('knowledge','')}}),
         {'role':'system','content':'Роли и время текущего запроса\n'+dynamic},
         block('POV и знания', {'protagonist_id':main,'controlled_actor_id':actor,'mode':kind,'world_clock':state.get('world_clock',{}),'transition':state.get('pov_transition') if kind=='pov' else None,

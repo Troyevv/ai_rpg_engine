@@ -402,6 +402,9 @@ def create_app(db_path=None, recover=True):
         state = repo.get_save(body.save_id)['state'] if body.save_id else repo.get_world(body.world_id)['state'] if body.world_id else {}
         return {'html': linked_markdown(body.text, state.get('characters', []) if body.link_names else [])}
 
+    from backend.api.drafts import install
+    install(app,repo,preparation,credentials,job)
+
     dist = ROOT / 'frontend' / 'dist'
     if (dist / 'assets').is_dir():
         app.mount('/assets', StaticFiles(directory=dist / 'assets'), name='assets')

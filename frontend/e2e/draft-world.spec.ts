@@ -1,0 +1,83 @@
+import {test,expect} from '@playwright/test';
+import {nav} from './navigation';
+for(const width of [360,390,412,430,1280,1440,1920]){
+ test(`world draft creation and editor ${width}`,async({page,request})=>{
+  await page.setViewportSize({width,height:900});
+  const workspace=await (await request.post('/api/workspaces',{data:{name:`Черновик ${width}`}})).json();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),workspace.id);
+  await page.goto('/');await nav(page,'Создать');
+  await page.getByLabel('Описание мира или текст импорта').fill('Драмеди. Восемь соседей собрались на кухне; один скрывает встречу у маяка. Сохрани направленные отношения.');
+  await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
+  await expect(page.locator('main')).not.toContainText('Тайная встреча у маяка');
+  await expect(page.locator('.workshop-view')).toContainText('Игрок');
+  await page.locator('.workshop-tabs').getByRole('button',{name:'Начало',exact:true}).click();
+  await expect(page.locator('.workshop-content')).toContainText('Кухня');
+  await page.locator('.workshop-tabs').getByRole('button',{name:'Места и факты',exact:true}).click();
+  await expect(page.locator('.workshop-content')).not.toContainText('Тайная встреча у маяка');
+  await page.locator('.workshop-tabs').getByRole('button',{name:'Обзор',exact:true}).click();
+  await expect(page.locator('.workshop-overview-grid')).toContainText('Главный герой');
+  await page.getByRole('button',{name:'Автор мира',exact:true}).click();
+  await page.getByRole('button',{name:'Показать всё',exact:true}).click();
+  await page.locator('.workshop-tabs').getByRole('button',{name:'Персонажи',exact:true}).click();
+  const first=page.locator('.workshop-person').first();
+  await first.getByRole('button',{name:'Изменить fields.Внешность',exact:true}).click();
+  await page.getByRole('dialog').getByLabel('Внешность',{exact:true}).fill('Рыжие волосы, зелёный шарф.');
+  await page.getByRole('button',{name:'Сохранить поле',exact:true}).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const draft=await (await request.get(`/api/workspaces/${workspace.id}/draft?author=true`)).json();
+  expect(draft.state.characters[0].fields.Внешность).toContain('зелёный шарф');
+  const exported=await request.get(`/api/workspaces/${workspace.id}/draft/export?version_id=${draft.version_id}&format=txt`);
+  expect(exported.ok()).toBeTruthy();expect(await exported.text()).toContain('зелёный шарф');
+  await page.evaluate(()=>{window.scrollTo(0,0);document.querySelector('.world-workshop')?.scrollTo(0,0)});
+  const geometry=await page.evaluate(()=>({left:scrollX,document:document.documentElement.scrollWidth,body:document.body.scrollWidth,viewport:innerWidth,workshop:document.querySelector('.world-workshop')?.scrollWidth,client:document.querySelector('.world-workshop')?.clientWidth}));
+  expect(geometry.left,JSON.stringify(geometry)).toBe(0);
+  expect(geometry.body,JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.viewport);
+  expect(geometry.document,JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.viewport);
+  expect(geometry.workshop,JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.client!+1);
+  await page.screenshot({path:`test-results/draft-${width}.png`,fullPage:false});
+  await page.reload();await nav(page,'Создать');
+  await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
+  await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
+  await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Начать игру',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Начать игру',exact:true}).click();
+  await expect(page.locator('.choices button')).toHaveCount(6);
+ });
+}
+
+test('new visitor can begin with an idea without making a workspace', async ({page}) => {
+  await page.goto('/');
+  await nav(page,'Создать');
+  await expect(page.getByRole('heading',{name:'Придумай свою историю'})).toBeVisible();
+  await page.getByLabel('Название черновика').fill('Вечер в клинике');
+  await page.getByLabel('Описание мира или текст импорта').fill('Вечером врач заканчивает дежурство. Придумай коллег, привычки, отношения и начало истории.');
+  await page.getByRole('button',{name:'Развить идею и создать мир'}).click();
+  await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
+  await expect(page.locator('.workshop-content')).toBeVisible();
+  await expect(page.locator('main')).not.toContainText('Тайная встреча у маяка');
+  await page.reload();await nav(page,'Создать');
+  await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
+});
+
+test('draft trash and responsive workshop width', async ({page,request}) => {
+  const kept=await (await request.post('/api/workspaces',{data:{name:'Оставить этот черновик'}})).json();
+  const removed=await (await request.post('/api/workspaces',{data:{name:'Удалить этот черновик'}})).json();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),removed.id);
+  await page.setViewportSize({width:1920,height:900});
+  await page.goto('/');await nav(page,'Создать');
+  const workshop=page.locator('.world-workshop');
+  const row=workshop.locator(`.workshop-draft-list [data-workspace-id="${removed.id}"]`);
+  await expect.poll(()=>workshop.evaluate(node=>node.getBoundingClientRect().width)).toBeGreaterThan(1200);
+  await workshop.locator('.workshop-continue > summary').click();
+  await row.getByRole('button',{name:'Удалить черновик «Удалить этот черновик»'}).click();
+  await expect(page.getByRole('dialog')).toContainText('Готовые игровые сохранения не затрагиваются');
+  await page.getByRole('dialog').getByRole('button',{name:'Удалить',exact:true}).click();
+  await expect(row).toHaveCount(0);
+  expect((await (await request.get('/api/workspaces')).json()).map((item:{id:string})=>item.id)).toContain(kept.id);
+  await workshop.locator('.workshop-trash > summary').click();
+  await workshop.locator(`.workshop-trash [data-workspace-id="${removed.id}"]`).getByRole('button',{name:'Восстановить'}).click();
+  await expect(row).toBeVisible();
+  await page.setViewportSize({width:390,height:844});
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});

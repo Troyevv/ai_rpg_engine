@@ -8,11 +8,16 @@ INSTRUCTION = ('Продолжи документ ровно с места об�
                'разделы исходного задания. Верни только продолжение Markdown. Уже выданный текст сохранён.')
 
 
-def request_context(original, text, context_length, requested_output):
+JSON_INSTRUCTION = ('Продолжи ЕДИНСТВЕННЫЙ JSON-объект ровно с последнего символа. '
+                    'Не начинай заново, не добавляй Markdown, кавычки кодового блока или объяснения. '
+                    'Верни только отсутствующий суффикс до корректного закрытия объекта.')
+
+
+def request_context(original, text, context_length, requested_output, format_hint='markdown'):
     """Keep source/template intact; slide only generated text when the context fills."""
     messages=deepcopy(original)
     if text:
-        messages += [{'role':'assistant','content':''},{'role':'user','content':INSTRUCTION}]
+        messages += [{'role':'assistant','content':''},{'role':'user','content':JSON_INSTRUCTION if format_hint=='json' else INSTRUCTION}]
     # Leave room for a useful tail and provider framing. Estimate is deliberately conservative.
     available=context_length-estimate(messages)-512
     tail_reserve=min(2048,available//3) if text else 0
@@ -37,11 +42,11 @@ def request_context(original, text, context_length, requested_output):
     return messages,output
 
 
-def stream_document(original, context_length, max_tokens, generate, cancelled):
+def stream_document(original, context_length, max_tokens, generate, cancelled, format_hint='markdown'):
     text=''
     requested=max_tokens
     while not cancelled.is_set():
-        messages,limit=request_context(original,text,context_length,requested)
+        messages,limit=request_context(original,text,context_length,requested,format_hint)
         fragment=''
         try:
             for chunk in generate(messages,limit):
@@ -53,7 +58,7 @@ def stream_document(original, context_length, max_tokens, generate, cancelled):
             if not fragment.strip():
                 # Thinking can consume a small output budget without visible text.
                 grown=min(32000,requested*2)
-                if grown<=requested or request_context(original,text,context_length,grown)[1]<=limit:
+                if grown<=requested or request_context(original,text,context_length,grown,format_hint)[1]<=limit:
                     raise ValueError('Модель исчерпала доступный ответ на размышления, не выдав текст. Уменьши Thinking или увеличь контекст.')
                 requested=grown
                 continue

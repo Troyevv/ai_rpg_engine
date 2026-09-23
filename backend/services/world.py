@@ -5,6 +5,21 @@ from backend.services.scene import scene_metadata
 from backend.services.timeline import current_time, label
 
 KINDS = ('characters','facts','knowledge','relationships','threads','scenes','events','scheduled_events','scene_records')
+CARD_FIELDS = ('Возраст','Роль','Статус','Внешность','Характер','Стиль общения','Привычки',
+               'Сильные стороны','Слабости','Страхи и уязвимости','Биография')
+
+
+def normalize_card_fields(fields):
+    """Project legacy character cards onto the current static profile, without inventing details."""
+    fields = dict(fields)
+    legacy = fields.pop('Суть', '')
+    if legacy:
+        if not fields.get('Характер'):
+            fields['Характер'] = legacy
+        elif legacy not in fields['Характер']:
+            fields['Характер'] += '\n\n' + legacy
+    return {**{key:fields.get(key,'') for key in CARD_FIELDS},
+            **{key:value for key,value in fields.items() if key not in CARD_FIELDS}}
 
 
 def identity(kind, *parts):
@@ -15,6 +30,9 @@ def normalize(original):
     state = deepcopy(original)
     if not isinstance(state.get('characters'),list):
         return state  # Incomplete ancient saves remain readable, never destroyed.
+    for card in state['characters']:
+        if isinstance(card.get('fields'),dict):
+            card['fields']=normalize_card_fields(card['fields'])
     if state.get('world', {}).get('version') == 2:
         state['world'].setdefault('scene_records',{})
         for character in state['world']['characters'].values():

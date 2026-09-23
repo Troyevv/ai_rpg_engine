@@ -18,7 +18,7 @@ import { Button } from "./components/ui/button";
 import { Settings } from "./Settings";
 import { Inspector, type Panel } from "./Inspector";
 import { Library } from "./Library";
-import { Preparation } from "./Preparation";
+import { WorldWorkshop } from "./WorldWorkshop";
 import { Game } from "./Game";
 
 import {useMobile,useMobileViewport,MobileNavigation} from './mobile';
@@ -217,7 +217,8 @@ export default function App() {
           </div>}
         </header>
         {view === "prepare" ? (
-          <Preparation
+          <WorldWorkshop
+              onGame={choose}
             prefs={prefs}
             apiKey={apiKey}
             onWorld={(w) => {

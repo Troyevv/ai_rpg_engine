@@ -44,7 +44,7 @@ def summary():
 def test_parse_preserves_details():
     state = parse_summary(summary())
     assert len(state['characters']) == 8
-    assert 'Вторая строка' in state['characters'][0]['fields']['Суть']
+    assert 'Вторая строка' in state['characters'][0]['fields']['Характер']
     assert state['relationships'][0]['target_name'] == 'Персонаж 1'
     assert len(state['locations']) == 2
     assert 'переезд' in state['knowledge'][1]['text']
@@ -64,6 +64,26 @@ def test_versions_dedup_and_independent_saves(tmp_path):
     state['characters'][0]['name'] = 'Изменено'
     assert db.get_save(save_b)['state']['characters'][0]['name'] != 'Изменено'
     assert db.get_world(world_id)['source_md'] == summary()
+
+
+def test_existing_sqlite_save_projects_old_card_without_changing_stored_data(tmp_path):
+    import json
+    from backend.services.world import CARD_FIELDS
+    db=Storage(tmp_path/'existing.sqlite3')
+    wid=db.save_world('Старый мир',summary())
+    sid=db.create_save(wid,'Первое прохождение')
+    with db.connect() as conn:
+        raw=json.loads(conn.execute('SELECT state_json FROM saves WHERE id=?',(sid,)).fetchone()[0])
+        card=raw['characters'][0]['fields'];card['Суть']=card.pop('Характер')
+        for key in CARD_FIELDS:
+            if key not in ('Статус','Внешность','Характер'):card.pop(key,None)
+        conn.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(raw,ensure_ascii=False),sid))
+    loaded=db.get_save(sid)['state']['characters'][0]['fields']
+    assert loaded['Характер']==card['Суть']
+    assert all(loaded[key]=='' for key in CARD_FIELDS if key not in ('Статус','Внешность','Характер'))
+    with db.connect() as conn:
+        unchanged=json.loads(conn.execute('SELECT state_json FROM saves WHERE id=?',(sid,)).fetchone()[0])
+    assert unchanged==raw
 
 
 def test_invalid_import_does_not_write(tmp_path):
