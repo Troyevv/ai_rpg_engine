@@ -1,3 +1,4 @@
+from canonical_fixture import canonical, fixture_sequence
 import json
 from threading import Event
 from unittest.mock import patch
@@ -44,7 +45,7 @@ def test_repeated_invalid_memory_does_not_block_thirty_turns_or_archive_sources(
                 memory_calls.append(jid);yield 'М'*9000
             elif kw.get('response_format'):
                 change=result();change['scene']['time']=label(current_time(json.loads(repo.get_job(jid)['before_json'])))
-                yield json.dumps(change,ensure_ascii=False)
+                yield json.dumps(canonical(change,fixture_sequence(repo,jid)),ensure_ascii=False)
             else:yield NARRATIVE
         with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=stream):
             engine.run_job(repo.path,jid,engine.Worker())

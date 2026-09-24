@@ -66,6 +66,13 @@ def apply_scene_policy(before,after,changes,kind,simulation=False):
         for relation in changes.get('relationships',[]):
             if relation['source_id'] not in audience:
                 raise ValueError('Нельзя приписать реакцию отсутствующему NPC.')
+        delta=changes.get('world_delta',{})
+        for change in delta.get('characters',[]):
+            if change['id'] in protected or change['id'] not in audience:
+                raise ValueError('Закулисная сцена меняет отсутствующего персонажа.')
+        for change in delta.get('relationships',[]):
+            if change['source_id'] not in audience:
+                raise ValueError('Нельзя приписать реакцию отсутствующему NPC.')
         after['last_background_scene']={'scene':after['scene'],'scene_meta':scene}
         after['controlled_actor_id']=None
     for fact in changes.get('facts',[]):

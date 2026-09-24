@@ -1,9 +1,11 @@
-"""Typed additions to the established extraction contract; validated before commit."""
+"""Canonical, source-backed changes to the live WorldState."""
 from copy import deepcopy
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field
-from backend.services.world import identity
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from backend.services.world import identity, CARD_FIELDS
 from backend.services.timeline import current_time
+
+RELATION_DIMENSIONS=('trust','affection','attraction','irritation','fear','jealousy','respect')
 
 class Record(BaseModel):
     model_config=ConfigDict(extra='forbid',strict=True)
@@ -34,10 +36,26 @@ class Character(Record):
     id: str
     location: str|None=None
     situation: str|None=None
-    short_goal: str|None=None
+    goals: list[str]|None=Field(default=None,max_length=20)
     intentions: list[str]|None=Field(default=None,max_length=20)
     emotion: str|None=None
     obligations: list[str]|None=Field(default=None,max_length=20)
+
+class Promotion(Record):
+    id: str=Field(min_length=1,max_length=120)
+    name: str=Field(min_length=1,max_length=120)
+    fields: dict[str,str]
+    goals: list[str]=Field(default_factory=list,max_length=20)
+    intentions: list[str]=Field(default_factory=list,max_length=20)
+    obligations: list[str]=Field(default_factory=list,max_length=20)
+    situation: str=''
+    emotion: str=''
+
+    @model_validator(mode='after')
+    def complete_card(self):
+        if set(self.fields)!=set(CARD_FIELDS) or any(not value.strip() for value in self.fields.values()):
+            raise ValueError('Новая значимая роль требует полную постоянную карточку персонажа.')
+        return self
 
 class Relationship(Record):
     source_id: str
@@ -65,6 +83,7 @@ class Scheduled(Record):
 
 class WorldDelta(BaseModel):
     model_config=ConfigDict(extra='forbid',strict=True)
+    promotions: list[Promotion]=Field(default_factory=list,max_length=10)
     facts: list[Fact]=Field(default_factory=list,max_length=50)
     events: list[Event]=Field(default_factory=list,max_length=50)
     knowledge: list[Knowledge]=Field(default_factory=list,max_length=50)
@@ -74,11 +93,31 @@ class WorldDelta(BaseModel):
     scheduled_events: list[Scheduled]=Field(default_factory=list,max_length=50)
 
 
-def apply_delta(state, payload, narrative, user_text, sequence, since=None):
-    from state_updates import normalized_evidence
-    delta=WorldDelta.model_validate(payload).model_dump(exclude_none=True)
+def add_promotions(state, promotions, narrative, user_text):
+    """Seed validated new cast members before scene membership is checked."""
+    from state_updates import normalized_evidence, EvidenceError
     state=deepcopy(state)
+    sources=[normalized_evidence(narrative),normalized_evidence(user_text)]
+    for index,entry in enumerate(promotions):
+        p=Promotion.model_validate(entry).model_dump()
+        if not any(normalized_evidence(p['evidence']) in source for source in sources):
+            raise EvidenceError(f'Изменение world_delta.promotions[{index}].evidence не подтверждено цитатой из хода.')
+        if p['id'] in state['world']['characters'] or any(c['name'].casefold()==p['name'].casefold() for c in state['characters']):
+            raise ValueError('Новая роль повторяет существующего персонажа.')
+        state['characters'].append({'id':p['id'],'name':p['name'],'aliases':[],'is_player':False,'fields':p['fields']})
+        state['world']['characters'][p['id']]={'id':p['id'],'location':None,'situation':p['situation'],
+            'goals':p['goals'],'intentions':p['intentions'],'obligations':p['obligations'],
+            'emotion':p['emotion'],'minute':None,'scene_id':None,'last_event_id':None}
+    return state
+
+
+def apply_delta(state, payload, narrative, user_text, sequence, since=None, promotions_prepared=False):
+    from state_updates import normalized_evidence, EvidenceError
+    delta=WorldDelta.model_validate(payload).model_dump(exclude_none=True)
+    state=deepcopy(state) if promotions_prepared else add_promotions(state,delta['promotions'],narrative,user_text)
     world=state['world']
+    for previous in world['relationships'].values():
+        previous.pop('change',None)
     camera=world['scenes'][state['camera']['scene_id']]
     present=set(camera['participants'])
     actors=set(world['characters'])
@@ -89,14 +128,17 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None):
     def refs(values):
         require(set(values)<=actors,'неизвестный персонаж')
     # Structural/evidence failures reject the whole extended delta, never partial knowledge.
-    for entries in delta.values():
+    for section,entries in delta.items():
         seen=set()
-        for item in entries:
-            require(any(normalized_evidence(item['evidence']) in s for s in sources),'нет цитаты текущего хода')
+        for index,item in enumerate(entries):
+            if not any(normalized_evidence(item['evidence']) in s for s in sources):
+                raise EvidenceError(f'Изменение world_delta.{section}[{index}].evidence не подтверждено цитатой из хода.')
             key=item.get('id')
             if key is None:key=(item['actor_id'],item['fact_id']) if 'actor_id' in item else (item['source_id'],item['target_id'])
             require(key not in seen,'повтор сущности в delta')
             seen.add(key)
+    for promotion in delta['promotions']:
+        require(promotion['id'] in present,'новый NPC не участвует в текущей сцене')
     for f in delta['facts']:
         refs(f['character_ids'])
         old=world['facts'].get(f['id'])
@@ -131,20 +173,24 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None):
     for c in delta['characters']:
         refs([c['id']]); require(c['id'] in present,'состояние отсутствующего NPC без сцены')
         if c['id']==state['controlled_actor_id']:
-            require(not set(c).intersection({'short_goal','intentions','emotion'}),'решение или чувство за игрока')
+            require(not set(c).intersection({'goals','intentions','emotion'}),'решение или чувство за игрока')
         if 'location' in c:require(c['location']==camera['location'],'место участника не совпадает со сценой')
         world['characters'][c['id']].update({k:v for k,v in c.items() if k not in ('id','evidence')})
-        if 'short_goal' in c:
-            world['characters'][c['id']]['goals']=[c['short_goal']] if c['short_goal'] else []
         world['characters'][c['id']]['minute']=now
     for r in delta['relationships']:
         refs([r['source_id'],r['target_id']])
         require(r['source_id']!=r['target_id'] and r['source_id'] in present,'недопустимая направленная связь')
         import math
         require(all(math.isfinite(v) and -100<=v<=100 for v in r['dimensions'].values()),'аспекты должны быть в диапазоне -100..100')
+        require(set(r['dimensions'])<=set(RELATION_DIMENSIONS),'неизвестное измерение отношений')
         key=r['source_id']+':'+r['target_id']
         old=world['relationships'].setdefault(key,dict(source_id=r['source_id'],target_id=r['target_id'],dimensions={}))
+        previous=old['dimensions'].copy()
         old['dimensions'].update(r['dimensions']); old['context']=r['context']
+        old['provenance']={'source':'extraction','quote':r['evidence'],'sequence':sequence}
+        movement=sum(value-previous.get(key,0) for key,value in r['dimensions'].items())
+        if movement:
+            old['change']={'direction':'up' if movement>0 else 'down','reason':r['context'],'turn':sequence}
     for t in delta['threads']:
         refs(t['character_ids']); require(t['last_event_id'] in new_events,'развитие линии требует события этого хода')
         world['threads'][t['id']]=t

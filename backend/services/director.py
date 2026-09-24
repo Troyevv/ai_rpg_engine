@@ -17,7 +17,9 @@ class Director:
         scene_age=max(0,now-scene['start_minute']) if scene.get('start_minute') is not None else 0
         due=[e for e in world['scheduled_events'].values() if e['status']=='pending' and e['due_minute']<=now and present.intersection(e['participants'])]
         threads=[t for t in world['threads'].values() if t['status']!='resolved' and present.intersection(t['character_ids'])]
-        threads.sort(key=lambda t:(t['status']=='dormant',-t['relevance'],t['id']))
+        from backend.services.relevance import rank,ordered
+        relevance=rank(state,'',kind)
+        threads=[world['threads'][tid] for tid in ordered(relevance['threads'],relevance['threads'])]
         reasons=[]
         if kind in ('background','pov'):reasons.append('camera_transition')
         if gap>=30:reasons.append('unobserved_time_gap')
@@ -83,6 +85,17 @@ def background_candidate(before, after):
             scene=world['scenes'].get(point.get('scene_id'))
             if actor not in present and actor!=controlled and (not scene or controlled not in scene['participants']):
                 return {'actor_id':actor,'reason':'scheduled_event_due','scheduled_id':event['id']}
+    if now-current_time(before)>=45:
+        for thread in sorted(world['threads'].values(),key=lambda t:(-t.get('relevance',0),t['id'])):
+            if thread['status'] not in ('active','developing') or thread.get('relevance',0)<0.6:continue
+            actors=[cid for cid in thread['character_ids'] if cid not in present and cid!=controlled]
+            if not actors or set(thread['character_ids']) & present:continue
+            for actor in actors:
+                point=world['characters'][actor]
+                scene=world['scenes'].get(point.get('scene_id'))
+                if scene and controlled in scene['participants']:continue
+                if point.get('minute') is None or now-point['minute']>=45:
+                    return {'actor_id':actor,'reason':'relevant_off_camera_thread','scheduled_id':None}
     # Time alone is not a reason to invent an event: an established intention or obligation is required.
     if now-current_time(before)<60:return None
     for actor, point in sorted(world['characters'].items()):

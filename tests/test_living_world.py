@@ -3,6 +3,7 @@ from copy import deepcopy
 from unittest.mock import patch
 import pytest
 import engine
+from canonical_fixture import canonical, fixture_sequence
 from storage import Storage
 from backend.services.world import normalize, knowledge_for, timeline
 from backend.services.world_delta import apply_delta
@@ -22,7 +23,7 @@ def delta():
         'events':[dict(id='disclosure',text='Рассказ о встрече.',participants=['character_3','character_4'],witnesses=['character_4'],fact_ids=['meeting'],medium='conversation',evidence=QUOTE)],
         'knowledge':[dict(actor_id='character_4',fact_id='meeting',status='known',source_event_id='disclosure',evidence=QUOTE)],
         'relationships':[dict(source_id='character_3',target_id='character_4',dimensions={'trust':20.0,'fear':-4.0},context='Доверие выросло.',evidence=QUOTE)],
-        'characters':[dict(id='character_3',intentions=['Прийти позднее'],short_goal='Встреча',emotion='Спокойствие',evidence=QUOTE)],
+        'characters':[dict(id='character_3',intentions=['Прийти позднее'],goals=['Встреча'],emotion='Спокойствие',evidence=QUOTE)],
         'threads':[dict(id='visit',description='Визит',character_ids=['character_3','character_4'],status='developing',state='Договорились',relevance=0.8,last_event_id='disclosure',evidence=QUOTE)],
         'scheduled_events':[dict(id='appointment',due_minute=1200,type='meeting',participants=['character_3','character_4'],description='Визит',status='pending',evidence=QUOTE)]}
 
@@ -95,8 +96,10 @@ def test_commit_variant_rollback_rebuild_world_projection(db):
         def stream(**kw):
             if kw.get('response_format'):
                 change=background()
-                if with_delta:change['world_delta']=delta()
-                yield json.dumps(change,ensure_ascii=False)
+                if with_delta:
+                    change['relationships']=[]
+                    change['world_delta']=delta()
+                yield json.dumps(canonical(change,fixture_sequence(repo,jid)),ensure_ascii=False)
             else:yield QUOTE+' '+__import__('test_pov_documents').SECRET
         with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=stream):
             engine.run_job(repo.path,jid,engine.Worker())
@@ -209,7 +212,7 @@ def test_camera_api_and_playback_are_separate_from_control(api):
     def stream(**kw):
         if kw.get('response_format'):
             payload=result();payload['choices']=[]
-            yield json.dumps(payload)
+            yield json.dumps(canonical(payload,fixture_sequence(repo,jid)))
         else:yield NARRATIVE
     with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=stream):engine.run_job(repo.path,jid,engine.Worker())
     assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']

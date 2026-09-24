@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 import engine
+from canonical_fixture import canonical, fixture_sequence
 from backend.repositories.preparation import Repository
 from backend.services.pov import apply_scene_policy, controlled
 from backend.services.memory import compact
@@ -28,7 +29,7 @@ def background():
 def generate_background(storage,sid,kind='background'):
     job=storage.begin_job(sid,'',kind,CONFIG)
     def stream(**kw):
-        yield json.dumps(background(),ensure_ascii=False) if kw.get('response_format') else SECRET
+        yield json.dumps(canonical(background(),fixture_sequence(storage,job)),ensure_ascii=False) if kw.get('response_format') else SECRET
     with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=stream):
         engine.run_job(storage.path,job,engine.Worker())
     assert storage.get_job(job)['status']=='saved',storage.get_job(job)['error']

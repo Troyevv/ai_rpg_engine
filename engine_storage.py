@@ -139,7 +139,7 @@ class EngineStorage:
             session_id = self.ensure_session(db, job['save_id'])
             db.execute("UPDATE game_jobs SET status='extracting',error='',warnings_json='[]',config_json=?,session_id=? WHERE id=?", (json.dumps(settings),session_id,job_id))
 
-    def commit_job(self, job_id, state, choices, changes):
+    def commit_job(self, job_id, state, choices, changes, timing=None):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             job = db.execute('SELECT * FROM game_jobs WHERE id=?', (job_id,)).fetchone()
@@ -164,12 +164,12 @@ class EngineStorage:
                 db.execute('UPDATE turns SET user_text=?,assistant_text=?,before_json=?,after_json=?,kind=?,choices_json=?,changes_json=? WHERE id=?', (*values,tid))
             else:
                 tid = db.execute('INSERT INTO turns(user_text,assistant_text,before_json,after_json,kind,choices_json,changes_json,save_id,sequence) VALUES(?,?,?,?,?,?,?,?,?)', (*values,job['save_id'],sequence)).lastrowid
-            db.execute('UPDATE turns SET pov_actor_id=?,audience_json=? WHERE id=?',(job['pov_actor_id'],job['audience_json'],tid))
+            db.execute('UPDATE turns SET pov_actor_id=?,audience_json=?,timing_json=? WHERE id=?',(job['pov_actor_id'],job['audience_json'],json.dumps(timing) if timing else None,tid))
             record = dict(db.execute('SELECT * FROM turns WHERE id=?', (tid,)).fetchone())
             self._variant(db, record, job_id, job['context_json'], job['memory_before_json'])
             self._archive_memory(db, job['save_id'], state)
             db.execute("UPDATE saves SET state_json=?,revision=revision+1,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?", (after, job['save_id']))
-            db.execute("UPDATE game_jobs SET status='saved' WHERE id=?", (job_id,))
+            db.execute("UPDATE game_jobs SET status='saved',timing_json=? WHERE id=?", (json.dumps(timing) if timing else None,job_id))
 
     def rollback_last(self, save_id, expected_revision=None):
         with self.connect() as db:

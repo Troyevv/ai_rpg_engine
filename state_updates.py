@@ -157,6 +157,41 @@ def choice_input(choice):
     return choice['action'] + (': «' + choice['speech'] + '»' if choice.get('speech') else '')
 
 
+def apply_world_updates(before, payload, narrative, user_text, turn, kind='turn', discard_unsupported=False, simulation=False):
+    """Validate a canonical extraction before changing any world state.
+
+    Only evidence failures may be discarded after a failed repair. All other
+    validation failures reject the entire candidate and leave the save intact.
+    """
+    import re
+    from backend.services.pov import apply_scene_policy
+    from backend.services.world import record_scene
+    from backend.services.world_delta import apply_delta
+    from backend.services.world_delta import add_promotions, WorldDelta
+    from backend.services.timeline import current_time
+    payload = json.loads(payload) if isinstance(payload,str) else deepcopy(payload)
+    exact_keys(payload, ('scene','choices','world_delta'), ('scene','choices','world_delta'))
+    warnings=[]
+    while True:
+        # The scene/choice validator is shared with older saves; never pass legacy
+        # patches through its mutation path.
+        try:
+            delta=WorldDelta.model_validate(payload['world_delta']).model_dump(exclude_none=True)
+            prepared=add_promotions(before,delta['promotions'],narrative,user_text)
+            state,choices,_=apply_updates(prepared,{'scene':payload['scene'],'choices':payload['choices']},narrative,user_text,turn,kind)
+            state,audience=apply_scene_policy(prepared,state,payload,kind,simulation=simulation)
+            record_scene(state,payload,turn,kind)
+            state=apply_delta(state,payload['world_delta'],narrative,user_text,turn,since=current_time(before),promotions_prepared=True)
+            return state,choices,payload,audience,warnings
+        except EvidenceError as exc:
+            if not discard_unsupported:raise
+            match=re.search(r'world_delta\.(\w+)\[(\d+)\]',str(exc))
+            if not match:raise
+            section,index=match[1],int(match[2])
+            rejected=payload['world_delta'][section].pop(index)
+            warnings.append({'section':section,'reason':'Нет подтверждённой цитаты текущего хода','rejected':rejected})
+
+
 def apply_supported_updates(before, payload, narrative, user_text, turn, kind="turn"):
     """After one repair, omit only unsupported patches and report each omission.
 

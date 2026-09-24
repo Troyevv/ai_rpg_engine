@@ -1552,3 +1552,10 @@ details > label:first-of-type {
  .workshop-generating { align-items:flex-start; flex-wrap:wrap; }
  .workshop-finish { align-items:stretch; }
 }
+.turn-timing {margin:12px 0;color:var(--muted,#adbbb7);font:12px/1.5 system-ui,sans-serif}
+.turn-timing summary {cursor:pointer;min-height:36px;display:inline-flex;align-items:center;padding:3px 0}
+.turn-timing dl {max-width:400px;margin:4px 0 12px;border-top:1px solid #344241;padding-top:6px}
+.turn-timing dl div {display:flex;justify-content:space-between;gap:16px;padding:3px 0}
+.turn-timing dt {min-width:0}.turn-timing dd {margin:0;white-space:nowrap}
+.relationship-dimension {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 0}
+.relationship-dimension input {width:84px;min-height:42px}

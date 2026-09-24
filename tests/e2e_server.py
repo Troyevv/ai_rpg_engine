@@ -1,3 +1,4 @@
+from canonical_fixture import canonical
 """Browser-only fixture server. Never imported by the production application."""
 import json
 import re
@@ -46,7 +47,7 @@ def stream(**kwargs):
             if 'Режим observer:' in full:
                 payload['facts']=[];payload['events']=[];payload['relationships']=[]
         payload['events']=[e for e in payload.get('events',[]) if set(e['character_ids'])<=set(payload['scene']['present_ids'])]
-        value=json.dumps(payload,ensure_ascii=False)
+        value=json.dumps(canonical(payload),ensure_ascii=False)
     elif observer:
         value = SECRET
     elif 'шаблон' in kwargs['messages'][-1]['content'].lower():

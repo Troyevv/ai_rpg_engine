@@ -17,7 +17,7 @@ import engine
 import llm
 from character_links import linked_markdown
 from backend.api.schemas import (World, Named, Generation, Turn, Retry, Revision, Scene,
-                                 Models, Load, Preferences, Markdown, Credential, VariantSelection, Actor, DocumentChange, Camera, Motivation)
+                                 Models, Load, Preferences, Markdown, Credential, VariantSelection, Actor, DocumentChange, Camera, Motivation, RelationshipEdit)
 from backend.repositories.preparation import Repository
 from backend.services.preparation import Preparation
 from backend.services.scene import scene_metadata
@@ -135,7 +135,8 @@ def create_app(db_path=None, recover=True):
     def save(sid: int):
         value = repo.get_save(sid)
         value['scene_meta'] = scene_metadata(value['state'])
-        value['turns'] = [{**t, 'choices': json.loads(t['choices_json']), 'changes': json.loads(t['changes_json'])} for t in repo.list_turns(sid)]
+        value['turns'] = [{**t, 'choices': json.loads(t['choices_json']), 'changes': json.loads(t['changes_json']),
+                           'timing': json.loads(t['timing_json']) if t['timing_json'] else None} for t in repo.list_turns(sid)]
         for t in value['turns']:
             t['variants'] = repo.variants(t['node_id'])
         latest = repo.latest_job(sid)
@@ -150,6 +151,16 @@ def create_app(db_path=None, recover=True):
     @app.patch('/api/saves/{sid}/characters/{actor_id}/motivation')
     def motivation(sid: int, actor_id: str, body: Motivation):
         repo.update_motivation(sid, actor_id, body.revision, body.goals, body.intentions)
+        return save(sid)
+
+    @app.get('/api/relationships/dimensions')
+    def relation_dimensions():
+        from backend.services.world_delta import RELATION_DIMENSIONS
+        return list(RELATION_DIMENSIONS)
+
+    @app.patch('/api/saves/{sid}/characters/{actor_id}/relationships')
+    def relationship(sid: int, actor_id: str, body: RelationshipEdit):
+        repo.update_relationship(sid, actor_id, body.model_dump())
         return save(sid)
 
     @app.post('/api/saves/{sid}/turns')
