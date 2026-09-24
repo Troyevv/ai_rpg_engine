@@ -202,6 +202,8 @@ def review_initial(state,source=''):
         cid=card['id'];fields=card['fields'];character=world['characters'].get(cid,{})
         weak=[field for field in DETAIL_MIN if weak_card_field(fields.get(field,''),field,source)]
         if weak:warnings.append(f"{card['name']}: недостаточно раскрыты поля карточки ({', '.join(weak)}).")
+        if not appearance_is_detailed(fields.get('Внешность','')):
+            warnings.append(f"{card['name']}: Внешность описана слишком общо: нужен целостный физический образ человека.")
         if len(fields.get('Характер','').strip())<35 and len(fields.get('Биография','').strip())<35:
             warnings.append(f"{card['name']}: мало информации о личности важного персонажа.")
         if cid!=actor and not (character.get('goals') or character.get('intentions')):
@@ -249,6 +251,18 @@ def weak_card_field(value,field,source=''):
         words=set(re.findall(r'[\wё]{4,}',value.casefold()))
         if len(words-source_words)<4:return True
     return False
+
+
+def appearance_is_detailed(value):
+    """Conservative advisory signal for short/generic portraits, not a keyword template.
+
+    Word presence cannot prove visual specificity. The heuristic checks the
+    density of independently described details; ambiguous cases remain for the
+    human to review rather than silently triggering another provider request.
+    """
+    words=set(re.findall(r'[\wё]{4,}',value.casefold()))
+    clauses=[part.strip() for part in re.split(r'[.;!?\n]+',value) if len(part.strip())>=12]
+    return len(value.strip())>=135 and len(words)>=18 and len(clauses)>=3
 
 
 def repair_scene_interval(state):
