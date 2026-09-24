@@ -220,6 +220,9 @@ def run_job(path, job_id, handle):
             if not handle.cancelled.is_set():
                 timings['total']=time.perf_counter()-job_started
                 storage.commit_job(job_id, state, choices, changes, timing=timings)
+                # Include the commit and variant snapshot in independently measured
+                # wall-clock time; the provisional value covers an interrupted final write.
+                storage.finalize_job_timing(job_id,time.perf_counter()-job_started)
     except Exception as exc:
         storage.job_progress(job_id, 'stopped' if handle.cancelled.is_set() else 'error',
                              narrative=narrative or None, error=str(exc))

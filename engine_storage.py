@@ -171,6 +171,23 @@ class EngineStorage:
             db.execute("UPDATE saves SET state_json=?,revision=revision+1,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?", (after, job['save_id']))
             db.execute("UPDATE game_jobs SET status='saved',timing_json=? WHERE id=?", (json.dumps(timing) if timing else None,job_id))
 
+    def finalize_job_timing(self, job_id, total):
+        """Persist elapsed wall-clock time after the save and variant are committed."""
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            job=db.execute('SELECT timing_json FROM game_jobs WHERE id=? AND status=\'saved\'',(job_id,)).fetchone()
+            if not job or not job['timing_json']:return
+            timing=json.loads(job['timing_json'])
+            timing['total']=total
+            encoded=json.dumps(timing)
+            db.execute('UPDATE game_jobs SET timing_json=? WHERE id=?',(encoded,job_id))
+            variant=db.execute('SELECT id,payload FROM response_variants WHERE job_id=? ORDER BY rowid DESC LIMIT 1',(job_id,)).fetchone()
+            if variant:
+                payload=json.loads(variant['payload'])
+                payload['timing_json']=encoded
+                db.execute('UPDATE response_variants SET payload=? WHERE id=?',(json.dumps(payload,ensure_ascii=False),variant['id']))
+                db.execute('UPDATE turns SET timing_json=? WHERE active_variant_id=?',(encoded,variant['id']))
+
     def rollback_last(self, save_id, expected_revision=None):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
