@@ -42,6 +42,8 @@ def build_context(state, history, user_text, kind, context_length, reserve, extr
     rules += '\n'+(contract if extraction_text is not None else contract.split('ТОЛЬКО при извлечении')[0])
     if extraction_text is not None:
         from backend.services.world_delta import WorldDelta, KNOWLEDGE_CONTRACT, RELATION_CONTRACT
+        from backend.services.player_agency import PLAYER_AGENCY_CONTRACT
+        rules += '\n'+PLAYER_AGENCY_CONTRACT
         rules += '\n'+KNOWLEDGE_CONTRACT+'\n'+RELATION_CONTRACT
         rules += '\nКаноническая JSON Schema поля world_delta:\n'+encoded(WorldDelta.model_json_schema())
     from backend.services.timeline import current_time,label

@@ -4,6 +4,8 @@ from typing import Literal, Annotated
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from backend.services.world import identity, CARD_FIELDS
 from backend.services.timeline import current_time
+from backend.services.world_delta_errors import SecondaryDeltaError, StructuralDeltaError
+from backend.services.player_agency import PLAYER_FIELDS, PLAYER_SOURCE_DESCRIPTION, supported_player_field
 
 RELATION_DIMENSIONS=('trust','affection','attraction','irritation','fear','jealousy','respect')
 
@@ -18,15 +20,6 @@ RELATION_CONTRACT = ('relationships.dimensions is a closed set: '+', '.join(RELA
 def dimensions_schema(schema):
     schema.update(type='object', properties={key:{'type':'number','minimum':-100,'maximum':100}
         for key in RELATION_DIMENSIONS}, additionalProperties=False)
-
-class SecondaryDeltaError(ValueError):
-    """An explicitly classified leaf failure, safe to omit after one repair."""
-    def __init__(self, section, index, reason, field=None, entity=None):
-        super().__init__('World Delta: '+reason)
-        self.warning={'section':section,'index':index,'reason':reason}
-        if field:self.warning['field']=field
-        if entity:self.warning['entity']=entity
-
 
 class Record(BaseModel):
     model_config=ConfigDict(extra='forbid',strict=True)
@@ -53,14 +46,22 @@ class Knowledge(Record):
     status: Literal['known','suspected','unknown']
     source_event_id: str=Field(description=KNOWLEDGE_CONTRACT)
 
+class PlayerEvidence(BaseModel):
+    model_config=ConfigDict(extra='forbid',strict=True)
+    goals: list[str]|None=Field(default=None,max_length=20,description='Полные цитаты player_input, по одной на каждую новую цель.')
+    intentions: list[str]|None=Field(default=None,max_length=20,description='Полные цитаты player_input, по одной на каждое новое намерение.')
+    emotion: str|None=Field(default=None,description='Полная цитата player_input, явно называющая внутреннее состояние.')
+    obligations: list[str]|None=Field(default=None,max_length=20,description='Полные цитаты явных обещаний игрока, по одной на новое обязательство.')
+
 class Character(Record):
     id: str
     location: str|None=None
     situation: str|None=None
-    goals: list[str]|None=Field(default=None,max_length=20)
-    intentions: list[str]|None=Field(default=None,max_length=20)
-    emotion: str|None=None
-    obligations: list[str]|None=Field(default=None,max_length=20)
+    goals: list[str]|None=Field(default=None,max_length=20,description=PLAYER_SOURCE_DESCRIPTION)
+    intentions: list[str]|None=Field(default=None,max_length=20,description=PLAYER_SOURCE_DESCRIPTION)
+    emotion: str|None=Field(default=None,description=PLAYER_SOURCE_DESCRIPTION)
+    obligations: list[str]|None=Field(default=None,max_length=20,description=PLAYER_SOURCE_DESCRIPTION)
+    player_evidence: PlayerEvidence|None=Field(default=None,description=PLAYER_SOURCE_DESCRIPTION)
 
 class Promotion(Record):
     id: str=Field(min_length=1,max_length=120)
@@ -147,7 +148,7 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None, prom
     sources=[normalized_evidence(narrative),normalized_evidence(user_text)]
     now=current_time(state)
     def require(ok,message):
-        if not ok:raise ValueError('World Delta: '+message)
+        if not ok:raise StructuralDeltaError('World Delta: '+message)
     def refs(values):
         require(set(values)<=actors,'неизвестный персонаж')
     # Check identity conflicts before applying any candidate changes.
@@ -189,15 +190,24 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None, prom
         event=new_events.get(k['source_event_id'])
         if (event is None or k['actor_id'] not in event['witnesses']
                 or k['fact_id'] not in event['fact_ids'] or event['medium'] not in KNOWLEDGE_CHANNELS):
-            raise SecondaryDeltaError('knowledge',index,'нет подтверждённого пути передачи знания')
+            raise SecondaryDeltaError('knowledge',index,'нет подтверждённого пути передачи знания',entity=k['actor_id']+':'+k['fact_id'])
         world['knowledge'][k['actor_id']+':'+k['fact_id']]=k
-    for c in delta['characters']:
+    for index,c in enumerate(delta['characters']):
         refs([c['id']]); require(c['id'] in present,'состояние отсутствующего NPC без сцены')
-        if c['id']==state['controlled_actor_id']:
-            require(not set(c).intersection({'goals','intentions','emotion'}),'решение или чувство за игрока')
         if 'location' in c:require(c['location']==camera['location'],'место участника не совпадает со сценой')
-        world['characters'][c['id']].update({k:v for k,v in c.items() if k not in ('id','evidence')})
-        world['characters'][c['id']]['minute']=now
+        if c['id']==state['controlled_actor_id']:
+            for field in PLAYER_FIELDS:
+                if field not in c:continue
+                evidence=c.get('player_evidence',{}).get(field,c['evidence'])
+                if not supported_player_field(field,c[field],world['characters'][c['id']].get(field),user_text,evidence):
+                    reason=('Внутреннее состояние controlled actor не задано игроком' if field=='emotion'
+                        else 'Обязательство controlled actor не задано игроком' if field=='obligations'
+                        else 'Решение controlled actor не задано игроком')
+                    raise SecondaryDeltaError('characters',index,reason,field,c['id'])
+        updates={k:v for k,v in c.items() if k not in ('id','evidence','player_evidence')}
+        if updates:
+            world['characters'][c['id']].update(updates)
+            world['characters'][c['id']]['minute']=now
     for index,r in enumerate(delta['relationships']):
         refs([r['source_id'],r['target_id']])
         require(r['source_id']!=r['target_id'] and r['source_id'] in present,'недопустимая направленная связь')
@@ -206,7 +216,7 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None, prom
         for dimension in r['dimensions']:
             if dimension not in RELATION_DIMENSIONS:
                 raise SecondaryDeltaError('relationships',index,'неизвестное измерение отношений',
-                    'dimensions.'+dimension,r['source_id']+':'+r['target_id'])
+                    'dimensions.'+dimension,r['source_id']+':'+r['target_id'],path=('dimensions',dimension))
         key=r['source_id']+':'+r['target_id']
         old=world['relationships'].setdefault(key,dict(source_id=r['source_id'],target_id=r['target_id'],dimensions={}))
         previous=old['dimensions'].copy()
@@ -234,5 +244,8 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None, prom
     for section,entries in delta.items():
         for index,item in enumerate(entries):
             if not any(normalized_evidence(item['evidence']) in s for s in sources):
-                raise EvidenceError(f'Изменение world_delta.{section}[{index}].evidence не подтверждено цитатой из хода.')
+                if section=='promotions':
+                    raise EvidenceError(f'Изменение world_delta.{section}[{index}].evidence не подтверждено цитатой из хода.')
+                entity=item.get('id') or item.get('actor_id') or item.get('source_id')
+                raise SecondaryDeltaError(section,index,'Нет подтверждённой цитаты текущего хода',entity=entity,cause_field='evidence')
     return state

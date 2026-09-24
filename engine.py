@@ -6,7 +6,7 @@ import time
 
 from context_builder import build_context, describe_context, estimate
 from llm import chat_stream, find_loaded_model, deepseek_key, PROVIDERS
-from state_updates import apply_world_updates, EvidenceError
+from state_updates import apply_world_updates
 from storage import Storage
 from backend.services.usage import tracked_stream
 from backend.services.memory import compact
@@ -97,7 +97,6 @@ def stop(storage, job_id):
 
 
 def run_job(path, job_id, handle):
-    from backend.services.world_delta import SecondaryDeltaError
     storage = Storage(path)
     narrative = ''
     job_started=time.perf_counter()
@@ -194,16 +193,13 @@ def run_job(path, job_id, handle):
                 storage.job_progress(job_id, 'validating')
                 stage_started=time.perf_counter()
                 try:
-                    state, choices, changes, audience, warnings = apply_world_updates(before,result,narrative,job['user_text'],sequence,job['kind'])
-                    break
-                except (EvidenceError, SecondaryDeltaError) as exc:
-                    if attempt == 1:
-                        state, choices, changes, audience, warnings = apply_world_updates(before,result,narrative,job['user_text'],sequence,job['kind'],discard_unsupported=True)
+                    state, choices, changes, audience, warnings = apply_world_updates(
+                        before,result,narrative,job['user_text'],sequence,job['kind'],discard_unsupported=attempt==1)
+                    if warnings:
                         with storage.connect() as db:
                             previous=json.loads(db.execute('SELECT warnings_json FROM game_jobs WHERE id=?',(job_id,)).fetchone()[0] or '[]')
                             db.execute('UPDATE game_jobs SET warnings_json=? WHERE id=?', (json.dumps(previous+warnings,ensure_ascii=False),job_id))
-                        break
-                    feedback = str(exc)
+                    break
                 except ValueError as exc:
                     if attempt == 1:raise
                     feedback = str(exc)

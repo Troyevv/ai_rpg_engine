@@ -163,7 +163,7 @@ def apply_world_updates(before, payload, narrative, user_text, turn, kind='turn'
     Only explicitly isolated secondary failures may be discarded after repair. Other
     validation failures reject the entire candidate and leave the save intact.
     """
-    import re
+    from backend.services.world_delta_errors import sanitize_secondary
     from backend.services.pov import apply_scene_policy
     from backend.services.world import record_scene
     from backend.services.world_delta import apply_delta, SecondaryDeltaError
@@ -187,24 +187,7 @@ def apply_world_updates(before, payload, narrative, user_text, turn, kind='turn'
             return state,choices,payload,audience,warnings
         except SecondaryDeltaError as exc:
             if not discard_unsupported:raise
-            warning=dict(exc.warning)
-            section,index=warning['section'],warning['index']
-            entry=payload['world_delta'][section][index]
-            if warning.get('field'):
-                entry['dimensions'].pop(warning['field'].split('.',1)[1])
-                warning['index']=original_indices[section][index]
-            else:
-                payload['world_delta'][section].pop(index)
-                warning['index']=original_indices[section].pop(index)
-            warnings.append(warning)
-        except EvidenceError as exc:
-            if not discard_unsupported:raise
-            match=re.search(r'world_delta\.(\w+)\[(\d+)\]',str(exc))
-            if not match:raise
-            section,index=match[1],int(match[2])
-            if section=='promotions':raise
-            rejected=payload['world_delta'][section].pop(index)
-            warnings.append({'section':section,'index':original_indices[section].pop(index),'reason':'Нет подтверждённой цитаты текущего хода','rejected':rejected})
+            warnings.append(sanitize_secondary(payload['world_delta'],exc,original_indices))
 
 
 def apply_supported_updates(before, payload, narrative, user_text, turn, kind="turn"):

@@ -72,3 +72,44 @@
 ## Проверки этой версии
 
 54 Python/API-теста: версии/исторический откат, атомарность, память и её снимки, usage/цены/сессии, ключ после перезапуска, evidence, миграция и существующие сценарии. 6 Playwright-проверок (desktop и Pixel 7): основной игровой цикл, disconnect/stop, ключ после reload, Thinking, выбранный/свободный ввод, историческая перегенерация, переключение варианта и расходы. TypeScript + production build проходят. LLM в проверках подменены; реальные платные запросы и Windows double-click не выполнялись.
+
+## WorldDelta: validation and player agency
+
+`apply_world_updates` validates JSON/Pydantic structure, then applies semantic
+checks on a fresh copy of the before-state. A failed first extraction gets one
+repair request. On the repaired candidate, only explicit `SecondaryDeltaError`
+instances authorize sanitization. `sanitize_secondary` removes the validator's
+exact record or field path, records its original index and reason, and the entire
+candidate is validated again from the original state before commit. Unknown
+exceptions, invalid types, IDs, scene/time conflicts and dependent references
+remain fatal; they are never ignored by a broad exception handler.
+
+The same removal mechanism handles knowledge without a transmission path,
+unknown relationship dimensions, unsupported record evidence, and unconfirmed
+controlled-actor fields. A character's invalid emotion does not discard their
+valid location or situation. Warnings retain `section`, original `index`,
+`entity`, removed `field` where applicable, and `reason`; `cause_field` identifies
+an evidence failure when the whole record must be removed. Warnings are stored
+on the job and shown through the active turn variant in Diagnostics.
+
+For the controlled actor, goals, intentions, emotion and obligations require
+explicit current `player_input`. Narrative, gestures, character cards and
+previous events cannot authorize those changes. `player_evidence` optionally
+provides field-specific quotes (a string for emotion; a list of quotes for newly
+added list items); legacy extraction can use record `evidence` when it directly
+confirms the same explicit player statement. This extraction metadata is not
+copied into WorldState. Omitted fields and rejected fields preserve existing
+values. New list items must preserve old items unless the player explicitly
+replaces/cancels them. Direct player editing APIs remain independent of this LLM
+validation and do not require narrative evidence.
+
+Source checking is deliberately conservative and deterministic: it recognizes
+explicit Russian declarations, literal values, and a limited set of surface
+forms (e.g. «я злюсь» / «злится», placing «завтра» before/after an intention).
+It is not a general natural-language entailment model. Unsupported paraphrases,
+questions, conditional claims and quoted third-party speech are rejected for
+repair/omission, rather than guessed into canon. Open-vocabulary emotions can
+be expressed literally via «я чувствую …» / «я испытываю …». Additional forms
+must be added with both acceptance and false-positive regression tests.
+Normal turns still use two mandatory LLM requests; validation and sanitization
+run entirely in code.
