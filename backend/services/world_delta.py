@@ -1,11 +1,32 @@
 """Canonical, source-backed changes to the live WorldState."""
 from copy import deepcopy
-from typing import Literal
+from typing import Literal, Annotated
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from backend.services.world import identity, CARD_FIELDS
 from backend.services.timeline import current_time
 
 RELATION_DIMENSIONS=('trust','affection','attraction','irritation','fear','jealousy','respect')
+
+KNOWLEDGE_CHANNELS=('observation','conversation','message','testimony','discovery')
+KNOWLEDGE_CONTRACT = ('Knowledge requires Fact -> Event -> Witness -> Knowledge: source_event_id must reference '
+    'an Event in this WorldDelta; fact_id must be in that Event.fact_ids; actor_id must be in '
+    'that Event.witnesses; medium must be observation, conversation, message, testimony or discovery, never action. '
+    'If the complete path is not supported by the narrative, omit Knowledge.')
+RELATION_CONTRACT = ('relationships.dimensions is a closed set: '+', '.join(RELATION_DIMENSIONS)+
+    '. Never invent dimension names. Put meaning that does not fit these dimensions in relationship.context.')
+
+def dimensions_schema(schema):
+    schema.update(type='object', properties={key:{'type':'number','minimum':-100,'maximum':100}
+        for key in RELATION_DIMENSIONS}, additionalProperties=False)
+
+class SecondaryDeltaError(ValueError):
+    """An explicitly classified leaf failure, safe to omit after one repair."""
+    def __init__(self, section, index, reason, field=None, entity=None):
+        super().__init__('World Delta: '+reason)
+        self.warning={'section':section,'index':index,'reason':reason}
+        if field:self.warning['field']=field
+        if entity:self.warning['entity']=entity
+
 
 class Record(BaseModel):
     model_config=ConfigDict(extra='forbid',strict=True)
@@ -22,15 +43,15 @@ class Event(Record):
     id: str=Field(min_length=1,max_length=120)
     text: str=Field(min_length=1,max_length=12000)
     participants: list[str]=Field(max_length=50)
-    witnesses: list[str]=Field(max_length=50)
-    fact_ids: list[str]=Field(default_factory=list,max_length=50)
+    witnesses: list[str]=Field(max_length=50,description="Recipients/observers who actually received information. "+KNOWLEDGE_CONTRACT)
+    fact_ids: list[str]=Field(default_factory=list,max_length=50,description=KNOWLEDGE_CONTRACT)
     medium: Literal['observation','conversation','message','testimony','discovery','action']
 
 class Knowledge(Record):
     actor_id: str
     fact_id: str
     status: Literal['known','suspected','unknown']
-    source_event_id: str
+    source_event_id: str=Field(description=KNOWLEDGE_CONTRACT)
 
 class Character(Record):
     id: str
@@ -60,7 +81,9 @@ class Promotion(Record):
 class Relationship(Record):
     source_id: str
     target_id: str
-    dimensions: dict[str,float]=Field(default_factory=dict,max_length=20)
+    # Keep raw keys through parsing to classify unknown numeric keys as isolated
+    # leaf errors. The advertised schema remains closed and uses the same registry.
+    dimensions: dict[str,Annotated[float,Field(ge=-100,le=100,allow_inf_nan=False)]]=Field(default_factory=dict,max_length=20,description=RELATION_CONTRACT,json_schema_extra=dimensions_schema)
     context: str=Field(min_length=1,max_length=12000)
 
 class Thread(Record):
@@ -86,7 +109,7 @@ class WorldDelta(BaseModel):
     promotions: list[Promotion]=Field(default_factory=list,max_length=10)
     facts: list[Fact]=Field(default_factory=list,max_length=50)
     events: list[Event]=Field(default_factory=list,max_length=50)
-    knowledge: list[Knowledge]=Field(default_factory=list,max_length=50)
+    knowledge: list[Knowledge]=Field(default_factory=list,max_length=50,description=KNOWLEDGE_CONTRACT)
     characters: list[Character]=Field(default_factory=list,max_length=50)
     relationships: list[Relationship]=Field(default_factory=list,max_length=50)
     threads: list[Thread]=Field(default_factory=list,max_length=50)
@@ -127,12 +150,10 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None, prom
         if not ok:raise ValueError('World Delta: '+message)
     def refs(values):
         require(set(values)<=actors,'неизвестный персонаж')
-    # Structural/evidence failures reject the whole extended delta, never partial knowledge.
+    # Check identity conflicts before applying any candidate changes.
     for section,entries in delta.items():
         seen=set()
         for index,item in enumerate(entries):
-            if not any(normalized_evidence(item['evidence']) in s for s in sources):
-                raise EvidenceError(f'Изменение world_delta.{section}[{index}].evidence не подтверждено цитатой из хода.')
             key=item.get('id')
             if key is None:key=(item['actor_id'],item['fact_id']) if 'actor_id' in item else (item['source_id'],item['target_id'])
             require(key not in seen,'повтор сущности в delta')
@@ -162,13 +183,13 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None, prom
         new_events[e['id']]=record
         camera['event_ids'].append(e['id'])
         for cid in e['participants']:world['characters'][cid]['last_event_id']=e['id']
-    for k in delta['knowledge']:
+    for index,k in enumerate(delta['knowledge']):
         refs([k['actor_id']])
         require(k['fact_id'] in world['facts'],'неизвестный факт знания')
         event=new_events.get(k['source_event_id'])
-        require(event is not None,'знание требует события этого хода')
-        require(k['actor_id'] in event['witnesses'] and k['fact_id'] in event['fact_ids'],'нет пути передачи знания')
-        require(event['medium']!='action','укажи канал получения информации')
+        if (event is None or k['actor_id'] not in event['witnesses']
+                or k['fact_id'] not in event['fact_ids'] or event['medium'] not in KNOWLEDGE_CHANNELS):
+            raise SecondaryDeltaError('knowledge',index,'нет подтверждённого пути передачи знания')
         world['knowledge'][k['actor_id']+':'+k['fact_id']]=k
     for c in delta['characters']:
         refs([c['id']]); require(c['id'] in present,'состояние отсутствующего NPC без сцены')
@@ -177,12 +198,15 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None, prom
         if 'location' in c:require(c['location']==camera['location'],'место участника не совпадает со сценой')
         world['characters'][c['id']].update({k:v for k,v in c.items() if k not in ('id','evidence')})
         world['characters'][c['id']]['minute']=now
-    for r in delta['relationships']:
+    for index,r in enumerate(delta['relationships']):
         refs([r['source_id'],r['target_id']])
         require(r['source_id']!=r['target_id'] and r['source_id'] in present,'недопустимая направленная связь')
         import math
         require(all(math.isfinite(v) and -100<=v<=100 for v in r['dimensions'].values()),'аспекты должны быть в диапазоне -100..100')
-        require(set(r['dimensions'])<=set(RELATION_DIMENSIONS),'неизвестное измерение отношений')
+        for dimension in r['dimensions']:
+            if dimension not in RELATION_DIMENSIONS:
+                raise SecondaryDeltaError('relationships',index,'неизвестное измерение отношений',
+                    'dimensions.'+dimension,r['source_id']+':'+r['target_id'])
         key=r['source_id']+':'+r['target_id']
         old=world['relationships'].setdefault(key,dict(source_id=r['source_id'],target_id=r['target_id'],dimensions={}))
         previous=old['dimensions'].copy()
@@ -205,4 +229,10 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None, prom
             require(bool(set(world['scheduled_events'][e['id']]['participants']).intersection(new_events[e['resolved_event_id']]['participants'])),'событие не связано с участниками обязательства')
             if e['status']=='resolved':require(new_events[e['resolved_event_id']]['minute']>=world['scheduled_events'][e['id']]['due_minute'],'событие завершено раньше срока')
         world['scheduled_events'][e['id']]=e
+    # Validate semantic structure first, so an unsupported quote cannot mask a
+    # fatal ID, scene or time error in the same record. Mutations are on a copy.
+    for section,entries in delta.items():
+        for index,item in enumerate(entries):
+            if not any(normalized_evidence(item['evidence']) in s for s in sources):
+                raise EvidenceError(f'Изменение world_delta.{section}[{index}].evidence не подтверждено цитатой из хода.')
     return state

@@ -97,6 +97,7 @@ def stop(storage, job_id):
 
 
 def run_job(path, job_id, handle):
+    from backend.services.world_delta import SecondaryDeltaError
     storage = Storage(path)
     narrative = ''
     job_started=time.perf_counter()
@@ -195,7 +196,7 @@ def run_job(path, job_id, handle):
                 try:
                     state, choices, changes, audience, warnings = apply_world_updates(before,result,narrative,job['user_text'],sequence,job['kind'])
                     break
-                except EvidenceError as exc:
+                except (EvidenceError, SecondaryDeltaError) as exc:
                     if attempt == 1:
                         state, choices, changes, audience, warnings = apply_world_updates(before,result,narrative,job['user_text'],sequence,job['kind'],discard_unsupported=True)
                         with storage.connect() as db:
@@ -211,7 +212,12 @@ def run_job(path, job_id, handle):
             record_narrative(state,narrative,sequence,True,set(before['world']['events']))
             from backend.services.simulation import simulate
             stage_started=time.perf_counter()
-            state=simulate(before,state,sequence,context,config,generate,handle.cancelled)
+            background_warnings=[]
+            state=simulate(before,state,sequence,context,config,generate,handle.cancelled,warnings=background_warnings)
+            if background_warnings:
+                with storage.connect() as db:
+                    previous=json.loads(db.execute('SELECT warnings_json FROM game_jobs WHERE id=?',(job_id,)).fetchone()[0] or '[]')
+                    db.execute('UPDATE game_jobs SET warnings_json=? WHERE id=?',(json.dumps(previous+background_warnings,ensure_ascii=False),job_id))
             if any(request['stage'].startswith('world_simulation') for request in storage.request_log(job_id=job_id)):
                 timings['background_simulation']=time.perf_counter()-stage_started
             state=compatibility_view(state)

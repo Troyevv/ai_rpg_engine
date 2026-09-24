@@ -160,18 +160,20 @@ def choice_input(choice):
 def apply_world_updates(before, payload, narrative, user_text, turn, kind='turn', discard_unsupported=False, simulation=False):
     """Validate a canonical extraction before changing any world state.
 
-    Only evidence failures may be discarded after a failed repair. All other
+    Only explicitly isolated secondary failures may be discarded after repair. Other
     validation failures reject the entire candidate and leave the save intact.
     """
     import re
     from backend.services.pov import apply_scene_policy
     from backend.services.world import record_scene
-    from backend.services.world_delta import apply_delta
+    from backend.services.world_delta import apply_delta, SecondaryDeltaError
     from backend.services.world_delta import add_promotions, WorldDelta
     from backend.services.timeline import current_time
     payload = json.loads(payload) if isinstance(payload,str) else deepcopy(payload)
     exact_keys(payload, ('scene','choices','world_delta'), ('scene','choices','world_delta'))
     warnings=[]
+    WorldDelta.model_validate(payload['world_delta'])
+    original_indices={section:list(range(len(entries))) for section,entries in payload['world_delta'].items() if isinstance(entries,list)}
     while True:
         # The scene/choice validator is shared with older saves; never pass legacy
         # patches through its mutation path.
@@ -183,13 +185,26 @@ def apply_world_updates(before, payload, narrative, user_text, turn, kind='turn'
             record_scene(state,payload,turn,kind)
             state=apply_delta(state,payload['world_delta'],narrative,user_text,turn,since=current_time(before),promotions_prepared=True)
             return state,choices,payload,audience,warnings
+        except SecondaryDeltaError as exc:
+            if not discard_unsupported:raise
+            warning=dict(exc.warning)
+            section,index=warning['section'],warning['index']
+            entry=payload['world_delta'][section][index]
+            if warning.get('field'):
+                entry['dimensions'].pop(warning['field'].split('.',1)[1])
+                warning['index']=original_indices[section][index]
+            else:
+                payload['world_delta'][section].pop(index)
+                warning['index']=original_indices[section].pop(index)
+            warnings.append(warning)
         except EvidenceError as exc:
             if not discard_unsupported:raise
             match=re.search(r'world_delta\.(\w+)\[(\d+)\]',str(exc))
             if not match:raise
             section,index=match[1],int(match[2])
+            if section=='promotions':raise
             rejected=payload['world_delta'][section].pop(index)
-            warnings.append({'section':section,'reason':'Нет подтверждённой цитаты текущего хода','rejected':rejected})
+            warnings.append({'section':section,'index':original_indices[section].pop(index),'reason':'Нет подтверждённой цитаты текущего хода','rejected':rejected})
 
 
 def apply_supported_updates(before, payload, narrative, user_text, turn, kind="turn"):

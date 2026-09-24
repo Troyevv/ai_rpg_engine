@@ -266,6 +266,7 @@ def chat_stream(
     api_key=None,
     thinking='off',
     on_usage=None,
+    on_finish=None,
 ):
     if provider not in PROVIDERS:
         raise ValueError('Неизвестный провайдер модели.')
@@ -313,6 +314,7 @@ def chat_stream(
 
             if chunk.choices[0].finish_reason is not None:
                 finish_reason = chunk.choices[0].finish_reason
+                if on_finish:on_finish(finish_reason)
 
             delta = chunk.choices[0].delta
 

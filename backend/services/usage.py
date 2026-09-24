@@ -1,5 +1,6 @@
 """Provider usage is authoritative. Missing usage/cost remains unknown, not zero."""
 from decimal import Decimal
+import time
 from context_builder import estimate
 
 PRICE_SOURCE = 'https://api-docs.deepseek.com/quick_start/pricing/'
@@ -45,12 +46,16 @@ def tracked_stream(storage, stream_fn, job_id, stage, config, messages, diagnost
     effective = dict(config, thinking=thinking_options(config.get('provider','local'),config['model'],config.get('thinking','off'))[0])
     effective.update({k:kwargs[k] for k in ('max_tokens','temperature','response_format') if k in kwargs})
     rid = storage.begin_request(job_id,stage,effective,messages,diagnostics or {'estimated_tokens':estimate(messages),'parts':[]})
-    usage, status = None, 'error'
+    started=time.perf_counter()
+    usage, status, finish_reason = None, 'error', None
     def received(value):
         nonlocal usage
         usage = value
+    def finished(value):
+        nonlocal finish_reason
+        finish_reason=value
     try:
-        yield from stream_fn(messages=messages, thinking=effective['thinking'], on_usage=received, **kwargs)
+        yield from stream_fn(messages=messages, thinking=effective['thinking'], on_usage=received, on_finish=finished, **kwargs)
         status = 'complete'
     except OutputLimitReached:
         status = 'length'
@@ -59,4 +64,4 @@ def tracked_stream(storage, stream_fn, job_id, stage, config, messages, diagnost
         event = kwargs.get('cancel_event')
         if event is not None and event.is_set():
             status = 'stopped'
-        storage.finish_request(rid,status,usage)
+        storage.finish_request(rid,status,usage,time.perf_counter()-started,finish_reason)

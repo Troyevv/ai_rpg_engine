@@ -255,7 +255,7 @@ export function Inspector({
             )}
           </>
         )}
-        {panel === "Отношения" && <RelationsView state={state}/>}
+        {panel === "Отношения" && <RelationsView state={state} save={save} refresh={refresh}/>}
         {panel === "Тайны" && <SecretsView state={state}/>}
         {panel === "Сюжет" && <ThreadsView state={state}/>}
         {panel === "Память" && <MemoryView state={state}/>}

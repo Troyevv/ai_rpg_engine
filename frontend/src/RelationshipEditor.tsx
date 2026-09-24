@@ -15,7 +15,7 @@ export function RelationshipEditor({save,card,refresh}:{save:Save;card:Character
  const [dimensions,setDimensions]=useState<string[]>([]);
  const [edit,setEdit]=useState<Edit|null>(null);
  const [busy,setBusy]=useState(false);
- useEffect(()=>{let active=true;api<string[]>('/relationships/dimensions').then(value=>{if(active)setDimensions(value)}).catch(()=>{});return()=>{active=false}},[]);
+ useEffect(()=>{let active=true;api<string[]>('/relationships/dimensions').then(value=>{if(active)setDimensions(value)}).catch(e=>toast.error((e as Error).message));return()=>{active=false}},[]);
  const name=(id:string)=>save.state.characters.find(c=>c.id===id)?.name||id;
  const open=(r?:WorldRelation,remove=false)=>setEdit({target_id:r?.target_id||targets.find(c=>!relations.some(v=>v.target_id===c.id))?.id||'',context:r?.context||'',dimensions:Object.fromEntries(Object.entries(r?.dimensions||{}).filter(([,v])=>typeof v==='number')) as Record<string,number>,delete:remove});
  const persist=async()=>{if(!edit)return;setBusy(true);try{
@@ -23,7 +23,7 @@ export function RelationshipEditor({save,card,refresh}:{save:Save;card:Character
   await refresh();setEdit(null);toast.success('Отношение сохранено');
  }catch(e){toast.error((e as Error).message)}finally{setBusy(false)}};
  return <div className="motivation-editor">
-  {relations.map(r=><div key={r.target_id} className="motivation-row"><p><strong>{card.name} → {name(r.target_id)}</strong><br/>{r.context}</p><details className="motivation-menu"><summary aria-label={`Действия с отношением к ${name(r.target_id)}`}><MoreHorizontal size={20}/></summary><div><Button variant="ghost" onClick={e=>{e.currentTarget.closest('details')?.removeAttribute('open');open(r)}}>Редактировать</Button><Button variant="ghost" onClick={e=>{e.currentTarget.closest('details')?.removeAttribute('open');open(r,true)}}>Удалить</Button></div></details></div>)}
+  {relations.map(r=><div key={r.target_id} className="motivation-row"><p><strong>{card.name} → {name(r.target_id)}</strong><br/>{r.context}<span className="inspect-chips">{Object.entries(r.dimensions).map(([key,value])=><span className="pill" key={key}>{labels[key]||key}: {typeof value==='number'?value:value.reason}</span>)}</span></p><details className="motivation-menu"><summary aria-label={`Действия с отношением к ${name(r.target_id)}`}><MoreHorizontal size={20}/></summary><div><Button variant="ghost" onClick={e=>{e.currentTarget.closest('details')?.removeAttribute('open');open(r)}}>Редактировать</Button><Button variant="ghost" onClick={e=>{e.currentTarget.closest('details')?.removeAttribute('open');open(r,true)}}>Удалить</Button></div></details></div>)}
   {!relations.length&&<p className="muted small">Отношения этого персонажа ещё не записаны.</p>}
   <Button variant="ghost" disabled={!targets.some(c=>!relations.some(r=>r.target_id===c.id))} onClick={()=>open()}>+ Добавить отношение</Button>
   <Dialog open={!!edit} onOpenChange={value=>{if(!value&&!busy)setEdit(null)}}><DialogContent><DialogHeader><DialogTitle>{edit?.delete?'Удалить отношение?':'Отношение персонажа'}</DialogTitle><DialogDescription>{edit?.delete?'Текущая запись будет удалена из этого прохождения.':'Меняется только направление от управляемого персонажа к выбранному персонажу.'}</DialogDescription></DialogHeader>

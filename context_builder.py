@@ -41,7 +41,8 @@ def build_context(state, history, user_text, kind, context_length, reserve, extr
     contract=(prompts or {}).get('world_state_prompt.md',{}).get('content') or (PROMPTS/'world_state_prompt.md').read_text(encoding='utf-8')
     rules += '\n'+(contract if extraction_text is not None else contract.split('ТОЛЬКО при извлечении')[0])
     if extraction_text is not None:
-        from backend.services.world_delta import WorldDelta
+        from backend.services.world_delta import WorldDelta, KNOWLEDGE_CONTRACT, RELATION_CONTRACT
+        rules += '\n'+KNOWLEDGE_CONTRACT+'\n'+RELATION_CONTRACT
         rules += '\nКаноническая JSON Schema поля world_delta:\n'+encoded(WorldDelta.model_json_schema())
     from backend.services.timeline import current_time,label
     dynamic = '\nЕдиное время мира: '+label(current_time(state))+'. Не возвращай время назад. В scene.time используй День N (день недели) HH:MM. Переход POV синхронный, без флешбэка.'

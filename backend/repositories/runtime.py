@@ -36,6 +36,7 @@ class RuntimeStorage:
             ''')
             db.execute('BEGIN IMMEDIATE')
             for table, columns in {
+                'llm_requests': {'duration':'REAL','finish_reason':'TEXT'},
                 'turns': {'pov_actor_id':'TEXT', 'audience_json':"TEXT NOT NULL DEFAULT '[]'", 'node_id': 'TEXT', 'active_variant_id': 'TEXT', 'memory_archived': 'INTEGER NOT NULL DEFAULT 0', 'timing_json':'TEXT'},
                 'game_jobs': {'pov_actor_id':'TEXT', 'audience_json':"TEXT NOT NULL DEFAULT '[]'", 'context_json': 'TEXT', 'memory_before_json': 'TEXT', 'warnings_json': "TEXT NOT NULL DEFAULT '[]'", 'session_id': 'TEXT', 'timing_json':'TEXT'},
             }.items():
@@ -98,14 +99,14 @@ class RuntimeStorage:
               dump(messages), dump(diagnostics), dump(config), dump(price_snapshot(config, datetime.now(timezone.utc)))))
         return rid
 
-    def finish_request(self, rid, status, usage):
+    def finish_request(self, rid, status, usage, duration=None, finish_reason=None):
         from backend.services.usage import usage_values, cost
         inp, out, cached = usage_values(usage)
         with self.connect() as db:
             pricing = json.loads(db.execute('SELECT pricing_json FROM llm_requests WHERE id=?', (rid,)).fetchone()[0])
             amount = cost(inp, out, cached, pricing)
-            db.execute('UPDATE llm_requests SET status=?,usage_json=?,input_tokens=?,output_tokens=?,cached_input_tokens=?,cost_usd=? WHERE id=?',
-                       (status, dump(usage) if usage is not None else None, inp, out, cached, amount, rid))
+            db.execute('UPDATE llm_requests SET status=?,usage_json=?,input_tokens=?,output_tokens=?,cached_input_tokens=?,cost_usd=?,duration=?,finish_reason=? WHERE id=?',
+                       (status, dump(usage) if usage is not None else None, inp, out, cached, amount, duration, finish_reason, rid))
 
     def request_log(self, save_id=None, workspace_id=None, job_id=None):
         field, value = ('save_id', save_id) if save_id is not None else ('workspace_id', workspace_id) if workspace_id else ('job_id', job_id)
@@ -115,7 +116,7 @@ class RuntimeStorage:
             r['diagnostics'] = json.loads(r.pop('diagnostics_json'))
             r['messages'] = json.loads(r.pop('context_json'))
             r['pricing'] = json.loads(r.pop('pricing_json'))
-            r.pop('config_json')
+            r['max_tokens'] = json.loads(r.pop('config_json')).get('max_tokens')
         return rows
 
     def accounting(self, save_id):
@@ -130,7 +131,25 @@ class RuntimeStorage:
                     'unknown_requests': sum(r['cost_usd'] is None for r in records),
                     **{k: sum(r[k] or 0 for r in records) for k in ('input_tokens','output_tokens','cached_input_tokens')}}
         return {'session_id': sid[0] if sid else None, 'session': total([r for r in rows if sid and r['session_id']==sid[0]]),
-                'game': total(rows), 'world': total(world_rows), 'requests': rows}
+                'game': total(rows), 'world': total(world_rows), 'requests': rows, 'turns': self.turn_diagnostics(save_id,rows)}
+
+    def turn_diagnostics(self, save_id, requests=None):
+        # Join the active variant, never the latest job. Reuse the fetched log
+        # instead of issuing a database/context lookup for every history row.
+        requests=self.request_log(save_id=save_id) if requests is None else requests
+        by_job={}
+        for request in requests:by_job.setdefault(request['job_id'],[]).append(request)
+        with self.connect() as db:
+            turns=[dict(r) for r in db.execute("""SELECT t.id,t.sequence,t.active_variant_id,t.timing_json,
+                v.job_id,j.warnings_json FROM turns t
+                LEFT JOIN response_variants v ON v.id=t.active_variant_id
+                LEFT JOIN game_jobs j ON j.id=v.job_id
+                WHERE t.save_id=? ORDER BY t.sequence DESC LIMIT 30""",(save_id,))]
+        for turn in turns:
+            turn['timing']=json.loads(turn.pop('timing_json') or 'null')
+            turn['warnings']=json.loads(turn.pop('warnings_json') or '[]')
+            turn['requests']=by_job.get(turn['job_id'],[])
+        return turns
 
     def select_variant(self, save_id, turn_id, variant_id, revision, rollback=False):
         with self.connect() as db:
