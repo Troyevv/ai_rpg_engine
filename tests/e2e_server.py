@@ -1,5 +1,6 @@
-from canonical_fixture import canonical
 """Browser-only fixture server. Never imported by the production application."""
+from hashlib import sha256
+from canonical_fixture import canonical
 import json
 import re
 import os
@@ -47,7 +48,7 @@ def stream(**kwargs):
             if 'Режим observer:' in full:
                 payload['facts']=[];payload['events']=[];payload['relationships']=[]
         payload['events']=[e for e in payload.get('events',[]) if set(e['character_ids'])<=set(payload['scene']['present_ids'])]
-        value=json.dumps(canonical(payload),ensure_ascii=False)
+        value=json.dumps(canonical(payload,sha256(full.encode()).hexdigest()[:12]),ensure_ascii=False)
     elif observer:
         value = SECRET
     elif 'шаблон' in kwargs['messages'][-1]['content'].lower():
