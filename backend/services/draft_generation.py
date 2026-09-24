@@ -4,6 +4,7 @@ import time
 from backend.services import draft_world as domain
 from backend.services.continuation import stream_document
 from backend.services.usage import tracked_stream
+from backend.services.draft_schema import world_state_schema
 from llm import OutputLimitReached
 
 
@@ -22,7 +23,9 @@ def messages_for(repo,job,config):
     if task=='world':
         instructions=idea_text(repo,job,config)
         instructions+='\nРазработай пригодный для немедленной игры мир. Недостающие детали концепции дополни самостоятельно; исходная идея не является исчерпывающей спецификацией.'
-        system=config['_prompts']['draft_world_prompt.md']['content']+'\n\nТехнический контракт: верни ровно один завершённый JSON-объект World State v2.'
+        system=(config['_prompts']['draft_world_prompt.md']['content']
+                +'\n\nКаноническая JSON Schema WorldState для ПЕРВОНАЧАЛЬНОЙ генерации (не заполняй саму схему; верни объект по ней):\n'
+                +json.dumps(world_state_schema(),ensure_ascii=False,separators=(',',':')))
         return [{'role':'system','content':system},
                 {'role':'user','content':instructions}]
     draft=repo.draft(wid,author=True);state=draft['state']

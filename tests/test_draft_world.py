@@ -6,6 +6,7 @@ from test_worlds import summary
 from world_parser import parse_summary
 from backend.services import draft_world as domain
 from backend.services.draft_generation import decode_result
+from backend.services.draft_schema import world_state_schema
 from backend.services.world import CARD_FIELDS, normalize
 from context_builder import build_context
 
@@ -63,6 +64,30 @@ def test_current_scene_voices_reach_gm_without_all_npc_cards():
     assert 'Характер' in gm and 'Биография' in gm
     assert 'При написании диалогов используй «Стиль общения»' in str(context)
     assert [x['id'] for x in json.loads(gm.split('\n',1)[1])['characters']]==[a,b]
+
+
+def test_generated_card_fields_survive_prepare_sync_and_roundtrip():
+    raw=fixture();fields=raw['characters'][0]['fields']
+    for field in CARD_FIELDS:fields[field]=f'Содержательно раскрыто: {field} и характерная деталь персонажа.'
+    state=domain.prepare(raw)
+    assert all(state['characters'][0]['fields'][key]==fields[key] for key in CARD_FIELDS)
+    assert domain.sync(state)['characters'][0]['fields']==state['characters'][0]['fields']
+    assert parse_summary(domain.export_markdown(state))['characters'][0]['fields']==state['characters'][0]['fields']
+    schema=world_state_schema()
+    assert schema['properties']['characters']['items']['properties']['fields']['required']==list(CARD_FIELDS)
+    assert 'телосложение' in schema['properties']['characters']['items']['properties']['fields']['properties']['Внешность']['description']
+
+
+def test_generated_incomplete_fields_are_diagnostic_not_an_enrichment_request():
+    state=fixture();fields=state['characters'][0]['fields']
+    fields['Стиль общения']='нет данных'
+    fields['Привычки']=''
+    fields['Внешность']='Высокий человек с уставшим видом. Носит халат.'
+    notices=domain.review_initial(domain.prepare(state))
+    assert any('Стиль общения' in note and 'Привычки' in note for note in notices)
+    assert any('Внешность описана слишком общо' in note for note in notices)
+    assert not domain.appearance_is_detailed(fields['Внешность'])
+    assert domain.appearance_is_detailed('Рост примерно метр восемьдесят, крепкое телосложение, держится чуть сутуло. Чёрные волосы коротко подстрижены и аккуратно уложены; глаза тёмно-карие, взгляд спокойный. Носит светлую рубашку, тёмные джинсы и потёртую куртку.')
 
 
 def test_whole_character_regeneration_keeps_dynamic_state():
@@ -204,7 +229,7 @@ def test_generation_uses_one_request_and_saves_valid_world(api):
         calls.append(kwargs)
         with app.state.repository.connect() as db:
             phases.append(db.execute('SELECT phase FROM preparation_jobs ORDER BY rowid DESC LIMIT 1').fetchone()[0])
-        assert 'Ты автор полноценного живого RPG-мира' in kwargs['messages'][0]['content']
+        assert 'Ты создаёшь полноценный живой RPG-мир' in kwargs['messages'][0]['content']
         yield json.dumps(expected,ensure_ascii=False)
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         response=client.post(path+'/generate',json={'revision':draft['revision'],'task':'world','text':'Сложный мир','config':REMOTE,'api_key':'test'})
@@ -216,8 +241,11 @@ def test_generation_uses_one_request_and_saves_valid_world(api):
     assert not updated['validation']['errors'] and len(updated['history'])==2
     assert len(calls)==1 and phases==['world']
     prompt=calls[0]['messages'][0]['content']
-    assert 'НЕ полная спецификация' in prompt and 'минимальными текстами' in prompt
-    assert 'A → B и B → A' in prompt and 'knowledge["k1"]' in prompt
+    assert 'НЕ полная спецификация' in prompt and 'готов к игре' in prompt
+    assert 'A→B и B→A' in prompt and 'Каноническая JSON Schema WorldState' in prompt
+    assert '"Суть"' not in prompt and '"schema_version":1,' not in prompt
+    schema=json.loads(prompt.split('Каноническая JSON Schema WorldState',1)[1].split('\n',1)[1])
+    assert set(CARD_FIELDS)==set(schema['properties']['characters']['items']['properties']['fields']['required'])
     with app.state.repository.connect() as db:
         stages=[row[0] for row in db.execute('SELECT stage FROM llm_requests')]
     assert stages==['draft_world']
@@ -436,7 +464,15 @@ def test_quick_generation_creative_completion_is_playable_and_one_request(api):
          'Легко поддевает Илью за обедом, но тщательно скрывает усталость. Хочет сменить график, не признаваясь коллегам, что дома на ней держится семья.',
          'Катя вернулась в город ради матери и взяла больше ночных смен, чем может выдержать. С Ильёй подружилась после спорного диагноза, который они решали вместе.'),
     ]
-    for card,(appearance,character,biography) in zip(state['characters'],details):
+    portraits=[
+        'Он худощавый и заметно выше окружающих. Тёмно-русые короткие волосы всё время падают на лоб; серые глаза под круглыми очками кажутся настороженными. Носит простую рубашку с закатанными рукавами.',
+        'Она среднего роста, крепко сложена и ходит быстро, не сутулясь. У неё тёмные волосы до плеч и внимательные карие глаза. Вместо украшений носит тонкие часы; на работе выбирает однотонные костюмы.',
+        'Он невысокий и жилистый, волосы светлые, отросшие за уши и вечно всклокочены. Светло-карие глаза почти всегда щурятся от света. Обычно в мятой футболке и незастёгнутом халате.',
+        'Она высокая и тонкая, чёрные волосы ровно обрезаны по линии скул. Зелёные глаза смотрят внимательно и немного устало. На работу надевает строгие брюки, мягкую светлую блузку и удобные туфли.',
+        'Невысокая и плотная, с тёплым взглядом тёмных глаз и густыми каштановыми волосами, собранными в низкий хвост. Носит свободные свитера, светлые брюки и мягкие ботинки; держится чуть боком.',
+    ]
+    for card,(appearance,character,biography),portrait in zip(state['characters'],details,portraits):
+        appearance+=' '+portrait
         card['fields'].update(Внешность=appearance,Характер=character,Биография=biography,
             **{'Стиль общения':f'{card["name"]} говорит короткими точными фразами и редко повышает голос. С близкими позволяет себе сухие шутки, при начальстве отвечает прямо и формально.',
                'Привычки':f'{card["name"]} перед разговором поправляет рукав халата и делает короткую паузу, прежде чем назвать диагноз. После тяжёлой смены записывает наблюдения в бумажный блокнот.',
@@ -505,7 +541,7 @@ def test_quick_generation_creative_completion_is_playable_and_one_request(api):
         assert job.status_code==200,job.text
         assert wait_job(client,job.json()['id'])['status']=='saved'
     assert len(calls)==1 and idea in calls[0][-1]['content']
-    assert 'Ты автор полноценного живого RPG-мира' in calls[0][0]['content']
+    assert 'Ты создаёшь полноценный живой RPG-мир' in calls[0][0]['content']
     draft=client.get(f"/api/workspaces/{w['id']}/draft?author=true").json()
     assert not draft['validation']['errors'] and not draft['validation']['warnings']
     assert len(draft['state']['characters'])==5 and len(draft['state']['world']['relationships'])==7
@@ -538,6 +574,8 @@ def test_sparse_but_structurally_valid_world_saves_without_completion(api):
     from unittest.mock import patch
     client,app=api;path,previous=make(client)
     state=fixture();state['world']['relationships']={};state['world']['threads']={}
+    state['characters'][0]['fields'].pop('Стиль общения',None)
+    state['characters'][0]['fields']['Внешность']='Высокий человек с уставшим видом. Носит халат.'
     calls=[]
     def stream(**kwargs):
         calls.append(kwargs);yield json.dumps(state,ensure_ascii=False)
@@ -547,6 +585,9 @@ def test_sparse_but_structurally_valid_world_saves_without_completion(api):
         assert wait_job(client,job.json()['id'])['status']=='saved'
     after=client.get(path+'?author=true').json()
     assert len(calls)==1 and after['validation']['warnings']
+    assert after['state']['characters'][0]['fields']['Стиль общения']==''
+    assert any('Стиль общения' in note for note in after['validation']['warnings'])
+    assert any('Внешность описана слишком общо' in note for note in after['validation']['warnings'])
     assert after['state']['world']['threads']=={} and after['state']['world']['relationships']=={}
     with app.state.repository.connect() as db:
         assert [r[0] for r in db.execute('SELECT stage FROM llm_requests')]==['draft_world']
