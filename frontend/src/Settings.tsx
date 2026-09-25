@@ -1,3 +1,4 @@
+import {ThemeSelector} from "./ThemeProvider";
 import {Versions} from "./Versions";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
@@ -341,6 +342,7 @@ export function Settings({
               : "Статус появится после обновления списка или загрузки."}
           </p>
         </fieldset>
+        <details className="theme-disclosure"><summary>Тема мира</summary><ThemeSelector/></details>
         <fieldset>
           <legend>Чтение</legend>
           {(["font_size", "line_height", "reading_width"] as const).map(

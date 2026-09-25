@@ -1,3 +1,4 @@
+import {useMotionPreset} from "./motion";
 import {Timing} from './Timing';
 import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
@@ -62,6 +63,15 @@ export function Game({
   const scroll = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
   const reduced = useReducedMotion();
+  const turnMotion=useMotionPreset('fadeUp');
+  const choicesMotion=useMotionPreset('staggerContainer');
+  const choiceMotion=useMotionPreset('staggerItem');
+  const povMotion=useMotionPreset('povTransition');
+  // The loaded journal is already visible. Animate only records added in this session.
+  const initialTurns=useRef(new Set(save?.turns.map(t=>t.id)||[]));
+  const initialChoice=useRef(save?.turns.at(-1)?.active_variant_id);
+  const [selectedChoice,setSelectedChoice]=useState<number|null>(null);
+  useEffect(()=>{if(!busy)setSelectedChoice(null)},[save?.turns.at(-1)?.active_variant_id,busy]);
   useEffect(() => {
     setDraft(sessionStorage.getItem(draftKey) || "");
     setSubmitted(null);
@@ -195,17 +205,17 @@ export function Game({
           className="story"
           style={{
             maxWidth: prefs.reading_width,
-            fontSize: mobile?Math.min(prefs.font_size,18):prefs.font_size,
-            lineHeight: mobile?1.65:prefs.line_height,
+            fontSize: prefs.font_size,
+            lineHeight: prefs.line_height,
           }}
         >
-          {save&&mobile&&<details className="mobile-story-tools"><summary>Диагностика</summary><Button size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Диагностика</Button></details>}{save&&!mobile&&<Button size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Диагностика</Button>}
+          {save&&mobile&&<details className="mobile-story-tools"><summary>Диагностика</summary><Button size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Диагностика</Button></details>}{save&&!mobile&&<Button className="story-diagnostics" size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Диагностика</Button>}
           <div className="story-heading">
             <p className="eyebrow">
-              {save ? save.name : "Начало истории"} · Мир v{world.version}
+              {save ? save.name : "Начало истории"}
             </p>
-            <h1>{world.name}</h1>
-            <div className="chapter-rule">✦</div>
+            <h1 title={world.name}>{world.name}</h1>
+            <div className="chapter-rule" aria-hidden="true">✦</div>
           </div>
           {!save ? (
             <div className="empty-state">
@@ -230,10 +240,12 @@ export function Game({
                 <motion.article
                   key={t.id}
                   className={`turn ${t.kind==="background"?"background-turn":""}`}
-                  initial={reduced ? false : { opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.22 }}
+                  initial={initialTurns.current.has(t.id) ? false : "hidden"}
+                  animate="visible"
+                  variants={turnMotion}
                 >
+                  {t.kind==='pov'&&<motion.div className="pov-divider" variants={povMotion}><span>Другая точка зрения</span><strong>{save.state.characters.find(c=>c.id===t.pov_actor_id)?.name}</strong></motion.div>}
+                  {t.kind==='background'&&<div className="narrative-divider">Тем временем</div>}
                   {t.user_text && (
                     <div className="player-action" data-testid="player-action">
                       <span className="eyebrow">Твоё действие</span>
@@ -328,16 +340,18 @@ export function Game({
                     <Button disabled={busy} onClick={()=>switchActor(mainActor!)}>Вернуться к {save.state.characters.find(c=>c.id===mainActor)?.name.replace(' (ГГ)','')}</Button>
                     <label>Продолжить за персонажа…<select aria-label="Участник фоновой сцены" value="" disabled={busy} onChange={e=>switchActor(e.target.value,save.turns.at(-1)!.id)}><option value="">Выбрать участника</option>{save.state.characters.filter(c=>JSON.parse(save.turns.at(-1)?.audience_json||'[]').includes(c.id)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
                   </div>}
-                  <div className="choices">
+                  <motion.div className="choices" key={save.turns.at(-1)?.active_variant_id} variants={choicesMotion} initial={initialChoice.current===save.turns.at(-1)?.active_variant_id?false:"hidden"} animate="visible">
                     {(save.turns.at(-1)?.kind!=="background"&&(save.turns.at(-1)?.pov_actor_id||mainActor)===actorId?save.turns.at(-1)?.choices:[])?.map((c, i) => (
-                      <button
+                      <motion.button
+                        variants={choiceMotion}
+                        className={selectedChoice===i?"choice-selected":""}
                         key={i}
                         disabled={busy}
-                        onClick={() =>
-                          turn(
+                        onClick={() => {
+                          setSelectedChoice(i); void turn(
                             "turn",
                             c.action + (c.speech ? `: «${c.speech}»` : ""),
-                          )
+                          );}
                         }
                       >
                         <span className="choice-index">0{i + 1}</span>
@@ -345,9 +359,9 @@ export function Game({
                           <strong>{c.action}</strong>
                           {c.speech && <>: «{c.speech}»</>}
                         </span>
-                      </button>
+                      </motion.button>
                     ))}
-                  </div>
+                  </motion.div>
                   <div className="turn-actions">
                     <Button
                       variant="ghost"
@@ -432,7 +446,7 @@ export function Game({
                 pinned.current = true;setAway(false);
                 scroll.current?.scrollTo({
                   top: scroll.current.scrollHeight,
-                  behavior: "smooth",
+                  behavior: reduced ? "auto" : "smooth",
                 });
               }}
             >

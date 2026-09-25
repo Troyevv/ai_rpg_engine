@@ -1,3 +1,4 @@
+import {ThemeProvider, useTheme} from "./ThemeProvider";
 import { useCallback, useEffect, useState, useRef } from "react";
 import {
   BookOpen,
@@ -126,8 +127,8 @@ export default function App() {
     inspect("Персонажи");
   };
   return (
-    <div className={`app-shell ${reading ? "reading" : ""}`}>
-      <Toaster theme="dark" richColors position="top-center" />
+    <ThemeProvider world={world}><div className={`app-shell ${reading ? "reading" : ""}`}>
+      <ThemedToaster />
       {!mobile&&<nav className="nav-rail" aria-label="Главная навигация">
         <button
           className="brand"
@@ -276,6 +277,8 @@ export default function App() {
         setCharacter={setCharacter}
         refresh={refresh}
       />
-    </div>
+    </div></ThemeProvider>
   );
 }
+
+function ThemedToaster(){const {presentation}=useTheme();return <Toaster theme={presentation.theme_id==='parchment'?'light':'dark'} position="top-center" toastOptions={{className:"story-toast"}}/>}

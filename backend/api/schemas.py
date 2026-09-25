@@ -1,4 +1,5 @@
 from typing import Literal
+from backend.repositories.presentation import ThemeId
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 class DTO(BaseModel):
@@ -106,3 +107,7 @@ class RelationshipEdit(Revision):
     context: str = Field(default='',max_length=12000)
     dimensions: dict[str,float] = Field(default_factory=dict,max_length=20)
     delete: bool = False
+
+
+class Presentation(DTO):
+    theme_id: ThemeId | Literal["auto"]

@@ -5,9 +5,13 @@ from storage import Storage
 from backend.repositories.drafts import DraftStorage
 
 
-class Repository(DraftStorage, Storage):
+from backend.repositories.presentation import PresentationStorage
+
+
+class Repository(PresentationStorage, DraftStorage, Storage):
     def __init__(self, path=None):
         super().__init__(path)
+        self.init_presentation()
         with self.connect() as db:
             db.executescript('''
             CREATE TABLE IF NOT EXISTS preparation_workspaces (

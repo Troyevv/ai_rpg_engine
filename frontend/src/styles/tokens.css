@@ -1,0 +1,24 @@
+/* Components consume semantic tokens only. Theme palettes live in themes.css. */
+@theme inline {
+ --color-background: var(--bg);
+ --color-foreground: var(--text);
+ --color-primary: var(--accent);
+ --color-muted: var(--text-muted);
+ --font-sans: var(--ui-font);
+}
+:root {
+ --ui-font: "Segoe UI", system-ui, sans-serif;
+ --story-font: Georgia, "Times New Roman", serif;
+ --radius-sm: 6px;
+ --radius-md: 10px;
+ --radius-lg: 16px;
+ --radius-xl: 24px;
+ --shadow-sm: 0 2px 8px var(--shadow-color);
+ --shadow-panel: 0 12px 40px var(--shadow-color);
+ --shadow-dialog: 0 24px 90px var(--shadow-color);
+ --transition-fast: 140ms;
+ --transition-normal: 240ms;
+ --transition-slow: 480ms;
+ --ease-out: cubic-bezier(.22, 1, .36, 1);
+}
+html { font-family: var(--ui-font); color: var(--text); background: var(--bg); font-synthesis: none; }
