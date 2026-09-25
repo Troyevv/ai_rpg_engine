@@ -36,9 +36,9 @@ class RuntimeStorage:
             ''')
             db.execute('BEGIN IMMEDIATE')
             for table, columns in {
-                'llm_requests': {'duration':'REAL','finish_reason':'TEXT'},
+                'llm_requests': {'response_text':'TEXT','duration':'REAL','finish_reason':'TEXT'},
                 'turns': {'pov_actor_id':'TEXT', 'audience_json':"TEXT NOT NULL DEFAULT '[]'", 'node_id': 'TEXT', 'active_variant_id': 'TEXT', 'memory_archived': 'INTEGER NOT NULL DEFAULT 0', 'timing_json':'TEXT'},
-                'game_jobs': {'pov_actor_id':'TEXT', 'audience_json':"TEXT NOT NULL DEFAULT '[]'", 'context_json': 'TEXT', 'memory_before_json': 'TEXT', 'warnings_json': "TEXT NOT NULL DEFAULT '[]'", 'session_id': 'TEXT', 'timing_json':'TEXT'},
+                'game_jobs': {'repair_diagnostics_json':"TEXT NOT NULL DEFAULT '[]'", 'pov_actor_id':'TEXT', 'audience_json':"TEXT NOT NULL DEFAULT '[]'", 'context_json': 'TEXT', 'memory_before_json': 'TEXT', 'warnings_json': "TEXT NOT NULL DEFAULT '[]'", 'session_id': 'TEXT', 'timing_json':'TEXT'},
             }.items():
                 existing = {r['name'] for r in db.execute(f'PRAGMA table_info({table})')}
                 for name, declaration in columns.items():
@@ -85,6 +85,11 @@ class RuntimeStorage:
             db.execute('UPDATE game_jobs SET context_json=COALESCE(context_json,?),memory_before_json=COALESCE(memory_before_json,?) WHERE id=?',
                        (dump(messages), dump(before), job_id))
 
+    def record_repair(self, job_id, diagnostic):
+        with self.connect() as db:
+            records=json.loads(db.execute('SELECT repair_diagnostics_json FROM game_jobs WHERE id=?',(job_id,)).fetchone()[0] or '[]')
+            db.execute('UPDATE game_jobs SET repair_diagnostics_json=? WHERE id=?',(dump(records+[diagnostic]),job_id))
+
     def begin_request(self, job_id, stage, config, messages, diagnostics):
         from backend.services.usage import price_snapshot
         rid = uuid.uuid4().hex
@@ -99,14 +104,14 @@ class RuntimeStorage:
               dump(messages), dump(diagnostics), dump(config), dump(price_snapshot(config, datetime.now(timezone.utc)))))
         return rid
 
-    def finish_request(self, rid, status, usage, duration=None, finish_reason=None):
+    def finish_request(self, rid, status, usage, duration=None, finish_reason=None, response_text=None):
         from backend.services.usage import usage_values, cost
         inp, out, cached = usage_values(usage)
         with self.connect() as db:
             pricing = json.loads(db.execute('SELECT pricing_json FROM llm_requests WHERE id=?', (rid,)).fetchone()[0])
             amount = cost(inp, out, cached, pricing)
-            db.execute('UPDATE llm_requests SET status=?,usage_json=?,input_tokens=?,output_tokens=?,cached_input_tokens=?,cost_usd=?,duration=?,finish_reason=? WHERE id=?',
-                       (status, dump(usage) if usage is not None else None, inp, out, cached, amount, duration, finish_reason, rid))
+            db.execute('UPDATE llm_requests SET status=?,usage_json=?,input_tokens=?,output_tokens=?,cached_input_tokens=?,cost_usd=?,duration=?,finish_reason=?,response_text=? WHERE id=?',
+                       (status, dump(usage) if usage is not None else None, inp, out, cached, amount, duration, finish_reason, response_text, rid))
 
     def request_log(self, save_id=None, workspace_id=None, job_id=None):
         field, value = ('save_id', save_id) if save_id is not None else ('workspace_id', workspace_id) if workspace_id else ('job_id', job_id)
@@ -141,12 +146,13 @@ class RuntimeStorage:
         for request in requests:by_job.setdefault(request['job_id'],[]).append(request)
         with self.connect() as db:
             turns=[dict(r) for r in db.execute("""SELECT t.id,t.sequence,t.active_variant_id,t.timing_json,
-                v.job_id,j.warnings_json FROM turns t
+                v.job_id,j.warnings_json,j.repair_diagnostics_json FROM turns t
                 LEFT JOIN response_variants v ON v.id=t.active_variant_id
                 LEFT JOIN game_jobs j ON j.id=v.job_id
                 WHERE t.save_id=? ORDER BY t.sequence DESC LIMIT 30""",(save_id,))]
         for turn in turns:
             turn['timing']=json.loads(turn.pop('timing_json') or 'null')
+            turn['repairs']=json.loads(turn.pop('repair_diagnostics_json') or '[]')
             turn['warnings']=json.loads(turn.pop('warnings_json') or '[]')
             turn['requests']=by_job.get(turn['job_id'],[])
         return turns

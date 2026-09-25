@@ -1,10 +1,12 @@
 """Allowlisted, source-backed state patches. No arbitrary JSON paths."""
+from backend.services.world_delta_errors import StructuralDeltaError
+
 from copy import deepcopy
 import json
 import unicodedata
 
 
-class EvidenceError(ValueError):
+class EvidenceError(StructuralDeltaError):
     """An extraction must be corrected before any state can be committed."""
 
 
@@ -17,13 +19,13 @@ def normalized_evidence(value):
 
 def text(value, label, limit=12000):
     if not isinstance(value, str) or not value.strip() or len(value) > limit:
-        raise ValueError(f'Некорректное поле: {label}.')
+        raise StructuralDeltaError(f'Некорректное поле: {label}.', code='schema_invalid')
     return value.strip()
 
 
 def exact_keys(obj, allowed, required=()):
     if not isinstance(obj, dict) or set(obj) - set(allowed) or set(required) - set(obj):
-        raise ValueError('Неверная структура изменений.')
+        raise StructuralDeltaError('Неверная структура изменений.', code='schema_invalid')
 
 
 def apply_updates(before, payload, narrative, user_text, turn, kind="turn"):
@@ -45,14 +47,14 @@ def apply_updates(before, payload, narrative, user_text, turn, kind="turn"):
 
     def known(values):
         if not isinstance(values, list) or any(not isinstance(v, str) or v not in ids for v in values):
-            raise ValueError('Неизвестный персонаж в изменениях.')
+            raise StructuralDeltaError('Неизвестный персонаж в изменениях.', code='unknown_character')
         return list(dict.fromkeys(values))
 
     def items(key):
         nonlocal evidence_path
         value = payload.get(key, [])
         if not isinstance(value, list) or len(value) > 50:
-            raise ValueError(f'Неверный список: {key}.')
+            raise StructuralDeltaError(f'Неверный список: {key}.', code='schema_invalid')
         for index, item in enumerate(value):
             evidence_path = f'{key}[{index}].evidence'
             yield item
@@ -60,7 +62,7 @@ def apply_updates(before, payload, narrative, user_text, turn, kind="turn"):
     scene = payload['scene']
     exact_keys(scene, ['text', 'time', 'location', 'present_ids', 'elapsed_minutes'], ['text', 'time', 'location', 'present_ids'])
     if 'elapsed_minutes' in scene and (type(scene['elapsed_minutes']) is not int or not 0<=scene['elapsed_minutes']<=10080):
-        raise ValueError('Некорректная длительность scene.elapsed_minutes.')
+        raise StructuralDeltaError('Некорректная длительность scene.elapsed_minutes.', code='schema_invalid')
     state['scene'] = text(scene['text'], 'scene.text')
     state['sections']['scene'] = state['scene']
     state['scene_meta'] = {'time': text(scene['time'], 'time', 120), 'location': text(scene['location'], 'location', 200),
@@ -68,17 +70,17 @@ def apply_updates(before, payload, narrative, user_text, turn, kind="turn"):
     choices = payload['choices']
     expected_choices = 0 if kind=='background' else 6
     if not isinstance(choices,list) or len(choices)!=expected_choices:
-        raise ValueError('Для закулисной сцены нужен пустой choices.' if kind=='background' else 'Нужно ровно 6 вариантов действий.')
+        raise StructuralDeltaError('Для закулисной сцены нужен пустой choices.' if kind=='background' else 'Нужно ровно 6 вариантов действий.', code='schema_invalid')
     normalized = []
     for choice in choices:
         exact_keys(choice, ['action', 'speech'], ['action'])
         action = text(choice['action'], 'action', 500)
         speech = choice.get('speech') or ''
         if not isinstance(speech, str) or len(speech) > 1000:
-            raise ValueError('Некорректная реплика варианта.')
+            raise StructuralDeltaError('Некорректная реплика варианта.', code='schema_invalid')
         normalized.append({'action': action, 'speech': speech.strip()})
     if len({(c['action'].casefold(), c['speech'].casefold()) for c in normalized}) != expected_choices:
-        raise ValueError('Варианты действий повторяются.')
+        raise StructuralDeltaError('Варианты действий повторяются.', code='schema_invalid')
     for change in items('characters'):
         exact_keys(change, ['id', 'now', 'goal', 'evidence'], ['id', 'evidence'])
         known([change['id']]); evidence(change)
@@ -87,7 +89,7 @@ def apply_updates(before, payload, narrative, user_text, turn, kind="turn"):
             card['fields']['Сейчас'] = text(change['now'], 'now')
         if 'goal' in change:
             if card['id']==controlled(before):
-                raise ValueError('Нельзя менять желания ГГ за игрока.')
+                raise StructuralDeltaError('Нельзя менять желания ГГ за игрока.', code='schema_invalid')
             card['fields']['Чего хочет'] = text(change['goal'], 'goal')
     # Arrows describe this turn only. Historical changes remain in turns.changes_json.
     for relationship in state['relationships']:
@@ -98,10 +100,10 @@ def apply_updates(before, payload, narrative, user_text, turn, kind="turn"):
                    ['source_id', 'target_id', 'text', 'direction', 'aspect', 'reason', 'evidence'])
         known([change['source_id'], change['target_id']]); evidence(change)
         if change['source_id'] == change['target_id'] or change['direction'] not in ('up', 'down', 'neutral'):
-            raise ValueError('Некорректное направление отношений.')
+            raise StructuralDeltaError('Некорректное направление отношений.', code='schema_invalid')
         pair = (change['source_id'], change['target_id'])
         if pair in changed_pairs:
-            raise ValueError('Направленная связь повторяется в изменениях.')
+            raise StructuralDeltaError('Направленная связь повторяется в изменениях.', code='schema_invalid')
         changed_pairs.add(pair)
         reason, aspect = text(change['reason'], 'reason'), text(change['aspect'], 'aspect', 120)
         target = cards[change['target_id']]['name']
@@ -110,10 +112,10 @@ def apply_updates(before, payload, narrative, user_text, turn, kind="turn"):
         if change.get('existing_index') is not None:
             index = change['existing_index']
             if type(index) is not int or not 0 <= index < len(before['relationships']):
-                raise ValueError('Неизвестная связь отношений.')
+                raise StructuralDeltaError('Неизвестная связь отношений.', code='schema_invalid')
             relation = state['relationships'][index]
             if relation['source_id'] != change['source_id'] or relation.get('target_id', change['target_id']) != change['target_id']:
-                raise ValueError('Нельзя менять участников существующей связи.')
+                raise StructuralDeltaError('Нельзя менять участников существующей связи.', code='schema_invalid')
         if relation is None:
             relation = {'source_id': change['source_id'], 'target_id': change['target_id'], 'target_name': target}
             state['relationships'].append(relation)
@@ -132,7 +134,7 @@ def apply_updates(before, payload, narrative, user_text, turn, kind="turn"):
         exact_keys(plan, ['id', 'text', 'character_ids', 'status', 'evidence'], ['id', 'text', 'character_ids', 'status', 'evidence'])
         evidence(plan)
         if plan['status'] not in ('open', 'done', 'cancelled'):
-            raise ValueError('Некорректный статус договорённости.')
+            raise StructuralDeltaError('Некорректный статус договорённости.', code='schema_invalid')
         record = {'id': text(plan['id'], 'plan.id', 100), 'text': text(plan['text'], 'plan.text'),
                   'character_ids': known(plan['character_ids']), 'status': plan['status'], 'turn': turn}
         plans = state.setdefault('plans', [])
@@ -160,7 +162,7 @@ def choice_input(choice):
 def apply_world_updates(before, payload, narrative, user_text, turn, kind='turn', discard_unsupported=False, simulation=False):
     """Validate a canonical extraction before changing any world state.
 
-    Only explicitly isolated secondary failures may be discarded after repair. Other
+    Only explicitly isolated secondary failures may be discarded. Other
     validation failures reject the entire candidate and leave the save intact.
     """
     from backend.services.world_delta_errors import sanitize_secondary
@@ -169,11 +171,19 @@ def apply_world_updates(before, payload, narrative, user_text, turn, kind='turn'
     from backend.services.world_delta import apply_delta, SecondaryDeltaError
     from backend.services.world_delta import add_promotions, WorldDelta
     from backend.services.timeline import current_time
-    payload = json.loads(payload) if isinstance(payload,str) else deepcopy(payload)
+    try:
+        payload = json.loads(payload) if isinstance(payload,str) else deepcopy(payload)
+    except json.JSONDecodeError as exc:
+        raise StructuralDeltaError(str(exc),'schema_invalid') from exc
     exact_keys(payload, ('scene','choices','world_delta'), ('scene','choices','world_delta'))
     warnings=[]
-    WorldDelta.model_validate(payload['world_delta'])
+    from pydantic import ValidationError
+    try:
+        WorldDelta.model_validate(payload['world_delta'])
+    except ValidationError as exc:
+        raise StructuralDeltaError(str(exc),'schema_invalid',section='world_delta') from exc
     original_indices={section:list(range(len(entries))) for section,entries in payload['world_delta'].items() if isinstance(entries,list)}
+    iterations=0
     while True:
         # The scene/choice validator is shared with older saves; never pass legacy
         # patches through its mutation path.
@@ -187,7 +197,13 @@ def apply_world_updates(before, payload, narrative, user_text, turn, kind='turn'
             return state,choices,payload,audience,warnings
         except SecondaryDeltaError as exc:
             if not discard_unsupported:raise
+            iterations+=1
+            if iterations>4096:
+                raise StructuralDeltaError('Sanitization iteration limit','sanitization_internal',repairable=False)
+            previous=deepcopy(payload['world_delta'])
             warnings.append(sanitize_secondary(payload['world_delta'],exc,original_indices))
+            if previous==payload['world_delta']:
+                raise StructuralDeltaError('Sanitization made no progress','sanitization_internal',repairable=False)
 
 
 def apply_supported_updates(before, payload, narrative, user_text, turn, kind="turn"):

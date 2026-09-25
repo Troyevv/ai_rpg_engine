@@ -1,4 +1,6 @@
 """One monotonic story clock. Old display strings are parsed without rewriting history."""
+from backend.services.world_delta_errors import StructuralDeltaError
+
 import re
 from backend.services.scene import scene_metadata
 
@@ -44,16 +46,16 @@ def advance(before,after,scene,elapsed=None,minimum=0):
         value=now
     if elapsed is not None:
         if type(elapsed) is not int or not 0<=elapsed<=10080:
-            raise ValueError('Длительность сцены должна быть целым числом минут от 0 до 10080.')
+            raise StructuralDeltaError('Длительность сцены должна быть целым числом минут от 0 до 10080.', code='invalid_time')
         if value%1440==(now+elapsed)%1440 and not re.search(r'день\s+\d+|'+ '|'.join(DAYS),scene['time'],re.I):
             value=now+elapsed
         if value not in (now, now+elapsed):
-            raise ValueError('Время сцены не совпадает с её длительностью.')
+            raise StructuralDeltaError('Время сцены не совпадает с её длительностью.', code='invalid_time')
         value=now+elapsed
     elif value==now:
         value=now+minimum
     if value<now:
-        raise ValueError('Время сцены раньше текущего времени мира. Минимум: '+label(now))
+        raise StructuralDeltaError('Время сцены раньше текущего времени мира. Минимум: '+label(now), code='invalid_time')
     after['world_clock']={'minute':value,'last_event_time':label(value)}
     scene['time']=label(value)
     return value

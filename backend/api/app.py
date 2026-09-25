@@ -128,6 +128,7 @@ def create_app(db_path=None, recover=True):
         else:
             value = repo.get_job(jid)
             value['live'] = engine.live(jid)
+        value['repairs'] = json.loads(value.get('repair_diagnostics_json') or '[]')
         value['warnings'] = json.loads(value.get('warnings_json','[]'))
         return repo.public_job(value)
 

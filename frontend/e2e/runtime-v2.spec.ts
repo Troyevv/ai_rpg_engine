@@ -83,3 +83,32 @@ test('diagnostic tabs use persisted turn timing and requests; old turns stay rea
  await expect(dialog.locator('.diagnostic-history')).toContainText('⚠ 1');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
 });
+
+test('repair reasons and sanitization have separate statistics per selected variant',async({page,request})=>{
+ const selection=await(await request.post('/test/seed')).json();
+ await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selection);
+ await page.goto('/');await page.getByRole('button',{name:'Начать игру',exact:true}).click();
+ await expect(page.locator('.turn')).toHaveCount(1);
+ await page.route(`**/api/saves/${selection.save}/accounting`,async route=>{
+  const response=await route.fetch();const data=await response.json();const original=data.turns[0];
+  const repaired={...original,id:999,sequence:99,active_variant_id:'repair-variant',job_id:'repair-job',
+   requests:[...original.requests,{...original.requests[0],id:'repair-request',stage:'extraction_repair'}],
+   repairs:[{stage:'extraction_repair',repair_error_code:'unknown_character',repair_error_type:'StructuralDeltaError',repair_reason:'Неизвестный персонаж в изменениях.'}],
+   warnings:[{type:'sanitized_delta',code:'relationship_dimension_unknown',section:'relationships',index:0,field:'dimensions.sympathy',reason:'неизвестное измерение отношений'}]};
+  data.turns=[repaired,{...original,repairs:[],warnings:[]}];
+  await route.fulfill({response,json:data});
+ });
+ await diagnostics(page);const dialog=page.getByRole('dialog');
+ await dialog.getByRole('tab',{name:'Производительность',exact:true}).click();
+ await dialog.getByLabel('Ход диагностики').selectOption('repair-variant');
+ await expect(dialog).toContainText('Причина repair');await expect(dialog).toContainText('StructuralDeltaError');
+ await dialog.getByText('Статистика extraction · последние 2 ходов',{exact:true}).click();
+ await expect(dialog).toContainText('Repair rate: 50.0%');
+ await expect(dialog).toContainText('relationship_dimension_unknown: 1');
+ const originalOption=await dialog.getByLabel('Ход диагностики').locator('option').last().getAttribute('value');
+ await dialog.getByLabel('Ход диагностики').selectOption(originalOption!);
+ await expect(dialog).toContainText('Repair: не выполнялся');
+ await expect(dialog.getByRole('heading',{name:'Причина repair',exact:true})).toHaveCount(0);
+ await expect(dialog.locator('.delta-warnings')).toHaveCount(0);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+});

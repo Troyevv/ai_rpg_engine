@@ -127,7 +127,7 @@ def add_promotions(state, promotions, narrative, user_text):
         if not any(normalized_evidence(p['evidence']) in source for source in sources):
             raise EvidenceError(f'Изменение world_delta.promotions[{index}].evidence не подтверждено цитатой из хода.')
         if p['id'] in state['world']['characters'] or any(c['name'].casefold()==p['name'].casefold() for c in state['characters']):
-            raise ValueError('Новая роль повторяет существующего персонажа.')
+            raise StructuralDeltaError('Новая роль повторяет существующего персонажа.','canonical_id_conflict')
         state['characters'].append({'id':p['id'],'name':p['name'],'aliases':[],'is_player':False,'fields':p['fields']})
         state['world']['characters'][p['id']]={'id':p['id'],'location':None,'situation':p['situation'],
             'goals':p['goals'],'intentions':p['intentions'],'obligations':p['obligations'],
@@ -147,17 +147,17 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None, prom
     actors=set(world['characters'])
     sources=[normalized_evidence(narrative),normalized_evidence(user_text)]
     now=current_time(state)
-    def require(ok,message):
-        if not ok:raise StructuralDeltaError('World Delta: '+message)
+    def require(ok,message,code="invalid_reference"):
+        if not ok:raise StructuralDeltaError('World Delta: '+message,code)
     def refs(values):
-        require(set(values)<=actors,'неизвестный персонаж')
+        require(set(values)<=actors,'неизвестный персонаж','unknown_character')
     # Check identity conflicts before applying any candidate changes.
     for section,entries in delta.items():
         seen=set()
         for index,item in enumerate(entries):
             key=item.get('id')
             if key is None:key=(item['actor_id'],item['fact_id']) if 'actor_id' in item else (item['source_id'],item['target_id'])
-            require(key not in seen,'повтор сущности в delta')
+            require(key not in seen,'повтор сущности в delta','canonical_id_conflict')
             seen.add(key)
     for promotion in delta['promotions']:
         require(promotion['id'] in present,'новый NPC не участвует в текущей сцене')
@@ -172,11 +172,11 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None, prom
     new_events={}
     for e in delta['events']:
         refs(e['participants']); refs(e['witnesses'])
-        require(e['id'] not in world['events'],'event id уже существует')
-        require(set(e['participants'])<=present and set(e['witnesses'])<=present,'событие или свидетель вне текущей сцены')
+        require(e['id'] not in world['events'],'event id уже существует','canonical_id_conflict')
+        require(set(e['participants'])<=present and set(e['witnesses'])<=present,'событие или свидетель вне текущей сцены','scene_event_membership')
         require(set(e['fact_ids'])<=set(world['facts']),'неизвестный факт события')
         minute=e.get('minute',now)
-        require((since if since is not None else now)<=minute<=now,'событие вне подтверждаемого интервала сцены')
+        require((since if since is not None else now)<=minute<=now,'событие вне подтверждаемого интервала сцены','invalid_time')
         if camera.get('start_minute') is None or minute<camera['start_minute']:
             camera['start_minute']=minute
         record=dict(e,minute=minute,scene_id=camera['id'],source_sequence=sequence,player_observed=True)
@@ -190,7 +190,7 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None, prom
         event=new_events.get(k['source_event_id'])
         if (event is None or k['actor_id'] not in event['witnesses']
                 or k['fact_id'] not in event['fact_ids'] or event['medium'] not in KNOWLEDGE_CHANNELS):
-            raise SecondaryDeltaError('knowledge',index,'нет подтверждённого пути передачи знания',entity=k['actor_id']+':'+k['fact_id'])
+            raise SecondaryDeltaError('knowledge',index,'нет подтверждённого пути передачи знания',entity=k['actor_id']+':'+k['fact_id'],code='knowledge_path_invalid')
         world['knowledge'][k['actor_id']+':'+k['fact_id']]=k
     for index,c in enumerate(delta['characters']):
         refs([c['id']]); require(c['id'] in present,'состояние отсутствующего NPC без сцены')
@@ -203,7 +203,7 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None, prom
                     reason=('Внутреннее состояние controlled actor не задано игроком' if field=='emotion'
                         else 'Обязательство controlled actor не задано игроком' if field=='obligations'
                         else 'Решение controlled actor не задано игроком')
-                    raise SecondaryDeltaError('characters',index,reason,field,c['id'])
+                    raise SecondaryDeltaError('characters',index,reason,field,c['id'],code='controlled_actor_'+field+'_unsupported')
         updates={k:v for k,v in c.items() if k not in ('id','evidence','player_evidence')}
         if updates:
             world['characters'][c['id']].update(updates)
@@ -216,7 +216,7 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None, prom
         for dimension in r['dimensions']:
             if dimension not in RELATION_DIMENSIONS:
                 raise SecondaryDeltaError('relationships',index,'неизвестное измерение отношений',
-                    'dimensions.'+dimension,r['source_id']+':'+r['target_id'],path=('dimensions',dimension))
+                    'dimensions.'+dimension,r['source_id']+':'+r['target_id'],path=('dimensions',dimension),code='relationship_dimension_unknown')
         key=r['source_id']+':'+r['target_id']
         old=world['relationships'].setdefault(key,dict(source_id=r['source_id'],target_id=r['target_id'],dimensions={}))
         previous=old['dimensions'].copy()
@@ -247,5 +247,5 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None, prom
                 if section=='promotions':
                     raise EvidenceError(f'Изменение world_delta.{section}[{index}].evidence не подтверждено цитатой из хода.')
                 entity=item.get('id') or item.get('actor_id') or item.get('source_id')
-                raise SecondaryDeltaError(section,index,'Нет подтверждённой цитаты текущего хода',entity=entity,cause_field='evidence')
+                raise SecondaryDeltaError(section,index,'Нет подтверждённой цитаты текущего хода',entity=entity,cause_field='evidence',code='evidence_unsupported')
     return state

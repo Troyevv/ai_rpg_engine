@@ -1,4 +1,6 @@
 """Role and visibility policy independent of HTTP and the protagonist marker."""
+from backend.services.world_delta_errors import StructuralDeltaError
+
 from copy import deepcopy
 import json
 
@@ -47,41 +49,41 @@ def apply_scene_policy(before,after,changes,kind,simulation=False):
     if kind=='pov' and before.get('pov_transition',{}).get('adopt_scene_id'):
         anchor=before['pov_transition']['anchor']['meta']
         if scene['location']!=anchor['location'] or set(scene['present_ids'])!=set(anchor['present_ids']):
-            raise ValueError('Передача управления должна продолжать ту же сцену и участников.')
+            raise StructuralDeltaError('Передача управления должна продолжать ту же сцену и участников.', code='scene_invalid')
     advance(before,after,scene,elapsed=changes['scene'].get('elapsed_minutes'),
             minimum=1 if kind in ('turn','background') and not simulation else 0)
     after['scene_meta']=deepcopy(scene)
     audience=set(scene['present_ids'])
     if kind!='background' and actor not in audience:
-        raise ValueError('Управляемый персонаж отсутствует в сцене.')
+        raise StructuralDeltaError('Управляемый персонаж отсутствует в сцене.', code='scene_invalid')
     if kind=='background':
         if main in audience and before.get('camera',{}).get('scope')!='scene':
-            raise ValueError('Закулисная сцена включает основного или управляемого персонажа.')
+            raise StructuralDeltaError('Закулисная сцена включает основного или управляемого персонажа.', code='scene_invalid')
         if not audience:
-            raise ValueError('У закулисной сцены должны быть участники NPC.')
+            raise StructuralDeltaError('У закулисной сцены должны быть участники NPC.', code='scene_invalid')
         protected={main} if before.get('camera',{}).get('scope')!='scene' else set()
         for change in changes.get('characters',[]):
             if change['id'] in protected or change['id'] not in audience:
-                raise ValueError('Закулисная сцена меняет отсутствующего персонажа.')
+                raise StructuralDeltaError('Закулисная сцена меняет отсутствующего персонажа.', code='scene_invalid')
         for relation in changes.get('relationships',[]):
             if relation['source_id'] not in audience:
-                raise ValueError('Нельзя приписать реакцию отсутствующему NPC.')
+                raise StructuralDeltaError('Нельзя приписать реакцию отсутствующему NPC.', code='scene_invalid')
         delta=changes.get('world_delta',{})
         for change in delta.get('characters',[]):
             if change['id'] in protected or change['id'] not in audience:
-                raise ValueError('Закулисная сцена меняет отсутствующего персонажа.')
+                raise StructuralDeltaError('Закулисная сцена меняет отсутствующего персонажа.', code='scene_invalid')
         for change in delta.get('relationships',[]):
             if change['source_id'] not in audience:
-                raise ValueError('Нельзя приписать реакцию отсутствующему NPC.')
+                raise StructuralDeltaError('Нельзя приписать реакцию отсутствующему NPC.', code='scene_invalid')
         after['last_background_scene']={'scene':after['scene'],'scene_meta':scene}
         after['controlled_actor_id']=None
     for fact in changes.get('facts',[]):
         if not set(fact['known_by'])<=audience:
-            raise ValueError('Новое знание передано отсутствующему персонажу.')
+            raise StructuralDeltaError('Новое знание передано отсутствующему персонажу.', code='scene_invalid')
     for key in ('events','plans'):
         for entry in changes.get(key,[]):
             if not set(entry['character_ids'])<=audience:
-                raise ValueError('Событие закулисья приписано отсутствующему персонажу.')
+                raise StructuralDeltaError('Событие закулисья приписано отсутствующему персонажу.', code='scene_invalid')
     after.setdefault('actor_scenes',{})
     for cid in audience:
         after['actor_scenes'][cid]={'text': changes['scene']['text'],'meta':deepcopy(scene)}
@@ -110,7 +112,7 @@ def transition(state,actor,source=None):
     was_observer=state.get('controlled_actor_id','legacy') is None
     cards={c['id']:c for c in state['characters']}
     if actor not in cards or cards[actor].get('available') is False:
-        raise ValueError('Персонаж недоступен.')
+        raise StructuralDeltaError('Персонаж недоступен.', code='scene_invalid')
     old=controlled(state)
     meta=scene_metadata(state)
     scenes=state.setdefault('actor_scenes',{})

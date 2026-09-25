@@ -76,9 +76,11 @@
 ## WorldDelta: validation and player agency
 
 `apply_world_updates` validates JSON/Pydantic structure, then applies semantic
-checks on a fresh copy of the before-state. A failed first extraction gets one
-repair request. On the repaired candidate, only explicit `SecondaryDeltaError`
-instances authorize sanitization. `sanitize_secondary` removes the validator's
+checks on a fresh copy of the before-state. Explicit `SecondaryDeltaError` instances authorize deterministic sanitization
+on the FIRST extraction, without an LLM repair request. Only typed repairable
+`StructuralDeltaError` failures get one repair. The repaired candidate uses
+the same sanitizer; another structural failure is fatal. Unexpected validator
+exceptions and explicitly unsafe failures never trigger repair. `sanitize_secondary` removes the validator's
 exact record or field path, records its original index and reason, and the entire
 candidate is validated again from the original state before commit. Unknown
 exceptions, invalid types, IDs, scene/time conflicts and dependent references
@@ -108,8 +110,22 @@ explicit Russian declarations, literal values, and a limited set of surface
 forms (e.g. «я злюсь» / «злится», placing «завтра» before/after an intention).
 It is not a general natural-language entailment model. Unsupported paraphrases,
 questions, conditional claims and quoted third-party speech are rejected for
-repair/omission, rather than guessed into canon. Open-vocabulary emotions can
+omission with a warning, rather than guessed into canon. Open-vocabulary emotions can
 be expressed literally via «я чувствую …» / «я испытываю …». Additional forms
 must be added with both acceptance and false-positive regression tests.
 Normal turns still use two mandatory LLM requests; validation and sanitization
 run entirely in code.
+
+
+Repair diagnostics are persisted on the job in `repair_diagnostics_json` and
+joined through the active response variant (including after restart). Each
+entry includes stage, error type/code and message, with available path metadata.
+Extraction and repair output is saved once per actual request in
+`llm_requests.response_text`, alongside the existing input snapshot and usage.
+Diagnostics separates LLM repair from deterministic sanitization and shows
+repair rate over the last 30 active turns; legacy turns without request logs
+are excluded from the denominator and shown as unknown. Secondary warnings have
+`type=sanitized_delta` and stable codes. No semantic dimension mapping or
+additional mandatory LLM calls are introduced. The sanitizer revalidates from
+the original state after every deletion, checks progress, and has a 4096-step
+hard limit. Event-time membership validation remains a separate task.

@@ -1,11 +1,13 @@
 """Bounded autonomous scene, reusing GM/context/delta. Its result joins the parent transaction."""
+from backend.services.world_delta_errors import StructuralDeltaError
+
 from copy import deepcopy
 from backend.services.director import background_candidate, observe
 from backend.services.world import record_narrative
 from backend.services.timeline import current_time
 
 
-def simulate(before, state, sequence, context_length, config, generate, cancelled, warnings=None):
+def simulate(before, state, sequence, context_length, config, generate, cancelled, warnings=None,on_repair=None):
     candidate=background_candidate(before,state)
     if not candidate or cancelled.is_set():return state
     from context_builder import build_context
@@ -29,13 +31,16 @@ def simulate(before, state, sequence, context_length, config, generate, cancelle
         if cancelled.is_set():return state
         try:
             updated,_,changes,audience,omitted=apply_world_updates(camera,payload,narrative,'',sequence,'background',
-                simulation=True,discard_unsupported=attempt==1)
+                simulation=True,discard_unsupported=True)
             if warnings is not None:
                 warnings.extend({**warning,'stage':'background_simulation'} for warning in omitted)
             break
-        except ValueError as exc:
-            if attempt==1:raise
-            feedback=str(exc)
+        except StructuralDeltaError as exc:
+            if attempt==1 or not exc.repairable:raise
+            diagnostic=exc.diagnostic('world_simulation_repair')
+            if on_repair:on_repair(diagnostic)
+            import json
+            feedback=json.dumps(diagnostic,ensure_ascii=False)
     if state.get('controlled_actor_id') in audience:
         raise ValueError('Фоновая симуляция не может действовать за управляемого персонажа.')
     if current_time(updated)!=current_time(state):

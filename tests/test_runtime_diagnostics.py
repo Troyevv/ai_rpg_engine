@@ -31,13 +31,13 @@ def corrupt(p,case):
 
 
 @pytest.mark.parametrize('case',['witness','fact','source','action','dimension'])
-def test_leaf_errors_repair_once_and_keep_independent_delta(db,case):
+def test_leaf_errors_skip_repair_and_keep_independent_delta(db,case):
     storage,_,sid=db;p=payload();corrupt(p,case)
     before=storage.get_save(sid)['state']
     with pytest.raises(SecondaryDeltaError):apply_world_updates(before,p,NARRATIVE,'',0,'start')
     job=storage.begin_job(sid,'','start',CONFIG)
     calls=run(storage,job,p)
-    assert len(calls)==3 and storage.get_job(job)['status']=='saved'
+    assert len(calls)==2 and storage.get_job(job)['status']=='saved'
     state=storage.get_save(sid)['state'];w=state['world']
     assert w['characters']['character_2']['situation']=='Ждёт ответа'
     assert w['relationships']['character_2:character_1']['dimensions']=={'trust':55,'respect':70}
@@ -45,13 +45,15 @@ def test_leaf_errors_repair_once_and_keep_independent_delta(db,case):
     assert 't' in w['threads'] and 'f' in w['facts'] and p['world_delta']['events'][0]['id'] in w['events']
     assert ('character_2:f' in w['knowledge'])==(case=='dimension')
     diagnostic=storage.accounting(sid)['turns'][0]
-    assert len(diagnostic['requests'])==3
-    assert {r['stage'] for r in diagnostic['requests']}=={'narrative','extraction','extraction_repair'}
+    assert len(diagnostic['requests'])==2
+    assert {r['stage'] for r in diagnostic['requests']}=={'narrative','extraction'}
     warning=diagnostic['warnings'][0]
     assert warning['index']==0
     assert warning['section']==('relationships' if case=='dimension' else 'knowledge')
     if case=='dimension':assert warning['field']=='dimensions.sympathy' and warning['entity']=='character_2:character_1'
-    assert diagnostic['timing']['extraction_repair']>=0
+    assert 'extraction_repair' not in diagnostic['timing']
+    assert diagnostic['repairs']==[]
+    assert warning['type']=='sanitized_delta' and warning['code']
     assert storage.get_save(sid)['state']!=before
 
 
@@ -116,7 +118,7 @@ def test_api_timing_requests_totals_and_variant_association(api):
     original_timing=t['timing']
     second=storage.begin_job(sid,'','regenerate',CONFIG);bad=payload();corrupt(bad,'dimension');run(storage,second,bad)
     newer=storage.turn_diagnostics(sid)[0];assert newer['job_id']==second and len(newer['warnings'])==1
-    assert newer['timing']['extraction_repair']>=0
+    assert 'extraction_repair' not in newer['timing']
     storage.select_variant(sid,turn['id'],turn['active_variant_id'],storage.get_save(sid)['revision'])
     restored=storage.turn_diagnostics(sid)[0]
     assert restored['job_id']==job and restored['timing']==original_timing and restored['warnings']==[]
@@ -126,7 +128,7 @@ def test_api_timing_requests_totals_and_variant_association(api):
     assert client.get(f'/api/saves/{sid}/accounting').json()['turns'][0]['timing'] is None
 
 
-def test_background_uses_one_repair_and_records_leaf_warning(db):
+def test_background_skips_repair_and_records_leaf_warning(db):
     from threading import Event
     from backend.services.simulation import simulate
     from backend.services.pov import transition
@@ -143,7 +145,7 @@ def test_background_uses_one_repair_and_records_leaf_warning(db):
             yield json.dumps({'scene':{'text':'Встреча','time':'День 1 20:00','location':'Подвал','present_ids':['character_3','character_4']},'choices':[],
                 'world_delta':{'relationships':[{'source_id':'character_3','target_id':'character_4','context':'Уважает','dimensions':{'respect':30,'loyalty':50},'evidence':QUOTE}]}})
     after=simulate(before,state,3,32768,CONFIG,generate,Event(),warnings=warnings)
-    assert calls==['world_simulation','world_simulation_delta','world_simulation_repair']
+    assert calls==['world_simulation','world_simulation_delta']
     assert after['world']['relationships']['character_3:character_4']['dimensions']['respect']==30
     assert 'loyalty' not in after['world']['relationships']['character_3:character_4']['dimensions']
     assert warnings[0]['stage']=='background_simulation' and warnings[0]['field']=='dimensions.loyalty'

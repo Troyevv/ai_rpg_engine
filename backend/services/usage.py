@@ -47,6 +47,7 @@ def tracked_stream(storage, stream_fn, job_id, stage, config, messages, diagnost
     effective.update({k:kwargs[k] for k in ('max_tokens','temperature','response_format') if k in kwargs})
     rid = storage.begin_request(job_id,stage,effective,messages,diagnostics or {'estimated_tokens':estimate(messages),'parts':[]})
     started=time.perf_counter()
+    response=[] if stage in ('extraction','extraction_repair','world_simulation_delta','world_simulation_repair') else None
     usage, status, finish_reason = None, 'error', None
     def received(value):
         nonlocal usage
@@ -55,7 +56,9 @@ def tracked_stream(storage, stream_fn, job_id, stage, config, messages, diagnost
         nonlocal finish_reason
         finish_reason=value
     try:
-        yield from stream_fn(messages=messages, thinking=effective['thinking'], on_usage=received, on_finish=finished, **kwargs)
+        for chunk in stream_fn(messages=messages, thinking=effective['thinking'], on_usage=received, on_finish=finished, **kwargs):
+            if response is not None:response.append(chunk)
+            yield chunk
         status = 'complete'
     except OutputLimitReached:
         status = 'length'
@@ -64,4 +67,4 @@ def tracked_stream(storage, stream_fn, job_id, stage, config, messages, diagnost
         event = kwargs.get('cancel_event')
         if event is not None and event.is_set():
             status = 'stopped'
-        storage.finish_request(rid,status,usage,time.perf_counter()-started,finish_reason)
+        storage.finish_request(rid,status,usage,time.perf_counter()-started,finish_reason,response_text=''.join(response) if response is not None else None)

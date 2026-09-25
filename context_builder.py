@@ -71,7 +71,7 @@ def build_context(state, history, user_text, kind, context_length, reserve, extr
     main,actor=protagonist(state),controlled(state)
     if validation_feedback:
         dynamic += ('\nПредыдущее извлечение отклонено: '+validation_feedback+
-                  '\nВерни полный исправленный JSON. Копируй evidence непрерывно из completed_narrative или player_input. '
+                  '\nИсправь только необходимые противоречия из структурированной ошибки. Не переписывай подтверждённые независимые изменения без необходимости. Верни полный исправленный JSON. Копируй evidence непрерывно из completed_narrative или player_input. '
                   'Не используй историю и состояние мира как источник цитаты. Если цитаты нет, исключи изменение. '
                   + ('Сохрани фиксацию сцены и choices=[]. Не продолжай сцену.' if kind=='background' else 'Сохрани фиксацию сцены и ровно 6 вариантов. Не продолжай сцену.'))
     relevance=rank(state,user_text,kind)

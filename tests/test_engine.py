@@ -233,10 +233,12 @@ def test_evidence_repair_is_bounded_atomic_and_keeps_narrative(db, outcome):
             yield NARRATIVE
             return
         payload = result()
-        if len(calls) == 2 or outcome == 'invalid':
+        if len(calls) == 2:
+            payload['scene']['present_ids']=['missing']
+        elif outcome == 'invalid':
             payload['events'][0]['evidence'] = 'Пересказ вместо цитаты'
         if len(calls) == 3:
-            assert any('events[0].evidence' in m['content'] for m in kwargs['messages'])
+            assert any('unknown_character' in m['content'] for m in kwargs['messages'])
             assert estimate(kwargs['messages']) <= CONFIG['context_length'] - CONFIG['update_tokens'] - 256
             if outcome == 'stopped':
                 engine.stop(storage, job)

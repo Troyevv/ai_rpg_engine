@@ -1,4 +1,6 @@
 """Background turn processing. Workers are independent of HTTP requests and browser sessions."""
+from backend.services.world_delta_errors import StructuralDeltaError
+
 from dataclasses import dataclass, field
 import json
 import threading
@@ -194,22 +196,24 @@ def run_job(path, job_id, handle):
                 stage_started=time.perf_counter()
                 try:
                     state, choices, changes, audience, warnings = apply_world_updates(
-                        before,result,narrative,job['user_text'],sequence,job['kind'],discard_unsupported=attempt==1)
+                        before,result,narrative,job['user_text'],sequence,job['kind'],discard_unsupported=True)
                     if warnings:
                         with storage.connect() as db:
                             previous=json.loads(db.execute('SELECT warnings_json FROM game_jobs WHERE id=?',(job_id,)).fetchone()[0] or '[]')
                             db.execute('UPDATE game_jobs SET warnings_json=? WHERE id=?', (json.dumps(previous+warnings,ensure_ascii=False),job_id))
                     break
-                except ValueError as exc:
-                    if attempt == 1:raise
-                    feedback = str(exc)
+                except StructuralDeltaError as exc:
+                    if attempt == 1 or not exc.repairable:raise
+                    diagnostic=exc.diagnostic('extraction_repair')
+                    storage.record_repair(job_id,diagnostic)
+                    feedback = json.dumps(diagnostic,ensure_ascii=False)
                 finally:
                     timings['validation_apply']=timings.get('validation_apply',0)+time.perf_counter()-stage_started
             record_narrative(state,narrative,sequence,True,set(before['world']['events']))
             from backend.services.simulation import simulate
             stage_started=time.perf_counter()
             background_warnings=[]
-            state=simulate(before,state,sequence,context,config,generate,handle.cancelled,warnings=background_warnings)
+            state=simulate(before,state,sequence,context,config,generate,handle.cancelled,warnings=background_warnings,on_repair=lambda detail: storage.record_repair(job_id,detail))
             if background_warnings:
                 with storage.connect() as db:
                     previous=json.loads(db.execute('SELECT warnings_json FROM game_jobs WHERE id=?',(job_id,)).fetchone()[0] or '[]')

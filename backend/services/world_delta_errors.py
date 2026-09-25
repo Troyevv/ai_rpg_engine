@@ -7,16 +7,24 @@ candidate on a fresh state copy after EVERY removal, before committing anything.
 class StructuralDeltaError(ValueError):
     """No safe partial application is known."""
     recoverable = False
+    def __init__(self, message, code='invalid_reference', *, repairable=True, **path):
+        super().__init__(message)
+        self.code, self.repairable, self.path = code, repairable, path
+
+    def diagnostic(self, stage):
+        return dict(repair_reason=str(self), repair_error_type=type(self).__name__,
+                    repair_error_code=self.code, stage=stage, **self.path)
+
 
 
 class SecondaryDeltaError(ValueError):
-    """A validator-authorized independent record or field; repair must run first."""
+    """A validator-authorized independent record or field; deterministic removal is safe."""
     recoverable = True
 
-    def __init__(self, section, index, reason, field=None, entity=None, *, path=None, cause_field=None):
+    def __init__(self, section, index, reason, field=None, entity=None, *, path=None, cause_field=None, code="secondary_invalid"):
         self.section, self.index = section, index
         self.path = tuple(path) if path is not None else ((field,) if field else ())
-        self.warning = {'section': section, 'index': index, 'reason': reason}
+        self.warning = {'type':'sanitized_delta', 'code':code, 'section': section, 'index': index, 'reason': reason}
         if field:
             self.warning['field'] = field
         if entity:

@@ -50,11 +50,11 @@ def execute(storage, job, payload, narrative=NARRATIVE, repaired=None):
     ('Я отвожу взгляд.',{'emotion':'смущается'}),
     ('Я подхожу к окну.',{'goals':['Вернуть Люду'],'intentions':['Добиться признания'],'emotion':'ревнует'}),
 ])
-def test_unsupported_fields_are_dropped_after_one_repair(db,input_text,fields):
+def test_unsupported_fields_are_dropped_without_repair(db,input_text,fields):
     storage,_,sid=db;before=seed(storage,sid)
     p=character_payload(fields)
     job=storage.begin_job(sid,input_text,'start',CONFIG)
-    assert len(execute(storage,job,p))==3
+    assert len(execute(storage,job,p))==2
     assert storage.get_job(job)['status']=='saved',storage.get_job(job)['error']
     point=storage.get_save(sid)['state']['world']['characters']['character_1']
     for field in fields:assert point[field]==before['world']['characters']['character_1'][field]
@@ -149,7 +149,7 @@ def test_explicit_clear_and_multiple_field_sources():
         'Решаю найти карту. Планирую поговорить с Людой.', ['Решаю найти карту.','Планирую поговорить с Людой.'])
 
 
-def test_mixed_secondary_errors_use_single_repair_and_preserve_independent_changes(api):
+def test_mixed_secondary_errors_skip_repair_and_preserve_independent_changes(api):
     client,app=api;_,save=new_save(client);storage=app.state.repository;sid=save['id'];before=seed(storage,sid)
     p=mixed_payload();d=p['world_delta']
     d['events'][0]['witnesses']=[]
@@ -157,7 +157,7 @@ def test_mixed_secondary_errors_use_single_repair_and_preserve_independent_chang
     d['characters'].append({'id':'character_1','situation':'Стоит у окна','emotion':'ревнует','evidence':NARRATIVE})
     job=storage.begin_job(sid,'Я подхожу к окну.','start',CONFIG)
     calls=execute(storage,job,p)
-    assert len(calls)==3 and storage.get_job(job)['status']=='saved'
+    assert len(calls)==2 and storage.get_job(job)['status']=='saved'
     w=storage.get_save(sid)['state']['world']
     assert d['events'][0]['id'] in w['events']
     assert w['characters']['character_2']['situation']=='Ждёт ответа'
@@ -166,7 +166,7 @@ def test_mixed_secondary_errors_use_single_repair_and_preserve_independent_chang
     assert w['relationships']['character_2:character_1']['dimensions']=={'trust':55,'respect':70}
     assert 'character_2:f' not in w['knowledge'] and 't' in w['threads']
     turn=client.get(f'/api/saves/{sid}/accounting').json()['turns'][0]
-    assert len(turn['warnings'])==3 and len(turn['requests'])==3
+    assert len(turn['warnings'])==3 and len(turn['requests'])==2
     assert {warn.get('field') for warn in turn['warnings']}=={None,'dimensions.sympathy','emotion'}
     saved=json.loads(storage.list_turns(sid)[0]['changes_json'])
     # The exact sanitized delta passes full validation again, without sanitization.
@@ -192,6 +192,7 @@ def test_structural_failures_after_recoverable_fields_remain_atomic(db,failure):
 def test_valid_repair_has_no_dropped_field_warning(db):
     storage,_,sid=db;seed(storage,sid);user='Я злюсь на неё.'
     p=character_payload({'emotion':'боится'})
+    p['scene']['present_ids']=['missing']
     fixed=character_payload({'emotion':'злится'},player_evidence={'emotion':user})
     job=storage.begin_job(sid,user,'start',CONFIG)
     assert len(execute(storage,job,p,repaired=fixed))==3

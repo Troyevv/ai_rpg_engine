@@ -134,7 +134,7 @@ def test_relationship_api_is_save_scoped_and_follows_controlled_actor(api):
     assert actor+':'+target in removed.json()['state']['world']['relationships']
 
 
-def test_repair_timing_is_distinct(db):
+def test_sanitization_does_not_add_repair_timing(db):
     storage,_,sid=db
     payload=canonical(result())
     payload['world_delta']['events'][0]['evidence']='Не существует в тексте'
@@ -142,7 +142,7 @@ def test_repair_timing_is_distinct(db):
     run(storage,job,payload)
     assert storage.get_job(job)['status']=='saved'
     timing=json.loads(storage.list_turns(sid)[0]['timing_json'])
-    assert timing['extraction_repair']>=0 and timing['extraction']>=0
+    assert 'extraction_repair' not in timing and timing['extraction']>=0
     assert storage.get_job(job)['warnings_json']!='[]'
 
 
