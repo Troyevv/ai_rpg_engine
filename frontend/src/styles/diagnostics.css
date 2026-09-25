@@ -1,0 +1,46 @@
+.usage-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.8rem}
+
+.usage-grid section {display:flex;flex-direction:column;gap:.4rem;padding:.8rem;border:1px solid var(--border);border-radius:10px}
+
+.usage-grid strong {font-size:20px}
+
+.diagnostics details {padding:.7rem 0;border-bottom:1px solid var(--border)}
+
+.context-content,.warning pre {white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-height:400px;overflow:auto}
+
+.diagnostics select {width:100%;min-width:0}
+
+.diagnostic-tabs {display:flex;gap:4px;overflow-x:auto;flex-shrink:0}
+
+.diagnostic-tabs button {flex:1;padding:10px 6px;border-radius:var(--radius-md);font-size:13px;white-space:nowrap}
+
+.diagnostic-tabs button[aria-selected=true],.diagnostic-history button[aria-pressed=true] {background:var(--accent);color:var(--accent-contrast)}
+
+.timing-breakdown {margin:12px 0;font-size:13px}
+
+.timing-breakdown div {display:flex;justify-content:space-between;gap:12px;padding:5px 0}
+
+.timing-breakdown dd {margin:0;white-space:nowrap}
+
+.diagnostic-history {max-height:240px;overflow-y:auto}
+
+.diagnostic-history button {display:flex;flex-wrap:wrap;gap:8px;width:100%;text-align:left;padding:10px;border-bottom:1px solid var(--border);font-size:12px}
+
+.delta-warnings {border-left:3px solid var(--warning);padding:0 12px;font-size:13px;overflow-wrap:anywhere}
+
+.diagnostics [role=tabpanel] {min-width:0}
+
+.diagnostics select {max-width:100%;width:100%}
+
+.diagnostics { font-family:var(--ui-font); background:var(--surface-1); }
+.diagnostics .dialog-title { font-family:var(--ui-font); font-size:22px; font-weight:600; }
+.diagnostics h3 { margin-top:20px; font-size:14px; }
+.diagnostics .diagnostic-tabs { flex-wrap:nowrap; }
+.diagnostics .diagnostic-tabs button.selected { background:transparent; color:var(--accent); }
+.diagnostic-history { border:1px solid var(--border); border-radius:var(--radius-md); }
+.diagnostic-history button { min-height:44px; color:var(--text-secondary); font-variant-numeric:tabular-nums; }
+.diagnostic-history button[aria-pressed=true] { color:var(--accent); background:var(--accent-soft); }
+.delta-warnings { background:var(--warning-soft); color:var(--text-secondary); padding:12px 14px; border-radius:0 var(--radius-md) var(--radius-md) 0; line-height:1.6; }
+.delta-warnings h4 { color:var(--warning); }
+.usage-grid section { background:var(--surface-2); border-radius:var(--radius-md); }
+.context-content { background:var(--bg-subtle); padding:12px; border-radius:var(--radius-sm); }

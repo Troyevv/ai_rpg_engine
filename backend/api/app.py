@@ -17,7 +17,7 @@ import engine
 import llm
 from character_links import linked_markdown
 from backend.api.schemas import (World, Named, Generation, Turn, Retry, Revision, Scene,
-                                 Models, Load, Preferences, Markdown, Credential, VariantSelection, Actor, DocumentChange, Camera, Motivation, RelationshipEdit)
+                                 Models, Load, Preferences, Markdown, Credential, VariantSelection, Actor, DocumentChange, Camera, Motivation, RelationshipEdit, Presentation)
 from backend.repositories.preparation import Repository
 from backend.services.preparation import Preparation
 from backend.services.scene import scene_metadata
@@ -110,7 +110,16 @@ def create_app(db_path=None, recover=True):
     def world(wid: int):
         w = repo.get_world(wid)
         w['scene_meta'] = scene_metadata(w['state'])
+        w['presentation'] = repo.get_presentation(wid)
         return w
+
+    @app.get('/api/worlds/{wid}/presentation')
+    def presentation(wid: int):
+        return repo.get_presentation(wid)
+
+    @app.put('/api/worlds/{wid}/presentation')
+    def set_presentation(wid: int, body: Presentation):
+        return repo.set_presentation(wid, body.theme_id)
 
     @app.get('/api/worlds/{wid}/saves')
     def saves(wid: int):
