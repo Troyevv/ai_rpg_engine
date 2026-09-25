@@ -1,3 +1,4 @@
+import {SectionTabs} from "./components/ui/section-tabs";
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { api, download } from './api';
@@ -256,9 +257,8 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
           <summary>Проверка мира · {draft?.validation.errors.length || 0} ошибок · {(draft?.validation.warnings.length || 0) + (draft?.import_warnings.length || 0)} замечаний</summary>
           {[...(draft?.validation.errors || []), ...(draft?.validation.warnings || []), ...(draft?.import_warnings || [])].map((x,i)=><p key={i}>{x}</p>)}
         </details> : null}
-        <nav className="workshop-tabs" aria-label="Разделы мира">
-          {([['overview','Обзор'],['characters','Персонажи'],['world','Места и факты'],['relations','Отношения'],['story','Сюжет'],['start','Начало'],['more','Ещё']] as const).map(([key,label]) => <button key={key} className={section === key ? 'selected' : ''} aria-current={section === key ? 'page' : undefined} onClick={() => setSection(key)}>{label}</button>)}
-        </nav>
+        <SectionTabs className="workshop-tabs" label="Разделы мира" value={section} onChange={setSection} items={([['overview','Обзор'],['characters','Персонажи'],['world','Места и факты'],['relations','Отношения'],['story','Сюжет'],['start','Начало'],['more','Ещё']] as const).map(([id,label])=>({id,label}))}/>
+
         <div className="workshop-content" key={section}>
           {section === 'overview' && <>
             <p className="workshop-kicker">Твой мир</p><h3>{String(state.campaign.title || draft?.name)}</h3>

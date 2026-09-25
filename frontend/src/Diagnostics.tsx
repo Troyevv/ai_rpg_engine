@@ -1,3 +1,4 @@
+import {SectionTabs} from "./components/ui/section-tabs";
 import {useEffect,useState} from "react";
 import {toast} from "sonner";
 import {api} from "./api";
@@ -46,10 +47,10 @@ export function Diagnostics({saveId,workspaceId,jobId,open,onOpenChange}:{saveId
  const request=filtered.find(r=>r.id===selected)||filtered[0];
  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="settings-dialog diagnostics">
   <DialogHeader><DialogTitle>Диагностика</DialogTitle><DialogDescription>Снимки фактически отправленных запросов. Здесь есть GM-only данные и тайны мира.</DialogDescription></DialogHeader>
-  <div className="diagnostic-tabs" role="tablist" aria-label="Раздел диагностики">{[['context','Контекст'],['performance','Производительность'],['cost','Расходы']].map(([key,label])=><button role="tab" aria-selected={tab===key} key={key} onClick={()=>setTab(key)}>{label}</button>)}</div>
+  <SectionTabs className="diagnostic-tabs" label="Раздел диагностики" tablist panelId="diagnostic-panel" value={tab} onChange={setTab} items={[{id:'context',label:'Контекст'},{id:'performance',label:'Производительность'},{id:'cost',label:'Расходы'}]}/>
   <Button variant="outline" disabled={busy} onClick={()=>void load()}>Обновить</Button>
   {turns.length>0&&<label>Ход<select aria-label="Ход диагностики" value={turnId==='all'?'all':turn?.active_variant_id||''} onChange={e=>{setTurnId(e.target.value);setSelected('')}}><option value="all">Все запросы прохождения</option>{turns.map(t=><option key={t.active_variant_id} value={t.active_variant_id}>#{t.sequence} · {t.timing?.total==null?'нет timing':t.timing.total.toFixed(1)+' с'}</option>)}</select></label>}
-  <div role="tabpanel">
+  <div role="tabpanel" id="diagnostic-panel" aria-labelledby={`diagnostic-panel-tab-${tab}`}>
   {tab==='performance'&&<>
    <h3>{turn?`Ход #${turn.sequence}`:'Выбранный вариант'}</h3><Timing timing={timing}/>
    <RequestTotals rows={filtered}/>

@@ -1,3 +1,5 @@
+import {SectionTabs} from "./components/ui/section-tabs";
+import {ThemeSelector} from "./ThemeProvider";
 import { useEffect, useState } from "react";
 import {
   ChevronLeft,
@@ -78,6 +80,7 @@ export function Inspector({
             Основа v{world.version} · {save ? save.name : "Исходный мир"}
           </DialogDescription>
         </DialogHeader>
+        <details className="theme-disclosure"><summary>Тема мира</summary><ThemeSelector/></details>
         <details className="metadata">
           <summary>О мире и сохранении</summary>
           <p>Мир создан: {localDate(world.created_at)}</p>
@@ -97,27 +100,7 @@ export function Inspector({
             Исходная выжимка
           </Button>
         </details>
-        <div className="panel-tabs">
-          {(
-            [
-              "Мир",
-              "Сцена",
-              "Персонажи",
-              "Отношения",
-              "Тайны",
-              "Сюжет",
-              "Память",
-            ] as Panel[]
-          ).map((p) => (
-            <button
-              key={p}
-              className={panel === p ? "selected" : ""}
-              onClick={() => setPanel(p)}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
+        <SectionTabs className="panel-tabs" label="Разделы справочника" value={panel} onChange={setPanel} items={(["Мир","Сцена","Персонажи","Отношения","Тайны","Сюжет","Память"] as Panel[]).map(id=>({id,label:id}))}/>
         {panel === "Мир" && <WorldView state={state} meta={meta}/>}
         {panel === "Сцена" && (
           <>

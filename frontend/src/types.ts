@@ -67,6 +67,7 @@ export interface State {
   events?: { text: string; character_ids: string[]; turn: number }[];
 }
 export interface World {
+  presentation?: import("./ThemeProvider").Presentation;
   id: number;
   name: string;
   version: number;
