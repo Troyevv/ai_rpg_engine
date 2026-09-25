@@ -1,4 +1,6 @@
 """Background turn processing. Workers are independent of HTTP requests and browser sessions."""
+from backend.services.world_delta_errors import StructuralDeltaError
+
 from dataclasses import dataclass, field
 import json
 import threading
@@ -6,7 +8,7 @@ import time
 
 from context_builder import build_context, describe_context, estimate
 from llm import chat_stream, find_loaded_model, deepseek_key, PROVIDERS
-from state_updates import apply_updates, apply_supported_updates, EvidenceError
+from state_updates import apply_world_updates
 from storage import Storage
 from backend.services.usage import tracked_stream
 from backend.services.memory import compact
@@ -99,6 +101,8 @@ def stop(storage, job_id):
 def run_job(path, job_id, handle):
     storage = Storage(path)
     narrative = ''
+    job_started=time.perf_counter()
+    timings={}
     try:
         initial = storage.get_job(job_id)
         provider = json.loads(initial['config_json']).get('provider', 'local')
@@ -116,8 +120,7 @@ def run_job(path, job_id, handle):
                     raise ValueError('Выбранная модель не загружена. Загрузи её в настройках игры.')
                 actual_context = model.get('config', {}).get('context_length') or config['context_length']
                 context = min(int(actual_context), config['context_length'])
-            from backend.services.world import normalize, apply_legacy, record_narrative, compatibility_view
-            from backend.services.world_delta import apply_delta
+            from backend.services.world import normalize, record_narrative, compatibility_view
             before = normalize(json.loads(job['memory_before_json'] or job['before_json']))
             if job['kind']=='pov' and not job['memory_before_json']:
                 from backend.services.pov import transition
@@ -151,13 +154,17 @@ def run_job(path, job_id, handle):
                     if estimate(messages)>context-config['max_tokens']-256:
                         raise ValueError('Сохранённый контекст не помещается в выбранную модель. Увеличь контекст или уменьши лимит ответа.')
                 else:
+                    stage_started=time.perf_counter()
                     before = compact(storage, job, before, history, dict(config,context_length=context),
                                      lambda messages: generate('memory',messages,output_budget(dict(config,context_length=context)),0.1), handle.cancelled)
+                    if any(request['stage']=='memory' for request in storage.request_log(job_id=job_id)):
+                        timings['memory_compaction']=time.perf_counter()-stage_started
                     if handle.cancelled.is_set():
                         return
                     messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'))
                     storage.save_context(job_id,messages,before)
                 last_write = 0.0
+                stage_started=time.perf_counter()
                 for chunk in generate('narrative',messages,config['max_tokens'],config.get('temperature',0.8)):
                     if handle.cancelled.is_set():
                         return
@@ -165,6 +172,7 @@ def run_job(path, job_id, handle):
                     if time.monotonic() - last_write > 0.2:
                         storage.job_progress(job_id, 'generating', narrative=narrative)
                         last_write = time.monotonic()
+                timings['narrative']=time.perf_counter()-stage_started
                 if not narrative.strip():
                     raise ValueError('Модель вернула пустую сцену.')
                 storage.job_progress(job_id, 'extracting', narrative=narrative, complete=True)
@@ -178,39 +186,49 @@ def run_job(path, job_id, handle):
                 messages = build_context(before, history, job['user_text'], job['kind'], context,
                                          config['update_tokens'], extraction_text=narrative,
                                          validation_feedback=feedback, recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'))
+                stage_started=time.perf_counter()
                 result = ''.join(generate('extraction' if attempt==0 else 'extraction_repair',messages,config['update_tokens'],0.1,
                                           response_format={'type':'json_object'}))
+                timings['extraction' if attempt==0 else 'extraction_repair']=time.perf_counter()-stage_started
                 if handle.cancelled.is_set():
                     return
                 storage.job_progress(job_id, 'validating')
+                stage_started=time.perf_counter()
                 try:
-                    state, choices, changes = apply_updates(before, result, narrative, job['user_text'], sequence,job['kind'])
-                    state,audience = apply_scene_policy(before,state,changes,job['kind'])
-                    break
-                except EvidenceError as exc:
-                    if attempt == 1:
-                        state, choices, changes, warnings = apply_supported_updates(before,result,narrative,job['user_text'],sequence,job['kind'])
-                        state,audience = apply_scene_policy(before,state,changes,job['kind'])
+                    state, choices, changes, audience, warnings = apply_world_updates(
+                        before,result,narrative,job['user_text'],sequence,job['kind'],discard_unsupported=True)
+                    if warnings:
                         with storage.connect() as db:
                             previous=json.loads(db.execute('SELECT warnings_json FROM game_jobs WHERE id=?',(job_id,)).fetchone()[0] or '[]')
                             db.execute('UPDATE game_jobs SET warnings_json=? WHERE id=?', (json.dumps(previous+warnings,ensure_ascii=False),job_id))
-                        break
-                    feedback = str(exc)
-                except ValueError as exc:
-                    if attempt == 1:raise
-                    feedback = str(exc)
-            state = apply_legacy(state,changes,sequence,job['kind'])
-            if changes.get('world_delta'):
-                from backend.services.timeline import current_time
-                state = apply_delta(state,changes['world_delta'],narrative,job['user_text'],sequence,since=current_time(before))
+                    break
+                except StructuralDeltaError as exc:
+                    if attempt == 1 or not exc.repairable:raise
+                    diagnostic=exc.diagnostic('extraction_repair')
+                    storage.record_repair(job_id,diagnostic)
+                    feedback = json.dumps(diagnostic,ensure_ascii=False)
+                finally:
+                    timings['validation_apply']=timings.get('validation_apply',0)+time.perf_counter()-stage_started
             record_narrative(state,narrative,sequence,True,set(before['world']['events']))
             from backend.services.simulation import simulate
-            state=simulate(before,state,sequence,context,config,generate,handle.cancelled)
+            stage_started=time.perf_counter()
+            background_warnings=[]
+            state=simulate(before,state,sequence,context,config,generate,handle.cancelled,warnings=background_warnings,on_repair=lambda detail: storage.record_repair(job_id,detail))
+            if background_warnings:
+                with storage.connect() as db:
+                    previous=json.loads(db.execute('SELECT warnings_json FROM game_jobs WHERE id=?',(job_id,)).fetchone()[0] or '[]')
+                    db.execute('UPDATE game_jobs SET warnings_json=? WHERE id=?',(json.dumps(previous+background_warnings,ensure_ascii=False),job_id))
+            if any(request['stage'].startswith('world_simulation') for request in storage.request_log(job_id=job_id)):
+                timings['background_simulation']=time.perf_counter()-stage_started
             state=compatibility_view(state)
             with storage.connect() as db:
                 db.execute('UPDATE game_jobs SET audience_json=? WHERE id=?',(json.dumps(audience),job_id))
             if not handle.cancelled.is_set():
-                storage.commit_job(job_id, state, choices, changes)
+                timings['total']=time.perf_counter()-job_started
+                storage.commit_job(job_id, state, choices, changes, timing=timings)
+                # Include the commit and variant snapshot in independently measured
+                # wall-clock time; the provisional value covers an interrupted final write.
+                storage.finalize_job_timing(job_id,time.perf_counter()-job_started)
     except Exception as exc:
         storage.job_progress(job_id, 'stopped' if handle.cancelled.is_set() else 'error',
                              narrative=narrative or None, error=str(exc))

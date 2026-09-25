@@ -103,6 +103,7 @@ export interface Turn {
   assistant_text: string;
   choices: Choice[];
   kind: string;
+  timing?: Record<string,number>|null;
 }
 export interface Job {
   phase?: "scenario" | "world" | "retrying" | "validating" | "saving" | "editing" | "";

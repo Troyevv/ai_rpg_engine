@@ -188,12 +188,10 @@ def compatibility_view(state):
     """Refresh old read models from canonical entities; no second mutable world."""
     world=state['world']
     names={c['id']:c['name'] for c in state['characters']}
-    for key,r in world['relationships'].items():
-        existing=next((p for p in state['relationships'] if p['source_id']==r['source_id'] and (p.get('target_id')==r['target_id'] or p.get('target_name')==names[r['target_id']])),None)
-        if existing is None:
-            existing={'source_id':r['source_id'],'target_id':r['target_id'],'target_name':names[r['target_id']]}
-            state['relationships'].append(existing)
-        existing['text']=r['context']
+    state['relationships']=[{'source_id':r['source_id'],'target_id':r['target_id'],
+        'target_name':names.get(r['target_id'],r['target_id']),'text':r['context'],
+        **({'change':r['change']} if 'change' in r else {})}
+        for r in world['relationships'].values()]
     state['facts']=[{'id':f['id'],'text':f['text'],'known_by':[k['actor_id'] for k in world['knowledge'].values() if k['fact_id']==f['id'] and k['status']=='known']} for f in world['facts'].values()]
     state['plans']=[{'id':t['id'],'text':t['state'] or t['description'],'character_ids':t['character_ids'],
                      'status':'done' if t['status']=='resolved' else 'open'} for t in world['threads'].values()]

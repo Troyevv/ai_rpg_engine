@@ -9,6 +9,6 @@ export async function actor(page:Page,id:string,name:string){
  else {await page.locator('.mobile-pov button').first().click();await page.getByRole('dialog').getByRole('button',{name,exact:true}).click()}
 }
 export async function diagnostics(page:Page){
- if(await page.locator('.mobile-story-tools').isVisible())await page.locator('.mobile-story-tools summary').click();
- await page.getByRole('button',{name:'Контекст ведущего · Расходы',exact:true}).click();
+ if(await page.locator('.mobile-story-tools').isVisible() && await page.locator('.mobile-story-tools').getAttribute('open')===null)await page.locator('.mobile-story-tools summary').click();
+ await page.getByRole('button',{name:'Диагностика',exact:true}).click();
 }

@@ -1,0 +1,4 @@
+export const stages:Record<string,string>={narrative:'Художественная генерация',extraction:'Извлечение состояния',extraction_repair:'Исправление extraction',validation_apply:'Валидация и применение',background_simulation:'Фоновая симуляция',memory_compaction:'Память',total:'Общее время',memory:'Память',world_simulation:'Фоновая генерация',world_simulation_delta:'Фоновое извлечение',world_simulation_repair:'Исправление фонового extraction'};
+export function Timing({timing}:{timing?:Record<string,number>|null}){
+ return timing ? <dl className="timing-breakdown">{['total','narrative','extraction','extraction_repair','validation_apply','background_simulation','memory_compaction'].filter(k=>timing[k]!=null).map(k=><div key={k}><dt>{stages[k]}</dt><dd>{timing[k].toFixed(1)} с</dd></div>)}</dl> : <p className="muted">Статистика времени для этого хода не сохранена.</p>;
+}

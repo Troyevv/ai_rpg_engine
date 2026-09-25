@@ -122,7 +122,7 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
     def list_turns(self, save_id):
         with self.connect() as db:
             return [dict(row) for row in db.execute(
-                'SELECT id,sequence,user_text,assistant_text,kind,choices_json,changes_json,node_id,active_variant_id,memory_archived,pov_actor_id,audience_json FROM turns WHERE save_id=? ORDER BY sequence', (save_id,))]
+                'SELECT id,sequence,user_text,assistant_text,kind,choices_json,changes_json,node_id,active_variant_id,memory_archived,pov_actor_id,audience_json,timing_json FROM turns WHERE save_id=? ORDER BY sequence', (save_id,))]
 
     def update_scene_meta(self, save_id, metadata, expected_revision=None):
         with self.connect() as db:

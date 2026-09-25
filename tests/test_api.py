@@ -1,3 +1,4 @@
+from canonical_fixture import canonical, fixture_sequence
 import json
 import sqlite3
 import threading
@@ -51,7 +52,7 @@ def test_preparation_to_game_parity(api):
     world = client.post(f"/api/workspaces/{workspace['id']}/world", json={'name':'Новая история'}).json()
     save = client.post(f"/api/worlds/{world['id']}/saves",json={'name':'Первое'}).json()
     def stream(**kw):
-        yield json.dumps(result(),ensure_ascii=False) if kw.get('response_format') else NARRATIVE
+        yield json.dumps(canonical(result(),len(app.state.repository.list_turns(save['id']))),ensure_ascii=False) if kw.get('response_format') else NARRATIVE
     with patch('engine.chat_stream',side_effect=stream),patch('engine.find_loaded_model',side_effect=AssertionError('LM Studio not needed')):
         j=client.post(f"/api/saves/{save['id']}/turns",json={'kind':'start','revision':0,'config':REMOTE,'api_key':'test-secret'}).json()
         assert wait_job(client,j['id'])['status']=='saved'

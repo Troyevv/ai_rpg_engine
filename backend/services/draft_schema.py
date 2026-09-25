@@ -4,6 +4,7 @@ The runtime accepts older saves via prepare/normalize; this contract describes
 the richer initial output expected from the single world generation request.
 """
 from backend.services.world import CARD_FIELDS
+from backend.services.world_delta import RELATION_DIMENSIONS, RELATION_CONTRACT
 
 
 def obj(properties, required=(), description='', additional=True):
@@ -64,7 +65,7 @@ def world_state_schema():
                  'status': {'type':'string','enum':['active','ended','paused']},'event_ids': IDS},
                 ('id','location','participants','text','start_minute','end_minute','status','event_ids'))
     relation = obj({'source_id': ID,'target_id': ID,'context': text('Разная в каждом направлении история и эмоциональная динамика.'),
-                    'dimensions': entries({'type':'number','minimum':-100,'maximum':100},'Только уместные trust, affection, attraction, irritation, fear, jealousy, respect.'),
+                    'dimensions': obj({key:{'type':'number','minimum':-100,'maximum':100} for key in RELATION_DIMENSIONS},description=RELATION_CONTRACT,additional=False),
                     'visible_to_ids': IDS},('source_id','target_id','context','dimensions'))
     fact = obj({'id':ID,'text':text('Объективный факт мира, включая собственные тайны значимых персонажей.'),
                 'secret':{'type':'boolean'},'owner_id':OPTIONAL_ID,'character_ids':IDS,

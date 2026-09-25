@@ -20,5 +20,9 @@
     "8df5206222a36429dbaf0c9549a1acce0e3bbbe1dc4d08c9ad8c50c33f92eef2",
     "877bf49514facb62e84a0e11ea624beda85545bdd71b98be7a24a9761d391df1"
   ],
-  "state_update_prompt.md": "3e68b42ae37e74b608db0d94a709d540e54270c6f7da132eb5206adcb5c251cc"
+  "state_update_prompt.md": [
+    "3e68b42ae37e74b608db0d94a709d540e54270c6f7da132eb5206adcb5c251cc",
+    "24db48e9efac9f20ed80de02f6975fa5bbb92e9668c188d5f46baed01a17e7f8"
+  ],
+  "world_state_prompt.md": "f1eea9331a1e600f7473b1e730720310f2bc7d418bf2be0dc1881037c59caada"
 }

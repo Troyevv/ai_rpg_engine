@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 import engine
+from canonical_fixture import canonical, fixture_sequence
 from context_builder import build_context, estimate
 from state_updates import apply_updates, choice_input
 from storage import Storage
@@ -32,7 +33,7 @@ def run(storage, job_id, extraction=None):
     calls = []
     def stream(**kwargs):
         calls.append(kwargs)
-        yield json.dumps(result() if extraction is None else extraction, ensure_ascii=False) if kwargs.get('response_format') else NARRATIVE
+        yield json.dumps(canonical(result() if extraction is None else extraction, fixture_sequence(storage,job_id)), ensure_ascii=False) if kwargs.get('response_format') else NARRATIVE
     with patch('engine.find_loaded_model', return_value={'config': {'context_length': 32768}}), patch('engine.chat_stream', side_effect=stream):
         engine.run_job(storage.path, job_id, engine.Worker())
     return calls
@@ -232,15 +233,17 @@ def test_evidence_repair_is_bounded_atomic_and_keeps_narrative(db, outcome):
             yield NARRATIVE
             return
         payload = result()
-        if len(calls) == 2 or outcome == 'invalid':
+        if len(calls) == 2:
+            payload['scene']['present_ids']=['missing']
+        elif outcome == 'invalid':
             payload['events'][0]['evidence'] = 'Пересказ вместо цитаты'
         if len(calls) == 3:
-            assert any('events[0].evidence' in m['content'] for m in kwargs['messages'])
+            assert any('unknown_character' in m['content'] for m in kwargs['messages'])
             assert estimate(kwargs['messages']) <= CONFIG['context_length'] - CONFIG['update_tokens'] - 256
             if outcome == 'stopped':
                 engine.stop(storage, job)
                 worker.cancelled.set()
-        yield json.dumps(payload, ensure_ascii=False)
+        yield json.dumps(canonical(payload), ensure_ascii=False)
     with patch('engine.chat_stream', side_effect=stream):
         engine.run_job(storage.path, job, worker)
     assert len(calls) == 3

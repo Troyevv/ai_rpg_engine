@@ -28,7 +28,7 @@ test("persistent key, thinking, memory, visible player actions, variants and acc
  await expect(page.locator('.turn')).toHaveCount(1);
  if(await page.locator('.mobile-variants').isVisible()){await expect(page.locator('.mobile-variants')).toContainText('2 / 2');await page.getByRole('button',{name:'Предыдущий вариант'}).click();await expect(page.locator('.mobile-variants')).toContainText('1 / 2')}else{await expect(page.getByText('Вариант 2 / 2')).toBeVisible();await page.locator('.variant-controls').getByRole('button',{name:'1',exact:true}).click();await expect(page.getByText('Вариант 1 / 2')).toBeVisible()}
  await diagnostics(page);
- await expect(page.getByRole('dialog')).toContainText('Cached input');
+ await expect(page.getByRole('dialog')).toContainText('Cache');
  await expect(page.getByRole('dialog')).toContainText('low');
  await expect(page.getByRole('dialog')).toContainText('Текущая сцена');
  await page.getByRole('button',{name:'Показать архив откатов'}).click();

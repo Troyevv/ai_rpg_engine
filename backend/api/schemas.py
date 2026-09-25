@@ -100,3 +100,9 @@ class Camera(Revision, Credential):
 class Motivation(Revision):
     goals: list[str] = Field(max_length=20)
     intentions: list[str] = Field(max_length=20)
+
+class RelationshipEdit(Revision):
+    target_id: str
+    context: str = Field(default='',max_length=12000)
+    dimensions: dict[str,float] = Field(default_factory=dict,max_length=20)
+    delete: bool = False

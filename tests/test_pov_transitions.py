@@ -1,3 +1,4 @@
+from canonical_fixture import canonical, fixture_sequence
 import json
 from unittest.mock import patch
 import pytest
@@ -18,7 +19,7 @@ def intro(storage,sid,actor,source=None,bad=False):
             scene=json.loads(block.split('\n',1)[1]);payload['scene'].update(scene['scene_meta']);payload['scene']['text']=scene['scene']
             payload['events']=[e for e in payload.get('events',[]) if set(e['character_ids'])<=set(payload['scene']['present_ids'])]
             if bad:payload['choices']=[]
-            yield json.dumps(payload,ensure_ascii=False)
+            yield json.dumps(canonical(payload,fixture_sequence(storage,jid)),ensure_ascii=False)
         else:yield NARRATIVE
     with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=stream):
         engine.run_job(storage.path,jid,engine.Worker())

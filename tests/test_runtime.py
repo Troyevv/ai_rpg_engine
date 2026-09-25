@@ -13,6 +13,7 @@ from context_builder import build_context, estimate
 from llm import chat_stream
 from storage import Storage
 import engine
+from canonical_fixture import canonical, fixture_sequence
 from test_engine import CONFIG, NARRATIVE, result, run, db
 
 
@@ -25,7 +26,7 @@ def generate(storage,sid,kind='turn',text='Я сажусь.',config=None,story=N
             payload=result()
             from backend.services.timeline import current_time,label
             payload['scene']['time']=label(max(1100,current_time(json.loads(storage.get_job(job)['before_json']))))
-            yield json.dumps(payload,ensure_ascii=False)
+            yield json.dumps(canonical(payload,fixture_sequence(storage,job)),ensure_ascii=False)
         elif 'Обнови компактную память' in kw['messages'][0]['content']:
             yield 'Собеседники встретились и договорились поговорить на кухне.'
         else:
@@ -164,7 +165,7 @@ def test_invalid_plan_is_reported_without_blocking_valid_event(db):
     state=storage.get_save(sid)['state']
     assert not state.get('plans')
     assert state['events'][-1]['text']==bad['events'][0]['text']
-    assert json.loads(storage.get_job(job)['warnings_json'])[0]['section']=='plans'
+    assert json.loads(storage.get_job(job)['warnings_json'])[0]['section']=='threads'
 
 
 def test_retry_retains_historical_rollback_consent_with_new_model_config(db):

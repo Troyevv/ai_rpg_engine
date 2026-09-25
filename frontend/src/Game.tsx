@@ -1,3 +1,4 @@
+import {Timing} from './Timing';
 import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import {
@@ -198,7 +199,7 @@ export function Game({
             lineHeight: mobile?1.65:prefs.line_height,
           }}
         >
-          {save&&mobile&&<details className="mobile-story-tools"><summary>Контекст и расходы</summary><Button size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Контекст ведущего · Расходы</Button></details>}{save&&!mobile&&<Button size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Контекст ведущего · Расходы</Button>}
+          {save&&mobile&&<details className="mobile-story-tools"><summary>Диагностика</summary><Button size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Диагностика</Button></details>}{save&&!mobile&&<Button size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Диагностика</Button>}
           <div className="story-heading">
             <p className="eyebrow">
               {save ? save.name : "Начало истории"} · Мир v{world.version}
@@ -250,6 +251,7 @@ export function Game({
                     links={prefs.link_names}
                     onCharacter={openCharacter}
                   />
+                  {t.timing?.total!=null&&<details className="turn-timing"><summary>Время хода: {t.timing.total.toFixed(1)} с</summary><Timing timing={t.timing}/></details>}
                   {mobile?<div className="mobile-variants">
                     <Button size="icon" variant="ghost" aria-label="Ещё вариант" disabled={busy||pending||!t.variants?.some(v=>v.can_regenerate)} onClick={()=>{const later=i<save.turns.length-1;if(later&&!window.confirm('Откатить следующие ходы в архив?'))return;void turn('regenerate','',t.id,later)}}>↻</Button>
                     {[-1,1].map((step)=>{const list=t.variants||[];const index=list.findIndex(v=>v.id===t.active_variant_id);const v=list[index+step];return <span className="variant-step" key={step}>{step===1&&<span>{index+1} / {list.length||1}</span>}<Button size="icon" variant="ghost" aria-label={step<0?'Предыдущий вариант':'Следующий вариант'} disabled={busy||pending||!v} onClick={()=>{const later=i<save.turns.length-1;if(later&&!window.confirm('Откатить следующие ходы в архив?'))return;void run(async()=>{await api(`/saves/${save.id}/turns/${t.id}/variant`,{variant_id:v.id,revision:save.revision,rollback_following:later});setSubmitted(null);refresh()})}}>{step<0?'‹':'›'}</Button></span>})}
