@@ -187,3 +187,5 @@
 .world-timeline { border-left:1px solid var(--border-strong); padding-left:22px; margin-left:6px; }
 .world-timeline li { position:relative; }
 .world-timeline li::before { content:''; position:absolute; width:7px; height:7px; border-radius:50%; left:-26px; top:22px; background:var(--accent); }
+
+.inspector-dialog .dialog-title { font-size:23px; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }

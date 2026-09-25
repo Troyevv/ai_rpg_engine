@@ -75,7 +75,7 @@ export function Inspector({
     <Dialog open={open} onOpenChange={(v) => !v && close()}>
       <DialogContent className="inspector-dialog">
         <DialogHeader>
-          <DialogTitle>{world.name}</DialogTitle>
+          <DialogTitle title={world.name}>{world.name}</DialogTitle>
           <DialogDescription>
             Основа v{world.version} · {save ? save.name : "Исходный мир"}
           </DialogDescription>

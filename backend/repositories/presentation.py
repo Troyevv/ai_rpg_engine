@@ -36,13 +36,17 @@ class PresentationStorage:
     def set_presentation(self, world_id, theme_id):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
-            world = db.execute('SELECT name,source_md FROM worlds WHERE id=?', (world_id,)).fetchone()
+            world = db.execute('SELECT name FROM worlds WHERE id=?', (world_id,)).fetchone()
             if not world:
                 raise ValueError('Мир не найден.')
             row = db.execute('SELECT payload FROM world_presentation WHERE world_id=?', (world_id,)).fetchone()
             value = json.loads(row['payload']) if row else {}
             if theme_id == 'auto':
-                value.setdefault('auto_theme_id', suggested_theme(world['name'] + '\n' + world['source_md']))
+                campaign_row = db.execute("SELECT payload FROM world_parts WHERE world_id=? AND kind='campaign'", (world_id,)).fetchone()
+                campaign = json.loads(campaign_row['payload']) if campaign_row else {}
+                # Read only public genre metadata, never secrets, knowledge or narrative.
+                hints = [world['name']] + [str(campaign.get(key, '')) for key in ('title', 'genre', 'tone')]
+                value.setdefault('auto_theme_id', suggested_theme('\n'.join(hints)))
                 value.update(theme_id=value['auto_theme_id'], mode='auto')
             else:
                 value.update(theme_id=theme_id, mode='manual')

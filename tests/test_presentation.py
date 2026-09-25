@@ -55,3 +55,9 @@ def test_missing_world_cannot_create_or_read_presentation(tmp_path):
     with TestClient(create_app(tmp_path/'missing.sqlite3')) as client:
         assert client.get('/api/worlds/999/presentation').status_code == 409
         assert client.put('/api/worlds/999/presentation',json={'theme_id':'auto'}).status_code == 409
+
+
+def test_auto_does_not_read_secrets_from_source(tmp_path):
+    repo = Repository(tmp_path/'secret.sqlite3')
+    wid = repo.save_world('Город друзей', summary()+'\nТайна: один из соседей вампир, другой из киберпанк будущего.')
+    assert repo.set_presentation(wid,'auto')['theme_id'] == 'graphite'

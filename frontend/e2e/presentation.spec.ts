@@ -7,12 +7,22 @@ async function noOverflow(page:Page){
  const dialog=page.getByRole('dialog');
  if(await dialog.count()) expect(await dialog.last().evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
 }
+async function capture(page:Page,path:string){
+ // Capture the final UI, not a translucent frame halfway through a dialog transition.
+ await expect(page.locator('.dialog-content[data-state=closed]')).toHaveCount(0);
+ for(const el of await page.locator('.dialog-content[data-state=open],.turn').all())await expect(el).toHaveCSS('opacity','1');
+ await expect.poll(()=>page.locator('.tab-indicator').evaluateAll(nodes=>nodes.every(el=>{
+  const a=el.getBoundingClientRect(),b=el.parentElement!.getBoundingClientRect();
+  return Math.abs(a.x-b.x)<2&&Math.abs(a.y-b.y)<2&&Math.abs(a.width-b.width)<3&&Math.abs(a.height-b.height)<3;
+ }))).toBe(true);
+ await page.screenshot({path,animations:'disabled'});
+}
 async function themeControl(page:Page){
  await nav(page,'Мир');await page.locator('.theme-disclosure > summary').click();
  return page.getByLabel('Тема мира',{exact:true}).filter({has:page.locator('option')});
 }
 
-test('world themes persist across reload and devices; portals inherit theme; all palettes remain playable',async({page,request,browser})=>{
+test('world themes persist across reload and devices; portals inherit theme; all palettes remain playable',async({page,request,browser},info)=>{
  const selection=await(await request.post('/test/seed')).json();
  await request.put(`/api/worlds/${selection.world}/presentation`,{data:{theme_id:'graphite'}});
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selection);
@@ -24,8 +34,22 @@ test('world themes persist across reload and devices; portals inherit theme; all
   await themeControl(page);await page.locator('.theme-selector select').selectOption(id);
   await expect(page.locator('html')).toHaveAttribute('data-theme',id);
   expect(await page.getByRole('dialog').evaluate(el=>getComputedStyle(el).getPropertyValue('--bg').trim())).toBe(await page.locator('html').evaluate(el=>getComputedStyle(el).getPropertyValue('--bg').trim()));
+  const contrast=await page.locator('html').evaluate(el=>{
+   const css=getComputedStyle(el);
+   const luminance=(token:string)=>{
+    const hex=css.getPropertyValue(token).trim().slice(1);
+    const rgb=[0,2,4].map(i=>parseInt(hex.slice(i,i+2),16)/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);
+    return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;
+   };
+   return [['--text','--bg'],['--text-muted','--surface-2'],['--text-subtle','--bg'],['--accent','--accent-soft'],['--accent-contrast','--accent']].map(([a,b])=>{
+    const values=[luminance(a),luminance(b)].sort((a,b)=>a-b);return (values[1]+.05)/(values[0]+.05);
+   });
+  });
+  for(const ratio of contrast)expect(ratio).toBeGreaterThanOrEqual(4.5);
   await noOverflow(page);await page.getByRole('button',{name:'Закрыть',exact:true}).click();
   await expect(page.locator('.choices button').first()).toBeEnabled();
+  await page.locator('.story-scroll').evaluate(el=>el.scrollTop=0);
+  await capture(page,info.outputPath(`${id}.png`));
   await page.getByRole('textbox',{name:'Своё действие или реплика'}).fill(`Мой ход в ${id}`);
   await expect(page.getByRole('button',{name:'Отправить действие'})).toBeEnabled();
   await diagnostics(page);await page.getByRole('tab',{name:'Производительность',exact:true}).click();
@@ -89,14 +113,21 @@ for(const size of [{width:1920,height:1080},{width:1366,height:768},{width:360,h
    for(const turn of data.turns)turn.assistant_text+='\n\n'+('За окном медленно зажигаются огни. '.repeat(70));
    await route.fulfill({response,json:data});
   });
+  await page.route(`**/api/saves/${selection.save}/accounting`,async route=>{
+   const response=await route.fetch();const data=await response.json();
+   if(data.turns[0])data.turns[0].warnings=[{section:'knowledge',index:2,reason:'Нет подтверждённого пути передачи знания. '.repeat(25)}];
+   await route.fulfill({response,json:data});
+  });
   await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selection);
   await page.goto('/');await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.choices button')).toHaveCount(6);
   await noOverflow(page);await page.locator('.story-scroll').evaluate(el=>el.scrollTop=0);
-  await page.screenshot({path:info.outputPath('game.png')});
+  await capture(page,info.outputPath('game.png'));
   await nav(page,'Мир');await page.locator('.panel-tabs').getByRole('button',{name:'Персонажи',exact:true}).click();
   await page.getByLabel('Персонаж',{exact:true}).selectOption('character_2');await noOverflow(page);
-  await page.screenshot({path:info.outputPath('inspector.png')});await page.getByRole('button',{name:'Закрыть',exact:true}).click();
+  await capture(page,info.outputPath('inspector.png'));
+  await page.locator('.panel-tabs').getByRole('button',{name:'Отношения',exact:true}).click();await noOverflow(page);
+  await capture(page,info.outputPath('relationships.png'));await page.getByRole('button',{name:'Закрыть',exact:true}).click();
   await diagnostics(page);await page.getByRole('tab',{name:'Производительность'}).click();await noOverflow(page);
-  await page.screenshot({path:info.outputPath('diagnostics.png')});
+  await capture(page,info.outputPath('diagnostics.png'));
  });
 }

@@ -388,9 +388,9 @@
 /* Reading surface: quiet tools, generous text, restrained action notes. */
 .game { background:var(--bg); }
 .story { padding-top:36px; }
-.story-heading { margin:20px 0 48px; }
+.story-heading { margin:12px 0 28px; }
 .story-heading .eyebrow { color:var(--text-muted); letter-spacing:.14em; }
-.story-heading h1 { font-size:clamp(28px,3vw,40px); line-height:1.25; overflow-wrap:anywhere; margin-bottom:20px; }
+.story-heading h1 { font-size:clamp(25px,2.5vw,34px); line-height:1.25; overflow-wrap:anywhere; margin-bottom:16px; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
 .chapter-rule { color:var(--accent); opacity:.65; }
 .prose { color:var(--text); font-family:var(--story-font); }
 .prose em { color:var(--text-secondary); }
@@ -431,3 +431,6 @@
 .generation-stages { display:flex; flex-wrap:wrap; gap:8px 16px; list-style:none; margin:4px 0 16px; padding:0; color:var(--text-subtle); font:11px/1.6 var(--ui-font); }
 .generation-stages [aria-current=step] { color:var(--accent); }
 .job-streaming .generation-stages { margin-bottom:12px; }
+.story .job .prose { line-height:inherit; }
+
+.story-diagnostics { margin-left:auto; display:flex; color:var(--text-subtle); font-size:11px; font-weight:400; }

@@ -209,12 +209,12 @@ export function Game({
             lineHeight: prefs.line_height,
           }}
         >
-          {save&&mobile&&<details className="mobile-story-tools"><summary>Диагностика</summary><Button size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Диагностика</Button></details>}{save&&!mobile&&<Button size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Диагностика</Button>}
+          {save&&mobile&&<details className="mobile-story-tools"><summary>Диагностика</summary><Button size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Диагностика</Button></details>}{save&&!mobile&&<Button className="story-diagnostics" size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Диагностика</Button>}
           <div className="story-heading">
             <p className="eyebrow">
               {save ? save.name : "Начало истории"}
             </p>
-            <h1>{world.name}</h1>
+            <h1 title={world.name}>{world.name}</h1>
             <div className="chapter-rule" aria-hidden="true">✦</div>
           </div>
           {!save ? (
@@ -458,4 +458,3 @@ export function Game({
     </main>
   );
 }
-
