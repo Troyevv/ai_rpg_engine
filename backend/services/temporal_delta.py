@@ -1,8 +1,39 @@
 """Small intra-turn location timeline, separate from the final camera snapshot."""
-from backend.services.world_delta_errors import StructuralDeltaError
+from backend.services.world_delta_errors import StructuralDeltaError, SecondaryDeltaError
 from backend.services.timeline import current_time
 
-TEMPORAL_CONTRACT = '''scene — КОНЕЧНОЕ состояние камеры, не состав участников всего хода. Event.minute — абсолютная минута события внутри [время before, время after], order — порядок внутри минуты (по умолчанию 0). Event.location — место события; можно опустить, если оно однозначно по участникам. При одинаковых minute/order события проверяются ДО transitions. Для иного порядка укажи различные order. transitions: actor_id, minute, order, from_location, to_location, evidence. Создавай их только для входа/выхода/смены места, не для жестов. from_location=null допустим только при неизвестном исходном месте. Участники и свидетели Event должны находиться в месте события В МОМЕНТ события. Кто пришёл позже или ушёл раньше — не свидетель. characters.location — конечное место конкретного персонажа: вне final present_ids оно может отличаться от scene.location. Ушедший сохраняет полученное ранее Knowledge. Любое изменение известного места требует transition; не подменяй его одним characters.location. Если chronology содержит transitions, явно указывай minute событий. Новый значимый NPC тоже входит через transition. Не создавай события между людьми, которые не пересекались. Старый prompt о свидетелях только final scene.present_ids заменяется этим temporal контрактом.'''
+TEMPORAL_CONTRACT = '''scene — КОНЕЧНОЕ состояние камеры, не состав участников всего хода. Event.minute — абсолютная минута события внутри [время before, время after], order — порядок внутри минуты (по умолчанию 0). Event.location — место события; можно опустить, если оно однозначно по участникам. При одинаковых minute/order события проверяются ДО transitions. Для иного порядка укажи различные order. transitions: actor_id, minute, order, to_location, evidence. Создавай их только для входа/выхода/смены места, не для жестов. Исходное место берёт Runtime из текущей позиции. from_location — необязательная подсказка для неизвестного места/появления NPC; обычно ОПУСКАЙ, не копируй из памяти. Участники и свидетели Event должны находиться в месте события В МОМЕНТ события. Кто пришёл позже или ушёл раньше — не свидетель. characters.location — конечное место конкретного персонажа: вне final present_ids оно может отличаться от scene.location. Ушедший сохраняет полученное ранее Knowledge. Любое изменение известного места требует transition; не подменяй его одним characters.location. Если chronology содержит transitions, явно указывай minute событий. Новый значимый NPC тоже входит через transition. Не создавай события между людьми, которые не пересекались. Старый prompt о свидетелях только final scene.present_ids заменяется этим temporal контрактом.'''
+
+
+def redundant_origin(before, actor_id, origin, destination, hint, evidence, narrative, user_text):
+    """Conservative direct-movement grammar, not semantic location aliasing.
+
+    Correct only a named actor's single explicit Russian movement clause. A
+    mentioned asserted origin, compound route, unknown grammar or ambiguous
+    quote stays structural. Event-time/final checks still run after correction.
+    """
+    import re
+    from state_updates import normalized_evidence
+    def forms(label):
+        label=normalized_evidence(label)
+        variants={label}
+        # Only simple one-word location labels; no stemming, synonyms or fuzzy
+        # matching. Multiword labels require their literal canonical spelling.
+        if re.fullmatch('[а-яё]+',label):
+            if label.endswith('а'):variants.add(label[:-1]+('и' if label[-2:-1] in 'гкхжчшщ' else 'ы'))
+            elif label.endswith('я'):variants.add(label[:-1]+'и')
+            elif label[-1] not in 'аеёиоуыэюяьй':variants.add(label+'а')
+        return '|'.join(re.escape(v) for v in sorted(variants,key=len,reverse=True))
+    sources=normalized_evidence(narrative)+' '+normalized_evidence(user_text)
+    if re.search(r'(?<!\w)(?:'+forms(hint)+r')(?!\w)',sources):return False
+    character=next((c for c in before['characters'] if c['id']==actor_id),None)
+    if not character:return False
+    name=re.escape(normalized_evidence(character['name']))
+    # Full sentence: no intervening route or another actor's departure can
+    # accidentally prove this movement. Quotes must already match current turn.
+    pattern=(r'(?:'+name+r') (?:выходит|вышел|вышла|переходит|перешёл|перешла) из (?:'
+             +forms(origin)+r') в (?:'+forms(destination)+r')[.!]?')
+    return any(re.fullmatch(pattern,clause.strip()) for clause in re.split(r'(?<=[.!?])\s+',normalized_evidence(evidence)))
 
 
 def validate_timeline(before, after, delta, narrative, user_text, since=None):
@@ -40,7 +71,7 @@ def validate_timeline(before, after, delta, narrative, user_text, since=None):
     observed={initial.get('location'),final_location}
     observed.update(t['to_location'] for t in delta['transitions'] if t['actor_id']==actor)
     sources=[normalized_evidence(narrative),normalized_evidence(user_text)]
-    operations=[];movement_keys=set()
+    operations=[];movement_keys=set();warnings=[]
     for i,t in enumerate(delta['transitions']):
         refs([t['actor_id']],'transitions',i)
         key=(t['minute'],t['order'],t['actor_id'])
@@ -48,7 +79,7 @@ def validate_timeline(before, after, delta, narrative, user_text, since=None):
         movement_keys.add(key)
         if not start<=t['minute']<=end:fail('перемещение вне интервала хода','temporal_order_invalid','transitions',i)
         if not any(normalized_evidence(t['evidence']) in s for s in sources):
-            fail('перемещение не подтверждено цитатой','transition_invalid','transitions',i,'evidence',t['actor_id'])
+            raise SecondaryDeltaError('transitions',i,'Нет подтверждённой цитаты текущего хода',entity=t['actor_id'],cause_field='evidence',code='evidence_unsupported')
         operations.append((t['minute'],t['order'],1,i,t))
     for i,e in enumerate(delta['events']):
         refs(e['participants']+e['witnesses'],'events',i)
@@ -60,9 +91,18 @@ def validate_timeline(before, after, delta, narrative, user_text, since=None):
     snapshots={}
     for minute,order,kind,index,item in sorted(operations,key=lambda v:v[:4]):
         if kind:
-            cid=item['actor_id'];source=item.get('from_location');destination=item['to_location']
-            if positions[cid]!=source or source==destination:
-                fail('исходное место перемещения не совпадает с текущим','transition_location_invalid','transitions',index,'from_location',cid)
+            cid=item['actor_id'];source=positions[cid];destination=item['to_location']
+            hint=item.get('from_location')
+            if source==destination:
+                fail('перемещение не меняет место','transition_location_invalid','transitions',index,'to_location',cid)
+            if source is not None and hint is not None and hint!=source:
+                if not redundant_origin(before,cid,source,destination,hint,item['evidence'],narrative,user_text):
+                    fail('исходное место перемещения не совпадает с текущим','transition_location_invalid','transitions',index,'from_location',cid)
+                warnings.append(dict(type='sanitized_delta',code='transition_from_location_corrected',section='transitions',
+                    index=index,field='from_location',entity=cid,reason='Использовано каноническое исходное место Runtime.',
+                    message='Избыточная подсказка from_location исправлена.',canonical_origin=source,action='correct_field'))
+            # Unknown origins stay unknown. A sourced arrival establishes only
+            # the destination; a hint never rewrites earlier event membership.
             if source not in observed and destination not in observed and cid not in involved:
                 fail('перемещение не связано с наблюдаемым ходом','transition_invalid','transitions',index,entity=cid)
             positions[cid]=destination;involved.add(cid)
@@ -95,7 +135,7 @@ def validate_timeline(before, after, delta, narrative, user_text, since=None):
             fail('персонаж не участвовал в текущем ходе','character_not_involved','characters',i,entity=c['id'])
         if 'location' in c and c['location']!=positions[c['id']]:
             fail('конечное место персонажа противоречит хронологии','character_location_inconsistent','characters',i,'location',c['id'])
-    return {'positions':positions,'involved':involved|final_present,'events':snapshots}
+    return {'positions':positions,'involved':involved|final_present,'events':snapshots,'warnings':warnings}
 
 
 def apply_locations(state, temporal, sequence):

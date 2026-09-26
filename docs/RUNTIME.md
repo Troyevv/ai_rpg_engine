@@ -135,9 +135,10 @@ hard limit. Event-time membership now uses the temporal contract below.
 
 `scene` is the final camera snapshot, not a history of presence. Optional
 `world_delta.transitions` describes only location/membership changes:
-`actor_id`, absolute `minute`, `order` (default 0), `from_location`,
-`to_location`, exact `evidence`. Null source is allowed only for unknown prior
-locations. Events have optional `location` and `order`; when transitions exist,
+`actor_id`, absolute `minute`, `order` (default 0), `to_location`, exact
+`evidence`. Runtime derives the origin at replay time. `from_location` is an
+optional legacy hint, never a replacement for a known canonical position.
+Unknown origins stay unknown until a sourced arrival establishes the destination. Events have optional `location` and `order`; when transitions exist,
 the event minute is required. Operations replay by minute, order, then events
 before movements at equal coordinates. Two movements of one actor at the same
 coordinate are rejected; array order cannot change their meaning.
@@ -161,3 +162,29 @@ character scene pointers follow final positions; moving a character later must
 not remove them from an event's historical membership. Narrative recordings
 link all new events of their turn, even when the final camera moved elsewhere.
 The same validator runs for ordinary, start, POV, observer and simulated turns.
+
+
+### Deterministic extraction recovery
+
+Before strict WorldDelta validation, only missing `evidence` errors in existing
+entity updates, facts, events, knowledge, relationships, threads, scheduled events
+and transitions may discard a record. The whole raw delta is checked first: any
+other schema error, including another error in the same record, requires repair.
+Promotions remain structural because they define canonical identities. Evidence
+remains required in the canonical schema. A discarded fact removes only its
+event fact references and dependent knowledge; a discarded event removes dependent
+knowledge/thread/scheduled changes. Unknown references are not treated as discarded
+IDs. Dropping a transition cannot bypass final-position or event-time validation.
+
+A mismatching origin hint is corrected only for an explicit named-actor direct
+movement clause in current-turn evidence (a deliberately narrow Russian grammar).
+Canonical origin and destination must both match; an asserted alternative origin
+mentioned in the turn, compound movement, unsupported grammar or ambiguity requires
+repair. Limited grammatical case variants are not location aliases. With omitted
+origins, ordinary transitions replay directly from Runtime positions. Intermediate
+events, equal-minute ordering and final locations are validated as before.
+
+Warnings `evidence_missing`, `evidence_unsupported`, `dependency_removed` and
+`transition_from_location_corrected` use the existing per-variant deterministic
+diagnostics, without changing repair rate, request accounting or timing. Fatal
+validation never publishes a partial state.

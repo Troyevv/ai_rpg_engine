@@ -92,7 +92,7 @@ def test_same_minute_order_is_deterministic(db,event_order,accepted):
 @pytest.mark.parametrize('defect,code',[
     ('final_location','character_location_inconsistent'),('random_npc','character_not_involved'),
     ('origin','transition_location_invalid'),('time','temporal_order_invalid'),('same_order','temporal_order_invalid'),
-    ('missing_time','temporal_order_invalid'),('evidence','transition_invalid')])
+    ('missing_time','temporal_order_invalid'),('evidence','character_location_inconsistent')])
 def test_structural_failures_are_not_sanitized(db,defect,code):
     repo,_,sid=db;before=setup(repo,sid)
     p=payload(transitions=[move(B,'кабинет','коридор')])
@@ -102,7 +102,9 @@ def test_structural_failures_are_not_sanitized(db,defect,code):
     if defect=='time':p['world_delta']['transitions'][0]['minute']=539
     if defect=='same_order':p['world_delta']['transitions'].append(move(B,'коридор','кабинет'))
     if defect=='missing_time':del p['world_delta']['events'][0]['minute']
-    if defect=='evidence':p['world_delta']['transitions'][0]['evidence']='Нет такой цитаты'
+    if defect=='evidence':
+        p['world_delta']['transitions'][0]['evidence']='Нет такой цитаты'
+        p['world_delta']['characters']=[dict(id=B,location='коридор',evidence=QUOTE)]
     with pytest.raises(StructuralDeltaError) as error:apply(before,p)
     assert error.value.code==code
     assert repo.get_save(sid)['state']==before
@@ -128,6 +130,7 @@ def test_normal_movement_uses_two_calls_and_variant_keeps_own_state(db,kind):
 def test_observer_and_automatic_background_share_temporal_contract(db):
     repo,_,sid=db;state=setup(repo,sid,[B,C],observer=True)
     p=payload([B],transitions=[move(C,'кабинет','коридор')],observer=True)
+    del p['world_delta']['transitions'][0]['from_location']
     p['world_delta']['events'][0].update(participants=[B,C],witnesses=[B,C])
     p['world_delta']['knowledge'][0]['actor_id']=C
     assert apply(state,p,'background')[0]['world']['knowledge'][C+':f']['status']=='known'
@@ -166,6 +169,7 @@ def test_promoted_npc_can_arrive_and_leave_before_final_scene(db):
     from backend.services.world import CARD_FIELDS
     repo,_,sid=db;before=setup(repo,sid,[A])
     p=payload(transitions=[move('new',None,'кабинет',540),move('new','кабинет','коридор',542)],event_minute=541)
+    for t in p['world_delta']['transitions']:del t['from_location']
     p['world_delta']['promotions']=[dict(id='new',name='Новый',fields={f:'Описание' for f in CARD_FIELDS},evidence=QUOTE)]
     p['world_delta']['events'][0].update(participants=[A,'new'],witnesses=[A,'new'])
     p['world_delta']['knowledge'][0]['actor_id']='new'

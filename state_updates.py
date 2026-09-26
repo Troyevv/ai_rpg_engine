@@ -176,13 +176,14 @@ def apply_world_updates(before, payload, narrative, user_text, turn, kind='turn'
     except json.JSONDecodeError as exc:
         raise StructuralDeltaError(str(exc),'schema_invalid') from exc
     exact_keys(payload, ('scene','choices','world_delta'), ('scene','choices','world_delta'))
-    warnings=[]
-    from pydantic import ValidationError
-    try:
-        WorldDelta.model_validate(payload['world_delta'])
-    except ValidationError as exc:
-        raise StructuralDeltaError(str(exc),'schema_invalid',section='world_delta') from exc
-    original_indices={section:list(range(len(entries))) for section,entries in payload['world_delta'].items() if isinstance(entries,list)}
+    from backend.services.delta_salvage import salvage_missing_evidence, cascade_removed
+    raw=payload['world_delta']
+    original_indices={section:list(range(len(entries))) for section,entries in (raw.items() if isinstance(raw,dict) else []) if isinstance(entries,list)}
+    original=deepcopy(raw)
+    warnings=salvage_missing_evidence(raw,original_indices,discard_unsupported)
+    removed={section:{original[section][w['index']]['id'] for w in warnings if w['section']==section}
+             for section in ('facts','events')}
+    warnings.extend(cascade_removed(raw,before,removed,original_indices))
     iterations=0
     while True:
         # The scene/choice validator is shared with older saves; never pass legacy
@@ -203,14 +204,21 @@ def apply_world_updates(before, payload, narrative, user_text, turn, kind='turn'
             record_scene(state,payload,turn,kind)
             state=apply_delta(state,payload['world_delta'],narrative,user_text,turn,since=interval_start,promotions_prepared=True,before_state=prepared,temporal=temporal)
             audience=sorted(set(audience)|temporal['involved'])
-            return state,choices,payload,audience,warnings
+            corrections=[]
+            for warning in temporal.get('warnings',[]):
+                warning=dict(warning,index=original_indices['transitions'][warning['index']])
+                corrections.append(warning)
+            return state,choices,payload,audience,warnings+corrections
         except SecondaryDeltaError as exc:
             if not discard_unsupported:raise
             iterations+=1
             if iterations>4096:
                 raise StructuralDeltaError('Sanitization iteration limit','sanitization_internal',repairable=False)
             previous=deepcopy(payload['world_delta'])
+            if not exc.path and exc.section in removed:
+                removed[exc.section].add(payload['world_delta'][exc.section][exc.index]['id'])
             warnings.append(sanitize_secondary(payload['world_delta'],exc,original_indices))
+            warnings.extend(cascade_removed(payload['world_delta'],before,removed,original_indices))
             if previous==payload['world_delta']:
                 raise StructuralDeltaError('Sanitization made no progress','sanitization_internal',repairable=False)
 

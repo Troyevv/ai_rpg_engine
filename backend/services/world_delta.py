@@ -35,7 +35,7 @@ class Transition(Record):
     actor_id: str
     minute: int=Field(ge=0,description='Absolute minute inside the completed turn.')
     order: int=Field(default=0,ge=0,description='Order within minute. Events with the same minute/order happen before transitions.')
-    from_location: str|None=Field(description='Exact prior location; null only if unknown before this transition.')
+    from_location: str|None=Field(default=None,description='Optional origin hint for unknown positions. Runtime derives known origins from its timeline; normally omit.')
     to_location: str=Field(min_length=1,max_length=200,pattern=r'\S',description='Destination, not a body movement inside the same room.')
 
 class Event(Record):

@@ -112,3 +112,32 @@ test('repair reasons and sanitization have separate statistics per selected vari
  await expect(dialog.locator('.delta-warnings')).toHaveCount(0);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
 });
+
+test('deterministic evidence salvage and origin correction keep repair rate zero',async({page,request})=>{
+ const selection=await(await request.post('/test/seed')).json();
+ await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selection);
+ await page.goto('/');await page.getByRole('button',{name:'Начать игру',exact:true}).click();
+ await expect(page.locator('.turn')).toHaveCount(1);
+ await page.route(`**/api/saves/${selection.save}/accounting`,async route=>{
+  const response=await route.fetch();const data=await response.json();
+  data.turns[0].warnings=[
+   {type:'sanitized_delta',code:'evidence_missing',section:'events',index:0,field:'evidence',action:'drop_record',reason:'Обязательное evidence отсутствует.'},
+   {type:'sanitized_delta',code:'evidence_unsupported',section:'relationships',index:1,action:'drop_record',reason:'Нет подтверждённой цитаты текущего хода'},
+   {type:'sanitized_delta',code:'transition_from_location_corrected',section:'transitions',index:0,field:'from_location',action:'correct_field',reason:'Использовано каноническое исходное место Runtime.'},
+  ];
+  await route.fulfill({response,json:data});
+ });
+ await diagnostics(page);const dialog=page.getByRole('dialog');
+ await dialog.getByRole('tab',{name:'Производительность',exact:true}).click();
+ await expect(dialog).toContainText('Repair: не выполнялся');
+ await expect(dialog.locator('.diagnostic-history')).toContainText('2 LLM');
+ await dialog.getByText('Статистика extraction · последние 1 ходов',{exact:true}).click();
+ await expect(dialog).toContainText('Repair rate: 0.0%');
+ for(const code of ['evidence_missing','evidence_unsupported','transition_from_location_corrected'])await expect(dialog).toContainText(`${code}: 1`);
+ const warnings=dialog.locator('.delta-warnings');
+ await expect(warnings.locator('p').filter({hasText:'events[0]'})).toContainText('Запись отброшена.');
+ const corrected=warnings.locator('p').filter({hasText:'transitions[0]'});
+ await expect(corrected).toContainText('Использовано каноническое значение.');
+ await expect(corrected).not.toContainText('отброшено');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+});
