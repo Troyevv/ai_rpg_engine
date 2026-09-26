@@ -13,10 +13,14 @@ def simulate(before, state, sequence, context_length, config, generate, cancelle
     from context_builder import build_context
     from state_updates import apply_world_updates
     camera=observe(state,actor_id=candidate['actor_id'],allow_protagonist=True)
+    observed=camera['world']['scenes'][camera['camera']['scene_id']].get('end_minute')
+    interval_start=observed if type(observed) is int and 0<=observed<=current_time(camera) else current_time(camera)
     instruction=('Фоновая симуляция по причине '+candidate['reason']+'. Это не наблюдение игрока. '
                  'Продолжи только эту ситуацию до текущего времени мира; не продвигай глобальные часы. '
                  'Не вводи текущего управляемого персонажа '+str(state.get('controlled_actor_id'))+'. '
-                 'Уже подтверждённый срок может остаться незавершённым. Не создавай события без причины.')
+                 'Уже подтверждённый срок может остаться незавершённым. Не создавай события без причины. '
+                 f'Для этой фоновой симуляции допустимый интервал Event/transition.minute: {interval_start}..{current_time(camera)}. '
+                 'Это развитие от последнего наблюдения сцены до текущих глобальных часов, не откат времени.')
     messages=build_context(camera,[],instruction,'background',context_length,config['max_tokens'],prompts=config.get('_prompts'))
     messages[-1]['content']+='\n'+instruction
     narrative=''.join(generate('world_simulation',messages,config['max_tokens'],config.get('temperature',0.8)))

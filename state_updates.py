@@ -192,8 +192,17 @@ def apply_world_updates(before, payload, narrative, user_text, turn, kind='turn'
             prepared=add_promotions(before,delta['promotions'],narrative,user_text)
             state,choices,_=apply_updates(prepared,{'scene':payload['scene'],'choices':payload['choices']},narrative,user_text,turn,kind)
             state,audience=apply_scene_policy(prepared,state,payload,kind,simulation=simulation)
+            from backend.services.temporal_delta import validate_timeline
+            interval_start=current_time(before)
+            if simulation:
+                observed=prepared['world']['scenes'][prepared['camera']['scene_id']].get('end_minute')
+                if type(observed) is int and 0<=observed<=interval_start:interval_start=observed
+            temporal=validate_timeline(prepared,state,delta,narrative,user_text,since=interval_start)
+            if kind=='background' and before.get('camera',{}).get('scope')!='scene' and before.get('protagonist_id') in temporal['involved']:
+                raise StructuralDeltaError('Закулисье включает основного персонажа','scene_invalid')
             record_scene(state,payload,turn,kind)
-            state=apply_delta(state,payload['world_delta'],narrative,user_text,turn,since=current_time(before),promotions_prepared=True)
+            state=apply_delta(state,payload['world_delta'],narrative,user_text,turn,since=interval_start,promotions_prepared=True,before_state=prepared,temporal=temporal)
+            audience=sorted(set(audience)|temporal['involved'])
             return state,choices,payload,audience,warnings
         except SecondaryDeltaError as exc:
             if not discard_unsupported:raise

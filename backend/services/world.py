@@ -105,7 +105,7 @@ def record_scene(state, changes, sequence, kind):
         c.update(location=meta['location'],scene_id=sid,minute=now)
         # Remove a moved participant from its old live scene, retaining its history.
         for other in world['scenes'].values():
-            if other['id']!=sid and cid in other['participants']:
+            if not other.get('historical') and other['id']!=sid and cid in other['participants']:
                 other['participants'].remove(cid)
                 if not other['participants']:other['status']='ended'
     return sid
@@ -166,7 +166,7 @@ def timeline(state, visibility='player'):
     events=state['world']['events'].values()
     known_events={k.get('source_event_id') for k in state['world']['knowledge'].values() if k['actor_id']==actor and k['status']=='known'}
     rows=[e for e in events if e.get('player_observed')] if visibility=='player' else [e for e in events if actor in e['witnesses'] or e['id'] in known_events]
-    return sorted(rows,key=lambda e:(e['minute'] if e['minute'] is not None else -1,e['id']))
+    return sorted(rows,key=lambda e:(e['minute'] if e['minute'] is not None else -1,e.get('order',0),e['id']))
 
 
 def record_narrative(state, narrative, sequence, observed=True, previous_events=()):
@@ -178,7 +178,7 @@ def record_narrative(state, narrative, sequence, observed=True, previous_events=
         minute=current_time(state),scene_meta=deepcopy(state['scene_meta']),narrative=narrative,
         participants=list(scene['participants']),player_observed=observed,pov_actor_id=state.get('controlled_actor_id'))
     for eid,event in world['events'].items():
-        if eid not in previous_events and event['source_sequence']==sequence and event['scene_id']==scene['id']:
+        if eid not in previous_events and event['source_sequence']==sequence:
             event['source_record_id']=rid
     scene['last_record_id']=rid
     return rid
