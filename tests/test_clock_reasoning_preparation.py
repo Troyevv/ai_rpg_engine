@@ -101,7 +101,12 @@ def test_generated_summary_can_start_game(tmp_path):
     assert repo.preparation_job(jid)['status']=='saved'
     wid=repo.save_world('Мир',repo.workspace(w['id'])['summary']);sid=repo.create_save(wid,'Игра')
     jid=repo.begin_job(sid,'','start',CONFIG)
-    change=result();change['scene']['time']='Пятница 09:00';run(repo,jid,change)
+    from canonical_fixture import canonical
+    change=canonical(result());change['scene']['time']='Пятница 09:00'
+    minute=current_time(repo.get_save(sid)['state'])
+    change['world_delta']['transitions']=[dict(actor_id='character_2',minute=minute,from_location=None,to_location='Кухня',evidence='Персонаж 1 подвигает свободный стул.')]
+    change['world_delta']['events'][0].update(minute=minute,order=1)
+    run(repo,jid,change)
     assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
 
 

@@ -28,7 +28,7 @@ def role_rules(state,kind,extraction=False):
     if kind=='background':
         return (f'\nТип хода: background. Запрещённые участники: protagonist_id={main}. '
                 'Они отсутствуют. choices должен быть пустым массивом. scene описывает ТОЛЬКО закулисную сцену. '
-                'Не меняй их карточки, цели, планы и знания. Носители новых фактов и участники событий — только scene.present_ids. '
+                'Не меняй их карточки, цели, планы и знания. Носители новых фактов и участники событий должны быть подтверждены в момент события. '
                 'Отношения могут описывать отношение присутствующего NPC к отсутствующему, но не реакцию отсутствующего. '
                 'Фиксация основной сцены будет сохранена движком отдельно.')
     return (f'\nРОЛИ ТЕКУЩЕГО ХОДА: protagonist_id={main}; controlled_actor_id={actor}. '
@@ -38,7 +38,7 @@ def role_rules(state,kind,extraction=False):
             'действуют как NPC. Камера следует controlled_actor. choices — 6 действий controlled_actor. '
             'Не меняй его goal. Если переключение POV не сопровождалось переходом, не телепортируй других персонажей. '
             'Знания POV и объективные сведения ведущего разделены. Не раскрывай сведения из director_only как известные POV. '
-            'Носителями нового знания могут быть только свидетели scene.present_ids; события вне их наблюдения не дают знания.')
+            'Носителями нового знания могут быть только свидетели в момент Event; финальный scene.present_ids не описывает весь ход.')
 
 
 def apply_scene_policy(before,after,changes,kind,simulation=False):
@@ -67,13 +67,6 @@ def apply_scene_policy(before,after,changes,kind,simulation=False):
                 raise StructuralDeltaError('Закулисная сцена меняет отсутствующего персонажа.', code='scene_invalid')
         for relation in changes.get('relationships',[]):
             if relation['source_id'] not in audience:
-                raise StructuralDeltaError('Нельзя приписать реакцию отсутствующему NPC.', code='scene_invalid')
-        delta=changes.get('world_delta',{})
-        for change in delta.get('characters',[]):
-            if change['id'] in protected or change['id'] not in audience:
-                raise StructuralDeltaError('Закулисная сцена меняет отсутствующего персонажа.', code='scene_invalid')
-        for change in delta.get('relationships',[]):
-            if change['source_id'] not in audience:
                 raise StructuralDeltaError('Нельзя приписать реакцию отсутствующему NPC.', code='scene_invalid')
         after['last_background_scene']={'scene':after['scene'],'scene_meta':scene}
         after['controlled_actor_id']=None

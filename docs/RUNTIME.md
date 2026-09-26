@@ -128,4 +128,36 @@ are excluded from the denominator and shown as unknown. Secondary warnings have
 `type=sanitized_delta` and stable codes. No semantic dimension mapping or
 additional mandatory LLM calls are introduced. The sanitizer revalidates from
 the original state after every deletion, checks progress, and has a 4096-step
-hard limit. Event-time membership validation remains a separate task.
+hard limit. Event-time membership now uses the temporal contract below.
+
+
+## Intra-turn chronology
+
+`scene` is the final camera snapshot, not a history of presence. Optional
+`world_delta.transitions` describes only location/membership changes:
+`actor_id`, absolute `minute`, `order` (default 0), `from_location`,
+`to_location`, exact `evidence`. Null source is allowed only for unknown prior
+locations. Events have optional `location` and `order`; when transitions exist,
+the event minute is required. Operations replay by minute, order, then events
+before movements at equal coordinates. Two movements of one actor at the same
+coordinate are rejected; array order cannot change their meaning.
+
+The validator starts from the pre-turn character positions. It checks each
+participant/witness at event time, then checks final character locations and
+final camera participants. Departed actors can retain knowledge and receive
+source-backed character/relationship updates. A Character update alone cannot
+prove involvement. Temporal failures remain typed structural errors, with
+section/index/field metadata; they are never hidden by dropping events.
+
+Locations are currently canonical text labels, not a registered location-ID
+catalog. A known position cannot change without a sourced transition. Static
+legacy extractions may omit transitions/order. An imported initial scene with
+no spatial information can be bootstrapped as stationary; known before/after
+snapshots are never unioned. Old saved turns are not rewritten. New transitions
+remain in the saved delta/variant, without a new table or LLM stage.
+
+Events reference immutable historical scene snapshots. Live camera scenes and
+character scene pointers follow final positions; moving a character later must
+not remove them from an event's historical membership. Narrative recordings
+link all new events of their turn, even when the final camera moved elsewhere.
+The same validator runs for ordinary, start, POV, observer and simulated turns.
