@@ -196,3 +196,14 @@ def test_array_order_does_not_change_chronology_or_last_event(db):
     state=apply(before,p)[0]
     assert state['world']['characters'][A]['last_event_id']=='later'
     assert state['world']['characters'][B]['location']=='ординаторская'
+
+def test_live_scene_keeps_director_event_count_without_mutating_snapshots(db):
+    from backend.services.director import Director
+    repo,_,sid=db;before=setup(repo,sid)
+    before['world']['scenes']['office']['start_minute']=480
+    p=payload([A,B]);event=p['world_delta']['events'][0]
+    p['world_delta']['events']=[{**event,'id':f'e{i}','order':i} for i in range(12)]
+    p['world_delta']['knowledge']=[]
+    state=apply(before,p)[0]
+    assert len(state['world']['scenes'][state['camera']['scene_id']]['event_ids'])==12
+    assert 'consider_quiet_scene_end' in Director().plan(state,'turn')['triggers']

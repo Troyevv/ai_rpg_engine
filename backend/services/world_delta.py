@@ -197,6 +197,11 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None, prom
         world['events'][e['id']]=record
         new_events[e['id']]=record
         event_scene['event_ids'].append(e['id'])
+        # Keep live-scene history for Director without treating its current
+        # membership as the historical witness list.
+        live_scene=camera if camera['location']==snapshot['location'] else world['scenes'].get((before_state or state)['camera']['scene_id'])
+        if live_scene and not live_scene.get('historical') and live_scene['location']==snapshot['location']:
+            live_scene['event_ids'].append(e['id'])
         for cid in e['participants']:world['characters'][cid]['last_event_id']=e['id']
     for index,k in enumerate(delta['knowledge']):
         refs([k['actor_id']])

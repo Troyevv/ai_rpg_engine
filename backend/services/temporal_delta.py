@@ -104,7 +104,7 @@ def apply_locations(state, temporal, sequence):
     from backend.services.timeline import current_time
     world=state['world'];now=current_time(state)
     final=world['scenes'][state['camera']['scene_id']]
-    for cid in temporal['involved']:
+    for cid in sorted(temporal['involved']):
         location=temporal['positions'][cid]
         if location is None:continue
         point=world['characters'][cid]
