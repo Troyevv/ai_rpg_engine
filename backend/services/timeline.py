@@ -49,8 +49,6 @@ def advance(before,after,scene,elapsed=None,minimum=0):
             raise StructuralDeltaError('Длительность сцены должна быть целым числом минут от 0 до 10080.', code='invalid_time')
         if value%1440==(now+elapsed)%1440 and not re.search(r'день\s+\d+|'+ '|'.join(DAYS),scene['time'],re.I):
             value=now+elapsed
-        if value not in (now, now+elapsed):
-            raise StructuralDeltaError('Время сцены не совпадает с её длительностью.', code='invalid_time')
         value=now+elapsed
     elif value==now:
         value=now+minimum

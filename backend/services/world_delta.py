@@ -34,7 +34,7 @@ class Fact(Record):
 class Transition(Record):
     actor_id: str
     minute: int|None=Field(default=None,ge=0,description='Optional known time; not required for movement.')
-    order: int|None=Field(default=None,ge=0,description='Relative movement order. Use distinct values for multiple movements of one actor.')
+    order: int|None=Field(default=None,ge=0,description='Optional route order. Distinct off-camera destinations need unambiguous order; final camera positions are derived from scene.')
     from_location: str|None=Field(default=None,description='Deprecated input, ignored by Runtime.')
 
     @staticmethod
@@ -69,8 +69,12 @@ class PlayerEvidence(BaseModel):
     obligations: list[str]|None=Field(default=None,max_length=20,description='Полные цитаты явных обещаний игрока, по одной на новое обязательство.')
 
 class Character(Record):
+    @staticmethod
+    def _schema(schema):
+        schema.get('properties',{}).pop('location',None)
+    model_config=ConfigDict(extra='forbid',strict=True,json_schema_extra=_schema)
     id: str
-    location: str|None=Field(default=None,min_length=1,max_length=200,description="Final location of THIS character, not necessarily the camera. Must agree with transitions.")
+    location: str|None=Field(default=None,min_length=1,max_length=200,description="Deprecated redundant input; ignored. Final State Resolver owns location.")
     situation: str|None=None
     goals: list[str]|None=Field(default=None,max_length=20,description=PLAYER_SOURCE_DESCRIPTION)
     intentions: list[str]|None=Field(default=None,max_length=20,description=PLAYER_SOURCE_DESCRIPTION)
@@ -122,7 +126,7 @@ class Scheduled(Record):
 
 class WorldDelta(BaseModel):
     model_config=ConfigDict(extra='forbid',strict=True)
-    transitions: list[Transition]=Field(default_factory=list,max_length=100,description="Source-backed location changes. actor_id, to_location, evidence; relative order only for multiple movements.")
+    transitions: list[Transition]=Field(default_factory=list,max_length=100,description="Source-backed location changes. actor_id, to_location, evidence. Final camera members need no movement; scene owns their endpoint. Off-camera changes need movement.")
     promotions: list[Promotion]=Field(default_factory=list,max_length=10)
     facts: list[Fact]=Field(default_factory=list,max_length=50)
     events: list[Event]=Field(default_factory=list,max_length=50)
@@ -151,7 +155,7 @@ def add_promotions(state, promotions, narrative, user_text):
     return state
 
 
-def apply_delta(state, payload, narrative, user_text, sequence, since=None, promotions_prepared=False, before_state=None, movement_plan=None):
+def apply_delta(state, payload, narrative, user_text, sequence, since=None, promotions_prepared=False, before_state=None, movement_plan=None, spatial_prepared=False):
     delta=WorldDelta.model_validate(payload).model_dump(exclude_none=True)
     state=deepcopy(state) if promotions_prepared else add_promotions(state,delta['promotions'],narrative,user_text)
     world=state['world']
@@ -160,10 +164,10 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None, prom
     actors=set(world['characters'])
     from backend.services.turn_delta.references import validate_references, require
     from backend.services.turn_delta.provenance import validate_provenance
-    from backend.services.turn_delta.movement import derive_movements
+    from backend.services.turn_delta.resolver import resolve_final_state
     validate_references(state,delta)
     validate_provenance(delta,narrative,user_text)
-    movement_plan=movement_plan or derive_movements(before_state or state,state,delta,since)
+    movement_plan=movement_plan or resolve_final_state(before_state or state,state,delta,since)
     involved=movement_plan['involved']
     now=current_time(state)
     def refs(values):require(set(values)<=actors,'неизвестный персонаж','unknown_character')
@@ -182,7 +186,7 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None, prom
     from backend.services.turn_delta.scene_sync import apply_locations
     new_events=apply_events(state,before_state or state,delta['events'],sequence,since)
     apply_knowledge(world,delta['knowledge'],new_events,KNOWLEDGE_CHANNELS)
-    apply_locations(state,movement_plan,sequence)
+    if not spatial_prepared:apply_locations(state,movement_plan,sequence)
     for index,c in enumerate(delta['characters']):
         refs([c['id']]); require(c['id'] in involved,'персонаж не участвовал в текущем ходе','character_not_involved')
         if c['id']==state['controlled_actor_id']:
@@ -194,7 +198,7 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None, prom
                         else 'Обязательство controlled actor не задано игроком' if field=='obligations'
                         else 'Решение controlled actor не задано игроком')
                     raise SecondaryDeltaError('characters',index,reason,field,c['id'],code='controlled_actor_'+field+'_unsupported')
-        updates={k:v for k,v in c.items() if k not in ('id','evidence','player_evidence')}
+        updates={k:v for k,v in c.items() if k not in ('id','evidence','player_evidence','location')}
         if updates:
             world['characters'][c['id']].update(updates)
             world['characters'][c['id']]['minute']=now

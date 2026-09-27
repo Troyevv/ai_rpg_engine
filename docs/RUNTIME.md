@@ -136,13 +136,15 @@ hard limit. Canonical endpoints follow the Turn Delta contract below.
 Strict endpoints are canonical Before and After WorldState. Between them,
 Extraction supplies sourced events and movements, not a frame-by-frame simulation.
 `turn_delta/references.py` checks IDs; `provenance.py` checks current-turn quotes;
-`movement.py` derives final positions; `events.py` stores event-specific historical
+`resolver.py` resolves final positions; `events.py` stores event-specific historical
 contexts; `knowledge.py` checks Fact → Event → Witness → Knowledge;
 `final_state.py` validates the resulting state before atomic commit.
 
 Movement (`transitions` for compatibility) requires actor_id, to_location, evidence.
-A single movement needs no time/order. Multiple movements of one actor require
+A single movement needs no time/order. Distinct off-camera destinations require
 unique relative order, or complete unambiguous legacy minute/order metadata.
+For final camera members the snapshot determines their endpoint even when the
+intermediate route is incomplete or unordered; Runtime does not invent its history.
 Legacy from_location is accepted but ignored and excluded from generated schema.
 No language-specific movement grammar, location inflection or origin correction.
 
@@ -154,10 +156,19 @@ historical membership. Event references and knowledge paths remain strict.
 
 Involvement is initial/final presence, sourced Event participation/witnessing,
 Movement or promotion. Character/relationship updates alone do not authorize
-arbitrary off-scene edits. Known positions change only through sourced movements.
-Unknown imported initial scenes can initialize stationary participants; sourced
-new promotions may initialize their location from final presence. Neither policy
-permits overwriting a known position or repairing a discarded required movement.
+arbitrary off-scene edits. Final scene owns the final camera location/membership.
+The resolver starts with Before positions, applies sourced movements, then assigns
+scene.location to every final participant. Absent NPCs retain their previous
+position unless their own valid movement changes it. Legacy Character.location is
+ignored and removed from the advertised schema. Missing final-actor movement is
+ordinary DERIVE, never a warning or repair.
+
+RawExtraction normalizes legacy redundant fields before schema/provenance checks.
+CanonicalTurnDelta contains runtime-owned resolved positions. The v2 pipeline uses
+its own scene/choice parser rather than the legacy patch mutator. `scene_sync.py`
+is the sole publisher for live positions, membership and camera identity;
+`record_scene` is only a compatibility facade. `events.py` independently owns
+immutable event snapshots, which are never used as live scenes.
 
 Recovery: DROP unsupported/missing provenance and its known dependencies; DERIVE
 movement origins/final positions; FATAL only for malformed data, invalid references,
@@ -170,3 +181,12 @@ Movement derivations are stored in changes_json, selected with the response vari
 and displayed separately from warnings and repair statistics. Old snapshots remain
 unchanged. The same pipeline supports POV, observer, background and regeneration;
 ordinary successful turns still make two mandatory LLM requests.
+
+The field-by-field ownership and DROP/DERIVE/FATAL audit is in
+[RUNTIME_FAILURE_AUDIT.md](RUNTIME_FAILURE_AUDIT.md). The regression corpus has
+15 reconstructed failure classes, 100 seeded extraction mutations and 25 sequential
+saved turns. These are not production payload captures. Tests measure real request
+rows and zero repair rate for tolerable variations. Malformed arrays, unknown
+mandatory IDs and unresolved off-camera movement ambiguity still fail atomically.
+The shared `assert_world_invariants` gate runs before commit, after simulation,
+and checks immutable history as well as canonical references and live geometry.

@@ -23,7 +23,9 @@ def test_clock_rollover_and_explicit_zero():
     assert scene['time']=='День 8 (Пн) 00:01'
     advance(after,{}, {'time':scene['time']},elapsed=0,minimum=1)
     assert parse_time(label(7*1440+1))==7*1440+1
-    with pytest.raises(ValueError):advance(before,{}, {'time':'День 6 19:00'},elapsed=3)
+    derived={};advance(before,derived, {'time':'День 6 19:00'},elapsed=3)
+    assert derived['world_clock']['minute']==7*1440+1
+    with pytest.raises(ValueError):advance(before,{}, {'time':'День 6 19:00'})
 
 
 def test_repeated_turns_advance_and_regeneration_does_not_double_time(db):

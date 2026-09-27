@@ -87,19 +87,14 @@ def test_event_order_does_not_drive_intermediate_geometry(db,event_order):
     assert apply(before,p)[0]['world']['knowledge'][B+':f']['status']=='known'
 
 @pytest.mark.parametrize('defect,code',[
-    ('final_location','character_location_inconsistent'),('random_npc','character_not_involved'),
-    ('time','temporal_order_invalid'),('same_order','temporal_order_invalid'),
-    ('evidence','character_location_inconsistent')])
+    ('random_npc','character_not_involved'),
+    ('time','temporal_order_invalid'),('same_order','temporal_order_invalid')])
 def test_structural_failures_are_not_sanitized(db,defect,code):
     repo,_,sid=db;before=setup(repo,sid)
     p=payload(transitions=[move(B,'кабинет','коридор')])
-    if defect=='final_location':p['scene']['present_ids']=[A,B]
     if defect=='random_npc':p['world_delta']['characters']=[dict(id=C,emotion='радуется',evidence=QUOTE)]
     if defect=='time':p['world_delta']['transitions'][0]['minute']=539
     if defect=='same_order':p['world_delta']['transitions'].append(move(B,'коридор','кабинет'))
-    if defect=='evidence':
-        p['world_delta']['transitions'][0]['evidence']='Нет такой цитаты'
-        p['world_delta']['characters']=[dict(id=B,location='коридор',evidence=QUOTE)]
     with pytest.raises(StructuralDeltaError) as error:apply(before,p)
     assert error.value.code==code
     assert repo.get_save(sid)['state']==before
@@ -148,18 +143,18 @@ def test_optional_schema_and_stale_prompt_receive_temporal_contract(db):
     assert 'transitions' not in schema.get('required',[])
     assert 'order' not in schema['$defs']['Event'].get('required',[])
     messages=build_context(before,[],QUOTE,'turn',32768,4096,extraction_text=QUOTE,prompts={'state_update_prompt.md':{'content':'Old prompt'}})
-    assert 'КОНЕЧНОЕ состояние камеры' in messages[0]['content']
+    assert 'КОНЕЧНЫЙ snapshot камеры' in messages[0]['content']
 
-def test_final_conflict_rolls_back_whole_job_after_one_repair(db):
-    repo,_,sid=db;before=setup(repo,sid)
+def test_intermediate_movement_does_not_compete_with_final_snapshot(db):
+    repo,_,sid=db;setup(repo,sid)
     p=payload([A,B],transitions=[move(B,'кабинет','коридор',541)],event_minute=542)
     job=repo.begin_job(sid,'','start',CONFIG)
-    assert len(execute(repo,job,p,QUOTE))==3
-    assert repo.get_job(job)['status']=='error'
-    assert repo.get_save(sid)['state']==before and repo.list_turns(sid)==[]
-    reason=json.loads(repo.get_job(job)['repair_diagnostics_json'])[0]
-    assert reason['repair_error_code']=='character_location_inconsistent'
-    assert reason['section']=='scene' and reason['entity']==B
+    assert len(execute(repo,job,p,QUOTE))==2
+    assert repo.get_job(job)['status']=='saved'
+    diag=repo.turn_diagnostics(sid)[0]
+    assert not diag['repairs'] and not diag['warnings']
+    assert repo.get_save(sid)['state']['world']['characters'][B]['location']=='кабинет'
+
 
 def test_promoted_npc_can_arrive_and_leave_before_final_scene(db):
     from backend.services.world import CARD_FIELDS

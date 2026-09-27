@@ -87,28 +87,13 @@ def normalize(original):
 
 
 def record_scene(state, changes, sequence, kind):
-    """Update only observed participants; keep off-camera points and other scenes."""
-    world = state['world']
-    meta = state['scene_meta']
-    participants = meta['present_ids']
-    prior = world['scenes'].get(state.get('camera',{}).get('scene_id'))
-    same = prior and prior['location']==meta['location'] and set(prior['participants'])==set(participants)
-    sid = prior['id'] if same else identity('scene',sequence,meta['location'],sorted(participants))
-    now = current_time(state)
-    scene = world['scenes'].setdefault(sid,dict(id=sid, start_minute=now, event_ids=[]))
-    scene.update(participants=participants,location=meta['location'],end_minute=now,text=state['scene'],status='active')
-    state['camera'] = {'scene_id':sid,'mode':'observer' if kind=='background' else 'actor','scope':state.get('camera',{}).get('scope','world')}
-    if kind=='background':
-        state['controlled_actor_id'] = None
-    for cid in participants:
-        c = world['characters'][cid]
-        c.update(location=meta['location'],scene_id=sid,minute=now)
-        # Remove a moved participant from its old live scene, retaining its history.
-        for other in world['scenes'].values():
-            if not other.get('historical') and other['id']!=sid and cid in other['participants']:
-                other['participants'].remove(cid)
-                if not other['participants']:other['status']='ended'
-    return sid
+    """Compatibility facade; live spatial writes belong to scene_sync only."""
+    from backend.services.turn_delta.scene_sync import apply_locations
+    meta=state['scene_meta'];world=state['world']
+    positions={cid:c.get('location') for cid,c in world['characters'].items()}
+    for cid in meta['present_ids']:positions[cid]=meta['location']
+    return apply_locations(state,dict(positions=positions,involved=set(meta['present_ids']),
+        final_present=meta['present_ids']),sequence,kind)
 
 
 def apply_legacy(state, changes, sequence, kind):

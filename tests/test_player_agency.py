@@ -174,12 +174,11 @@ def test_mixed_secondary_errors_skip_repair_and_preserve_independent_changes(api
     assert warnings==[]
 
 
-@pytest.mark.parametrize('failure',['id','location','type','time','duplicate'])
+@pytest.mark.parametrize('failure',['id','type','time','duplicate'])
 def test_structural_failures_after_recoverable_fields_remain_atomic(db,failure):
     storage,_,sid=db;before=seed(storage,sid)
     p=character_payload({'emotion':'ревнует'});d=p['world_delta'];c=d['characters'][0]
     if failure=='id':d['characters'].append({'id':'missing','situation':'Тут','evidence':NARRATIVE})
-    elif failure=='location':c['location']='Неверное место'
     elif failure=='type':c['goals']='не список'
     elif failure=='time':d['events'][0]['minute']=999999
     elif failure=='duplicate':d['characters'].append(deepcopy(c))

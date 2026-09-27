@@ -97,7 +97,7 @@ def test_discarded_update_does_not_delete_existing_fact(db):
 
 
 @pytest.mark.parametrize('missing',[True,False])
-def test_unsourced_transition_dropped_but_required_movement_still_fatal(db,missing):
+def test_unsourced_transition_dropped_and_final_snapshot_resolves_position(db,missing):
     repo,_,sid=db;before=setup(repo,sid)
     p=payload([A,B],transitions=[move(B,'кабинет','коридор')])
     if missing:del p['world_delta']['transitions'][0]['evidence']
@@ -105,11 +105,12 @@ def test_unsourced_transition_dropped_but_required_movement_still_fatal(db,missi
     after,_,_,_,warnings=apply(before,p)
     assert after['world']['characters'][B]['location']=='кабинет'
     assert warnings[0]['code']==('evidence_missing' if missing else 'evidence_unsupported')
-    p['scene'].update(location='коридор',present_ids=[B])
+    p['scene'].update(location='коридор',present_ids=[A,B])
     job=repo.begin_job(sid,'','start',CONFIG)
-    assert len(execute(repo,job,p,QUOTE))==3
-    assert repo.get_job(job)['status']=='error' and repo.get_save(sid)['state']==before
-    assert not repo.list_turns(sid)
+    assert len(execute(repo,job,p,QUOTE))==2
+    assert repo.get_job(job)['status']=='saved'
+    assert repo.get_save(sid)['state']['world']['characters'][B]['location']=='коридор'
+    assert not repo.turn_diagnostics(sid)[0]['repairs']
 
 
 def test_canonical_schema_stays_strict_and_origin_is_optional():

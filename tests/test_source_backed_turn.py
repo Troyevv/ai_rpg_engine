@@ -65,9 +65,10 @@ def test_relative_movements_need_unambiguous_order_only(db,orders):
         assert after['world']['characters'][A]['location']=='улица'
         assert [d['origin'] for d in saved['derivations']]==['кабинет','коридор','лифт']
     else:
-        with pytest.raises(StructuralDeltaError) as exc:apply(before,p)
-        assert exc.value.code=='temporal_order_invalid'
-        assert repo.get_save(sid)['state']==before
+        after,_,saved,_,warnings=apply(before,p)
+        assert after['world']['characters'][A]['location']=='улица'
+        assert not warnings
+        assert saved['derivations'][-1]['code']=='final_location_derived_from_scene'
 
 
 def test_promoted_final_participant_needs_no_synthetic_transition(db):
@@ -89,14 +90,17 @@ def test_unsupported_event_does_not_grant_remote_edit_authority(db):
     assert exc.value.code=='character_not_involved'
 
 
-def test_missing_movement_cannot_teleport_final_present_actor(db):
-    repo,_,sid=db;before=setup(repo,sid);p=payload([A],location='коридор')
-    p['world_delta']['transitions']=[dict(actor_id=A,to_location='коридор')]
+def test_missing_movement_is_derived_from_final_scene(db):
+    repo,_,sid=db;setup(repo,sid);p=payload([A],location='коридор')
     job=repo.begin_job(sid,'','start',CONFIG)
-    assert len(execute(repo,job,p,QUOTE))==3
-    assert repo.get_job(job)['status']=='error' and repo.get_save(sid)['state']==before
-    assert repo.list_turns(sid)==[]
-    assert json.loads(repo.get_job(job)['repair_diagnostics_json'])[0]['repair_error_code']=='character_location_inconsistent'
+    assert len(execute(repo,job,p,QUOTE))==2
+    assert repo.get_job(job)['status']=='saved'
+    diag=repo.turn_diagnostics(sid)[0]
+    assert not diag['repairs'] and not diag['warnings']
+    assert diag['derivations'][0]['code']=='final_location_derived_from_scene'
+    w=repo.get_save(sid)['state']['world']
+    assert w['characters'][A]['location']=='коридор'
+    assert w['characters'][B]['location']=='кабинет'
 
 
 def test_schema_hides_legacy_origin_and_requires_only_movement_changes():
