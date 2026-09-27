@@ -141,3 +141,23 @@ test('deterministic evidence salvage and origin correction keep repair rate zero
  await expect(corrected).not.toContainText('отброшено');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
 });
+
+test('derived movement positions are separate from dropped records and repair',async({page,request})=>{
+ const selection=await(await request.post('/test/seed')).json();
+ await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selection);
+ await page.goto('/');await page.getByRole('button',{name:'Начать игру',exact:true}).click();
+ await expect(page.locator('.turn')).toHaveCount(1);
+ await page.route(`**/api/saves/${selection.save}/accounting`,async route=>{
+  const response=await route.fetch();const data=await response.json();
+  data.turns[0].derivations=[{section:'transitions',index:0,entity:'Илья',origin:'кабинет',destination:'коридор'}];
+  await route.fulfill({response,json:data});
+ });
+ await diagnostics(page);const dialog=page.getByRole('dialog');
+ await dialog.getByRole('tab',{name:'Производительность',exact:true}).click();
+ await dialog.locator('.delta-derivations summary').click();
+ await expect(dialog.locator('.delta-derivations')).toContainText('Илья: кабинет → коридор');
+ await expect(dialog.locator('.delta-warnings')).toHaveCount(0);
+ await expect(dialog).toContainText('Repair: не выполнялся');
+ await expect(dialog.locator('.diagnostic-history')).toContainText('2 LLM');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+});

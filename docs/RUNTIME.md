@@ -128,63 +128,45 @@ are excluded from the denominator and shown as unknown. Secondary warnings have
 `type=sanitized_delta` and stable codes. No semantic dimension mapping or
 additional mandatory LLM calls are introduced. The sanitizer revalidates from
 the original state after every deletion, checks progress, and has a 4096-step
-hard limit. Event-time membership now uses the temporal contract below.
+hard limit. Canonical endpoints follow the Turn Delta contract below.
 
 
-## Intra-turn chronology
+## Source-backed Turn Delta
 
-`scene` is the final camera snapshot, not a history of presence. Optional
-`world_delta.transitions` describes only location/membership changes:
-`actor_id`, absolute `minute`, `order` (default 0), `to_location`, exact
-`evidence`. Runtime derives the origin at replay time. `from_location` is an
-optional legacy hint, never a replacement for a known canonical position.
-Unknown origins stay unknown until a sourced arrival establishes the destination. Events have optional `location` and `order`; when transitions exist,
-the event minute is required. Operations replay by minute, order, then events
-before movements at equal coordinates. Two movements of one actor at the same
-coordinate are rejected; array order cannot change their meaning.
+Strict endpoints are canonical Before and After WorldState. Between them,
+Extraction supplies sourced events and movements, not a frame-by-frame simulation.
+`turn_delta/references.py` checks IDs; `provenance.py` checks current-turn quotes;
+`movement.py` derives final positions; `events.py` stores event-specific historical
+contexts; `knowledge.py` checks Fact → Event → Witness → Knowledge;
+`final_state.py` validates the resulting state before atomic commit.
 
-The validator starts from the pre-turn character positions. It checks each
-participant/witness at event time, then checks final character locations and
-final camera participants. Departed actors can retain knowledge and receive
-source-backed character/relationship updates. A Character update alone cannot
-prove involvement. Temporal failures remain typed structural errors, with
-section/index/field metadata; they are never hidden by dropping events.
+Movement (`transitions` for compatibility) requires actor_id, to_location, evidence.
+A single movement needs no time/order. Multiple movements of one actor require
+unique relative order, or complete unambiguous legacy minute/order metadata.
+Legacy from_location is accepted but ignored and excluded from generated schema.
+No language-specific movement grammar, location inflection or origin correction.
 
-Locations are currently canonical text labels, not a registered location-ID
-catalog. A known position cannot change without a sourced transition. Static
-legacy extractions may omit transitions/order. An imported initial scene with
-no spatial information can be bootstrapped as stationary; known before/after
-snapshots are never unioned. Old saved turns are not rewritten. New transitions
-remain in the saved delta/variant, without a new table or LLM stage.
+Events need no minute/order/location, even when movements exist. Missing metadata
+stays unknown. Historical scenes contain exactly the Event participants/witnesses,
+not everyone who happens to share a location. Events do not alter final positions.
+The live scene activity index remains available to Director without implying
+historical membership. Event references and knowledge paths remain strict.
 
-Events reference immutable historical scene snapshots. Live camera scenes and
-character scene pointers follow final positions; moving a character later must
-not remove them from an event's historical membership. Narrative recordings
-link all new events of their turn, even when the final camera moved elsewhere.
-The same validator runs for ordinary, start, POV, observer and simulated turns.
+Involvement is initial/final presence, sourced Event participation/witnessing,
+Movement or promotion. Character/relationship updates alone do not authorize
+arbitrary off-scene edits. Known positions change only through sourced movements.
+Unknown imported initial scenes can initialize stationary participants; sourced
+new promotions may initialize their location from final presence. Neither policy
+permits overwriting a known position or repairing a discarded required movement.
 
+Recovery: DROP unsupported/missing provenance and its known dependencies; DERIVE
+movement origins/final positions; FATAL only for malformed data, invalid references,
+ambiguous movement order or contradictory canonical endpoints. After every removal,
+processing restarts from the original state. State applies on a copy, then final
+validation checks scene/character consistency, references and clocks. Canonical
+schema keeps evidence mandatory; raw salvage remains an explicit whitelist.
 
-### Deterministic extraction recovery
-
-Before strict WorldDelta validation, only missing `evidence` errors in existing
-entity updates, facts, events, knowledge, relationships, threads, scheduled events
-and transitions may discard a record. The whole raw delta is checked first: any
-other schema error, including another error in the same record, requires repair.
-Promotions remain structural because they define canonical identities. Evidence
-remains required in the canonical schema. A discarded fact removes only its
-event fact references and dependent knowledge; a discarded event removes dependent
-knowledge/thread/scheduled changes. Unknown references are not treated as discarded
-IDs. Dropping a transition cannot bypass final-position or event-time validation.
-
-A mismatching origin hint is corrected only for an explicit named-actor direct
-movement clause in current-turn evidence (a deliberately narrow Russian grammar).
-Canonical origin and destination must both match; an asserted alternative origin
-mentioned in the turn, compound movement, unsupported grammar or ambiguity requires
-repair. Limited grammatical case variants are not location aliases. With omitted
-origins, ordinary transitions replay directly from Runtime positions. Intermediate
-events, equal-minute ordering and final locations are validated as before.
-
-Warnings `evidence_missing`, `evidence_unsupported`, `dependency_removed` and
-`transition_from_location_corrected` use the existing per-variant deterministic
-diagnostics, without changing repair rate, request accounting or timing. Fatal
-validation never publishes a partial state.
+Movement derivations are stored in changes_json, selected with the response variant
+and displayed separately from warnings and repair statistics. Old snapshots remain
+unchanged. The same pipeline supports POV, observer, background and regeneration;
+ordinary successful turns still make two mandatory LLM requests.

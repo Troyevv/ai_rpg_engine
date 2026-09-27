@@ -166,7 +166,7 @@ def timeline(state, visibility='player'):
     events=state['world']['events'].values()
     known_events={k.get('source_event_id') for k in state['world']['knowledge'].values() if k['actor_id']==actor and k['status']=='known'}
     rows=[e for e in events if e.get('player_observed')] if visibility=='player' else [e for e in events if actor in e['witnesses'] or e['id'] in known_events]
-    return sorted(rows,key=lambda e:(e['minute'] if e['minute'] is not None else -1,e.get('order',0),e['id']))
+    return sorted(rows,key=lambda e:(e['minute'] if e['minute'] is not None else -1,e.get('order') or 0,e['id']))
 
 
 def record_narrative(state, narrative, sequence, observed=True, previous_events=()):

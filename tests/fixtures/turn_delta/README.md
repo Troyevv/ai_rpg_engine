@@ -1,0 +1,1 @@
+Reconstructed minimal fixtures for classes reported in manual testing; not captured production payloads. The exact failing extraction JSON was not supplied. All cases run through Narrative/Extraction mocks and the real commit pipeline.

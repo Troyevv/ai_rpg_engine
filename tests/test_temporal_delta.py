@@ -1,4 +1,4 @@
-"""Event-time presence is not final camera membership, nor before/after union."""
+"""Source-backed events are independent of incomplete intermediate movement metadata."""
 import json
 from copy import deepcopy
 from unittest.mock import patch
@@ -59,49 +59,44 @@ def test_conversation_then_departure_preserves_event_knowledge_and_final_positio
     assert w['characters'][B]['situation']=='Завершила разговор'
     assert w['scenes'][w['characters'][B]['scene_id']]['location']==w['characters'][B]['location']
 
-@pytest.mark.parametrize('arrival,event_time,accepted',[(541,542,True),(542,541,False)])
-def test_arrival_before_or_after_event(db,arrival,event_time,accepted):
+@pytest.mark.parametrize('arrival,event_time',[(541,542),(542,541)])
+def test_incomplete_arrival_metadata_does_not_invalidate_source(db,arrival,event_time):
     repo,_,sid=db;before=setup(repo,sid,[A])
     p=payload([A,B],transitions=[move(B,'коридор','кабинет',arrival)],event_minute=event_time)
     p['world_delta']['events'][0]['participants']=[A]
-    if accepted:assert apply(before,p)[0]['world']['knowledge'][B+':f']['status']=='known'
-    else:
-        with pytest.raises(StructuralDeltaError) as error:apply(before,p)
-        assert error.value.code=='event_witness_not_present'
+    assert apply(before,p)[0]['world']['knowledge'][B+':f']['status']=='known'
 
-def test_departed_witness_is_rejected(db):
+def test_departed_witness_retains_source_backed_knowledge(db):
     repo,_,sid=db;before=setup(repo,sid)
     p=payload(transitions=[move(B,'кабинет','коридор',541)],event_minute=542)
     p['world_delta']['events'][0]['participants']=[A]
-    with pytest.raises(StructuralDeltaError) as error:apply(before,p)
-    assert error.value.code=='event_witness_not_present'
+    assert apply(before,p)[0]['world']['knowledge'][B+':f']['status']=='known'
 
-def test_before_after_union_does_not_prove_meeting(db):
+def test_positions_alone_do_not_create_event_or_knowledge(db):
     repo,_,sid=db;before=setup(repo,sid,[A],observer=True)
     p=payload([B],transitions=[move(A,'кабинет','коридор',541),move(B,'коридор','кабинет',542)],event_minute=542,observer=True)
-    with pytest.raises(StructuralDeltaError):apply(before,p,'background')
+    p['world_delta']['events'][0]['evidence']='Неподтверждённая встреча'
+    state,_,_,_,warnings=apply(before,p,'background')
+    assert 'e' not in state['world']['events'] and B+':f' not in state['world']['knowledge']
+    assert any(w['code']=='evidence_unsupported' for w in warnings)
 
-@pytest.mark.parametrize('event_order,accepted',[(0,True),(2,False)])
-def test_same_minute_order_is_deterministic(db,event_order,accepted):
+@pytest.mark.parametrize('event_order',[0,2])
+def test_event_order_does_not_drive_intermediate_geometry(db,event_order):
     repo,_,sid=db;before=setup(repo,sid)
     p=payload(transitions=[move(B,'кабинет','коридор',540,1)],event_minute=540,event_order=event_order)
-    if accepted:apply(before,p)
-    else:
-        with pytest.raises(StructuralDeltaError):apply(before,p)
+    assert apply(before,p)[0]['world']['knowledge'][B+':f']['status']=='known'
 
 @pytest.mark.parametrize('defect,code',[
     ('final_location','character_location_inconsistent'),('random_npc','character_not_involved'),
-    ('origin','transition_location_invalid'),('time','temporal_order_invalid'),('same_order','temporal_order_invalid'),
-    ('missing_time','temporal_order_invalid'),('evidence','character_location_inconsistent')])
+    ('time','temporal_order_invalid'),('same_order','temporal_order_invalid'),
+    ('evidence','character_location_inconsistent')])
 def test_structural_failures_are_not_sanitized(db,defect,code):
     repo,_,sid=db;before=setup(repo,sid)
     p=payload(transitions=[move(B,'кабинет','коридор')])
     if defect=='final_location':p['scene']['present_ids']=[A,B]
     if defect=='random_npc':p['world_delta']['characters']=[dict(id=C,emotion='радуется',evidence=QUOTE)]
-    if defect=='origin':p['world_delta']['transitions'][0]['from_location']='подвал'
     if defect=='time':p['world_delta']['transitions'][0]['minute']=539
     if defect=='same_order':p['world_delta']['transitions'].append(move(B,'коридор','кабинет'))
-    if defect=='missing_time':del p['world_delta']['events'][0]['minute']
     if defect=='evidence':
         p['world_delta']['transitions'][0]['evidence']='Нет такой цитаты'
         p['world_delta']['characters']=[dict(id=B,location='коридор',evidence=QUOTE)]
@@ -130,7 +125,8 @@ def test_normal_movement_uses_two_calls_and_variant_keeps_own_state(db,kind):
 def test_observer_and_automatic_background_share_temporal_contract(db):
     repo,_,sid=db;state=setup(repo,sid,[B,C],observer=True)
     p=payload([B],transitions=[move(C,'кабинет','коридор')],observer=True)
-    del p['world_delta']['transitions'][0]['from_location']
+    for key in ('from_location','minute','order'):p['world_delta']['transitions'][0].pop(key,None)
+    for key in ('minute','order'):p['world_delta']['events'][0].pop(key,None)
     p['world_delta']['events'][0].update(participants=[B,C],witnesses=[B,C])
     p['world_delta']['knowledge'][0]['actor_id']=C
     assert apply(state,p,'background')[0]['world']['knowledge'][C+':f']['status']=='known'
@@ -154,16 +150,16 @@ def test_optional_schema_and_stale_prompt_receive_temporal_contract(db):
     messages=build_context(before,[],QUOTE,'turn',32768,4096,extraction_text=QUOTE,prompts={'state_update_prompt.md':{'content':'Old prompt'}})
     assert 'КОНЕЧНОЕ состояние камеры' in messages[0]['content']
 
-def test_temporal_failure_rolls_back_whole_job_after_one_repair(db):
+def test_final_conflict_rolls_back_whole_job_after_one_repair(db):
     repo,_,sid=db;before=setup(repo,sid)
-    p=payload(transitions=[move(B,'кабинет','коридор',541)],event_minute=542)
+    p=payload([A,B],transitions=[move(B,'кабинет','коридор',541)],event_minute=542)
     job=repo.begin_job(sid,'','start',CONFIG)
     assert len(execute(repo,job,p,QUOTE))==3
     assert repo.get_job(job)['status']=='error'
     assert repo.get_save(sid)['state']==before and repo.list_turns(sid)==[]
     reason=json.loads(repo.get_job(job)['repair_diagnostics_json'])[0]
-    assert reason['repair_error_code']=='event_participant_not_present'
-    assert reason['section']=='events' and reason['index']==0
+    assert reason['repair_error_code']=='character_location_inconsistent'
+    assert reason['section']=='scene' and reason['entity']==B
 
 def test_promoted_npc_can_arrive_and_leave_before_final_scene(db):
     from backend.services.world import CARD_FIELDS

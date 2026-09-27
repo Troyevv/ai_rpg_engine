@@ -115,7 +115,7 @@ def test_unsourced_transition_dropped_but_required_movement_still_fatal(db,missi
 def test_canonical_schema_stays_strict_and_origin_is_optional():
     schema=WorldDelta.model_json_schema()
     required=schema['$defs']['Transition']['required']
-    assert set(required)=={'actor_id','minute','to_location','evidence'}
+    assert set(required)=={'actor_id','to_location','evidence'}
     for name in ('Fact','Event','Character','Relationship','Knowledge','Thread','Transition'):
         assert 'evidence' in schema['$defs'][name]['required']
     with pytest.raises(ValidationError):WorldDelta.model_validate({'facts':[dict(id='f',text='x')]})
@@ -158,15 +158,16 @@ def correction_setup(repo,sid):
     return state,p
 
 
-def test_safe_origin_correction_and_diagnostics_have_no_repair(db):
+def test_legacy_origin_is_ignored_and_derivation_is_not_repair(db):
     repo,_,sid=db;_,p=correction_setup(repo,sid)
     del p['world_delta']['facts'][0]['evidence']
     p['world_delta']['relationships']=[dict(relation(),evidence='Нет цитаты')]
     calls,diag=run(repo,sid,p,DIRECT)
     counts=Counter(w['code'] for w in diag['warnings'])
-    assert counts['evidence_missing']==counts['evidence_unsupported']==counts['transition_from_location_corrected']==1
+    assert counts['evidence_missing']==counts['evidence_unsupported']==1
+    assert counts['transition_from_location_corrected']==0
     assert len(calls)==2 and not diag['repairs']
-    assert next(w for w in diag['warnings'] if w['code']=='transition_from_location_corrected')['action']=='correct_field'
+    assert diag['derivations'][0]['origin']=='кабинет' and diag['derivations'][0]['destination']=='коридор'
     assert repo.get_save(sid)['state']['world']['characters'][A]['location']=='коридор'
 
 
@@ -174,19 +175,17 @@ def test_safe_origin_correction_and_diagnostics_have_no_repair(db):
     'Илья вышел из кабинета, зашёл в палату, после разговора вышел на улицу.',
     'Илья вышел из палаты на улицу.',
     'Илья покинул помещение.',
-    'Люда выходит из кабинета в коридор.',
+    'Илья направился в коридор.',
 ])
-def test_ambiguous_or_missing_intermediate_movement_requires_repair(db,quote):
+def test_language_and_legacy_origin_do_not_control_movement(db,quote):
     repo,_,sid=db;before,p=correction_setup(repo,sid)
     p['world_delta']['transitions'][0]['from_location']='палата'
     for entries in p['world_delta'].values():
         for item in entries:item['evidence']=quote
-    with pytest.raises(StructuralDeltaError) as exc:
-        apply_world_updates(before,p,quote,'',1,discard_unsupported=True)
-    assert exc.value.code=='transition_location_invalid'
-    job=repo.begin_job(sid,'','start',CONFIG)
-    assert len(execute(repo,job,p,quote))==3
-    assert repo.get_job(job)['status']=='error' and repo.get_save(sid)['state']==before
+    state=apply_world_updates(before,p,quote,'',1,discard_unsupported=True)[0]
+    assert state['world']['characters'][A]['location']=='коридор'
+    calls,diag=run(repo,sid,p,quote)
+    assert len(calls)==2 and not diag['repairs'] and not diag['warnings']
 
 
 def test_correct_origin_legacy_output_accepted(db):
