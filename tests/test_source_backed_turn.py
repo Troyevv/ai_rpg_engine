@@ -145,3 +145,15 @@ def test_omitted_event_time_survives_pov_and_next_turn(db):
     final=apply_world_updates(after,next_p,QUOTE,'',2,'turn',discard_unsupported=True)[0]
     assert final['world']['scenes'][snapshot['id']]==snapshot
     assert final['controlled_actor_id']==B and final['world']['characters'][B]['location']=='кабинет'
+
+
+def test_unknown_event_minute_keeps_current_turn_recency_without_inventing_time(db):
+    from backend.services.relevance import rank
+    from backend.services.world import timeline
+    repo,_,sid=db;before=setup(repo,sid);p=payload([A,B])
+    p['world_delta']['events'][0].pop('minute')
+    after=apply(before,p)[0];event=after['world']['events']['e']
+    after['world']['events']['old']=dict(event,id='old',minute=1,recorded_minute=1)
+    assert event['minute'] is None and event['recorded_minute']==543
+    assert rank(after,'')['events']['e']>rank(after,'')['events']['old']
+    assert [e['id'] for e in timeline(after)]==['old','e']
