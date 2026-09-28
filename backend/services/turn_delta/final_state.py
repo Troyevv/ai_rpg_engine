@@ -19,7 +19,7 @@ def validate_final_state(before, state, plan):
         c=world['characters'][cid]
         require(c['location']==camera['location'] and c['scene_id']==camera['id'],'конечная сцена противоречит персонажу','character_location_inconsistent',entity=cid)
     for cid,c in world['characters'].items():
-        if cid in plan['involved']:require(c.get('location')==plan['positions'][cid],'позиция не совпадает с результатом resolver','character_location_inconsistent',entity=cid)
+        if cid in plan.get('spatial_actors',plan['involved']):require(c.get('location')==plan['positions'][cid],'позиция не совпадает с результатом resolver','character_location_inconsistent',entity=cid)
         sid=c.get('scene_id')
         if sid:
             require(sid in scenes,'неизвестная сцена персонажа')

@@ -5,6 +5,7 @@ import json
 import random
 import pytest
 from test_engine import db, CONFIG
+from test_api import api
 from test_player_agency import execute
 from test_temporal_delta import setup, payload, A, B, C, QUOTE
 from backend.services.turn_delta.final_state import assert_world_invariants
@@ -167,3 +168,48 @@ def test_invariant_gate_rejects_corrupted_canonical_state(db,defect):
     if defect=='history':w['scenes'][w['events']['e']['scene_id']]['location']='rewritten'
     if defect=='clock':state['world_clock']['minute']-=1
     with pytest.raises(StructuralDeltaError):assert_world_invariants(state,before)
+
+
+def test_confirmed_draft_first_turn_preserves_departed_initial_member(api):
+    from test_draft_world import make
+    from test_engine import result, NARRATIVE
+    from canonical_fixture import canonical
+    client,app=api;path,draft=make(client)
+    response=client.post(path+'/confirm',json={'revision':draft['revision'],'version_id':draft['version_id']})
+    assert response.status_code==200,response.text
+    repo=app.state.repository;sid=response.json()['save'];before=repo.get_save(sid)['state']
+    assert before['world']['characters'][C]['location'] is None
+    job=repo.begin_job(sid,'','start',CONFIG)
+    assert len(execute(repo,job,canonical(result()),NARRATIVE))==2
+    assert repo.get_job(job)['status']=='saved',repo.get_job(job)['error']
+    after=repo.get_save(sid)['state'];assert_world_invariants(after,before)
+    assert after['world']['characters'][C]['location']=='Кухня'
+    assert C not in after['world']['scenes'][after['camera']['scene_id']]['participants']
+    diag=repo.turn_diagnostics(sid)[0]
+    assert not diag['repairs'] and not diag['warnings']
+    assert any(d['code']=='initial_location_derived_from_scene' and d['entity']==C for d in diag['derivations'])
+
+
+def test_ambiguous_initial_missing_coordinate_remains_fatal(db):
+    from state_updates import apply_world_updates
+    from backend.services.world_delta_errors import StructuralDeltaError
+    repo,_,sid=db;before=setup(repo,sid)
+    before['world']['characters'][B]['location']=None
+    before['world']['scenes']['conflict']=dict(before['world']['scenes']['office'],id='conflict',location='other',participants=[B])
+    with pytest.raises(StructuralDeltaError,match='исходное место'):
+        apply_world_updates(before,payload([A]),QUOTE,'',1,discard_unsupported=True)
+
+
+def test_coordinate_derivation_does_not_grant_remote_edit_or_audience(db):
+    from state_updates import apply_world_updates
+    from backend.services.world_delta_errors import StructuralDeltaError
+    repo,_,sid=db;before=setup(repo,sid)
+    before['world']['characters'][C].update(location=None,scene_id=None)
+    before['world']['scenes']['remote']=dict(before['world']['scenes']['office'],id='remote',location='other',participants=[C])
+    p=payload([A,B])
+    after,_,_,audience,_=apply_world_updates(before,p,QUOTE,'',1,discard_unsupported=True)
+    assert_world_invariants(after,before)
+    assert after['world']['characters'][C]['location']=='other' and C not in audience
+    p['world_delta']['characters']=[dict(id=C,situation='Неподтверждённое участие',evidence=QUOTE)]
+    with pytest.raises(StructuralDeltaError,match='не участвовал'):
+        apply_world_updates(before,p,QUOTE,'',1,discard_unsupported=True)

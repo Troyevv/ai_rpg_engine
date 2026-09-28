@@ -103,3 +103,17 @@ Final-scene actors do not need complete routes. For them unordered movements can
 ## Verification plan
 
 15 named reconstructed failure fixtures (not production captures), 100 deterministic payload mutations, structural-negative cases, and 25 successive saved turns. Verify real request count, repair_rate=0 for tolerable variations, warnings vs derivations, immutable historical snapshots, complete knowledge paths, off-camera preservation and canonical graph invariants after each commit. Update obsolete fatal expectations instead of preserving the old architecture through tests.
+
+## Additional finding from browser integration
+
+The draft-to-first-turn path can provide known live membership with null redundant
+character coordinates. This is DERIVE, not a spatial conflict: resolve an omitted
+Before coordinate from its unique known live-scene location before applying any
+movement or final snapshot. Two distinct source locations are FATAL ambiguity.
+This uses the same resolver/publisher, including off-camera actors; no fallback
+validator or second spatial writer is introduced. Covered through draft confirmation
+and the real saved first-turn pipeline; the leaving member keeps the known origin.
+
+Coordinate normalization does not grant narrative participation, audience access or
+authority to edit an off-camera actor. The resolver tracks spatial normalization
+separately from source-backed turn involvement.

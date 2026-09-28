@@ -15,7 +15,7 @@ def apply_locations(state, movement_plan, sequence, kind=None):
         if kind=='background':state['controlled_actor_id']=None
     else:
         final=world['scenes'][state['camera']['scene_id']]
-    for cid in sorted(movement_plan['involved']):
+    for cid in sorted(movement_plan.get('spatial_actors',movement_plan['involved'])):
         location=movement_plan['positions'][cid]
         if location is None:continue
         point=world['characters'][cid]

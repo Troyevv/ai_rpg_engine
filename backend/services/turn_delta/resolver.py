@@ -13,7 +13,19 @@ def resolve_final_state(before, after, delta, since=None):
     positions={cid:c.get('location') for cid,c in actors.items()}
     involved=set(initial['participants'])|present|{p['id'] for p in delta['promotions']}
     for e in delta['events']:involved.update(e['participants']+e['witnesses'])
-    groups=defaultdict(list);derivations=[]
+    groups=defaultdict(list);derivations=[];normalized=set()
+    # Imported/draft snapshots may omit redundant character coordinates. A known
+    # Before live membership supplies those coordinates without moving the actor.
+    for cid in sorted(actors):
+        if positions[cid] is not None:continue
+        locations={s['location'] for s in world['scenes'].values()
+                   if not s.get('historical') and cid in s['participants']
+                   and s.get('location') not in (None,'','Не указано')}
+        require(len(locations)<=1,'неоднозначное исходное место персонажа','character_location_inconsistent',entity=cid)
+        if locations:
+            positions[cid]=next(iter(locations));normalized.add(cid)
+            derivations.append(dict(section='scene',entity=cid,code='initial_location_derived_from_scene',
+                origin=None,destination=positions[cid]))
     start=current_time(before) if since is None else since
     for i,m in enumerate(delta['transitions']):
         if 'minute' in m:require(start<=m['minute']<=current_time(after),'перемещение вне интервала хода','temporal_order_invalid',section='transitions',index=i)
@@ -44,5 +56,5 @@ def resolve_final_state(before, after, delta, since=None):
         positions[cid]=final['location']
     for i,c in enumerate(delta['characters']):
         require(c['id'] in involved,'персонаж не участвовал в текущем ходе','character_not_involved',section='characters',index=i)
-    return dict(positions=positions,involved=involved,derivations=derivations,
+    return dict(positions=positions,involved=involved,spatial_actors=involved|normalized,derivations=derivations,
                 final_location=final['location'],final_present=sorted(present))
