@@ -210,6 +210,8 @@ def test_coordinate_derivation_does_not_grant_remote_edit_or_audience(db):
     after,_,_,audience,_=apply_world_updates(before,p,QUOTE,'',1,discard_unsupported=True)
     assert_world_invariants(after,before)
     assert after['world']['characters'][C]['location']=='other' and C not in audience
+    assert after['world']['scenes']['remote']['end_minute']==before['world']['scenes']['remote']['end_minute']
+    assert after['world']['characters'][C]['minute']==before['world']['characters'][C]['minute']
     p['world_delta']['characters']=[dict(id=C,situation='Неподтверждённое участие',evidence=QUOTE)]
     with pytest.raises(StructuralDeltaError,match='не участвовал'):
         apply_world_updates(before,p,QUOTE,'',1,discard_unsupported=True)

@@ -116,4 +116,5 @@ and the real saved first-turn pipeline; the leaving member keeps the known origi
 
 Coordinate normalization does not grant narrative participation, audience access or
 authority to edit an off-camera actor. The resolver tracks spatial normalization
-separately from source-backed turn involvement.
+separately from source-backed turn involvement. It also preserves the observation
+time of unrelated actors/scenes, so normalization cannot postpone background simulation.

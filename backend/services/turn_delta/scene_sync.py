@@ -31,6 +31,8 @@ def apply_locations(state, movement_plan, sequence, kind=None):
             if not other.get('historical') and other['id']!=scene['id'] and cid in other['participants']:
                 other['participants'].remove(cid)
                 if not other['participants']:other['status']='ended'
-        scene['status']='active';scene['end_minute']=now
-        point.update(location=location,scene_id=scene['id'],minute=now)
+        point.update(location=location,scene_id=scene['id'])
+        if cid in movement_plan['involved']:
+            scene['status']='active';scene['end_minute']=now
+            point['minute']=now
     return final['id']
