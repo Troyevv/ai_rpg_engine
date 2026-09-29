@@ -52,5 +52,7 @@ def test_saved_current_corruption_is_rejected_before_paid_request(db):
     repo,_,sid=db;state=repo.get_snapshot(sid)
     state['world_state']['characters']['character_1']['location_id']='missing'
     with repo.connect() as conn:conn.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(state),sid))
+    with pytest.raises(StructuralDeltaError):repo.get_snapshot(sid)
+    with pytest.raises(StructuralDeltaError):repo.get_save(sid)
     with pytest.raises(StructuralDeltaError):repo.begin_job(sid,'','start',CONFIG)
     assert repo.latest_job(sid) is None

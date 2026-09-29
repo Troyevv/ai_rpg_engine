@@ -122,6 +122,8 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             from backend.runtime_v3.selectors import ui_view
             from backend.runtime_v3.repository import read_history
             snapshot=json.loads(result.pop('state_json'))
+            from backend.runtime_v3.models import assert_world_state_v3_invariants
+            assert_world_state_v3_invariants(snapshot['world_state'])
             history,warnings=read_history(db,snapshot.get('history_head'))
             result['state']=ui_view(snapshot,history)
             result['history_warnings']=warnings
@@ -163,4 +165,7 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
         with self.connect() as db:
             row=db.execute('SELECT state_json FROM saves WHERE id=?',(save_id,)).fetchone()
             if not row:raise ValueError('Прохождение не найдено.')
-            return json.loads(row[0])
+            snapshot=json.loads(row[0])
+            from backend.runtime_v3.models import assert_world_state_v3_invariants
+            assert_world_state_v3_invariants(snapshot['world_state'])
+            return snapshot

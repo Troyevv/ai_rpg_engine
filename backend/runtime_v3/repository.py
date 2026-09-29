@@ -106,4 +106,7 @@ def migrate_database(storage):
                 if table=='response_variants' and row['memory_before_json']:
                     snapshot,_=migrate_snapshot(db,json.loads(row['memory_before_json']))
                     db.execute('UPDATE response_variants SET memory_before_json=? WHERE rowid=?',(json.dumps(snapshot,ensure_ascii=False),row['migration_row']))
+        from backend.repositories.living_world import project
+        for row in db.execute('SELECT id,state_json FROM saves').fetchall():
+            project(db,row['id'],json.loads(row['state_json']))
         db.execute("INSERT INTO schema_migrations(name) VALUES('runtime_v3')")
