@@ -42,8 +42,16 @@ def stream(**kwargs):
         block=next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only'))
         state=json.loads(block.split('\n',1)[1]);camera=state['camera']
         observer=camera['mode']=='observer'
+        task=json.loads(next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод')).split('\n',1)[1])
         present=camera['present_character_ids']
-        payload=dict(final_scene=dict(location_id=camera['location_id'],
+        location_id=camera['location_id'];locations=[]
+        if task['kind']=='start' or (observer and location_id is None):
+            from backend.runtime_v3.models import identity
+            place='Подвал' if observer else 'Кухня'
+            location_id=identity('location',place.casefold())
+            present=['character_3','character_4'] if observer and 'character_3' in present else present if observer else ['character_1','character_2']
+            if location_id not in state['locations']:locations=[dict(id=location_id,name=place,evidence=SECRET if observer else NARRATIVE)]
+        payload=dict(locations=locations,final_scene=dict(location_id=location_id,
             present_character_ids=present,situation='Тайная встреча.' if observer else 'Разговор на кухне.',elapsed_minutes=1),
             choices=[] if observer else [dict(action='Действие '+str(i),speech='Реплика '+str(i)) for i in range(6)])
         evidence=SECRET if observer else 'Садись, поговорим'

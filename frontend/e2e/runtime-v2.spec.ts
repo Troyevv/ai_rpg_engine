@@ -79,7 +79,7 @@ test('diagnostic tabs use persisted turn timing and requests; old turns stay rea
  await diagnostics(page);await dialog.getByRole('tab',{name:'Производительность',exact:true}).click();
  await expect(dialog).toContainText('Статистика времени для этого хода не сохранена');
  await expect(dialog.locator('.delta-warnings')).toContainText('knowledge[2]');
- await expect(dialog.locator('.delta-warnings')).toContainText('Остальной WorldDelta применён');
+ await expect(dialog.locator('.delta-warnings')).toContainText('Остальные изменения применены');
  await expect(dialog.locator('.diagnostic-history')).toContainText('⚠ 1');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
 });
