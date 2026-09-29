@@ -1,0 +1,511 @@
+.tt-shell {
+  height: 100dvh;
+  overflow: auto;
+  background: var(--bg);
+  color: var(--text);
+  font:
+    15px/1.6 system-ui,
+    sans-serif;
+}
+.tt-shell * {
+  box-sizing: border-box;
+}
+.tt-shell button,
+.tt-shell select,
+.tt-shell input,
+.tt-shell textarea {
+  font: inherit;
+}
+.tt-shell button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #ffffff24;
+  border-radius: 9px;
+  background: #ffffff08;
+  padding: 8px 13px;
+  cursor: pointer;
+  color: inherit;
+}
+.tt-shell button:hover:not(:disabled) {
+  background: #bda47a22;
+  border-color: #bda47a88;
+}
+.tt-shell button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.tt-shell button:focus-visible,
+.tt-shell input:focus-visible,
+.tt-shell textarea:focus-visible,
+.tt-shell select:focus-visible {
+  outline: 2px solid #c8b486;
+  outline-offset: 3px;
+}
+.tt-shell h1 {
+  font-family: Georgia, serif;
+  font-size: 30px;
+  line-height: 1.25;
+  margin: 10px 0 15px;
+}
+.tt-shell h2 {
+  font-size: 18px;
+  margin: 10px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tt-shell h3 {
+  font-size: 16px;
+  margin-top: 22px;
+}
+.tt-shell p {
+  margin: 10px 0;
+}
+.tt-shell small,
+.tt-note {
+  opacity: 0.65;
+}
+.tt-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg);
+  height: 74px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 30px;
+  border-bottom: 1px solid #ffffff14;
+}
+.tt-header > div {
+  text-align: center;
+}
+.tt-header small {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+.tt-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 16px 30px;
+  max-width: 1500px;
+  margin: auto;
+}
+.tt-toolbar select {
+  max-width: 340px;
+  min-width: 0;
+  flex: 1;
+}
+.tt-shell select,
+.tt-shell input:not([type="checkbox"]),
+.tt-shell textarea {
+  padding: 10px 12px;
+  background: #131719;
+  color: #edece7;
+  border: 1px solid #ffffff30;
+  border-radius: 8px;
+  width: 100%;
+}
+.tt-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.tt-shell input[type="checkbox"] {
+  accent-color: #bda47a;
+}
+.tt-tabs {
+  display: flex;
+  gap: 5px;
+  padding: 0 30px 15px;
+  max-width: 1500px;
+  margin: auto;
+  border-bottom: 1px solid #ffffff14;
+}
+.tt-tabs button[aria-current],
+.tt-sheet-tabs button[aria-current] {
+  color: #dbc99f;
+  border-color: #bda47a80;
+  background: #bda47a18;
+}
+.tt-layout {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr) 240px;
+  gap: 24px;
+  max-width: 1500px;
+  margin: auto;
+  padding: 24px 30px 50px;
+  align-items: start;
+}
+.tt-main {
+  min-width: 0;
+}
+.tt-panel {
+  background: #ffffff04;
+  border: 1px solid #ffffff14;
+  border-radius: 14px;
+  padding: 22px;
+}
+.tt-party,
+.tt-stats {
+  position: sticky;
+  top: 16px;
+}
+.tt-member {
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-start !important;
+  text-align: left;
+  margin: 8px 0;
+  gap: 3px !important;
+}
+.tt-member span {
+  font-size: 12px;
+  opacity: 0.75;
+}
+.tt-member progress {
+  width: 100%;
+  height: 5px;
+  accent-color: #8ba58d;
+  margin: 8px 0;
+}
+.tt-note {
+  font-size: 12px;
+}
+.tt-eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #bda47a;
+}
+.tt-scene {
+  padding: 8px 0 20px;
+  border-bottom: 1px solid #ffffff14;
+}
+.tt-scene p {
+  opacity: 0.6;
+}
+.tt-story article {
+  padding: 24px 0;
+  border-bottom: 1px solid #ffffff12;
+}
+.tt-story article > p {
+  white-space: pre-wrap;
+  font:
+    18px/1.8 Georgia,
+    serif;
+}
+.tt-player-text {
+  font: 12px/1.6 system-ui;
+  color: #bda47a;
+  margin-bottom: 15px;
+}
+.tt-roll-result {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  background: #ffffff06;
+  border-radius: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+.tt-roll-result strong {
+  margin-left: auto;
+  font-size: 20px;
+  color: #dbc99f;
+}
+.tt-roll-card {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 20px 0;
+  padding: 24px;
+  border: 1px solid #bda47a88;
+  border-radius: 14px;
+  background: #bda47a12;
+}
+.tt-roll-card > div {
+  flex: 1;
+}
+.tt-roll-card h2 {
+  margin: 2px 0;
+}
+.tt-shell .tt-primary {
+  background: #c0ab7e;
+  color: #171c1c;
+  border-color: #c0ab7e;
+  font-weight: 650;
+}
+.tt-encounter {
+  margin: 20px 0;
+  padding: 18px;
+  border: 1px solid #b671514d;
+  border-radius: 12px;
+  background: #b671510c;
+}
+.tt-order {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+}
+.tt-order span {
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid #ffffff18;
+}
+.tt-order .active {
+  border-color: #bda47a;
+  color: #dbc99f;
+}
+.tt-encounter p,
+.tt-encounter small {
+  font-size: 12px;
+}
+.tt-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 20px 0;
+}
+.tt-actions button {
+  font-size: 12px;
+}
+.tt-compose {
+  padding: 18px;
+  background: #ffffff05;
+  border: 1px solid #ffffff1c;
+  border-radius: 14px;
+}
+.tt-compose label {
+  font-size: 12px;
+  display: block;
+  margin-bottom: 8px;
+}
+.tt-compose textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+.tt-compose > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+.tt-compose small {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.tt-rollback {
+  margin-top: 16px;
+  opacity: 0.65;
+  font-size: 12px !important;
+}
+.tt-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+}
+.tt-stat-grid > div {
+  border: 1px solid #ffffff16;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  padding: 15px;
+}
+.tt-stat-grid strong {
+  font:
+    26px Georgia,
+    serif;
+}
+.tt-stat-grid small {
+  font-size: 11px;
+}
+.tt-sheet .tt-stat-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.tt-sheet-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 20px 0;
+}
+.tt-sheet-tabs button {
+  font-size: 12px;
+}
+.tt-wizard {
+  max-width: 720px;
+  margin: 25px auto 60px;
+  padding: 35px;
+}
+.tt-wizard label:not(.tt-toggle) {
+  display: block;
+  margin: 20px 0;
+}
+.tt-wizard input,
+.tt-wizard textarea {
+  display: block;
+  margin-top: 8px;
+}
+.tt-wizard textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+.tt-wizard footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 35px;
+  gap: 15px;
+}
+.tt-steps {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  opacity: 0.65;
+  margin: 20px 0 30px;
+}
+.tt-steps .active {
+  color: #dbc99f;
+  opacity: 1;
+}
+.tt-empty {
+  text-align: center;
+  max-width: 580px;
+  margin: 12vh auto;
+  padding: 25px;
+}
+.tt-empty > svg {
+  margin: auto;
+  color: #bda47a;
+}
+.tt-empty p {
+  opacity: 0.65;
+  margin: 20px 0 30px;
+}
+.tt-error {
+  padding: 14px 20px;
+  background: #783a332b;
+  border: 1px solid #bd675970;
+  border-radius: 10px;
+  max-width: 1000px;
+  margin: 10px auto;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+}
+.tt-panel details {
+  border-bottom: 1px solid #ffffff18;
+  padding: 12px 0;
+}
+.tt-panel summary {
+  cursor: pointer;
+}
+.tt-panel li {
+  margin-left: 20px;
+}
+.tt-panel p {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 1100px) {
+  .tt-layout {
+    grid-template-columns: 190px minmax(0, 1fr);
+    gap: 18px;
+  }
+  .tt-stats {
+    display: none;
+  }
+}
+@media (max-width: 767px) {
+  .tt-header {
+    height: 64px;
+    padding: 10px 14px;
+  }
+  .tt-header > button span {
+    display: none;
+  }
+  .tt-toolbar {
+    padding: 12px;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .tt-toolbar select {
+    flex-basis: 55%;
+    font-size: 13px;
+  }
+  .tt-toolbar button {
+    font-size: 12px;
+    padding: 9px;
+  }
+  .tt-toggle {
+    font-size: 12px;
+  }
+  .tt-tabs {
+    padding: 0 10px 10px;
+    gap: 4px;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .tt-tabs button {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+  .tt-layout {
+    display: block;
+    padding: 16px 14px 40px;
+  }
+  .tt-party,
+  .tt-stats {
+    display: none;
+  }
+  .tt-shell h1 {
+    font-size: 26px;
+  }
+  .tt-story article > p {
+    font-size: 17px;
+  }
+  .tt-roll-card {
+    padding: 18px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .tt-roll-card > button {
+    width: 100%;
+  }
+  .tt-roll-card > svg {
+    width: 25px;
+  }
+  .tt-wizard {
+    margin: 15px 12px 40px;
+    padding: 22px;
+  }
+  .tt-error {
+    margin: 10px 12px;
+    font-size: 13px;
+  }
+  .tt-compose > div {
+    align-items: flex-end;
+  }
+  .tt-sheet .tt-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .tt-panel {
+    padding: 18px;
+  }
+  .tt-encounter h2 {
+    font-size: 15px;
+  }
+  .tt-empty {
+    margin-top: 7vh;
+  }
+}

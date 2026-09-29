@@ -21,10 +21,13 @@ import { Inspector, type Panel } from "./Inspector";
 import { Library } from "./Library";
 import { WorldWorkshop } from "./WorldWorkshop";
 import { Game } from "./Game";
+import { Tabletop } from "./Tabletop";
 
 import {useMobile,useMobileViewport,MobileNavigation} from './mobile';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from './components/ui/dialog';
 export default function App() {
+  const [gameMode,setGameMode]=useState(()=>localStorage.getItem('game-mode')||'narrative');
+  const changeMode=(mode:string)=>{setGameMode(mode);localStorage.setItem('game-mode',mode);};
   const mobile=useMobile();useMobileViewport(mobile);
   const [mobileMenu,setMobileMenu]=useState(false);
   const [branches,setBranches]=useState(false);
@@ -126,6 +129,7 @@ export default function App() {
     setCharacter(id);
     inspect("Персонажи");
   };
+  if(gameMode==='tabletop')return <ThemeProvider world={null}><ThemedToaster/><Tabletop onBack={()=>changeMode('narrative')} onSettings={()=>setSettings(true)} prefs={prefs} apiKey={apiKey}/><Settings open={settings} onOpenChange={setSettings} value={prefs} save={async p=>{await api(`/settings/${profile}`,p,'PUT');setPrefs(p);}} apiKey={apiKey} setApiKey={setApiKey}/></ThemeProvider>;
   return (
     <ThemeProvider world={world}><div className={`app-shell ${reading ? "reading" : ""}`}>
       <ThemedToaster />
@@ -173,6 +177,7 @@ export default function App() {
       </nav>}
       <div className="app-main">
         <header className="topbar">
+          <Button variant="outline" size="sm" aria-label="Настольная RPG" onClick={()=>changeMode("tabletop")}>{mobile?"RPG":"Настольная RPG"}</Button>
           <button className="breadcrumb" onClick={() => setLibrary(true)}>
             <LibraryIcon size={17} />
             <span>

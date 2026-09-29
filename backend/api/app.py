@@ -426,6 +426,9 @@ def create_app(db_path=None, recover=True):
     from backend.api.drafts import install
     install(app,repo,preparation,credentials,job)
 
+    from backend.tabletop.api import install as install_tabletop
+    install_tabletop(app, repo, credentials)
+
     dist = ROOT / 'frontend' / 'dist'
     if (dist / 'assets').is_dir():
         app.mount('/assets', StaticFiles(directory=dist / 'assets'), name='assets')
