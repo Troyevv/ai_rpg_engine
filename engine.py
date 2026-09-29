@@ -8,12 +8,12 @@ import time
 
 from context_builder import build_context, describe_context, estimate
 from llm import chat_stream, find_loaded_model, deepseek_key, PROVIDERS
-from state_updates import apply_world_updates
+from backend.runtime_v3.resolver import StateResolver
 from storage import Storage
 from backend.services.usage import tracked_stream
 from backend.services.memory import compact
 from backend.services.memory_compactor import output_budget
-from backend.services.pov import apply_scene_policy
+
 
 from backend.services.coordinator import LOCAL_MODEL_LOCK, model_lease
 
@@ -120,14 +120,18 @@ def run_job(path, job_id, handle):
                     raise ValueError('Выбранная модель не загружена. Загрузи её в настройках игры.')
                 actual_context = model.get('config', {}).get('context_length') or config['context_length']
                 context = min(int(actual_context), config['context_length'])
-            from backend.services.world import normalize, record_narrative, compatibility_view
-            before = normalize(json.loads(job['memory_before_json'] or job['before_json']))
+            before = json.loads(job['memory_before_json'] or job['before_json'])
+            from backend.runtime_v3.models import assert_world_state_v3_invariants
+            assert_world_state_v3_invariants(before['world_state'])
             if job['kind']=='pov' and not job['memory_before_json']:
-                from backend.services.pov import transition
+                from backend.runtime_v3.camera import transition
                 before=transition(before,config['actor_id'],config.get('source_node_id'))
             if job['kind']=='background' and not job['memory_before_json']:
-                from backend.services.director import observe
+                from backend.runtime_v3.camera import observe
                 before=observe(before,config.get('camera_actor_id'),config.get('camera_scene_id'),config.get('camera_direct',False))
+            from backend.runtime_v3.repository import read_history
+            with storage.connect() as db:
+                world_history,history_audit=read_history(db,before.get('history_head'))
             history = storage.list_turns(job['save_id'])
             if job['replaces_id'] is not None:
                 target = next(t for t in history if t['id'] == job['replaces_id'])
@@ -161,7 +165,7 @@ def run_job(path, job_id, handle):
                         timings['memory_compaction']=time.perf_counter()-stage_started
                     if handle.cancelled.is_set():
                         return
-                    messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'))
+                    messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
                     storage.save_context(job_id,messages,before)
                 last_write = 0.0
                 stage_started=time.perf_counter()
@@ -185,7 +189,7 @@ def run_job(path, job_id, handle):
                 storage.job_progress(job_id, 'extracting')
                 messages = build_context(before, history, job['user_text'], job['kind'], context,
                                          config['update_tokens'], extraction_text=narrative,
-                                         validation_feedback=feedback, recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'))
+                                         validation_feedback=feedback, recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
                 stage_started=time.perf_counter()
                 result = ''.join(generate('extraction' if attempt==0 else 'extraction_repair',messages,config['update_tokens'],0.1,
                                           response_format={'type':'json_object'}))
@@ -195,8 +199,19 @@ def run_job(path, job_id, handle):
                 storage.job_progress(job_id, 'validating')
                 stage_started=time.perf_counter()
                 try:
-                    state, choices, changes, audience, warnings = apply_world_updates(
-                        before,result,narrative,job['user_text'],sequence,job['kind'],discard_unsupported=True)
+                    from copy import deepcopy
+                    from dataclasses import asdict
+                    from backend.runtime_v3.raw import RawTurnResult
+                    raw=RawTurnResult.parse(result)
+                    resolved=StateResolver(before['world_state'],narrative,job['user_text'],turn_id=sequence+1).resolve(raw)
+                    state=deepcopy(before)
+                    state['world_state']=resolved.state
+                    state['character_cards'].extend(resolved.cards)
+                    choices=resolved.choices if job['kind']!='background' else []
+                    changes={'raw_turn_result':asdict(raw), 'state_patch':asdict(resolved.patch)}
+                    audience=list(resolved.state['camera']['present_character_ids'])
+                    warnings=resolved.warnings
+                    history_batch=resolved.history
                     if warnings:
                         with storage.connect() as db:
                             previous=json.loads(db.execute('SELECT warnings_json FROM game_jobs WHERE id=?',(job_id,)).fetchone()[0] or '[]')
@@ -209,25 +224,28 @@ def run_job(path, job_id, handle):
                     feedback = json.dumps(diagnostic,ensure_ascii=False)
                 finally:
                     timings['validation_apply']=timings.get('validation_apply',0)+time.perf_counter()-stage_started
-            record_narrative(state,narrative,sequence,True,set(before['world']['events']))
-            from backend.services.simulation import simulate
+            from backend.runtime_v3.simulation import simulate
             stage_started=time.perf_counter()
             background_warnings=[]
-            state=simulate(before,state,sequence,context,config,generate,handle.cancelled,warnings=background_warnings,on_repair=lambda detail: storage.record_repair(job_id,detail))
+            state,history_batch=simulate(before,state,history_batch,context,config,generate,handle.cancelled,
+                warnings=background_warnings,on_repair=lambda detail: storage.record_repair(job_id,detail))
             if background_warnings:
                 with storage.connect() as db:
                     previous=json.loads(db.execute('SELECT warnings_json FROM game_jobs WHERE id=?',(job_id,)).fetchone()[0] or '[]')
                     db.execute('UPDATE game_jobs SET warnings_json=? WHERE id=?',(json.dumps(previous+background_warnings,ensure_ascii=False),job_id))
             if any(request['stage'].startswith('world_simulation') for request in storage.request_log(job_id=job_id)):
                 timings['background_simulation']=time.perf_counter()-stage_started
-            state=compatibility_view(state)
-            from backend.services.turn_delta.final_state import assert_world_invariants
-            assert_world_invariants(state,before)
+            from backend.runtime_v3.models import assert_world_state_v3_invariants
+            assert_world_state_v3_invariants(state['world_state'],before['world_state'])
+            from backend.runtime_v3.models import StatePatch
+            final=state['world_state'];prior=before['world_state']
+            combined={section:{key:value for key,value in final[section].items() if value!=prior[section].get(key)} for section in resolved.patch.upserts}
+            changes['state_patch']=asdict(StatePatch(resolved.patch.before_hash,final['meta'],final['camera'],combined))
             with storage.connect() as db:
                 db.execute('UPDATE game_jobs SET audience_json=? WHERE id=?',(json.dumps(audience),job_id))
             if not handle.cancelled.is_set():
                 timings['total']=time.perf_counter()-job_started
-                storage.commit_job(job_id, state, choices, changes, timing=timings)
+                storage.commit_job(job_id, state, choices, changes, timing=timings, history_batch=history_batch)
                 # Include the commit and variant snapshot in independently measured
                 # wall-clock time; the provisional value covers an interrupted final write.
                 storage.finalize_job_timing(job_id,time.perf_counter()-job_started)

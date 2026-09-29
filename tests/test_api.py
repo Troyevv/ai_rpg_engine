@@ -1,3 +1,4 @@
+from runtime_v3_fixture import wire
 from canonical_fixture import canonical, fixture_sequence
 import json
 import sqlite3
@@ -55,7 +56,7 @@ def test_preparation_to_game_parity(api):
     world = client.post(f"/api/workspaces/{workspace['id']}/world", json={'name':'Новая история'}).json()
     save = client.post(f"/api/worlds/{world['id']}/saves",json={'name':'Первое'}).json()
     def stream(**kw):
-        yield json.dumps(canonical(result(),len(app.state.repository.list_turns(save['id']))),ensure_ascii=False) if kw.get('response_format') else NARRATIVE
+        yield json.dumps(wire(canonical(result(),len(app.state.repository.list_turns(save['id']))),NARRATIVE,app.state.repository.get_snapshot(save['id'])),ensure_ascii=False) if kw.get('response_format') else NARRATIVE
     with patch('engine.chat_stream',side_effect=stream),patch('engine.find_loaded_model',side_effect=AssertionError('LM Studio not needed')):
         j=client.post(f"/api/saves/{save['id']}/turns",json={'kind':'start','revision':0,'config':REMOTE,'api_key':'test-secret'}).json()
         assert wait_job(client,j['id'])['status']=='saved'
@@ -110,14 +111,14 @@ def test_scene_and_safe_character_links(api):
     c,_=api
     w,s=new_save(c)
     assert c.patch(f"/api/saves/{s['id']}/scene",json={'time':'20:00','location':'Двор','present_ids':['missing'],'revision':0}).status_code==409
-    assert c.patch(f"/api/saves/{s['id']}/scene",json={'time':'20:00','location':'Двор','present_ids':['character_2'],'revision':0}).status_code==200
+    assert c.patch(f"/api/saves/{s['id']}/scene",json={'time':'20:00','location':'Двор','present_ids':['character_1','character_2'],'revision':0}).status_code==200
     assert c.patch(f"/api/saves/{s['id']}/scene",json={'time':'21:00','location':'Двор','present_ids':[],'revision':0}).status_code==409
     html=c.post('/api/markdown',json={'text':'Персонаж 1 <script>alert(1)</script>','save_id':s['id']}).json()['html']
     assert 'data-character-id="character_2"' in html and '<script>' not in html
     assert c.get(f"/api/worlds/{w['id']}").json()['state']==w['state']
 
 
-def test_existing_database_keeps_old_json(tmp_path):
+def test_existing_database_migrates_snapshots_once(tmp_path):
     path=tmp_path/'old.sqlite3'
     from world_parser import parse_summary
     state=parse_summary(summary());state['characters']=state['characters'][:7]
@@ -132,12 +133,15 @@ def test_existing_database_keeps_old_json(tmp_path):
         db.execute("INSERT INTO turns VALUES(1,1,0,'','Старая сцена',?,?)",(original,original))
     for _ in range(2):
         repo=Repository(path)
-        assert all(repo.get_save(1)['state'][key]==value for key,value in state.items())
+        assert repo.get_snapshot(1)['schema_version']==3
+        assert len(repo.get_snapshot(1)['character_cards'])==7
+        assert repo.get_save(1)['state']['scene']==state['scene']
         assert repo.get_save(1)['state']['world']['version']==2
         assert repo.list_turns(1)[0]['assistant_text']=='Старая сцена'
     with repo.connect() as db:
-        assert db.execute('SELECT before_json FROM turns').fetchone()[0]==original
-        assert db.execute('SELECT after_json FROM turns').fetchone()[0]==original
+        assert json.loads(db.execute('SELECT before_json FROM turns').fetchone()[0])['schema_version']==3
+        assert json.loads(db.execute('SELECT after_json FROM turns').fetchone()[0])['schema_version']==3
+        assert db.execute('SELECT COUNT(*) FROM world_migrations_v3').fetchone()[0]==2
         assert db.execute('PRAGMA foreign_key_check').fetchall()==[]
 
 

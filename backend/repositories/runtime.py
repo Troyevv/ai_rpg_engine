@@ -136,7 +136,7 @@ class RuntimeStorage:
                     'unknown_requests': sum(r['cost_usd'] is None for r in records),
                     **{k: sum(r[k] or 0 for r in records) for k in ('input_tokens','output_tokens','cached_input_tokens')}}
         return {'session_id': sid[0] if sid else None, 'session': total([r for r in rows if sid and r['session_id']==sid[0]]),
-                'game': total(rows), 'world': total(world_rows), 'requests': rows, 'turns': self.turn_diagnostics(save_id,rows)}
+                'game': total(rows), 'world': total(world_rows), 'requests': rows, 'turns': self.turn_diagnostics(save_id,rows), 'history_audit':save.get('history_warnings',[])}
 
     def turn_diagnostics(self, save_id, requests=None):
         # Join the active variant, never the latest job. Reuse the fetched log
@@ -201,7 +201,7 @@ class RuntimeStorage:
             row=db.execute('SELECT * FROM saves WHERE id=?',(save_id,)).fetchone()
             if not row or row['revision']!=revision:
                 raise ValueError('Сейв изменился. Обнови страницу.')
-            from backend.services.pov import transition
+            from backend.runtime_v3.camera import transition
             state=transition(json.loads(row['state_json']),actor)
             parent=db.execute('SELECT active_variant_id FROM turns WHERE save_id=? ORDER BY sequence DESC LIMIT 1',(save_id,)).fetchone()
             after=dump(state)
@@ -211,7 +211,7 @@ class RuntimeStorage:
             project(db,save_id,state)
 
     def update_motivation(self, save_id, actor_id, revision, goals, intentions):
-        from backend.services.motivation import edit_motivation
+        from backend.runtime_v3.manual import edit_motivation
         from backend.repositories.living_world import project
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -219,7 +219,15 @@ class RuntimeStorage:
             row = db.execute('SELECT state_json,revision FROM saves WHERE id=?', (save_id,)).fetchone()
             if not row or row['revision'] != revision:
                 raise ValueError('Сейв изменился. Обнови карточку и повтори изменение.')
-            state = edit_motivation(json.loads(row['state_json']), actor_id, goals, intentions)
+            prior = json.loads(row['state_json'])
+            state = edit_motivation(prior, actor_id, goals, intentions)
+            from backend.runtime_v3.repository import append_history
+            from backend.runtime_v3.models import WorldHistoryV3
+            batch = WorldHistoryV3()
+            batch.state_changes.append(dict(section='characters',entity=actor_id,source='player_edit',
+                turn_id=state['world_state']['meta']['turn_id'],
+                before=prior['world_state']['characters'][actor_id],after=state['world_state']['characters'][actor_id]))
+            state['history_head']=append_history(db,state.get('history_head'),batch.to_dict())
             project(db, save_id, state)
             db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?',
                        (dump(state), save_id))
@@ -227,7 +235,7 @@ class RuntimeStorage:
             # The next turn snapshots this edited state; other saves remain untouched.
 
     def update_relationship(self,save_id,actor_id,change):
-        from backend.services.relationship_edit import edit_relationship
+        from backend.runtime_v3.manual import edit_relationship
         from backend.repositories.living_world import project
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -237,6 +245,13 @@ class RuntimeStorage:
                 raise ValueError('Сейв изменился. Обнови карточку и повтори изменение.')
             state=edit_relationship(json.loads(row['state_json']),actor_id,change['target_id'],
                                     change['context'],change['dimensions'],change['delete'])
+            from backend.runtime_v3.repository import append_history
+            from backend.runtime_v3.models import WorldHistoryV3
+            prior=json.loads(row['state_json']);key=actor_id+':'+change['target_id']
+            batch=WorldHistoryV3()
+            batch.relationship_changes.append(dict(entity=key,source='player_edit',turn_id=state['world_state']['meta']['turn_id'],
+                before=prior['world_state']['relationships'].get(key),after=state['world_state']['relationships'].get(key)))
+            state['history_head']=append_history(db,state.get('history_head'),batch.to_dict())
             project(db,save_id,state)
             db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?',
                        (dump(state),save_id))

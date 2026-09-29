@@ -86,57 +86,6 @@ def normalize(original):
     return state
 
 
-def record_scene(state, changes, sequence, kind):
-    """Compatibility facade; live spatial writes belong to scene_sync only."""
-    from backend.services.turn_delta.scene_sync import apply_locations
-    meta=state['scene_meta'];world=state['world']
-    positions={cid:c.get('location') for cid,c in world['characters'].items()}
-    for cid in meta['present_ids']:positions[cid]=meta['location']
-    return apply_locations(state,dict(positions=positions,involved=set(meta['present_ids']),
-        final_present=meta['present_ids']),sequence,kind)
-
-
-def apply_legacy(state, changes, sequence, kind):
-    """Compatibility adapter: old extraction fields enter the same world aggregate."""
-    state = normalize(state)
-    world = state['world']
-    sid = record_scene(state,changes,sequence,kind)
-    scene = world['scenes'][sid]
-    def event(text, witnesses, evidence, medium='observation'):
-        eid = identity('event',sequence,sid,text)
-        world['events'][eid] = dict(id=eid, text=text, participants=list(witnesses), witnesses=list(witnesses),
-            minute=current_time(state), scene_id=sid, fact_ids=[], medium=medium, evidence=evidence,
-            player_observed=True, source_sequence=sequence)
-        if eid not in scene['event_ids']:scene['event_ids'].append(eid)
-        for cid in witnesses:world['characters'][cid]['last_event_id']=eid
-        return eid
-    for e in changes.get('events',[]):
-        event(e['text'],e['character_ids'],e['evidence'])
-    for f in changes.get('facts',[]):
-        fid = identity('fact',sequence,sid,f['text'])
-        eid = event(f['text'],f['known_by'],f['evidence'])
-        world['facts'][fid] = dict(id=fid,text=f['text'],character_ids=f['known_by'],secret=False,evidence=[f['evidence']])
-        world['events'][eid]['fact_ids'].append(fid)
-        for cid in f['known_by']:
-            world['knowledge'][cid+':'+fid] = dict(actor_id=cid,fact_id=fid,status='known',source_event_id=eid)
-    for c in changes.get('characters',[]):
-        target = world['characters'][c['id']]
-        if 'now' in c:target['situation']=c['now']
-        if 'goal' in c:
-            target['short_goal']=c['goal']
-            target['goals']=[c['goal']] if c['goal'] else []
-    for r in changes.get('relationships',[]):
-        key = r['source_id']+':'+r['target_id']
-        relation = world['relationships'].setdefault(key,dict(source_id=r['source_id'],target_id=r['target_id'],dimensions={}))
-        relation['context']=r['text']
-        relation['dimensions'][r['aspect']]={'direction':r['direction'],'reason':r['reason']}
-    for p in changes.get('plans',[]):
-        old = world['threads'].get(p['id'],{})
-        world['threads'][p['id']] = dict(id=p['id'],description=p['text'],character_ids=p['character_ids'],
-            status='active' if p['status']=='open' else 'resolved',state=p['text'],relevance=old.get('relevance',0.5),last_event_id=old.get('last_event_id'))
-    return state
-
-
 def knowledge_for(world, actor):
     result = []
     for k in world['knowledge'].values():
@@ -152,37 +101,3 @@ def timeline(state, visibility='player'):
     known_events={k.get('source_event_id') for k in state['world']['knowledge'].values() if k['actor_id']==actor and k['status']=='known'}
     rows=[e for e in events if e.get('player_observed')] if visibility=='player' else [e for e in events if actor in e['witnesses'] or e['id'] in known_events]
     return sorted(rows,key=lambda e:(e['minute'] if e['minute'] is not None else e.get('recorded_minute',-1),e.get('order') or 0,e['id']))
-
-
-def record_narrative(state, narrative, sequence, observed=True, previous_events=()):
-    """Immutable scene recording, including off-camera scenes not in chat prose."""
-    world=state['world']
-    scene=world['scenes'][state['camera']['scene_id']]
-    rid=identity('record',sequence,scene['id'],narrative)
-    world.setdefault('scene_records',{})[rid]=dict(id=rid,scene_id=scene['id'],source_sequence=sequence,
-        minute=current_time(state),scene_meta=deepcopy(state['scene_meta']),narrative=narrative,
-        participants=list(scene['participants']),player_observed=observed,pov_actor_id=state.get('controlled_actor_id'))
-    for eid,event in world['events'].items():
-        if eid not in previous_events and event['source_sequence']==sequence:
-            event['source_record_id']=rid
-    scene['last_record_id']=rid
-    return rid
-
-
-def compatibility_view(state):
-    """Refresh old read models from canonical entities; no second mutable world."""
-    world=state['world']
-    names={c['id']:c['name'] for c in state['characters']}
-    state['relationships']=[{'source_id':r['source_id'],'target_id':r['target_id'],
-        'target_name':names.get(r['target_id'],r['target_id']),'text':r['context'],
-        **({'change':r['change']} if 'change' in r else {})}
-        for r in world['relationships'].values()]
-    state['facts']=[{'id':f['id'],'text':f['text'],'known_by':[k['actor_id'] for k in world['knowledge'].values() if k['fact_id']==f['id'] and k['status']=='known']} for f in world['facts'].values()]
-    state['plans']=[{'id':t['id'],'text':t['state'] or t['description'],'character_ids':t['character_ids'],
-                     'status':'done' if t['status']=='resolved' else 'open'} for t in world['threads'].values()]
-    # Compatibility inspector is player-facing; don't expose unobserved simulation events here.
-    state['events']=[{'id':e['id'],'text':e['text'],'character_ids':e['participants'],'turn':e['source_sequence']} for e in world['events'].values() if e['player_observed']]
-    for c in state['characters']:
-        if world['characters'][c['id']]['situation']:
-            c['fields']['Сейчас']=world['characters'][c['id']]['situation']
-    return state

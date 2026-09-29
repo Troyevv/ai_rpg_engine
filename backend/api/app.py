@@ -165,7 +165,7 @@ def create_app(db_path=None, recover=True):
 
     @app.get('/api/relationships/dimensions')
     def relation_dimensions():
-        from backend.services.world_delta import RELATION_DIMENSIONS
+        from backend.services.relation_dimensions import RELATION_DIMENSIONS
         return list(RELATION_DIMENSIONS)
 
     @app.patch('/api/saves/{sid}/characters/{actor_id}/relationships')
@@ -325,8 +325,8 @@ def create_app(db_path=None, recover=True):
             row=db.execute('SELECT * FROM turns WHERE id=? AND save_id=?',(tid,sid)).fetchone()
             if row is None:
                 raise ValueError('Записанная сцена не найдена в текущей истории.')
-            from backend.services.world import normalize
-            state=normalize(json.loads(row['after_json']))
+            from backend.runtime_v3.selectors import ui_view
+            state=ui_view(json.loads(row['after_json']))
             return {'mode':'playback','turn_id':tid,'sequence':row['sequence'],
                     'narrative':row['assistant_text'],'user_text':row['user_text'],
                     'scene':scene_metadata(state),'pov_actor_id':row['pov_actor_id'],

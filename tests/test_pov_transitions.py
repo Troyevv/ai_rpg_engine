@@ -7,19 +7,17 @@ from test_engine import db,CONFIG,NARRATIVE,result
 from test_runtime import generate
 from test_pov_documents import generate_background
 from backend.services.timeline import current_time,label,parse_time
-from backend.services.pov import transition
 
 
 def intro(storage,sid,actor,source=None,bad=False):
     jid=storage.begin_job(sid,'','pov',{**CONFIG,'actor_id':actor,'source_turn_id':source})
     def stream(**kw):
         if kw.get('response_format'):
-            payload=result()
-            block=next(m['content'] for m in kw['messages'] if m['content'].startswith('Текущая сцена'))
-            scene=json.loads(block.split('\n',1)[1]);payload['scene'].update(scene['scene_meta']);payload['scene']['text']=scene['scene']
-            payload['events']=[e for e in payload.get('events',[]) if set(e['character_ids'])<=set(payload['scene']['present_ids'])]
-            if bad:payload['choices']=[]
-            yield json.dumps(canonical(payload,fixture_sequence(storage,jid)),ensure_ascii=False)
+            block=next(m['content'] for m in kw['messages'] if m['content'].startswith('Текущее состояние / GM-only'))
+            current=json.loads(block.split('\n',1)[1]);camera=current['camera']
+            payload=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=['missing'] if bad else camera['present_character_ids'],situation=camera['situation'],elapsed_minutes=0),
+                choices=[dict(action='Действие '+str(i),speech='') for i in range(6)])
+            yield json.dumps(payload,ensure_ascii=False)
         else:yield NARRATIVE
     with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=stream):
         engine.run_job(storage.path,jid,engine.Worker())
@@ -48,13 +46,14 @@ def test_background_participant_anchor_and_return_time(db):
     assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
     state=repo.get_save(sid)['state']
     assert state['scene_meta']['location']=='Подвал'
-    assert state['pov_transition']['source_node_id']==background['node_id']
+    assert repo.get_job(jid)['kind']=='pov'
+    assert json.loads(repo.get_job(jid)['config_json'])['source_node_id']==background['node_id']
     assert current_time(state)==1105
     jid=intro(repo,sid,'character_1')
     assert repo.get_job(jid)['status']=='saved'
     state=repo.get_save(sid)['state']
     assert state['scene_meta']['location']=='Кухня' and state['scene_meta']['time']=='День 1 (Пн) 18:25'
-    assert state['actor_scenes']['character_3']['meta']['location']=='Подвал'
+    assert state['world']['characters']['character_3']['location']=='Подвал'
     assert all('character_1' not in f['known_by'] for f in state['facts'])
 
 
@@ -66,17 +65,14 @@ def test_pov_regeneration_pins_actor_and_pre_transition_snapshot(db):
     assert job['kind']=='pov' and job['pov_actor_id']=='character_2'
     assert job['before_json']==original['before_json']
     assert job['context_json']==original['context_json']
-    assert json.loads(job['memory_before_json'])['controlled_actor_id']=='character_2'
+    assert json.loads(job['memory_before_json'])['world_state']['camera']['controlled_actor_id']=='character_2'
 
 
 def test_clock_cannot_rewind_across_pov(db):
-    from backend.services.timeline import advance
-    repo,_,sid=db;state=repo.get_save(sid)['state']
-    state['world_clock']={'last_event_time':'Пт 20:30'}
-    state['actor_scenes']={'character_2':{'text':'Ждёт','meta':{'time':'Пт 19:50','location':'Дом','present_ids':['character_2']}}}
+    from backend.runtime_v3.camera import transition
+    from backend.runtime_v3.models import assert_world_state_v3_invariants
+    repo,_,sid=db;state=repo.get_snapshot(sid)
+    state['world_state']['meta']['world_time']=6990
     next_state=transition(state,'character_2')
-    assert next_state['scene_meta']['time']=='День 5 (Пт) 20:30'
-    assert next_state['pov_transition']['anchor']['meta']['time']=='Пт 19:50'
-    with pytest.raises(ValueError,match='раньше'):
-        advance(next_state,{}, {'time':'Пт 19:50'})
-    assert parse_time('День 6 00:10')>current_time(next_state)
+    assert next_state['world_state']['meta']['world_time']==6990
+    assert_world_state_v3_invariants(next_state['world_state'],state['world_state'])

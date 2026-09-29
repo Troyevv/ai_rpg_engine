@@ -1,3 +1,4 @@
+from runtime_v3_fixture import wire
 import json
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -25,8 +26,8 @@ def generate(storage,sid,kind='turn',text='Я сажусь.',config=None,story=N
         if kw.get('response_format'):
             payload=result()
             from backend.services.timeline import current_time,label
-            payload['scene']['time']=label(max(1100,current_time(json.loads(storage.get_job(job)['before_json']))))
-            yield json.dumps(canonical(payload,fixture_sequence(storage,job)),ensure_ascii=False)
+            payload['scene']['time']=label(max(1100,json.loads(storage.get_job(job)['before_json'])['world_state']['meta']['world_time']))
+            yield json.dumps(wire(canonical(payload,fixture_sequence(storage,job)),story,json.loads(storage.get_job(job)['before_json'])),ensure_ascii=False)
         elif 'Обнови компактную память' in kw['messages'][0]['content']:
             yield 'Собеседники встретились и договорились поговорить на кухне.'
         else:

@@ -1,3 +1,4 @@
+from runtime_v3_fixture import wire
 from canonical_fixture import canonical, fixture_sequence
 import json
 from threading import Event
@@ -31,7 +32,7 @@ def test_memory_repairs_before_advancing_cursor(db,invalid):
     assert len(calls)>=3  # Objective retry plus actor-scoped summaries.
     assert updated['memory']['through_sequence']==1
     assert len(updated['memory']['summary'])<=8000
-    assert 'memory' not in state
+    assert not state.get('memory')
 
 
 def test_repeated_invalid_memory_does_not_block_thirty_turns_or_archive_sources(db):
@@ -44,8 +45,8 @@ def test_repeated_invalid_memory_does_not_block_thirty_turns_or_archive_sources(
             if 'Обнови компактную память' in kw['messages'][0]['content']:
                 memory_calls.append(jid);yield 'М'*9000
             elif kw.get('response_format'):
-                change=result();change['scene']['time']=label(current_time(json.loads(repo.get_job(jid)['before_json'])))
-                yield json.dumps(canonical(change,fixture_sequence(repo,jid)),ensure_ascii=False)
+                change=result();change['scene']['time']=label(json.loads(repo.get_job(jid)['before_json'])['world_state']['meta']['world_time'])
+                yield json.dumps(wire(canonical(change,fixture_sequence(repo,jid)),NARRATIVE,json.loads(repo.get_job(jid)['before_json'])),ensure_ascii=False)
             else:yield NARRATIVE
         with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=stream):
             engine.run_job(repo.path,jid,engine.Worker())

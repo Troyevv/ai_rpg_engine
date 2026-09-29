@@ -58,12 +58,12 @@ def test_current_scene_voices_reach_gm_without_all_npc_cards():
         'Слабости':'Не признаёт ошибки.', 'Страхи и уязвимости':'Боится повторить провал.'})
     state['characters'][2]['fields']['Стиль общения']='Исключительный голос отсутствующего персонажа.'
     context=build_context(state,[],'Осмотреть кабинет.','turn',32768,4000)
-    gm=next(m['content'] for m in context if m['content'].startswith('NPC и отношения'))
+    gm=next(m['content'] for m in context if m['content'].startswith('Карточки присутствующих / GM-only'))
     assert 'Говорит рублеными фразами' in gm
     assert 'Исключительный голос отсутствующего персонажа' not in gm
     assert 'Характер' in gm and 'Биография' in gm
     assert 'При написании диалогов используй «Стиль общения»' in str(context)
-    assert [x['id'] for x in json.loads(gm.split('\n',1)[1])['characters']]==[a,b]
+    assert [x['id'] for x in json.loads(gm.split('\n',1)[1])]==[a,b]
 
 
 def test_generated_card_fields_survive_prepare_sync_and_roundtrip():
@@ -375,12 +375,15 @@ def test_legacy_import_preserves_source_and_reports_repairs(api):
 
 def test_first_context_uses_confirmed_revision(api):
     from context_builder import build_context
-    client,_=api;path,d=make(client)
+    client,app=api;path,d=make(client)
     r=client.patch(path,json={'revision':d['revision'],'operation':'patch','kind':'campaign','field':'setting','value':'Город на плавучих островах'})
     d=r.json();r=client.post(path+'/confirm',json={'revision':d['revision'],'version_id':d['version_id']})
     s=client.get(f"/api/saves/{r.json()['save']}").json()['state']
-    assert s==d['state']
-    ctx=build_context(s,[],'','start',32768,4000)
+    snapshot=app.state.repository.get_snapshot(r.json()['save'])
+    assert snapshot['schema_version']==3
+    assert snapshot['campaign']['campaign']==d['state']['campaign']
+    assert set(snapshot['world_state']['characters'])==set(d['state']['world']['characters'])
+    ctx=build_context(snapshot,[],'','start',32768,4000)
     assert 'Город на плавучих островах' in str(ctx)
 
 

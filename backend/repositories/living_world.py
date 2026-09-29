@@ -4,10 +4,13 @@ from backend.services.world import normalize, KINDS
 
 
 def project(db, save_id, state):
-    world=normalize(state).get('world',{k:{} for k in KINDS})
+    if state.get('schema_version')==3:
+        world=state['world_state'];kinds=('characters','locations','facts','knowledge','relationships','threads','scheduled_events')
+    else:
+        world=normalize(state).get('world',{k:{} for k in KINDS});kinds=KINDS
     db.execute('DELETE FROM world_entities WHERE save_id=?',(save_id,))
     db.executemany('INSERT INTO world_entities(save_id,kind,entity_id,payload) VALUES(?,?,?,?)',
-        [(save_id,kind,key,json.dumps(value,ensure_ascii=False)) for kind in KINDS for key,value in world[kind].items()])
+        [(save_id,kind,key,json.dumps(value,ensure_ascii=False)) for kind in kinds for key,value in world[kind].items()])
 
 
 def migrate(storage):

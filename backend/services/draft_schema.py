@@ -4,7 +4,7 @@ The runtime accepts older saves via prepare/normalize; this contract describes
 the richer initial output expected from the single world generation request.
 """
 from backend.services.world import CARD_FIELDS
-from backend.services.world_delta import RELATION_DIMENSIONS, RELATION_CONTRACT
+from backend.services.relation_dimensions import RELATION_DIMENSIONS, RELATION_CONTRACT
 
 
 def obj(properties, required=(), description='', additional=True):
