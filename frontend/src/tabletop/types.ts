@@ -191,7 +191,23 @@ export type Game = {
   }[];
   usage: Usage[];
 };
+export type ValidationIssue = {
+  code: string;
+  entity_type: string;
+  entity_id: string;
+  field: string;
+  reference: string;
+  message: string;
+};
+export type ValidationDiagnostics = {
+  stage?: string;
+  validation_issues?: ValidationIssue[];
+  draft_id?: string;
+};
 export type Draft = {
+  generation_status: "VALID" | "INVALID";
+  validation_issues: ValidationIssue[];
+  validation_stage: string;
   id: string;
   revision: number;
   definition: Record<string, unknown> & {

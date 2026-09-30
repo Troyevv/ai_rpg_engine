@@ -1,3 +1,13 @@
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public details: Record<string, unknown>,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export async function api<T>(
   path: string,
   body?: unknown,
@@ -27,8 +37,9 @@ export async function api<T>(
     const error = await response
       .json()
       .catch(() => ({ detail: "Сервер недоступен" }));
-    throw new Error(
+    throw new ApiError(
       typeof error.detail === "string" ? error.detail : "Некорректный запрос",
+      error,
     );
   }
   return response.json();

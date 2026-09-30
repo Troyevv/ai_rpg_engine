@@ -4,6 +4,8 @@ import hashlib
 import json
 from uuid import uuid4
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
+from .validation import CampaignValidationError
 from pydantic import Field, model_validator
 from backend.api.schemas import Credential, ModelConfig
 from .models import Command, NewGame
@@ -117,6 +119,17 @@ def install(app, shared_repo, credentials):
             repo.annotate(gid, body.revision + 1, narrative)
         return snapshot(gid)
 
+    def validation_response(exc, draft_id=None):
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": exc.public_message(),
+                "stage": exc.stage,
+                "validation_issues": [i.model_dump() for i in exc.issues],
+                "draft_id": draft_id,
+            },
+        )
+
     @router.get("/catalog")
     def catalog():
         return {
@@ -141,17 +154,32 @@ def install(app, shared_repo, credentials):
 
     @router.post("/drafts")
     def import_draft(body: DraftRequest):
-        return repo.save_draft(body.definition)
+        try:
+            return repo.save_draft(body.definition)
+        except CampaignValidationError as exc:
+            return validation_response(exc)
 
     @router.put("/drafts/{did}")
     def edit(did: str, body: DraftRequest):
-        return repo.save_draft(body.definition, draft_id=did, revision=body.revision)
+        try:
+            return repo.save_draft(
+                body.definition, draft_id=did, revision=body.revision
+            )
+        except CampaignValidationError as exc:
+            return validation_response(exc, did)
 
     @router.post("/generate")
     def generate(body: GenerateRequest):
         did = uuid4().hex
         try:
             definition = CampaignGenerator(agent(body)).generate(did, body.options)
+        except CampaignValidationError as exc:
+            invalid_id = None
+            if exc.definition is not None:
+                invalid_id = repo.save_invalid_draft(
+                    exc.definition, exc.issues, exc.stage, did
+                )
+            return validation_response(exc, invalid_id)
         except ValueError:
             raise
         except Exception:
@@ -175,6 +203,10 @@ def install(app, shared_repo, credentials):
         draft = repo.draft(body.draft_id)
         if draft["revision"] != body.draft_revision:
             raise ValueError("Черновик изменился")
+        if draft["generation_status"] != "VALID":
+            raise ValueError(
+                "Черновик содержит ошибки. Исправь и проверь его перед запуском."
+            )
         state = compiler.compile(draft["definition"], body.character)
         state.campaign.source_draft = body.draft_id
         gid = repo.create(state)

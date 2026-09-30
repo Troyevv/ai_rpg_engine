@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import type { Preferences } from "../types";
 import {
   abilities,
@@ -8,6 +8,7 @@ import {
   type Catalog,
   type Draft,
   type Game,
+  type ValidationDiagnostics,
 } from "./types";
 
 export function Wizard({
@@ -27,10 +28,15 @@ export function Wizard({
     [step, setStep] = useState(0),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
+  const [diagnostics, setDiagnostics] = useState<ValidationDiagnostics | null>(
+    null,
+  );
   const [json, setJson] = useState(""),
     [advanced, setAdvanced] = useState(false),
     [author, setAuthor] = useState(false),
-    [drafts, setDrafts] = useState<{ id: string; name: string }[]>([]);
+    [drafts, setDrafts] = useState<
+      { id: string; name: string; generation_status: string }[]
+    >([]);
   const [options, setOptions] = useState({
     idea: "",
     title: "",
@@ -53,7 +59,9 @@ export function Wizard({
         setBuild(c.default_build);
       })
       .catch((e) => setError(e.message));
-    api<{ id: string; name: string }[]>("/tabletop/drafts")
+    api<{ id: string; name: string; generation_status: string }[]>(
+      "/tabletop/drafts",
+    )
       .then(setDrafts)
       .catch((e) => setError(e.message));
   }, []);
@@ -61,16 +69,21 @@ export function Wizard({
     if (busy) return;
     setBusy(true);
     setError("");
+    setDiagnostics(null);
     try {
       await fn();
     } catch (e) {
       setError((e as Error).message);
+      if (e instanceof ApiError)
+        setDiagnostics(e.details as ValidationDiagnostics);
     } finally {
       setBusy(false);
     }
   }
   const choose = (d: Draft) => {
     setDraft(d);
+    setDiagnostics(null);
+    setAuthor(false);
     setJson(JSON.stringify(d.definition, null, 2));
     setStep(1);
   };
@@ -78,6 +91,9 @@ export function Wizard({
     setOptions((prev) => ({ ...prev, [key]: value }));
   if (!catalog || !build)
     return <p className="tt-panel">Загрузка каталога правил… {error}</p>;
+  const issues =
+    diagnostics?.validation_issues ?? draft?.validation_issues ?? [];
+  const issueStage = diagnostics?.stage ?? draft?.validation_stage;
   const cls = catalog.classes[build.character_class];
   return (
     <main className="tt-wizard tt-panel">
@@ -93,9 +109,46 @@ export function Wizard({
         }
       </h1>
       {error && (
-        <p role="alert" className="tt-error">
+        <p role="alert" className="tt-error" style={{ whiteSpace: "pre-line" }}>
           {error}
         </p>
+      )}
+      {draft?.generation_status === "INVALID" && step > 0 && (
+        <p role="alert" className="tt-error">
+          Черновик содержит ошибки. Исправь его в режиме автора или вернись к
+          генерации. Начать игру пока нельзя.
+        </p>
+      )}
+      {!!issues.length && (
+        <details className="tt-diagnostics">
+          <summary>Диагностика проверки ({issues.length})</summary>
+          <p>Этап: {issueStage}</p>
+          <ul>
+            {issues.map((issue, i) => (
+              <li key={i}>
+                <p>{issue.message}</p>
+                <code>
+                  {issue.code} · {issue.entity_type}:{issue.entity_id} ·{" "}
+                  {issue.field} → {issue.reference}
+                </code>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      {diagnostics?.draft_id && diagnostics.draft_id !== draft?.id && (
+        <button
+          disabled={busy}
+          onClick={() =>
+            void run(async () =>
+              choose(
+                await api<Draft>(`/tabletop/drafts/${diagnostics.draft_id}`),
+              ),
+            )
+          }
+        >
+          Открыть невалидный черновик
+        </button>
       )}
       {step === 0 ? (
         <>
@@ -207,6 +260,7 @@ export function Wizard({
                 {drafts.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.name}
+                    {d.generation_status === "INVALID" ? " (ошибки)" : ""}
                   </option>
                 ))}
               </select>
@@ -477,7 +531,9 @@ export function Wizard({
           <button
             className="tt-primary"
             disabled={
-              busy || (step === 2 && build.skills.length !== cls.skill_count)
+              busy ||
+              draft?.generation_status === "INVALID" ||
+              (step === 2 && build.skills.length !== cls.skill_count)
             }
             onClick={() =>
               void run(async () => {

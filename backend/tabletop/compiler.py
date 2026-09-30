@@ -4,6 +4,13 @@ from .definitions import CampaignDefinition, CampaignMutation
 from .catalog import load_ruleset
 from .models import GameState, Campaign, ActorControl, SessionState, ObjectState
 from .rules import RulesEngine
+from pydantic import ValidationError
+from .validation import (
+    CampaignReferenceValidator,
+    CampaignValidationError,
+    ValidationIssue,
+    schema_error,
+)
 
 
 def index(values):
@@ -15,50 +22,68 @@ def index(values):
 
 class CampaignCompiler:
     def validate(self, definition):
-        d = CampaignDefinition.model_validate(
-            definition.model_dump()
-            if isinstance(definition, CampaignDefinition)
-            else definition
-        )
-        rules = load_ruleset(d.ruleset_id)
+        try:
+            d = CampaignDefinition.model_validate(
+                definition.model_dump()
+                if isinstance(definition, CampaignDefinition)
+                else definition
+            )
+        except ValidationError as exc:
+            raise schema_error(exc) from None
+        try:
+            rules = load_ruleset(d.ruleset_id)
+            issues = CampaignReferenceValidator().validate(d, rules)
+            if issues:
+                raise CampaignValidationError(issues, definition=d)
+            self.validate_semantics(d, rules)
+        except CampaignValidationError:
+            raise
+        except ValueError as exc:
+            raise CampaignValidationError(
+                [
+                    ValidationIssue(
+                        code="semantic_validation",
+                        entity_type="campaign",
+                        entity_id=d.id,
+                        field="definition",
+                        message=str(exc),
+                    )
+                ],
+                stage="semantic",
+                definition=d,
+            ) from None
+        return d
+
+    def validate_semantics(self, d, rules):
+        # Cross references are already complete. These checks enforce their meaning.
         if d.ruleset_version != rules.version:
             raise ValueError("Несовместимая версия ruleset")
-        regions = index(d.regions)
-        locations = index(d.locations)
-        factions = index(d.factions)
-        actors = index(d.characters + d.creatures)
-        items = index(rules.items + d.items)
-        objects = index(d.objects)
-        quests = index(d.quests)
-        secrets = index(d.secrets)
-        encounters = index(d.encounters)
-        all_ids = [
-            i
+        groups = [
+            index(values)
             for values in (
-                regions,
-                locations,
-                factions,
-                actors,
-                items,
-                objects,
-                quests,
-                secrets,
-                encounters,
+                d.regions,
+                d.locations,
+                d.factions,
+                d.characters + d.creatures,
+                rules.items + d.items,
+                d.objects,
+                d.quests,
+                d.secrets,
+                d.encounters,
             )
-            for i in values
         ]
+        all_ids = [i for group in groups for i in group]
         if len(all_ids) != len(set(all_ids)):
             raise ValueError("ID должны быть уникальны между типами сущностей")
+        _, locations, _, actors, items, objects, _, secrets, encounters = groups
 
         def require(ok, message):
             if not ok:
                 raise ValueError(message)
 
-        require(d.starting_location in locations, "Неизвестная стартовая локация")
         require(
-            len(set(d.starting_party)) == len(d.starting_party)
-            and set(d.starting_party) <= set(actors),
-            "Некорректная стартовая партия",
+            len(set(d.starting_party)) == len(d.starting_party),
+            "Повтор участника в стартовой партии",
         )
         require(
             any(
@@ -71,10 +96,6 @@ class CampaignCompiler:
 
         def inventory(entries):
             require(
-                all(e.item_id in items for e in entries),
-                "Инвентарь ссылается на неизвестный предмет",
-            )
-            require(
                 all(
                     not e.equipped or items[e.item_id].type in ("weapon", "armor")
                     for e in entries
@@ -82,13 +103,7 @@ class CampaignCompiler:
                 "Нельзя экипировать этот предмет",
             )
 
-        for loc in locations.values():
-            require(
-                loc.region_id in regions and set(loc.connections) <= set(locations),
-                "Некорректные ссылки локации",
-            )
-        visited = set()
-        todo = [d.starting_location]
+        visited, todo = set(), [d.starting_location]
         while todo:
             loc = todo.pop()
             if loc not in visited:
@@ -98,29 +113,17 @@ class CampaignCompiler:
             visited == set(locations), "Все локации должны быть достижимы из стартовой"
         )
         pairs = set()
-        for relation in d.faction_relations:
-            pair = tuple(sorted((relation.first, relation.second)))
+        for r in d.faction_relations:
+            pair = tuple(sorted((r.first, r.second)))
             require(
-                relation.first in factions
-                and relation.second in factions
-                and relation.first != relation.second
-                and pair not in pairs,
+                r.first != r.second and pair not in pairs,
                 "Некорректное отношение фракций",
             )
             pairs.add(pair)
         for a in actors.values():
             require(
-                a.location_id in locations and a.faction_id in factions,
-                "Неизвестная локация или фракция персонажа",
-            )
-            require(
-                set(a.knowledge) <= set(secrets)
-                and set(a.relationships) <= set(actors),
-                "Неизвестные знания или отношения персонажа",
-            )
-            require(
                 a.controller == "PLAYER" or a.player_id is None,
-                "AI/DM не может владеть player_id",
+                f"Персонаж '{a.id}': AI/DM не может владеть player_id",
             )
             RulesEngine().validate_build(a.build, rules)
             inventory(a.inventory)
@@ -128,58 +131,37 @@ class CampaignCompiler:
             all(actors[i].location_id == d.starting_location for i in d.starting_party),
             "Партия должна начинать в одной локации",
         )
-        for secret in secrets.values():
-            require(secret.location_id in locations, "Неизвестная локация секрета")
-        for obj in objects.values():
+        for o in objects.values():
             require(
-                obj.location_id in locations and set(obj.secrets) <= set(secrets),
-                "Некорректные ссылки объекта",
+                all(secrets[i].location_id == o.location_id for i in o.secrets),
+                f"Объект '{o.id}': секрет должен принадлежать его локации",
             )
             require(
-                all(secrets[i].location_id == obj.location_id for i in obj.secrets),
-                "Секрет объекта должен принадлежать его локации",
+                not o.check_skill or rules.skills.get(o.check_skill) == o.check_ability,
+                f"Объект '{o.id}': неверный навык проверки",
             )
-            require(
-                not obj.check_skill
-                or rules.skills.get(obj.check_skill) == obj.check_ability,
-                "Неверный навык проверки объекта",
-            )
-            inventory(obj.contents)
-        for q in quests.values():
-            require(
-                q.location_id in locations
-                and (q.giver_id is None or q.giver_id in actors)
-                and (q.required_item is None or q.required_item in items),
-                "Некорректные ссылки задания",
-            )
+            inventory(o.contents)
+        for q in d.quests:
             inventory(q.reward)
         for e in encounters.values():
             require(
-                e.location_id in locations
-                and len(set(e.participants)) == len(e.participants)
-                and set(e.participants) <= set(actors),
-                "Некорректные участники столкновения",
+                len(set(e.participants)) == len(e.participants),
+                f"Столкновение '{e.id}': повтор участника",
             )
             require(
                 all(actors[i].location_id == e.location_id for i in e.participants),
-                "Участники столкновения должны находиться на его локации",
+                f"Столкновение '{e.id}': участники должны находиться на его локации",
             )
             require(
                 e.loot_object is None
-                or e.loot_object in objects
-                and objects[e.loot_object].location_id == e.location_id,
-                "Некорректная добыча",
-            )
-            require(
-                e.quest_id is None or e.quest_id in quests,
-                "Неизвестное задание столкновения",
+                or objects[e.loot_object].location_id == e.location_id,
+                f"Столкновение '{e.id}': добыча должна находиться на его локации",
             )
         for item in items.values():
             require(
                 not item.healing or item.type == "consumable",
-                "Лечение разрешено только расходуемым предметам",
+                f"Предмет '{item.id}': лечение разрешено только расходуемым предметам",
             )
-        return d
 
     def compile(self, definition, character=None):
         d = self.validate(definition).model_copy(deep=True)

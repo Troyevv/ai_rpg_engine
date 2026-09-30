@@ -41,6 +41,21 @@ class TabletopRepository:
                   stage TEXT NOT NULL, payload TEXT NOT NULL);
             """)
 
+            # Additive migration keeps existing valid authoring drafts readable.
+            db.execute("BEGIN IMMEDIATE")
+            columns = {
+                r["name"] for r in db.execute("PRAGMA table_info(tabletop_drafts)")
+            }
+            for name, declaration in {
+                "generation_status": "TEXT NOT NULL DEFAULT 'VALID'",
+                "validation_issues_json": "TEXT NOT NULL DEFAULT '[]'",
+                "validation_stage": "TEXT NOT NULL DEFAULT ''",
+            }.items():
+                if name not in columns:
+                    db.execute(
+                        f"ALTER TABLE tabletop_drafts ADD COLUMN {name} {declaration}"
+                    )
+
     @contextmanager
     def connect(self):
         db = sqlite3.connect(self.path, timeout=10)
@@ -232,7 +247,7 @@ class TabletopRepository:
         with self.connect() as db:
             if draft_id:
                 result = db.execute(
-                    "UPDATE tabletop_drafts SET definition_json=?,revision=revision+1 WHERE id=? AND revision=?",
+                    "UPDATE tabletop_drafts SET definition_json=?,revision=revision+1,generation_status='VALID',validation_issues_json='[]',validation_stage='' WHERE id=? AND revision=?",
                     (definition.model_dump_json(), did, revision),
                 )
                 if result.rowcount != 1:
@@ -243,6 +258,20 @@ class TabletopRepository:
                     (did, definition.model_dump_json(), source),
                 )
         return self.draft(did)
+
+    def save_invalid_draft(self, definition, issues, stage, draft_id):
+        # Authoring diagnostics only. Game creation always validates again.
+        with self.connect() as db:
+            db.execute(
+                "INSERT INTO tabletop_drafts(id,definition_json,source,generation_status,validation_issues_json,validation_stage) VALUES(?,?,'generated','INVALID',?,?)",
+                (
+                    draft_id,
+                    definition.model_dump_json(),
+                    dump([i.model_dump() for i in issues]),
+                    stage,
+                ),
+            )
+        return draft_id
 
     def draft(self, did):
         with self.connect() as db:
@@ -256,6 +285,9 @@ class TabletopRepository:
             "revision": r["revision"],
             "definition": json.loads(r["definition_json"]),
             "source": r["source"],
+            "generation_status": r["generation_status"],
+            "validation_issues": json.loads(r["validation_issues_json"]),
+            "validation_stage": r["validation_stage"],
             "usage": self.usage(did),
         }
 
@@ -266,6 +298,7 @@ class TabletopRepository:
                     "id": r["id"],
                     "revision": r["revision"],
                     "name": json.loads(r["definition_json"])["name"],
+                    "generation_status": r["generation_status"],
                 }
                 for r in db.execute("SELECT * FROM tabletop_drafts ORDER BY rowid DESC")
             ]

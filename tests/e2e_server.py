@@ -94,7 +94,12 @@ def tabletop_stream(**kwargs):
     from tabletop_fixture import definition
     prompt=kwargs['messages'][0]['content']
     if 'playable CampaignDefinition' in prompt:
-        value=definition().model_dump_json()
+        campaign = definition()
+        idea = json.loads(kwargs['messages'][-1]['content'])['options']['idea']
+        if idea == 'invalid references':
+            campaign.characters[1].knowledge.append('missing_secret')
+            campaign.characters[1].relationships['missing_actor'] = 10
+        value=campaign.model_dump_json()
     elif 'CampaignMutation JSON' in prompt:
         value=json.dumps({'operations':[{'type':'CreateLocation','value':{'id':'observatory','name':'Обсерватория','region_id':'district'}},{'type':'ConnectLocations','first':'market','second':'observatory'}]})
     elif kwargs.get('response_format'):

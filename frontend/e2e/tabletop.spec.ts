@@ -202,3 +202,66 @@ test("generated campaign, quest, combat, loot, expansion and real server restart
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("invalid generated draft shows all diagnostics and requires explicit correction", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Настольная RPG", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Создать кампанию", exact: true })
+    .click();
+  await page
+    .getByLabel("Идея приключения", { exact: true })
+    .fill("invalid references");
+  await page
+    .getByRole("button", { name: "Сгенерировать мир", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText("missing_secret");
+  await expect(page.getByRole("alert")).toContainText("missing_actor");
+  await page.getByText("Диагностика проверки (2)", { exact: true }).click();
+  await expect(page.locator(".tt-diagnostics")).toContainText(
+    "unknown_reference · character:archivist · knowledge",
+  );
+  await page
+    .getByRole("button", { name: "Открыть невалидный черновик" })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Далее", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByLabel("Определение кампании", { exact: true }),
+  ).toHaveCount(0);
+  const invalid = await page.evaluate(async () => {
+    const drafts = await (await fetch("/api/tabletop/drafts")).json();
+    return drafts.find(
+      (d: { generation_status: string }) => d.generation_status === "INVALID",
+    );
+  });
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Создать кампанию", exact: true })
+    .click();
+  await page.getByLabel("Продолжить черновик").selectOption(invalid.id);
+  await expect(
+    page.getByRole("button", { name: "Далее", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByText("Диагностика проверки (2)", { exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("Режим автора: редактирование со спойлерами").check();
+  const editor = page.getByLabel("Определение кампании", { exact: true });
+  const definition = JSON.parse(await editor.inputValue());
+  definition.characters[1].knowledge = ["sealed_truth", "rumor"];
+  definition.characters[1].relationships = { traveler: 10 };
+  await editor.fill(JSON.stringify(definition));
+  await page.getByRole("button", { name: "Проверить и сохранить мир" }).click();
+  await expect(
+    page.getByRole("button", { name: "Далее", exact: true }),
+  ).toBeEnabled();
+  await expect(page.locator(".tt-diagnostics")).toHaveCount(0);
+  await page.getByRole("button", { name: "Далее", exact: true }).click();
+  await expect(page.getByLabel("Имя героя", { exact: true })).toBeVisible();
+});

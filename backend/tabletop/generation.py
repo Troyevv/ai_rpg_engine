@@ -1,9 +1,42 @@
 """Authoring LLM outputs definitions/operations, never canonical GameState."""
 
 import json
+from pydantic import ValidationError
+from .validation import CampaignValidationError, ValidationIssue, schema_error
 from .definitions import CampaignDefinition, CampaignMutation
 from .compiler import CampaignCompiler
 from .catalog import load_ruleset
+
+REFERENCE_CONTRACT = """
+КРИТИЧЕСКОЕ ТРЕБОВАНИЕ: соблюдай ссылочную целостность CampaignDefinition.
+Любая ссылка должна указывать на сущность, реально объявленную в этом документе
+или в переданном каталоге. Имя не заменяет ID. Не придумывай ссылки без сущностей.
+CharacterDefinition (characters и creatures):
+- knowledge[] содержит исключительно существующие secrets.id, не отдельные ID знаний
+  и не текст фактов. Если персонаж не знает существующих секретов, верни [].
+- relationships: ключи только characters.id или creatures.id, никогда имена.
+  Если отношений нет, верни {}. Несуществующие участники запрещены.
+- location_id -> locations.id; faction_id -> factions.id.
+- inventory[].item_id -> catalog.items.id или items.id.
+- build.equipment[] -> catalog.items.id; набор должен соответствовать классу.
+Location.region_id -> regions.id; Location.connections[] -> locations.id.
+Secret.location_id -> locations.id.
+WorldObject.location_id -> locations.id; WorldObject.secrets[] -> secrets.id.
+WorldObject.contents[].item_id -> catalog.items.id или items.id.
+Quest.location_id -> locations.id; Quest.giver_id -> characters.id или creatures.id.
+Quest.required_item -> catalog.items.id или items.id.
+Quest.reward[].item_id -> catalog.items.id или items.id.
+Encounter.location_id -> locations.id.
+Encounter.participants[] -> characters.id или creatures.id.
+Encounter.loot_object -> objects.id; Encounter.quest_id -> quests.id.
+FactionRelation.first и FactionRelation.second -> factions.id.
+starting_party[] -> characters.id или creatures.id; starting_location -> locations.id.
+Необязательные ссылки без цели должны быть null, не пустой строкой и не выдуманным ID.
+Проверь каждую ссылку перед возвратом JSON, включая обе коллекции actors и предметы
+каталога. Не создавай reference на entity, которой нет в документе/catalog.
+Существующий секрет объекта и участники encounter должны находиться в соответствующей
+локации. Все члены стартовой партии находятся в starting_location.
+"""
 
 
 class CampaignGenerator:
@@ -25,7 +58,8 @@ class CampaignGenerator:
             "Не переопределяй предметы каталога в items. faction_relations должны явно задавать HOSTILE для врагов. "
             "secrets.description скрыт, обычные descriptions публичны: не дублируй там секреты. "
             "Object contents содержит InventoryEntry. Quest required_item — ID реально доступного предмета. "
-            "Схема: "
+            + REFERENCE_CONTRACT
+            + "\nСхема: "
             + json.dumps(CampaignDefinition.model_json_schema(), ensure_ascii=False)
         )
         raw = self.dm.call(
@@ -48,6 +82,9 @@ class CampaignGenerator:
         )
         try:
             definition = CampaignDefinition.model_validate_json(raw)
+        except ValidationError as exc:
+            raise schema_error(exc) from None
+        try:
             definition = CampaignCompiler().validate(definition)
             if (
                 len(definition.locations) < 3
@@ -63,9 +100,21 @@ class CampaignGenerator:
                     "Размер сгенерированной партии не соответствует запросу"
                 )
             return definition
+        except CampaignValidationError:
+            raise
         except ValueError as exc:
-            raise ValueError(
-                "Кампания не прошла проверку до старта: " + str(exc)[:1500]
+            raise CampaignValidationError(
+                [
+                    ValidationIssue(
+                        code="semantic_validation",
+                        entity_type="campaign",
+                        entity_id=definition.id,
+                        field="definition",
+                        message=str(exc),
+                    )
+                ],
+                stage="semantic",
+                definition=definition,
             ) from None
 
 
