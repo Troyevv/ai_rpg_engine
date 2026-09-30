@@ -8,29 +8,17 @@ import llm
 from backend.services.coordinator import LOCAL_MODEL_LOCK
 from backend.services.usage import usage_values, cost, price_snapshot
 from .models import Command
-from .projection import public_state
+from .narration import contains_mechanical_instruction, safe_narration
 
 
 class DMContextBuilder:
     @staticmethod
     def build(state, events=None, role="narration"):
-        from .projection import DMProjection, PublicProjection
+        from .projection import DMProjection, NarrationProjection
 
         if role == "interpretation":
             return DMProjection.build(state, events)
-        p = PublicProjection.build(state)
-        return {
-            "scene": p["scene"],
-            "location": p["location"],
-            "mode": p["mode"],
-            "characters": p["characters"],
-            "visible_npcs": p["npcs"],
-            "objects": p["objects"],
-            "known": p["knowledge"],
-            "quests": p["quests"],
-            "encounter": p["encounter"],
-            "events": (events or [])[-20:],
-        }
+        return NarrationProjection.build(state, events)
 
 
 class DMAgent:
@@ -92,7 +80,7 @@ class DMAgent:
     def interpret(self, gid, state, text):
         if not self.config:
             raise ValueError(
-                "Свободный ввод требует LLM DM. Без модели используй игровые кнопки."
+                "Для игры настрой AI-ведущего: выбери провайдера и модель."
             )
         prompt = (
             "Ты DM настольной RPG. Верни только одну JSON команду по схеме. "
@@ -102,6 +90,9 @@ class DMAgent:
             "Если игрок хочет пойти в ещё не созданное место: expand topic=описание места. "
             "Не выдавай скрытые ID/секреты в topic и не назначай последствия за пределами схемы. "
             "Для неожиданного действия: check с ability/skill и семантической difficulty; исход не даёт произвольных изменений. "
+            "Любая проверка или спасбросок — только check/save request с reason; не обещай бросок текстом. "
+            "Если нужно уточнение цели или действия, верни request_choice с 2–6 публичными вариантами и typed commands. "
+            "Не раскрывай секреты в reason/prompt/label. Не выбирай за игрока. "
             "Схема: " + json.dumps(Command.model_json_schema(), ensure_ascii=False)
         )
         raw = self.call(
@@ -114,7 +105,7 @@ class DMAgent:
                     "content": json.dumps(
                         {
                             "context": DMContextBuilder.build(
-                                state, role="interpretation"
+                                state, self.recent_events(gid), role="interpretation"
                             ),
                             "action": text,
                         },
@@ -131,11 +122,20 @@ class DMAgent:
                 "DM вернул недопустимую команду. Состояние не изменено."
             ) from None
 
+    def recent_events(self, gid):
+        return [
+            event for turn in self.repo.history(gid)[-6:] for event in turn["events"]
+        ][-20:]
+
     def narrate(self, gid, state, events, text=""):
+        # No result-generation call while any mechanical resolution remains pending.
+        if not state.session_state.mechanical_resolution_complete:
+            return ""
         if not self.config:
             return "\n\n".join(e["text"] for e in events if "roll" not in e)
         dialogue = any(e.get("kind") == "dialogue" for e in events)
         context = DMContextBuilder.build(state, events)
+        context["recent_events"] = self.recent_events(gid)
         if dialogue and state.session_state.dialogue_actor:
             npc = state.actor(state.session_state.dialogue_actor)
             # Portrayal has public traits, public lore and only engine-authorized disclosures.
@@ -151,7 +151,7 @@ class DMAgent:
                     if i in state.player_knowledge
                 ],
             }
-        return self.call(
+        narrative = self.call(
             gid,
             "npc_dialogue" if dialogue else "narration",
             [
@@ -160,7 +160,12 @@ class DMAgent:
                     "content": "Ты DM настольной RPG. Пиши по-русски. Опиши только подтверждённые механические события. "
                     "Для dialogue отвечай от лица указанного NPC, учитывая характер и отношение. "
                     "Не выдумывай секреты, победы, предметы, успешные проверки или изменения HP. "
-                    "Если нужен бросок, попроси его выполнить. Решения игрока не дописывай. В конце можно предложить 2 коротких действия.",
+                    "Механическое разрешение уже завершено. Никогда не требуй новых бросков или проверок. "
+                    "Запрещено: брось d20, сделай saving throw, потеряй HP, получи предмет, потрать spell slot, "
+                    "брось initiative, нанеси damage, добавь modifier/condition, DC 15, выбери действие 1/2, нажми кнопку. "
+                    "Всю механику показывает UI. Ты описываешь мир и реакцию NPC, без численных HP/урона/бонусов. "
+                    "Учитывай biography/personality/ideals/bonds/flaws героя без механических бонусов. "
+                    "Решения, мысли и чувства игрока не дописывай.",
                 },
                 {
                     "role": "user",
@@ -170,3 +175,21 @@ class DMAgent:
                 },
             ],
         )
+
+        if contains_mechanical_instruction(narrative):
+            self.repo.request_log(
+                gid,
+                "narration_guard",
+                {
+                    "status": "rejected",
+                    "provider": self.config["provider"],
+                    "model": self.config["model"],
+                    "seconds": 0,
+                    "input_tokens": None,
+                    "output_tokens": None,
+                    "cached_tokens": None,
+                    "cost": None,
+                    "reason": "mechanical_instruction_in_prose",
+                },
+            )
+        return safe_narration(narrative)

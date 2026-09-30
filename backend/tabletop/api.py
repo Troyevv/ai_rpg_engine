@@ -1,5 +1,6 @@
 """HTTP adapts requests; generated data crosses compiler before persistence."""
 
+import os
 import hashlib
 import json
 from uuid import uuid4
@@ -8,7 +9,8 @@ from fastapi.responses import JSONResponse
 from .validation import CampaignValidationError
 from pydantic import Field, model_validator
 from backend.api.schemas import Credential, ModelConfig
-from .models import Command, NewGame
+from .models import NewGame
+from .commands import CommandType
 from .definitions import CampaignDefinition, GenerationOptions, CharacterBuild
 from .repository import TabletopRepository
 from .runtime import TabletopRuntime
@@ -16,7 +18,8 @@ from .projection import public_state
 from .compiler import CampaignCompiler
 from .catalog import load_ruleset
 from .dm import DMAgent, DMContextBuilder
-from .generation import CampaignGenerator, ContentGenerator
+from .generation import CampaignGenerator
+from .services.content import ContentService
 
 
 class Request(Credential):
@@ -26,7 +29,7 @@ class Request(Credential):
 
 
 class ActionRequest(Request):
-    command: Command | None = None
+    command: CommandType | None = None
     text: str = Field(default="", max_length=4000)
 
     @model_validator(mode="after")
@@ -50,6 +53,10 @@ class DraftRequest(Credential):
     revision: int = 0
 
 
+class NewGameRequest(NewGame, Credential):
+    config: ModelConfig | None = None
+
+
 class BuildRequest(Credential):
     build: CharacterBuild
     ruleset_id: str = "d20-basic-v2"
@@ -57,6 +64,7 @@ class BuildRequest(Credential):
 
 def install(app, shared_repo, credentials):
     repo = TabletopRepository(shared_repo.path)
+    app.state.tabletop_debug = os.getenv("TABLETOP_DEBUG") == "1"
     runtime = TabletopRuntime()
     compiler = CampaignCompiler()
     app.state.tabletop_repository = repo
@@ -79,6 +87,10 @@ def install(app, shared_repo, credentials):
         }
 
     def agent(body):
+        if not body.config and not app.state.tabletop_debug:
+            raise ValueError(
+                "Для игры настрой AI-ведущего: выбери провайдера и модель."
+            )
         config = body.config.model_dump() if body.config else None
         return DMAgent(
             repo,
@@ -135,6 +147,7 @@ def install(app, shared_repo, credentials):
         return {
             **load_ruleset().model_dump(),
             "default_build": CharacterBuild().model_dump(),
+            "developer_mode": app.state.tabletop_debug,
         }
 
     @router.post("/build/validate")
@@ -199,7 +212,8 @@ def install(app, shared_repo, credentials):
         return repo.list_games()
 
     @router.post("/games")
-    def create(body: NewGame):
+    def create(body: NewGameRequest):
+        dm = agent(body)
         draft = repo.draft(body.draft_id)
         if draft["revision"] != body.draft_revision:
             raise ValueError("Черновик изменился")
@@ -212,7 +226,11 @@ def install(app, shared_repo, credentials):
         gid = repo.create(state)
         events = [{"text": state.definition.starting_scene, "kind": "opening"}]
         repo.commit(gid, 0, uuid4().hex, "opening", state, events, "")
-        repo.annotate(gid, 1, state.definition.starting_scene)
+        try:
+            opening = dm.narrate(gid, state, events, "Начало приключения")
+        except Exception:
+            opening = "Мир готов. Опиши своё первое действие."
+        repo.annotate(gid, 1, opening)
         return snapshot(gid)
 
     @router.get("/games/{gid}")
@@ -234,6 +252,10 @@ def install(app, shared_repo, credentials):
             return snapshot(gid)
         if state.session_state.pending:
             raise ValueError("Сначала выполни ожидающий бросок")
+        if state.session_state.choice and (
+            body.command is None or body.command.type != "resolve_choice"
+        ):
+            raise ValueError("Сначала выбери вариант ожидающего действия")
         dm = agent(body)
         try:
             command = body.command or dm.interpret(gid, state, body.text)
@@ -242,30 +264,7 @@ def install(app, shared_repo, credentials):
         except Exception:
             raise ValueError("DM недоступен. Состояние не изменено.") from None
         if command.type == "expand":
-            if state.encounter or state.session_state.reaction:
-                raise ValueError("Новый контент создаётся вне боя")
-            runtime.owned(
-                state, command.actor_id or state.session_state.controlled_actor
-            )
-            if not command.topic.strip():
-                raise ValueError("Опиши новый контент")
-            try:
-                after, mutation = ContentGenerator(dm).generate(
-                    gid, state, command.topic
-                )
-            except ValueError:
-                raise
-            except Exception:
-                raise ValueError(
-                    "Расширение мира недоступно. Состояние не изменено."
-                ) from None
-            events = [
-                {
-                    "text": "Добавлен новый контент. Доступные переходы обновлены.",
-                    "kind": "content",
-                    "operations": [op.type for op in mutation.operations],
-                }
-            ]
+            after, events = ContentService(runtime).execute(gid, state, command, dm)
         else:
             after, events = runtime.execute(state, command)
         labels = {
@@ -295,6 +294,8 @@ def install(app, shared_repo, credentials):
             "reaction_attack": "Атаковать реакцией",
             "decline_reaction": "Пропустить реакцию",
             "select_actor": "Выбрать персонажа",
+            "request_choice": "Уточнить действие",
+            "resolve_choice": "Выбрать действие",
         }
         return finish(
             gid, body, fp, after, events, dm, body.text or labels[command.type]

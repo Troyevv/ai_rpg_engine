@@ -47,9 +47,6 @@ export function Tabletop({
     [tab, setTab] = useState("Игра"),
     [text, setText] = useState(""),
     [context, setContext] = useState("");
-  const [llm, setLlm] = useState(
-    () => localStorage.getItem("tabletop-dm") === "true",
-  );
   const lock = useRef(false);
   const refresh = () =>
     api<{ id: string; name: string }[]>("/tabletop/games").then(setGames);
@@ -91,7 +88,7 @@ export function Tabletop({
     localStorage.setItem("tabletop-game", g.id);
     void refresh();
   };
-  async function perform(path: string, payload: object, model = llm) {
+  async function perform(path: string, payload: object, model = true) {
     if (!game) return;
     await run(async () => {
       try {
@@ -121,6 +118,7 @@ export function Tabletop({
   const hero = s?.characters[acting] || s?.characters[s.controlled_actor];
   const blocked =
     busy ||
+    !!s?.choice ||
     !!pending ||
     !!s?.reaction ||
     !hero ||
@@ -231,17 +229,9 @@ export function Tabletop({
             </option>
           ))}
         </select>
-        <label className="tt-toggle">
-          <input
-            type="checkbox"
-            checked={llm}
-            onChange={(e) => {
-              setLlm(e.target.checked);
-              localStorage.setItem("tabletop-dm", String(e.target.checked));
-            }}
-          />{" "}
-          LLM DM
-        </label>
+        <span className="tt-note">
+          AI-ведущий · {prefs.game.model || "выбери модель в настройках"}
+        </span>
       </div>
       {error && (
         <p role="alert" className="tt-error">
@@ -280,6 +270,29 @@ export function Tabletop({
                 {enc.movement}
               </p>
             )}
+            {s.choice && (
+              <div className="tt-roll-prompt" role="status">
+                <h2>{s.choice.prompt}</h2>
+                {s.choice.options.map((option) => (
+                  <button
+                    key={option.id}
+                    disabled={busy}
+                    onClick={() =>
+                      void perform("actions", {
+                        command: {
+                          type: "resolve_choice",
+                          actor_id: s.choice!.actor,
+                          pending_id: s.choice!.id,
+                          option_id: option.id,
+                        },
+                      })
+                    }
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
             {pending && (
               <div className="tt-roll-prompt" role="status">
                 <h2>
@@ -287,6 +300,12 @@ export function Tabletop({
                   {purposes[pending.purpose] || pending.purpose}
                 </h2>
                 <p>
+                  {pending.reason && (
+                    <span>
+                      {pending.reason}
+                      <br />
+                    </span>
+                  )}
                   {pending.expression} {signed(pending.modifier)}
                   {pending.critical ? " · критический урон" : ""}
                 </p>
@@ -351,13 +370,21 @@ export function Tabletop({
                       <small>
                         #{h.revision} · {h.user_text}
                       </small>
-                      <p style={{ whiteSpace: "pre-wrap" }}>
-                        {h.narrative ||
-                          h.events
-                            .filter((e) => !e.roll)
-                            .map((e) => e.text)
-                            .join("\n")}
-                      </p>
+                      {h.narrative && (
+                        <p
+                          className="tt-narration"
+                          style={{ whiteSpace: "pre-wrap" }}
+                        >
+                          {h.narrative}
+                        </p>
+                      )}
+                      <div className="tt-mechanics" aria-label="События правил">
+                        {h.events
+                          .filter((e) => !e.roll)
+                          .map((e, i) => (
+                            <p key={i}>{e.text}</p>
+                          ))}
+                      </div>
                       {h.events
                         .filter((e) => e.roll)
                         .map((e, i) => (
@@ -380,21 +407,17 @@ export function Tabletop({
                   <label>
                     Твоё действие
                     <textarea
+                      disabled={blocked}
                       value={text}
                       onChange={(e) => setText(e.target.value)}
                       placeholder="Опиши, что хочешь сделать…"
                     />
                   </label>
-                  <button disabled={blocked || !llm || !text.trim()}>
+                  <button disabled={blocked || !text.trim()}>
                     Отправить DM
                   </button>
                 </form>
-                {!llm && (
-                  <p className="tt-note">
-                    Включи LLM DM для свободного ввода. Кнопки действий доступны
-                    без модели.
-                  </p>
-                )}
+
                 <button
                   disabled={busy || game.revision < 2}
                   onClick={() => void perform("rollback", {})}

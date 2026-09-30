@@ -157,7 +157,16 @@ export type Game = {
     }[];
     exits: { id: string; name: string }[];
     game_time: number;
+    mechanical_resolution_complete: boolean;
+    choice: null | {
+      id: string;
+      actor: string;
+      kind: string;
+      prompt: string;
+      options: { id: string; label: string }[];
+    };
     pending: null | {
+      reason: string;
       id: string;
       actor: string;
       controller: string;

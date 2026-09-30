@@ -1,6 +1,7 @@
 """Canonical state v2. Definitions are compiled, never accepted as runtime patches."""
 
 from typing import Literal
+from .commands import ChoiceOption
 from pydantic import Field, model_validator
 from .definitions import (
     Model,
@@ -130,6 +131,7 @@ class Encounter(Model):
 
 class PendingRoll(Model):
     id: str
+    reason: str = ""
     purpose: Literal["check", "save", "initiative", "attack", "damage", "death"]
     actor: str
     controller: ControllerType = "PLAYER"
@@ -149,18 +151,34 @@ class PendingRoll(Model):
     resume: Literal["EXPLORATION", "DIALOGUE", "ENCOUNTER"] = "EXPLORATION"
 
 
+class PendingChoice(Model):
+    id: str
+    actor: str
+    player_id: str | None = "local"
+    kind: Literal["action", "target"] = "action"
+    prompt: str
+    options: list[ChoiceOption] = Field(min_length=2, max_length=6)
+
+
 class SessionState(Model):
     mode: Literal["EXPLORATION", "DIALOGUE", "ENCOUNTER", "AWAITING_ROLL"] = (
         "EXPLORATION"
     )
     controlled_actor: str
     pending: PendingRoll | None = None
+    choice: PendingChoice | None = None
     dialogue_actor: str | None = None
     initiative_waiting: list[str] = []
     initiative_results: dict[str, int] = {}
     encounter_definition: str = ""
     turn_started: bool = False
     reaction: dict | None = None
+
+    @property
+    def mechanical_resolution_complete(self):
+        return not (
+            self.pending or self.choice or self.reaction or self.initiative_waiting
+        )
 
 
 class ObjectState(Model):
@@ -245,6 +263,15 @@ class GameState(Model):
             or p.player_id != self.controllers[p.actor].player_id
         ):
             raise ValueError("Контроллер броска не соответствует участнику")
+        choice = self.session_state.choice
+        if choice:
+            if p or self.session_state.reaction or choice.actor not in actors:
+                raise ValueError("Несовместимые ожидающие действия")
+            owner = self.controllers[choice.actor]
+            if owner.controller != "PLAYER" or owner.player_id != choice.player_id:
+                raise ValueError("Контроллер выбора не соответствует участнику")
+            if len({o.id for o in choice.options}) != len(choice.options):
+                raise ValueError("Повтор ID варианта выбора")
         e = self.encounter
         if self.active_encounter and (
             not e
@@ -258,47 +285,8 @@ class GameState(Model):
         return self
 
 
-class Command(Model):
-    type: Literal[
-        "look",
-        "move",
-        "interact",
-        "dialogue",
-        "check",
-        "save",
-        "attack",
-        "use_item",
-        "equip",
-        "unequip",
-        "take_item",
-        "drop_item",
-        "rest",
-        "help",
-        "dodge",
-        "dash",
-        "disengage",
-        "end_turn",
-        "start_encounter",
-        "flee",
-        "guard",
-        "recover",
-        "expand",
-        "reaction_attack",
-        "decline_reaction",
-        "select_actor",
-    ]
-    actor_id: str = ""
-    target: str = Field(default="", max_length=80)
-    ability: Ability = "wisdom"
-    skill: str = Field(default="", max_length=80)
-    difficulty: Difficulty = "MEDIUM"
-    weapon: str = Field(default="", max_length=80)
-    item_id: str = Field(default="", max_length=80)
-    quantity: int = Field(default=1, ge=1, le=100)
-    distance: int = Field(default=0, ge=-120, le=120)
-    rest: Literal["short", "long"] = "short"
-    purpose: Literal["general", "search", "unlock", "persuade"] = "general"
-    topic: str = Field(default="", max_length=1000)
+# Backwards compatible import; HTTP uses the discriminated CommandType union.
+from .commands import Command
 
 
 class NewGame(Model):

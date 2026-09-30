@@ -232,7 +232,8 @@ def test_unsupported_rules_and_state_references():
 
 
 @pytest.fixture
-def api(tmp_path):
+def api(tmp_path, monkeypatch):
+    monkeypatch.setenv("TABLETOP_DEBUG", "1")
     app = create_app(tmp_path / "tabletop.sqlite3")
     with TestClient(app) as client:
         yield client, app
@@ -393,10 +394,10 @@ def test_dm_contract_usage_no_secret_and_fallback(api):
             config=CONFIG,
             api_key="secret-token",
         ).json()
-    assert g["state"]["pending"]["ability"] == "strength" and len(calls) == 2
-    assert len(g["usage"]) == 2 and g["usage"][0]["input_tokens"] == 100
+    assert g["state"]["pending"]["ability"] == "strength" and len(calls) == 1
+    assert len(g["usage"]) == 1 and g["usage"][0]["input_tokens"] == 100
     assert "NEVER_DISCLOSE" in json.dumps(calls[0], ensure_ascii=False, default=str)
-    assert "NEVER_DISCLOSE" not in json.dumps(calls[1], ensure_ascii=False, default=str)
+    assert g["history"][-1]["narrative"] == ""  # no narration before manual resolution
     with patch("llm.chat_stream", side_effect=RuntimeError("secret-token")):
         response = send(
             c,
