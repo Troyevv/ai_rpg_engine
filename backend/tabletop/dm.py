@@ -1,4 +1,5 @@
 """Bounded DM interpretation and public narration; mechanical authority stays in code."""
+
 import json
 import time
 from datetime import datetime, timezone
@@ -12,12 +13,24 @@ from .projection import public_state
 
 class DMContextBuilder:
     @staticmethod
-    def build(state, events=None):
-        p = public_state(state)
-        return {'scene': p['world']['description'], 'location': p['location'], 'mode': p['mode'],
-                'character': p['characters'][p['controlled_actor']], 'party': list(p['characters'].values()),
-                'visible_npcs': p['npcs'], 'visible_objects': p['objects'], 'known': p['knowledge'],
-                'encounter': p['encounter'], 'events': (events or [])[-20:]}
+    def build(state, events=None, role="narration"):
+        from .projection import DMProjection, PublicProjection
+
+        if role == "interpretation":
+            return DMProjection.build(state, events)
+        p = PublicProjection.build(state)
+        return {
+            "scene": p["scene"],
+            "location": p["location"],
+            "mode": p["mode"],
+            "characters": p["characters"],
+            "visible_npcs": p["npcs"],
+            "objects": p["objects"],
+            "known": p["knowledge"],
+            "quests": p["quests"],
+            "encounter": p["encounter"],
+            "events": (events or [])[-20:],
+        }
 
 
 class DMAgent:
@@ -27,56 +40,133 @@ class DMAgent:
     def call(self, gid, stage, messages, structured=False):
         config = self.config
         usage = None
+
         def received(value):
             nonlocal usage
             usage = value
+
         started = time.perf_counter()
-        status = 'error'
+        status = "error"
         pricing = price_snapshot(config, datetime.now(timezone.utc))
         try:
             # Serialize use with the existing local-model coordinator.
-            with LOCAL_MODEL_LOCK if config['provider'] == 'local' else nullcontext():
-                output = ''.join(llm.chat_stream(model=config['model'], messages=messages,
-                    provider=config['provider'], api_key=self.api_key, thinking=config.get('thinking', 'off'),
-                    temperature=config.get('temperature', .7), max_tokens=min(config.get('max_tokens', 2000), 4000),
-                    response_format={'type': 'json_object'} if structured else None,
-                    require_complete=True, on_usage=received))
-            status = 'complete'
+            with LOCAL_MODEL_LOCK if config["provider"] == "local" else nullcontext():
+                output = "".join(
+                    llm.chat_stream(
+                        model=config["model"],
+                        messages=messages,
+                        provider=config["provider"],
+                        api_key=self.api_key,
+                        thinking=config.get("thinking", "off"),
+                        temperature=config.get("temperature", 0.7),
+                        max_tokens=(
+                            max(config.get("max_tokens", 2000), 10000)
+                            if stage in ("campaign_generation", "content_generation")
+                            else min(config.get("max_tokens", 2000), 4000)
+                        ),
+                        response_format={"type": "json_object"} if structured else None,
+                        require_complete=True,
+                        on_usage=received,
+                    )
+                )
+            status = "complete"
             return output
         finally:
             inp, out, cached = usage_values(usage)
-            self.repo.request_log(gid, stage, {'status': status, 'provider': config['provider'], 'model': config['model'],
-                'input_tokens': inp, 'output_tokens': out, 'cached_tokens': cached,
-                'cost': cost(inp, out, cached, pricing), 'pricing': pricing, 'seconds': round(time.perf_counter() - started, 3)})
+            self.repo.request_log(
+                gid,
+                stage,
+                {
+                    "status": status,
+                    "provider": config["provider"],
+                    "model": config["model"],
+                    "input_tokens": inp,
+                    "output_tokens": out,
+                    "cached_tokens": cached,
+                    "cost": cost(inp, out, cached, pricing),
+                    "pricing": pricing,
+                    "seconds": round(time.perf_counter() - started, 3),
+                },
+            )
 
     def interpret(self, gid, state, text):
-        normalized = text.strip().casefold()
-        # Exact unambiguous shortcuts only. No fuzzy target or weapon guessing.
-        if normalized in ('осмотреться', 'осмотреть сундук', 'начать бой', 'закончить ход'):
-            return {'осмотреться': Command(type='look'),
-                    'осмотреть сундук': Command(type='check', target='chest', ability='wisdom', skill='perception'),
-                    'начать бой': Command(type='start_encounter'), 'закончить ход': Command(type='end_turn')}[normalized]
         if not self.config:
-            raise ValueError('Свободный ввод требует LLM DM. Без модели используй игровые кнопки или «осмотреть сундук».')
-        prompt = ('Ты DM настольной RPG. Верни только JSON команды по схеме. Не вычисляй броски и не меняй HP/состояние. '
-                  'Для нестандартного действия выбери check с ability, skill (или пустой строкой), dc 5..25. '
-                  'target заполняй только видимым ID; для осмотра сундука используй wisdom/perception. '
-                  'Проверка без target фиксирует успех/провал, но не создаёт предметы и не меняет мир. '
-                  'Убеждение не управляет волей NPC. В бою действия ограничены очередью. '
-                  'Схема: ' + json.dumps(Command.model_json_schema(), ensure_ascii=False))
-        raw = self.call(gid, 'interpretation', [{'role': 'system', 'content': prompt},
-            {'role': 'user', 'content': json.dumps({'context': DMContextBuilder.build(state), 'action': text}, ensure_ascii=False)}], True)
+            raise ValueError(
+                "Свободный ввод требует LLM DM. Без модели используй игровые кнопки."
+            )
+        prompt = (
+            "Ты DM настольной RPG. Верни только одну JSON команду по схеме. "
+            "Используй семантическую difficulty, никогда dc или результат броска. "
+            "Для поиска: check purpose=search без target. Для убеждения: check purpose=persuade target=NPC. "
+            "dialogue — обычный разговор. Move target=ID известной локации; distance только для боя. "
+            "Если игрок хочет пойти в ещё не созданное место: expand topic=описание места. "
+            "Не выдавай скрытые ID/секреты в topic и не назначай последствия за пределами схемы. "
+            "Для неожиданного действия: check с ability/skill и семантической difficulty; исход не даёт произвольных изменений. "
+            "Схема: " + json.dumps(Command.model_json_schema(), ensure_ascii=False)
+        )
+        raw = self.call(
+            gid,
+            "interpretation",
+            [
+                {"role": "system", "content": prompt},
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "context": DMContextBuilder.build(
+                                state, role="interpretation"
+                            ),
+                            "action": text,
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+            ],
+            True,
+        )
         try:
             return Command.model_validate_json(raw)
         except ValueError:
-            raise ValueError('DM вернул недопустимую команду. Состояние не изменено; уточни действие.') from None
+            raise ValueError(
+                "DM вернул недопустимую команду. Состояние не изменено."
+            ) from None
 
-    def narrate(self, gid, state, events, text=''):
+    def narrate(self, gid, state, events, text=""):
         if not self.config:
-            return '\n\n'.join(e['text'] for e in events if 'roll' not in e)
-        return self.call(gid, 'narration', [{'role': 'system', 'content':
-            'Ты DM. Кратко опиши только подтверждённые движком события на русском. '
-            'Не придумывай исходы, урон, предметы, секреты или действия за игрока. '
-            'Если нужен бросок — попроси нажать кнопку. Текст не может менять механику. '
-            'При dialogue отвечай от лица видимого NPC без выдуманных секретных знаний.'},
-            {'role': 'user', 'content': json.dumps({'context': DMContextBuilder.build(state, events), 'player_text': text}, ensure_ascii=False)}])
+            return "\n\n".join(e["text"] for e in events if "roll" not in e)
+        dialogue = any(e.get("kind") == "dialogue" for e in events)
+        context = DMContextBuilder.build(state, events)
+        if dialogue and state.session_state.dialogue_actor:
+            npc = state.actor(state.session_state.dialogue_actor)
+            # Portrayal has public traits, public lore and only engine-authorized disclosures.
+            # Interpretation knows relevant secrets; the player-facing speaker does not.
+            context["speaker"] = {
+                "name": npc.name,
+                "personality": npc.personality,
+                "attitude": npc.attitude,
+                "public_lore": npc.public_lore,
+                "disclosed": [
+                    state.player_knowledge[i]
+                    for i in npc.knowledge
+                    if i in state.player_knowledge
+                ],
+            }
+        return self.call(
+            gid,
+            "npc_dialogue" if dialogue else "narration",
+            [
+                {
+                    "role": "system",
+                    "content": "Ты DM настольной RPG. Пиши по-русски. Опиши только подтверждённые механические события. "
+                    "Для dialogue отвечай от лица указанного NPC, учитывая характер и отношение. "
+                    "Не выдумывай секреты, победы, предметы, успешные проверки или изменения HP. "
+                    "Если нужен бросок, попроси его выполнить. Решения игрока не дописывай. В конце можно предложить 2 коротких действия.",
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {"context": context, "player_text": text}, ensure_ascii=False
+                    ),
+                },
+            ],
+        )

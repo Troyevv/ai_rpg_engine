@@ -90,8 +90,43 @@ def stream(**kwargs):
         yield value[i:i+60]
 
 
+def tabletop_stream(**kwargs):
+    from tabletop_fixture import definition
+    prompt=kwargs['messages'][0]['content']
+    if 'playable CampaignDefinition' in prompt:
+        value=definition().model_dump_json()
+    elif 'CampaignMutation JSON' in prompt:
+        value=json.dumps({'operations':[{'type':'CreateLocation','value':{'id':'observatory','name':'Обсерватория','region_id':'district'}},{'type':'ConnectLocations','first':'market','second':'observatory'}]})
+    elif kwargs.get('response_format'):
+        value=json.dumps({'type':'look'})
+    else:
+        context=json.loads(kwargs['messages'][-1]['content'])['context']
+        value='\n'.join(e['text'] for e in context['events'] if 'roll' not in e)
+    if kwargs.get('on_usage'):kwargs['on_usage']({'prompt_tokens':100,'completion_tokens':50})
+    yield value
+
+llm.chat_stream = tabletop_stream
+
 engine.chat_stream = stream
-preparation.chat_stream = stream
+hold_next_preparation = False
+
+def preparation_stream(**kwargs):
+    global hold_next_preparation
+    hold = hold_next_preparation
+    hold_next_preparation = False
+    for chunk in stream(**kwargs):
+        yield chunk
+        if hold:
+            # Browser reconnection must observe an in-flight generation, independent
+            # of device speed. Only the cancellation test enables this one-shot gate.
+            deadline=time.monotonic()+30
+            while time.monotonic()<deadline:
+                if kwargs.get('cancel_event') and kwargs['cancel_event'].is_set():
+                    raise RuntimeError('Генерация остановлена.')
+                time.sleep(.05)
+            hold=False
+
+preparation.chat_stream = preparation_stream
 engine.find_loaded_model = preparation.find_loaded_model = lambda _: {'config': {'context_length':32768}}
 llm.get_available_models = lambda: ['local-model']
 llm.get_loaded_models = lambda: [{'model_key':'local-model','display_name':'Test local model'}]
@@ -102,6 +137,21 @@ llm.unload_all_models = lambda: 1
 if __name__ == '__main__':
     path = os.getenv('E2E_DB_PATH') or str(Path(tempfile.mkdtemp())/'e2e.sqlite3')
     app = create_app(path)
+    from backend.tabletop.dice import DiceEngine
+    from tabletop_fixture import Fixed
+    class BrowserDice(DiceEngine):
+        def roll(self,expression,**kwargs):
+            value=({'initiative':1,'attack':12,'damage':2}.get(kwargs.get('purpose'),10) if kwargs.get('actor')=='sentinel' else 8 if kwargs.get('purpose')=='damage' else 20)
+            return DiceEngine(Fixed(*([value]*10))).roll(expression,**kwargs)
+    dice=BrowserDice()
+    app.state.tabletop_runtime.dice=dice
+    app.state.tabletop_runtime.combat.dice=dice
+    @app.post('/test/hold-preparation')
+    def hold_preparation():
+        global hold_next_preparation
+        hold_next_preparation=True
+        return {'held':True}
+
     @app.post('/test/seed')
     def seed():
         repo = app.state.repository

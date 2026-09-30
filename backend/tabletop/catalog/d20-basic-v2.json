@@ -1,0 +1,184 @@
+{
+  "id": "d20-basic-v2",
+  "name": "D20 Basic v2",
+  "version": 2,
+  "capabilities": [
+    "checks",
+    "combat",
+    "rests",
+    "inventory",
+    "exploration",
+    "dialogue"
+  ],
+  "abilities": [
+    "strength",
+    "dexterity",
+    "constitution",
+    "intelligence",
+    "wisdom",
+    "charisma"
+  ],
+  "ability_array": [
+    15,
+    14,
+    13,
+    12,
+    10,
+    8
+  ],
+  "skills": {
+    "athletics": "strength",
+    "stealth": "dexterity",
+    "perception": "wisdom",
+    "persuasion": "charisma",
+    "investigation": "intelligence",
+    "survival": "wisdom"
+  },
+  "difficulty": {
+    "TRIVIAL": 5,
+    "EASY": 10,
+    "MEDIUM": 15,
+    "HARD": 20,
+    "VERY_HARD": 25,
+    "EXTREME": 30
+  },
+  "check_die": 20,
+  "critical": "double_dice",
+  "short_rest_minutes": 60,
+  "long_rest_minutes": 480,
+  "conditions": [
+    "dodge",
+    "helped",
+    "guard",
+    "unconscious",
+    "stable",
+    "dead",
+    "fled"
+  ],
+  "progression": {
+    "max_level": 1,
+    "proficiency_base": 2,
+    "proficiency_interval": 4
+  },
+  "classes": {
+    "fighter": {
+      "name": "Воин",
+      "hit_die": 10,
+      "saves": [
+        "strength",
+        "constitution"
+      ],
+      "skills": [
+        "athletics",
+        "perception",
+        "survival",
+        "persuasion"
+      ],
+      "equipment": [
+        "sword",
+        "leather",
+        "potion"
+      ],
+      "skill_count": 2,
+      "equipment_choices": [
+        [
+          "sword",
+          "leather",
+          "potion"
+        ],
+        [
+          "bow",
+          "leather",
+          "potion"
+        ]
+      ]
+    },
+    "scout": {
+      "name": "Разведчик",
+      "hit_die": 8,
+      "saves": [
+        "dexterity",
+        "intelligence"
+      ],
+      "skills": [
+        "stealth",
+        "perception",
+        "investigation",
+        "survival"
+      ],
+      "equipment": [
+        "bow",
+        "leather",
+        "potion"
+      ],
+      "skill_count": 2,
+      "equipment_choices": [
+        [
+          "bow",
+          "leather",
+          "potion"
+        ],
+        [
+          "sword",
+          "leather",
+          "potion"
+        ]
+      ]
+    }
+  },
+  "species": {
+    "human": {
+      "name": "Человек",
+      "speed": 30
+    },
+    "elf": {
+      "name": "Эльф",
+      "speed": 35
+    },
+    "dwarf": {
+      "name": "Дварф",
+      "speed": 25
+    }
+  },
+  "backgrounds": {
+    "wanderer": {
+      "name": "Странник"
+    },
+    "soldier": {
+      "name": "Солдат"
+    },
+    "scholar": {
+      "name": "Учёный"
+    }
+  },
+  "items": [
+    {
+      "id": "sword",
+      "name": "Меч",
+      "type": "weapon",
+      "weapon_die": 8
+    },
+    {
+      "id": "bow",
+      "name": "Лук",
+      "type": "weapon",
+      "weapon_die": 6,
+      "weapon_ability": "dexterity",
+      "reach": 60
+    },
+    {
+      "id": "leather",
+      "name": "Кожаная броня",
+      "type": "armor",
+      "armor_base": 12,
+      "dex_cap": 3
+    },
+    {
+      "id": "potion",
+      "name": "Лечебное зелье",
+      "type": "consumable",
+      "healing": 8,
+      "description": "Восстанавливает 8 HP, расходуется при использовании."
+    }
+  ]
+}

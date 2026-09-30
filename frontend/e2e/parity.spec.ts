@@ -108,6 +108,7 @@ test("streaming survives disconnect; stop keeps a draft and cannot save it as a 
     .getByRole("button", { name: "Написать сценарий", exact: true })
     .click();
   await expect(page.getByText("Сценарий готов", { exact: true })).toBeVisible();
+  await request.post("/test/hold-preparation");
   await page
     .getByRole("button", { name: "Создать выжимку", exact: true })
     .click();

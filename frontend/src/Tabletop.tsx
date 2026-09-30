@@ -1,150 +1,33 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  ArrowLeft,
-  Dice5,
-  Settings2,
-  Shield,
-  Swords,
-  ScrollText,
-  Plus,
-  RotateCcw,
-} from "lucide-react";
 import { api } from "./api";
 import type { Preferences } from "./types";
+import { Wizard } from "./tabletop/Wizard";
+import {
+  abilities,
+  skills,
+  purposes,
+  signed,
+  type Command,
+  type Game,
+  type Sheet,
+} from "./tabletop/types";
 import "./styles/tabletop.css";
-
-type Command = {
-  type: string;
-  target?: string;
-  ability?: string;
-  skill?: string;
-  distance?: number;
-  rest?: string;
-};
-type Sheet = {
-  id: string;
-  name: string;
-  character_class: string;
-  species: string;
-  level: number;
-  hp: number;
-  max_hp: number;
-  armor_class: number;
-  speed: number;
-  position: number;
-  abilities: Record<string, number>;
-  modifiers: Record<string, number>;
-  skill_modifiers: Record<string, number>;
-  save_modifiers: Record<string, number>;
-  attack_modifiers: Record<string, number>;
-  attacks: Record<
-    string,
-    { name: string; ability: string; die: number; reach: number }
-  >;
-  skill_proficiencies: string[];
-  save_proficiencies: string[];
-  inventory: string[];
-  features: string[];
-  spells: string[];
-  resources: Record<string, number>;
-  conditions: string[];
-  biography: string;
-};
-type Roll = {
-  expression: string;
-  raw: number[];
-  modifier: number;
-  total: number;
-  purpose: string;
-  actor: string;
-  advantage: number;
-};
-type Entry = {
-  revision: number;
-  user_text: string;
-  narrative: string;
-  events: { text: string; roll?: Roll }[];
-};
-type Game = {
-  id: string;
-  revision: number;
-  state: {
-    campaign: string;
-    ruleset: { name: string };
-    world: { name: string; description: string };
-    location: string;
-    mode: string;
-    controlled_actor: string;
-    characters: Record<string, Sheet>;
-    party: string[];
-    npcs: Record<
-      string,
-      { id: string; name: string; position: number; status: string }
-    >;
-    knowledge: Record<string, string>;
-    quests: Record<string, string>;
-    game_time: number;
-    pending: null | {
-      id: string;
-      purpose: string;
-      expression: string;
-      modifier: number;
-      critical: boolean;
-      ability: string;
-      skill: string;
-    };
-    encounter: null | {
-      round: number;
-      current_actor: string;
-      order: string[];
-      initiative: Record<string, number>;
-      action: boolean;
-      bonus_action: boolean;
-      reaction: boolean;
-      movement: number;
-    };
-  };
-  history: Entry[];
-  usage: {
-    stage: string;
-    status: string;
-    input_tokens: number | null;
-    output_tokens: number | null;
-    cached_tokens: number | null;
-    cost: string | null;
-    seconds: number;
-  }[];
-};
-type Item = { id: string; name: string; revision: number };
-const abilities: Record<string, string> = {
-  strength: "Сила",
-  dexterity: "Ловкость",
-  constitution: "Телосложение",
-  intelligence: "Интеллект",
-  wisdom: "Мудрость",
-  charisma: "Харизма",
-};
-const purposes: Record<string, string> = {
-  check: "Проверка",
-  save: "Спасбросок",
-  initiative: "Инициатива",
-  attack: "Атака",
-  damage: "Урон",
-  death: "Спасбросок от смерти",
-};
-const modes: Record<string, string> = {
+const modeNames: Record<string, string> = {
   EXPLORATION: "Исследование",
   DIALOGUE: "Разговор",
   ENCOUNTER: "Бой",
   AWAITING_ROLL: "Ожидание броска",
 };
-const signed = (v: number) => (v >= 0 ? `+${v}` : String(v));
-const requestId = () =>
-  crypto.randomUUID?.() ||
-  Array.from(crypto.getRandomValues(new Uint8Array(16)), (n) =>
-    n.toString(16).padStart(2, "0"),
-  ).join("");
-
+const controlNames: Record<string, string> = {
+  PLAYER: "Игрок",
+  AI: "Автоматическое управление",
+  DM: "Ведущий",
+};
+const questNames: Record<string, string> = {
+  available: "Доступно",
+  active: "В процессе",
+  completed: "Выполнено",
+};
 export function Tabletop({
   onBack,
   onSettings,
@@ -156,178 +39,198 @@ export function Tabletop({
   prefs: Preferences;
   apiKey: string;
 }) {
-  const [games, setGames] = useState<Item[]>([]);
-  const [game, setGame] = useState<Game | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [text, setText] = useState("");
-  const [tab, setTab] = useState("Игра");
+  const [games, setGames] = useState<{ id: string; name: string }[]>([]),
+    [game, setGame] = useState<Game | null>(null),
+    [creating, setCreating] = useState(false);
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState(""),
+    [tab, setTab] = useState("Игра"),
+    [text, setText] = useState(""),
+    [context, setContext] = useState("");
   const [llm, setLlm] = useState(
     () => localStorage.getItem("tabletop-dm") === "true",
   );
-  const [sheetId, setSheetId] = useState("hero");
   const lock = useRef(false);
-  const generation = useRef(0);
-  const bottom = useRef<HTMLDivElement>(null);
-  const refreshList = () => api<Item[]>("/tabletop/games").then(setGames);
+  const refresh = () =>
+    api<{ id: string; name: string }[]>("/tabletop/games").then(setGames);
   useEffect(() => {
-    let cancelled = false;
-    api<Item[]>("/tabletop/games")
-      .then((items) => {
-        if (cancelled) return;
-        setGames(items);
+    let active = true;
+    api<{ id: string; name: string }[]>("/tabletop/games")
+      .then(async (list) => {
+        if (!active) return;
+        setGames(list);
         const id = localStorage.getItem("tabletop-game");
-        if (id && items.some((g) => g.id === id))
-          api<Game>(`/tabletop/games/${id}`)
-            .then((g) => {
-              if (!cancelled) setGame(g);
-            })
-            .catch((e) => {
-              if (!cancelled) setError(e.message);
-            });
+        if (list.some((g) => g.id === id)) {
+          const g = await api<Game>(`/tabletop/games/${id}`);
+          if (active) setGame(g);
+        }
       })
-      .catch((e) => {
-        if (!cancelled) setError(e.message);
-      });
+      .catch((e) => active && setError(e.message));
     return () => {
-      cancelled = true;
-      generation.current++;
+      active = false;
     };
   }, []);
-  useEffect(() => {
-    bottom.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [game?.revision, tab]);
-  const open = async (id: string) => {
+  async function run(fn: () => Promise<void>) {
     if (lock.current) return;
     lock.current = true;
     setBusy(true);
     setError("");
     try {
-      const g = await api<Game>(`/tabletop/games/${id}`);
-      setGame(g);
-      setCreating(false);
-      setTab("Игра");
-      localStorage.setItem("tabletop-game", id);
+      await fn();
     } catch (e) {
       setError((e as Error).message);
     } finally {
       lock.current = false;
       setBusy(false);
     }
+  }
+  const accept = (g: Game) => {
+    setGame(g);
+    setCreating(false);
+    setTab("Игра");
+    localStorage.setItem("tabletop-game", g.id);
+    void refresh();
   };
-  const perform = async (path: string, payload: object) => {
-    if (!game || lock.current) return;
-    lock.current = true;
-    setBusy(true);
-    setError("");
-    const gen = generation.current;
-    try {
-      const next = await api<Game>(`/tabletop/games/${game.id}/${path}`, {
-        ...payload,
-        revision: game.revision,
-        request_id: requestId(),
-        ...(llm ? { config: prefs.game, api_key: apiKey || undefined } : {}),
-      });
-      if (gen === generation.current) {
-        setGame(next);
-        setText("");
-      }
-    } catch (e) {
-      if (gen === generation.current) {
-        setError((e as Error).message);
-        try {
-          setGame(await api<Game>(`/tabletop/games/${game.id}`));
-        } catch {
-          /* retain visible snapshot */
-        }
-      }
-    } finally {
-      lock.current = false;
-      setBusy(false);
-    }
-  };
-  const act = (command: Command) => void perform("actions", { command });
-  const state = game?.state;
-  const hero = state?.characters[state.controlled_actor];
-  const pending = state?.pending;
-  const encounter = state?.encounter;
-  const blocked = busy || !!pending || (!!hero && hero.hp === 0);
-  const name = (id: string) =>
-    state?.characters[id]?.name || state?.npcs[id]?.name || id;
-  const party = (
-    <section className="tt-panel">
-      <h2>
-        <Shield size={17} /> Партия
-      </h2>
-      {state?.party.map((id) => {
-        const a = state.characters[id];
-        return (
-          <button
-            className="tt-member"
-            key={id}
-            onClick={() => {
-              setSheetId(id);
-              setTab("Персонаж");
-            }}
-          >
-            <strong>
-              {a.name} {id === state.controlled_actor ? "· ты" : ""}
-            </strong>
-            <span>
-              {a.character_class} · уровень {a.level}
-            </span>
-            <progress max={a.max_hp} value={a.hp} />
-            <span>
-              {a.hp} / {a.max_hp} HP · AC {a.armor_class}
-            </span>
-            {a.conditions.length > 0 && (
-              <small>{a.conditions.join(", ")}</small>
-            )}
-          </button>
+  async function perform(path: string, payload: object, model = llm) {
+    if (!game) return;
+    await run(async () => {
+      try {
+        setGame(
+          await api<Game>(`/tabletop/games/${game.id}/${path}`, {
+            ...payload,
+            revision: game.revision,
+            request_id: crypto.randomUUID(),
+            ...(model
+              ? { config: prefs.game, api_key: apiKey || undefined }
+              : {}),
+          }),
         );
-      })}
-      <p className="tt-note">
-        Спутники выбирают действия сами. Сейчас доступен воин 1-го уровня.
+        setText("");
+        setContext("");
+      } catch (e) {
+        setGame(await api<Game>(`/tabletop/games/${game.id}`));
+        throw e;
+      }
+    });
+  }
+  const s = game?.state,
+    enc = s?.encounter,
+    pending = s?.pending,
+    acting =
+      s?.reaction?.actor || enc?.current_actor || s?.controlled_actor || "";
+  const hero = s?.characters[acting] || s?.characters[s.controlled_actor];
+  const blocked =
+    busy ||
+    !!pending ||
+    !!s?.reaction ||
+    !hero ||
+    hero.hp <= 0 ||
+    hero.controller.controller !== "PLAYER";
+  const act = (command: Command) =>
+    void perform("actions", { command: { actor_id: acting, ...command } });
+  const name = (id: string) =>
+    s?.characters[id]?.name || s?.npcs[id]?.name || id;
+  const button = (
+    label: string,
+    command: Command,
+    disabled = command.type === "rest" && hero?.conditions.includes("stable")
+      ? busy || !!pending || !!enc
+      : blocked,
+  ) => (
+    <button key={label} disabled={disabled} onClick={() => act(command)}>
+      {label}
+    </button>
+  );
+  const sheet = (a: Sheet) => (
+    <article className="tt-panel" key={a.id}>
+      <h2>{a.name}</h2>
+      <p>
+        {a.character_class_name} · {a.species_name} · уровень {a.level} ·{" "}
+        {controlNames[a.controller.controller]}
       </p>
-    </section>
+      <p>
+        <strong>
+          {a.hp} / {a.max_hp} HP
+        </strong>{" "}
+        · КД {a.armor_class} · скорость {a.speed} · позиция {a.position}
+      </p>
+      <p>{a.conditions.join(", ")}</p>
+      <div className="tt-form-grid">
+        {Object.entries(a.abilities).map(([k, v]) => (
+          <div key={k}>
+            {abilities[k]}{" "}
+            <strong>
+              {v} ({signed(a.modifiers[k])})
+            </strong>{" "}
+            · спасбросок {signed(a.save_modifiers[k])}
+          </div>
+        ))}
+      </div>
+      <h3>Навыки</h3>
+      <p>
+        {Object.entries(a.skill_modifiers)
+          .map(([k, v]) => `${skills[k] || k} ${signed(v)}`)
+          .join(" · ")}
+      </p>
+      <h3>Оружие</h3>
+      {Object.entries(a.attacks).map(([id, w]) => (
+        <p key={id}>
+          {w.name}: {signed(a.attack_modifiers[id])} · 1d{w.die} · дистанция{" "}
+          {w.reach}
+        </p>
+      ))}
+      {Object.entries({
+        appearance: "Внешность",
+        biography: "Биография",
+        personality: "Характер",
+        ideals: "Идеалы",
+        bonds: "Привязанности",
+        flaws: "Слабости",
+      }).map(
+        ([key, label]) =>
+          a[key as keyof Sheet] && (
+            <p key={key}>
+              <strong>{label}:</strong> {String(a[key as keyof Sheet])}
+            </p>
+          ),
+      )}
+    </article>
   );
   return (
     <div className="tt-shell">
       <header className="tt-header">
-        <button
-          onClick={onBack}
-          disabled={busy}
-          aria-label="Вернуться к историям"
-        >
-          <ArrowLeft size={18} />
-          <span>Истории</span>
+        <button onClick={onBack} disabled={busy}>
+          Истории
         </button>
         <div>
           <strong>Настольная RPG</strong>
-          <small>D20 Basic · отдельная кампания</small>
+          <small>D20 Basic v2</small>
         </div>
-        <button onClick={onSettings} aria-label="Настройки DM">
-          <Settings2 size={19} />
-        </button>
+        <button onClick={onSettings}>Настройки DM</button>
       </header>
       <div className="tt-toolbar">
+        <button disabled={busy} onClick={() => setCreating(true)}>
+          Новая кампания
+        </button>
         <select
-          aria-label="Кампания"
-          value={creating ? "" : game?.id || ""}
+          aria-label="Сохранённая кампания"
+          value={game?.id || ""}
           disabled={busy}
-          onChange={(e) => e.target.value && void open(e.target.value)}
+          onChange={(e) =>
+            void run(async () =>
+              accept(await api<Game>(`/tabletop/games/${e.target.value}`)),
+            )
+          }
         >
-          <option value="">Выбрать кампанию</option>
+          <option value="" disabled>
+            Выбрать кампанию
+          </option>
           {games.map((g) => (
             <option key={g.id} value={g.id}>
               {g.name}
             </option>
           ))}
         </select>
-        <button disabled={busy} onClick={() => setCreating(true)}>
-          <Plus size={16} /> Новая игра
-        </button>
         <label className="tt-toggle">
           <input
             type="checkbox"
@@ -341,669 +244,504 @@ export function Tabletop({
         </label>
       </div>
       {error && (
-        <div className="tt-error" role="alert">
+        <p role="alert" className="tt-error">
           {error}
-          <button onClick={() => setError("")}>Закрыть</button>
-        </div>
+        </p>
       )}
       {creating ? (
         <Wizard
-          busy={busy}
+          prefs={prefs}
+          apiKey={apiKey}
+          done={accept}
           cancel={() => setCreating(false)}
-          create={async (options) => {
-            if (lock.current) return;
-            lock.current = true;
-            setBusy(true);
-            setError("");
-            try {
-              const g = await api<Game>("/tabletop/games", options);
-              setGame(g);
-              setCreating(false);
-              setTab("Игра");
-              localStorage.setItem("tabletop-game", g.id);
-              await refreshList();
-            } catch (e) {
-              setError((e as Error).message);
-            } finally {
-              lock.current = false;
-              setBusy(false);
-            }
-          }}
         />
-      ) : !state ? (
-        <main className="tt-empty">
-          <Dice5 size={48} />
-          <h1>Приключение начинается с броска</h1>
+      ) : !s || !game ? (
+        <main className="tt-panel">
+          <h1>Твоя настольная кампания</h1>
           <p>
-            Создай героя, исследуй старую заставу и проведи первый бой. Правила
-            и кубики работают даже без модели.
+            Создай мир по своей идее, собери героя и исследуй его с ведущим.
           </p>
-          <button className="tt-primary" onClick={() => setCreating(true)}>
-            Создать настольную игру
-          </button>
+          <button onClick={() => setCreating(true)}>Создать кампанию</button>
         </main>
       ) : (
         <>
-          <nav className="tt-tabs" aria-label="Разделы настольной игры">
-            {["Игра", "Персонаж", "Партия", "Журнал", "Мир"].map((t) => (
+          <section className="tt-panel">
+            <h1>{s.campaign}</h1>
+            <p>
+              {s.location} · {modeNames[s.mode]} ·{" "}
+              {Math.floor(s.game_time / 60)} мин.
+            </p>
+            {enc && (
+              <p>
+                Раунд {enc.round} · ход:{" "}
+                <strong>{name(enc.current_actor)}</strong> · действие{" "}
+                {enc.action ? "доступно" : "потрачено"} · бонус{" "}
+                {enc.bonus_action ? "доступен" : "потрачен"} · движение{" "}
+                {enc.movement}
+              </p>
+            )}
+            {pending && (
+              <div className="tt-roll-prompt" role="status">
+                <h2>
+                  {name(pending.actor)}:{" "}
+                  {purposes[pending.purpose] || pending.purpose}
+                </h2>
+                <p>
+                  {pending.expression} {signed(pending.modifier)}
+                  {pending.critical ? " · критический урон" : ""}
+                </p>
+                <button
+                  className="tt-primary"
+                  disabled={busy}
+                  onClick={() =>
+                    void perform("roll", { pending_id: pending.id })
+                  }
+                >
+                  Бросить кубик
+                </button>
+              </div>
+            )}
+            {s.reaction && !pending && (
+              <div role="status">
+                <p>
+                  {name(s.reaction.actor)} может атаковать{" "}
+                  {name(s.reaction.mover)} реакцией.
+                </p>
+                {button(
+                  "Атаковать реакцией",
+                  { type: "reaction_attack" },
+                  busy,
+                )}
+                {button(
+                  "Пропустить реакцию",
+                  { type: "decline_reaction" },
+                  busy,
+                )}
+              </div>
+            )}
+          </section>
+          <nav className="tt-tabs" aria-label="Разделы кампании">
+            {[
+              "Игра",
+              "Персонаж",
+              "Инвентарь",
+              "Журнал",
+              "Партия",
+              "Карта",
+              "Броски",
+              "DM",
+            ].map((t) => (
               <button
                 key={t}
-                aria-current={tab === t ? "page" : undefined}
+                aria-pressed={tab === t}
                 onClick={() => setTab(t)}
               >
                 {t}
               </button>
             ))}
           </nav>
-          <div className={`tt-layout ${tab === "Игра" ? "tt-playing" : ""}`}>
-            <aside className="tt-party">{party}</aside>
-            <main className="tt-main">
-              {tab === "Игра" ? (
-                <>
-                  <div className="tt-scene">
-                    <span className="tt-eyebrow">{modes[state.mode]}</span>
-                    <h1>{state.campaign}</h1>
-                    <p>
-                      {state.location} · {Math.floor(state.game_time / 60)} мин.
-                    </p>
-                  </div>
-                  {encounter && (
-                    <section className="tt-encounter" aria-label="Очередь боя">
-                      <h2>
-                        <Swords size={18} /> Раунд {encounter.round} · ход:{" "}
-                        {name(encounter.current_actor)}
-                      </h2>
-                      <p>
-                        {hero?.name}: HP {hero?.hp}/{hero?.max_hp} · AC{" "}
-                        {hero?.armor_class}
-                      </p>
-                      <div className="tt-order">
-                        {encounter.order.map((id) => (
-                          <span
-                            className={
-                              id === encounter.current_actor ? "active" : ""
-                            }
-                            key={id}
-                          >
-                            {name(id)} <b>{encounter.initiative[id]}</b>
-                          </span>
-                        ))}
-                      </div>
-                      <p>
-                        Действие: {encounter.action ? "доступно" : "потрачено"}{" "}
-                        · Перемещение: {encounter.movement} футов
-                      </p>
-                      <small>
-                        Бонусные действия и реакции: механики следующего этапа.
-                      </small>
-                    </section>
-                  )}
-                  <div className="tt-story" aria-live="polite">
-                    {game?.history.map((h) => (
-                      <article key={h.revision}>
-                        {h.user_text && (
-                          <div className="tt-player-text">{h.user_text}</div>
-                        )}
-                        <p>
-                          {h.narrative ||
-                            h.events.map((e) => e.text).join("\n")}
-                        </p>
-                        {h.events
-                          .filter((e) => e.roll)
-                          .map((e, i) => (
-                            <div className="tt-roll-result" key={i}>
-                              <Dice5 size={16} />
-                              <span>
-                                {name(e.roll!.actor)} ·{" "}
-                                {purposes[e.roll!.purpose]} · [
-                                {e.roll!.raw.join(", ")}]{" "}
-                                {signed(e.roll!.modifier)}
-                              </span>
-                              <strong>{e.roll!.total}</strong>
-                            </div>
-                          ))}
-                      </article>
-                    ))}
-                    <div ref={bottom} />
-                  </div>
-                  {pending && (
-                    <section className="tt-roll-card">
-                      <Dice5 size={30} />
-                      <div>
-                        <span className="tt-eyebrow">Твой бросок</span>
-                        <h2>{purposes[pending.purpose]}</h2>
-                        <p>
-                          {pending.expression} {signed(pending.modifier)}{" "}
-                          {pending.critical ? "· критический урон" : ""}
-                        </p>
-                        {pending.purpose === "check" && (
-                          <small>
-                            {abilities[pending.ability]} ·{" "}
-                            {pending.skill || "без навыка"} · сложность скрыта
-                          </small>
-                        )}
-                      </div>
-                      <button
-                        className="tt-primary"
-                        disabled={busy}
-                        onClick={() =>
-                          void perform("roll", { pending_id: pending.id })
-                        }
-                      >
-                        {busy ? "Бросаем…" : "Бросить кубик"}
-                      </button>
-                    </section>
-                  )}
-                  <section className="tt-actions" aria-label="Игровые действия">
-                    {!encounter ? (
-                      <>
-                        <button
-                          disabled={blocked}
-                          onClick={() => act({ type: "look" })}
-                        >
-                          Осмотреться
-                        </button>
-                        <button
-                          disabled={blocked}
-                          onClick={() =>
-                            act({
-                              type: "check",
-                              target: "chest",
-                              ability: "wisdom",
-                              skill: "perception",
-                            })
-                          }
-                        >
-                          Осмотреть сундук
-                        </button>
-                        <button
-                          disabled={blocked}
-                          onClick={() => act({ type: "start_encounter" })}
-                        >
-                          Начать бой
-                        </button>
-                        <button
-                          disabled={blocked}
-                          onClick={() => act({ type: "rest", rest: "short" })}
-                        >
-                          Короткий отдых
-                        </button>
-                        <button
-                          disabled={blocked}
-                          onClick={() => act({ type: "rest", rest: "long" })}
-                        >
-                          Долгий отдых
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        {Object.values(state.npcs)
-                          .filter((n) => n.status === "готов к бою")
-                          .map((n) => (
-                            <button
-                              key={n.id}
-                              disabled={blocked || !encounter.action}
-                              onClick={() =>
-                                act({ type: "attack", target: n.id })
-                              }
-                            >
-                              Атаковать: {n.name}
-                            </button>
-                          ))}
-                        <button
-                          disabled={blocked || !encounter.action}
-                          onClick={() => act({ type: "dodge" })}
-                        >
-                          Уклонение
-                        </button>
-                        <button
-                          disabled={blocked || !encounter.action}
-                          onClick={() => act({ type: "dash" })}
-                        >
-                          Рывок
-                        </button>
-                        <button
-                          disabled={blocked || encounter.movement < 5}
-                          onClick={() => act({ type: "move", distance: 5 })}
-                        >
-                          Вперёд 5 фт
-                        </button>
-                        <button
-                          disabled={blocked || encounter.movement < 5}
-                          onClick={() => act({ type: "move", distance: -5 })}
-                        >
-                          Назад 5 фт
-                        </button>
-                        <button
-                          disabled={blocked}
-                          onClick={() => act({ type: "end_turn" })}
-                        >
-                          Закончить ход
-                        </button>
-                      </>
-                    )}
-                  </section>
-                  <form
-                    className="tt-compose"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      if (text.trim()) void perform("actions", { text });
-                    }}
-                  >
-                    <label htmlFor="tt-action">Твоё действие</label>
-                    <textarea
-                      id="tt-action"
-                      value={text}
-                      disabled={blocked}
-                      onChange={(e) => setText(e.target.value)}
-                      maxLength={4000}
-                      placeholder={
-                        llm
-                          ? "Что ты делаешь или говоришь?"
-                          : "Например: осмотреть сундук"
-                      }
-                    />
-                    <div>
-                      <small>
-                        {llm
-                          ? `DM: ${prefs.game.model || "выбери модель в настройках"}`
-                          : "Без LLM: кнопки и точные команды"}
-                      </small>
-                      <button
-                        className="tt-primary"
-                        disabled={blocked || !text.trim()}
-                      >
-                        {busy ? "Обработка…" : "Сделать ход"}
-                      </button>
-                    </div>
-                  </form>
-                  <button
-                    className="tt-rollback"
-                    disabled={busy || !game?.history.length}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          "Вернуть состояние до последнего действия?",
-                        )
-                      )
-                        void perform("rollback", {});
-                    }}
-                  >
-                    <RotateCcw size={14} /> Откатить действие
-                  </button>
-                </>
-              ) : tab === "Персонаж" ? (
-                <CharacterSheet sheet={state.characters[sheetId] || hero!} />
-              ) : tab === "Партия" ? (
-                party
-              ) : tab === "Мир" ? (
-                <section className="tt-panel">
-                  <h1>{state.world.name}</h1>
-                  <p>{state.world.description}</p>
-                  <h2>Задания</h2>
-                  {Object.values(state.quests).map((v, i) => (
-                    <p key={i}>{v}</p>
-                  ))}
-                  <h2>Известное герою</h2>
-                  {Object.values(state.knowledge).length ? (
-                    Object.values(state.knowledge).map((v, i) => (
-                      <p key={i}>{v}</p>
-                    ))
-                  ) : (
-                    <p className="tt-note">Пока ничего не обнаружено.</p>
-                  )}
-                </section>
-              ) : (
-                <section className="tt-panel">
-                  <h1>
-                    <ScrollText size={22} /> Журнал и расходы
-                  </h1>
-                  {game?.history.map((h) => (
-                    <details key={h.revision}>
-                      <summary>
-                        Действие {h.revision} · {h.user_text || "Начало"}
-                      </summary>
-                      {h.events.map((e, i) => (
-                        <p key={i}>{e.text}</p>
-                      ))}
-                    </details>
-                  ))}
-                  <h2>Вызовы DM</h2>
-                  {!game?.usage.length && <p>Вызовов LLM не было.</p>}
-                  {game?.usage.map((u, i) => (
-                    <p key={i}>
-                      {u.stage} · {u.status} · {u.seconds} с<br />
-                      Вход: {u.input_tokens ?? "—"} · выход:{" "}
-                      {u.output_tokens ?? "—"} · кеш: {u.cached_tokens ?? "—"} ·
-                      ${u.cost ?? "неизвестно"}
-                    </p>
-                  ))}
-                </section>
-              )}
-            </main>
-            <aside className="tt-stats">
+          {tab === "Игра" ? (
+            <main className="tt-game-grid">
               <section className="tt-panel">
-                <span className="tt-eyebrow">Твой герой</span>
-                <h2>{hero?.name}</h2>
-                <div className="tt-stat-grid">
-                  <div>
-                    <strong>
-                      {hero?.hp}/{hero?.max_hp}
-                    </strong>
-                    <small>HP</small>
-                  </div>
-                  <div>
-                    <strong>{hero?.armor_class}</strong>
-                    <small>AC</small>
-                  </div>
+                <h2>{s.location}</h2>
+                <p>{s.scene}</p>
+                <div className="tt-history">
+                  {game.history.map((h) => (
+                    <article key={h.revision}>
+                      <small>
+                        #{h.revision} · {h.user_text}
+                      </small>
+                      <p style={{ whiteSpace: "pre-wrap" }}>
+                        {h.narrative ||
+                          h.events
+                            .filter((e) => !e.roll)
+                            .map((e) => e.text)
+                            .join("\n")}
+                      </p>
+                      {h.events
+                        .filter((e) => e.roll)
+                        .map((e, i) => (
+                          <p key={i}>
+                            {name(e.roll!.actor)} ·{" "}
+                            {purposes[e.roll!.purpose] || e.roll!.purpose}: [
+                            {e.roll!.raw.join(", ")}] {signed(e.roll!.modifier)}{" "}
+                            = <strong>{e.roll!.total}</strong>
+                          </p>
+                        ))}
+                    </article>
+                  ))}
                 </div>
-                <button
-                  onClick={() => {
-                    setSheetId(state.controlled_actor);
-                    setTab("Персонаж");
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void perform("actions", { text });
                   }}
                 >
-                  Открыть лист персонажа
-                </button>
-                <h3>На сцене</h3>
-                {Object.values(state.npcs).map((n) => (
-                  <p key={n.id}>
-                    {n.name}
-                    <br />
-                    <small>
-                      {n.status} · позиция {n.position} фт
-                    </small>
+                  <label>
+                    Твоё действие
+                    <textarea
+                      value={text}
+                      onChange={(e) => setText(e.target.value)}
+                      placeholder="Опиши, что хочешь сделать…"
+                    />
+                  </label>
+                  <button disabled={blocked || !llm || !text.trim()}>
+                    Отправить DM
+                  </button>
+                </form>
+                {!llm && (
+                  <p className="tt-note">
+                    Включи LLM DM для свободного ввода. Кнопки действий доступны
+                    без модели.
                   </p>
-                ))}
-                <p className="tt-note">Твоя позиция: {hero?.position} фт</p>
+                )}
+                <button
+                  disabled={busy || game.revision < 2}
+                  onClick={() => void perform("rollback", {})}
+                >
+                  Откатить действие
+                </button>
               </section>
-            </aside>
-          </div>
+              <aside className="tt-panel">
+                <h2>Действия · {hero?.name}</h2>
+                <div className="tt-actions">
+                  {button("Осмотреться", { type: "look" })}
+                  {button("Обыскать место", {
+                    type: "check",
+                    purpose: "search",
+                    ability: "wisdom",
+                    skill: "perception",
+                  })}
+                  {enc ? (
+                    <>
+                      {[
+                        ["dodge", "Уклонение"],
+                        ["dash", "Рывок"],
+                        ["disengage", "Отход"],
+                        ["guard", "Защититься"],
+                        ["recover", "Восстановиться"],
+                        ["flee", "Сбежать"],
+                        ["end_turn", "Закончить ход"],
+                      ].map(([type, label]) => button(label, { type }))}
+                      {[-5, 5].map((distance) =>
+                        button(`Движение ${signed(distance)}`, {
+                          type: "move",
+                          distance,
+                        }),
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {s.exits.map((l) =>
+                        button(`Перейти: ${l.name}`, {
+                          type: "move",
+                          target: l.id,
+                        }),
+                      )}
+                      {s.encounters.map((e) =>
+                        button(`Начать бой: ${e.name}`, {
+                          type: "start_encounter",
+                          target: e.id,
+                        }),
+                      )}
+                      {button("Короткий отдых", {
+                        type: "rest",
+                        rest: "short",
+                      })}
+                      {button("Долгий отдых", { type: "rest", rest: "long" })}
+                    </>
+                  )}
+                </div>
+                <h3>На сцене</h3>
+                {Object.values(s.npcs).map((n) => (
+                  <article key={n.id}>
+                    <strong>{n.name}</strong>
+                    <p>
+                      {n.status} · позиция {n.position}
+                    </p>
+                    {!enc ? (
+                      <>
+                        {button(`Поговорить: ${n.name}`, {
+                          type: "dialogue",
+                          target: n.id,
+                        })}
+                        {button(`Убедить: ${n.name}`, {
+                          type: "check",
+                          purpose: "persuade",
+                          target: n.id,
+                          ability: "charisma",
+                          skill: "persuasion",
+                        })}
+                      </>
+                    ) : (
+                      n.hostile &&
+                      Object.entries(hero?.attacks || {}).map(([id, w]) =>
+                        button(
+                          `Атаковать ${n.name}: ${w.name}`,
+                          { type: "attack", target: n.id, weapon: id },
+                          blocked || !enc.action,
+                        ),
+                      )
+                    )}
+                  </article>
+                ))}
+                {enc &&
+                  s.party
+                    .filter((id) => id !== acting)
+                    .map((id) =>
+                      button(`Помочь: ${name(id)}`, {
+                        type: "help",
+                        target: id,
+                      }),
+                    )}
+                <h3>Объекты</h3>
+                {s.objects.map((o) => (
+                  <article key={o.id}>
+                    <h4>{o.name}</h4>
+                    <p>{o.description}</p>
+                    {button(`Открыть: ${o.name}`, {
+                      type: "interact",
+                      target: o.id,
+                    })}
+                    {button(`Вскрыть: ${o.name}`, {
+                      type: "check",
+                      purpose: "unlock",
+                      target: o.id,
+                    })}
+                    {o.contents.map((x) =>
+                      button(
+                        `Взять: ${s.items[x.item_id]?.name || x.item_id} ×${x.quantity}`,
+                        {
+                          type: "take_item",
+                          target: o.id,
+                          item_id: x.item_id,
+                          quantity: x.quantity,
+                        },
+                      ),
+                    )}
+                  </article>
+                ))}
+                {!enc && (
+                  <details>
+                    <summary>Расширить мир</summary>
+                    <p>
+                      Напиши запрос нового места в поле действия и нажми кнопку
+                      ниже. Генерация использует модель из настроек.
+                    </p>
+                    <button
+                      disabled={blocked || !text.trim() || !prefs.game.model}
+                      onClick={() =>
+                        void perform(
+                          "actions",
+                          { command: { type: "expand", topic: text } },
+                          true,
+                        )
+                      }
+                    >
+                      Создать новое место
+                    </button>
+                  </details>
+                )}
+              </aside>
+            </main>
+          ) : tab === "Персонаж" ? (
+            s.party.map((id) => sheet(s.characters[id]))
+          ) : tab === "Инвентарь" ? (
+            s.party.map((id) => {
+              const a = s.characters[id];
+              return (
+                <section className="tt-panel" key={id}>
+                  <h2>{a.name}</h2>
+                  {a.inventory.map((entry, i) => {
+                    const item = s.items[entry.item_id];
+                    return (
+                      <article key={`${entry.item_id}-${i}`}>
+                        <h3>
+                          {item?.name || entry.item_id} ×{entry.quantity}
+                          {entry.equipped ? " · экипировано" : ""}
+                        </h3>
+                        <p>{item?.description}</p>
+                        <p>
+                          Вес {item?.weight} · ценность {item?.value}
+                        </p>
+                        {a.controller.controller === "PLAYER" && (
+                          <>
+                            {button(entry.equipped ? "Снять" : "Экипировать", {
+                              type: entry.equipped ? "unequip" : "equip",
+                              actor_id: id,
+                              item_id: entry.item_id,
+                            })}
+                            {item?.type === "consumable" &&
+                              s.party.map((target) =>
+                                button(`Использовать на ${name(target)}`, {
+                                  type: "use_item",
+                                  actor_id: id,
+                                  item_id: entry.item_id,
+                                  target,
+                                }),
+                              )}
+                            {button("Оставить один", {
+                              type: "drop_item",
+                              actor_id: id,
+                              item_id: entry.item_id,
+                              quantity: 1,
+                            })}
+                          </>
+                        )}
+                      </article>
+                    );
+                  })}
+                </section>
+              );
+            })
+          ) : tab === "Журнал" ? (
+            <section className="tt-panel">
+              <h2>Задания</h2>
+              {Object.entries(s.quests).map(([id, q]) => (
+                <article key={id}>
+                  <h3>
+                    {q.name} · {questNames[q.status]}
+                  </h3>
+                  <p>{q.description}</p>
+                </article>
+              ))}
+              <h2>Известные сведения</h2>
+              {Object.entries(s.knowledge).map(([id, k]) => (
+                <p key={id}>{k}</p>
+              ))}
+            </section>
+          ) : tab === "Партия" ? (
+            <section className="tt-panel">
+              <h2>Участники</h2>
+              {s.party.map((id) => (
+                <article key={id}>
+                  <h3>{name(id)}</h3>
+                  <p>
+                    {s.characters[id].hp}/{s.characters[id].max_hp} HP ·{" "}
+                    {controlNames[s.characters[id].controller.controller]}
+                  </p>
+                  {button(
+                    `Управлять: ${name(id)}`,
+                    { type: "select_actor", target: id },
+                    busy ||
+                      !!pending ||
+                      !!enc ||
+                      s.characters[id].controller.controller !== "PLAYER",
+                  )}
+                </article>
+              ))}
+            </section>
+          ) : tab === "Карта" ? (
+            <section className="tt-panel">
+              <h2>Известные места</h2>
+              <div className="tt-form-grid">
+                {s.locations.map((l) => (
+                  <article key={l.id}>
+                    <h3>
+                      {l.name}
+                      {l.id === s.location_id ? " · ты здесь" : ""}
+                    </h3>
+                    <p>{l.description || "Ещё не исследовано"}</p>
+                    <p>
+                      Переходы:{" "}
+                      {l.connections
+                        .map(
+                          (id) =>
+                            s.locations.find((x) => x.id === id)?.name || id,
+                        )
+                        .join(", ") || "неизвестны"}
+                    </p>
+                    {s.exits.some((x) => x.id === l.id) &&
+                      button(
+                        `Перейти: ${l.name}`,
+                        { type: "move", target: l.id },
+                        blocked || !!enc,
+                      )}
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : tab === "Броски" ? (
+            <section className="tt-panel">
+              <h2>История бросков</h2>
+              {game.history.flatMap((h) =>
+                h.events
+                  .filter((e) => e.roll)
+                  .map((e, i) => (
+                    <p key={`${h.revision}-${i}`}>
+                      #{h.revision} · {name(e.roll!.actor)} ·{" "}
+                      {purposes[e.roll!.purpose] || e.roll!.purpose}:{" "}
+                      {e.roll!.expression} [{e.roll!.raw.join(", ")}]{" "}
+                      {signed(e.roll!.modifier)} ={" "}
+                      <strong>{e.roll!.total}</strong>
+                    </p>
+                  )),
+              )}
+            </section>
+          ) : (
+            <section className="tt-panel">
+              <h2>Диагностика DM</h2>
+              <p>
+                Механика, проверки и изменения мира выполняются сервером. LLM
+                интерпретирует намерение и описывает утверждённый результат.
+              </p>
+              <button
+                disabled={busy}
+                onClick={() =>
+                  void run(async () =>
+                    setContext(
+                      JSON.stringify(
+                        await api(`/tabletop/games/${game.id}/context`),
+                        null,
+                        2,
+                      ),
+                    ),
+                  )
+                }
+              >
+                Показать публичный контекст
+              </button>
+              {context && <pre className="tt-json">{context}</pre>}
+              <div className="tt-table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      {[
+                        "Этап",
+                        "Модель",
+                        "Статус",
+                        "Вход",
+                        "Выход",
+                        "Кэш",
+                        "USD",
+                        "Секунды",
+                      ].map((x) => (
+                        <th key={x}>{x}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {game.usage.map((u, i) => (
+                      <tr key={i}>
+                        <td>{u.stage}</td>
+                        <td>
+                          {u.provider}/{u.model}
+                        </td>
+                        <td>{u.status}</td>
+                        <td>{u.input_tokens ?? "—"}</td>
+                        <td>{u.output_tokens ?? "—"}</td>
+                        <td>{u.cached_tokens ?? "—"}</td>
+                        <td>{u.cost ?? "—"}</td>
+                        <td>{u.seconds}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
         </>
       )}
     </div>
-  );
-}
-
-function CharacterSheet({ sheet: a }: { sheet: Sheet }) {
-  const [section, setSection] = useState("Обзор");
-  return (
-    <section className="tt-panel tt-sheet">
-      <span className="tt-eyebrow">Лист персонажа</span>
-      <h1>{a.name}</h1>
-      <p>
-        {a.species} · {a.character_class} · уровень {a.level}
-      </p>
-      <nav className="tt-sheet-tabs">
-        {[
-          "Обзор",
-          "Навыки",
-          "Спасброски",
-          "Бой",
-          "Инвентарь",
-          "Особенности",
-          "Заклинания",
-          "Биография",
-        ].map((s) => (
-          <button
-            key={s}
-            aria-current={section === s ? "page" : undefined}
-            onClick={() => setSection(s)}
-          >
-            {s}
-          </button>
-        ))}
-      </nav>
-      {section === "Обзор" ? (
-        <>
-          <div className="tt-stat-grid">
-            {Object.entries(a.abilities).map(([key, v]) => (
-              <div key={key}>
-                <small>{abilities[key]}</small>
-                <strong>{v}</strong>
-                <span>{signed(a.modifiers[key])}</span>
-              </div>
-            ))}
-          </div>
-          <p>
-            HP {a.hp}/{a.max_hp} · AC {a.armor_class} · скорость {a.speed} фт
-          </p>
-          <p>Состояния: {a.conditions.join(", ") || "нет"}</p>
-        </>
-      ) : section === "Навыки" ? (
-        <div>
-          {Object.entries(a.skill_modifiers).map(([key, value]) => (
-            <p key={key}>
-              {(
-                {
-                  athletics: "Атлетика",
-                  stealth: "Скрытность",
-                  perception: "Внимательность",
-                  persuasion: "Убеждение",
-                } as Record<string, string>
-              )[key] || key}
-              : <strong>{signed(value)}</strong>
-              {a.skill_proficiencies.includes(key) ? " · владение" : ""}
-            </p>
-          ))}
-        </div>
-      ) : section === "Спасброски" ? (
-        <div>
-          {Object.entries(a.save_modifiers).map(([key, value]) => (
-            <p key={key}>
-              {abilities[key]}: <strong>{signed(value)}</strong>
-              {a.save_proficiencies.includes(key) ? " · владение" : ""}
-            </p>
-          ))}
-        </div>
-      ) : section === "Бой" ? (
-        <>
-          {Object.entries(a.attacks).map(([key, attack]) => (
-            <p key={key}>
-              {attack.name} · атака {signed(a.attack_modifiers[key])} · 1d
-              {attack.die} {signed(a.modifiers[attack.ability])} урона ·
-              досягаемость {attack.reach} фт
-            </p>
-          ))}
-          <p>
-            Основное действие и перемещение обновляются в начале хода. Для атаки
-            и урона броски выполняются отдельно.
-          </p>
-        </>
-      ) : section === "Инвентарь" ? (
-        <ul>
-          {a.inventory.map((v) => (
-            <li key={v}>{v}</li>
-          ))}
-        </ul>
-      ) : section === "Особенности" ? (
-        <>
-          <p>{a.features.join(", ") || "Особенностей пока нет."}</p>
-          <p>
-            Ресурсы:{" "}
-            {Object.entries(a.resources)
-              .map(([k, v]) => `${k}: ${v}`)
-              .join(", ")}
-          </p>
-        </>
-      ) : section === "Заклинания" ? (
-        <p>
-          {a.spells.join(", ") ||
-            "У этого персонажа нет заклинаний. Магия появится на следующем этапе."}
-        </p>
-      ) : (
-        <p>{a.biography || "Биография не заполнена."}</p>
-      )}
-    </section>
-  );
-}
-
-function Wizard({
-  create,
-  cancel,
-  busy,
-}: {
-  create: (options: object) => Promise<void>;
-  cancel: () => void;
-  busy: boolean;
-}) {
-  const [step, setStep] = useState(0);
-  const [name, setName] = useState("Тайна заставы");
-  const [hero, setHero] = useState("Искатель");
-  const [bio, setBio] = useState("");
-  const [companion, setCompanion] = useState(true);
-  const [settingName, setSettingName] = useState("Старая застава");
-  const [description, setDescription] = useState(
-    "На границе леса стоит заброшенная застава. Ворота приоткрыты; во дворе виден старый сундук.",
-  );
-  const steps = [
-    "Правила",
-    "Мир",
-    "Кампания",
-    "Персонаж",
-    "Партия",
-    "DM",
-    "Старт",
-  ];
-  return (
-    <main className="tt-wizard tt-panel">
-      <span className="tt-eyebrow">Новая настольная игра · {step + 1} / 7</span>
-      <h1>{steps[step]}</h1>
-      <div className="tt-steps">
-        {steps.map((s, i) => (
-          <span key={s} className={i === step ? "active" : ""}>
-            {i + 1}. {s}
-          </span>
-        ))}
-      </div>
-      {step === 0 ? (
-        <>
-          <h2>D20 Basic</h2>
-          <p>
-            D&D-подобная основа: характеристики, проверки, инициатива, атаки и
-            урон, критические попадания, уклонение, отдых.
-          </p>
-          <p className="tt-note">
-            Это ограниченный ruleset, не полная редакция D&D. Пока без магии,
-            реакций атак и развития по уровням. Короткий отдых восстанавливает
-            фиксированное здоровье за кость здоровья.
-          </p>
-        </>
-      ) : step === 1 ? (
-        <>
-          <label>
-            Название мира
-            <input
-              value={settingName}
-              maxLength={120}
-              onChange={(e) => setSettingName(e.target.value)}
-            />
-          </label>
-          <label>
-            Описание
-            <textarea
-              value={description}
-              maxLength={6000}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </label>
-          <p className="tt-note">
-            Первый сценарий: двор, сундук и гоблин. Редактируется описание;
-            генератор географии появится позднее.
-          </p>
-        </>
-      ) : step === 2 ? (
-        <label>
-          Название кампании
-          <input
-            value={name}
-            maxLength={120}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </label>
-      ) : step === 3 ? (
-        <>
-          <label>
-            Имя героя
-            <input
-              value={hero}
-              maxLength={120}
-              onChange={(e) => setHero(e.target.value)}
-            />
-          </label>
-          <p>Человек · воин · уровень 1 · HP 12 · AC 16</p>
-          <label>
-            Биография
-            <textarea
-              value={bio}
-              maxLength={3000}
-              onChange={(e) => setBio(e.target.value)}
-            />
-          </label>
-        </>
-      ) : step === 4 ? (
-        <>
-          <label className="tt-toggle">
-            <input
-              type="checkbox"
-              checked={companion}
-              onChange={(e) => setCompanion(e.target.checked)}
-            />{" "}
-            Взять Терона в партию
-          </label>
-          <p>
-            Спутником управляет игровой AI: он выбирает цель, подходит и
-            атакует.
-          </p>
-        </>
-      ) : step === 5 ? (
-        <>
-          <h2>Механика работает без модели</h2>
-          <p>
-            В игре включи «LLM DM» для свободных действий и описания
-            результатов. Модель, режим Thinking и ключ берутся из общих настроек
-            игры.
-          </p>
-          <p>
-            Каждый бросок героя ждёт твоего нажатия. Сложность проверок и
-            секреты скрыты.
-          </p>
-        </>
-      ) : (
-        <>
-          <h2>{name}</h2>
-          <p>
-            {hero} отправляется в мир «{settingName}»{" "}
-            {companion ? "вместе с Тероном" : "в одиночку"}.
-          </p>
-          <p>Начни с осмотра сундука, затем проведи первый бой.</p>
-        </>
-      )}
-      <footer>
-        <button
-          disabled={busy}
-          onClick={step ? () => setStep(step - 1) : cancel}
-        >
-          {step ? "Назад" : "Отмена"}
-        </button>
-        <button
-          className="tt-primary"
-          disabled={busy || !name.trim() || !hero.trim() || !settingName.trim()}
-          onClick={() =>
-            step < 6
-              ? setStep(step + 1)
-              : void create({
-                  name,
-                  character_name: hero,
-                  biography: bio,
-                  companion,
-                  setting: { id: requestId(), name: settingName, description },
-                })
-          }
-        >
-          {busy ? "Создаём…" : step < 6 ? "Далее" : "Начать приключение"}
-        </button>
-      </footer>
-    </main>
   );
 }

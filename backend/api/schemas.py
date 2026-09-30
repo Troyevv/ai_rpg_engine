@@ -6,7 +6,7 @@ class DTO(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
 class ModelConfig(DTO):
-    provider: Literal['local', 'deepseek'] = 'local'
+    provider: Literal['local', 'deepseek', 'compatible'] = 'local'
     model: str = Field(min_length=1, max_length=300)
     context_length: int = Field(default=32768, ge=8192, le=131072)
     temperature: float = Field(default=0.8, ge=0, le=1.5)
@@ -54,7 +54,7 @@ class Scene(DTO):
     revision: int = Field(ge=0)
 
 class Models(Credential):
-    provider: Literal['local', 'deepseek']
+    provider: Literal['local', 'deepseek', 'compatible']
 
 class Load(DTO):
     model: str = Field(min_length=1, max_length=300)

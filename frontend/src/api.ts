@@ -4,6 +4,18 @@ export async function api<T>(
   method = body === undefined ? "GET" : "POST",
   signal?: AbortSignal,
 ): Promise<T> {
+  // The settings field holds a DeepSeek key. Never forward it to another service.
+  if (body && typeof body === "object") {
+    const value = body as {
+      config?: { provider?: string };
+      provider?: string;
+      api_key?: string;
+    };
+    if ((value.config?.provider || value.provider) === "compatible") {
+      const { api_key: _key, ...withoutKey } = value;
+      body = withoutKey;
+    }
+  }
   const response = await fetch("/api" + path, {
     method,
     headers:

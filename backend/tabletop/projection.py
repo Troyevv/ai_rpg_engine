@@ -1,26 +1,234 @@
-"""All player-facing surfaces use the same whitelist; never serialize DM state."""
+"""Role-specific projections. Secret-bearing DM context never reaches gameplay APIs."""
+
 from .rules import RulesEngine
 
 
-def public_state(state):
-    hero = state.actor(state.session_state.controlled_actor)
-    sheets = {}
-    for aid in state.party:
-        a = state.actor(aid)
-        sheets[aid] = {k: v for k, v in a.model_dump().items() if k not in ('goals', 'traits', 'knowledge', 'relationships', 'morale', 'faction')}
+class PlayerProjection:
+    @staticmethod
+    def build(state):
+        return {
+            "knowledge": dict(state.player_knowledge),
+            "known_locations": state.known_locations[:],
+            "quests": {
+                q.id: {
+                    "name": q.name,
+                    "description": q.description,
+                    "status": state.quests[q.id],
+                }
+                for q in state.definition.quests
+                if state.quests[q.id] != "available"
+            },
+        }
+
+
+class PublicProjection:
+    @staticmethod
+    def build(state):
+        hero = state.actor(state.session_state.controlled_actor)
         rules = RulesEngine()
-        sheets[aid]['modifiers'] = {k: rules.modifier(v) for k, v in a.abilities.items()}
-        sheets[aid]['skill_modifiers'] = {k: rules.check_modifier(a, ability, k, state.ruleset) for k, ability in state.ruleset.skills.items()}
-        sheets[aid]['save_modifiers'] = {k: rules.save_modifier(a, k) for k in a.abilities}
-        sheets[aid]['attack_modifiers'] = {k: rules.attack_modifier(a, k) for k in a.attacks}
-    visible_npcs = {k: {'id': k, 'name': a.name, 'position': a.position, 'status': 'выведен из боя' if a.hp == 0 else 'сбежал' if 'fled' in a.conditions else 'готов к бою'} for k, a in state.npcs.items() if a.location == hero.location}
-    pending = state.session_state.pending
-    e = state.encounter
-    # Enemy AC/HP, hidden DC, unrevealed object data and AI internals are absent.
-    return {'campaign': state.campaign.name, 'ruleset': {'id': state.ruleset.id, 'name': state.ruleset.name},
-            'world': {'name': state.world.name, 'description': state.world.description}, 'location': state.locations[hero.location],
-            'party': state.party, 'characters': sheets, 'npcs': visible_npcs, 'controlled_actor': hero.id,
-            'mode': state.session_state.mode, 'game_time': state.game_time, 'quests': state.quests,
-            'knowledge': state.player_knowledge, 'objects': [{'id': k, 'name': o['name']} for k, o in state.dm_state.get('objects', {}).items() if o['location'] == hero.location],
-            'pending': {k: v for k, v in pending.model_dump().items() if k in ('id', 'purpose', 'actor', 'expression', 'modifier', 'advantage', 'critical', 'ability', 'skill')} if pending else None,
-            'encounter': {'order': e.order, 'initiative': e.initiative, 'round': e.round, 'current_actor': e.order[e.index], 'action': e.action, 'bonus_action': e.bonus_action, 'reaction': e.reaction.get(hero.id, False), 'movement': e.movement} if e else None}
+        sheets = {}
+        for aid in state.party:
+            a = state.actor(aid)
+            sheets[aid] = {
+                k: v
+                for k, v in a.model_dump().items()
+                if k
+                not in (
+                    "goals",
+                    "traits",
+                    "knowledge",
+                    "relationships",
+                    "morale",
+                    "attitude",
+                    "current_intent",
+                    "public_lore",
+                    "faction",
+                )
+            }
+            sheets[aid].update(
+                character_class_name=state.ruleset.classes.get(
+                    a.character_class, {}
+                ).get("name", a.character_class),
+                species_name=state.ruleset.species.get(a.species, {}).get(
+                    "name", a.species
+                ),
+                modifiers={k: rules.modifier(v) for k, v in a.abilities.items()},
+                skill_modifiers={
+                    k: rules.check_modifier(a, ability, k, state.ruleset)
+                    for k, ability in state.ruleset.skills.items()
+                },
+                save_modifiers={k: rules.save_modifier(a, k) for k in a.abilities},
+                attack_modifiers={k: rules.attack_modifier(a, k) for k in a.attacks},
+                controller=state.controllers[aid].model_dump(),
+            )
+        npcs = {
+            k: {
+                "id": k,
+                "name": a.name,
+                "position": a.position,
+                "hostile": state.hostile(hero.id, k),
+                "status": (
+                    "выведен из боя"
+                    if a.hp <= 0
+                    else "сбежал" if "fled" in a.conditions else "на сцене"
+                ),
+            }
+            for k, a in state.npcs.items()
+            if a.location == hero.location
+        }
+        objects = []
+        visible_items = {
+            e.item_id for i in state.party for e in state.actor(i).inventory
+        }
+        for o in state.definition.objects:
+            status = state.objects[o.id]
+            if o.location_id == hero.location and status.revealed:
+                contents = (
+                    [x.model_dump() for x in status.contents] if status.opened else []
+                )
+                visible_items.update(x["item_id"] for x in contents)
+                objects.append(
+                    {
+                        "id": o.id,
+                        "name": o.name,
+                        "description": o.description,
+                        "opened": status.opened,
+                        "contents": contents,
+                    }
+                )
+        location = next(x for x in state.definition.locations if x.id == hero.location)
+        visible_locations = set(state.known_locations) | set(location.connections)
+        locations = [
+            {
+                "id": l.id,
+                "name": l.name,
+                "description": l.description if l.id in state.known_locations else "",
+                "connections": (
+                    [i for i in l.connections if i in visible_locations]
+                    if l.id in state.known_locations
+                    else []
+                ),
+            }
+            for l in state.definition.locations
+            if l.id in visible_locations
+        ]
+        p = state.session_state.pending
+        e = state.encounter
+        return {
+            "campaign": state.campaign.name,
+            "ruleset": {"id": state.ruleset.id, "name": state.ruleset.name},
+            "world": {"name": state.world.name, "description": state.world.description},
+            "location": location.name,
+            "location_id": location.id,
+            "scene": location.description,
+            "locations": locations,
+            "exits": [
+                {"id": i, "name": state.locations[i]} for i in location.connections
+            ],
+            "party": state.party,
+            "characters": sheets,
+            "npcs": npcs,
+            "objects": objects,
+            "items": {i: state.items[i].model_dump() for i in visible_items},
+            "controlled_actor": hero.id,
+            "mode": state.session_state.mode,
+            "game_time": state.game_time,
+            **PlayerProjection.build(state),
+            "pending": (
+                {
+                    k: v
+                    for k, v in p.model_dump().items()
+                    if k
+                    in (
+                        "id",
+                        "purpose",
+                        "actor",
+                        "controller",
+                        "player_id",
+                        "expression",
+                        "modifier",
+                        "advantage",
+                        "critical",
+                        "ability",
+                        "skill",
+                    )
+                }
+                if p
+                else None
+            ),
+            "reaction": (
+                {
+                    k: v
+                    for k, v in state.session_state.reaction.items()
+                    if k in ("actor", "mover")
+                }
+                if state.session_state.reaction
+                else None
+            ),
+            "encounters": [
+                {"id": x.id, "name": x.name}
+                for x in state.definition.encounters
+                if x.location_id == hero.location
+                and x.id not in state.completed_encounters
+            ],
+            "encounter": (
+                {
+                    "order": e.order,
+                    "initiative": e.initiative,
+                    "round": e.round,
+                    "current_actor": e.order[e.index],
+                    "action": e.action,
+                    "bonus_action": e.bonus_action,
+                    "reaction": e.reaction,
+                    "movement": e.movement,
+                    "disengaged": e.disengaged,
+                }
+                if e
+                else None
+            ),
+        }
+
+
+class DMProjection:
+    @staticmethod
+    def build(state, events=None):
+        p = PublicProjection.build(state)
+        loc = p["location_id"]
+        relevant = [a for a in state.actors().values() if a.location == loc]
+        return {
+            "scene": p["scene"],
+            "location": loc,
+            "visible": p,
+            "known": PlayerProjection.build(state),
+            "hidden_objects": [
+                o.model_dump() for o in state.definition.objects if o.location_id == loc
+            ],
+            "secrets": [
+                s.model_dump() for s in state.definition.secrets if s.location_id == loc
+            ],
+            "npc_intentions": [
+                {
+                    "id": a.id,
+                    "goals": a.goals,
+                    "personality": a.personality,
+                    "attitude": a.attitude,
+                    "current_intent": a.current_intent,
+                    "knowledge": [
+                        i
+                        for i in a.knowledge
+                        if any(
+                            s.id == i and s.location_id == loc
+                            for s in state.definition.secrets
+                        )
+                    ],
+                }
+                for a in relevant
+                if a.id not in state.party
+            ],
+            "recent_events": (events or [])[-15:],
+        }
+
+
+# Compatibility alias for read adapters, not a canonical serialization method.
+def public_state(state):
+    return PublicProjection.build(state)

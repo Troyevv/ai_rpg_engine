@@ -1,90 +1,121 @@
-"""Versioned tabletop state and strictly bounded command contracts."""
+"""Canonical state v2. Definitions are compiled, never accepted as runtime patches."""
+
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import Field, model_validator
+from .definitions import (
+    Model,
+    Ability,
+    Difficulty,
+    ControllerType,
+    CharacterBuild,
+    CampaignDefinition,
+    InventoryEntry,
+    ItemDefinition,
+    Setting,
+)
 
-Ability = Literal['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma']
-Mode = Literal['EXPLORATION', 'DIALOGUE', 'ENCOUNTER', 'AWAITING_ROLL']
-ABILITIES = ('strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma')
-
-
-class Model(BaseModel):
-    model_config = ConfigDict(extra='forbid', validate_assignment=True)
+ABILITIES = (
+    "strength",
+    "dexterity",
+    "constitution",
+    "intelligence",
+    "wisdom",
+    "charisma",
+)
 
 
 class Ruleset(Model):
-    id: str = 'd20-basic-v1'
-    name: str = 'D20 Basic — D&D-подобные правила'
-    version: int = 1
-    capabilities: list[Literal['checks', 'combat', 'rests']] = ['checks', 'combat', 'rests']
+    id: str
+    name: str
+    version: Literal[2] = 2
+    capabilities: list[str]
+    abilities: list[Ability]
+    ability_array: list[int]
+    skills: dict[str, Ability]
+    difficulty: dict[Difficulty, int]
     check_die: Literal[20] = 20
-    critical: Literal['double_dice', 'max_dice'] = 'double_dice'
-    short_rest_minutes: int = Field(default=60, ge=1, le=1440)
-    long_rest_minutes: int = Field(default=480, ge=60, le=1440)
-    skills: dict[str, Ability] = {'athletics': 'strength', 'stealth': 'dexterity', 'perception': 'wisdom', 'persuasion': 'charisma'}
-    # This first implementation advertises only implemented capabilities.
+    critical: Literal["double_dice", "max_dice"] = "double_dice"
+    short_rest_minutes: int
+    long_rest_minutes: int
+    conditions: list[str]
+    progression: dict[str, int]
+    classes: dict[str, dict]
+    species: dict[str, dict]
+    backgrounds: dict[str, dict]
+    items: list[ItemDefinition]
 
 
 class Attack(Model):
-    name: str = 'Меч'
-    ability: Ability = 'strength'
-    die: Literal[4, 6, 8, 10, 12] = 8
+    name: str
+    ability: Ability = "strength"
+    die: Literal[4, 6, 8, 10, 12] = 6
     proficient: bool = True
-    reach: int = Field(default=5, ge=5, le=120)
+    reach: int = 5
+
+
+class ActorControl(Model):
+    actor_id: str
+    controller: ControllerType
+    player_id: str | None = None
 
 
 class CharacterSheet(Model):
     id: str
-    name: str = Field(min_length=1, max_length=120)
-    level: int = Field(default=1, ge=1, le=20)
-    character_class: str = 'Воин'
-    species: str = 'Человек'
-    biography: str = Field(default='', max_length=3000)
-    abilities: dict[Ability, int] = {'strength': 16, 'dexterity': 12, 'constitution': 14, 'intelligence': 10, 'wisdom': 12, 'charisma': 10}
-    skill_proficiencies: list[str] = ['athletics', 'perception']
-    save_proficiencies: list[Ability] = ['strength', 'constitution']
-    hp: int = 12
-    max_hp: int = Field(default=12, ge=1, le=1000)
-    armor_class: int = Field(default=16, ge=1, le=30)
-    speed: int = Field(default=30, ge=0, le=120)
-    position: int = Field(default=0, ge=-10000, le=10000)
-    attacks: dict[str, Attack] = {'sword': Attack()}
-    inventory: list[str] = ['Меч', 'Щит', 'Кольчуга']
+    name: str
+    level: int = 1
+    proficiency_bonus: int = 2
+    character_class: str
+    species: str
+    background: str = ""
+    biography: str = ""
+    appearance: str = ""
+    personality: str = ""
+    ideals: str = ""
+    bonds: str = ""
+    flaws: str = ""
+    abilities: dict[Ability, int]
+    skill_proficiencies: list[str] = []
+    save_proficiencies: list[Ability] = []
+    hp: int
+    max_hp: int
+    armor_class: int
+    speed: int
+    position: int = 0
+    attacks: dict[str, Attack] = {}
+    inventory: list[InventoryEntry] = []
     features: list[str] = []
     spells: list[str] = []
-    resources: dict[str, int] = {'hit_dice': 1}
-    conditions: list[Literal['dodge', 'unconscious', 'dead', 'fled', 'stable']] = []
-    death_successes: int = Field(default=0, ge=0, le=3)
-    death_failures: int = Field(default=0, ge=0, le=3)
-    faction: str = 'party'
-    location: str = 'gate'
+    resources: dict[str, int] = {}
+    conditions: list[str] = []
+    death_successes: int = 0
+    death_failures: int = 0
+    faction: str
+    location: str
     goals: list[str] = []
     traits: list[str] = []
     knowledge: list[str] = []
+    public_lore: list[str] = []
     relationships: dict[str, int] = {}
-    morale: float = Field(default=0.5, ge=0, le=1)
+    attitude: str = "neutral"
+    current_intent: str = ""
+    morale: float = 0.5
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def valid(self):
-        if set(self.abilities) != set(ABILITIES) or any(type(v) is not int or not 1 <= v <= 30 for v in self.abilities.values()):
-            raise ValueError('Некорректные характеристики')
-        if not 0 <= self.hp <= self.max_hp:
-            raise ValueError('Некорректные HP')
+        if set(self.abilities) != set(ABILITIES) or not 0 <= self.hp <= self.max_hp:
+            raise ValueError("Некорректный лист персонажа")
         return self
 
 
-class Setting(Model):
-    id: str = 'old-watch'
-    name: str = Field(default='Старая застава', min_length=1, max_length=120)
-    description: str = Field(default='На границе леса стоит заброшенная застава. Ворота приоткрыты; во дворе виден старый сундук.', max_length=6000)
-
-
 class Campaign(Model):
-    name: str = Field(default='Тайна заставы', min_length=1, max_length=120)
-    setting_id: str = 'old-watch'
-    starting_location: str = 'gate'
+    source_draft: str = ""
+    name: str
+    setting_id: str
+    starting_location: str
 
 
 class Encounter(Model):
+    definition_id: str = ""
     order: list[str] = []
     initiative: dict[str, int] = {}
     index: int = 0
@@ -92,103 +123,185 @@ class Encounter(Model):
     action: bool = True
     bonus_action: bool = True
     reaction: dict[str, bool] = {}
-    movement: int = 30
+    movement: int = 0
     disengaged: bool = False
+    outcome: str = ""
 
 
 class PendingRoll(Model):
     id: str
-    purpose: Literal['check', 'save', 'initiative', 'attack', 'damage', 'death']
+    purpose: Literal["check", "save", "initiative", "attack", "damage", "death"]
     actor: str
-    expression: str = '1d20'
+    controller: ControllerType = "PLAYER"
+    player_id: str | None = "local"
+    expression: str = "1d20"
     modifier: int = 0
     advantage: Literal[-1, 0, 1] = 0
     dc: int = 10
-    target: str = ''
-    ability: Ability = 'wisdom'
-    skill: str = ''
-    weapon: str = ''
+    target: str = ""
+    ability: Ability = "wisdom"
+    skill: str = ""
+    weapon: str = ""
     critical: bool = False
-    resume: Literal['EXPLORATION', 'DIALOGUE', 'ENCOUNTER'] = 'EXPLORATION'
+    outcome: Literal[
+        "check", "search", "unlock", "persuade", "trap", "attack", "reaction"
+    ] = "check"
+    resume: Literal["EXPLORATION", "DIALOGUE", "ENCOUNTER"] = "EXPLORATION"
 
 
 class SessionState(Model):
-    mode: Mode = 'EXPLORATION'
-    controlled_actor: str = 'hero'
+    mode: Literal["EXPLORATION", "DIALOGUE", "ENCOUNTER", "AWAITING_ROLL"] = (
+        "EXPLORATION"
+    )
+    controlled_actor: str
     pending: PendingRoll | None = None
+    dialogue_actor: str | None = None
+    initiative_waiting: list[str] = []
+    initiative_results: dict[str, int] = {}
+    encounter_definition: str = ""
+    turn_started: bool = False
+    reaction: dict | None = None
+
+
+class ObjectState(Model):
+    revealed: bool = True
+    opened: bool = False
+    unlocked: bool = False
+    trap_triggered: bool = False
+    contents: list[InventoryEntry] = []
 
 
 class GameState(Model):
-    model_config = ConfigDict(extra='forbid', validate_assignment=False)  # validate complete transactions, not intermediate copies
-    schema_version: Literal[1] = 1
-    campaign: Campaign = Campaign()
-    ruleset: Ruleset = Ruleset()
-    world: Setting = Setting()
-    party: list[str] = ['hero']
+    schema_version: Literal[2] = 2
+    definition: CampaignDefinition
+    campaign: Campaign
+    ruleset: Ruleset
+    world: Setting
+    party: list[str]
     characters: dict[str, CharacterSheet]
     npcs: dict[str, CharacterSheet]
-    locations: dict[str, str] = {'gate': 'Двор заставы'}
+    controllers: dict[str, ActorControl]
+    locations: dict[str, str]
+    objects: dict[str, ObjectState] = {}
+    items: dict[str, ItemDefinition] = {}
     encounters: dict[str, Encounter] = {}
     active_encounter: str | None = None
-    quests: dict[str, str] = {'watch': 'Осмотреть заставу и справиться с её обитателями.'}
-    effects: list[dict] = []
+    completed_encounters: list[str] = []
+    quests: dict[str, Literal["available", "active", "completed"]] = {}
     player_knowledge: dict[str, str] = {}
-    dm_state: dict = {}
+    known_locations: list[str] = []
     game_time: int = 0
-    session_state: SessionState = SessionState()
+    session_state: SessionState
 
     def actors(self):
         return {**self.characters, **self.npcs}
 
     def actor(self, actor_id):
-        try:
-            return self.actors()[actor_id]
-        except KeyError:
-            raise ValueError('Участник не найден') from None
+        if actor_id not in self.actors():
+            raise ValueError("Участник не найден")
+        return self.actors()[actor_id]
+
+    def relation(self, first, second):
+        if first == second:
+            return "ALLY"
+        for r in self.definition.faction_relations:
+            if {first, second} == {r.first, r.second}:
+                return r.relation
+        return "NEUTRAL"
+
+    def hostile(self, a, b):
+        return self.relation(self.actor(a).faction, self.actor(b).faction) == "HOSTILE"
 
     @property
     def encounter(self):
         return self.encounters.get(self.active_encounter)
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def invariants(self):
-        if set(self.characters) & set(self.npcs):
-            raise ValueError('Повтор ID участника')
         actors = self.actors()
-        if self.session_state.controlled_actor not in self.party or not set(self.party) <= set(self.characters):
-            raise ValueError('Некорректная партия')
-        for key, actor in actors.items():
-            if key != actor.id or actor.location not in self.locations:
-                raise ValueError('Некорректное положение участника')
+        if set(self.characters) & set(self.npcs) or set(self.controllers) != set(
+            actors
+        ):
+            raise ValueError("Некорректные участники или контроллеры")
+        if self.session_state.controlled_actor not in actors or not set(
+            self.party
+        ) <= set(actors):
+            raise ValueError("Некорректная партия")
+        for key, a in actors.items():
+            if (
+                key != a.id
+                or a.location not in self.locations
+                or self.controllers[key].actor_id != key
+            ):
+                raise ValueError("Некорректная ссылка участника")
+            if any(x.item_id not in self.items for x in a.inventory):
+                raise ValueError("Неизвестный предмет")
         p = self.session_state.pending
-        if (self.session_state.mode == 'AWAITING_ROLL') != (p is not None):
-            raise ValueError('Некорректное ожидание броска')
-        if p and (p.actor != self.session_state.controlled_actor or p.target and p.target not in actors and p.target not in self.dm_state.get('objects', {})):
-            raise ValueError('Некорректный бросок')
+        if (self.session_state.mode == "AWAITING_ROLL") != (p is not None):
+            raise ValueError("Некорректный ожидающий бросок")
+        if p and (
+            p.actor not in actors
+            or p.controller != self.controllers[p.actor].controller
+            or p.player_id != self.controllers[p.actor].player_id
+        ):
+            raise ValueError("Контроллер броска не соответствует участнику")
         e = self.encounter
-        if self.active_encounter and (not e or not e.order or not set(e.order) <= set(actors) or not 0 <= e.index < len(e.order)):
-            raise ValueError('Некорректная очередь')
-        if self.session_state.mode == 'ENCOUNTER' and not e:
-            raise ValueError('Отсутствует бой')
+        if self.active_encounter and (
+            not e
+            or not e.order
+            or not set(e.order) <= set(actors)
+            or not 0 <= e.index < len(e.order)
+        ):
+            raise ValueError("Некорректная очередь")
+        if self.session_state.mode == "ENCOUNTER" and not e:
+            raise ValueError("Отсутствует бой")
         return self
 
 
 class Command(Model):
-    """Public/DM command has no HP, roll values, actor override or state patch."""
-    type: Literal['look', 'dialogue', 'check', 'save', 'attack', 'start_encounter', 'end_turn', 'dodge', 'dash', 'disengage', 'move', 'rest']
-    target: str = Field(default='', max_length=120)
-    ability: Ability = 'wisdom'
-    skill: str = Field(default='', max_length=80)
-    dc: int = Field(default=12, ge=5, le=25)
-    weapon: str = Field(default='sword', max_length=80)
+    type: Literal[
+        "look",
+        "move",
+        "interact",
+        "dialogue",
+        "check",
+        "save",
+        "attack",
+        "use_item",
+        "equip",
+        "unequip",
+        "take_item",
+        "drop_item",
+        "rest",
+        "help",
+        "dodge",
+        "dash",
+        "disengage",
+        "end_turn",
+        "start_encounter",
+        "flee",
+        "guard",
+        "recover",
+        "expand",
+        "reaction_attack",
+        "decline_reaction",
+        "select_actor",
+    ]
+    actor_id: str = ""
+    target: str = Field(default="", max_length=80)
+    ability: Ability = "wisdom"
+    skill: str = Field(default="", max_length=80)
+    difficulty: Difficulty = "MEDIUM"
+    weapon: str = Field(default="", max_length=80)
+    item_id: str = Field(default="", max_length=80)
+    quantity: int = Field(default=1, ge=1, le=100)
     distance: int = Field(default=0, ge=-120, le=120)
-    rest: Literal['short', 'long'] = 'short'
+    rest: Literal["short", "long"] = "short"
+    purpose: Literal["general", "search", "unlock", "persuade"] = "general"
+    topic: str = Field(default="", max_length=1000)
 
 
 class NewGame(Model):
-    name: str = Field(default='Тайна заставы', min_length=1, max_length=120)
-    character_name: str = Field(default='Искатель', min_length=1, max_length=120)
-    biography: str = Field(default='', max_length=3000)
-    companion: bool = True
-    setting: Setting = Setting()
-    ruleset: Ruleset = Ruleset()
+    draft_id: str
+    draft_revision: int = Field(ge=0)
+    character: CharacterBuild

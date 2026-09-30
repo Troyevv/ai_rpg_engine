@@ -509,3 +509,81 @@
     margin-top: 7vh;
   }
 }
+.tt-toolbar,
+.tt-actions {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 1rem 0;
+}
+.tt-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+}
+.tt-game-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  gap: 1rem;
+}
+.tt-shell label:not(.tt-toggle) {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0.8rem 0;
+}
+.tt-shell textarea,
+.tt-shell input:not([type="checkbox"]),
+.tt-shell select {
+  max-width: 100%;
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: inherit;
+}
+.tt-shell textarea {
+  min-height: 90px;
+}
+.tt-shell button {
+  margin: 0.2rem;
+}
+.tt-shell article {
+  border-bottom: 1px solid var(--border);
+  padding: 0.8rem 0;
+}
+.tt-json {
+  width: 100%;
+  min-height: 220px;
+  max-height: 500px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 12px monospace;
+}
+.tt-table-scroll {
+  overflow: auto;
+}
+.tt-table-scroll td,
+.tt-table-scroll th {
+  padding: 0.5rem;
+  text-align: left;
+}
+.tt-roll-prompt {
+  padding: 1rem;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+}
+.tt-history {
+  max-height: 65vh;
+  overflow: auto;
+}
+@media (max-width: 800px) {
+  .tt-game-grid {
+    grid-template-columns: 1fr;
+  }
+  .tt-toolbar select {
+    width: 100%;
+  }
+}

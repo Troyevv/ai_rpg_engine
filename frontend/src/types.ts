@@ -1,4 +1,4 @@
-export type Provider = "local" | "deepseek";
+export type Provider = "local" | "deepseek" | "compatible";
 export type Section =
   "game" | "world" | "characters" | "memory" | "branches" | "settings";
 export interface ModelConfig {

@@ -1,42 +1,48 @@
-"""Initiative, action economy and automatic NPC turns."""
+"""Faction-agnostic encounter queue and combat primitives."""
+
 from .models import Encounter
-from .ai import GameAI
 
 
 def event(events, text, **details):
-    events.append({'text': text, **details})
+    events.append({"text": text, **details})
 
 
 class EncounterEngine:
     def __init__(self, dice, rules):
-        self.dice, self.rules, self.ai = dice, rules, GameAI()
+        self.dice, self.rules = dice, rules
 
     def roll(self, events, expression, **kwargs):
         roll = self.dice.roll(expression, **kwargs)
-        event(events, f'Бросок: {roll.total}', roll=roll.as_dict())
+        event(events, f"Бросок: {roll.total}", roll=roll.as_dict())
         return roll
 
-    def start(self, state, player_roll, events):
-        hero = state.actor(state.session_state.controlled_actor)
-        actors = [a for a in state.actors().values() if a.location == hero.location and a.hp > 0 and 'fled' not in a.conditions]
-        totals = {hero.id: player_roll.total}
-        for actor in actors:
-            if actor.id != hero.id:
-                totals[actor.id] = self.roll(events, '1d20', modifier=self.rules.modifier(actor.abilities['dexterity']), purpose='initiative', actor=actor.id).total
-        order = sorted(totals, key=lambda i: (-totals[i], -state.actor(i).abilities['dexterity'], i))
-        state.encounters['current'] = Encounter(order=order, initiative=totals, reaction={i: True for i in order})
-        state.active_encounter = 'current'
-        state.session_state.mode = 'ENCOUNTER'
+    def start(self, state, definition, results, events):
+        order = sorted(
+            results,
+            key=lambda i: (-results[i], -state.actor(i).abilities["dexterity"], i),
+        )
+        state.encounters[definition.id] = Encounter(
+            definition_id=definition.id,
+            order=order,
+            initiative=results,
+            reaction={i: True for i in order},
+        )
+        state.active_encounter = definition.id
+        state.session_state.mode = "ENCOUNTER"
+        state.session_state.turn_started = False
         self.reset_turn(state)
-        event(events, 'Бой начался. Определена инициатива.', kind='encounter')
+        event(events, "Столкновение началось. Определена инициатива.", kind="encounter")
 
     @staticmethod
     def reset_turn(state):
         e = state.encounter
-        actor = state.actor(e.order[e.index])
-        e.action, e.bonus_action, e.disengaged = True, True, False
-        e.reaction[actor.id], e.movement = True, actor.speed
-        actor.conditions = [c for c in actor.conditions if c != 'dodge']
+        a = state.actor(e.order[e.index])
+        e.action = e.bonus_action = True
+        e.disengaged = False
+        e.movement = a.speed
+        e.reaction[a.id] = True
+        a.conditions = [c for c in a.conditions if c not in ("dodge", "guard")]
+        state.session_state.turn_started = False
 
     def advance(self, state):
         e = state.encounter
@@ -46,69 +52,112 @@ class EncounterEngine:
             state.game_time += 6
         self.reset_turn(state)
 
-    @staticmethod
-    def ended(state, events):
-        active = [a for a in state.actors().values() if a.id in state.encounter.order and a.hp > 0 and not set(a.conditions) & {'dead', 'fled'}]
-        factions = {a.faction for a in active}
-        if len(factions) > 1:
+    def ended(self, state, events):
+        e = state.encounter
+        if not e:
+            return True
+        active = [
+            i
+            for i in e.order
+            if (
+                state.actor(i).hp > 0
+                or state.controllers[i].controller == "PLAYER"
+                and "stable" not in state.actor(i).conditions
+            )
+            and not set(state.actor(i).conditions) & {"dead", "fled"}
+        ]
+        if any(state.hostile(a, b) for a in active for b in active):
             return False
-        won = factions == {'party'}
+        party_here = set(state.party) & set(e.order)
+        surviving = set(active) & party_here
+        escaped = {i for i in party_here if "fled" in state.actor(i).conditions}
+        e.outcome = "victory" if surviving else "flee" if escaped else "defeat"
         state.active_encounter = None
-        state.session_state.mode = 'EXPLORATION'
-        if won:
-            state.quests['watch'] = 'Обитатели заставы больше не угрожают партии.'
-        event(events, 'Бой завершён: победа партии.' if won else 'Бой завершён: партия выведена из боя.', kind='encounter_end')
+        state.session_state.mode = "EXPLORATION"
+        state.session_state.reaction = None
+        state.session_state.pending = None
+        if e.outcome == "victory" and e.definition_id not in state.completed_encounters:
+            state.completed_encounters.append(e.definition_id)
+        for aid in party_here:
+            state.actor(aid).conditions = [
+                c for c in state.actor(aid).conditions if c != "fled"
+            ]
+        definition = next(
+            x for x in state.definition.encounters if x.id == e.definition_id
+        )
+        if e.outcome == "victory":
+            if definition.loot_object:
+                state.objects[definition.loot_object].revealed = True
+            if definition.quest_id:
+                state.quests[definition.quest_id] = "completed"
+        event(
+            events,
+            {
+                "victory": "Победа. Можно осмотреть добычу.",
+                "flee": "Участники покинули бой.",
+                "defeat": "Партия выведена из боя.",
+            }[e.outcome],
+            kind="encounter_end",
+            outcome=e.outcome,
+        )
         return True
 
     def validate_attack(self, state, actor_id, target_id, weapon):
-        actor, target = state.actor(actor_id), state.actor(target_id)
-        self.rules.attack_modifier(actor, weapon)
-        if target.hp == 0 or set(target.conditions) & {'dead', 'fled'} or target.faction == actor.faction or target.location != actor.location:
-            raise ValueError('Цель атаки недоступна')
-        if abs(actor.position - target.position) > actor.attacks[weapon].reach:
-            raise ValueError('Цель вне досягаемости: сначала подойди')
-        return actor, target
+        a, t = state.actor(actor_id), state.actor(target_id)
+        self.rules.attack_modifier(a, weapon)
+        if (
+            not state.hostile(a.id, t.id)
+            or t.hp <= 0
+            or "fled" in t.conditions
+            or a.location != t.location
+        ):
+            raise ValueError("Цель атаки недоступна")
+        if not state.encounter or t.id not in state.encounter.order:
+            raise ValueError("Цель не участвует в бою")
+        if abs(a.position - t.position) > a.attacks[weapon].reach:
+            raise ValueError("Цель вне досягаемости")
+        return a, t
+
+    def damage(self, state, target, amount, critical, events):
+        if "guard" in target.conditions:
+            amount = max(0, amount - 2)
+            target.conditions.remove("guard")
+            event(events, "Защитная реакция поглощает 2 урона.")
+        dealt = self.rules.damage(target, amount, critical)
+        event(
+            events,
+            f"{target.name}: получено {dealt} урона.",
+            kind="damage",
+            target=target.id,
+            amount=dealt,
+        )
+        return dealt
 
     def npc_attack(self, state, actor_id, target_id, weapon, events):
-        actor, target = self.validate_attack(state, actor_id, target_id, weapon)
-        roll = self.roll(events, '1d20', modifier=self.rules.attack_modifier(actor, weapon), advantage=-1 if 'dodge' in target.conditions else 0, purpose='attack', actor=actor_id)
-        if self.rules.hit(roll, target.armor_class):
-            attack = actor.attacks[weapon]
-            damage = self.roll(events, f'1d{attack.die}', modifier=self.rules.modifier(actor.abilities[attack.ability]), critical=roll.selected == 20, critical_rule=state.ruleset.critical, purpose='damage', actor=actor_id)
-            dealt = self.rules.damage(target, damage.total, critical=roll.selected == 20)
-            event(events, f'{actor.name} атакует {target.name}: урон {dealt}.', kind='damage', actor=actor_id, target=target_id, amount=dealt)
+        a, t = self.validate_attack(state, actor_id, target_id, weapon)
+        advantage = (1 if "helped" in a.conditions else 0) - (
+            1 if "dodge" in t.conditions else 0
+        )
+        a.conditions = [c for c in a.conditions if c != "helped"]
+        roll = self.roll(
+            events,
+            "1d20",
+            modifier=self.rules.attack_modifier(a, weapon),
+            advantage=advantage,
+            purpose="attack",
+            actor=a.id,
+        )
+        if self.rules.hit(roll, t.armor_class):
+            w = a.attacks[weapon]
+            damage = self.roll(
+                events,
+                f"1d{w.die}",
+                modifier=self.rules.modifier(a.abilities[w.ability]),
+                critical=roll.selected == 20,
+                critical_rule=state.ruleset.critical,
+                purpose="damage",
+                actor=a.id,
+            )
+            self.damage(state, t, damage.total, roll.selected == 20, events)
         else:
-            event(events, f'{actor.name} промахивается по {target.name}.', kind='miss')
-
-    def move(self, state, actor_id, distance, events):
-        e, actor = state.encounter, state.actor(actor_id)
-        if abs(distance) > e.movement or not distance:
-            raise ValueError('Недостаточно перемещения')
-        new_position = actor.position + distance
-        actor.position = new_position
-        e.movement -= abs(distance)
-        event(events, f'{actor.name}: перемещение на {distance} футов.', kind='move')
-
-    def run_npcs(self, state, events):
-        for _ in range(100):
-            if not state.encounter or self.ended(state, events):
-                return
-            e = state.encounter
-            actor = state.actor(e.order[e.index])
-            if actor.id == state.session_state.controlled_actor and not set(actor.conditions) & {'dead', 'stable', 'fled'}:
-                return
-            if actor.hp > 0 and not set(actor.conditions) & {'dead', 'fled'}:
-                command = self.ai.decide(state, actor.id)
-                if command.type == 'move':
-                    self.move(state, actor.id, command.distance, events)
-                    if actor.hp / actor.max_hp < .3 and actor.morale < .6:
-                        actor.conditions.append('fled')
-                        event(events, f'{actor.name} бежит с поля боя.', kind='flee')
-                    else:
-                        command = self.ai.decide(state, actor.id)
-                if command.type == 'attack':
-                    self.npc_attack(state, actor.id, command.target, command.weapon, events)
-                elif command.type == 'dodge':
-                    actor.conditions.append('dodge')
-            self.advance(state)
-        raise ValueError('Не удалось завершить очередь NPC')
+            event(events, f"{a.name} промахивается.", kind="miss")

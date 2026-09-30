@@ -86,7 +86,7 @@ export function Settings({
           />
         </label>
         <p className="muted small">
-          Ключ сохраняется зашифрованным на сервере и работает после перезапуска и с телефона. Для DeepSeek текст и контекст отправляются в API.
+          Ключ сохраняется зашифрованным на сервере и работает после перезапуска и с телефона. Для DeepSeek текст и контекст отправляются в API. OpenAI-совместимый провайдер использует отдельные COMPATIBLE_BASE_URL и COMPATIBLE_API_KEY на сервере.
         </p>
         {stored && <Button variant="ghost" size="sm" onClick={()=>run(async()=>{
           const status = await api<{deepseek:boolean}>("/credentials/deepseek",undefined,"DELETE");
@@ -115,6 +115,7 @@ export function Settings({
                 >
                   <option value="local">Локальная модель · LM Studio</option>
                   <option value="deepseek">DeepSeek API</option>
+                  <option value="compatible">OpenAI-совместимый API · настройка сервера</option>
                 </select>
               </label>
               <label>

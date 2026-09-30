@@ -1,0 +1,504 @@
+import { useEffect, useState } from "react";
+import { api } from "../api";
+import type { Preferences } from "../types";
+import {
+  abilities,
+  skills,
+  type Build,
+  type Catalog,
+  type Draft,
+  type Game,
+} from "./types";
+
+export function Wizard({
+  prefs,
+  apiKey,
+  done,
+  cancel,
+}: {
+  prefs: Preferences;
+  apiKey: string;
+  done: (game: Game) => void;
+  cancel: () => void;
+}) {
+  const [catalog, setCatalog] = useState<Catalog | null>(null),
+    [build, setBuild] = useState<Build | null>(null);
+  const [draft, setDraft] = useState<Draft | null>(null),
+    [step, setStep] = useState(0),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false);
+  const [json, setJson] = useState(""),
+    [advanced, setAdvanced] = useState(false),
+    [author, setAuthor] = useState(false),
+    [drafts, setDrafts] = useState<{ id: string; name: string }[]>([]);
+  const [options, setOptions] = useState({
+    idea: "",
+    title: "",
+    genre: "Фэнтези",
+    setting: "",
+    tone: "Мрачное приключение",
+    technology: "Средневековье",
+    magic: "Низкая",
+    scale: "Город и окрестности",
+    adventure_type: "Расследование",
+    difficulty: "MEDIUM",
+    party_size: 1,
+    starting_situation: "",
+    wishes: "",
+  });
+  useEffect(() => {
+    api<Catalog>("/tabletop/catalog")
+      .then((c) => {
+        setCatalog(c);
+        setBuild(c.default_build);
+      })
+      .catch((e) => setError(e.message));
+    api<{ id: string; name: string }[]>("/tabletop/drafts")
+      .then(setDrafts)
+      .catch((e) => setError(e.message));
+  }, []);
+  async function run(fn: () => Promise<void>) {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await fn();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const choose = (d: Draft) => {
+    setDraft(d);
+    setJson(JSON.stringify(d.definition, null, 2));
+    setStep(1);
+  };
+  const change = (key: string, value: unknown) =>
+    setOptions((prev) => ({ ...prev, [key]: value }));
+  if (!catalog || !build)
+    return <p className="tt-panel">Загрузка каталога правил… {error}</p>;
+  const cls = catalog.classes[build.character_class];
+  return (
+    <main className="tt-wizard tt-panel">
+      <span className="tt-eyebrow">Новая кампания · {step + 1} / 4</span>
+      <h1>
+        {
+          [
+            "Идея приключения",
+            "Мир и стартовая сцена",
+            "Создание персонажа",
+            "Начало кампании",
+          ][step]
+        }
+      </h1>
+      {error && (
+        <p role="alert" className="tt-error">
+          {error}
+        </p>
+      )}
+      {step === 0 ? (
+        <>
+          <label>
+            Идея приключения
+            <textarea
+              value={options.idea}
+              onChange={(e) => change("idea", e.target.value)}
+              maxLength={6000}
+              placeholder="Мрачное фэнтези. Я бывший охотник на чудовищ. В шахтёрском городе пропадают люди…"
+            />
+          </label>
+          <label className="tt-toggle">
+            <input
+              type="checkbox"
+              checked={advanced}
+              onChange={(e) => setAdvanced(e.target.checked)}
+            />{" "}
+            Подробная настройка
+          </label>
+          {advanced && (
+            <div className="tt-form-grid">
+              {Object.entries({
+                title: "Название",
+                genre: "Жанр",
+                setting: "Сеттинг",
+                tone: "Тон",
+                technology: "Технологии",
+                magic: "Магия",
+                scale: "Масштаб",
+                adventure_type: "Тип приключения",
+                starting_situation: "Стартовая ситуация",
+                wishes: "Пожелания",
+              }).map(([key, label]) => (
+                <label key={key}>
+                  {label}
+                  <input
+                    value={String(options[key as keyof typeof options])}
+                    maxLength={key === "wishes" ? 3000 : 120}
+                    onChange={(e) => change(key, e.target.value)}
+                  />
+                </label>
+              ))}
+              <label>
+                Размер партии
+                <input
+                  type="number"
+                  min={1}
+                  max={4}
+                  value={options.party_size}
+                  onChange={(e) => change("party_size", Number(e.target.value))}
+                />
+              </label>
+              <label>
+                Сложность
+                <select
+                  value={options.difficulty}
+                  onChange={(e) => change("difficulty", e.target.value)}
+                >
+                  <option value="EASY">Легко</option>
+                  <option value="MEDIUM">Средне</option>
+                  <option value="HARD">Сложно</option>
+                </select>
+              </label>
+            </div>
+          )}
+          <p className="tt-note">
+            Генерация создаёт связанный мир, NPC, задания, предметы и
+            столкновения. Используется модель из общих настроек игры:{" "}
+            {prefs.game.model || "модель не выбрана"}.
+          </p>
+          <button
+            className="tt-primary"
+            disabled={
+              busy || options.idea.trim().length < 3 || !prefs.game.model
+            }
+            onClick={() =>
+              void run(async () =>
+                choose(
+                  await api<Draft>("/tabletop/generate", {
+                    options,
+                    config: {
+                      ...prefs.game,
+                      max_tokens: Math.max(10000, prefs.game.max_tokens),
+                    },
+                    api_key: apiKey || undefined,
+                  }),
+                ),
+              )
+            }
+          >
+            {busy ? "Генерация и проверка мира…" : "Сгенерировать мир"}
+          </button>
+          {!!drafts.length && (
+            <label>
+              Продолжить черновик
+              <select
+                defaultValue=""
+                onChange={(e) =>
+                  e.target.value &&
+                  void run(async () =>
+                    choose(
+                      await api<Draft>(`/tabletop/drafts/${e.target.value}`),
+                    ),
+                  )
+                }
+              >
+                <option value="">Выбрать</option>
+                {drafts.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <details>
+            <summary>Импорт готовой кампании (JSON)</summary>
+            <textarea
+              aria-label="Импорт кампании"
+              value={json}
+              onChange={(e) => setJson(e.target.value)}
+            />
+            <button
+              disabled={busy || !json.trim()}
+              onClick={() =>
+                void run(async () =>
+                  choose(
+                    await api<Draft>("/tabletop/drafts", {
+                      definition: JSON.parse(json),
+                    }),
+                  ),
+                )
+              }
+            >
+              Проверить и импортировать
+            </button>
+          </details>
+        </>
+      ) : step === 1 && draft ? (
+        <>
+          <h2>{draft.definition.name}</h2>
+          <p>{draft.definition.starting_scene}</p>
+          <h3>Локации</h3>
+          {draft.definition.locations.map((l) => (
+            <details key={l.id}>
+              <summary>{l.name}</summary>
+              <p>{l.description}</p>
+            </details>
+          ))}
+          <label className="tt-toggle">
+            <input
+              type="checkbox"
+              checked={author}
+              onChange={(e) => setAuthor(e.target.checked)}
+            />{" "}
+            Режим автора: редактирование со спойлерами
+          </label>
+          {author && (
+            <>
+              <p className="tt-note">
+                Определение содержит секреты. В игровой интерфейс они не попадут
+                до обнаружения.
+              </p>
+              <textarea
+                className="tt-json"
+                aria-label="Определение кампании"
+                value={json}
+                onChange={(e) => setJson(e.target.value)}
+              />
+              <button
+                disabled={busy}
+                onClick={() =>
+                  void run(async () =>
+                    choose(
+                      await api<Draft>(
+                        `/tabletop/drafts/${draft.id}`,
+                        {
+                          revision: draft.revision,
+                          definition: JSON.parse(json),
+                        },
+                        "PUT",
+                      ),
+                    ),
+                  )
+                }
+              >
+                Проверить и сохранить мир
+              </button>
+            </>
+          )}
+          {draft.usage.map((u, i) => (
+            <p className="tt-note" key={i}>
+              {u.stage}: {u.seconds} с · вход {u.input_tokens ?? "—"} · выход{" "}
+              {u.output_tokens ?? "—"} · ${u.cost ?? "неизвестно"}
+            </p>
+          ))}
+        </>
+      ) : step === 2 ? (
+        <>
+          <label>
+            Имя героя
+            <input
+              value={build.name}
+              maxLength={120}
+              onChange={(e) => setBuild({ ...build, name: e.target.value })}
+            />
+          </label>
+          <div className="tt-form-grid">
+            <label>
+              Класс
+              <select
+                value={build.character_class}
+                onChange={(e) => {
+                  const c = catalog.classes[e.target.value];
+                  setBuild({
+                    ...build,
+                    character_class: e.target.value,
+                    skills: c.skills.slice(0, c.skill_count),
+                    equipment: c.equipment,
+                  });
+                }}
+              >
+                {Object.entries(catalog.classes).map(([id, c]) => (
+                  <option key={id} value={id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Вид
+              <select
+                value={build.species}
+                onChange={(e) =>
+                  setBuild({ ...build, species: e.target.value })
+                }
+              >
+                {Object.entries(catalog.species).map(([id, c]) => (
+                  <option key={id} value={id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Происхождение
+              <select
+                value={build.background}
+                onChange={(e) =>
+                  setBuild({ ...build, background: e.target.value })
+                }
+              >
+                {Object.entries(catalog.backgrounds).map(([id, c]) => (
+                  <option key={id} value={id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <h3>Характеристики</h3>
+          <p className="tt-note">
+            Распредели {catalog.ability_array.join(", ")}. Выбор меняет местами
+            значения.
+          </p>
+          <div className="tt-form-grid">
+            {catalog.abilities.map((a) => (
+              <label key={a}>
+                {abilities[a] || a}
+                <select
+                  value={build.abilities[a]}
+                  onChange={(e) => {
+                    const value = Number(e.target.value),
+                      other = Object.keys(build.abilities).find(
+                        (k) => build.abilities[k] === value,
+                      )!;
+                    setBuild({
+                      ...build,
+                      abilities: {
+                        ...build.abilities,
+                        [a]: value,
+                        [other]: build.abilities[a],
+                      },
+                    });
+                  }}
+                >
+                  {catalog.ability_array.map((v) => (
+                    <option key={v}>{v}</option>
+                  ))}
+                </select>
+              </label>
+            ))}
+          </div>
+          <h3>Навыки: выбери {cls.skill_count}</h3>
+          {cls.skills.map((s) => (
+            <label className="tt-toggle" key={s}>
+              <input
+                type="checkbox"
+                checked={build.skills.includes(s)}
+                onChange={(e) =>
+                  setBuild({
+                    ...build,
+                    skills: e.target.checked
+                      ? [...build.skills, s]
+                      : build.skills.filter((x) => x !== s),
+                  })
+                }
+              />
+              {skills[s] || s}
+            </label>
+          ))}
+          <h3>Снаряжение</h3>
+          <label>
+            Стартовый набор
+            <select
+              value={JSON.stringify(build.equipment)}
+              onChange={(e) =>
+                setBuild({ ...build, equipment: JSON.parse(e.target.value) })
+              }
+            >
+              {(cls.equipment_choices || [cls.equipment]).map((items) => (
+                <option key={items.join("-")} value={JSON.stringify(items)}>
+                  {items
+                    .map(
+                      (i) => catalog.items.find((x) => x.id === i)?.name || i,
+                    )
+                    .join(", ")}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p>
+            Владение спасбросками:{" "}
+            {cls.saves.map((a) => abilities[a] || a).join(", ")}.
+          </p>
+          <p className="tt-note">
+            Набор и владения определяются выбранным классом. Производные
+            характеристики рассчитает движок.
+          </p>
+          {Object.entries({
+            appearance: "Внешность",
+            biography: "Биография",
+            personality: "Характер",
+            ideals: "Идеалы",
+            bonds: "Привязанности",
+            flaws: "Слабости",
+          }).map(([key, label]) => (
+            <label key={key}>
+              {label}
+              <textarea
+                value={String(build[key as keyof Build])}
+                maxLength={key === "biography" ? 3000 : 1000}
+                onChange={(e) => setBuild({ ...build, [key]: e.target.value })}
+              />
+            </label>
+          ))}
+        </>
+      ) : draft ? (
+        <>
+          <h2>
+            {build.name} · {catalog.classes[build.character_class].name}
+          </h2>
+          <p>{draft.definition.name}</p>
+          <p>
+            Кубики бросаются на сервере по твоему нажатию. Сложность проверок и
+            нераскрытые секреты остаются скрытыми.
+          </p>
+        </>
+      ) : null}
+      <footer>
+        <button
+          disabled={busy}
+          onClick={step ? () => setStep(step - 1) : cancel}
+        >
+          {step ? "Назад" : "Отмена"}
+        </button>
+        {step > 0 && (
+          <button
+            className="tt-primary"
+            disabled={
+              busy || (step === 2 && build.skills.length !== cls.skill_count)
+            }
+            onClick={() =>
+              void run(async () => {
+                if (step === 2)
+                  await api("/tabletop/build/validate", { build });
+                if (step < 3) setStep(step + 1);
+                else if (draft)
+                  done(
+                    await api<Game>("/tabletop/games", {
+                      draft_id: draft.id,
+                      draft_revision: draft.revision,
+                      character: build,
+                    }),
+                  );
+              })
+            }
+          >
+            {busy ? "Проверка…" : step < 3 ? "Далее" : "Начать приключение"}
+          </button>
+        )}
+      </footer>
+    </main>
+  );
+}
