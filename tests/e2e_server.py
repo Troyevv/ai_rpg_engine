@@ -4,6 +4,7 @@ from canonical_fixture import canonical
 import json
 import re
 import os
+os.environ["TABLETOP_DEBUG"] = "1"
 from pathlib import Path
 import sys
 import tempfile
@@ -103,7 +104,16 @@ def tabletop_stream(**kwargs):
     elif 'CampaignMutation JSON' in prompt:
         value=json.dumps({'operations':[{'type':'CreateLocation','value':{'id':'observatory','name':'Обсерватория','region_id':'district'}},{'type':'ConnectLocations','first':'market','second':'observatory'}]})
     elif kwargs.get('response_format'):
-        value=json.dumps({'type':'look'})
+        action = json.loads(kwargs['messages'][-1]['content']).get('action', '')
+        command = {'type': 'look'}
+        if action == 'Пробираюсь через затопленный тоннель':
+            command = {'type':'check','ability':'strength','skill':'athletics','difficulty':'MEDIUM','reason':'Сильное течение'}
+        elif action == 'Уточнить путь':
+            command = {'type':'request_choice','prompt':'Как обследуешь проход?', 'options':[
+                {'id':'look','label':'Осмотреть стены','command':{'type':'look'}},
+                {'id':'check','label':'Проверить течение','command':{'type':'check','ability':'strength','skill':'athletics'}},
+            ]}
+        value=json.dumps(command)
     else:
         context=json.loads(kwargs['messages'][-1]['content'])['context']
         value='\n'.join(e['text'] for e in context['events'] if 'roll' not in e)

@@ -265,3 +265,56 @@ test("invalid generated draft shows all diagnostics and requires explicit correc
   await page.getByRole("button", { name: "Далее", exact: true }).click();
   await expect(page.getByLabel("Имя героя", { exact: true })).toBeVisible();
 });
+
+test("AI DM check and choice have durable mechanical controls", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Настольная RPG", exact: true })
+    .click();
+  await expect(page.getByLabel("LLM DM", { exact: true })).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Создать кампанию", exact: true })
+    .click();
+  await page
+    .getByLabel("Идея приключения", { exact: true })
+    .fill("Протокол ведущего");
+  await page
+    .getByRole("button", { name: "Сгенерировать мир", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Далее", exact: true }).click();
+  await page.getByRole("button", { name: "Далее", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Начать приключение", exact: true })
+    .click();
+  const input = page.getByLabel("Твоё действие", { exact: true });
+  await input.fill("Пробираюсь через затопленный тоннель");
+  await page.getByRole("button", { name: "Отправить DM", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Сильное течение");
+  await expect(input).toBeDisabled();
+  await page.reload();
+  await expect(input).toBeDisabled();
+  await page
+    .getByRole("button", { name: "Бросить кубик", exact: true })
+    .click();
+  await expect(input).toBeEnabled();
+  await input.fill("Уточнить путь");
+  await page.getByRole("button", { name: "Отправить DM", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText(
+    "Как обследуешь проход?",
+  );
+  await expect(input).toBeDisabled();
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Проверить течение", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Бросить кубик", exact: true }),
+  ).toBeVisible();
+  await expect(input).toBeDisabled();
+  await page
+    .getByRole("button", { name: "Бросить кубик", exact: true })
+    .click();
+  await expect(input).toBeEnabled();
+});

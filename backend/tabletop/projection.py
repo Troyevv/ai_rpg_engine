@@ -134,6 +134,21 @@ class PublicProjection:
             "mode": state.session_state.mode,
             "game_time": state.game_time,
             **PlayerProjection.build(state),
+            "mechanical_resolution_complete": state.session_state.mechanical_resolution_complete,
+            "choice": (
+                {
+                    "id": state.session_state.choice.id,
+                    "actor": state.session_state.choice.actor,
+                    "kind": state.session_state.choice.kind,
+                    "prompt": state.session_state.choice.prompt,
+                    "options": [
+                        {"id": o.id, "label": o.label}
+                        for o in state.session_state.choice.options
+                    ],
+                }
+                if state.session_state.choice
+                else None
+            ),
             "pending": (
                 {
                     k: v
@@ -142,6 +157,7 @@ class PublicProjection:
                     in (
                         "id",
                         "purpose",
+                        "reason",
                         "actor",
                         "controller",
                         "player_id",
@@ -213,6 +229,11 @@ class DMProjection:
                     "personality": a.personality,
                     "attitude": a.attitude,
                     "current_intent": a.current_intent,
+                    "relationships": {
+                        i: v
+                        for i, v in a.relationships.items()
+                        if i in {x.id for x in relevant}
+                    },
                     "knowledge": [
                         i
                         for i in a.knowledge
@@ -232,3 +253,22 @@ class DMProjection:
 # Compatibility alias for read adapters, not a canonical serialization method.
 def public_state(state):
     return PublicProjection.build(state)
+
+
+class NarrationProjection:
+    @staticmethod
+    def build(state, events=None):
+        p = PublicProjection.build(state)
+        return {
+            "mechanical_resolution_complete": state.session_state.mechanical_resolution_complete,
+            "scene": p["scene"],
+            "location": p["location"],
+            "mode": p["mode"],
+            "characters": p["characters"],
+            "visible_npcs": p["npcs"],
+            "objects": p["objects"],
+            "known": p["knowledge"],
+            "quests": p["quests"],
+            "encounter": p["encounter"],
+            "events": (events or [])[-20:],
+        }

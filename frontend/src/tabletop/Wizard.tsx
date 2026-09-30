@@ -546,6 +546,8 @@ export function Wizard({
                       draft_id: draft.id,
                       draft_revision: draft.revision,
                       character: build,
+                      config: prefs.game,
+                      api_key: apiKey || undefined,
                     }),
                   );
               })
