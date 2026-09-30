@@ -587,3 +587,26 @@
     width: 100%;
   }
 }
+@media (max-width: 600px) {
+  .tt-header {
+    gap: 8px;
+    padding: 10px 12px;
+    height: auto;
+    min-height: 64px;
+  }
+  .tt-header > button {
+    white-space: nowrap;
+    font-size: 12px;
+    padding: 8px;
+    flex-shrink: 0;
+  }
+  .tt-header > div {
+    min-width: 0;
+    font-size: 13px;
+    line-height: 1.3;
+  }
+  .tt-header small {
+    font-size: 9px;
+    letter-spacing: 0;
+  }
+}
