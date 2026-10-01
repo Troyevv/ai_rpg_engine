@@ -610,3 +610,34 @@
     letter-spacing: 0;
   }
 }
+
+.tt-creator { min-width: 0; }
+.tt-creator-steps { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 20px; }
+.tt-creator-steps button { font-size:12px; }
+.tt-creator-steps [aria-current="step"], .tt-choice-card[aria-pressed="true"] { border-color:var(--accent); background:var(--accent-soft, #243548); }
+.tt-creator-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(220px,300px); gap:24px; }
+.tt-choice-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.tt-choice-card { display:flex; flex-direction:column; gap:10px; align-items:flex-start; text-align:left; padding:18px!important; }
+.tt-choice-card strong { font-size:20px; }
+.tt-choice-card span { font-size:13px; line-height:1.55; }
+.tt-live-sheet { border:1px solid var(--border); border-radius:16px; padding:18px; align-self:start; position:sticky; top:20px; }
+.tt-live-sheet p { font-size:13px; line-height:1.7; }
+.tt-live-stats { display:flex; justify-content:space-between; gap:8px; }
+.tt-live-stats span { display:flex; flex-direction:column; gap:8px; }
+.tt-live-stats strong { font-size:24px; }
+.tt-ability-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.tt-score { display:flex; flex-direction:column; gap:10px; border:1px solid var(--border); border-radius:12px; padding:12px; }
+.tt-score div { display:flex; align-items:center; justify-content:space-between; }
+.tt-score output { font-size:24px; }
+.tt-score span { font-size:12px; }
+.tt-feature { border-left:2px solid var(--accent); padding-left:10px; margin:14px 0; }
+.tt-feature p { margin:6px 0; font-size:13px; }
+.tt-creator-navigation { display:flex; justify-content:space-between; gap:12px; margin-top:24px; }
+.tt-proposal { border:1px solid var(--accent); border-radius:16px; padding:20px; margin-top:20px; }
+@media(max-width:767px) {
+ .tt-creator-layout { display:flex; flex-direction:column; }
+ .tt-live-sheet { position:static; width:100%; }
+ .tt-choice-grid { grid-template-columns:1fr; }
+ .tt-creator-steps { flex-wrap:nowrap; overflow-x:auto; padding-bottom:10px; }
+ .tt-creator-steps button { flex-shrink:0; }
+}

@@ -69,6 +69,9 @@ test("generated campaign, quest, combat, loot, expansion and real server restart
     ).toBeVisible();
     await page.getByRole("button", { name: "Далее", exact: true }).click();
     await page.getByLabel("Имя героя", { exact: true }).fill("Александр");
+    await page
+      .getByRole("button", { name: "10. Внешность", exact: true })
+      .click();
     await page.getByLabel("Внешность", { exact: true }).fill("Серый плащ");
     await page.getByRole("button", { name: "Далее", exact: true }).click();
     await page
@@ -317,4 +320,74 @@ test("AI DM check and choice have durable mechanical controls", async ({
     .getByRole("button", { name: "Бросить кубик", exact: true })
     .click();
   await expect(input).toBeEnabled();
+});
+
+test("point buy and AI portrait are reviewed before character creation", async ({
+  page,
+}, testInfo) => {
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Настольная RPG", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Создать кампанию", exact: true })
+    .click();
+  await page
+    .getByLabel("Идея приключения", { exact: true })
+    .fill("Герой с характером");
+  await page
+    .getByRole("button", { name: "Сгенерировать мир", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Далее", exact: true }).click();
+  await page
+    .getByLabel("Концепция героя", { exact: true })
+    .fill("Бывший городской стражник");
+  await page
+    .getByRole("button", { name: "✨ Сгенерировать персонажа", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Предложение ведущего", { exact: true }),
+  ).toContainText("Бывший городской стражник");
+  await page
+    .getByRole("button", { name: "Принять портрет", exact: true })
+    .click();
+  await expect(page.getByLabel("Имя героя", { exact: true })).toHaveValue(
+    "Александр",
+  );
+  await page
+    .getByRole("button", { name: "5. Характеристики", exact: true })
+    .click();
+  await page
+    .getByLabel("Метод характеристик", { exact: true })
+    .selectOption("point_buy");
+  await expect(
+    page.getByRole("status", { name: "Бюджет характеристик" }),
+  ).toContainText("Осталось очков: 27");
+  await page
+    .getByRole("button", { name: "Увеличить: Сила", exact: true })
+    .click();
+  await expect(
+    page.getByRole("status", { name: "Бюджет характеристик" }),
+  ).toContainText("Осталось очков: 26");
+  await expect(
+    page.getByLabel("Предварительный лист персонажа", { exact: true }),
+  ).toContainText("Сила -1");
+  await page
+    .getByRole("button", { name: "Уменьшить: Сила", exact: true })
+    .click();
+  await expect(
+    page.getByRole("status", { name: "Бюджет характеристик" }),
+  ).toContainText("Осталось очков: 27");
+  await page.screenshot({
+    path: `test-results/creator-${testInfo.project.name}.png`,
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "Далее", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Начать приключение", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Персонаж", exact: true }).click();
+  await expect(
+    page.getByText("Бывший городской стражник.", { exact: false }),
+  ).toBeVisible();
 });

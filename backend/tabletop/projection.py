@@ -60,6 +60,11 @@ class PublicProjection:
                 save_modifiers={k: rules.save_modifier(a, k) for k in a.abilities},
                 attack_modifiers={k: rules.attack_modifier(a, k) for k in a.attacks},
                 controller=state.controllers[aid].model_dump(),
+                feature_definitions=[
+                    state.ruleset.features[i].model_dump()
+                    for i in a.features
+                    if i in state.ruleset.features
+                ],
             )
         npcs = {
             k: {

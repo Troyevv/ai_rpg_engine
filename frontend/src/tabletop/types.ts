@@ -1,4 +1,7 @@
 export type Build = {
+  ability_method: "standard_array" | "point_buy";
+  concept: string;
+  feature_choices: string[];
   name: string;
   species: string;
   character_class: string;
@@ -13,7 +16,21 @@ export type Build = {
   bonds: string;
   flaws: string;
 };
+export type Feature = {
+  id: string;
+  name: string;
+  description: string;
+  activation: string;
+  effects: { type: string; value: number; key: string }[];
+};
 export type Catalog = {
+  point_buy: {
+    budget?: number;
+    minimum?: number;
+    maximum?: number;
+    costs?: Record<string, number>;
+  };
+  features: Record<string, Feature>;
   id: string;
   name: string;
   abilities: string[];
@@ -23,6 +40,14 @@ export type Catalog = {
     string,
     {
       name: string;
+      description?: string;
+      hit_die: number;
+      primary_abilities?: string[];
+      armor?: string[];
+      weapons?: string[];
+      features?: string[];
+      feature_choices?: string[];
+      feature_choice_count?: number;
       skills: string[];
       equipment: string[];
       equipment_choices?: string[][];
@@ -30,8 +55,21 @@ export type Catalog = {
       skill_count: number;
     }
   >;
-  species: Record<string, { name: string; speed: number }>;
-  backgrounds: Record<string, { name: string }>;
+  species: Record<
+    string,
+    { name: string; speed: number; description?: string; features?: string[] }
+  >;
+  backgrounds: Record<
+    string,
+    {
+      name: string;
+      description?: string;
+      skills?: string[];
+      equipment?: string[];
+      proficiencies?: string[];
+      hooks?: string[];
+    }
+  >;
   items: Item[];
   default_build: Build;
 };
@@ -235,6 +273,18 @@ export const abilities: Record<string, string> = {
   charisma: "Харизма",
 };
 export const skills: Record<string, string> = {
+  acrobatics: "Акробатика",
+  sleight_of_hand: "Ловкость рук",
+  arcana: "Магия",
+  history: "История",
+  nature: "Природа",
+  religion: "Религия",
+  animal_handling: "Уход за животными",
+  insight: "Проницательность",
+  medicine: "Медицина",
+  deception: "Обман",
+  intimidation: "Запугивание",
+  performance: "Выступление",
   athletics: "Атлетика",
   perception: "Восприятие",
   stealth: "Скрытность",

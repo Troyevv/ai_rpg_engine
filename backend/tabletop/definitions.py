@@ -34,6 +34,8 @@ class ItemDefinition(Named):
     weight: float = Field(default=0, ge=0, le=1000)
     value: int = Field(default=0, ge=0, le=100000)
     properties: list[str] = Field(default_factory=list, max_length=12)
+    weapon_category: Literal["simple", "martial", "finesse"] = "simple"
+    armor_category: Literal["light", "medium", "heavy", "shield"] = "light"
     weapon_die: Literal[4, 6, 8, 10, 12] = 6
     weapon_ability: Ability = "strength"
     reach: int = Field(default=5, ge=5, le=120)
@@ -66,6 +68,9 @@ class CharacterBuild(Model):
     species: str = "human"
     character_class: str = "fighter"
     background: str = "wanderer"
+    ability_method: Literal["standard_array", "point_buy"] = "standard_array"
+    concept: str = Field(default="", max_length=2000)
+    feature_choices: list[str] = Field(default_factory=list, max_length=10)
     abilities: dict[Ability, int] = {
         "strength": 15,
         "dexterity": 13,
@@ -148,7 +153,7 @@ class CampaignDefinition(Model):
     id: Id
     name: str = Field(min_length=1, max_length=120)
     ruleset_id: str = "d20-basic-v2"
-    ruleset_version: Literal[2] = 2
+    ruleset_version: Literal[2, 3] = 2
     setting: Setting
     regions: list[Region] = Field(min_length=1, max_length=30)
     locations: list[Location] = Field(min_length=1, max_length=150)
@@ -250,3 +255,13 @@ class GenerationOptions(Model):
     party_size: int = Field(default=1, ge=1, le=4)
     starting_situation: str = Field(default="", max_length=2000)
     wishes: str = Field(default="", max_length=3000)
+
+
+class CharacterRoleplay(Model):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    appearance: str | None = Field(default=None, min_length=1, max_length=2000)
+    biography: str | None = Field(default=None, min_length=1, max_length=3000)
+    personality: str | None = Field(default=None, min_length=1, max_length=1000)
+    ideals: str | None = Field(default=None, min_length=1, max_length=1000)
+    bonds: str | None = Field(default=None, min_length=1, max_length=1000)
+    flaws: str | None = Field(default=None, min_length=1, max_length=1000)

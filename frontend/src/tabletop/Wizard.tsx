@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../api";
+import { CharacterCreator } from "./CharacterCreator";
 import type { Preferences } from "../types";
 import {
-  abilities,
-  skills,
   type Build,
   type Catalog,
   type Draft,
@@ -22,6 +21,7 @@ export function Wizard({
   done: (game: Game) => void;
   cancel: () => void;
 }) {
+  const [creatorValid, setCreatorValid] = useState(false);
   const [catalog, setCatalog] = useState<Catalog | null>(null),
     [build, setBuild] = useState<Build | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null),
@@ -80,7 +80,12 @@ export function Wizard({
       setBusy(false);
     }
   }
-  const choose = (d: Draft) => {
+  const choose = async (d: Draft) => {
+    const c = await api<Catalog>(
+      `/tabletop/catalog?ruleset_id=${encodeURIComponent(String(d.definition.ruleset_id))}`,
+    );
+    if (catalog?.id !== c.id) setBuild(c.default_build);
+    setCatalog(c);
     setDraft(d);
     setDiagnostics(null);
     setAuthor(false);
@@ -348,166 +353,16 @@ export function Wizard({
             </p>
           ))}
         </>
-      ) : step === 2 ? (
-        <>
-          <label>
-            Имя героя
-            <input
-              value={build.name}
-              maxLength={120}
-              onChange={(e) => setBuild({ ...build, name: e.target.value })}
-            />
-          </label>
-          <div className="tt-form-grid">
-            <label>
-              Класс
-              <select
-                value={build.character_class}
-                onChange={(e) => {
-                  const c = catalog.classes[e.target.value];
-                  setBuild({
-                    ...build,
-                    character_class: e.target.value,
-                    skills: c.skills.slice(0, c.skill_count),
-                    equipment: c.equipment,
-                  });
-                }}
-              >
-                {Object.entries(catalog.classes).map(([id, c]) => (
-                  <option key={id} value={id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Вид
-              <select
-                value={build.species}
-                onChange={(e) =>
-                  setBuild({ ...build, species: e.target.value })
-                }
-              >
-                {Object.entries(catalog.species).map(([id, c]) => (
-                  <option key={id} value={id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Происхождение
-              <select
-                value={build.background}
-                onChange={(e) =>
-                  setBuild({ ...build, background: e.target.value })
-                }
-              >
-                {Object.entries(catalog.backgrounds).map(([id, c]) => (
-                  <option key={id} value={id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <h3>Характеристики</h3>
-          <p className="tt-note">
-            Распредели {catalog.ability_array.join(", ")}. Выбор меняет местами
-            значения.
-          </p>
-          <div className="tt-form-grid">
-            {catalog.abilities.map((a) => (
-              <label key={a}>
-                {abilities[a] || a}
-                <select
-                  value={build.abilities[a]}
-                  onChange={(e) => {
-                    const value = Number(e.target.value),
-                      other = Object.keys(build.abilities).find(
-                        (k) => build.abilities[k] === value,
-                      )!;
-                    setBuild({
-                      ...build,
-                      abilities: {
-                        ...build.abilities,
-                        [a]: value,
-                        [other]: build.abilities[a],
-                      },
-                    });
-                  }}
-                >
-                  {catalog.ability_array.map((v) => (
-                    <option key={v}>{v}</option>
-                  ))}
-                </select>
-              </label>
-            ))}
-          </div>
-          <h3>Навыки: выбери {cls.skill_count}</h3>
-          {cls.skills.map((s) => (
-            <label className="tt-toggle" key={s}>
-              <input
-                type="checkbox"
-                checked={build.skills.includes(s)}
-                onChange={(e) =>
-                  setBuild({
-                    ...build,
-                    skills: e.target.checked
-                      ? [...build.skills, s]
-                      : build.skills.filter((x) => x !== s),
-                  })
-                }
-              />
-              {skills[s] || s}
-            </label>
-          ))}
-          <h3>Снаряжение</h3>
-          <label>
-            Стартовый набор
-            <select
-              value={JSON.stringify(build.equipment)}
-              onChange={(e) =>
-                setBuild({ ...build, equipment: JSON.parse(e.target.value) })
-              }
-            >
-              {(cls.equipment_choices || [cls.equipment]).map((items) => (
-                <option key={items.join("-")} value={JSON.stringify(items)}>
-                  {items
-                    .map(
-                      (i) => catalog.items.find((x) => x.id === i)?.name || i,
-                    )
-                    .join(", ")}
-                </option>
-              ))}
-            </select>
-          </label>
-          <p>
-            Владение спасбросками:{" "}
-            {cls.saves.map((a) => abilities[a] || a).join(", ")}.
-          </p>
-          <p className="tt-note">
-            Набор и владения определяются выбранным классом. Производные
-            характеристики рассчитает движок.
-          </p>
-          {Object.entries({
-            appearance: "Внешность",
-            biography: "Биография",
-            personality: "Характер",
-            ideals: "Идеалы",
-            bonds: "Привязанности",
-            flaws: "Слабости",
-          }).map(([key, label]) => (
-            <label key={key}>
-              {label}
-              <textarea
-                value={String(build[key as keyof Build])}
-                maxLength={key === "biography" ? 3000 : 1000}
-                onChange={(e) => setBuild({ ...build, [key]: e.target.value })}
-              />
-            </label>
-          ))}
-        </>
+      ) : step === 2 && draft ? (
+        <CharacterCreator
+          build={build}
+          catalog={catalog}
+          onChange={setBuild}
+          onValidity={setCreatorValid}
+          draftId={draft.id}
+          prefs={prefs}
+          apiKey={apiKey}
+        />
       ) : draft ? (
         <>
           <h2>
@@ -533,12 +388,16 @@ export function Wizard({
             disabled={
               busy ||
               draft?.generation_status === "INVALID" ||
-              (step === 2 && build.skills.length !== cls.skill_count)
+              (step === 2 &&
+                (!creatorValid || build.skills.length !== cls.skill_count))
             }
             onClick={() =>
               void run(async () => {
                 if (step === 2)
-                  await api("/tabletop/build/validate", { build });
+                  await api("/tabletop/build/validate", {
+                    build,
+                    ruleset_id: catalog.id,
+                  });
                 if (step < 3) setStep(step + 1);
                 else if (draft)
                   done(
