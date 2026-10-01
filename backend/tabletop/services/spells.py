@@ -258,7 +258,8 @@ class SpellService:
                         a.id,
                         modifier=self.modifier(state, a)
                         + a.proficiency_bonus
-                        + self.runtime.rules.conditions.bonus(a, "attack_bonus"),
+                        + self.runtime.rules.conditions.bonus(a, "attack_bonus")
+                        + a.bonuses.get("attack_bonus", 0),
                         dc=target.armor_class,
                         target=target.id,
                         advantage=adv,

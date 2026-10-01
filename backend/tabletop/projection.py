@@ -1,6 +1,7 @@
 """Role-specific projections. Secret-bearing DM context never reaches gameplay APIs."""
 
 from .rules import RulesEngine
+from .services.progression import ProgressionService
 
 
 class PlayerProjection:
@@ -60,6 +61,7 @@ class PublicProjection:
                 save_modifiers={k: rules.save_modifier(a, k) for k in a.abilities},
                 attack_modifiers={k: rules.attack_modifier(a, k) for k in a.attacks},
                 controller=state.controllers[aid].model_dump(),
+                progression=ProgressionService.options(state, a),
                 spell_definitions=[
                     state.ruleset.spells[i].model_dump()
                     for i in a.spells
@@ -210,6 +212,7 @@ class PublicProjection:
                     "round": e.round,
                     "current_actor": e.order[e.index],
                     "action": e.action,
+                    "attacks_remaining": e.attacks_remaining,
                     "bonus_action": e.bonus_action,
                     "free_interaction": e.free_interaction,
                     "ready": e.ready,

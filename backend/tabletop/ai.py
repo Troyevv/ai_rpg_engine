@@ -48,7 +48,7 @@ class Attack(Behavior):
     def candidates(self, c):
         if (
             c.weapon
-            and c.encounter.action
+            and (c.encounter.action or c.encounter.attacks_remaining)
             and c.target
             and abs(c.target.position - c.actor.position)
             <= c.actor.attacks[c.weapon].reach

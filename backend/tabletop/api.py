@@ -280,6 +280,7 @@ def install(app, shared_repo, credentials):
             )
         state = compiler.compile(draft["definition"], body.character)
         state.campaign.source_draft = body.draft_id
+        state.campaign.progression_mode = body.progression_mode
         gid = repo.create(state)
         events = [{"text": state.definition.starting_scene, "kind": "opening"}]
         repo.commit(gid, 0, uuid4().hex, "opening", state, events, "")
@@ -325,6 +326,7 @@ def install(app, shared_repo, credentials):
         else:
             after, events = runtime.execute(state, command)
         labels = {
+            "level_up": "Повысить уровень",
             "cast_spell": "Сотворить заклинание",
             "prepare_spells": "Подготовить заклинания",
             "use_feature": "Применить способность",

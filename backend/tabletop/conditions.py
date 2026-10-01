@@ -22,65 +22,15 @@ class ConditionDefinition(Model):
 
 
 def default_conditions():
-    data = [
-        dict(
-            id="dodge",
-            name="Уклонение",
-            incoming_attack=-1,
-            saves={"dexterity": 1},
-            expires="turn_start",
-        ),
-        dict(id="helped", name="Помощь союзника", attack=1, expires="attack"),
-        dict(
-            id="hidden",
-            name="Скрытность",
-            attack=1,
-            incoming_attack=-1,
-            expires="attack",
-        ),
-        dict(id="poisoned", name="Отравление", attack=-1, checks=-1),
-        dict(id="frightened", name="Испуг", attack=-1, checks=-1),
-        dict(
-            id="restrained",
-            name="Опутан",
-            speed_multiplier=0,
-            attack=-1,
-            incoming_attack=1,
-            saves={"dexterity": -1},
-        ),
-        dict(id="grappled", name="Захват", speed_multiplier=0),
-        dict(id="prone", name="Сбит с ног", speed_multiplier=0.5, attack=-1),
-        dict(
-            id="stunned",
-            name="Оглушение",
-            blocks_action=True,
-            speed_multiplier=0,
-            incoming_attack=1,
-            saves={"strength": -1, "dexterity": -1},
-        ),
-        dict(
-            id="unconscious",
-            name="Без сознания",
-            blocks_action=True,
-            speed_multiplier=0,
-            incoming_attack=1,
-        ),
-        dict(id="dead", name="Погиб", blocks_action=True, speed_multiplier=0),
-        dict(id="fled", name="Покинул бой", blocks_action=True),
-        dict(id="surrendered", name="Сдался", blocks_action=True, expires="encounter"),
-        dict(
-            id="rage",
-            name="Ярость",
-            damage_bonus=2,
-            resistance=True,
-            expires="encounter",
-        ),
-        dict(id="focused", name="Прицельная атака", attack=1, expires="attack"),
-        dict(id="guard", name="Защитная реакция", expires="turn_start"),
-        dict(id="stable", name="Стабилизирован"),
-        dict(id="blessed", name="Благословение", attack_bonus=1, save_bonus=1),
-    ]
-    return {x["id"]: ConditionDefinition(**x) for x in data}
+    import json
+    from pathlib import Path
+
+    data = json.loads(
+        (Path(__file__).with_name("catalog") / "shared" / "conditions.json").read_text()
+    )
+    return {
+        key: ConditionDefinition.model_validate(value) for key, value in data.items()
+    }
 
 
 class ConditionEngine:

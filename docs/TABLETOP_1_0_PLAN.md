@@ -10,7 +10,7 @@
 | B | codex/tabletop-character-creator | Creator, point buy, live sheet, species/classes/backgrounds/skills, roleplay generation, feature catalog | Реализован; 550 backend / 8 tabletop E2E / build |
 | C | codex/tabletop-combat-features | Features/resources, actions, conditions, advantage, reactions, GameAI, combat HUD | Реализован; 574 backend / 8 tabletop E2E / build |
 | D | codex/tabletop-spellcasting | Spell catalog/slots, attacks/saves/AoE/concentration, spell UI | Реализован; 589 backend / 10 tabletop E2E / build |
-| E | — | XP/milestones, levels 1–20, subclasses/ASI/feats, level-up UI | Ожидает |
+| E | codex/tabletop-progression | XP/milestones, levels 1–20, subclasses/ASI/feats, level-up UI | Реализован; 604 backend / campaign desktop+mobile E2E / build |
 | F | — | Campaign/world generation, travel, factions/quests/secrets, evolving world | Ожидает |
 | G | — | Final desktop/mobile UX, sheets, spellbook, journal/map/party, DM settings | Ожидает |
 
@@ -111,3 +111,19 @@ spells → quest reward/progression/level-up → dynamic expansion → save/rest
 - Проверки: промах/critical, слот один раз, неправильные цели/подготовка/дальность/ресурс,
   AoE по союзникам, restart между фазами, лечение, концентрация/истечение, HTTP duplicate.
   Desktop/mobile: создать мага → выбрать заговор → бой → cast → reload → attack/damage.
+
+## E: развитие 1–20
+
+- Ruleset содержит пороги XP, proficiency, уровни ASI/subclass, class features и таблицы
+  ячеек; условия также вынесены в JSON-каталог. По два подкласса на основной класс,
+  три механические черты, дополнительные атаки martial-классов и заклинания до 9 круга.
+- Опыт начисляется только за подтверждённые завершения encounter/quest и защищён ledger
+  от повторной выдачи. Режим milestone выдаёт уровень за завершённое задание. Выбор режима
+  происходит при создании кампании; команды произвольного начисления XP нет.
+- LevelUpCommand выбирает допустимые subclass/ASI/feat/spells; HP, proficiency, ресурсы и
+  слоты рассчитывает ProgressionService. Телосложение ретроактивно меняет HP; старые
+  пассивы не применяются заново, потраченные слоты не восстанавливаются повышением.
+- UI показывает новый уровень и отдельный flow с эффектами/HP/выборами/ячейками.
+- Все шесть классов проверены от 1 до 20; запреты ранних/повторных выборов, потолок 20,
+  Constitution HP, slots, extra attacks, duplicate/restart/replay/rollback.
+  Campaign E2E завершает задание, повышает уровень и расширяет мир без сброса героя.

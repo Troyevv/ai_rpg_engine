@@ -20,6 +20,7 @@ class FeatureEffect(Model):
         "condition",
         "dash",
         "disengage",
+        "extra_attack",
     ]
     value: int = Field(default=0, ge=-20, le=100)
     key: str = ""

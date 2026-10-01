@@ -42,6 +42,14 @@ class AttackCommand(ActorCommand):
     weapon: str = Field(default="", max_length=80)
 
 
+class LevelUpCommand(ActorCommand):
+    type: Literal["level_up"] = "level_up"
+    subclass: str = Field(default="", max_length=80)
+    ability_increases: list[Ability] = Field(default_factory=list, max_length=2)
+    feat_id: str = Field(default="", max_length=80)
+    learn_spells: list[str] = Field(default_factory=list, max_length=2)
+
+
 class CastSpellCommand(ActorCommand):
     type: Literal["cast_spell"] = "cast_spell"
     spell_id: str = Field(min_length=1, max_length=80)
@@ -150,6 +158,7 @@ ActionCommand = Annotated[
         AttackCommand,
         UseFeatureCommand,
         CastSpellCommand,
+        LevelUpCommand,
         PrepareSpellsCommand,
         ManeuverCommand,
         TacticalCommand,

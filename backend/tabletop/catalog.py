@@ -21,6 +21,13 @@ def load_ruleset(ruleset_id="d20-basic-v2"):
                 r"([1-9]|1[0-9]|20)d(4|6|8|10|12)([+-][0-9]+)?", expression
             ):
                 raise ValueError("Некорректные кости заклинания")
+    for level in rules.levels.values():
+        if any(
+            fid not in rules.features for ids in level.features.values() for fid in ids
+        ):
+            raise ValueError("Неизвестная особенность развития")
+    if not set(rules.feats) <= set(rules.features):
+        raise ValueError("Неизвестная черта")
     for cls, casting in rules.spellcasting.items():
         if cls not in rules.classes or not set(casting.defaults) <= set(rules.spells):
             raise ValueError("Некорректный каталог магического класса")

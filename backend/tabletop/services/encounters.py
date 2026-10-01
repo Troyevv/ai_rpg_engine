@@ -47,7 +47,13 @@ class EncounterService:
         if t == "attack":
             if not e:
                 raise ValueError("Сначала начни столкновение")
-            self.runtime.spend(e)
+            if e.action:
+                self.runtime.spend(e)
+                e.attacks_remaining = a.bonuses.get("extra_attack", 0)
+            elif e.attacks_remaining > 0:
+                e.attacks_remaining -= 1
+            else:
+                raise ValueError("Доступные атаки закончились")
             self.runtime.attack(
                 state, aid, c.target, c.weapon or next(iter(a.attacks)), events
             )
