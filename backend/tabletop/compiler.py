@@ -70,12 +70,13 @@ class CampaignCompiler:
                 d.quests,
                 d.secrets,
                 d.encounters,
+                d.schedules,
             )
         ]
         all_ids = [i for group in groups for i in group]
         if len(all_ids) != len(set(all_ids)):
             raise ValueError("ID должны быть уникальны между типами сущностей")
-        _, locations, _, actors, items, objects, _, secrets, encounters = groups
+        _, locations, _, actors, items, objects, _, secrets, encounters, _ = groups
 
         def require(ok, message):
             if not ok:
@@ -157,6 +158,17 @@ class CampaignCompiler:
                 or objects[e.loot_object].location_id == e.location_id,
                 f"Столкновение '{e.id}': добыча должна находиться на его локации",
             )
+        for location in d.locations:
+            require(
+                set(location.travel_minutes) <= set(location.connections),
+                "Время пути задаётся только для связанного места",
+            )
+        for schedule in d.schedules:
+            require(
+                actors[schedule.actor_id].controller == "AI"
+                and schedule.actor_id not in d.starting_party,
+                "Расписание не может управлять партией или персонажем игрока",
+            )
         for item in items.values():
             require(
                 not item.healing or item.type == "consumable",
@@ -228,6 +240,7 @@ class CampaignCompiler:
                 q.id: "active" if not q.giver_id else "available" for q in d.quests
             },
             known_locations=[d.starting_location],
+            schedule_due={s.id: s.delay_minutes * 60 for s in d.schedules},
             session_state=SessionState(controlled_actor=controlled),
         )
 
@@ -242,7 +255,18 @@ class CampaignCompiler:
             "CreateEncounter": "encounters",
             "CreateObject": "objects",
             "CreateFaction": "factions",
+            "CreateRegion": "regions",
+            "CreateSecret": "secrets",
+            "CreateSchedule": "schedules",
         }
+        created_secret_ids = {
+            op.value.id for op in mutation.operations if op.type == "CreateSecret"
+        }
+        created_actor_ids = {
+            op.value.id for op in mutation.operations if op.type == "CreateNPC"
+        }
+        existing_factions = {f.id for f in d.factions}
+        new_schedules = []
         reveals = []
         new_actors = []
         new_objects = []
@@ -251,8 +275,17 @@ class CampaignCompiler:
         existing_secrets = {s.id for s in d.secrets}
         for op in mutation.operations:
             if op.type in collections:
+                if op.type == "CreateSchedule":
+                    if op.value.actor_id not in created_actor_ids:
+                        raise ValueError(
+                            "Расширение задаёт расписания только новым NPC"
+                        )
+                    new_schedules.append(op.value)
                 if op.type == "CreateNPC":
-                    if op.value.controller != "AI" or op.value.knowledge:
+                    if (
+                        op.value.controller != "AI"
+                        or not set(op.value.knowledge) <= created_secret_ids
+                    ):
                         raise ValueError(
                             "Динамический NPC не получает управление игрока или старые секреты"
                         )
@@ -268,6 +301,21 @@ class CampaignCompiler:
                 if op.type == "CreateQuest":
                     new_quests.append(op.value)
                 getattr(d, collections[op.type]).append(op.value)
+            elif op.type == "DefineFactionRelation":
+                relation = op.value
+                if (
+                    relation.first in existing_factions
+                    and relation.second in existing_factions
+                ):
+                    raise ValueError(
+                        "Нельзя менять отношения существующих фракций расширением мира"
+                    )
+                if any(
+                    {r.first, r.second} == {relation.first, relation.second}
+                    for r in d.faction_relations
+                ):
+                    raise ValueError("Отношение фракций уже определено")
+                d.faction_relations.append(relation)
             elif op.type == "ConnectLocations":
                 locs = index(d.locations)
                 if op.first not in locs or op.second not in locs:
@@ -278,6 +326,10 @@ class CampaignCompiler:
             else:
                 reveals.append(op)
         self.validate(d)
+        for schedule in new_schedules:
+            state.schedule_due[schedule.id] = (
+                state.game_time + schedule.delay_minutes * 60
+            )
         state.locations = {x.id: x.name for x in d.locations}
         state.items.update(index(new_items))
         for a in new_actors:

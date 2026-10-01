@@ -104,6 +104,7 @@ class CampaignReferenceValidator:
         for l in d.locations:
             check("location", l, "region_id", l.region_id, "region")
             many("location", l, "connections", l.connections, "location")
+            many("location", l, "travel_minutes", sorted(l.travel_minutes), "location")
         for kind, actors in [("character", d.characters), ("creature", d.creatures)]:
             for a in actors:
                 check(kind, a, "location_id", a.location_id, "location")
@@ -136,6 +137,16 @@ class CampaignReferenceValidator:
             many("encounter", e, "participants", e.participants, "actor")
             check("encounter", e, "loot_object", e.loot_object, "object")
             check("encounter", e, "quest_id", e.quest_id, "quest")
+        for schedule in d.schedules:
+            check("schedule", schedule, "actor_id", schedule.actor_id, "actor")
+            check(
+                "schedule",
+                schedule,
+                "destination_id",
+                schedule.destination_id,
+                "location",
+            )
+            check("schedule", schedule, "after_quest", schedule.after_quest, "quest")
         for n, r in enumerate(d.faction_relations):
             # Relations have no standalone entity ID: identify their stable array slot.
             relation = SimpleNamespace(

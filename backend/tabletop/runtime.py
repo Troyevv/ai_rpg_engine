@@ -20,6 +20,7 @@ from .services.features import FeatureService
 from .services.tactics import TacticalService
 from .services.spells import SpellService
 from .services.progression import ProgressionService
+from .services.world import WorldService
 
 
 class TabletopRuntime:
@@ -132,6 +133,7 @@ class TabletopRuntime:
             if state.encounter and (not state.session_state.pending):
                 self.drive(state, events)
         self.progression_service.reconcile(state, events)
+        WorldService.advance(state, events)
         return (self.validate(state), events)
 
     def apply(self, state, c, aid, events):

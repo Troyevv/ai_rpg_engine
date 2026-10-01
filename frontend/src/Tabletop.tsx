@@ -704,6 +704,20 @@ export function Tabletop({
             })
           ) : tab === "Журнал" ? (
             <section className="tt-panel">
+              {s.initial_conflict && (
+                <>
+                  <h2>История кампании</h2>
+                  <p>{s.initial_conflict}</p>
+                </>
+              )}
+              {s.plot_hooks?.length > 0 && (
+                <>
+                  <h2>Зацепки</h2>
+                  {s.plot_hooks.map((hook, i) => (
+                    <p key={i}>{hook}</p>
+                  ))}
+                </>
+              )}
               <h2>Задания</h2>
               {Object.entries(s.quests).map(([id, q]) => (
                 <article key={id}>
@@ -713,6 +727,20 @@ export function Tabletop({
                   <p>{q.description}</p>
                 </article>
               ))}
+              {s.factions?.length > 0 && (
+                <>
+                  <h2>Знакомые фракции</h2>
+                  {s.factions.map((f) => (
+                    <article key={f.id}>
+                      <h3>
+                        {f.name} · репутация {signed(f.reputation)}
+                      </h3>
+                      <p>{f.description}</p>
+                      <p>{f.public_goal}</p>
+                    </article>
+                  ))}
+                </>
+              )}
               <h2>Известные сведения</h2>
               {Object.entries(s.knowledge).map(([id, k]) => (
                 <p key={id}>{k}</p>

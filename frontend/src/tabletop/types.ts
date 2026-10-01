@@ -216,6 +216,15 @@ export type Game = {
   revision: number;
   state: {
     campaign: string;
+    initial_conflict: string;
+    plot_hooks: string[];
+    factions: {
+      id: string;
+      name: string;
+      description: string;
+      public_goal: string;
+      reputation: number;
+    }[];
     ruleset: { name: string };
     world: { name: string; description: string };
     scene: string;
