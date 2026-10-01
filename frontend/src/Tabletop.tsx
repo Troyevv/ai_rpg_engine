@@ -267,7 +267,9 @@ export function Tabletop({
                 <strong>{name(enc.current_actor)}</strong> · действие{" "}
                 {enc.action ? "доступно" : "потрачено"} · бонус{" "}
                 {enc.bonus_action ? "доступен" : "потрачен"} · движение{" "}
-                {enc.movement}
+                {enc.movement} · реакция{" "}
+                {enc.reaction[acting] ? "доступна" : "потрачена"} ·
+                взаимодействие {enc.free_interaction ? "доступно" : "потрачено"}
               </p>
             )}
             {s.choice && (
@@ -304,6 +306,17 @@ export function Tabletop({
                     <span>
                       {pending.reason}
                       <br />
+                    </span>
+                  )}
+                  {pending.advantage_sources?.length > 0 && (
+                    <span className="tt-advantage">
+                      {pending.advantage > 0
+                        ? "Преимущество"
+                        : pending.advantage < 0
+                          ? "Помеха"
+                          : "Преимущество и помеха отменены"}
+                      :{" "}
+                      {pending.advantage_sources.map((x) => x.name).join(" · ")}
                     </span>
                   )}
                   {pending.expression} {signed(pending.modifier)}
@@ -391,8 +404,12 @@ export function Tabletop({
                           <p key={i}>
                             {name(e.roll!.actor)} ·{" "}
                             {purposes[e.roll!.purpose] || e.roll!.purpose}: [
-                            {e.roll!.raw.join(", ")}] {signed(e.roll!.modifier)}{" "}
-                            = <strong>{e.roll!.total}</strong>
+                            {e.roll!.raw.join(", ")}]{" "}
+                            {e.roll!.advantage !== 0
+                              ? `выбрано ${e.roll!.selected} · `
+                              : ""}
+                            {signed(e.roll!.modifier)} ={" "}
+                            <strong>{e.roll!.total}</strong>
                           </p>
                         ))}
                     </article>
@@ -443,6 +460,9 @@ export function Tabletop({
                         ["disengage", "Отход"],
                         ["guard", "Защититься"],
                         ["recover", "Восстановиться"],
+                        ["hide", "Скрыться"],
+                        ["stand", "Встать"],
+                        ["escape", "Освободиться"],
                         ["flee", "Сбежать"],
                         ["end_turn", "Закончить ход"],
                       ].map(([type, label]) => button(label, { type }))}
@@ -475,6 +495,45 @@ export function Tabletop({
                     </>
                   )}
                 </div>
+                {hero?.feature_definitions?.some(
+                  (f) => f.activation !== "PASSIVE",
+                ) && (
+                  <>
+                    <h3>Способности</h3>
+                    {hero.feature_definitions
+                      .filter((f) => f.activation !== "PASSIVE")
+                      .map((f) => (
+                        <article key={f.id}>
+                          <strong>{f.name}</strong>
+                          <p>{f.description}</p>
+                          {f.resource && (
+                            <p>
+                              Осталось: {hero.resources[f.resource] || 0} /{" "}
+                              {f.uses}
+                            </p>
+                          )}
+                          {(f.target === "ally" ? s.party : [acting]).map(
+                            (target) =>
+                              button(
+                                `${f.name}${f.target === "ally" ? `: ${name(target)}` : ""}`,
+                                {
+                                  type: "use_feature",
+                                  feature_id: f.id,
+                                  target,
+                                },
+                                blocked ||
+                                  (!!f.resource &&
+                                    !hero.resources[f.resource]) ||
+                                  (!!enc &&
+                                    !(f.activation === "BONUS_ACTION"
+                                      ? enc.bonus_action
+                                      : enc.action)),
+                              ),
+                          )}
+                        </article>
+                      ))}
+                  </>
+                )}
                 <h3>На сцене</h3>
                 {Object.values(s.npcs).map((n) => (
                   <article key={n.id}>
@@ -506,6 +565,19 @@ export function Tabletop({
                         ),
                       )
                     )}
+                    {enc &&
+                      n.hostile &&
+                      [
+                        ["grapple", "Захватить"],
+                        ["shove", "Сбить с ног"],
+                        ["ready", "Подготовить атаку"],
+                      ].map(([type, label]) =>
+                        button(
+                          `${label}: ${n.name}`,
+                          { type, target: n.id },
+                          blocked || !enc.action,
+                        ),
+                      )}
                   </article>
                 ))}
                 {enc &&

@@ -130,6 +130,25 @@ test("generated campaign, quest, combat, loot, expansion and real server restart
     expect(snapshot.state.characters.traveler.hp).toBeLessThan(
       snapshot.state.characters.traveler.max_hp,
     );
+    await click("Второе дыхание");
+    await expect(
+      page.getByRole("button", { name: "Второе дыхание", exact: true }),
+    ).toBeDisabled();
+    const afterFeature = await page.evaluate(async () =>
+      (
+        await fetch(
+          "/api/tabletop/games/" + localStorage.getItem("tabletop-game"),
+        )
+      ).json(),
+    );
+    expect(afterFeature.state.characters.traveler.hp).toBeGreaterThan(
+      snapshot.state.characters.traveler.hp,
+    );
+    expect(afterFeature.state.characters.traveler.resources.SECOND_WIND).toBe(
+      0,
+    );
+    expect(afterFeature.state.encounter.action).toBe(true);
+    expect(afterFeature.state.encounter.bonus_action).toBe(false);
     await page.getByRole("button", { name: "Инвентарь", exact: true }).click();
     await page
       .getByRole("button", { name: "Использовать на Александр", exact: true })

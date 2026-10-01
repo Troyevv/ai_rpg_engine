@@ -17,6 +17,9 @@ class FeatureEffect(Model):
         "attack_bonus",
         "damage_bonus",
         "heal",
+        "condition",
+        "dash",
+        "disengage",
     ]
     value: int = Field(default=0, ge=-20, le=100)
     key: str = ""
@@ -32,6 +35,7 @@ class FeatureDefinition(Model):
     uses: int = Field(default=0, ge=0, le=20)
     recharge: Literal["short", "long", "none"] = "long"
     target: Literal["self", "ally", "enemy"] = "self"
+    reach: int = Field(default=5, ge=0, le=120)
     effects: list[FeatureEffect]
 
 

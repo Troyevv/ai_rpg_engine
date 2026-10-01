@@ -48,7 +48,7 @@ class CheckService:
                 ]
             if not candidates:
                 event(events, "Поиск не обнаружил ничего нового.")
-                state.game_time += 60
+                state.game_time += 6 if state.encounter else 60
                 return
             obj = candidates[0]
             target = obj.id
@@ -98,10 +98,15 @@ class CheckService:
             if c.type == "save"
             else self.runtime.rules.check_modifier(a, ability, skill, state.ruleset)
         )
+        advantage, sources = self.runtime.rules.conditions.advantage(
+            a, state.ruleset, c.type, ability=ability
+        )
         self.runtime.pending(
             state,
             "save" if c.type == "save" else "check",
             a.id,
+            advantage=advantage,
+            advantage_sources=sources,
             ability=ability,
             skill=skill,
             modifier=modifier,
@@ -130,6 +135,8 @@ class CheckService:
             critical=p.critical,
             critical_rule=state.ruleset.critical,
         )
+        if p.advantage_sources:
+            events[-1]["sources"] = p.advantage_sources
         state.session_state.pending = None
         state.session_state.mode = p.resume
         if p.purpose == "initiative":
@@ -143,7 +150,11 @@ class CheckService:
                 kind="check",
                 success=success,
             )
-            if p.outcome in ("search", "unlock"):
+            if p.outcome in ("hide", "grapple", "shove", "escape"):
+                self.runtime.tactics_service.resolve(
+                    state, p.actor, p.outcome, p.target, success, events
+                )
+            elif p.outcome in ("search", "unlock"):
                 obj = next((o for o in state.definition.objects if o.id == p.target))
                 if success:
                     state.objects[obj.id].revealed = True
@@ -180,7 +191,7 @@ class CheckService:
                 if not success:
                     self.runtime.combat.damage(state, a, obj.trap_damage, False, events)
                 self.runtime.reveal_object(state, obj, events)
-            state.game_time += 60
+            state.game_time += 6 if state.encounter else 60
         elif p.purpose == "attack":
             if self.runtime.rules.hit(roll, state.actor(p.target).armor_class):
                 w = a.attacks[p.weapon]
@@ -189,7 +200,9 @@ class CheckService:
                     "damage",
                     p.actor,
                     expression=f"1d{w.die}",
-                    modifier=self.runtime.rules.modifier(a.abilities[w.ability]),
+                    modifier=self.runtime.rules.damage_modifier(
+                        a, p.weapon, state.ruleset
+                    ),
                     target=p.target,
                     weapon=p.weapon,
                     critical=roll.selected == 20,

@@ -41,7 +41,7 @@ class ExplorationService:
         if t == "interact":
             self.runtime.interact(state, a, c.target, events)
 
-    def interact(self, state, a, target, events):
+    def interact(self, state, a, target, events, action=False):
         obj = next(
             (
                 o
@@ -62,7 +62,10 @@ class ExplorationService:
         status = state.objects[obj.id]
         if obj.locked and (not status.unlocked):
             raise ValueError("Объект заперт. Нужна проверка взаимодействия")
-        self.runtime.spend(state.encounter)
+        if action:
+            self.runtime.spend(state.encounter)
+        else:
+            self.runtime.interaction(state)
         if obj.trap_damage and (not status.trap_triggered):
             self.runtime.pending(
                 state,

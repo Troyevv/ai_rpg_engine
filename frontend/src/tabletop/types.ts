@@ -21,6 +21,9 @@ export type Feature = {
   name: string;
   description: string;
   activation: string;
+  resource: string;
+  uses: number;
+  target: string;
   effects: { type: string; value: number; key: string }[];
 };
 export type Catalog = {
@@ -108,6 +111,7 @@ export type Sheet = {
   attack_modifiers: Record<string, number>;
   inventory: Entry[];
   resources: Record<string, number>;
+  feature_definitions: Feature[];
   biography: string;
   appearance: string;
   personality: string;
@@ -126,6 +130,7 @@ export type Command = {
   weapon?: string;
   distance?: number;
   item_id?: string;
+  feature_id?: string;
   quantity?: number;
   rest?: string;
   topic?: string;
@@ -133,6 +138,7 @@ export type Command = {
 export type Roll = {
   expression: string;
   raw: number[];
+  selected: number;
   modifier: number;
   total: number;
   purpose: string;
@@ -213,6 +219,8 @@ export type Game = {
       expression: string;
       modifier: number;
       critical: boolean;
+      advantage: number;
+      advantage_sources: { name: string; value: number }[];
       ability: string;
       skill: string;
     };
@@ -225,6 +233,8 @@ export type Game = {
       initiative: Record<string, number>;
       action: boolean;
       bonus_action: boolean;
+      free_interaction: boolean;
+      ready: Record<string, string>;
       reaction: Record<string, boolean>;
       movement: number;
       disengaged: boolean;

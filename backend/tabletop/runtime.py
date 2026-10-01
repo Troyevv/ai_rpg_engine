@@ -16,6 +16,8 @@ from .services.dialogue import DialogueService
 from .services.rest import RestService
 from .services.characters import CharacterService
 from .services.choices import ChoiceService
+from .services.features import FeatureService
+from .services.tactics import TacticalService
 
 
 class TabletopRuntime:
@@ -32,6 +34,8 @@ class TabletopRuntime:
         self.rest_service = RestService(self)
         self.characters_service = CharacterService(self)
         self.choices = ChoiceService(self)
+        self.features_service = FeatureService(self)
+        self.tactics_service = TacticalService(self)
 
     @staticmethod
     def validate(state):
@@ -43,6 +47,18 @@ class TabletopRuntime:
             if not getattr(e, slot):
                 raise ValueError("Это действие уже использовано")
             setattr(e, slot, False)
+
+    def interaction(self, state):
+        e = state.encounter
+        if e:
+            self.spend(
+                e,
+                (
+                    "free_interaction"
+                    if state.ruleset.version >= 3 and e.free_interaction
+                    else "action"
+                ),
+            )
 
     @staticmethod
     def owned(state, actor_id, player_id="local"):
@@ -124,11 +140,32 @@ class TabletopRuntime:
             or set(a.conditions) & {"dead", "fled"}
         ):
             raise ValueError("Персонаж сейчас не может действовать")
+        if self.rules.conditions.blocked(a, state.ruleset) and t not in (
+            "end_turn",
+            "rest",
+        ):
+            raise ValueError("Состояние персонажа запрещает действия")
         if e and t != "guard" and (e.order[e.index] != aid):
             raise ValueError("Сейчас ход другого участника")
         if t == "request_choice":
             return self.choices.request(state, c, aid, events)
         services = {
+            "use_feature": self.features_service,
+            **{
+                name: self.tactics_service
+                for name in (
+                    "hide",
+                    "search",
+                    "stand",
+                    "escape",
+                    "grapple",
+                    "shove",
+                    "ready",
+                    "surrender",
+                    "seek_cover",
+                    "use_object",
+                )
+            },
             "look": self.exploration_service,
             "move": self.exploration_service,
             "interact": self.exploration_service,

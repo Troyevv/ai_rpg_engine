@@ -86,6 +86,8 @@ class DMAgent:
             "Ты DM настольной RPG. Верни только одну JSON команду по схеме. "
             "Используй семантическую difficulty, никогда dc или результат броска. "
             "Для поиска: check purpose=search без target. Для убеждения: check purpose=persuade target=NPC. "
+            "Способности применяй через use_feature с feature_id из листа; не придумывай эффекты. "
+            "grapple/shove/hide/ready/search/use_object — явные механические действия. "
             "dialogue — обычный разговор. Move target=ID известной локации; distance только для боя. "
             "Если игрок хочет пойти в ещё не созданное место: expand topic=описание места. "
             "Не выдавай скрытые ID/секреты в topic и не назначай последствия за пределами схемы. "

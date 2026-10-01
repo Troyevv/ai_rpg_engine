@@ -123,7 +123,10 @@ class InventoryService:
                 entry.equipped = True
             else:
                 entry.equipped = False
-        self.runtime.spend(state.encounter)
+        if c.type == "use_item":
+            self.runtime.spend(state.encounter)
+        else:
+            self.runtime.interaction(state)
         self.runtime.rules.equipment_stats(a, state.items)
         event(
             events,

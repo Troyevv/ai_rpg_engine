@@ -102,7 +102,9 @@ def test_ai_decisions_pure_and_neutral_factions():
     s = combat_state()
     before = s.model_dump_json()
     ai = GameAI()
-    assert len(ai.registry.behaviors) == 9
+    assert {"UseFeature", "SeekCover", "Surrender"} <= {
+        type(b).__name__ for b in ai.registry.behaviors
+    }
     assert (
         ai.decision(s, "sentinel").behavior == "Attack"
         and s.model_dump_json() == before
@@ -305,7 +307,10 @@ def test_mutations_atomic_and_no_generic_patch():
     assert s.player_knowledge == {}
 
 
-@pytest.mark.parametrize("fixture", ["tabletop_v1.json", "tabletop_v1_pending.json", "tabletop_v1_attack.json"])
+@pytest.mark.parametrize(
+    "fixture",
+    ["tabletop_v1.json", "tabletop_v1_pending.json", "tabletop_v1_attack.json"],
+)
 def test_migration_preserves_saved_stats_and_pending(tmp_path, fixture):
     old = json.loads((Path(__file__).parent / "fixtures" / fixture).read_text())
     s = migrate(old)
