@@ -38,6 +38,7 @@ class RulesEngine:
             self.modifier(actor.abilities[ability])
             + (self.proficiency(actor) if ability in actor.save_proficiencies else 0)
             + actor.bonuses.get("save_bonus:" + ability, 0)
+            + self.conditions.bonus(actor, "save_bonus")
         )
 
     def attack_modifier(self, actor, weapon):
@@ -48,6 +49,7 @@ class RulesEngine:
             self.modifier(actor.abilities[attack.ability])
             + (self.proficiency(actor) if attack.proficient else 0)
             + actor.bonuses.get("attack_bonus", 0)
+            + self.conditions.bonus(actor, "attack_bonus")
         )
 
     @staticmethod
@@ -139,6 +141,9 @@ class RulesEngine:
             or not set(build.feature_choices) <= set(choices)
         ):
             raise ValueError("Выбери допустимые особенности класса")
+        from .services.spells import SpellService
+
+        SpellService.choices(build, rules)
         return build
 
     @staticmethod
@@ -229,6 +234,9 @@ class RulesEngine:
         from .features import FeatureEngine
 
         FeatureEngine.apply_passives(actor, [rules.features[i] for i in feature_ids])
+        from .services.spells import SpellService
+
+        SpellService.initialize(actor, b, rules)
         return actor
 
     def equipment_stats(self, actor, items):

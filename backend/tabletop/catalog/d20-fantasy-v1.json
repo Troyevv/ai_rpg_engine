@@ -8,7 +8,8 @@
     "rests",
     "inventory",
     "exploration",
-    "dialogue"
+    "dialogue",
+    "spellcasting"
   ],
   "abilities": [
     "strength",
@@ -978,6 +979,230 @@
           "key": "guard"
         }
       ]
+    }
+  },
+  "spells": {
+    "fire_bolt": {
+      "id": "fire_bolt",
+      "name": "Огненная стрела",
+      "level": 0,
+      "classes": [
+        "wizard"
+      ],
+      "school": "evocation",
+      "description": "Атака заклинанием: 1d10 урона. Не расходует ячейку.",
+      "damage": "1d10",
+      "attack_roll": true,
+      "range": 120
+    },
+    "ray_of_frost": {
+      "id": "ray_of_frost",
+      "name": "Луч холода",
+      "level": 0,
+      "classes": [
+        "wizard"
+      ],
+      "school": "evocation",
+      "description": "Атака заклинанием: 1d8 урона.",
+      "damage": "1d8",
+      "attack_roll": true,
+      "range": 60
+    },
+    "sacred_flame": {
+      "id": "sacred_flame",
+      "name": "Священное пламя",
+      "level": 0,
+      "classes": [
+        "cleric"
+      ],
+      "school": "evocation",
+      "description": "Спасбросок Ловкости; при провале 1d8 урона.",
+      "damage": "1d8",
+      "save": "dexterity"
+    },
+    "magic_missile": {
+      "id": "magic_missile",
+      "name": "Волшебная стрела",
+      "level": 1,
+      "classes": [
+        "wizard"
+      ],
+      "school": "evocation",
+      "description": "Гарантированно наносит 3d4+3 урона одной цели. Усиление: +1d4 за ячейку выше первой.",
+      "damage": "3d4+3",
+      "upcast": 1,
+      "range": 120
+    },
+    "burning_hands": {
+      "id": "burning_hands",
+      "name": "Огненный веер",
+      "level": 1,
+      "classes": [
+        "wizard"
+      ],
+      "school": "evocation",
+      "description": "Область 10 футов вокруг цели, включая союзников; 3d6 урона, половина при успешном спасброске.",
+      "damage": "3d6",
+      "save": "dexterity",
+      "half_on_save": true,
+      "target_type": "area",
+      "area": 10,
+      "range": 15,
+      "upcast": 1
+    },
+    "cure_wounds": {
+      "id": "cure_wounds",
+      "name": "Лечение ран",
+      "level": 1,
+      "classes": [
+        "cleric",
+        "ranger"
+      ],
+      "school": "evocation",
+      "description": "Союзник рядом восстанавливает 1d8 + модификатор магии HP.",
+      "healing": "1d8",
+      "target_type": "ally",
+      "range": 5,
+      "upcast": 1
+    },
+    "healing_word": {
+      "id": "healing_word",
+      "name": "Исцеляющее слово",
+      "level": 1,
+      "classes": [
+        "cleric"
+      ],
+      "school": "evocation",
+      "description": "Бонусное действие: 1d4 + модификатор магии HP союзнику.",
+      "healing": "1d4",
+      "target_type": "ally",
+      "casting_time": "BONUS_ACTION",
+      "range": 60,
+      "upcast": 1
+    },
+    "bless": {
+      "id": "bless",
+      "name": "Благословение",
+      "level": 1,
+      "classes": [
+        "cleric"
+      ],
+      "school": "evocation",
+      "description": "Концентрация: +1 к атакам и спасброскам выбранного союзника до 10 раундов.",
+      "target_type": "ally",
+      "effects": [
+        "blessed"
+      ],
+      "concentration": true,
+      "duration": 10
+    },
+    "entangle": {
+      "id": "entangle",
+      "name": "Опутывание",
+      "level": 1,
+      "classes": [
+        "ranger"
+      ],
+      "school": "evocation",
+      "description": "Провал спасброска Силы в области: опутан до окончания концентрации, максимум 10 раундов.",
+      "target_type": "area",
+      "area": 10,
+      "save": "strength",
+      "effects": [
+        "restrained"
+      ],
+      "concentration": true,
+      "duration": 10
+    },
+    "hold_person": {
+      "id": "hold_person",
+      "name": "Удержание",
+      "level": 2,
+      "classes": [
+        "cleric",
+        "wizard"
+      ],
+      "school": "evocation",
+      "description": "Провал спасброска Мудрости: оглушение до 3 раундов концентрации.",
+      "save": "wisdom",
+      "effects": [
+        "stunned"
+      ],
+      "concentration": true,
+      "duration": 3
+    },
+    "scorching_ray": {
+      "id": "scorching_ray",
+      "name": "Палящий луч",
+      "level": 2,
+      "classes": [
+        "wizard"
+      ],
+      "school": "evocation",
+      "description": "Атака заклинанием: 4d6 урона одной цели.",
+      "attack_roll": true,
+      "damage": "4d6",
+      "upcast": 2,
+      "range": 120
+    },
+    "fireball": {
+      "id": "fireball",
+      "name": "Огненный шар",
+      "level": 3,
+      "classes": [
+        "wizard"
+      ],
+      "school": "evocation",
+      "description": "Область 20 футов, включая союзников: 8d6 урона, половина при успехе спасброска.",
+      "damage": "8d6",
+      "save": "dexterity",
+      "half_on_save": true,
+      "target_type": "area",
+      "area": 20,
+      "range": 120,
+      "upcast": 1
+    }
+  },
+  "spellcasting": {
+    "wizard": {
+      "ability": "intelligence",
+      "known": 5,
+      "prepared": 2,
+      "defaults": [
+        "fire_bolt",
+        "ray_of_frost",
+        "magic_missile",
+        "burning_hands"
+      ],
+      "slots": {
+        "1": 2
+      }
+    },
+    "cleric": {
+      "ability": "wisdom",
+      "known": 5,
+      "prepared": 2,
+      "defaults": [
+        "sacred_flame",
+        "cure_wounds",
+        "healing_word",
+        "bless"
+      ],
+      "slots": {
+        "1": 2
+      }
+    },
+    "ranger": {
+      "ability": "wisdom",
+      "known": 3,
+      "prepared": 2,
+      "defaults": [
+        "cure_wounds",
+        "entangle"
+      ],
+      "slots": {
+        "1": 2
+      }
     }
   }
 }

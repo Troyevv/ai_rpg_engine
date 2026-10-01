@@ -34,6 +34,8 @@ class RestService:
                     if ally.location == a.location and "dead" not in ally.conditions:
                         self.runtime.rules.heal(ally, ally.max_hp)
                         ally.resources.update(hit_dice=ally.level, recovery=1)
+                        for slot in ally.spell_slots.values():
+                            slot.remaining = slot.maximum
                         self.runtime.features_service.recharge(
                             ally, state.ruleset, "long"
                         )

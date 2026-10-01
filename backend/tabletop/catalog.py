@@ -11,6 +11,19 @@ def load_ruleset(ruleset_id="d20-basic-v2"):
         raise ValueError("Неподдерживаемый ruleset")
     rules = Ruleset.model_validate(json.loads(paths[ruleset_id].read_text()))
     items = {item.id for item in rules.items}
+    import re
+
+    for spell in rules.spells.values():
+        if not set(spell.effects) <= set(rules.condition_definitions):
+            raise ValueError("Заклинание ссылается на неизвестное состояние")
+        for expression in (spell.damage, spell.healing):
+            if expression and not re.fullmatch(
+                r"([1-9]|1[0-9]|20)d(4|6|8|10|12)([+-][0-9]+)?", expression
+            ):
+                raise ValueError("Некорректные кости заклинания")
+    for cls, casting in rules.spellcasting.items():
+        if cls not in rules.classes or not set(casting.defaults) <= set(rules.spells):
+            raise ValueError("Некорректный каталог магического класса")
     for group in (rules.classes, rules.species, rules.backgrounds):
         for entry in group.values():
             if not set(

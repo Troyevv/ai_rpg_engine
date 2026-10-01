@@ -225,6 +225,7 @@ class EncounterService:
 
     def drive(self, state, events):
         for _ in range(250):
+            self.runtime.spells_service.resume(state, events)
             if (
                 not state.encounter
                 or state.session_state.pending

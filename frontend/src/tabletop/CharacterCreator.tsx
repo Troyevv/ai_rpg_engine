@@ -33,7 +33,7 @@ const proficiencyNames: Record<string, string> = {
   thieves_tools: "Воровские инструменты",
   music: "Музыкальные инструменты",
 };
-const stages = [
+const baseStages = [
   "Концепция",
   "Вид",
   "Класс",
@@ -72,10 +72,16 @@ export function CharacterCreator({
   prefs: Preferences;
   apiKey: string;
 }) {
+  const casting = catalog.spellcasting?.[build.character_class];
+  const stages = casting
+    ? [...baseStages.slice(0, 8), "Заклинания", ...baseStages.slice(8)]
+    : baseStages;
   const [step, setStep] = useState(0),
     [preview, setPreview] = useState<Preview | null>(null),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
+  const spellStep = !!casting && step === 8;
+  const contentStep = casting && step > 8 ? step - 1 : step;
   const [proposal, setProposal] = useState<Partial<Build> | null>(null),
     [generationField, setGenerationField] = useState("all"),
     [generationError, setGenerationError] = useState("");
@@ -195,7 +201,7 @@ export function CharacterCreator({
       <div className="tt-creator-layout">
         <section>
           <h2>{stages[step]}</h2>
-          {step === 0 && (
+          {!spellStep && contentStep === 0 && (
             <>
               {roleField("name")}
               <label>
@@ -216,7 +222,7 @@ export function CharacterCreator({
               </p>
             </>
           )}
-          {step === 1 && (
+          {!spellStep && contentStep === 1 && (
             <div className="tt-choice-grid">
               {Object.entries(catalog.species).map(([id, s]) => (
                 <button
@@ -237,7 +243,7 @@ export function CharacterCreator({
               ))}
             </div>
           )}
-          {step === 2 && (
+          {!spellStep && contentStep === 2 && (
             <div className="tt-choice-grid">
               {Object.entries(catalog.classes).map(([id, c]) => (
                 <button
@@ -248,6 +254,8 @@ export function CharacterCreator({
                     onChange({
                       ...build,
                       character_class: id,
+                      spells: null,
+                      prepared_spells: null,
                       skills: c.skills.slice(0, c.skill_count),
                       equipment: c.equipment,
                       feature_choices: (c.feature_choices || []).slice(
@@ -284,7 +292,7 @@ export function CharacterCreator({
               ))}
             </div>
           )}
-          {step === 3 && (
+          {!spellStep && contentStep === 3 && (
             <div className="tt-choice-grid">
               {Object.entries(catalog.backgrounds).map(([id, b]) => (
                 <button
@@ -309,7 +317,7 @@ export function CharacterCreator({
               ))}
             </div>
           )}
-          {step === 4 && (
+          {!spellStep && contentStep === 4 && (
             <>
               <label>
                 Метод характеристик
@@ -399,7 +407,7 @@ export function CharacterCreator({
               </div>
             </>
           )}
-          {step === 5 && (
+          {!spellStep && contentStep === 5 && (
             <>
               <p>
                 Навыки класса: {build.skills.length} / {cls.skill_count}
@@ -430,7 +438,7 @@ export function CharacterCreator({
               </p>
             </>
           )}
-          {step === 6 && (
+          {!spellStep && contentStep === 6 && (
             <>
               {(cls.features || []).map(featureCard)}
               {(catalog.species[build.species].features || []).map(featureCard)}
@@ -459,7 +467,7 @@ export function CharacterCreator({
               )}
             </>
           )}
-          {step === 7 && (
+          {!spellStep && contentStep === 7 && (
             <label>
               Стартовый набор
               <select
@@ -481,7 +489,74 @@ export function CharacterCreator({
               <p>Предметы происхождения добавляются отдельно.</p>
             </label>
           )}
-          {step === 8 && (
+          {spellStep && casting && (
+            <section>
+              <h2>Известные заклинания</h2>
+              <p>
+                Выбери до {casting.known} заклинаний; до {casting.prepared}{" "}
+                заклинаний с ячейками можно подготовить. Заговоры доступны
+                всегда.
+              </p>
+              <div className="tt-catalog-grid">
+                {Object.values(catalog.spells)
+                  .filter(
+                    (s) =>
+                      s.classes.includes(build.character_class) && s.level <= 1,
+                  )
+                  .map((s) => {
+                    const known = build.spells ?? casting.defaults;
+                    const prepared =
+                      build.prepared_spells ??
+                      known
+                        .filter((id) => catalog.spells[id].level > 0)
+                        .slice(0, casting.prepared);
+                    return (
+                      <article className="tt-feature" key={s.id}>
+                        <h3>{s.name}</h3>
+                        <p>{s.description}</p>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={known.includes(s.id)}
+                            onChange={(e) =>
+                              onChange({
+                                ...build,
+                                spells: e.target.checked
+                                  ? [...known, s.id]
+                                  : known.filter((id) => id !== s.id),
+                                prepared_spells: prepared.filter(
+                                  (id) => id !== s.id,
+                                ),
+                              })
+                            }
+                          />
+                          Знать {s.name}
+                        </label>
+                        {s.level > 0 && known.includes(s.id) && (
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={prepared.includes(s.id)}
+                              onChange={(e) =>
+                                onChange({
+                                  ...build,
+                                  spells: known,
+                                  prepared_spells: e.target.checked
+                                    ? [...prepared, s.id]
+                                    : prepared.filter((id) => id !== s.id),
+                                })
+                              }
+                            />
+                            Подготовить {s.name}
+                          </label>
+                        )}
+                      </article>
+                    );
+                  })}
+              </div>
+            </section>
+          )}
+          {!spellStep && contentStep === 8 && (
             <>
               <p className="tt-note">
                 Ведущий использует эти поля в диалогах, реакции мира и сюжетных
@@ -498,8 +573,8 @@ export function CharacterCreator({
               ).map(roleField)}
             </>
           )}
-          {step === 9 && roleField("appearance")}
-          {step === 10 && (
+          {!spellStep && contentStep === 9 && roleField("appearance")}
+          {!spellStep && contentStep === 10 && (
             <>
               <h3>{build.name}</h3>
               <p>

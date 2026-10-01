@@ -164,7 +164,7 @@ if __name__ == '__main__':
     from tabletop_fixture import Fixed
     class BrowserDice(DiceEngine):
         def roll(self,expression,**kwargs):
-            value=({'initiative':1,'attack':12,'damage':2}.get(kwargs.get('purpose'),10) if kwargs.get('actor')=='sentinel' else 8 if kwargs.get('purpose')=='damage' else 20)
+            value=(4 if kwargs.get('purpose') in ('spell_damage','spell_healing') else ({'initiative':1,'attack':12,'damage':2}.get(kwargs.get('purpose'),10) if kwargs.get('actor')=='sentinel' else 8 if kwargs.get('purpose')=='damage' else 20))
             return DiceEngine(Fixed(*([value]*10))).roll(expression,**kwargs)
     dice=BrowserDice()
     app.state.tabletop_runtime.dice=dice

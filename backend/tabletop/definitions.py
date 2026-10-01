@@ -69,6 +69,8 @@ class CharacterBuild(Model):
     character_class: str = "fighter"
     background: str = "wanderer"
     ability_method: Literal["standard_array", "point_buy"] = "standard_array"
+    spells: list[str] | None = Field(default=None, max_length=30)
+    prepared_spells: list[str] | None = Field(default=None, max_length=30)
     concept: str = Field(default="", max_length=2000)
     feature_choices: list[str] = Field(default_factory=list, max_length=10)
     abilities: dict[Ability, int] = {

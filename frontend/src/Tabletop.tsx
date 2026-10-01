@@ -1,3 +1,4 @@
+import { Spellbook } from "./tabletop/Spellbook";
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import type { Preferences } from "./types";
@@ -360,6 +361,7 @@ export function Tabletop({
               "Журнал",
               "Партия",
               "Карта",
+              ...(hero?.spells?.length ? ["Заклинания"] : []),
               "Броски",
               "DM",
             ].map((t) => (
@@ -372,7 +374,9 @@ export function Tabletop({
               </button>
             ))}
           </nav>
-          {tab === "Игра" ? (
+          {tab === "Заклинания" && hero ? (
+            <Spellbook hero={hero} state={s} blocked={blocked} act={act} />
+          ) : tab === "Игра" ? (
             <main className="tt-game-grid">
               <section className="tt-panel">
                 <h2>{s.location}</h2>

@@ -15,6 +15,8 @@ class ConditionDefinition(Model):
     checks: Literal[-1, 0, 1] = 0
     saves: dict[str, Literal[-1, 0, 1]] = {}
     damage_bonus: int = 0
+    attack_bonus: int = 0
+    save_bonus: int = 0
     resistance: bool = False
     expires: Literal["none", "turn_start", "attack", "encounter"] = "none"
 
@@ -76,11 +78,19 @@ def default_conditions():
         dict(id="focused", name="Прицельная атака", attack=1, expires="attack"),
         dict(id="guard", name="Защитная реакция", expires="turn_start"),
         dict(id="stable", name="Стабилизирован"),
+        dict(id="blessed", name="Благословение", attack_bonus=1, save_bonus=1),
     ]
     return {x["id"]: ConditionDefinition(**x) for x in data}
 
 
 class ConditionEngine:
+    @staticmethod
+    def bonus(actor, field):
+        definitions = default_conditions()
+        return sum(
+            getattr(definitions[c], field) for c in actor.conditions if c in definitions
+        )
+
     @staticmethod
     def definitions(actor, rules):
         return [
