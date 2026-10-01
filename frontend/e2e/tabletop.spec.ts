@@ -181,6 +181,18 @@ test("generated campaign, quest, combat, loot, expansion and real server restart
     await click("Взять: Старинная монета ×3");
     await click("Перейти: Площадь");
     await click("Поговорить: Архивариус");
+    await page
+      .getByRole("button", { name: "Новый уровень: 2", exact: true })
+      .click();
+    await expect(
+      page.getByRole("dialog", { name: "Повышение уровня" }),
+    ).toContainText("Уровень 1 → 2");
+    await page
+      .getByRole("button", { name: "Подтвердить уровень", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Новый уровень: 2", exact: true }),
+    ).toHaveCount(0);
     await page.getByRole("button", { name: "Журнал", exact: true }).click();
     await expect(
       page.getByRole("heading", { name: "Вернуть рукопись · Выполнено" }),
@@ -198,6 +210,14 @@ test("generated campaign, quest, combat, loot, expansion and real server restart
     await expect(
       page.getByRole("button", { name: "Перейти: Обсерватория", exact: true }),
     ).toBeVisible();
+    const leveled = await page.evaluate(async () =>
+      (
+        await fetch(
+          "/api/tabletop/games/" + localStorage.getItem("tabletop-game"),
+        )
+      ).json(),
+    );
+    expect(leveled.state.characters.traveler.level).toBe(2);
     await page.getByRole("button", { name: "Карта", exact: true }).click();
     await expect(
       page.getByRole("heading", { name: "Обсерватория", exact: true }),

@@ -1,3 +1,4 @@
+import { LevelUp } from "./tabletop/LevelUp";
 import { Spellbook } from "./tabletop/Spellbook";
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
@@ -262,6 +263,14 @@ export function Tabletop({
               {s.location} · {modeNames[s.mode]} ·{" "}
               {Math.floor(s.game_time / 60)} мин.
             </p>
+            {hero && (
+              <LevelUp
+                key={`${hero.id}-${hero.level}`}
+                hero={hero}
+                blocked={blocked || !!enc}
+                act={act}
+              />
+            )}
             {enc && (
               <p>
                 Раунд {enc.round} · ход:{" "}
@@ -565,7 +574,7 @@ export function Tabletop({
                         button(
                           `Атаковать ${n.name}: ${w.name}`,
                           { type: "attack", target: n.id, weapon: id },
-                          blocked || !enc.action,
+                          blocked || (!enc.action && !enc.attacks_remaining),
                         ),
                       )
                     )}

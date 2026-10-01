@@ -258,4 +258,5 @@ class CheckService:
                         events, actor.name + ": спасбросок от смерти.", kind="pending"
                     )
                     break
+        self.runtime.progression_service.reconcile(state, events)
         return (self.runtime.validate(state), events)

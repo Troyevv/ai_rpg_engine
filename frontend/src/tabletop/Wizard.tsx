@@ -21,6 +21,7 @@ export function Wizard({
   done: (game: Game) => void;
   cancel: () => void;
 }) {
+  const [progressionMode, setProgressionMode] = useState("xp");
   const [creatorValid, setCreatorValid] = useState(false);
   const [catalog, setCatalog] = useState<Catalog | null>(null),
     [build, setBuild] = useState<Build | null>(null);
@@ -375,6 +376,19 @@ export function Wizard({
           </p>
         </>
       ) : null}
+      {step === 3 && (
+        <label>
+          Развитие персонажа
+          <select
+            aria-label="Развитие персонажа"
+            value={progressionMode}
+            onChange={(e) => setProgressionMode(e.target.value)}
+          >
+            <option value="xp">Опыт за завершённые задания и бои</option>
+            <option value="milestone">Вехи за завершённые задания</option>
+          </select>
+        </label>
+      )}
       <footer>
         <button
           disabled={busy}
@@ -405,6 +419,7 @@ export function Wizard({
                       draft_id: draft.id,
                       draft_revision: draft.revision,
                       character: build,
+                      progression_mode: progressionMode,
                       config: prefs.game,
                       api_key: apiKey || undefined,
                     }),

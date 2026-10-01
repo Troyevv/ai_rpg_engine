@@ -136,6 +136,24 @@ export type Sheet = {
   attack_modifiers: Record<string, number>;
   inventory: Entry[];
   resources: Record<string, number>;
+  progression: {
+    available: boolean;
+    maximum: boolean;
+    level: number;
+    required_xp: number;
+    mode: string;
+    proficiency: number;
+    hp_base: number;
+    asi: boolean;
+    features: Feature[];
+    subclasses: { id: string; name: string; description: string }[];
+    feats: Feature[];
+    spells: Spell[];
+    learn_spells: number;
+    spell_slots: Record<string, number>;
+  };
+  xp: number;
+  subclass: string;
   feature_definitions: Feature[];
   spells: string[];
   prepared_spells: string[];
@@ -161,6 +179,10 @@ export type Command = {
   distance?: number;
   item_id?: string;
   feature_id?: string;
+  subclass?: string;
+  feat_id?: string;
+  ability_increases?: string[];
+  learn_spells?: string[];
   spell_id?: string;
   slot_level?: number;
   spells?: string[];
@@ -265,6 +287,7 @@ export type Game = {
       order: string[];
       initiative: Record<string, number>;
       action: boolean;
+      attacks_remaining: number;
       bonus_action: boolean;
       free_interaction: boolean;
       ready: Record<string, string>;

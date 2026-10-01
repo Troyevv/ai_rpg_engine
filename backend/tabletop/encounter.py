@@ -39,6 +39,7 @@ class EncounterEngine:
         a = state.actor(e.order[e.index])
         e.action = e.bonus_action = e.free_interaction = True
         e.ready.pop(a.id, None)
+        e.attacks_remaining = 0
         e.disengaged = False
         from .conditions import ConditionEngine
 

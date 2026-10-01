@@ -3,6 +3,7 @@
 from typing import Literal
 from .commands import ChoiceOption
 from .features import FeatureDefinition
+from .progression import LevelRule, SubclassDefinition
 from .spells import (
     SpellDefinition,
     SpellcastingFeature,
@@ -56,6 +57,9 @@ class Ruleset(Model):
     long_rest_minutes: int
     conditions: list[str]
     progression: dict[str, int]
+    levels: dict[str, LevelRule] = {}
+    subclasses: dict[str, dict[str, SubclassDefinition]] = {}
+    feats: list[str] = []
     classes: dict[str, dict]
     species: dict[str, dict]
     backgrounds: dict[str, dict]
@@ -79,7 +83,11 @@ class ActorControl(Model):
 class CharacterSheet(Model):
     id: str
     name: str
-    level: int = 1
+    level: int = Field(default=1, ge=1, le=20)
+    xp: int = Field(default=0, ge=0)
+    milestones: int = Field(default=0, ge=0)
+    subclass: str = ""
+    feats: list[str] = []
     proficiency_bonus: int = 2
     bonuses: dict[str, int] = {}
     proficiencies: list[str] = []
@@ -134,6 +142,7 @@ class CharacterSheet(Model):
 
 
 class Campaign(Model):
+    progression_mode: Literal["xp", "milestone"] = "xp"
     source_draft: str = ""
     name: str
     setting_id: str
@@ -149,6 +158,7 @@ class Encounter(Model):
     action: bool = True
     bonus_action: bool = True
     free_interaction: bool = True
+    attacks_remaining: int = Field(default=0, ge=0)
     ready: dict[str, str] = {}
     reaction: dict[str, bool] = {}
     movement: int = 0
@@ -262,6 +272,7 @@ class GameState(Model):
     encounters: dict[str, Encounter] = {}
     active_encounter: str | None = None
     completed_encounters: list[str] = []
+    rewarded_progression: list[str] = []
     quests: dict[str, Literal["available", "active", "completed"]] = {}
     player_knowledge: dict[str, str] = {}
     known_locations: list[str] = []
@@ -357,6 +368,7 @@ from .commands import Command
 
 
 class NewGame(Model):
+    progression_mode: Literal["xp", "milestone"] = "xp"
     draft_id: str
     draft_revision: int = Field(ge=0)
     character: CharacterBuild
