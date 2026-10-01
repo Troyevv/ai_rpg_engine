@@ -96,11 +96,19 @@ def tabletop_stream(**kwargs):
     prompt=kwargs['messages'][0]['content']
     if 'playable CampaignDefinition' in prompt:
         campaign = definition()
+        campaign.ruleset_id = 'd20-fantasy-v1'
+        campaign.ruleset_version = 3
+        for actor in campaign.characters + campaign.creatures:
+            actor.build.feature_choices = ['defense_style']
         idea = json.loads(kwargs['messages'][-1]['content'])['options']['idea']
         if idea == 'invalid references':
             campaign.characters[1].knowledge.append('missing_secret')
             campaign.characters[1].relationships['missing_actor'] = 10
         value=campaign.model_dump_json()
+    elif 'roleplay-портрет героя' in prompt:
+        requested = json.loads(kwargs['messages'][-1]['content'])['field']
+        portrait = {'name':'Александр','appearance':'Серый плащ','biography':'Бывший городской стражник.','personality':'Немногословный и упрямый.','ideals':'Защищать слабых.','bonds':'Старая стража.','flaws':'Не доверяет начальству.'}
+        value = json.dumps(portrait if requested == 'all' else {requested:portrait[requested]})
     elif 'CampaignMutation JSON' in prompt:
         value=json.dumps({'operations':[{'type':'CreateLocation','value':{'id':'observatory','name':'Обсерватория','region_id':'district'}},{'type':'ConnectLocations','first':'market','second':'observatory'}]})
     elif kwargs.get('response_format'):

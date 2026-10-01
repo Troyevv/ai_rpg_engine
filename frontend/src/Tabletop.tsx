@@ -202,7 +202,7 @@ export function Tabletop({
         </button>
         <div>
           <strong>Настольная RPG</strong>
-          <small>D20 Basic v2</small>
+          <small>{game?.state.ruleset.name || "D20 Fantasy"}</small>
         </div>
         <button onClick={onSettings}>Настройки DM</button>
       </header>

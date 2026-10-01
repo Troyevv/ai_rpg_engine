@@ -7,7 +7,7 @@
 | Этап | Ветка | Содержание | Статус |
 |---|---|---|---|
 | A | codex/tabletop-dm-protocol | DM protocol, typed commands, pending choices, services | Реализован; 496 backend / 6 tabletop E2E / build |
-| B | — | Creator, point buy, live sheet, species/classes/backgrounds/skills, roleplay generation, feature catalog | Ожидает |
+| B | codex/tabletop-character-creator | Creator, point buy, live sheet, species/classes/backgrounds/skills, roleplay generation, feature catalog | Реализован; 550 backend / 8 tabletop E2E / build |
 | C | — | Features/resources, actions, conditions, advantage, reactions, GameAI, combat HUD | Ожидает |
 | D | — | Spell catalog/slots, attacks/saves/AoE/concentration, spell UI | Ожидает |
 | E | — | XP/milestones, levels 1–20, subclasses/ASI/feats, level-up UI | Ожидает |
@@ -59,3 +59,19 @@ social check → quest/travel → initiative/combat/feature/damage/healing/loot/
 spells → quest reward/progression/level-up → dynamic expansion → save/restart/continue.
 На каждом этапе тестировать невалидные цели, ресурсные ограничения, stale revisions,
 повтор запроса, скрытые данные и незавершённую механику, а не только happy path.
+
+## B: создание персонажа и фундамент правил
+
+- Новый `d20-fantasy-v1` — собственный набор D20, шесть основных классов и видов,
+  семь происхождений, 18 навыков. Старый `d20-basic-v2` остаётся для сохранений.
+- Creator: 11 шагов, карточки с реальными эффектами, стандартный массив и point buy
+  с серверной проверкой стоимости, диапазона и бюджета. Live sheet рассчитывается
+  тем же RulesEngine, что и канонический герой; preview ничего не сохраняет.
+- Каталог FeatureDefinition/FeatureEffect применяет пассивные эффекты вида, класса
+  и выбранного стиля; владение оружием влияет на proficiency, броня проверяется.
+- AI-портрет и отдельные roleplay-поля — предложения с принятием/отклонением/повтором.
+  Строгая схема не допускает механических полей; контекст не содержит секретов мира.
+- Активные классовые способности, магия и развитие относятся к следующим C–E.
+  Это готовность этапа B, а не готовность всей версии 1.0.
+- Проверки: 36 сочетаний классов/видов, эффекты, стоимость характеристик, совместимость,
+  preview/compiler equality, roleplay boundary, desktop/mobile AI portrait→point buy→start.

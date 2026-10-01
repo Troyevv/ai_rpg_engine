@@ -1,0 +1,866 @@
+{
+  "id": "d20-fantasy-v1",
+  "name": "D20 Fantasy 1.0",
+  "version": 3,
+  "capabilities": [
+    "checks",
+    "combat",
+    "rests",
+    "inventory",
+    "exploration",
+    "dialogue"
+  ],
+  "abilities": [
+    "strength",
+    "dexterity",
+    "constitution",
+    "intelligence",
+    "wisdom",
+    "charisma"
+  ],
+  "ability_array": [
+    15,
+    14,
+    13,
+    12,
+    10,
+    8
+  ],
+  "skills": {
+    "athletics": "strength",
+    "stealth": "dexterity",
+    "perception": "wisdom",
+    "persuasion": "charisma",
+    "investigation": "intelligence",
+    "survival": "wisdom",
+    "acrobatics": "dexterity",
+    "sleight_of_hand": "dexterity",
+    "arcana": "intelligence",
+    "history": "intelligence",
+    "nature": "intelligence",
+    "religion": "intelligence",
+    "animal_handling": "wisdom",
+    "insight": "wisdom",
+    "medicine": "wisdom",
+    "deception": "charisma",
+    "intimidation": "charisma",
+    "performance": "charisma"
+  },
+  "difficulty": {
+    "TRIVIAL": 5,
+    "EASY": 10,
+    "MEDIUM": 15,
+    "HARD": 20,
+    "VERY_HARD": 25,
+    "EXTREME": 30
+  },
+  "check_die": 20,
+  "critical": "double_dice",
+  "short_rest_minutes": 60,
+  "long_rest_minutes": 480,
+  "conditions": [
+    "dodge",
+    "helped",
+    "guard",
+    "unconscious",
+    "stable",
+    "dead",
+    "fled"
+  ],
+  "progression": {
+    "max_level": 1,
+    "proficiency_base": 2,
+    "proficiency_interval": 4
+  },
+  "classes": {
+    "fighter": {
+      "name": "Воин",
+      "description": "Владение атлетикой.",
+      "hit_die": 10,
+      "saves": [
+        "strength",
+        "constitution"
+      ],
+      "primary_abilities": [
+        "strength",
+        "constitution"
+      ],
+      "skills": [
+        "athletics",
+        "perception",
+        "survival",
+        "persuasion"
+      ],
+      "skill_count": 2,
+      "equipment": [
+        "sword",
+        "leather",
+        "potion"
+      ],
+      "equipment_choices": [
+        [
+          "sword",
+          "leather",
+          "potion"
+        ],
+        [
+          "bow",
+          "leather",
+          "potion"
+        ]
+      ],
+      "features": [
+        "martial_training"
+      ],
+      "armor": [
+        "light",
+        "medium",
+        "heavy",
+        "shield"
+      ],
+      "weapons": [
+        "simple",
+        "martial"
+      ],
+      "feature_choices": [
+        "defense_style",
+        "athletic_style"
+      ],
+      "feature_choice_count": 1
+    },
+    "rogue": {
+      "name": "Плут",
+      "description": "Ловкость рук +2.",
+      "hit_die": 8,
+      "saves": [
+        "dexterity",
+        "intelligence"
+      ],
+      "primary_abilities": [
+        "dexterity",
+        "intelligence"
+      ],
+      "skills": [
+        "stealth",
+        "sleight_of_hand",
+        "acrobatics",
+        "investigation",
+        "deception",
+        "insight",
+        "perception"
+      ],
+      "skill_count": 4,
+      "equipment": [
+        "dagger",
+        "leather",
+        "potion"
+      ],
+      "equipment_choices": [
+        [
+          "dagger",
+          "leather",
+          "potion"
+        ]
+      ],
+      "features": [
+        "cunning"
+      ],
+      "armor": [
+        "light"
+      ],
+      "weapons": [
+        "simple",
+        "finesse"
+      ]
+    },
+    "ranger": {
+      "name": "Следопыт",
+      "description": "Выживание +2.",
+      "hit_die": 10,
+      "saves": [
+        "strength",
+        "dexterity"
+      ],
+      "primary_abilities": [
+        "strength",
+        "dexterity"
+      ],
+      "skills": [
+        "survival",
+        "perception",
+        "nature",
+        "animal_handling",
+        "stealth",
+        "athletics"
+      ],
+      "skill_count": 3,
+      "equipment": [
+        "bow",
+        "leather",
+        "potion"
+      ],
+      "equipment_choices": [
+        [
+          "bow",
+          "leather",
+          "potion"
+        ]
+      ],
+      "features": [
+        "pathfinder"
+      ],
+      "armor": [
+        "light",
+        "medium",
+        "shield"
+      ],
+      "weapons": [
+        "simple",
+        "martial"
+      ]
+    },
+    "barbarian": {
+      "name": "Варвар",
+      "description": "Максимум здоровья +2.",
+      "hit_die": 12,
+      "saves": [
+        "strength",
+        "constitution"
+      ],
+      "primary_abilities": [
+        "strength",
+        "constitution"
+      ],
+      "skills": [
+        "athletics",
+        "intimidation",
+        "survival",
+        "perception",
+        "animal_handling"
+      ],
+      "skill_count": 2,
+      "equipment": [
+        "axe",
+        "leather",
+        "potion"
+      ],
+      "equipment_choices": [
+        [
+          "axe",
+          "leather",
+          "potion"
+        ]
+      ],
+      "features": [
+        "hardy"
+      ],
+      "armor": [
+        "light",
+        "medium",
+        "shield"
+      ],
+      "weapons": [
+        "simple",
+        "martial"
+      ]
+    },
+    "cleric": {
+      "name": "Жрец",
+      "description": "Религия +2.",
+      "hit_die": 8,
+      "saves": [
+        "wisdom",
+        "charisma"
+      ],
+      "primary_abilities": [
+        "wisdom",
+        "charisma"
+      ],
+      "skills": [
+        "religion",
+        "medicine",
+        "insight",
+        "persuasion",
+        "history"
+      ],
+      "skill_count": 2,
+      "equipment": [
+        "mace",
+        "leather",
+        "potion"
+      ],
+      "equipment_choices": [
+        [
+          "mace",
+          "leather",
+          "potion"
+        ]
+      ],
+      "features": [
+        "divine_lore"
+      ],
+      "armor": [
+        "light",
+        "medium",
+        "shield"
+      ],
+      "weapons": [
+        "simple"
+      ]
+    },
+    "wizard": {
+      "name": "Маг",
+      "description": "Магия +2.",
+      "hit_die": 6,
+      "saves": [
+        "intelligence",
+        "wisdom"
+      ],
+      "primary_abilities": [
+        "intelligence",
+        "wisdom"
+      ],
+      "skills": [
+        "arcana",
+        "history",
+        "investigation",
+        "insight",
+        "medicine",
+        "religion"
+      ],
+      "skill_count": 2,
+      "equipment": [
+        "staff",
+        "potion"
+      ],
+      "equipment_choices": [
+        [
+          "staff",
+          "potion"
+        ]
+      ],
+      "features": [
+        "arcane_lore"
+      ],
+      "armor": [],
+      "weapons": [
+        "simple"
+      ]
+    },
+    "scout": {
+      "name": "Разведчик",
+      "description": "Выживание +2.",
+      "hit_die": 10,
+      "saves": [
+        "strength",
+        "dexterity"
+      ],
+      "primary_abilities": [
+        "strength",
+        "dexterity"
+      ],
+      "skills": [
+        "survival",
+        "perception",
+        "nature",
+        "animal_handling",
+        "stealth",
+        "athletics"
+      ],
+      "skill_count": 2,
+      "equipment": [
+        "bow",
+        "leather",
+        "potion"
+      ],
+      "equipment_choices": [
+        [
+          "bow",
+          "leather",
+          "potion"
+        ]
+      ],
+      "features": [
+        "pathfinder"
+      ],
+      "armor": [
+        "light",
+        "medium",
+        "shield"
+      ],
+      "weapons": [
+        "simple",
+        "martial"
+      ]
+    }
+  },
+  "species": {
+    "human": {
+      "name": "Человек",
+      "speed": 30,
+      "features": [
+        "human_training"
+      ],
+      "description": "Владение убеждением."
+    },
+    "elf": {
+      "name": "Эльф",
+      "speed": 30,
+      "features": [
+        "keen_senses"
+      ],
+      "description": "Владение восприятием."
+    },
+    "dwarf": {
+      "name": "Дварф",
+      "speed": 25,
+      "features": [
+        "dwarven_resilience"
+      ],
+      "description": "Максимум здоровья +2."
+    },
+    "halfling": {
+      "name": "Полурослик",
+      "speed": 25,
+      "features": [
+        "nimble"
+      ],
+      "description": "Акробатика +1 сверх обычного модификатора."
+    },
+    "half_elf": {
+      "name": "Полуэльф",
+      "speed": 30,
+      "features": [
+        "empathy"
+      ],
+      "description": "Владение проницательностью."
+    },
+    "orc": {
+      "name": "Орк",
+      "speed": 30,
+      "features": [
+        "orc_endurance"
+      ],
+      "description": "Максимум здоровья +3."
+    }
+  },
+  "backgrounds": {
+    "wanderer": {
+      "name": "Странник",
+      "skills": [
+        "survival",
+        "nature"
+      ],
+      "equipment": [
+        "ration",
+        "torch"
+      ],
+      "proficiencies": [
+        "navigation"
+      ],
+      "hooks": [
+        "Найти дорогу к утраченному дому."
+      ],
+      "description": "Найти дорогу к утраченному дому."
+    },
+    "soldier": {
+      "name": "Солдат",
+      "skills": [
+        "athletics",
+        "intimidation"
+      ],
+      "equipment": [
+        "insignia",
+        "ration"
+      ],
+      "proficiencies": [
+        "vehicles"
+      ],
+      "hooks": [
+        "Встретить бывших сослуживцев."
+      ],
+      "description": "Встретить бывших сослуживцев."
+    },
+    "scholar": {
+      "name": "Учёный",
+      "skills": [
+        "arcana",
+        "history"
+      ],
+      "equipment": [
+        "book"
+      ],
+      "proficiencies": [
+        "languages"
+      ],
+      "hooks": [
+        "Исследовать загадку местных архивов."
+      ],
+      "description": "Исследовать загадку местных архивов."
+    },
+    "acolyte": {
+      "name": "Послушник",
+      "skills": [
+        "religion",
+        "insight"
+      ],
+      "equipment": [
+        "symbol"
+      ],
+      "proficiencies": [
+        "rituals"
+      ],
+      "hooks": [
+        "Помочь общине в опасности."
+      ],
+      "description": "Помочь общине в опасности."
+    },
+    "artisan": {
+      "name": "Ремесленник",
+      "skills": [
+        "investigation",
+        "persuasion"
+      ],
+      "equipment": [
+        "tools"
+      ],
+      "proficiencies": [
+        "crafting"
+      ],
+      "hooks": [
+        "Найти редкий материал для важного заказа."
+      ],
+      "description": "Найти редкий материал для важного заказа."
+    },
+    "urchin": {
+      "name": "Беспризорник",
+      "skills": [
+        "sleight_of_hand",
+        "stealth"
+      ],
+      "equipment": [
+        "tools"
+      ],
+      "proficiencies": [
+        "thieves_tools"
+      ],
+      "hooks": [
+        "Защитить тех, кто остался на улице."
+      ],
+      "description": "Защитить тех, кто остался на улице."
+    },
+    "entertainer": {
+      "name": "Артист",
+      "skills": [
+        "performance",
+        "acrobatics"
+      ],
+      "equipment": [
+        "instrument"
+      ],
+      "proficiencies": [
+        "music"
+      ],
+      "hooks": [
+        "Узнать историю, достойную новой песни."
+      ],
+      "description": "Узнать историю, достойную новой песни."
+    }
+  },
+  "items": [
+    {
+      "id": "sword",
+      "name": "Меч",
+      "type": "weapon",
+      "weapon_die": 8,
+      "weapon_category": "martial"
+    },
+    {
+      "id": "bow",
+      "name": "Лук",
+      "type": "weapon",
+      "weapon_die": 6,
+      "weapon_ability": "dexterity",
+      "reach": 60,
+      "weapon_category": "martial"
+    },
+    {
+      "id": "leather",
+      "name": "Кожаная броня",
+      "type": "armor",
+      "armor_base": 12,
+      "dex_cap": 3
+    },
+    {
+      "id": "potion",
+      "name": "Лечебное зелье",
+      "type": "consumable",
+      "healing": 8,
+      "description": "Восстанавливает 8 HP, расходуется при использовании."
+    },
+    {
+      "id": "dagger",
+      "name": "Кинжал",
+      "type": "weapon",
+      "weapon_die": 4,
+      "weapon_ability": "dexterity",
+      "weapon_category": "finesse"
+    },
+    {
+      "id": "axe",
+      "name": "Секира",
+      "type": "weapon",
+      "weapon_die": 12,
+      "weapon_ability": "strength",
+      "weapon_category": "martial"
+    },
+    {
+      "id": "mace",
+      "name": "Булава",
+      "type": "weapon",
+      "weapon_die": 6,
+      "weapon_ability": "strength"
+    },
+    {
+      "id": "staff",
+      "name": "Посох",
+      "type": "weapon",
+      "weapon_die": 6,
+      "weapon_ability": "strength"
+    },
+    {
+      "id": "ration",
+      "name": "Походный рацион",
+      "type": "miscellaneous"
+    },
+    {
+      "id": "torch",
+      "name": "Факел",
+      "type": "miscellaneous"
+    },
+    {
+      "id": "book",
+      "name": "Книга",
+      "type": "miscellaneous"
+    },
+    {
+      "id": "tools",
+      "name": "Набор инструментов",
+      "type": "miscellaneous"
+    },
+    {
+      "id": "insignia",
+      "name": "Знак службы",
+      "type": "miscellaneous"
+    },
+    {
+      "id": "symbol",
+      "name": "Символ веры",
+      "type": "miscellaneous"
+    },
+    {
+      "id": "instrument",
+      "name": "Музыкальный инструмент",
+      "type": "miscellaneous"
+    }
+  ],
+  "point_buy": {
+    "budget": 27,
+    "minimum": 8,
+    "maximum": 15,
+    "costs": {
+      "8": 0,
+      "9": 1,
+      "10": 2,
+      "11": 3,
+      "12": 4,
+      "13": 5,
+      "14": 7,
+      "15": 9
+    }
+  },
+  "features": {
+    "human_training": {
+      "id": "human_training",
+      "name": "Широкий кругозор",
+      "description": "Владение убеждением.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "skill_proficiency",
+          "key": "persuasion",
+          "value": 0
+        }
+      ]
+    },
+    "keen_senses": {
+      "id": "keen_senses",
+      "name": "Острые чувства",
+      "description": "Владение восприятием.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "skill_proficiency",
+          "key": "perception",
+          "value": 0
+        }
+      ]
+    },
+    "dwarven_resilience": {
+      "id": "dwarven_resilience",
+      "name": "Дварфская стойкость",
+      "description": "Максимум здоровья +2.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "max_hp",
+          "key": "",
+          "value": 2
+        }
+      ]
+    },
+    "nimble": {
+      "id": "nimble",
+      "name": "Проворство",
+      "description": "Акробатика +1 сверх обычного модификатора.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "check_bonus",
+          "key": "acrobatics",
+          "value": 1
+        }
+      ]
+    },
+    "empathy": {
+      "id": "empathy",
+      "name": "Два наследия",
+      "description": "Владение проницательностью.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "skill_proficiency",
+          "key": "insight",
+          "value": 0
+        }
+      ]
+    },
+    "orc_endurance": {
+      "id": "orc_endurance",
+      "name": "Выносливость",
+      "description": "Максимум здоровья +3.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "max_hp",
+          "key": "",
+          "value": 3
+        }
+      ]
+    },
+    "martial_training": {
+      "id": "martial_training",
+      "name": "Боевая подготовка",
+      "description": "Владение атлетикой.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "skill_proficiency",
+          "key": "athletics",
+          "value": 0
+        }
+      ]
+    },
+    "cunning": {
+      "id": "cunning",
+      "name": "Ловкие руки",
+      "description": "Ловкость рук +2.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "check_bonus",
+          "key": "sleight_of_hand",
+          "value": 2
+        }
+      ]
+    },
+    "pathfinder": {
+      "id": "pathfinder",
+      "name": "Следопыт",
+      "description": "Выживание +2.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "check_bonus",
+          "key": "survival",
+          "value": 2
+        }
+      ]
+    },
+    "hardy": {
+      "id": "hardy",
+      "name": "Закалка",
+      "description": "Максимум здоровья +2.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "max_hp",
+          "key": "",
+          "value": 2
+        }
+      ]
+    },
+    "divine_lore": {
+      "id": "divine_lore",
+      "name": "Священное знание",
+      "description": "Религия +2.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "check_bonus",
+          "key": "religion",
+          "value": 2
+        }
+      ]
+    },
+    "arcane_lore": {
+      "id": "arcane_lore",
+      "name": "Арканное знание",
+      "description": "Магия +2.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "check_bonus",
+          "key": "arcana",
+          "value": 2
+        }
+      ]
+    },
+    "defense_style": {
+      "id": "defense_style",
+      "name": "Защитный стиль",
+      "description": "Класс доспеха +1.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "armor_class",
+          "key": "",
+          "value": 1
+        }
+      ]
+    },
+    "athletic_style": {
+      "id": "athletic_style",
+      "name": "Атлетический стиль",
+      "description": "Атлетика +2.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "check_bonus",
+          "key": "athletics",
+          "value": 2
+        }
+      ]
+    }
+  }
+}

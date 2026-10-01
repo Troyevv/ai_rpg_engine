@@ -2,6 +2,7 @@
 
 from typing import Literal
 from .commands import ChoiceOption
+from .features import FeatureDefinition
 from pydantic import Field, model_validator
 from .definitions import (
     Model,
@@ -28,10 +29,12 @@ ABILITIES = (
 class Ruleset(Model):
     id: str
     name: str
-    version: Literal[2] = 2
+    version: Literal[2, 3] = 2
     capabilities: list[str]
     abilities: list[Ability]
     ability_array: list[int]
+    point_buy: dict[str, int | dict[str, int]] = {}
+    features: dict[str, FeatureDefinition] = {}
     skills: dict[str, Ability]
     difficulty: dict[Difficulty, int]
     check_die: Literal[20] = 20
@@ -65,6 +68,10 @@ class CharacterSheet(Model):
     name: str
     level: int = 1
     proficiency_bonus: int = 2
+    bonuses: dict[str, int] = {}
+    proficiencies: list[str] = []
+    campaign_hooks: list[str] = []
+    concept: str = ""
     character_class: str
     species: str
     background: str = ""

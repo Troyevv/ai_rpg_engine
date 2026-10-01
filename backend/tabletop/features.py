@@ -1,0 +1,59 @@
+"""Typed, catalog-owned effects. Player/LLM input can select IDs, never edit effects."""
+
+from typing import Literal
+from pydantic import Field
+from .definitions import Model
+
+
+class FeatureEffect(Model):
+    type: Literal[
+        "max_hp",
+        "armor_class",
+        "speed",
+        "skill_proficiency",
+        "resource",
+        "check_bonus",
+        "save_bonus",
+        "attack_bonus",
+        "damage_bonus",
+        "heal",
+    ]
+    value: int = Field(default=0, ge=-20, le=100)
+    key: str = ""
+
+
+class FeatureDefinition(Model):
+    id: str
+    name: str
+    level: int = Field(default=1, ge=1, le=20)
+    description: str
+    activation: Literal["PASSIVE", "ACTION", "BONUS_ACTION", "REACTION"] = "PASSIVE"
+    resource: str = ""
+    uses: int = Field(default=0, ge=0, le=20)
+    recharge: Literal["short", "long", "none"] = "long"
+    target: Literal["self", "ally", "enemy"] = "self"
+    effects: list[FeatureEffect]
+
+
+class FeatureEngine:
+    @staticmethod
+    def apply_passives(actor, definitions):
+        for feature in definitions:
+            if feature.resource:
+                actor.resources[feature.resource] = feature.uses
+            if feature.activation != "PASSIVE":
+                continue
+            for effect in feature.effects:
+                if effect.type == "max_hp":
+                    actor.max_hp += effect.value
+                    actor.hp += effect.value
+                elif effect.type == "speed":
+                    actor.speed += effect.value
+                elif effect.type == "skill_proficiency":
+                    if effect.key not in actor.skill_proficiencies:
+                        actor.skill_proficiencies.append(effect.key)
+                elif effect.type == "resource":
+                    actor.resources[effect.key] = effect.value
+                else:
+                    key = effect.type + (":" + effect.key if effect.key else "")
+                    actor.bonuses[key] = actor.bonuses.get(key, 0) + effect.value

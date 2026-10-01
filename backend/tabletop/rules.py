@@ -15,21 +15,28 @@ class RulesEngine:
     def check_modifier(self, actor, ability, skill, rules):
         if skill and (skill not in rules.skills or rules.skills[skill] != ability):
             raise ValueError("Навык не соответствует характеристике")
-        return self.modifier(actor.abilities[ability]) + (
-            self.proficiency(actor) if skill in actor.skill_proficiencies else 0
+        return (
+            self.modifier(actor.abilities[ability])
+            + (self.proficiency(actor) if skill in actor.skill_proficiencies else 0)
+            + actor.bonuses.get("check_bonus", 0)
+            + actor.bonuses.get("check_bonus:" + (skill or ability), 0)
         )
 
     def save_modifier(self, actor, ability):
-        return self.modifier(actor.abilities[ability]) + (
-            self.proficiency(actor) if ability in actor.save_proficiencies else 0
+        return (
+            self.modifier(actor.abilities[ability])
+            + (self.proficiency(actor) if ability in actor.save_proficiencies else 0)
+            + actor.bonuses.get("save_bonus:" + ability, 0)
         )
 
     def attack_modifier(self, actor, weapon):
         attack = actor.attacks.get(weapon)
         if not attack:
             raise ValueError("Оружие недоступно")
-        return self.modifier(actor.abilities[attack.ability]) + (
-            self.proficiency(actor) if attack.proficient else 0
+        return (
+            self.modifier(actor.abilities[attack.ability])
+            + (self.proficiency(actor) if attack.proficient else 0)
+            + actor.bonuses.get("attack_bonus", 0)
         )
 
     @staticmethod
@@ -93,9 +100,11 @@ class RulesEngine:
             or build.background not in rules.backgrounds
         ):
             raise ValueError("Неизвестный класс, вид или происхождение")
-        if set(build.abilities) != set(rules.abilities) or sorted(
-            build.abilities.values()
-        ) != sorted(rules.ability_array):
+        if set(build.abilities) != set(rules.abilities):
+            raise ValueError("Нужны все шесть характеристик")
+        if build.ability_method == "point_buy":
+            self.point_buy_cost(build.abilities, rules)
+        elif sorted(build.abilities.values()) != sorted(rules.ability_array):
             raise ValueError(
                 "Распредели стандартный набор характеристик без повторного использования значений"
             )
@@ -112,7 +121,27 @@ class RulesEngine:
             raise ValueError(
                 "Стартовое снаряжение должно соответствовать набору класса"
             )
+        choices = cls.get("feature_choices", [])
+        if (
+            len(build.feature_choices) != cls.get("feature_choice_count", 0)
+            or len(set(build.feature_choices)) != len(build.feature_choices)
+            or not set(build.feature_choices) <= set(choices)
+        ):
+            raise ValueError("Выбери допустимые особенности класса")
         return build
+
+    @staticmethod
+    def point_buy_cost(abilities, rules):
+        config = rules.point_buy
+        if not config:
+            raise ValueError("Этот ruleset не поддерживает point buy")
+        costs = config["costs"]
+        if any(str(value) not in costs for value in abilities.values()):
+            raise ValueError("Характеристики вне диапазона point buy")
+        spent = sum(costs[str(value)] for value in abilities.values())
+        if spent > config["budget"]:
+            raise ValueError("Превышен бюджет point buy")
+        return spent
 
     def build_character(self, definition, rules):
         from .models import CharacterSheet
@@ -129,7 +158,18 @@ class RulesEngine:
             )
             for i in b.equipment
         ]
+        background = rules.backgrounds[b.background]
+        inventory.extend(
+            InventoryEntry(item_id=i) for i in background.get("equipment", [])
+        )
         inventory.extend(e.model_copy(deep=True) for e in definition.inventory)
+        feature_ids = list(
+            dict.fromkeys(
+                cls.get("features", [])
+                + rules.species[b.species].get("features", [])
+                + b.feature_choices
+            )
+        )
         actor = CharacterSheet(
             id=definition.id,
             name=b.name,
@@ -137,6 +177,16 @@ class RulesEngine:
             species=b.species,
             proficiency_bonus=rules.progression["proficiency_base"],
             background=b.background,
+            concept=b.concept,
+            features=feature_ids,
+            proficiencies=list(
+                dict.fromkeys(
+                    cls.get("armor", [])
+                    + cls.get("weapons", [])
+                    + background.get("proficiencies", [])
+                )
+            ),
+            campaign_hooks=background.get("hooks", []),
             biography=b.biography,
             appearance=b.appearance,
             personality=b.personality or definition.personality,
@@ -144,7 +194,9 @@ class RulesEngine:
             bonds=b.bonds,
             flaws=b.flaws,
             abilities=b.abilities.copy(),
-            skill_proficiencies=b.skills[:],
+            skill_proficiencies=list(
+                dict.fromkeys(b.skills + background.get("skills", []))
+            ),
             save_proficiencies=cls["saves"][:],
             hp=hp,
             max_hp=hp,
@@ -163,6 +215,9 @@ class RulesEngine:
             attitude=definition.attitude,
             current_intent=definition.current_intent,
         )
+        from .features import FeatureEngine
+
+        FeatureEngine.apply_passives(actor, [rules.features[i] for i in feature_ids])
         return actor
 
     def equipment_stats(self, actor, items):
@@ -179,8 +234,15 @@ class RulesEngine:
                     ability=item.weapon_ability,
                     die=item.weapon_die,
                     reach=item.reach,
+                    proficient=not actor.proficiencies
+                    or item.weapon_category in actor.proficiencies,
                 )
             if e.equipped and item.type == "armor":
+                if (
+                    actor.proficiencies
+                    and item.armor_category not in actor.proficiencies
+                ):
+                    raise ValueError("Персонаж не владеет этим типом брони")
                 armors.append(item)
         if len(armors) > 1:
             raise ValueError("Можно надеть только одну броню")
@@ -188,6 +250,7 @@ class RulesEngine:
             actor.armor_class = armors[0].armor_base + min(
                 armors[0].dex_cap, self.modifier(actor.abilities["dexterity"])
             )
+        actor.armor_class += actor.bonuses.get("armor_class", 0)
         # Unarmed attacks are a universal supported primitive, not a campaign item.
         if not actor.attacks:
             actor.attacks["unarmed"] = Attack(name="Без оружия", die=4)

@@ -18,7 +18,7 @@ from .projection import public_state
 from .compiler import CampaignCompiler
 from .catalog import load_ruleset
 from .dm import DMAgent, DMContextBuilder
-from .generation import CampaignGenerator
+from .generation import CampaignGenerator, CharacterRoleplayGenerator
 from .services.content import ContentService
 
 
@@ -59,7 +59,14 @@ class NewGameRequest(NewGame, Credential):
 
 class BuildRequest(Credential):
     build: CharacterBuild
-    ruleset_id: str = "d20-basic-v2"
+    ruleset_id: str = "d20-fantasy-v1"
+
+
+class CharacterGenerationRequest(Credential):
+    config: ModelConfig
+    draft_id: str
+    build: CharacterBuild
+    field: str = "all"
 
 
 def install(app, shared_repo, credentials):
@@ -143,10 +150,16 @@ def install(app, shared_repo, credentials):
         )
 
     @router.get("/catalog")
-    def catalog():
+    def catalog(ruleset_id: str = "d20-fantasy-v1"):
+        rules = load_ruleset(ruleset_id)
+        default = CharacterBuild(
+            feature_choices=rules.classes["fighter"].get("feature_choices", [])[
+                : rules.classes["fighter"].get("feature_choice_count", 0)
+            ]
+        )
         return {
-            **load_ruleset().model_dump(),
-            "default_build": CharacterBuild().model_dump(),
+            **rules.model_dump(),
+            "default_build": default.model_dump(),
             "developer_mode": app.state.tabletop_debug,
         }
 
@@ -156,6 +169,50 @@ def install(app, shared_repo, credentials):
 
         RulesEngine().validate_build(body.build, load_ruleset(body.ruleset_id))
         return {"valid": True}
+
+    @router.post("/build/preview")
+    def preview(body: BuildRequest):
+        from .definitions import CharacterDefinition
+        from .rules import RulesEngine
+
+        rules = load_ruleset(body.ruleset_id)
+        engine = RulesEngine()
+        actor = engine.build_character(
+            CharacterDefinition(
+                id="preview",
+                name=body.build.name,
+                location_id="preview",
+                faction_id="preview",
+                build=body.build,
+            ),
+            rules,
+        )
+        engine.equipment_stats(actor, {i.id: i for i in rules.items})
+        return {
+            "sheet": actor.model_dump(),
+            "modifiers": {a: engine.modifier(v) for a, v in actor.abilities.items()},
+            "skills": {
+                s: engine.check_modifier(actor, a, s, rules)
+                for s, a in rules.skills.items()
+            },
+            "saves": {a: engine.save_modifier(actor, a) for a in actor.abilities},
+            "points_remaining": (
+                rules.point_buy["budget"]
+                - engine.point_buy_cost(body.build.abilities, rules)
+                if body.build.ability_method == "point_buy"
+                else None
+            ),
+        }
+
+    @router.post("/characters/generate")
+    def generate_character(body: CharacterGenerationRequest):
+        draft = repo.draft(body.draft_id)
+        definition = compiler.validate(draft["definition"])
+        return {
+            "fields": CharacterRoleplayGenerator(agent(body)).generate(
+                body.draft_id, definition, body.build, body.field
+            )
+        }
 
     @router.get("/drafts")
     def drafts():

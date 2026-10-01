@@ -46,9 +46,10 @@ class CampaignGenerator:
     def generate(self, draft_id, options):
         if not self.dm.config:
             raise ValueError("Для генерации кампании выбери модель")
-        rules = load_ruleset()
+        rules = load_ruleset("d20-fantasy-v1")
         prompt = (
             "Создай полноценную playable CampaignDefinition на русском. Только JSON по схеме. "
+            "ruleset_id=d20-fantasy-v1, ruleset_version=3. Для каждого build выбери feature_choices по feature_choice_count класса. "
             "Никаких полей runtime HP, AC, результатов бросков или state patches. "
             "Создай 3–6 связанных локаций, 2–5 NPC, хотя бы задание с giver_id, скрытый объект с предметом, "
             "секрет, контейнер добычи и encounter с враждебной фракцией. Все ID уникальны, ASCII. "
@@ -177,3 +178,63 @@ class ContentGenerator:
             raise ValueError(
                 "Новый контент не прошёл проверку схемы или ссылок. Состояние не изменено."
             ) from None
+
+
+class CharacterRoleplayGenerator:
+    """Generates only user-reviewable prose. Mechanics never come from this output."""
+
+    def __init__(self, dm):
+        self.dm = dm
+
+    def generate(self, draft_id, definition, build, field):
+        from .definitions import CharacterRoleplay
+
+        public_setting = {
+            "name": definition.setting.name,
+            "description": definition.setting.description,
+            "genre": definition.setting.genre,
+            "tone": definition.setting.tone,
+        }
+        allowed = list(CharacterRoleplay.model_fields)
+        if field != "all" and field not in allowed:
+            raise ValueError("Недопустимое поле персонажа")
+        raw = self.dm.call(
+            draft_id,
+            "character_generation",
+            [
+                {
+                    "role": "system",
+                    "content": "Создай roleplay-портрет героя на русском с учётом концепции и мира. "
+                    "Только JSON по схеме. Не назначай HP/AC/бонусы, предметы, заклинания или игровые результаты. "
+                    "Не раскрывай тайны кампании и не решай действия за игрока. При генерации отдельного поля верни только его. "
+                    "Схема: "
+                    + json.dumps(
+                        CharacterRoleplay.model_json_schema(), ensure_ascii=False
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "setting": public_setting,
+                            "character": build.model_dump(),
+                            "field": field,
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+            ],
+            True,
+        )
+        try:
+            result = CharacterRoleplay.model_validate_json(raw)
+        except ValidationError:
+            raise ValueError(
+                "Модель вернула некорректный портрет. Механика и персонаж не изменены."
+            ) from None
+        values = result.model_dump(exclude_none=True)
+        if field != "all":
+            values = {field: values[field]} if values.get(field) else {}
+        if not values or (field == "all" and set(values) != set(allowed)):
+            raise ValueError("Модель вернула неполный портрет. Повтори генерацию.")
+        return values
