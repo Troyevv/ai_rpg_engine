@@ -51,10 +51,11 @@ class Region(Named):
 class Location(Named):
     region_id: Id
     connections: list[Id] = Field(default_factory=list, max_length=50)
+    travel_minutes: dict[Id, Annotated[int, Field(ge=1, le=1440)]] = {}
 
 
 class Faction(Named):
-    pass
+    public_goal: str = Field(default="", max_length=1000)
 
 
 class FactionRelation(Model):
@@ -150,6 +151,13 @@ class Setting(Named):
     magic: str = "Низкая"
 
 
+class NPCSchedule(Named):
+    actor_id: Id
+    destination_id: Id
+    delay_minutes: int = Field(ge=1, le=10080)
+    after_quest: Id | None = None
+
+
 class CampaignDefinition(Model):
     schema_version: Literal[1] = 1
     id: Id
@@ -168,6 +176,8 @@ class CampaignDefinition(Model):
     quests: list[Quest] = Field(default_factory=list, max_length=50)
     secrets: list[Secret] = Field(default_factory=list, max_length=100)
     encounters: list[EncounterDefinition] = Field(default_factory=list, max_length=50)
+    initial_conflict: str = Field(default="", max_length=3000)
+    schedules: list[NPCSchedule] = Field(default_factory=list, max_length=100)
     plot_hooks: list[str] = Field(default_factory=list, max_length=20)
     starting_party: list[Id] = Field(min_length=1, max_length=6)
     starting_location: Id
@@ -211,6 +221,26 @@ class CreateFaction(Model):
     value: Faction
 
 
+class CreateRegion(Model):
+    type: Literal["CreateRegion"]
+    value: Region
+
+
+class CreateSecret(Model):
+    type: Literal["CreateSecret"]
+    value: Secret
+
+
+class CreateSchedule(Model):
+    type: Literal["CreateSchedule"]
+    value: NPCSchedule
+
+
+class DefineFactionRelation(Model):
+    type: Literal["DefineFactionRelation"]
+    value: FactionRelation
+
+
 class ConnectLocations(Model):
     type: Literal["ConnectLocations"]
     first: Id
@@ -232,6 +262,10 @@ Operation = Annotated[
         CreateEncounter,
         CreateObject,
         CreateFaction,
+        CreateRegion,
+        CreateSecret,
+        CreateSchedule,
+        DefineFactionRelation,
         ConnectLocations,
         RevealKnowledge,
     ],

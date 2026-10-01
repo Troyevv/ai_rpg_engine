@@ -11,7 +11,7 @@
 | C | codex/tabletop-combat-features | Features/resources, actions, conditions, advantage, reactions, GameAI, combat HUD | Реализован; 574 backend / 8 tabletop E2E / build |
 | D | codex/tabletop-spellcasting | Spell catalog/slots, attacks/saves/AoE/concentration, spell UI | Реализован; 589 backend / 10 tabletop E2E / build |
 | E | codex/tabletop-progression | XP/milestones, levels 1–20, subclasses/ASI/feats, level-up UI | Реализован; 604 backend / campaign desktop+mobile E2E / build |
-| F | — | Campaign/world generation, travel, factions/quests/secrets, evolving world | Ожидает |
+| F | codex/tabletop-living-world | Campaign/world generation, travel, factions/quests/secrets, evolving world | Реализован; 617 backend / build |
 | G | — | Final desktop/mobile UX, sheets, spellbook, journal/map/party, DM settings | Ожидает |
 
 Каждый следующий PR основан на предыдущем. Merge/deploy отдельны от реализации.
@@ -127,3 +127,17 @@ spells → quest reward/progression/level-up → dynamic expansion → save/rest
 - Все шесть классов проверены от 1 до 20; запреты ранних/повторных выборов, потолок 20,
   Constitution HP, slots, extra attacks, duplicate/restart/replay/rollback.
   Campaign E2E завершает задание, повышает уровень и расширяет мир без сброса героя.
+
+## F: мир и расширение
+
+- Генерация получает компактный стартовый каталог и контракт ссылок, публичный конфликт,
+  зацепки, цели фракций и NPC, время переходов и типизированные расписания.
+- Расписания используют каноническое время, условия завершения заданий и одноразовое
+  исполнение; участники незавершённых encounter остаются на месте. Скрытые перемещения
+  не попадают в публичные события, уход собеседника завершает разговор.
+- Завершённые задания однократно повышают репутацию фракции; она влияет на убеждение.
+- Расширение создаёт регионы, фракции, вражду, NPC, секреты и расписания только через
+  компилятор. Нельзя переписать старые отношения или назначить расписание старому NPC.
+  Развитие существующего героя сохраняется.
+- Проверены неверные ссылки, движение/перезапуск/приватность, условия расписаний,
+  репутация без повторного начисления, расширение и сохранение уровня героя.

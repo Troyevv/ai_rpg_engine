@@ -273,6 +273,11 @@ class GameState(Model):
     active_encounter: str | None = None
     completed_encounters: list[str] = []
     rewarded_progression: list[str] = []
+    schedule_due: dict[str, int] = {}
+    completed_schedules: list[str] = []
+    world_events: list[dict[str, str | int]] = []
+    faction_reputation: dict[str, int] = {}
+    reputation_rewards: list[str] = []
     quests: dict[str, Literal["available", "active", "completed"]] = {}
     player_knowledge: dict[str, str] = {}
     known_locations: list[str] = []

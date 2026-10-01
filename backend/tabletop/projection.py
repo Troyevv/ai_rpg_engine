@@ -134,6 +134,25 @@ class PublicProjection:
         return {
             "campaign": state.campaign.name,
             "ruleset": {"id": state.ruleset.id, "name": state.ruleset.name},
+            "initial_conflict": state.definition.initial_conflict,
+            "plot_hooks": state.definition.plot_hooks,
+            "factions": [
+                {
+                    "id": f.id,
+                    "name": f.name,
+                    "description": f.description,
+                    "public_goal": f.public_goal,
+                    "reputation": state.faction_reputation.get(f.id, 0),
+                }
+                for f in state.definition.factions
+                if f.id
+                in {
+                    a.faction
+                    for a in state.actors().values()
+                    if a.location == hero.location or a.id in state.party
+                }
+                or f.id in state.faction_reputation
+            ],
             "world": {"name": state.world.name, "description": state.world.description},
             "location": location.name,
             "location_id": location.id,
@@ -230,6 +249,8 @@ class DMProjection:
     @staticmethod
     def build(state, events=None):
         p = PublicProjection.build(state)
+        for sheet in p["characters"].values():
+            sheet.pop("progression", None)
         loc = p["location_id"]
         relevant = [a for a in state.actors().values() if a.location == loc]
         return {
@@ -285,7 +306,13 @@ class NarrationProjection:
             "scene": p["scene"],
             "location": p["location"],
             "mode": p["mode"],
-            "characters": p["characters"],
+            "characters": {
+                aid: {k: v for k, v in sheet.items() if k != "progression"}
+                for aid, sheet in p["characters"].items()
+            },
+            "initial_conflict": p["initial_conflict"],
+            "public_hooks": p["plot_hooks"],
+            "factions": p["factions"],
             "visible_npcs": p["npcs"],
             "objects": p["objects"],
             "known": p["knowledge"],

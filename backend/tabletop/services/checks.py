@@ -2,6 +2,7 @@
 
 from ..rules import DifficultyResolver
 from ..encounter import event
+from .world import WorldService
 
 
 class CheckService:
@@ -87,6 +88,7 @@ class CheckService:
             ability, skill = ("charisma", "persuasion")
             outcome = "persuade"
             dc = DifficultyResolver.resolve(state.ruleset, secrets[0].difficulty)
+            dc -= min(2, max(0, state.faction_reputation.get(npc.faction, 0)) // 2)
         elif target:
             raise ValueError("Для цели проверки укажи допустимое назначение")
         if c.type == "save" and (
@@ -185,6 +187,7 @@ class CheckService:
                     None,
                 )
                 if secret:
+                    npc.relationships[a.id] = min(5, npc.relationships.get(a.id, 0) + 1)
                     state.player_knowledge[secret.id] = secret.description
                     event(events, secret.description, kind="discovery")
             elif p.outcome == "trap":
@@ -259,4 +262,5 @@ class CheckService:
                     )
                     break
         self.runtime.progression_service.reconcile(state, events)
+        WorldService.advance(state, events)
         return (self.runtime.validate(state), events)

@@ -36,7 +36,8 @@ class ExplorationService:
                     state.known_locations.append(c.target)
                 state.session_state.mode = "EXPLORATION"
                 state.session_state.dialogue_actor = None
-                state.game_time += 300
+                minutes = loc.travel_minutes.get(c.target, 5)
+                state.game_time += minutes * 60
                 event(events, "Переход: " + state.locations[c.target], kind="travel")
         if t == "interact":
             self.runtime.interact(state, a, c.target, events)
