@@ -1,18 +1,18 @@
+import {
+  HeroSummary,
+  CombatHUD,
+  RollCard,
+  RollResult,
+  CharacterSheet,
+} from "./tabletop/GamePanels";
+import { DMSettings } from "./tabletop/DMSettings";
 import { LevelUp } from "./tabletop/LevelUp";
 import { Spellbook } from "./tabletop/Spellbook";
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import type { Preferences } from "./types";
 import { Wizard } from "./tabletop/Wizard";
-import {
-  abilities,
-  skills,
-  purposes,
-  signed,
-  type Command,
-  type Game,
-  type Sheet,
-} from "./tabletop/types";
+import { signed, type Command, type Game } from "./tabletop/types";
 import "./styles/tabletop.css";
 const modeNames: Record<string, string> = {
   EXPLORATION: "Исследование",
@@ -44,12 +44,28 @@ export function Tabletop({
   const [games, setGames] = useState<{ id: string; name: string }[]>([]),
     [game, setGame] = useState<Game | null>(null),
     [creating, setCreating] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [tab, setTab] = useState("Игра"),
     [text, setText] = useState(""),
-    [context, setContext] = useState("");
+    [context, setContext] = useState(""),
+    [mobileActions, setMobileActions] = useState(false),
+    [campaignMenu, setCampaignMenu] = useState(false),
+    [olderHistory, setOlderHistory] = useState(false);
   const lock = useRef(false);
+  const historyEnd = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (game?.state.pending || game?.state.choice || game?.state.reaction) {
+      document
+        .querySelector(".tt-roll-card, .tt-roll-prompt")
+        ?.scrollIntoView({ block: "center", behavior: "smooth" });
+    } else if (window.innerWidth >= 768 && historyEnd.current) {
+      historyEnd.current.parentElement?.scrollTo({
+        top: historyEnd.current.parentElement.scrollHeight,
+      });
+    }
+  }, [game?.revision]);
   const refresh = () =>
     api<{ id: string; name: string }[]>("/tabletop/games").then(setGames);
   useEffect(() => {
@@ -64,7 +80,8 @@ export function Tabletop({
           if (active) setGame(g);
         }
       })
-      .catch((e) => active && setError(e.message));
+      .catch((e) => active && setError(e.message))
+      .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
@@ -106,6 +123,7 @@ export function Tabletop({
         );
         setText("");
         setContext("");
+        setMobileActions(false);
       } catch (e) {
         setGame(await api<Game>(`/tabletop/games/${game.id}`));
         throw e;
@@ -141,74 +159,31 @@ export function Tabletop({
       {label}
     </button>
   );
-  const sheet = (a: Sheet) => (
-    <article className="tt-panel" key={a.id}>
-      <h2>{a.name}</h2>
-      <p>
-        {a.character_class_name} · {a.species_name} · уровень {a.level} ·{" "}
-        {controlNames[a.controller.controller]}
-      </p>
-      <p>
-        <strong>
-          {a.hp} / {a.max_hp} HP
-        </strong>{" "}
-        · КД {a.armor_class} · скорость {a.speed} · позиция {a.position}
-      </p>
-      <p>{a.conditions.join(", ")}</p>
-      <div className="tt-form-grid">
-        {Object.entries(a.abilities).map(([k, v]) => (
-          <div key={k}>
-            {abilities[k]}{" "}
-            <strong>
-              {v} ({signed(a.modifiers[k])})
-            </strong>{" "}
-            · спасбросок {signed(a.save_modifiers[k])}
-          </div>
-        ))}
-      </div>
-      <h3>Навыки</h3>
-      <p>
-        {Object.entries(a.skill_modifiers)
-          .map(([k, v]) => `${skills[k] || k} ${signed(v)}`)
-          .join(" · ")}
-      </p>
-      <h3>Оружие</h3>
-      {Object.entries(a.attacks).map(([id, w]) => (
-        <p key={id}>
-          {w.name}: {signed(a.attack_modifiers[id])} · 1d{w.die} · дистанция{" "}
-          {w.reach}
-        </p>
-      ))}
-      {Object.entries({
-        appearance: "Внешность",
-        biography: "Биография",
-        personality: "Характер",
-        ideals: "Идеалы",
-        bonds: "Привязанности",
-        flaws: "Слабости",
-      }).map(
-        ([key, label]) =>
-          a[key as keyof Sheet] && (
-            <p key={key}>
-              <strong>{label}:</strong> {String(a[key as keyof Sheet])}
-            </p>
-          ),
-      )}
-    </article>
-  );
   return (
-    <div className="tt-shell">
+    <div className={`tt-shell ${s && !creating ? "tt-playing" : ""}`}>
       <header className="tt-header">
         <button onClick={onBack} disabled={busy}>
           Истории
         </button>
         <div>
-          <strong>Настольная RPG</strong>
+          <strong>{s && !creating ? s.location : "Настольная RPG"}</strong>
           <small>{game?.state.ruleset.name || "D20 Fantasy"}</small>
         </div>
-        <button onClick={onSettings}>Настройки DM</button>
+        <button
+          disabled={loading}
+          onClick={() => (s ? setTab("Настройки") : onSettings())}
+        >
+          Настройки DM
+        </button>
       </header>
-      <div className="tt-toolbar">
+      <button
+        className="tt-campaign-toggle"
+        aria-expanded={campaignMenu}
+        onClick={() => setCampaignMenu(!campaignMenu)}
+      >
+        Кампании
+      </button>
+      <div className={`tt-toolbar ${campaignMenu ? "is-open" : ""}`}>
         <button disabled={busy} onClick={() => setCreating(true)}>
           Новая кампания
         </button>
@@ -240,7 +215,11 @@ export function Tabletop({
           {error}
         </p>
       )}
-      {creating ? (
+      {loading ? (
+        <main className="tt-panel" role="status">
+          Загружаю кампанию…
+        </main>
+      ) : creating ? (
         <Wizard
           prefs={prefs}
           apiKey={apiKey}
@@ -257,7 +236,7 @@ export function Tabletop({
         </main>
       ) : (
         <>
-          <section className="tt-panel">
+          <section className="tt-campaign-bar">
             <h1>{s.campaign}</h1>
             <p>
               {s.location} · {modeNames[s.mode]} ·{" "}
@@ -271,17 +250,7 @@ export function Tabletop({
                 act={act}
               />
             )}
-            {enc && (
-              <p>
-                Раунд {enc.round} · ход:{" "}
-                <strong>{name(enc.current_actor)}</strong> · действие{" "}
-                {enc.action ? "доступно" : "потрачено"} · бонус{" "}
-                {enc.bonus_action ? "доступен" : "потрачен"} · движение{" "}
-                {enc.movement} · реакция{" "}
-                {enc.reaction[acting] ? "доступна" : "потрачена"} ·
-                взаимодействие {enc.free_interaction ? "доступно" : "потрачено"}
-              </p>
-            )}
+            <CombatHUD state={s} />
             {s.choice && (
               <div className="tt-roll-prompt" role="status">
                 <h2>{s.choice.prompt}</h2>
@@ -306,42 +275,12 @@ export function Tabletop({
               </div>
             )}
             {pending && (
-              <div className="tt-roll-prompt" role="status">
-                <h2>
-                  {name(pending.actor)}:{" "}
-                  {purposes[pending.purpose] || pending.purpose}
-                </h2>
-                <p>
-                  {pending.reason && (
-                    <span>
-                      {pending.reason}
-                      <br />
-                    </span>
-                  )}
-                  {pending.advantage_sources?.length > 0 && (
-                    <span className="tt-advantage">
-                      {pending.advantage > 0
-                        ? "Преимущество"
-                        : pending.advantage < 0
-                          ? "Помеха"
-                          : "Преимущество и помеха отменены"}
-                      :{" "}
-                      {pending.advantage_sources.map((x) => x.name).join(" · ")}
-                    </span>
-                  )}
-                  {pending.expression} {signed(pending.modifier)}
-                  {pending.critical ? " · критический урон" : ""}
-                </p>
-                <button
-                  className="tt-primary"
-                  disabled={busy}
-                  onClick={() =>
-                    void perform("roll", { pending_id: pending.id })
-                  }
-                >
-                  Бросить кубик
-                </button>
-              </div>
+              <RollCard
+                pending={pending}
+                name={name(pending.actor)}
+                busy={busy}
+                roll={() => void perform("roll", { pending_id: pending.id })}
+              />
             )}
             {s.reaction && !pending && (
               <div role="status">
@@ -362,6 +301,16 @@ export function Tabletop({
               </div>
             )}
           </section>
+          <button
+            className="tt-mobile-actions"
+            aria-expanded={mobileActions}
+            onClick={() => {
+              setTab("Игра");
+              setMobileActions(!mobileActions);
+            }}
+          >
+            {mobileActions ? "Вернуться к истории" : "Действия"}
+          </button>
           <nav className="tt-tabs" aria-label="Разделы кампании">
             {[
               "Игра",
@@ -383,52 +332,98 @@ export function Tabletop({
               </button>
             ))}
           </nav>
-          {tab === "Заклинания" && hero ? (
+          {tab === "Настройки" ? (
+            <DMSettings
+              key={game.revision}
+              value={s.dm_settings}
+              busy={busy}
+              save={(settings) => void perform("settings", { settings }, false)}
+              provider={onSettings}
+            />
+          ) : tab === "Заклинания" && hero ? (
             <Spellbook hero={hero} state={s} blocked={blocked} act={act} />
           ) : tab === "Игра" ? (
-            <main className="tt-game-grid">
-              <section className="tt-panel">
+            <main
+              className={`tt-game-grid ${mobileActions ? "tt-show-actions" : ""}`}
+            >
+              <aside className="tt-panel tt-party-summary">
+                <span className="tt-eyebrow">Партия</span>
+                {s.party.map((id) => (
+                  <button
+                    className="tt-member"
+                    key={id}
+                    onClick={() => setTab("Партия")}
+                  >
+                    <strong>{name(id)}</strong>
+                    <span>
+                      {s.characters[id].hp}/{s.characters[id].max_hp} HP ·
+                      уровень {s.characters[id].level}
+                    </span>
+                    <progress
+                      value={s.characters[id].hp}
+                      max={s.characters[id].max_hp}
+                    />
+                  </button>
+                ))}
+                <h3>Текущие задания</h3>
+                {Object.values(s.quests)
+                  .filter((q) => q.status === "active")
+                  .map((q) => (
+                    <p key={q.name}>{q.name}</p>
+                  ))}
+                <button onClick={() => setTab("Журнал")}>Открыть журнал</button>
+              </aside>
+              <section className="tt-panel tt-story-panel">
                 <h2>{s.location}</h2>
                 <p>{s.scene}</p>
                 <div className="tt-history">
-                  {game.history.map((h) => (
-                    <article key={h.revision}>
-                      <small>
-                        #{h.revision} · {h.user_text}
-                      </small>
-                      {h.narrative && (
-                        <p
-                          className="tt-narration"
-                          style={{ whiteSpace: "pre-wrap" }}
-                        >
-                          {h.narrative}
-                        </p>
-                      )}
-                      <div className="tt-mechanics" aria-label="События правил">
-                        {h.events
-                          .filter((e) => !e.roll)
-                          .map((e, i) => (
-                            <p key={i}>{e.text}</p>
-                          ))}
-                      </div>
-                      {h.events
-                        .filter((e) => e.roll)
-                        .map((e, i) => (
-                          <p key={i}>
-                            {name(e.roll!.actor)} ·{" "}
-                            {purposes[e.roll!.purpose] || e.roll!.purpose}: [
-                            {e.roll!.raw.join(", ")}]{" "}
-                            {e.roll!.advantage !== 0
-                              ? `выбрано ${e.roll!.selected} · `
-                              : ""}
-                            {signed(e.roll!.modifier)} ={" "}
-                            <strong>{e.roll!.total}</strong>
+                  {game.history.length > 3 && (
+                    <button onClick={() => setOlderHistory(!olderHistory)}>
+                      {olderHistory
+                        ? "Скрыть ранние события"
+                        : "Предыдущие события"}
+                    </button>
+                  )}
+                  {(olderHistory ? game.history : game.history.slice(-3)).map(
+                    (h) => (
+                      <article key={h.revision}>
+                        <div className="tt-player-text">{h.user_text}</div>
+                        {h.narrative && (
+                          <p
+                            className="tt-narration"
+                            style={{ whiteSpace: "pre-wrap" }}
+                          >
+                            {h.narrative}
                           </p>
-                        ))}
-                    </article>
-                  ))}
+                        )}
+                        <div
+                          className="tt-mechanics"
+                          aria-label="События правил"
+                        >
+                          {h.events
+                            .filter(
+                              (e) => !e.roll && !h.narrative?.includes(e.text),
+                            )
+                            .map((e, i) => (
+                              <p key={i}>{e.text}</p>
+                            ))}
+                        </div>
+                        {h.events
+                          .filter((e) => e.roll)
+                          .map((e, i) => (
+                            <RollResult
+                              key={i}
+                              event={e}
+                              name={name(e.roll!.actor)}
+                            />
+                          ))}
+                      </article>
+                    ),
+                  )}
+                  <div ref={historyEnd} />
                 </div>
                 <form
+                  className="tt-compose"
                   onSubmit={(e) => {
                     e.preventDefault();
                     void perform("actions", { text });
@@ -443,7 +438,17 @@ export function Tabletop({
                       placeholder="Опиши, что хочешь сделать…"
                     />
                   </label>
-                  <button disabled={blocked || !text.trim()}>
+                  {s.dm_settings.hints && (
+                    <small>
+                      {pending
+                        ? "Сначала заверши бросок выше."
+                        : "Опиши намерение своими словами или выбери действие."}
+                    </small>
+                  )}
+                  <button
+                    className="tt-primary"
+                    disabled={blocked || !text.trim()}
+                  >
                     Отправить DM
                   </button>
                 </form>
@@ -455,7 +460,8 @@ export function Tabletop({
                   Откатить действие
                 </button>
               </section>
-              <aside className="tt-panel">
+              <aside className="tt-panel tt-action-panel">
+                {hero && <HeroSummary hero={hero} />}
                 <h2>Действия · {hero?.name}</h2>
                 <div className="tt-actions">
                   {button("Осмотреться", { type: "look" })}
@@ -632,10 +638,15 @@ export function Tabletop({
                 {!enc && (
                   <details>
                     <summary>Расширить мир</summary>
-                    <p>
-                      Напиши запрос нового места в поле действия и нажми кнопку
-                      ниже. Генерация использует модель из настроек.
-                    </p>
+                    <p>Опиши место, которое хочешь исследовать.</p>
+                    <label>
+                      Новое место
+                      <textarea
+                        value={text}
+                        onChange={(e) => setText(e.target.value)}
+                        placeholder="Обсерватория за городом…"
+                      />
+                    </label>
                     <button
                       disabled={blocked || !text.trim() || !prefs.game.model}
                       onClick={() =>
@@ -653,7 +664,9 @@ export function Tabletop({
               </aside>
             </main>
           ) : tab === "Персонаж" ? (
-            s.party.map((id) => sheet(s.characters[id]))
+            s.party.map((id) => (
+              <CharacterSheet key={id} hero={s.characters[id]} open={setTab} />
+            ))
           ) : tab === "Инвентарь" ? (
             s.party.map((id) => {
               const a = s.characters[id];
@@ -804,13 +817,11 @@ export function Tabletop({
                 h.events
                   .filter((e) => e.roll)
                   .map((e, i) => (
-                    <p key={`${h.revision}-${i}`}>
-                      #{h.revision} · {name(e.roll!.actor)} ·{" "}
-                      {purposes[e.roll!.purpose] || e.roll!.purpose}:{" "}
-                      {e.roll!.expression} [{e.roll!.raw.join(", ")}]{" "}
-                      {signed(e.roll!.modifier)} ={" "}
-                      <strong>{e.roll!.total}</strong>
-                    </p>
+                    <RollResult
+                      key={`${h.revision}-${i}`}
+                      event={e}
+                      name={name(e.roll!.actor)}
+                    />
                   )),
               )}
             </section>

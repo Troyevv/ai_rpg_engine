@@ -137,6 +137,10 @@ class CheckService:
             critical=p.critical,
             critical_rule=state.ruleset.critical,
         )
+        if p.purpose in ("check", "save", "spell_save", "concentration"):
+            events[-1].update(
+                dc=p.dc, success=roll.total >= p.dc, ability=p.ability, skill=p.skill
+            )
         if p.advantage_sources:
             events[-1]["sources"] = p.advantage_sources
         state.session_state.pending = None

@@ -1,6 +1,7 @@
 """Canonical state v2. Definitions are compiled, never accepted as runtime patches."""
 
 from typing import Literal
+from .settings import DMSettings
 from .commands import ChoiceOption
 from .features import FeatureDefinition
 from .progression import LevelRule, SubclassDefinition
@@ -257,6 +258,7 @@ class ObjectState(Model):
 
 
 class GameState(Model):
+    dm_settings: DMSettings = Field(default_factory=DMSettings)
     schema_version: Literal[2] = 2
     definition: CampaignDefinition
     campaign: Campaign

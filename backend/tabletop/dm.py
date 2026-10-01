@@ -8,6 +8,7 @@ import llm
 from backend.services.coordinator import LOCAL_MODEL_LOCK
 from backend.services.usage import usage_values, cost, price_snapshot
 from .models import Command
+from .settings import preferences_prompt
 from .narration import contains_mechanical_instruction, safe_narration
 
 
@@ -102,7 +103,10 @@ class DMAgent:
             gid,
             "interpretation",
             [
-                {"role": "system", "content": prompt},
+                {
+                    "role": "system",
+                    "content": prompt + preferences_prompt(state.dm_settings),
+                },
                 {
                     "role": "user",
                     "content": json.dumps(
@@ -168,7 +172,8 @@ class DMAgent:
                     "брось initiative, нанеси damage, добавь modifier/condition, DC 15, выбери действие 1/2, нажми кнопку. "
                     "Всю механику показывает UI. Ты описываешь мир и реакцию NPC, без численных HP/урона/бонусов. "
                     "Учитывай biography/personality/ideals/bonds/flaws героя без механических бонусов. "
-                    "Решения, мысли и чувства игрока не дописывай.",
+                    "Решения, мысли и чувства игрока не дописывай."
+                    + preferences_prompt(state.dm_settings),
                 },
                 {
                     "role": "user",
