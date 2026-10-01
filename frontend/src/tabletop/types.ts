@@ -134,6 +134,7 @@ export type Sheet = {
     { name: string; die: number; ability: string; reach: number }
   >;
   attack_modifiers: Record<string, number>;
+  damage_modifiers: Record<string, number>;
   inventory: Entry[];
   resources: Record<string, number>;
   progression: {
@@ -215,6 +216,7 @@ export type Game = {
   id: string;
   revision: number;
   state: {
+    dm_settings: import("./DMSettings").Settings;
     campaign: string;
     initial_conflict: string;
     plot_hooks: string[];
@@ -274,6 +276,7 @@ export type Game = {
       options: { id: string; label: string }[];
     };
     pending: null | {
+      dc?: number;
       reason: string;
       id: string;
       actor: string;
@@ -309,7 +312,14 @@ export type Game = {
     revision: number;
     user_text: string;
     narrative: string;
-    events: { text: string; kind?: string; success?: boolean; roll?: Roll }[];
+    events: {
+      text: string;
+      kind?: string;
+      success?: boolean;
+      dc?: number;
+      skill?: string;
+      roll?: Roll;
+    }[];
   }[];
   usage: Usage[];
 };

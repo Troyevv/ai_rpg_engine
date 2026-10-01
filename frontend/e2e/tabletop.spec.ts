@@ -1,8 +1,22 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+
+// Both layouts use their visible navigation, including the mobile action drawer.
+async function press(page: Page, name: string | RegExp) {
+  const target = page.getByRole("button", {
+    name,
+    exact: true,
+    includeHidden: true,
+  });
+  await target.waitFor({ state: "attached" });
+  const actions = page.getByRole("button", { name: "Действия", exact: true });
+  if (!(await target.isVisible()) && (await actions.isVisible()))
+    await actions.click();
+  await target.click();
+}
 
 test("generated campaign, quest, combat, loot, expansion and real server restart", async ({
   page,
@@ -52,43 +66,35 @@ test("generated campaign, quest, combat, loot, expansion and real server restart
   try {
     await start();
     await page.goto(base);
-    await page
-      .getByRole("button", { name: "Настольная RPG", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "Создать кампанию", exact: true })
-      .click();
+    await press(page, "Настольная RPG");
+    await press(page, "Создать кампанию");
     await page
       .getByLabel("Идея приключения", { exact: true })
       .fill("Город архивов, исчезнувшая рукопись");
-    await page
-      .getByRole("button", { name: "Сгенерировать мир", exact: true })
-      .click();
+    await press(page, "Сгенерировать мир");
     await expect(
       page.getByRole("heading", { name: "Исчезнувшая рукопись", exact: true }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Далее", exact: true }).click();
+    await press(page, "Далее");
     await page.getByLabel("Имя героя", { exact: true }).fill("Александр");
-    await page
-      .getByRole("button", { name: "10. Внешность", exact: true })
-      .click();
+    await press(page, "10. Внешность");
     await page.getByLabel("Внешность", { exact: true }).fill("Серый плащ");
-    await page.getByRole("button", { name: "Далее", exact: true }).click();
-    await page
-      .getByRole("button", { name: "Начать приключение", exact: true })
-      .click();
+    await press(page, "Далее");
+    await press(page, "Начать приключение");
     const click = async (name: string) => {
-      await page.getByRole("button", { name, exact: true }).click();
+      await press(page, name);
       await expect(
-        page.getByRole("button", { name: "Осмотреться", exact: true }),
+        page.getByRole("button", {
+          name: "Осмотреться",
+          exact: true,
+          includeHidden: true,
+        }),
       ).toBeEnabled();
     };
     await click("Осмотреться");
     await click("Поговорить: Архивариус");
     await click("Перейти: Хранилище");
-    await page
-      .getByRole("button", { name: "Обыскать место", exact: true })
-      .click();
+    await press(page, "Обыскать место");
     await expect(
       page.getByRole("button", { name: "Бросить кубик", exact: true }),
     ).toBeVisible();
@@ -114,9 +120,7 @@ test("generated campaign, quest, combat, loot, expansion and real server restart
     await click("Бросить кубик");
     await click("Открыть: Тайный ящик");
     await click("Взять: Рукопись ×1");
-    await page
-      .getByRole("button", { name: "Начать бой: Страж архива", exact: true })
-      .click();
+    await press(page, "Начать бой: Страж архива");
     await click("Бросить кубик");
     await click("Движение +5");
     await click("Закончить ход");
@@ -132,7 +136,11 @@ test("generated campaign, quest, combat, loot, expansion and real server restart
     );
     await click("Второе дыхание");
     await expect(
-      page.getByRole("button", { name: "Второе дыхание", exact: true }),
+      page.getByRole("button", {
+        name: "Второе дыхание",
+        exact: true,
+        includeHidden: true,
+      }),
     ).toBeDisabled();
     const afterFeature = await page.evaluate(async () =>
       (
@@ -149,10 +157,8 @@ test("generated campaign, quest, combat, loot, expansion and real server restart
     );
     expect(afterFeature.state.encounter.action).toBe(true);
     expect(afterFeature.state.encounter.bonus_action).toBe(false);
-    await page.getByRole("button", { name: "Инвентарь", exact: true }).click();
-    await page
-      .getByRole("button", { name: "Использовать на Александр", exact: true })
-      .click();
+    await press(page, "Инвентарь");
+    await press(page, "Использовать на Александр");
     await expect(
       page.getByRole("button", {
         name: "Использовать на Александр",
@@ -169,47 +175,51 @@ test("generated campaign, quest, combat, loot, expansion and real server restart
     expect(snapshot.state.characters.traveler.hp).toBe(
       snapshot.state.characters.traveler.max_hp,
     );
-    await page.getByRole("button", { name: "Игра", exact: true }).click();
+    await press(page, "Игра");
     await click("Закончить ход");
-    await page.getByRole("button", { name: /^Атаковать Страж:/ }).click();
-    await page
-      .getByRole("button", { name: "Бросить кубик", exact: true })
-      .click();
+    await press(page, /^Атаковать Страж:/);
+    await press(page, "Бросить кубик");
     await expect(page.getByRole("status")).toContainText("Урон");
     await click("Бросить кубик");
     await click("Открыть: Сумка стража");
     await click("Взять: Старинная монета ×3");
     await click("Перейти: Площадь");
     await click("Поговорить: Архивариус");
-    await page
-      .getByRole("button", { name: "Новый уровень: 2", exact: true })
-      .click();
+    await press(page, "Новый уровень: 2");
     await expect(
       page.getByRole("dialog", { name: "Повышение уровня" }),
     ).toContainText("Уровень 1 → 2");
-    await page
-      .getByRole("button", { name: "Подтвердить уровень", exact: true })
-      .click();
+    await press(page, "Подтвердить уровень");
     await expect(
       page.getByRole("button", { name: "Новый уровень: 2", exact: true }),
     ).toHaveCount(0);
-    await page.getByRole("button", { name: "Журнал", exact: true }).click();
+    await press(page, "Журнал");
     await expect(
       page.getByRole("heading", { name: "Вернуть рукопись · Выполнено" }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Инвентарь", exact: true }).click();
+    await press(page, "Инвентарь");
     await expect(
       page.getByRole("heading", { name: "Старинная монета ×8", exact: true }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Персонаж", exact: true }).click();
+    await press(page, "Персонаж");
     await expect(page.getByText("Серый плащ", { exact: false })).toBeVisible();
-    await page.getByRole("button", { name: "Игра", exact: true }).click();
+    await press(page, "Игра");
     await page.getByLabel("Твоё действие").fill("Найти обсерваторию");
+    if (
+      await page
+        .getByRole("button", { name: "Действия", exact: true })
+        .isVisible()
+    )
+      await press(page, "Действия");
     await page.getByText("Расширить мир", { exact: true }).click();
     await click("Создать новое место");
     await expect(
-      page.getByRole("button", { name: "Перейти: Обсерватория", exact: true }),
-    ).toBeVisible();
+      page.getByRole("button", {
+        name: "Перейти: Обсерватория",
+        exact: true,
+        includeHidden: true,
+      }),
+    ).toBeAttached();
     const leveled = await page.evaluate(async () =>
       (
         await fetch(
@@ -218,18 +228,37 @@ test("generated campaign, quest, combat, loot, expansion and real server restart
       ).json(),
     );
     expect(leveled.state.characters.traveler.level).toBe(2);
-    await page.getByRole("button", { name: "Карта", exact: true }).click();
+    await stop();
+    await start();
+    await page.reload();
+    const resumed = await page.evaluate(async () =>
+      (
+        await fetch(
+          "/api/tabletop/games/" + localStorage.getItem("tabletop-game"),
+        )
+      ).json(),
+    );
+    expect(resumed.state).toEqual(leveled.state);
+    await press(page, "Перейти: Обсерватория");
+    await expect(page.locator(".tt-header")).toContainText("Обсерватория");
+    await page.screenshot({
+      path: `test-results/tabletop-game-${info.project.name}.png`,
+      fullPage: true,
+    });
+
+    await press(page, "Карта");
     await expect(
-      page.getByRole("heading", { name: "Обсерватория", exact: true }),
+      page.getByRole("heading", {
+        name: "Обсерватория · ты здесь",
+        exact: true,
+      }),
     ).toBeVisible();
     await page.screenshot({
       path: `test-results/tabletop-v2-${info.project.name}.png`,
       fullPage: true,
     });
-    await page.getByRole("button", { name: "DM", exact: true }).click();
-    await page
-      .getByRole("button", { name: "Показать публичный контекст", exact: true })
-      .click();
+    await press(page, "DM");
+    await press(page, "Показать публичный контекст");
     await expect(page.locator(".tt-json")).toBeVisible();
     expect(await page.locator(".tt-shell").innerText()).not.toContain(
       "NEVER_DISCLOSE",
@@ -249,18 +278,12 @@ test("invalid generated draft shows all diagnostics and requires explicit correc
   page,
 }) => {
   await page.goto("/");
-  await page
-    .getByRole("button", { name: "Настольная RPG", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Создать кампанию", exact: true })
-    .click();
+  await press(page, "Настольная RPG");
+  await press(page, "Создать кампанию");
   await page
     .getByLabel("Идея приключения", { exact: true })
     .fill("invalid references");
-  await page
-    .getByRole("button", { name: "Сгенерировать мир", exact: true })
-    .click();
+  await press(page, "Сгенерировать мир");
   await expect(page.getByRole("alert")).toContainText("missing_secret");
   await expect(page.getByRole("alert")).toContainText("missing_actor");
   await page.getByText("Диагностика проверки (2)", { exact: true }).click();
@@ -283,9 +306,7 @@ test("invalid generated draft shows all diagnostics and requires explicit correc
     );
   });
   await page.reload();
-  await page
-    .getByRole("button", { name: "Создать кампанию", exact: true })
-    .click();
+  await press(page, "Создать кампанию");
   await page.getByLabel("Продолжить черновик").selectOption(invalid.id);
   await expect(
     page.getByRole("button", { name: "Далее", exact: true }),
@@ -304,7 +325,7 @@ test("invalid generated draft shows all diagnostics and requires explicit correc
     page.getByRole("button", { name: "Далее", exact: true }),
   ).toBeEnabled();
   await expect(page.locator(".tt-diagnostics")).toHaveCount(0);
-  await page.getByRole("button", { name: "Далее", exact: true }).click();
+  await press(page, "Далее");
   await expect(page.getByLabel("Имя героя", { exact: true })).toBeVisible();
 });
 
@@ -312,52 +333,63 @@ test("AI DM check and choice have durable mechanical controls", async ({
   page,
 }) => {
   await page.goto("/");
-  await page
-    .getByRole("button", { name: "Настольная RPG", exact: true })
-    .click();
+  await press(page, "Настольная RPG");
   await expect(page.getByLabel("LLM DM", { exact: true })).toHaveCount(0);
-  await page
-    .getByRole("button", { name: "Создать кампанию", exact: true })
-    .click();
+  await press(page, "Создать кампанию");
   await page
     .getByLabel("Идея приключения", { exact: true })
     .fill("Протокол ведущего");
+  await press(page, "Сгенерировать мир");
+  await press(page, "Далее");
+  await press(page, "Далее");
+  await press(page, "Начать приключение");
+  await expect(page.locator(".tt-playing")).toBeVisible();
+  await press(page, "Настройки DM");
+  await page.getByLabel("Стиль", { exact: true }).selectOption("dark");
   await page
-    .getByRole("button", { name: "Сгенерировать мир", exact: true })
-    .click();
-  await page.getByRole("button", { name: "Далее", exact: true }).click();
-  await page.getByRole("button", { name: "Далее", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Начать приключение", exact: true })
-    .click();
+    .getByLabel("Сложность проверок", { exact: true })
+    .selectOption("always");
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.url().endsWith("/settings") && r.request().method() === "POST",
+    ),
+    press(page, "Сохранить настройки ведущего"),
+  ]);
+  await page.reload();
+  await expect(page.locator(".tt-playing")).toBeVisible();
+  await press(page, "Настройки DM");
+  await expect(page.getByLabel("Стиль", { exact: true })).toHaveValue("dark");
+  await expect(
+    page.getByLabel("Сложность проверок", { exact: true }),
+  ).toHaveValue("always");
+  await press(page, "Игра");
   const input = page.getByLabel("Твоё действие", { exact: true });
   await input.fill("Пробираюсь через затопленный тоннель");
-  await page.getByRole("button", { name: "Отправить DM", exact: true }).click();
+  await press(page, "Отправить DM");
   await expect(page.getByRole("status")).toContainText("Сильное течение");
+  await expect(page.getByRole("status")).toContainText("Сложность: 15");
+  await page.screenshot({
+    path: `test-results/tabletop-roll-${test.info().project.name}.png`,
+    fullPage: true,
+  });
   await expect(input).toBeDisabled();
   await page.reload();
   await expect(input).toBeDisabled();
-  await page
-    .getByRole("button", { name: "Бросить кубик", exact: true })
-    .click();
+  await press(page, "Бросить кубик");
   await expect(input).toBeEnabled();
   await input.fill("Уточнить путь");
-  await page.getByRole("button", { name: "Отправить DM", exact: true }).click();
+  await press(page, "Отправить DM");
   await expect(page.getByRole("status")).toContainText(
     "Как обследуешь проход?",
   );
   await expect(input).toBeDisabled();
   await page.reload();
-  await page
-    .getByRole("button", { name: "Проверить течение", exact: true })
-    .click();
+  await press(page, "Проверить течение");
   await expect(
     page.getByRole("button", { name: "Бросить кубик", exact: true }),
   ).toBeVisible();
   await expect(input).toBeDisabled();
-  await page
-    .getByRole("button", { name: "Бросить кубик", exact: true })
-    .click();
+  await press(page, "Бросить кубик");
   await expect(input).toBeEnabled();
 });
 
@@ -365,55 +397,39 @@ test("point buy and AI portrait are reviewed before character creation", async (
   page,
 }, testInfo) => {
   await page.goto("/");
-  await page
-    .getByRole("button", { name: "Настольная RPG", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Создать кампанию", exact: true })
-    .click();
+  await press(page, "Настольная RPG");
+  await press(page, "Создать кампанию");
   await page
     .getByLabel("Идея приключения", { exact: true })
     .fill("Герой с характером");
-  await page
-    .getByRole("button", { name: "Сгенерировать мир", exact: true })
-    .click();
-  await page.getByRole("button", { name: "Далее", exact: true }).click();
+  await press(page, "Сгенерировать мир");
+  await press(page, "Далее");
   await page
     .getByLabel("Концепция героя", { exact: true })
     .fill("Бывший городской стражник");
-  await page
-    .getByRole("button", { name: "✨ Сгенерировать персонажа", exact: true })
-    .click();
+  await press(page, "✨ Сгенерировать персонажа");
   await expect(
     page.getByLabel("Предложение ведущего", { exact: true }),
   ).toContainText("Бывший городской стражник");
-  await page
-    .getByRole("button", { name: "Принять портрет", exact: true })
-    .click();
+  await press(page, "Принять портрет");
   await expect(page.getByLabel("Имя героя", { exact: true })).toHaveValue(
     "Александр",
   );
-  await page
-    .getByRole("button", { name: "5. Характеристики", exact: true })
-    .click();
+  await press(page, "5. Характеристики");
   await page
     .getByLabel("Метод характеристик", { exact: true })
     .selectOption("point_buy");
   await expect(
     page.getByRole("status", { name: "Бюджет характеристик" }),
   ).toContainText("Осталось очков: 27");
-  await page
-    .getByRole("button", { name: "Увеличить: Сила", exact: true })
-    .click();
+  await press(page, "Увеличить: Сила");
   await expect(
     page.getByRole("status", { name: "Бюджет характеристик" }),
   ).toContainText("Осталось очков: 26");
   await expect(
     page.getByLabel("Предварительный лист персонажа", { exact: true }),
   ).toContainText("Сила -1");
-  await page
-    .getByRole("button", { name: "Уменьшить: Сила", exact: true })
-    .click();
+  await press(page, "Уменьшить: Сила");
   await expect(
     page.getByRole("status", { name: "Бюджет характеристик" }),
   ).toContainText("Осталось очков: 27");
@@ -421,11 +437,10 @@ test("point buy and AI portrait are reviewed before character creation", async (
     path: `test-results/creator-${testInfo.project.name}.png`,
     fullPage: true,
   });
-  await page.getByRole("button", { name: "Далее", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Начать приключение", exact: true })
-    .click();
-  await page.getByRole("button", { name: "Персонаж", exact: true }).click();
+  await press(page, "Далее");
+  await press(page, "Начать приключение");
+  await press(page, "Персонаж");
+  await press(page, "Биография");
   await expect(
     page.getByText("Бывший городской стражник.", { exact: false }),
   ).toBeVisible();
@@ -435,47 +450,29 @@ test("wizard creator and spellbook keep casting pending across reload", async ({
   page,
 }) => {
   await page.goto("/");
-  await page
-    .getByRole("button", { name: "Настольная RPG", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Создать кампанию", exact: true })
-    .click();
+  await press(page, "Настольная RPG");
+  await press(page, "Создать кампанию");
   await page
     .getByLabel("Идея приключения", { exact: true })
     .fill("Маг в библиотеке");
-  await page
-    .getByRole("button", { name: "Сгенерировать мир", exact: true })
-    .click();
-  await page.getByRole("button", { name: "Далее", exact: true }).click();
-  await page.getByRole("button", { name: "3. Класс", exact: true }).click();
+  await press(page, "Сгенерировать мир");
+  await press(page, "Далее");
+  await press(page, "3. Класс");
   await page.getByRole("button", { name: /^Маг Кость здоровья/ }).click();
-  await page
-    .getByRole("button", { name: "9. Заклинания", exact: true })
-    .click();
+  await press(page, "9. Заклинания");
   await expect(
     page.getByLabel("Знать Огненная стрела", { exact: true }),
   ).toBeChecked();
-  await page.getByRole("button", { name: "Далее", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Начать приключение", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Перейти: Хранилище", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Начать бой: Страж архива", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Бросить кубик", exact: true })
-    .click();
-  await page.getByRole("button", { name: "Заклинания", exact: true }).click();
+  await press(page, "Далее");
+  await press(page, "Начать приключение");
+  await press(page, "Перейти: Хранилище");
+  await press(page, "Начать бой: Страж архива");
+  await press(page, "Бросить кубик");
+  await press(page, "Заклинания");
   await page
     .getByLabel("Цель заклинания", { exact: true })
     .selectOption("sentinel");
-  await page
-    .getByRole("button", { name: "Сотворить: Огненная стрела", exact: true })
-    .click();
+  await press(page, "Сотворить: Огненная стрела");
   const snapshot = () =>
     page.evaluate(async () =>
       (
@@ -488,15 +485,11 @@ test("wizard creator and spellbook keep casting pending across reload", async ({
     .poll(async () => (await snapshot()).state.pending?.purpose)
     .toBe("spell_attack");
   await page.reload();
-  await page
-    .getByRole("button", { name: "Бросить кубик", exact: true })
-    .click();
+  await press(page, "Бросить кубик");
   await expect
     .poll(async () => (await snapshot()).state.pending?.purpose)
     .toBe("spell_damage");
-  await page
-    .getByRole("button", { name: "Бросить кубик", exact: true })
-    .click();
+  await press(page, "Бросить кубик");
   await expect.poll(async () => (await snapshot()).state.pending).toBeNull();
   expect(
     (await snapshot()).state.characters.traveler.spell_slots["1"].remaining,

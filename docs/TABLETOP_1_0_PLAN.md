@@ -11,8 +11,8 @@
 | C | codex/tabletop-combat-features | Features/resources, actions, conditions, advantage, reactions, GameAI, combat HUD | Реализован; 574 backend / 8 tabletop E2E / build |
 | D | codex/tabletop-spellcasting | Spell catalog/slots, attacks/saves/AoE/concentration, spell UI | Реализован; 589 backend / 10 tabletop E2E / build |
 | E | codex/tabletop-progression | XP/milestones, levels 1–20, subclasses/ASI/feats, level-up UI | Реализован; 604 backend / campaign desktop+mobile E2E / build |
-| F | codex/tabletop-living-world | Campaign/world generation, travel, factions/quests/secrets, evolving world | Реализован; 617 backend / build |
-| G | — | Final desktop/mobile UX, sheets, spellbook, journal/map/party, DM settings | Ожидает |
+| F | codex/tabletop-living-world | Campaign/world generation, travel, factions/quests/secrets, evolving world | Реализован; 617 backend / 10 tabletop E2E / build |
+| G | codex/tabletop-game-ux | Desktop/mobile UX, sheets, spellbook, journal/map/party, DM settings | Реализован; 622 backend / 10 tabletop E2E / build |
 
 Каждый следующий PR основан на предыдущем. Merge/deploy отдельны от реализации.
 Нельзя вводить generic state patches, доверять LLM RNG/HP/damage/resources, repair
@@ -141,3 +141,29 @@ spells → quest reward/progression/level-up → dynamic expansion → save/rest
   Развитие существующего героя сохраняется.
 - Проверены неверные ссылки, движение/перезапуск/приватность, условия расписаний,
   репутация без повторного начисления, расширение и сохранение уровня героя.
+
+## G: игровой интерфейс и настройки
+
+- Desktop: партия и активные задания слева, сцена/история/composer в центре,
+  герой/ресурсы/контекстные действия справа. Ранние события раскрываются отдельно.
+- Mobile: компактная шапка, нижняя навигация, отдельная панель действий вместо
+  длинного desktop-sidebar под историей. Обязательные броски остаются общими.
+- RollCard показывает причину, характеристику/навык, модификатор, преимущество и
+  разрешённую настройкой сложность. RollResult показывает реальные кубики, выбранное
+  значение, итог и подтверждённый исход check/save. Composer заблокирован до разрешения.
+- CombatHUD показывает очередь инициативы, текущий ход и бюджет действий. Лист героя
+  разделён на обзор/характеристики/навыки/бой/способности/биографию, с переходами
+  к снаряжению и магии. Книга заклинаний использует карточки с реальными ресурсами.
+- DMSettings сохраняются атомарно в snapshot с CAS/idempotency/replay: стиль, свой
+  стиль, трактовка намерений, видимость DC, подсказки, длина. Строгость не меняет
+  RulesEngine. Настройки провайдера/модели/Thinking доступны из этого экрана.
+- История API скрывает DC по настройке; старые сохранения получают безопасные defaults.
+  Проверены все три режима DC, неизменность механики, stale revision, повтор запроса,
+  replay и передача предпочтений обоим DM prompts.
+- Сквозной campaign-сценарий дополнен вторым настоящим перезапуском сервера после
+  level-up/expansion и продолжением в новой области. Магия проверяется отдельным
+  browser-сценарием мага с перезагрузкой между фазами, настройки — сценарием DM check.
+
+Ограничения проверки: LLM подменён в автоматических тестах. Живой DeepSeek/local
+provider без доступных учётных данных не тестировался. Каталог — собственный D20
+Fantasy, не заявление о полном воспроизведении официального D&D.

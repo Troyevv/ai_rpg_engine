@@ -9,12 +9,13 @@ from fastapi.responses import JSONResponse
 from .validation import CampaignValidationError
 from pydantic import Field, model_validator
 from backend.api.schemas import Credential, ModelConfig
+from .settings import DMSettings
 from .models import NewGame
 from .commands import CommandType
 from .definitions import CampaignDefinition, GenerationOptions, CharacterBuild
 from .repository import TabletopRepository
 from .runtime import TabletopRuntime
-from .projection import public_state
+from .projection import public_state, public_history
 from .compiler import CampaignCompiler
 from .catalog import load_ruleset
 from .dm import DMAgent, DMContextBuilder
@@ -26,6 +27,10 @@ class Request(Credential):
     revision: int = Field(ge=0)
     request_id: str = Field(min_length=8, max_length=100)
     config: ModelConfig | None = None
+
+
+class SettingsRequest(Request):
+    settings: DMSettings
 
 
 class ActionRequest(Request):
@@ -84,7 +89,7 @@ def install(app, shared_repo, credentials):
             "id": gid,
             "revision": revision,
             "state": public_state(state),
-            "history": repo.history(gid),
+            "history": public_history(repo.history(gid), state.dm_settings),
             "usage": repo.usage(gid)
             + (
                 repo.usage(state.campaign.source_draft)
@@ -302,6 +307,23 @@ def install(app, shared_repo, credentials):
             "public_context": DMContextBuilder.build(state),
             "dm_hidden_context": "Скрытая часть используется сервером и не выдаётся игроку.",
         }
+
+    @router.post("/games/{gid}/settings")
+    def settings(gid: str, body: SettingsRequest):
+        state, fp = prepare(gid, body, "settings")
+        if state is None:
+            return snapshot(gid)
+        state.dm_settings = body.settings
+        repo.commit(
+            gid,
+            body.revision,
+            body.request_id,
+            fp,
+            state,
+            [{"text": "Настройки ведущего сохранены.", "kind": "settings"}],
+            "Настройки ведущего",
+        )
+        return snapshot(gid)
 
     @router.post("/games/{gid}/actions")
     def action(gid: str, body: ActionRequest):

@@ -60,6 +60,9 @@ class PublicProjection:
                 },
                 save_modifiers={k: rules.save_modifier(a, k) for k in a.abilities},
                 attack_modifiers={k: rules.attack_modifier(a, k) for k in a.attacks},
+                damage_modifiers={
+                    k: rules.damage_modifier(a, k, state.ruleset) for k in a.attacks
+                },
                 controller=state.controllers[aid].model_dump(),
                 progression=ProgressionService.options(state, a),
                 spell_definitions=[
@@ -132,6 +135,7 @@ class PublicProjection:
         p = state.session_state.pending
         e = state.encounter
         return {
+            "dm_settings": state.dm_settings.model_dump(),
             "campaign": state.campaign.name,
             "ruleset": {"id": state.ruleset.id, "name": state.ruleset.name},
             "initial_conflict": state.definition.initial_conflict,
@@ -189,7 +193,9 @@ class PublicProjection:
                 {
                     k: v
                     for k, v in p.model_dump().items()
-                    if k
+                    if k == "dc"
+                    and state.dm_settings.difficulty == "always"
+                    or k
                     in (
                         "id",
                         "purpose",
@@ -320,3 +326,14 @@ class NarrationProjection:
             "encounter": p["encounter"],
             "events": (events or [])[-20:],
         }
+
+
+def public_history(history, settings):
+    from copy import deepcopy
+
+    result = deepcopy(history)
+    if settings.difficulty == "hidden":
+        for turn in result:
+            for event in turn["events"]:
+                event.pop("dc", None)
+    return result
