@@ -8,7 +8,7 @@
 |---|---|---|---|
 | A | codex/tabletop-dm-protocol | DM protocol, typed commands, pending choices, services | Реализован; 496 backend / 6 tabletop E2E / build |
 | B | codex/tabletop-character-creator | Creator, point buy, live sheet, species/classes/backgrounds/skills, roleplay generation, feature catalog | Реализован; 550 backend / 8 tabletop E2E / build |
-| C | — | Features/resources, actions, conditions, advantage, reactions, GameAI, combat HUD | Ожидает |
+| C | codex/tabletop-combat-features | Features/resources, actions, conditions, advantage, reactions, GameAI, combat HUD | Реализован; 574 backend / 8 tabletop E2E / build |
 | D | — | Spell catalog/slots, attacks/saves/AoE/concentration, spell UI | Ожидает |
 | E | — | XP/milestones, levels 1–20, subclasses/ASI/feats, level-up UI | Ожидает |
 | F | — | Campaign/world generation, travel, factions/quests/secrets, evolving world | Ожидает |
@@ -75,3 +75,24 @@ spells → quest reward/progression/level-up → dynamic expansion → save/rest
   Это готовность этапа B, а не готовность всей версии 1.0.
 - Проверки: 36 сочетаний классов/видов, эффекты, стоимость характеристик, совместимость,
   preview/compiler equality, roleplay boundary, desktop/mobile AI portrait→point buy→start.
+
+## C: способности и бой
+
+- FeatureService проверяет каталог, владение, уровень, цель, досягаемость, действие и ресурс.
+  Второе дыхание, ярость, хитрые действия, прицеливание, исцеляющее касание и защита
+  имеют реальные эффекты и восстановление на коротком/долгом отдыхе. Значения относятся
+  к собственному D20 Fantasy, а не являются заявлением о точном воспроизведении D&D.
+- ConditionDefinition централизует блокировку действий, скорость, модификаторы d20,
+  урон и сопротивление. Любое преимущество и любая помеха взаимно отменяются независимо
+  от числа источников. PendingRoll сохраняет объяснения, UI показывает их и выбранный кубик.
+- Hide, Grapple, Shove, Escape используют PendingRoll и пассивную защиту; Stand тратит
+  движение. Захват снимается при отходе источника или его потере сознания.
+- Ready готовит атаку на начало хода указанной цели в досягаемости; срабатывание использует
+  сохраняемый протокол реакции. Это явный поддержанный триггер, не произвольный текст.
+- У D20 Fantasy первое простое взаимодействие бесплатно, последующее тратит действие;
+  Use Object и Use Item используют действие. Старые правила сохраняют прежнюю стоимость.
+- GameAI имеет UseFeature, SeekCover и Surrender; решения входят в подтверждённые события.
+  SeekCover использует защитную стойку, а не выдумывает геометрию укрытий отсутствующей карты.
+- Cast Spell и соответствующий AI behavior появятся в D вместе с механикой магии.
+- Проверяются недоступные способности/цели, атомарный отказ, отдых, преимущества, запреты
+  условий, манёвры, Ready/restart/reaction, повтор HTTP, stale revision, replay и rollback.

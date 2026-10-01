@@ -187,6 +187,71 @@ class Dash(Behavior):
         )
 
 
+class UseFeature(Behavior):
+    def candidates(self, c):
+        options = []
+        for fid in c.actor.features:
+            f = c.state.ruleset.features.get(fid)
+            if (
+                not f
+                or f.activation not in ("ACTION", "BONUS_ACTION")
+                or (f.resource and c.actor.resources.get(f.resource, 0) <= 0)
+            ):
+                continue
+            if not (
+                c.encounter.action
+                if f.activation == "ACTION"
+                else c.encounter.bonus_action
+            ):
+                continue
+            healing = any(e.type == "heal" for e in f.effects)
+            if healing:
+                targets = [c.actor] + (c.allies if f.target == "ally" else [])
+                targets = [
+                    a
+                    for a in targets
+                    if a.hp < a.max_hp and abs(a.position - c.actor.position) <= f.reach
+                ]
+                if not targets:
+                    continue
+                target = min(targets, key=lambda a: a.hp / a.max_hp)
+                score = 1.4 if target.hp / target.max_hp < 0.6 else 0.2
+            else:
+                if not any(
+                    e.type == "condition" and e.key not in c.actor.conditions
+                    for e in f.effects
+                ):
+                    continue
+                target, score = c.actor, 0.8
+            options.append(
+                Decision(
+                    "UseFeature",
+                    score,
+                    Command(type="use_feature", feature_id=fid, target=target.id),
+                )
+            )
+        return options
+
+
+class SeekCover(Behavior):
+    def candidates(self, c):
+        if (
+            c.encounter.action
+            and c.target
+            and c.danger > 0.5
+            and abs(c.target.position - c.actor.position) > 5
+        ):
+            return [Decision("SeekCover", 0.6, Command(type="seek_cover"))]
+        return []
+
+
+class Surrender(Behavior):
+    def candidates(self, c):
+        if c.danger > 0.8 and c.actor.morale < 0.25 and not c.encounter.movement:
+            return [Decision("Surrender", 2, Command(type="surrender"))]
+        return []
+
+
 class BehaviorRegistry:
     def __init__(self, behaviors=None):
         self.behaviors = behaviors or [
@@ -199,6 +264,9 @@ class BehaviorRegistry:
             ProtectAlly(),
             Disengage(),
             Dash(),
+            UseFeature(),
+            SeekCover(),
+            Surrender(),
         ]
 
     def options(self, context):

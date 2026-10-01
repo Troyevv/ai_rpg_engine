@@ -325,6 +325,17 @@ def install(app, shared_repo, credentials):
         else:
             after, events = runtime.execute(state, command)
         labels = {
+            "use_feature": "Применить способность",
+            "grapple": "Захватить",
+            "shove": "Сбить с ног",
+            "ready": "Подготовить атаку",
+            "hide": "Скрыться",
+            "search": "Обыскать",
+            "stand": "Встать",
+            "escape": "Освободиться",
+            "surrender": "Сдаться",
+            "seek_cover": "Занять защитную позицию",
+            "use_object": "Использовать объект",
             "look": "Осмотреться",
             "dialogue": "Поговорить",
             "check": "Выполнить проверку",

@@ -42,6 +42,26 @@ class AttackCommand(ActorCommand):
     weapon: str = Field(default="", max_length=80)
 
 
+class UseFeatureCommand(ActorCommand):
+    type: Literal["use_feature"] = "use_feature"
+    feature_id: str = Field(min_length=1, max_length=80)
+    target: str = Field(default="", max_length=80)
+
+
+class ManeuverCommand(ActorCommand):
+    type: Literal["grapple", "shove", "ready"]
+    target: str = Field(min_length=1, max_length=80)
+
+
+class TacticalCommand(ActorCommand):
+    type: Literal["hide", "search", "stand", "escape", "surrender", "seek_cover"]
+
+
+class UseObjectCommand(ActorCommand):
+    type: Literal["use_object"] = "use_object"
+    target: str = Field(min_length=1, max_length=80)
+
+
 class InteractCommand(ActorCommand):
     type: Literal["interact"] = "interact"
     target: str = Field(min_length=1, max_length=80)
@@ -116,6 +136,10 @@ ActionCommand = Annotated[
         CheckCommand,
         SaveCommand,
         AttackCommand,
+        UseFeatureCommand,
+        ManeuverCommand,
+        TacticalCommand,
+        UseObjectCommand,
         InteractCommand,
         DialogueCommand,
         UseItemCommand,

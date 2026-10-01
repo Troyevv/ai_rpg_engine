@@ -87,7 +87,7 @@ class EncounterService:
                 if t == "dodge":
                     a.conditions.append("dodge")
                 elif t == "dash":
-                    e.movement += a.speed
+                    e.movement += self.runtime.rules.speed(a, state.ruleset)
                 elif t == "disengage":
                     e.disengaged = True
                 else:
@@ -115,10 +115,10 @@ class EncounterService:
     def attack(self, state, aid, target, weapon, events, reaction=False):
         a, t = self.runtime.combat.validate_attack(state, aid, target, weapon)
         if state.controllers[aid].controller == "PLAYER":
-            advantage = (1 if "helped" in a.conditions else 0) - (
-                1 if "dodge" in t.conditions else 0
+            advantage, sources = self.runtime.rules.conditions.advantage(
+                a, state.ruleset, "attack", t, distance=abs(a.position - t.position)
             )
-            a.conditions = [x for x in a.conditions if x != "helped"]
+            self.runtime.rules.conditions.expire(a, state.ruleset, "attack")
             self.runtime.pending(
                 state,
                 "attack",
@@ -128,6 +128,7 @@ class EncounterService:
                 dc=t.armor_class,
                 weapon=weapon,
                 advantage=advantage,
+                advantage_sources=sources,
                 outcome="reaction" if reaction else "attack",
             )
             event(events, f"{a.name} атакует {t.name}. Брось кубик.", kind="pending")
@@ -158,7 +159,11 @@ class EncounterService:
     def move(self, state, aid, distance, events):
         e = state.encounter
         a = state.actor(aid)
-        if not distance or abs(distance) > e.movement:
+        if (
+            not distance
+            or abs(distance) > e.movement
+            or self.runtime.rules.speed(a, state.ruleset) == 0
+        ):
             raise ValueError("Недостаточно перемещения")
         new_position = a.position + distance
         if not e.disengaged:
@@ -169,7 +174,7 @@ class EncounterService:
                     not state.hostile(aid, oid)
                     or not weapon
                     or other.hp <= 0
-                    or ("fled" in other.conditions)
+                    or self.runtime.rules.conditions.blocked(other, state.ruleset)
                     or (not e.reaction.get(oid))
                 ):
                     continue
@@ -195,6 +200,13 @@ class EncounterService:
                 self.runtime.combat.npc_attack(state, oid, aid, weapon, events)
                 if a.hp <= 0:
                     return
+        for other in state.actors().values():
+            if (
+                other.condition_sources.get("grappled") == aid
+                and abs(other.position - new_position) > 5
+            ):
+                other.conditions = [c for c in other.conditions if c != "grappled"]
+                other.condition_sources.pop("grappled", None)
         a.position = new_position
         e.movement -= abs(distance)
         event(events, f"{a.name}: перемещение {distance} футов.", kind="move")
@@ -224,6 +236,11 @@ class EncounterService:
             aid = e.order[e.index]
             a = state.actor(aid)
             control = state.controllers[aid]
+            if self.runtime.tactics_service.trigger_ready(state, events):
+                return
+            if a.hp > 0 and self.runtime.rules.conditions.blocked(a, state.ruleset):
+                self.runtime.combat.advance(state)
+                continue
             if set(a.conditions) & {"dead", "stable", "fled"}:
                 self.runtime.combat.advance(state)
                 continue
@@ -240,7 +257,15 @@ class EncounterService:
                 continue
             if control.controller == "PLAYER":
                 return
-            command = self.runtime.ai.decide(state, aid)
+            decision = self.runtime.ai.decision(state, aid)
+            event(
+                events,
+                a.name + ": " + decision.behavior,
+                kind="ai_decision",
+                actor=aid,
+                behavior=decision.behavior,
+            )
+            command = decision.command
             self.runtime.apply(state, command, aid, events)
         raise ValueError(
             "Превышен предел автоматических действий; состояние не изменено"

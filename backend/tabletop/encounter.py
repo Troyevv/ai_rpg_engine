@@ -37,11 +37,14 @@ class EncounterEngine:
     def reset_turn(state):
         e = state.encounter
         a = state.actor(e.order[e.index])
-        e.action = e.bonus_action = True
+        e.action = e.bonus_action = e.free_interaction = True
+        e.ready.pop(a.id, None)
         e.disengaged = False
-        e.movement = a.speed
+        from .conditions import ConditionEngine
+
+        e.movement = ConditionEngine.speed(a, state.ruleset)
         e.reaction[a.id] = True
-        a.conditions = [c for c in a.conditions if c not in ("dodge", "guard")]
+        ConditionEngine.expire(a, state.ruleset, "turn_start")
         state.session_state.turn_started = False
 
     def advance(self, state):
@@ -64,7 +67,7 @@ class EncounterEngine:
                 or state.controllers[i].controller == "PLAYER"
                 and "stable" not in state.actor(i).conditions
             )
-            and not set(state.actor(i).conditions) & {"dead", "fled"}
+            and not set(state.actor(i).conditions) & {"dead", "fled", "surrendered"}
         ]
         if any(state.hostile(a, b) for a in active for b in active):
             return False
@@ -78,7 +81,8 @@ class EncounterEngine:
         state.session_state.pending = None
         if e.outcome == "victory" and e.definition_id not in state.completed_encounters:
             state.completed_encounters.append(e.definition_id)
-        for aid in party_here:
+        for aid in e.order:
+            self.rules.conditions.expire(state.actor(aid), state.ruleset, "encounter")
             state.actor(aid).conditions = [
                 c for c in state.actor(aid).conditions if c != "fled"
             ]
@@ -123,7 +127,19 @@ class EncounterEngine:
             amount = max(0, amount - 2)
             target.conditions.remove("guard")
             event(events, "Защитная реакция поглощает 2 урона.")
+        if any(
+            c.resistance
+            for c in self.rules.conditions.definitions(target, state.ruleset)
+        ):
+            amount //= 2
         dealt = self.rules.damage(target, amount, critical)
+        for actor in [
+            state.actor(i)
+            for i in (state.encounter.order if state.encounter else state.party)
+        ]:
+            if actor.condition_sources.get("grappled") == target.id and target.hp <= 0:
+                actor.conditions = [c for c in actor.conditions if c != "grappled"]
+                actor.condition_sources.pop("grappled", None)
         event(
             events,
             f"{target.name}: получено {dealt} урона.",
@@ -135,10 +151,17 @@ class EncounterEngine:
 
     def npc_attack(self, state, actor_id, target_id, weapon, events):
         a, t = self.validate_attack(state, actor_id, target_id, weapon)
-        advantage = (1 if "helped" in a.conditions else 0) - (
-            1 if "dodge" in t.conditions else 0
+        advantage, sources = self.rules.conditions.advantage(
+            a, state.ruleset, "attack", t, distance=abs(a.position - t.position)
         )
-        a.conditions = [c for c in a.conditions if c != "helped"]
+        self.rules.conditions.expire(a, state.ruleset, "attack")
+        if sources:
+            event(
+                events,
+                "Источники преимущества/помехи.",
+                kind="advantage",
+                sources=sources,
+            )
         roll = self.roll(
             events,
             "1d20",
@@ -152,7 +175,7 @@ class EncounterEngine:
             damage = self.roll(
                 events,
                 f"1d{w.die}",
-                modifier=self.rules.modifier(a.abilities[w.ability]),
+                modifier=self.rules.damage_modifier(a, weapon, state.ruleset),
                 critical=roll.selected == 20,
                 critical_rule=state.ruleset.critical,
                 purpose="damage",

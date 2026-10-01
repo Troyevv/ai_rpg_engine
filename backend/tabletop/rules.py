@@ -1,9 +1,20 @@
 """D20 mechanics selected by ruleset capabilities/configuration."""
 
 from .models import CharacterSheet
+from .conditions import ConditionEngine
 
 
 class RulesEngine:
+    conditions = ConditionEngine
+    speed = staticmethod(ConditionEngine.speed)
+
+    def damage_modifier(self, actor, weapon, rules):
+        return (
+            self.modifier(actor.abilities[actor.attacks[weapon].ability])
+            + actor.bonuses.get("damage_bonus", 0)
+            + sum(c.damage_bonus for c in self.conditions.definitions(actor, rules))
+        )
+
     @staticmethod
     def modifier(score):
         return (score - 10) // 2

@@ -110,7 +110,8 @@
         ]
       ],
       "features": [
-        "martial_training"
+        "martial_training",
+        "second_wind"
       ],
       "armor": [
         "light",
@@ -163,7 +164,9 @@
         ]
       ],
       "features": [
-        "cunning"
+        "cunning",
+        "cunning_dash",
+        "cunning_disengage"
       ],
       "armor": [
         "light"
@@ -207,7 +210,8 @@
         ]
       ],
       "features": [
-        "pathfinder"
+        "pathfinder",
+        "steady_aim"
       ],
       "armor": [
         "light",
@@ -252,7 +256,8 @@
         ]
       ],
       "features": [
-        "hardy"
+        "hardy",
+        "rage"
       ],
       "armor": [
         "light",
@@ -297,7 +302,8 @@
         ]
       ],
       "features": [
-        "divine_lore"
+        "divine_lore",
+        "healing_touch"
       ],
       "armor": [
         "light",
@@ -340,7 +346,8 @@
         ]
       ],
       "features": [
-        "arcane_lore"
+        "arcane_lore",
+        "arcane_ward"
       ],
       "armor": [],
       "weapons": [
@@ -859,6 +866,116 @@
           "type": "check_bonus",
           "key": "athletics",
           "value": 2
+        }
+      ]
+    },
+    "second_wind": {
+      "id": "second_wind",
+      "name": "Второе дыхание",
+      "description": "Восстановить 5 + уровень HP; один раз до отдыха.",
+      "activation": "BONUS_ACTION",
+      "resource": "SECOND_WIND",
+      "uses": 1,
+      "recharge": "short",
+      "target": "self",
+      "effects": [
+        {
+          "type": "heal",
+          "value": 5
+        }
+      ]
+    },
+    "rage": {
+      "id": "rage",
+      "name": "Ярость",
+      "description": "До конца боя: +2 урона оружием и половина входящего урона.",
+      "activation": "BONUS_ACTION",
+      "resource": "RAGE",
+      "uses": 2,
+      "recharge": "long",
+      "target": "self",
+      "effects": [
+        {
+          "type": "condition",
+          "key": "rage"
+        }
+      ]
+    },
+    "cunning_dash": {
+      "id": "cunning_dash",
+      "name": "Хитрый рывок",
+      "description": "Рывок бонусным действием.",
+      "activation": "BONUS_ACTION",
+      "resource": "",
+      "uses": 0,
+      "recharge": "none",
+      "target": "self",
+      "effects": [
+        {
+          "type": "dash"
+        }
+      ]
+    },
+    "cunning_disengage": {
+      "id": "cunning_disengage",
+      "name": "Хитрый отход",
+      "description": "Отход бонусным действием.",
+      "activation": "BONUS_ACTION",
+      "resource": "",
+      "uses": 0,
+      "recharge": "none",
+      "target": "self",
+      "effects": [
+        {
+          "type": "disengage"
+        }
+      ]
+    },
+    "steady_aim": {
+      "id": "steady_aim",
+      "name": "Прицеливание",
+      "description": "Преимущество следующей атаки; две активации до отдыха.",
+      "activation": "BONUS_ACTION",
+      "resource": "FOCUS",
+      "uses": 2,
+      "recharge": "short",
+      "target": "self",
+      "effects": [
+        {
+          "type": "condition",
+          "key": "focused"
+        }
+      ]
+    },
+    "healing_touch": {
+      "id": "healing_touch",
+      "name": "Исцеляющее касание",
+      "description": "Лечение себя или союзника рядом на 5 + уровень HP.",
+      "activation": "ACTION",
+      "resource": "HEALING_TOUCH",
+      "uses": 2,
+      "recharge": "long",
+      "target": "ally",
+      "effects": [
+        {
+          "type": "heal",
+          "value": 5
+        }
+      ]
+    },
+    "arcane_ward": {
+      "id": "arcane_ward",
+      "name": "Магическая защита",
+      "description": "Поглотить 2 урона от следующего попадания до своего следующего хода.",
+      "activation": "BONUS_ACTION",
+      "resource": "ARCANE_WARD",
+      "uses": 1,
+      "recharge": "short",
+      "target": "self",
+      "effects": [
+        {
+          "type": "condition",
+          "key": "guard"
         }
       ]
     }

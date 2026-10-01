@@ -3,6 +3,7 @@
 from typing import Literal
 from .commands import ChoiceOption
 from .features import FeatureDefinition
+from .conditions import ConditionDefinition, default_conditions
 from pydantic import Field, model_validator
 from .definitions import (
     Model,
@@ -35,6 +36,9 @@ class Ruleset(Model):
     ability_array: list[int]
     point_buy: dict[str, int | dict[str, int]] = {}
     features: dict[str, FeatureDefinition] = {}
+    condition_definitions: dict[str, ConditionDefinition] = Field(
+        default_factory=default_conditions
+    )
     skills: dict[str, Ability]
     difficulty: dict[Difficulty, int]
     check_die: Literal[20] = 20
@@ -95,6 +99,7 @@ class CharacterSheet(Model):
     spells: list[str] = []
     resources: dict[str, int] = {}
     conditions: list[str] = []
+    condition_sources: dict[str, str] = {}
     death_successes: int = 0
     death_failures: int = 0
     faction: str
@@ -130,6 +135,8 @@ class Encounter(Model):
     round: int = 1
     action: bool = True
     bonus_action: bool = True
+    free_interaction: bool = True
+    ready: dict[str, str] = {}
     reaction: dict[str, bool] = {}
     movement: int = 0
     disengaged: bool = False
@@ -146,6 +153,7 @@ class PendingRoll(Model):
     expression: str = "1d20"
     modifier: int = 0
     advantage: Literal[-1, 0, 1] = 0
+    advantage_sources: list[dict[str, str | int]] = []
     dc: int = 10
     target: str = ""
     ability: Ability = "wisdom"
@@ -153,7 +161,17 @@ class PendingRoll(Model):
     weapon: str = ""
     critical: bool = False
     outcome: Literal[
-        "check", "search", "unlock", "persuade", "trap", "attack", "reaction"
+        "check",
+        "search",
+        "unlock",
+        "persuade",
+        "trap",
+        "attack",
+        "reaction",
+        "hide",
+        "grapple",
+        "shove",
+        "escape",
     ] = "check"
     resume: Literal["EXPLORATION", "DIALOGUE", "ENCOUNTER"] = "EXPLORATION"
 
@@ -259,6 +277,10 @@ class GameState(Model):
                 or self.controllers[key].actor_id != key
             ):
                 raise ValueError("Некорректная ссылка участника")
+            if any(value < 0 for value in a.resources.values()):
+                raise ValueError("Ресурс не может быть отрицательным")
+            if any(source not in actors for source in a.condition_sources.values()):
+                raise ValueError("Источник состояния не найден")
             if any(x.item_id not in self.items for x in a.inventory):
                 raise ValueError("Неизвестный предмет")
         p = self.session_state.pending
