@@ -42,6 +42,18 @@ class AttackCommand(ActorCommand):
     weapon: str = Field(default="", max_length=80)
 
 
+class CastSpellCommand(ActorCommand):
+    type: Literal["cast_spell"] = "cast_spell"
+    spell_id: str = Field(min_length=1, max_length=80)
+    target: str = Field(default="", max_length=80)
+    slot_level: int = Field(default=0, ge=0, le=9)
+
+
+class PrepareSpellsCommand(ActorCommand):
+    type: Literal["prepare_spells"] = "prepare_spells"
+    spells: list[str] = Field(max_length=30)
+
+
 class UseFeatureCommand(ActorCommand):
     type: Literal["use_feature"] = "use_feature"
     feature_id: str = Field(min_length=1, max_length=80)
@@ -137,6 +149,8 @@ ActionCommand = Annotated[
         SaveCommand,
         AttackCommand,
         UseFeatureCommand,
+        CastSpellCommand,
+        PrepareSpellsCommand,
         ManeuverCommand,
         TacticalCommand,
         UseObjectCommand,

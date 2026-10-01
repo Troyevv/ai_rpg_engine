@@ -139,7 +139,11 @@ class CheckService:
             events[-1]["sources"] = p.advantage_sources
         state.session_state.pending = None
         state.session_state.mode = p.resume
-        if p.purpose == "initiative":
+        if p.purpose.startswith("spell_") or p.purpose == "concentration":
+            self.runtime.spells_service.resolve(
+                state, p.purpose, p.actor, roll, p.dc, events
+            )
+        elif p.purpose == "initiative":
             state.session_state.initiative_results[p.actor] = roll.total
             self.runtime.initiative(state, events)
         elif p.purpose in ("check", "save"):
@@ -238,6 +242,7 @@ class CheckService:
             )
             if a.hp == 0 and state.encounter:
                 self.runtime.combat.advance(state)
+        self.runtime.spells_service.resume(state, events)
         if state.encounter and (not state.session_state.pending):
             self.runtime.drive(state, events)
         if not state.encounter and (not state.session_state.pending):

@@ -18,6 +18,7 @@ from .services.characters import CharacterService
 from .services.choices import ChoiceService
 from .services.features import FeatureService
 from .services.tactics import TacticalService
+from .services.spells import SpellService
 
 
 class TabletopRuntime:
@@ -36,6 +37,7 @@ class TabletopRuntime:
         self.choices = ChoiceService(self)
         self.features_service = FeatureService(self)
         self.tactics_service = TacticalService(self)
+        self.spells_service = SpellService(self)
 
     @staticmethod
     def validate(state):
@@ -124,6 +126,7 @@ class TabletopRuntime:
                 )
         else:
             self.apply(state, command, aid, events)
+            self.spells_service.resume(state, events)
             if state.encounter and (not state.session_state.pending):
                 self.drive(state, events)
         return (self.validate(state), events)
@@ -150,6 +153,8 @@ class TabletopRuntime:
         if t == "request_choice":
             return self.choices.request(state, c, aid, events)
         services = {
+            "cast_spell": self.spells_service,
+            "prepare_spells": self.spells_service,
             "use_feature": self.features_service,
             **{
                 name: self.tactics_service

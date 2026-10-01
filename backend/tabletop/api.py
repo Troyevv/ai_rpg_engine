@@ -325,6 +325,8 @@ def install(app, shared_repo, credentials):
         else:
             after, events = runtime.execute(state, command)
         labels = {
+            "cast_spell": "Сотворить заклинание",
+            "prepare_spells": "Подготовить заклинания",
             "use_feature": "Применить способность",
             "grapple": "Захватить",
             "shove": "Сбить с ног",

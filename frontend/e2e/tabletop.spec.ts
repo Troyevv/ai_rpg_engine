@@ -410,3 +410,75 @@ test("point buy and AI portrait are reviewed before character creation", async (
     page.getByText("Бывший городской стражник.", { exact: false }),
   ).toBeVisible();
 });
+
+test("wizard creator and spellbook keep casting pending across reload", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Настольная RPG", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Создать кампанию", exact: true })
+    .click();
+  await page
+    .getByLabel("Идея приключения", { exact: true })
+    .fill("Маг в библиотеке");
+  await page
+    .getByRole("button", { name: "Сгенерировать мир", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Далее", exact: true }).click();
+  await page.getByRole("button", { name: "3. Класс", exact: true }).click();
+  await page.getByRole("button", { name: /^Маг Кость здоровья/ }).click();
+  await page
+    .getByRole("button", { name: "9. Заклинания", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Знать Огненная стрела", { exact: true }),
+  ).toBeChecked();
+  await page.getByRole("button", { name: "Далее", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Начать приключение", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Перейти: Хранилище", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Начать бой: Страж архива", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Бросить кубик", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Заклинания", exact: true }).click();
+  await page
+    .getByLabel("Цель заклинания", { exact: true })
+    .selectOption("sentinel");
+  await page
+    .getByRole("button", { name: "Сотворить: Огненная стрела", exact: true })
+    .click();
+  const snapshot = () =>
+    page.evaluate(async () =>
+      (
+        await fetch(
+          "/api/tabletop/games/" + localStorage.getItem("tabletop-game"),
+        )
+      ).json(),
+    );
+  await expect
+    .poll(async () => (await snapshot()).state.pending?.purpose)
+    .toBe("spell_attack");
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Бросить кубик", exact: true })
+    .click();
+  await expect
+    .poll(async () => (await snapshot()).state.pending?.purpose)
+    .toBe("spell_damage");
+  await page
+    .getByRole("button", { name: "Бросить кубик", exact: true })
+    .click();
+  await expect.poll(async () => (await snapshot()).state.pending).toBeNull();
+  expect(
+    (await snapshot()).state.characters.traveler.spell_slots["1"].remaining,
+  ).toBe(2);
+});

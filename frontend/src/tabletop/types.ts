@@ -1,4 +1,18 @@
+export type Spell = {
+  id: string;
+  name: string;
+  level: number;
+  classes: string[];
+  casting_time: string;
+  range: number;
+  target_type: string;
+  area: number;
+  concentration: boolean;
+  description: string;
+};
 export type Build = {
+  spells?: string[] | null;
+  prepared_spells?: string[] | null;
   ability_method: "standard_array" | "point_buy";
   concept: string;
   feature_choices: string[];
@@ -27,6 +41,17 @@ export type Feature = {
   effects: { type: string; value: number; key: string }[];
 };
 export type Catalog = {
+  spells: Record<string, Spell>;
+  spellcasting: Record<
+    string,
+    {
+      ability: string;
+      defaults: string[];
+      known: number;
+      prepared: number;
+      slots: Record<string, number>;
+    }
+  >;
   point_buy: {
     budget?: number;
     minimum?: number;
@@ -112,6 +137,11 @@ export type Sheet = {
   inventory: Entry[];
   resources: Record<string, number>;
   feature_definitions: Feature[];
+  spells: string[];
+  prepared_spells: string[];
+  spell_definitions: Spell[];
+  spell_slots: Record<string, { maximum: number; remaining: number }>;
+  concentration: null | { spell_id: string };
   biography: string;
   appearance: string;
   personality: string;
@@ -131,6 +161,9 @@ export type Command = {
   distance?: number;
   item_id?: string;
   feature_id?: string;
+  spell_id?: string;
+  slot_level?: number;
+  spells?: string[];
   quantity?: number;
   rest?: string;
   topic?: string;
@@ -303,6 +336,11 @@ export const skills: Record<string, string> = {
   survival: "Выживание",
 };
 export const purposes: Record<string, string> = {
+  spell_attack: "Атака заклинанием",
+  spell_save: "Спасбросок против заклинания",
+  spell_damage: "Урон заклинания",
+  spell_healing: "Лечение заклинанием",
+  concentration: "Проверка концентрации",
   check: "Проверка",
   save: "Спасбросок",
   initiative: "Инициатива",

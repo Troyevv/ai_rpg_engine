@@ -9,7 +9,7 @@
 | A | codex/tabletop-dm-protocol | DM protocol, typed commands, pending choices, services | Реализован; 496 backend / 6 tabletop E2E / build |
 | B | codex/tabletop-character-creator | Creator, point buy, live sheet, species/classes/backgrounds/skills, roleplay generation, feature catalog | Реализован; 550 backend / 8 tabletop E2E / build |
 | C | codex/tabletop-combat-features | Features/resources, actions, conditions, advantage, reactions, GameAI, combat HUD | Реализован; 574 backend / 8 tabletop E2E / build |
-| D | — | Spell catalog/slots, attacks/saves/AoE/concentration, spell UI | Ожидает |
+| D | codex/tabletop-spellcasting | Spell catalog/slots, attacks/saves/AoE/concentration, spell UI | Реализован; 589 backend / 10 tabletop E2E / build |
 | E | — | XP/milestones, levels 1–20, subclasses/ASI/feats, level-up UI | Ожидает |
 | F | — | Campaign/world generation, travel, factions/quests/secrets, evolving world | Ожидает |
 | G | — | Final desktop/mobile UX, sheets, spellbook, journal/map/party, DM settings | Ожидает |
@@ -96,3 +96,18 @@ spells → quest reward/progression/level-up → dynamic expansion → save/rest
 - Cast Spell и соответствующий AI behavior появятся в D вместе с механикой магии.
 - Проверяются недоступные способности/цели, атомарный отказ, отдых, преимущества, запреты
   условий, манёвры, Ready/restart/reaction, повтор HTTP, stale revision, replay и rollback.
+
+## D: магия
+
+- Типизированные SpellDefinition, SpellcastingFeature, SpellSlotState и ActiveConcentration.
+  Каталог содержит 12 заклинаний 0–3 кругов; дальнейшая доступность уровней — этап E.
+- Известные/подготовленные заклинания, проверка цели/дальности/ячейки; стоимость списывается
+  один раз. SpellCastState сохраняет очередь целей и фазу attack/save → damage/healing/effects.
+  Броски игрока используют PendingRoll, NPC — тот же DiceEngine без LLM RNG.
+- Область включает союзников; спасброски, половинный урон, critical, усиление и масштабирование
+  заговоров. Концентрация требует настоящего спасброска после урона и снимает связанные эффекты.
+- Creator показывает шаг магии только магическим классам; книга заклинаний позволяет выбрать
+  цель, ячейку и подготовку. GameAI выбирает CastSpell через общие проверки runtime.
+- Проверки: промах/critical, слот один раз, неправильные цели/подготовка/дальность/ресурс,
+  AoE по союзникам, restart между фазами, лечение, концентрация/истечение, HTTP duplicate.
+  Desktop/mobile: создать мага → выбрать заговор → бой → cast → reload → attack/damage.

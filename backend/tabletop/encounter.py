@@ -42,6 +42,11 @@ class EncounterEngine:
         e.disengaged = False
         from .conditions import ConditionEngine
 
+        for condition, until in list(a.condition_expiry.items()):
+            if until <= state.game_time:
+                a.conditions = [c for c in a.conditions if c != condition]
+                a.condition_expiry.pop(condition, None)
+                a.condition_sources.pop(condition, None)
         e.movement = ConditionEngine.speed(a, state.ruleset)
         e.reaction[a.id] = True
         ConditionEngine.expire(a, state.ruleset, "turn_start")
@@ -133,6 +138,10 @@ class EncounterEngine:
         ):
             amount //= 2
         dealt = self.rules.damage(target, amount, critical)
+        if dealt and target.concentration:
+            state.session_state.concentration_checks.append(
+                {"actor": target.id, "dc": max(10, amount // 2)}
+            )
         for actor in [
             state.actor(i)
             for i in (state.encounter.order if state.encounter else state.party)

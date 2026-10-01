@@ -252,6 +252,54 @@ class Surrender(Behavior):
         return []
 
 
+class CastSpell(Behavior):
+    def candidates(self, c):
+        casting = c.state.ruleset.spellcasting.get(c.actor.character_class)
+        if not casting:
+            return []
+        options = []
+        for sid in c.actor.spells:
+            spell = c.state.ruleset.spells[sid]
+            if not (
+                c.encounter.bonus_action
+                if spell.casting_time == "BONUS_ACTION"
+                else c.encounter.action
+            ):
+                continue
+            if spell.level and (
+                sid not in c.actor.prepared_spells
+                or str(spell.level) not in c.actor.spell_slots
+                or not c.actor.spell_slots[str(spell.level)].remaining
+            ):
+                continue
+            if spell.healing:
+                targets = [
+                    a
+                    for a in [c.actor, *c.allies]
+                    if a.hp / a.max_hp < 0.5
+                    and abs(a.position - c.actor.position) <= spell.range
+                ]
+                score = 1.5
+            elif spell.damage and spell.target_type != "area":
+                targets = [
+                    a
+                    for a in c.enemies
+                    if abs(a.position - c.actor.position) <= spell.range
+                ]
+                score = 0.75
+            else:
+                continue
+            if targets:
+                options.append(
+                    Decision(
+                        "CastSpell",
+                        score,
+                        Command(type="cast_spell", spell_id=sid, target=targets[0].id),
+                    )
+                )
+        return options
+
+
 class BehaviorRegistry:
     def __init__(self, behaviors=None):
         self.behaviors = behaviors or [
@@ -265,6 +313,7 @@ class BehaviorRegistry:
             Disengage(),
             Dash(),
             UseFeature(),
+            CastSpell(),
             SeekCover(),
             Surrender(),
         ]

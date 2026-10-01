@@ -3,6 +3,13 @@
 from typing import Literal
 from .commands import ChoiceOption
 from .features import FeatureDefinition
+from .spells import (
+    SpellDefinition,
+    SpellcastingFeature,
+    SpellSlotState,
+    ActiveConcentration,
+    SpellCastState,
+)
 from .conditions import ConditionDefinition, default_conditions
 from pydantic import Field, model_validator
 from .definitions import (
@@ -36,6 +43,8 @@ class Ruleset(Model):
     ability_array: list[int]
     point_buy: dict[str, int | dict[str, int]] = {}
     features: dict[str, FeatureDefinition] = {}
+    spells: dict[str, SpellDefinition] = {}
+    spellcasting: dict[str, SpellcastingFeature] = {}
     condition_definitions: dict[str, ConditionDefinition] = Field(
         default_factory=default_conditions
     )
@@ -97,6 +106,10 @@ class CharacterSheet(Model):
     inventory: list[InventoryEntry] = []
     features: list[str] = []
     spells: list[str] = []
+    prepared_spells: list[str] = []
+    spell_slots: dict[str, SpellSlotState] = {}
+    concentration: ActiveConcentration | None = None
+    condition_expiry: dict[str, int] = {}
     resources: dict[str, int] = {}
     conditions: list[str] = []
     condition_sources: dict[str, str] = {}
@@ -146,7 +159,19 @@ class Encounter(Model):
 class PendingRoll(Model):
     id: str
     reason: str = ""
-    purpose: Literal["check", "save", "initiative", "attack", "damage", "death"]
+    purpose: Literal[
+        "check",
+        "save",
+        "initiative",
+        "attack",
+        "damage",
+        "death",
+        "spell_attack",
+        "spell_save",
+        "spell_damage",
+        "spell_healing",
+        "concentration",
+    ]
     actor: str
     controller: ControllerType = "PLAYER"
     player_id: str | None = "local"
@@ -192,6 +217,8 @@ class SessionState(Model):
     controlled_actor: str
     pending: PendingRoll | None = None
     choice: PendingChoice | None = None
+    spell_cast: SpellCastState | None = None
+    concentration_checks: list[dict[str, str | int]] = []
     dialogue_actor: str | None = None
     initiative_waiting: list[str] = []
     initiative_results: dict[str, int] = {}
@@ -202,7 +229,12 @@ class SessionState(Model):
     @property
     def mechanical_resolution_complete(self):
         return not (
-            self.pending or self.choice or self.reaction or self.initiative_waiting
+            self.pending
+            or self.choice
+            or self.reaction
+            or self.initiative_waiting
+            or self.spell_cast
+            or self.concentration_checks
         )
 
 
@@ -277,6 +309,12 @@ class GameState(Model):
                 or self.controllers[key].actor_id != key
             ):
                 raise ValueError("Некорректная ссылка участника")
+            if any(slot.remaining > slot.maximum for slot in a.spell_slots.values()):
+                raise ValueError("Число ячеек превышает максимум")
+            if not set(a.spells) <= set(self.ruleset.spells) or not set(
+                a.prepared_spells
+            ) <= set(a.spells):
+                raise ValueError("Некорректные известные заклинания")
             if any(value < 0 for value in a.resources.values()):
                 raise ValueError("Ресурс не может быть отрицательным")
             if any(source not in actors for source in a.condition_sources.values()):

@@ -60,6 +60,16 @@ class PublicProjection:
                 save_modifiers={k: rules.save_modifier(a, k) for k in a.abilities},
                 attack_modifiers={k: rules.attack_modifier(a, k) for k in a.attacks},
                 controller=state.controllers[aid].model_dump(),
+                spell_definitions=[
+                    state.ruleset.spells[i].model_dump()
+                    for i in a.spells
+                    if i in state.ruleset.spells
+                ],
+                spellcasting=(
+                    state.ruleset.spellcasting[a.character_class].model_dump()
+                    if a.character_class in state.ruleset.spellcasting
+                    else None
+                ),
                 feature_definitions=[
                     state.ruleset.features[i].model_dump()
                     for i in a.features
