@@ -1,6 +1,7 @@
 """Role-specific projections. Secret-bearing DM context never reaches gameplay APIs."""
 
 from .rules import RulesEngine
+from .preview import attack_previews, usable_actions
 from .services.progression import ProgressionService
 
 
@@ -135,6 +136,30 @@ class PublicProjection:
         p = state.session_state.pending
         e = state.encounter
         return {
+            "attack_previews": attack_previews(state, hero),
+            "usable_actions": usable_actions(state, hero),
+            "checks": [
+                {
+                    "id": c.id,
+                    "name": c.name,
+                    "description": c.description,
+                    "save": c.save,
+                    "skill": c.skill,
+                    "ability": c.ability,
+                    "category": c.category,
+                }
+                for c in state.definition.checks
+                if c.location_id == hero.location
+                and (
+                    not c.actor_id or state.actor(c.actor_id).location == hero.location
+                )
+                and not c.passive
+                and c.id not in state.resolved_checks
+                and (
+                    not c.background_tags
+                    or set(c.background_tags) & set(hero.background_tags)
+                )
+            ],
             "dm_settings": state.dm_settings.model_dump(),
             "campaign": state.campaign.name,
             "ruleset": {"id": state.ruleset.id, "name": state.ruleset.name},
@@ -318,6 +343,7 @@ class NarrationProjection:
             },
             "initial_conflict": p["initial_conflict"],
             "public_hooks": p["plot_hooks"],
+            "available_checks": p["checks"],
             "factions": p["factions"],
             "visible_npcs": p["npcs"],
             "objects": p["objects"],

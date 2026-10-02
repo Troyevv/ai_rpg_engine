@@ -5,6 +5,8 @@ import {
   RollResult,
   CharacterSheet,
 } from "./tabletop/GamePanels";
+import { ActionImpact } from "./tabletop/ActionImpact";
+import { CombatActions } from "./tabletop/CombatActions";
 import { DMSettings } from "./tabletop/DMSettings";
 import { LevelUp } from "./tabletop/LevelUp";
 import { Spellbook } from "./tabletop/Spellbook";
@@ -53,10 +55,13 @@ export function Tabletop({
     [mobileActions, setMobileActions] = useState(false),
     [campaignMenu, setCampaignMenu] = useState(false),
     [olderHistory, setOlderHistory] = useState(false);
+  const [runtimeStage, setRuntimeStage] = useState("");
   const lock = useRef(false);
   const historyEnd = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (game?.state.pending || game?.state.choice || game?.state.reaction) {
+      setTab("Игра");
+      setMobileActions(false);
       document
         .querySelector(".tt-roll-card, .tt-roll-prompt")
         ?.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -110,12 +115,36 @@ export function Tabletop({
   async function perform(path: string, payload: object, model = true) {
     if (!game) return;
     await run(async () => {
+      const requestId = crypto.randomUUID();
+      let active = true;
+      setRuntimeStage("Отправка запроса");
+      const labels: Record<string, string> = {
+        waiting: "Ожидание обработки",
+        validation: "Проверка запроса",
+        interpretation: "DM разбирает намерение",
+        rules: "Проверка правил действия",
+        generation: "Создание контента",
+        roll: "Разрешение серверного броска",
+        saving: "Сохранение результата",
+        narration: "DM описывает результат",
+        complete: "Готово",
+        failed: "Обработка завершилась ошибкой",
+      };
+      const poll = setInterval(() => {
+        void api<{ stage: string }>(
+          `/tabletop/games/${game.id}/progress/${requestId}`,
+        )
+          .then((r) => {
+            if (active) setRuntimeStage(labels[r.stage] || r.stage);
+          })
+          .catch(() => {});
+      }, 500);
       try {
         setGame(
           await api<Game>(`/tabletop/games/${game.id}/${path}`, {
             ...payload,
             revision: game.revision,
-            request_id: crypto.randomUUID(),
+            request_id: requestId,
             ...(model
               ? { config: prefs.game, api_key: apiKey || undefined }
               : {}),
@@ -127,6 +156,10 @@ export function Tabletop({
       } catch (e) {
         setGame(await api<Game>(`/tabletop/games/${game.id}`));
         throw e;
+      } finally {
+        active = false;
+        clearInterval(poll);
+        setRuntimeStage("");
       }
     });
   }
@@ -246,60 +279,12 @@ export function Tabletop({
               <LevelUp
                 key={`${hero.id}-${hero.level}`}
                 hero={hero}
+                gameId={game.id}
                 blocked={blocked || !!enc}
                 act={act}
               />
             )}
             <CombatHUD state={s} />
-            {s.choice && (
-              <div className="tt-roll-prompt" role="status">
-                <h2>{s.choice.prompt}</h2>
-                {s.choice.options.map((option) => (
-                  <button
-                    key={option.id}
-                    disabled={busy}
-                    onClick={() =>
-                      void perform("actions", {
-                        command: {
-                          type: "resolve_choice",
-                          actor_id: s.choice!.actor,
-                          pending_id: s.choice!.id,
-                          option_id: option.id,
-                        },
-                      })
-                    }
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            )}
-            {pending && (
-              <RollCard
-                pending={pending}
-                name={name(pending.actor)}
-                busy={busy}
-                roll={() => void perform("roll", { pending_id: pending.id })}
-              />
-            )}
-            {s.reaction && !pending && (
-              <div role="status">
-                <p>
-                  {name(s.reaction.actor)} может атаковать{" "}
-                  {name(s.reaction.mover)} реакцией.
-                </p>
-                {button(
-                  "Атаковать реакцией",
-                  { type: "reaction_attack" },
-                  busy,
-                )}
-                {button(
-                  "Пропустить реакцию",
-                  { type: "decline_reaction" },
-                  busy,
-                )}
-              </div>
-            )}
           </section>
           <button
             className="tt-mobile-actions"
@@ -344,7 +329,7 @@ export function Tabletop({
             <Spellbook hero={hero} state={s} blocked={blocked} act={act} />
           ) : tab === "Игра" ? (
             <main
-              className={`tt-game-grid ${mobileActions ? "tt-show-actions" : ""}`}
+              className={`tt-game-grid ${mobileActions && !pending && !s.choice && !s.reaction ? "tt-show-actions" : ""}`}
             >
               <aside className="tt-panel tt-party-summary">
                 <span className="tt-eyebrow">Партия</span>
@@ -388,6 +373,50 @@ export function Tabletop({
                     (h) => (
                       <article key={h.revision}>
                         <div className="tt-player-text">{h.user_text}</div>
+                        <div
+                          className="tt-mechanics"
+                          aria-label="События правил"
+                        >
+                          {h.events
+                            .filter(
+                              (e) =>
+                                e.kind !== "opening" ||
+                                !h.narrative?.includes(e.text),
+                            )
+                            .map((e, i) =>
+                              e.roll ? (
+                                <RollResult
+                                  key={i}
+                                  event={e}
+                                  name={name(e.roll.actor)}
+                                />
+                              ) : (
+                                <div key={i}>
+                                  <p>{e.text}</p>
+                                  {e.hp_before !== undefined && (
+                                    <div className="tt-hp-event">
+                                      <strong>
+                                        {name(e.target || "")}: {e.hp_before} →{" "}
+                                        {e.hp_after} HP
+                                      </strong>
+                                      <progress
+                                        aria-label="Здоровье после действия"
+                                        value={e.hp_after}
+                                        max={
+                                          e.maximum ||
+                                          Math.max(
+                                            e.hp_before,
+                                            e.hp_after || 0,
+                                            1,
+                                          )
+                                        }
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              ),
+                            )}
+                        </div>
                         {h.narrative && (
                           <p
                             className="tt-narration"
@@ -396,32 +425,88 @@ export function Tabletop({
                             {h.narrative}
                           </p>
                         )}
-                        <div
-                          className="tt-mechanics"
-                          aria-label="События правил"
-                        >
-                          {h.events
-                            .filter(
-                              (e) => !e.roll && !h.narrative?.includes(e.text),
-                            )
-                            .map((e, i) => (
-                              <p key={i}>{e.text}</p>
-                            ))}
-                        </div>
-                        {h.events
-                          .filter((e) => e.roll)
-                          .map((e, i) => (
-                            <RollResult
-                              key={i}
-                              event={e}
-                              name={name(e.roll!.actor)}
-                            />
-                          ))}
                       </article>
                     ),
                   )}
                   <div ref={historyEnd} />
                 </div>
+                {enc && hero && !pending && !s.choice && !s.reaction && (
+                  <CombatActions
+                    state={s}
+                    hero={hero}
+                    blocked={blocked}
+                    act={act}
+                  />
+                )}
+                {!enc &&
+                  s.checks?.map((c) => (
+                    <button
+                      key={c.id}
+                      disabled={blocked}
+                      title={c.description}
+                      onClick={() =>
+                        act({ type: c.save ? "save" : "check", check_id: c.id })
+                      }
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                {s.choice && (
+                  <div className="tt-roll-prompt" role="status">
+                    <h2>{s.choice.prompt}</h2>
+                    {s.choice.options.map((option) => (
+                      <button
+                        key={option.id}
+                        disabled={busy}
+                        onClick={() =>
+                          void perform("actions", {
+                            command: {
+                              type: "resolve_choice",
+                              actor_id: s.choice!.actor,
+                              pending_id: s.choice!.id,
+                              option_id: option.id,
+                            },
+                          })
+                        }
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {pending && (
+                  <RollCard
+                    pending={pending}
+                    name={name(pending.actor)}
+                    busy={busy}
+                    roll={() =>
+                      void perform("roll", { pending_id: pending.id })
+                    }
+                  />
+                )}
+                {s.reaction && !pending && (
+                  <div role="status">
+                    <p>
+                      {name(s.reaction.actor)} может атаковать{" "}
+                      {name(s.reaction.mover)} реакцией.
+                    </p>
+                    {button(
+                      "Атаковать реакцией",
+                      { type: "reaction_attack" },
+                      busy,
+                    )}
+                    {button(
+                      "Пропустить реакцию",
+                      { type: "decline_reaction" },
+                      busy,
+                    )}
+                  </div>
+                )}
+                {busy && runtimeStage && (
+                  <p role="status" aria-live="polite">
+                    {runtimeStage}
+                  </p>
+                )}
                 <form
                   className="tt-compose"
                   onSubmit={(e) => {
@@ -462,204 +547,214 @@ export function Tabletop({
               </section>
               <aside className="tt-panel tt-action-panel">
                 {hero && <HeroSummary hero={hero} />}
-                <h2>Действия · {hero?.name}</h2>
-                <div className="tt-actions">
-                  {button("Осмотреться", { type: "look" })}
-                  {button("Обыскать место", {
-                    type: "check",
-                    purpose: "search",
-                    ability: "wisdom",
-                    skill: "perception",
-                  })}
-                  {enc ? (
-                    <>
-                      {[
-                        ["dodge", "Уклонение"],
-                        ["dash", "Рывок"],
-                        ["disengage", "Отход"],
-                        ["guard", "Защититься"],
-                        ["recover", "Восстановиться"],
-                        ["hide", "Скрыться"],
-                        ["stand", "Встать"],
-                        ["escape", "Освободиться"],
-                        ["flee", "Сбежать"],
-                        ["end_turn", "Закончить ход"],
-                      ].map(([type, label]) => button(label, { type }))}
-                      {[-5, 5].map((distance) =>
-                        button(`Движение ${signed(distance)}`, {
-                          type: "move",
-                          distance,
-                        }),
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      {s.exits.map((l) =>
-                        button(`Перейти: ${l.name}`, {
-                          type: "move",
-                          target: l.id,
-                        }),
-                      )}
-                      {s.encounters.map((e) =>
-                        button(`Начать бой: ${e.name}`, {
-                          type: "start_encounter",
-                          target: e.id,
-                        }),
-                      )}
-                      {button("Короткий отдых", {
-                        type: "rest",
-                        rest: "short",
-                      })}
-                      {button("Долгий отдых", { type: "rest", rest: "long" })}
-                    </>
-                  )}
-                </div>
-                {hero?.feature_definitions?.some(
-                  (f) => f.activation !== "PASSIVE",
-                ) && (
+                {!(s.ruleset.id === "d20-fantasy-v2" && enc) && (
                   <>
-                    <h3>Способности</h3>
-                    {hero.feature_definitions
-                      .filter((f) => f.activation !== "PASSIVE")
-                      .map((f) => (
-                        <article key={f.id}>
-                          <strong>{f.name}</strong>
-                          <p>{f.description}</p>
-                          {f.resource && (
-                            <p>
-                              Осталось: {hero.resources[f.resource] || 0} /{" "}
-                              {f.uses}
-                            </p>
+                    <h2>Действия · {hero?.name}</h2>
+                    <div className="tt-actions">
+                      {button("Осмотреться", { type: "look" })}
+                      {button("Обыскать место", {
+                        type: "check",
+                        purpose: "search",
+                        ability: "wisdom",
+                        skill: "perception",
+                      })}
+                      {enc ? (
+                        <>
+                          {[
+                            ["dodge", "Уклонение"],
+                            ["dash", "Рывок"],
+                            ["disengage", "Отход"],
+                            ["guard", "Защититься"],
+                            ["recover", "Восстановиться"],
+                            ["hide", "Скрыться"],
+                            ["stand", "Встать"],
+                            ["escape", "Освободиться"],
+                            ["flee", "Сбежать"],
+                            ["end_turn", "Закончить ход"],
+                          ].map(([type, label]) => button(label, { type }))}
+                          {[-5, 5].map((distance) =>
+                            button(`Движение ${signed(distance)}`, {
+                              type: "move",
+                              distance,
+                            }),
                           )}
-                          {(f.target === "ally" ? s.party : [acting]).map(
-                            (target) =>
-                              button(
-                                `${f.name}${f.target === "ally" ? `: ${name(target)}` : ""}`,
-                                {
-                                  type: "use_feature",
-                                  feature_id: f.id,
-                                  target,
-                                },
-                                blocked ||
-                                  (!!f.resource &&
-                                    !hero.resources[f.resource]) ||
-                                  (!!enc &&
-                                    !(f.activation === "BONUS_ACTION"
-                                      ? enc.bonus_action
-                                      : enc.action)),
-                              ),
+                        </>
+                      ) : (
+                        <>
+                          {s.exits.map((l) =>
+                            button(`Перейти: ${l.name}`, {
+                              type: "move",
+                              target: l.id,
+                            }),
                           )}
-                        </article>
-                      ))}
-                  </>
-                )}
-                <h3>На сцене</h3>
-                {Object.values(s.npcs).map((n) => (
-                  <article key={n.id}>
-                    <strong>{n.name}</strong>
-                    <p>
-                      {n.status} · позиция {n.position}
-                    </p>
-                    {!enc ? (
-                      <>
-                        {button(`Поговорить: ${n.name}`, {
-                          type: "dialogue",
-                          target: n.id,
-                        })}
-                        {button(`Убедить: ${n.name}`, {
-                          type: "check",
-                          purpose: "persuade",
-                          target: n.id,
-                          ability: "charisma",
-                          skill: "persuasion",
-                        })}
-                      </>
-                    ) : (
-                      n.hostile &&
-                      Object.entries(hero?.attacks || {}).map(([id, w]) =>
-                        button(
-                          `Атаковать ${n.name}: ${w.name}`,
-                          { type: "attack", target: n.id, weapon: id },
-                          blocked || (!enc.action && !enc.attacks_remaining),
-                        ),
-                      )
-                    )}
-                    {enc &&
-                      n.hostile &&
-                      [
-                        ["grapple", "Захватить"],
-                        ["shove", "Сбить с ног"],
-                        ["ready", "Подготовить атаку"],
-                      ].map(([type, label]) =>
-                        button(
-                          `${label}: ${n.name}`,
-                          { type, target: n.id },
-                          blocked || !enc.action,
-                        ),
+                          {s.encounters.map((e) =>
+                            button(`Начать бой: ${e.name}`, {
+                              type: "start_encounter",
+                              target: e.id,
+                            }),
+                          )}
+                          {button("Короткий отдых", {
+                            type: "rest",
+                            rest: "short",
+                          })}
+                          {button("Долгий отдых", {
+                            type: "rest",
+                            rest: "long",
+                          })}
+                        </>
                       )}
-                  </article>
-                ))}
-                {enc &&
-                  s.party
-                    .filter((id) => id !== acting)
-                    .map((id) =>
-                      button(`Помочь: ${name(id)}`, {
-                        type: "help",
-                        target: id,
-                      }),
+                    </div>
+                    {hero?.feature_definitions?.some(
+                      (f) => f.activation !== "PASSIVE",
+                    ) && (
+                      <>
+                        <h3>Способности</h3>
+                        {hero.feature_definitions
+                          .filter((f) => f.activation !== "PASSIVE")
+                          .map((f) => (
+                            <article key={f.id}>
+                              <strong>{f.name}</strong>
+                              <p>{f.description}</p>
+                              {f.resource && (
+                                <p>
+                                  Осталось: {hero.resources[f.resource] || 0} /{" "}
+                                  {f.uses}
+                                </p>
+                              )}
+                              {(f.target === "ally" ? s.party : [acting]).map(
+                                (target) =>
+                                  button(
+                                    `${f.name}${f.target === "ally" ? `: ${name(target)}` : ""}`,
+                                    {
+                                      type: "use_feature",
+                                      feature_id: f.id,
+                                      target,
+                                    },
+                                    blocked ||
+                                      (!!f.resource &&
+                                        !hero.resources[f.resource]) ||
+                                      (!!enc &&
+                                        !(f.activation === "BONUS_ACTION"
+                                          ? enc.bonus_action
+                                          : enc.action)),
+                                  ),
+                              )}
+                            </article>
+                          ))}
+                      </>
                     )}
-                <h3>Объекты</h3>
-                {s.objects.map((o) => (
-                  <article key={o.id}>
-                    <h4>{o.name}</h4>
-                    <p>{o.description}</p>
-                    {button(`Открыть: ${o.name}`, {
-                      type: "interact",
-                      target: o.id,
-                    })}
-                    {button(`Вскрыть: ${o.name}`, {
-                      type: "check",
-                      purpose: "unlock",
-                      target: o.id,
-                    })}
-                    {o.contents.map((x) =>
-                      button(
-                        `Взять: ${s.items[x.item_id]?.name || x.item_id} ×${x.quantity}`,
-                        {
-                          type: "take_item",
+                    <h3>На сцене</h3>
+                    {Object.values(s.npcs).map((n) => (
+                      <article key={n.id}>
+                        <strong>{n.name}</strong>
+                        <p>
+                          {n.status} · позиция {n.position}
+                        </p>
+                        {!enc ? (
+                          <>
+                            {button(`Поговорить: ${n.name}`, {
+                              type: "dialogue",
+                              target: n.id,
+                            })}
+                            {button(`Убедить: ${n.name}`, {
+                              type: "check",
+                              purpose: "persuade",
+                              target: n.id,
+                              ability: "charisma",
+                              skill: "persuasion",
+                            })}
+                          </>
+                        ) : (
+                          n.hostile &&
+                          Object.entries(hero?.attacks || {}).map(([id, w]) =>
+                            button(
+                              `Атаковать ${n.name}: ${w.name}`,
+                              { type: "attack", target: n.id, weapon: id },
+                              blocked ||
+                                (!enc.action && !enc.attacks_remaining),
+                            ),
+                          )
+                        )}
+                        {enc &&
+                          n.hostile &&
+                          [
+                            ["grapple", "Захватить"],
+                            ["shove", "Сбить с ног"],
+                            ["ready", "Подготовить атаку"],
+                          ].map(([type, label]) =>
+                            button(
+                              `${label}: ${n.name}`,
+                              { type, target: n.id },
+                              blocked || !enc.action,
+                            ),
+                          )}
+                      </article>
+                    ))}
+                    {enc &&
+                      s.party
+                        .filter((id) => id !== acting)
+                        .map((id) =>
+                          button(`Помочь: ${name(id)}`, {
+                            type: "help",
+                            target: id,
+                          }),
+                        )}
+                    <h3>Объекты</h3>
+                    {s.objects.map((o) => (
+                      <article key={o.id}>
+                        <h4>{o.name}</h4>
+                        <p>{o.description}</p>
+                        {button(`Открыть: ${o.name}`, {
+                          type: "interact",
                           target: o.id,
-                          item_id: x.item_id,
-                          quantity: x.quantity,
-                        },
-                      ),
+                        })}
+                        {button(`Вскрыть: ${o.name}`, {
+                          type: "check",
+                          purpose: "unlock",
+                          target: o.id,
+                        })}
+                        {o.contents.map((x) =>
+                          button(
+                            `Взять: ${s.items[x.item_id]?.name || x.item_id} ×${x.quantity}`,
+                            {
+                              type: "take_item",
+                              target: o.id,
+                              item_id: x.item_id,
+                              quantity: x.quantity,
+                            },
+                          ),
+                        )}
+                      </article>
+                    ))}
+                    {!enc && (
+                      <details>
+                        <summary>Расширить мир</summary>
+                        <p>Опиши место, которое хочешь исследовать.</p>
+                        <label>
+                          Новое место
+                          <textarea
+                            value={text}
+                            onChange={(e) => setText(e.target.value)}
+                            placeholder="Обсерватория за городом…"
+                          />
+                        </label>
+                        <button
+                          disabled={
+                            blocked || !text.trim() || !prefs.game.model
+                          }
+                          onClick={() =>
+                            void perform(
+                              "actions",
+                              { command: { type: "expand", topic: text } },
+                              true,
+                            )
+                          }
+                        >
+                          Создать новое место
+                        </button>
+                      </details>
                     )}
-                  </article>
-                ))}
-                {!enc && (
-                  <details>
-                    <summary>Расширить мир</summary>
-                    <p>Опиши место, которое хочешь исследовать.</p>
-                    <label>
-                      Новое место
-                      <textarea
-                        value={text}
-                        onChange={(e) => setText(e.target.value)}
-                        placeholder="Обсерватория за городом…"
-                      />
-                    </label>
-                    <button
-                      disabled={blocked || !text.trim() || !prefs.game.model}
-                      onClick={() =>
-                        void perform(
-                          "actions",
-                          { command: { type: "expand", topic: text } },
-                          true,
-                        )
-                      }
-                    >
-                      Создать новое место
-                    </button>
-                  </details>
+                  </>
                 )}
               </aside>
             </main>
@@ -673,45 +768,119 @@ export function Tabletop({
               return (
                 <section className="tt-panel" key={id}>
                   <h2>{a.name}</h2>
-                  {a.inventory.map((entry, i) => {
-                    const item = s.items[entry.item_id];
-                    return (
-                      <article key={`${entry.item_id}-${i}`}>
-                        <h3>
-                          {item?.name || entry.item_id} ×{entry.quantity}
-                          {entry.equipped ? " · экипировано" : ""}
-                        </h3>
-                        <p>{item?.description}</p>
-                        <p>
-                          Вес {item?.weight} · ценность {item?.value}
-                        </p>
-                        {a.controller.controller === "PLAYER" && (
-                          <>
-                            {button(entry.equipped ? "Снять" : "Экипировать", {
-                              type: entry.equipped ? "unequip" : "equip",
-                              actor_id: id,
-                              item_id: entry.item_id,
-                            })}
-                            {item?.type === "consumable" &&
-                              s.party.map((target) =>
-                                button(`Использовать на ${name(target)}`, {
-                                  type: "use_item",
+                  <p>
+                    Золото: {a.gold || 0} · Вес:{" "}
+                    {a.inventory.reduce(
+                      (n, e) =>
+                        n + (s.items[e.item_id]?.weight || 0) * e.quantity,
+                      0,
+                    )}{" "}
+                    · КД {a.armor_class}
+                  </p>
+                  {a.equipment_bonuses?.stealth_disadvantage ? (
+                    <p>Тяжёлая броня: помеха Скрытности</p>
+                  ) : null}
+                  <div className="tt-paper-doll" aria-label="Слоты экипировки">
+                    {Object.entries(a.equipment_slots || {}).map(
+                      ([slot, label]) => {
+                        const entry = a.inventory.find(
+                          (e) => e.equipped && e.slot === slot,
+                        );
+                        return (
+                          <div key={slot} style={{ gridArea: slot }}>
+                            <small>{label}</small>
+                            <strong>
+                              {entry ? s.items[entry.item_id]?.name : "Пусто"}
+                            </strong>
+                          </div>
+                        );
+                      },
+                    )}
+                  </div>
+                  <div className="tt-inventory-grid">
+                    {a.inventory.map((entry, i) => {
+                      const item = s.items[entry.item_id];
+                      return (
+                        <article key={`${entry.item_id}-${i}`}>
+                          <h3>
+                            {item?.name || entry.item_id} ×{entry.quantity}
+                            {entry.equipped ? " · экипировано" : ""}
+                          </h3>
+                          <details>
+                            <summary>Осмотреть и действия</summary>
+                            <p>{item?.description}</p>
+                            <p>
+                              Вес {item?.weight} · ценность {item?.value}
+                            </p>
+                            {a.controller.controller === "PLAYER" && (
+                              <>
+                                {item.slots?.length > 0 && (
+                                  <ActionImpact
+                                    gameId={game.id}
+                                    command={{
+                                      type: entry.equipped
+                                        ? "unequip"
+                                        : "equip",
+                                      actor_id: id,
+                                      item_id: entry.item_id,
+                                    }}
+                                  />
+                                )}
+                                {(!a.equipment_slots ||
+                                  !Object.keys(a.equipment_slots).length ||
+                                  item.slots?.length > 0) &&
+                                  button(
+                                    entry.equipped ? "Снять" : "Экипировать",
+                                    {
+                                      type: entry.equipped
+                                        ? "unequip"
+                                        : "equip",
+                                      actor_id: id,
+                                      item_id: entry.item_id,
+                                      slot: entry.equipped
+                                        ? entry.slot
+                                        : undefined,
+                                    },
+                                  )}
+                                {item?.type === "consumable" &&
+                                  s.party.map((target) =>
+                                    button(`Использовать на ${name(target)}`, {
+                                      type: "use_item",
+                                      actor_id: id,
+                                      item_id: entry.item_id,
+                                      slot: entry.equipped
+                                        ? entry.slot
+                                        : undefined,
+                                      target,
+                                    }),
+                                  )}
+                                {s.party
+                                  .filter((target) => target !== id)
+                                  .map((target) =>
+                                    button(`Передать: ${name(target)}`, {
+                                      type: "transfer_item",
+                                      actor_id: id,
+                                      item_id: entry.item_id,
+                                      slot: entry.equipped
+                                        ? entry.slot
+                                        : undefined,
+                                      target,
+                                      quantity: 1,
+                                    }),
+                                  )}
+                                {button("Оставить один", {
+                                  type: "drop_item",
                                   actor_id: id,
                                   item_id: entry.item_id,
-                                  target,
-                                }),
-                              )}
-                            {button("Оставить один", {
-                              type: "drop_item",
-                              actor_id: id,
-                              item_id: entry.item_id,
-                              quantity: 1,
-                            })}
-                          </>
-                        )}
-                      </article>
-                    );
-                  })}
+                                  quantity: 1,
+                                })}
+                              </>
+                            )}
+                          </details>
+                        </article>
+                      );
+                    })}
+                  </div>
                 </section>
               );
             })

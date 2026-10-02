@@ -1,6 +1,5 @@
 """Canonical casting queue: costs once, rolls in DiceEngine, resumable per target."""
 
-import re
 from ..spells import SpellCastState, ActiveConcentration, SpellSlotState
 from ..encounter import event
 
@@ -49,7 +48,7 @@ class SpellService:
                 for level, count in casting.slots.items()
             }
 
-    def execute(self, state, c, aid, events):
+    def execute(self, state, c, aid, events, validate_only=False):
         a = state.actor(aid)
         casting = state.ruleset.spellcasting.get(a.character_class)
         if not casting:
@@ -108,6 +107,12 @@ class SpellService:
             raise ValueError("Боевому заклинанию нужна цель в столкновении")
         if spell.target_type == "enemy" and not state.hostile(aid, target.id):
             raise ValueError("Нужна враждебная цель")
+        if validate_only:
+            self.runtime.spend(
+                state.encounter.model_copy(deep=True) if state.encounter else None,
+                "bonus_action" if spell.casting_time == "BONUS_ACTION" else "action",
+            )
+            return
         targets = [target.id]
         if spell.target_type == "area":
             targets = [
@@ -295,13 +300,7 @@ class SpellService:
                 cast.stage = "effect"
             expression = spell.damage or spell.healing
             if expression:
-                match = re.fullmatch(r"(\d+)d(\d+)([+-]\d+)?", expression)
-                dice = int(match[1]) + spell.upcast * max(
-                    0, cast.slot_level - spell.level
-                )
-                if spell.level == 0:
-                    dice *= 1 + (a.level >= 5) + (a.level >= 11) + (a.level >= 17)
-                expression = f"{dice}d{match[2]}{match[3] or ''}"
+                expression = self.expression(spell, cast.slot_level, a.level)
                 purpose = "spell_damage" if spell.damage else "spell_healing"
                 roll = self.roll_or_pending(
                     state,
@@ -318,6 +317,30 @@ class SpellService:
                 self.resolve(state, purpose, a.id, roll, 0, events)
             else:
                 self.apply_effects(state, events)
+
+    @staticmethod
+    def expression(spell, slot_level, actor_level):
+        from ..dice import DiceEngine
+
+        terms = DiceEngine.parse(spell.damage or spell.healing)
+        multiplier = (
+            1 + (actor_level >= 5) + (actor_level >= 11) + (actor_level >= 17)
+            if spell.level == 0
+            else 1
+        )
+        extra = spell.upcast * max(0, slot_level - spell.level)
+        result = []
+        for sign, count, sides in terms:
+            if sides:
+                count = count * multiplier + extra
+                extra = 0
+            result.append(
+                ("-" if sign < 0 else "+")
+                + (f"{count}d{sides}" if sides else str(count))
+            )
+        expression = "".join(result).lstrip("+")
+        DiceEngine.parse(expression)
+        return expression
 
     def resolve(self, state, purpose, aid, roll, dc, events):
         if purpose == "concentration":
@@ -359,11 +382,15 @@ class SpellService:
                     events,
                 )
             elif purpose == "spell_healing":
+                before = target.hp
                 healed = self.runtime.rules.heal(target, roll.total)
                 event(
                     events,
                     f"{target.name}: восстановлено {healed} HP.",
                     kind="healing",
+                    hp_before=before,
+                    hp_after=target.hp,
+                    maximum=target.max_hp,
                     amount=healed,
                     target=target.id,
                 )

@@ -1,5 +1,6 @@
 import { useState } from "react";
 export type Settings = {
+  check_frequency?: string;
   style: string;
   custom_style: string;
   strictness: string;
@@ -56,6 +57,11 @@ export function DMSettings({
           ["hidden", "Скрывать"],
           ["after", "Показывать после броска"],
           ["always", "Показывать всегда"],
+        ])}
+        {select("check_frequency", "Частота проверок", [
+          ["rare", "Редко"],
+          ["crpg", "Как в CRPG"],
+          ["often", "Часто"],
         ])}
         {select("length", "Подробность описаний", [
           ["short", "Коротко"],

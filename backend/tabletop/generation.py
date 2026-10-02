@@ -18,6 +18,9 @@ def authoring_catalog(rules):
             "version",
             "abilities",
             "ability_array",
+            "allocation",
+            "starting_gold",
+            "equipment_slots",
             "skills",
             "classes",
             "species",
@@ -71,10 +74,11 @@ class CampaignGenerator:
     def generate(self, draft_id, options):
         if not self.dm.config:
             raise ValueError("Для генерации кампании выбери модель")
-        rules = load_ruleset("d20-fantasy-v1")
+        rules = load_ruleset("d20-fantasy-v2")
         prompt = (
             "Создай полноценную playable CampaignDefinition на русском. Только JSON по схеме. "
-            "ruleset_id=d20-fantasy-v1, ruleset_version=3. Для каждого build выбери feature_choices по feature_choice_count класса. "
+            "Добавь checks: по значимым действиям exploration/dialogue/environment/knowledge/stealth/travel. Укажи только существующие ссылки для последствий; никогда не раскрывай secret с disclosure=never. Используй реальные success/failure эффекты, пассивные perception/insight для безопасного обнаружения. "
+            "ruleset_id=d20-fantasy-v2, ruleset_version=4. Для каждого build выбери feature_choices по feature_choice_count класса. "
             "Никаких полей runtime HP, AC, результатов бросков или state patches. "
             "Заполни initial_conflict и 2–4 публичных plot_hooks, не раскрывающих секреты. "
             "Дай фракциям public_goal, NPC — цели, отношения и намерения, заданиям — доступные условия выполнения. "

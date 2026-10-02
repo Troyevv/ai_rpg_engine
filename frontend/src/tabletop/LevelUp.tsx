@@ -1,12 +1,15 @@
+import { ActionImpact } from "./ActionImpact";
 import { useState } from "react";
 import { abilities, signed, type Command, type Sheet } from "./types";
 
 export function LevelUp({
   hero,
+  gameId,
   blocked,
   act,
 }: {
   hero: Sheet;
+  gameId: string;
   blocked: boolean;
   act: (command: Command) => void;
 }) {
@@ -143,6 +146,17 @@ export function LevelUp({
                 .join(" · ")}
             </p>
           )}
+          <ActionImpact
+            gameId={gameId}
+            command={{
+              type: "level_up",
+              actor_id: hero.id,
+              subclass,
+              feat_id: feat,
+              ability_increases: increases,
+              learn_spells: spells,
+            }}
+          />
           <button
             disabled={
               blocked ||

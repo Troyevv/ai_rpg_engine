@@ -25,12 +25,18 @@ class InventoryEntry(Model):
     item_id: Id
     quantity: int = Field(default=1, ge=1, le=10000)
     equipped: bool = False
+    slot: str = ""
 
 
 class ItemDefinition(Named):
     type: Literal["weapon", "armor", "consumable", "quest", "miscellaneous"] = (
         "miscellaneous"
     )
+    slots: list[str] = []
+    hands: int = Field(default=1, ge=1, le=2)
+    stealth_disadvantage: bool = False
+    ac_bonus: int = Field(default=0, ge=0, le=5)
+    features: list[str] = []
     weight: float = Field(default=0, ge=0, le=1000)
     value: int = Field(default=0, ge=0, le=100000)
     properties: list[str] = Field(default_factory=list, max_length=12)
@@ -69,7 +75,10 @@ class CharacterBuild(Model):
     species: str = "human"
     character_class: str = "fighter"
     background: str = "wanderer"
-    ability_method: Literal["standard_array", "point_buy"] = "standard_array"
+    ability_method: Literal["standard_array", "point_buy", "allocation"] = (
+        "standard_array"
+    )
+    purchases: list[InventoryEntry] | None = Field(default=None, max_length=40)
     spells: list[str] | None = Field(default=None, max_length=30)
     prepared_spells: list[str] | None = Field(default=None, max_length=30)
     concept: str = Field(default="", max_length=2000)
@@ -158,12 +167,41 @@ class NPCSchedule(Named):
     after_quest: Id | None = None
 
 
+class CheckEffect(Model):
+    type: Literal[
+        "reveal_secret", "reveal_object", "attitude", "alert", "move", "damage", "prone"
+    ]
+    target: str = ""
+    attitude: Literal["friendly", "neutral", "hostile"] = "neutral"
+    amount: int = Field(default=0, ge=0, le=10)
+
+
+class SceneCheck(Named):
+    location_id: Id
+    category: Literal[
+        "exploration", "dialogue", "environment", "knowledge", "stealth", "travel"
+    ]
+    ability: Ability
+    skill: str = ""
+    save: bool = False
+    difficulty: Difficulty = "MEDIUM"
+    passive: bool = False
+    actor_id: Id | None = None
+    background_tags: list[str] = []
+    success: list[CheckEffect] = Field(default_factory=list, max_length=5)
+    failure: list[CheckEffect] = Field(default_factory=list, max_length=5)
+    critical_success: list[CheckEffect] | None = None
+    critical_failure: list[CheckEffect] | None = None
+    partial_margin: int = Field(default=0, ge=0, le=5)
+    partial: list[CheckEffect] = []
+
+
 class CampaignDefinition(Model):
     schema_version: Literal[1] = 1
     id: Id
     name: str = Field(min_length=1, max_length=120)
     ruleset_id: str = "d20-basic-v2"
-    ruleset_version: Literal[2, 3] = 2
+    ruleset_version: Literal[2, 3, 4] = 2
     setting: Setting
     regions: list[Region] = Field(min_length=1, max_length=30)
     locations: list[Location] = Field(min_length=1, max_length=150)
@@ -177,6 +215,7 @@ class CampaignDefinition(Model):
     secrets: list[Secret] = Field(default_factory=list, max_length=100)
     encounters: list[EncounterDefinition] = Field(default_factory=list, max_length=50)
     initial_conflict: str = Field(default="", max_length=3000)
+    checks: list[SceneCheck] = Field(default_factory=list, max_length=150)
     schedules: list[NPCSchedule] = Field(default_factory=list, max_length=100)
     plot_hooks: list[str] = Field(default_factory=list, max_length=20)
     starting_party: list[Id] = Field(min_length=1, max_length=6)
@@ -231,6 +270,11 @@ class CreateSecret(Model):
     value: Secret
 
 
+class CreateCheck(Model):
+    type: Literal["CreateCheck"]
+    value: SceneCheck
+
+
 class CreateSchedule(Model):
     type: Literal["CreateSchedule"]
     value: NPCSchedule
@@ -265,6 +309,7 @@ Operation = Annotated[
         CreateRegion,
         CreateSecret,
         CreateSchedule,
+        CreateCheck,
         DefineFactionRelation,
         ConnectLocations,
         RevealKnowledge,

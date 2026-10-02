@@ -61,8 +61,12 @@ class ConditionEngine:
         )
 
     @classmethod
-    def advantage(cls, actor, rules, purpose, target=None, ability="", distance=5):
+    def advantage(
+        cls, actor, rules, purpose, target=None, ability="", distance=5, skill=""
+    ):
         sources = []
+        if skill == "stealth" and actor.equipment_bonuses.get("stealth_disadvantage"):
+            sources.append({"name": "Тяжёлая броня", "value": -1})
         for c in cls.definitions(actor, rules):
             value = (
                 c.attack

@@ -1,22 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { api } from "../api";
 import type { Preferences } from "../types";
 import { abilities, skills, signed, type Build, type Catalog } from "./types";
 
-type Preview = {
-  sheet: {
-    hp: number;
-    armor_class: number;
-    speed: number;
-    features: string[];
-    proficiencies: string[];
-    attacks: Record<string, { name: string; die: number }>;
-  };
-  modifiers: Record<string, number>;
-  skills: Record<string, number>;
-  saves: Record<string, number>;
-  points_remaining: number | null;
-};
+import {
+  BuildImpactPreview,
+  type BuildPreview as Preview,
+} from "./BuildImpactPreview";
+import { StartingShop } from "./StartingShop";
+
 const proficiencyNames: Record<string, string> = {
   light: "Лёгкая броня",
   medium: "Средняя броня",
@@ -30,6 +22,11 @@ const proficiencyNames: Record<string, string> = {
   languages: "Языки",
   rituals: "Ритуалы",
   crafting: "Ремесло",
+  etiquette: "Этикет",
+  trading: "Торговля",
+  herbalism: "Травничество",
+  traps: "Ловушки",
+  forgery: "Подделка документов",
   thieves_tools: "Воровские инструменты",
   music: "Музыкальные инструменты",
 };
@@ -72,6 +69,8 @@ export function CharacterCreator({
   prefs: Preferences;
   apiKey: string;
 }) {
+  const previousPreview = useRef<Preview | null>(null);
+  const latestPreview = useRef<Preview | null>(null);
   const casting = catalog.spellcasting?.[build.character_class];
   const stages = casting
     ? [...baseStages.slice(0, 8), "Заклинания", ...baseStages.slice(8)]
@@ -99,9 +98,11 @@ export function CharacterCreator({
         controller.signal,
       )
         .then((p) => {
+          previousPreview.current = latestPreview.current;
+          latestPreview.current = p;
           setPreview(p);
           setError("");
-          onValidity(true);
+          onValidity(p.valid !== false);
         })
         .catch((e) => {
           if (e.name !== "AbortError") {
@@ -258,6 +259,15 @@ export function CharacterCreator({
                       prepared_spells: null,
                       skills: c.skills.slice(0, c.skill_count),
                       equipment: c.equipment,
+                      purchases: build.purchases?.map((e) => {
+                        const item = catalog.items.find(
+                          (i) => i.id === e.item_id,
+                        );
+                        return item?.type === "armor" &&
+                          !c.armor?.includes(item.armor_category)
+                          ? { ...e, equipped: false, slot: "" }
+                          : e;
+                      }),
                       feature_choices: (c.feature_choices || []).slice(
                         0,
                         c.feature_choice_count || 0,
@@ -303,6 +313,17 @@ export function CharacterCreator({
                 >
                   <strong>{b.name}</strong>
                   <span>{b.description}</span>
+                  <span>Стартовое золото: +{b.starting_gold || 0}</span>
+                  <span>
+                    Инструменты:{" "}
+                    {(b.tools || [])
+                      .map((t) => proficiencyNames[t] || t)
+                      .join(", ")}
+                  </span>
+                  <span>Языки: {(b.languages || []).join(", ")}</span>
+                  {(b.features || []).map((f) => (
+                    <span key={f}>{catalog.features[f]?.description}</span>
+                  ))}
                   <span>
                     {(b.skills || []).map((s) => skills[s] || s).join(", ")}
                   </span>
@@ -319,48 +340,90 @@ export function CharacterCreator({
           )}
           {!spellStep && contentStep === 4 && (
             <>
-              <label>
-                Метод характеристик
-                <select
-                  aria-label="Метод характеристик"
-                  value={build.ability_method}
-                  onChange={(e) =>
-                    onChange({
-                      ...build,
-                      ability_method: e.target.value as Build["ability_method"],
-                      abilities:
-                        e.target.value === "point_buy"
-                          ? Object.fromEntries(
-                              catalog.abilities.map((a) => [
-                                a,
-                                catalog.point_buy.minimum!,
-                              ]),
-                            )
-                          : { ...catalog.default_build.abilities },
-                    })
-                  }
-                >
-                  <option value="standard_array">Стандартный массив</option>
-                  {catalog.point_buy.costs && (
+              {build.ability_method === "allocation" ? (
+                <>
+                  <p role="status" aria-label="Бюджет характеристик">
+                    Осталось очков:{" "}
+                    {catalog.allocation.points -
+                      Object.values(build.abilities).reduce(
+                        (n, v) => n + v - catalog.allocation.base,
+                        0,
+                      )}
+                  </p>
+                  <progress
+                    max={catalog.allocation.points}
+                    value={Object.values(build.abilities).reduce(
+                      (n, v) => n + v - catalog.allocation.base,
+                      0,
+                    )}
+                  />
+                  <p>
+                    Каждое +1 стоит одно очко. Модификатор меняется на чётных
+                    значениях; распределить нужно все{" "}
+                    {catalog.allocation.points} очка.
+                  </p>
+                </>
+              ) : (
+                <label>
+                  Метод характеристик
+                  <select
+                    aria-label="Метод характеристик"
+                    value={build.ability_method}
+                    onChange={(e) =>
+                      onChange({
+                        ...build,
+                        ability_method: e.target
+                          .value as Build["ability_method"],
+                        abilities:
+                          e.target.value === "point_buy"
+                            ? Object.fromEntries(
+                                catalog.abilities.map((a) => [
+                                  a,
+                                  catalog.point_buy.minimum!,
+                                ]),
+                              )
+                            : { ...catalog.default_build.abilities },
+                      })
+                    }
+                  >
+                    <option value="standard_array">Стандартный массив</option>
                     <option value="point_buy">Point buy</option>
+                  </select>
+                  {build.ability_method === "point_buy" && (
+                    <p role="status" aria-label="Бюджет характеристик">
+                      Осталось очков:{" "}
+                      {(catalog.point_buy.budget || 0) - totalCost}
+                    </p>
                   )}
-                </select>
-              </label>
-              {build.ability_method === "point_buy" && (
-                <p role="status" aria-label="Бюджет характеристик">
-                  Осталось очков: {(catalog.point_buy.budget || 0) - totalCost}
-                </p>
+                </label>
               )}
               <div className="tt-ability-grid">
                 {catalog.abilities.map((a) => (
                   <div className="tt-score" key={a}>
                     <strong>{abilities[a]}</strong>
-                    {build.ability_method === "point_buy" ? (
+                    <small>
+                      {
+                        {
+                          strength: "Ближний бой, перенос тяжестей, атлетика",
+                          dexterity:
+                            "Броня, инициатива, скрытность и ловкое оружие",
+                          constitution: "Здоровье и сопротивление опасностям",
+                          intelligence: "Знания, анализ и магия волшебника",
+                          wisdom:
+                            "Восприятие, проницательность и духовная магия",
+                          charisma: "Общение и магия личности",
+                        }[a]
+                      }
+                    </small>
+                    {build.ability_method !== "standard_array" ? (
                       <div>
                         <button
                           aria-label={`Уменьшить: ${abilities[a]}`}
                           disabled={
-                            build.abilities[a] <= catalog.point_buy.minimum!
+                            build.abilities[a] <=
+                            (build.ability_method === "allocation"
+                              ? catalog.allocation.minimum
+                              : catalog.point_buy.minimum!)
                           }
                           onClick={() => setScore(a, build.abilities[a] - 1)}
                         >
@@ -370,15 +433,23 @@ export function CharacterCreator({
                         <button
                           aria-label={`Увеличить: ${abilities[a]}`}
                           disabled={
-                            build.abilities[a] >= catalog.point_buy.maximum! ||
-                            totalCost +
-                              (catalog.point_buy.costs?.[
-                                String(build.abilities[a] + 1)
-                              ] ?? Infinity) -
-                              (catalog.point_buy.costs?.[
-                                String(build.abilities[a])
-                              ] ?? 0) >
-                              catalog.point_buy.budget!
+                            build.ability_method === "allocation"
+                              ? build.abilities[a] >=
+                                  catalog.allocation.maximum ||
+                                Object.values(build.abilities).reduce(
+                                  (n, v) => n + v - catalog.allocation.base,
+                                  0,
+                                ) >= catalog.allocation.points
+                              : build.abilities[a] >=
+                                  catalog.point_buy.maximum! ||
+                                totalCost +
+                                  (catalog.point_buy.costs?.[
+                                    String(build.abilities[a] + 1)
+                                  ] ?? Infinity) -
+                                  (catalog.point_buy.costs?.[
+                                    String(build.abilities[a])
+                                  ] ?? 0) >
+                                  catalog.point_buy.budget!
                           }
                           onClick={() => setScore(a, build.abilities[a] + 1)}
                         >
@@ -467,28 +538,33 @@ export function CharacterCreator({
               )}
             </>
           )}
-          {!spellStep && contentStep === 7 && (
-            <label>
-              Стартовый набор
-              <select
-                value={JSON.stringify(build.equipment)}
-                onChange={(e) =>
-                  change("equipment", JSON.parse(e.target.value))
-                }
-              >
-                {(cls.equipment_choices || [cls.equipment]).map((items) => (
-                  <option key={items.join("-")} value={JSON.stringify(items)}>
-                    {items
-                      .map(
-                        (i) => catalog.items.find((x) => x.id === i)?.name || i,
-                      )
-                      .join(", ")}
-                  </option>
-                ))}
-              </select>
-              <p>Предметы происхождения добавляются отдельно.</p>
-            </label>
-          )}
+          {!spellStep &&
+            contentStep === 7 &&
+            (build.purchases != null ? (
+              <StartingShop build={build} catalog={catalog} change={onChange} />
+            ) : (
+              <label>
+                Стартовый набор
+                <select
+                  value={JSON.stringify(build.equipment)}
+                  onChange={(e) =>
+                    change("equipment", JSON.parse(e.target.value))
+                  }
+                >
+                  {(cls.equipment_choices || [cls.equipment]).map((items) => (
+                    <option key={items.join("-")} value={JSON.stringify(items)}>
+                      {items
+                        .map(
+                          (i) =>
+                            catalog.items.find((x) => x.id === i)?.name || i,
+                        )
+                        .join(", ")}
+                    </option>
+                  ))}
+                </select>
+                <p>Предметы происхождения добавляются отдельно.</p>
+              </label>
+            ))}
           {spellStep && casting && (
             <section>
               <h2>Известные заклинания</h2>
@@ -615,6 +691,11 @@ export function CharacterCreator({
           aria-label="Предварительный лист персонажа"
         >
           <h3>Твой персонаж</h3>
+          <BuildImpactPreview
+            before={previousPreview.current}
+            after={preview}
+            catalog={catalog}
+          />
           {preview ? (
             <>
               <div className="tt-live-stats">

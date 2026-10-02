@@ -156,4 +156,23 @@ class CampaignReferenceValidator:
             check("faction_relation", relation, "second", r.second, "faction")
         check("campaign", d, "starting_location", d.starting_location, "location")
         many("campaign", d, "starting_party", d.starting_party, "actor")
+        for c in d.checks:
+            check("check", c, "location_id", c.location_id, "location")
+            check("check", c, "actor_id", c.actor_id, "actor")
+            for effect in (
+                c.success
+                + c.failure
+                + (c.critical_success or [])
+                + (c.critical_failure or [])
+                + c.partial
+            ):
+                target = {
+                    "reveal_secret": "secret",
+                    "reveal_object": "object",
+                    "attitude": "actor",
+                    "alert": "actor",
+                    "move": "location",
+                }.get(effect.type)
+                if target:
+                    check("check", c, "effects.target", effect.target, target)
         return issues

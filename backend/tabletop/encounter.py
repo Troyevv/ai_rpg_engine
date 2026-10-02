@@ -138,6 +138,7 @@ class EncounterEngine:
             for c in self.rules.conditions.definitions(target, state.ruleset)
         ):
             amount //= 2
+        before = target.hp
         dealt = self.rules.damage(target, amount, critical)
         if dealt and target.concentration:
             state.session_state.concentration_checks.append(
@@ -156,6 +157,10 @@ class EncounterEngine:
             kind="damage",
             target=target.id,
             amount=dealt,
+            hp_before=before,
+            hp_after=target.hp,
+            maximum=target.max_hp,
+            critical=critical,
         )
         return dealt
 

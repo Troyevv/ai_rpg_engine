@@ -7,6 +7,10 @@ from .definitions import Model
 
 class FeatureEffect(Model):
     type: Literal[
+        "heal_dice",
+        "restore_slot",
+        "unarmed_die",
+        "unarmored_ability",
         "max_hp",
         "armor_class",
         "speed",
@@ -22,11 +26,16 @@ class FeatureEffect(Model):
         "disengage",
         "extra_attack",
     ]
+    expression: str = ""
+    add_level: bool = False
     value: int = Field(default=0, ge=-20, le=100)
     key: str = ""
 
 
 class FeatureDefinition(Model):
+    source: Literal[
+        "CLASS", "SUBCLASS", "SPECIES", "BACKGROUND", "FEAT", "ITEM", "CONDITION"
+    ] = "CLASS"
     id: str
     name: str
     level: int = Field(default=1, ge=1, le=20)

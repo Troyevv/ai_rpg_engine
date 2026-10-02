@@ -39,10 +39,13 @@ ABILITIES = (
 class Ruleset(Model):
     id: str
     name: str
-    version: Literal[2, 3] = 2
+    version: Literal[2, 3, 4] = 2
     capabilities: list[str]
     abilities: list[Ability]
     ability_array: list[int]
+    allocation: dict[str, int] = {}
+    starting_gold: int = Field(default=0, ge=0)
+    equipment_slots: dict[str, str] = {}
     point_buy: dict[str, int | dict[str, int]] = {}
     features: dict[str, FeatureDefinition] = {}
     spells: dict[str, SpellDefinition] = {}
@@ -82,6 +85,12 @@ class ActorControl(Model):
 
 
 class CharacterSheet(Model):
+    gold: int = Field(default=0, ge=0)
+    equipment_slots: dict[str, str] = {}
+    languages: list[str] = []
+    tool_proficiencies: list[str] = []
+    background_tags: list[str] = []
+    equipment_bonuses: dict[str, int] = {}
     id: str
     name: str
     level: int = Field(default=1, ge=1, le=20)
@@ -168,6 +177,7 @@ class Encounter(Model):
 
 
 class PendingRoll(Model):
+    check_id: str = ""
     id: str
     reason: str = ""
     purpose: Literal[
@@ -181,6 +191,7 @@ class PendingRoll(Model):
         "spell_save",
         "spell_damage",
         "spell_healing",
+        "feature_healing",
         "concentration",
     ]
     actor: str
@@ -277,6 +288,8 @@ class GameState(Model):
     rewarded_progression: list[str] = []
     schedule_due: dict[str, int] = {}
     completed_schedules: list[str] = []
+    resolved_checks: dict[str, str] = {}
+    alerted_actors: list[str] = []
     world_events: list[dict[str, str | int]] = []
     faction_reputation: dict[str, int] = {}
     reputation_rewards: list[str] = []

@@ -11,9 +11,10 @@ export type Spell = {
   description: string;
 };
 export type Build = {
+  purchases?: Entry[] | null;
   spells?: string[] | null;
   prepared_spells?: string[] | null;
-  ability_method: "standard_array" | "point_buy";
+  ability_method: "standard_array" | "point_buy" | "allocation";
   concept: string;
   feature_choices: string[];
   name: string;
@@ -31,6 +32,10 @@ export type Build = {
   flaws: string;
 };
 export type Feature = {
+  source: string;
+  recharge: string;
+  reach: number;
+  level: number;
   id: string;
   name: string;
   description: string;
@@ -41,6 +46,14 @@ export type Feature = {
   effects: { type: string; value: number; key: string }[];
 };
 export type Catalog = {
+  allocation: {
+    base: number;
+    points: number;
+    minimum: number;
+    maximum: number;
+  };
+  starting_gold: number;
+  equipment_slots: Record<string, string>;
   spells: Record<string, Spell>;
   spellcasting: Record<
     string,
@@ -69,6 +82,7 @@ export type Catalog = {
     {
       name: string;
       description?: string;
+      starting_gold?: number;
       hit_die: number;
       primary_abilities?: string[];
       armor?: string[];
@@ -96,12 +110,25 @@ export type Catalog = {
       equipment?: string[];
       proficiencies?: string[];
       hooks?: string[];
+      starting_gold?: number;
+      tools?: string[];
+      languages?: string[];
+      features?: string[];
     }
   >;
   items: Item[];
   default_build: Build;
 };
 export type Item = {
+  slots: string[];
+  hands: number;
+  armor_category: string;
+  armor_base: number;
+  dex_cap: number;
+  ac_bonus: number;
+  weapon_die: number;
+  weapon_ability: string;
+  stealth_disadvantage: boolean;
   id: string;
   name: string;
   description: string;
@@ -110,8 +137,16 @@ export type Item = {
   weight: number;
   value: number;
 };
-export type Entry = { item_id: string; quantity: number; equipped: boolean };
+export type Entry = {
+  item_id: string;
+  quantity: number;
+  equipped: boolean;
+  slot?: string;
+};
 export type Sheet = {
+  gold: number;
+  equipment_slots: Record<string, string>;
+  equipment_bonuses: Record<string, number>;
   id: string;
   name: string;
   level: number;
@@ -171,6 +206,8 @@ export type Sheet = {
 };
 export type Command = {
   type: string;
+  check_id?: string;
+  slot?: string;
   actor_id?: string;
   target?: string;
   purpose?: string;
@@ -192,6 +229,7 @@ export type Command = {
   topic?: string;
 };
 export type Roll = {
+  components?: { die: number; raw: number[]; selected: number; sign: number }[];
   expression: string;
   raw: number[];
   selected: number;
@@ -216,6 +254,37 @@ export type Game = {
   id: string;
   revision: number;
   state: {
+    attack_previews: AttackPreview[];
+    usable_actions: {
+      kind: string;
+      id: string;
+      name: string;
+      description: string;
+      cost: string;
+      slot_level: number;
+      targets: {
+        id: string;
+        name: string;
+        distance: number;
+        hit_percent?: number;
+        modifier?: number;
+        target_ac?: number;
+        expression?: string;
+        healing_modifier?: number;
+        save?: string;
+        save_dc?: number;
+        half_on_save?: boolean;
+      }[];
+    }[];
+    checks: {
+      id: string;
+      name: string;
+      description: string;
+      save: boolean;
+      skill: string;
+      ability: string;
+      category: string;
+    }[];
     dm_settings: import("./DMSettings").Settings;
     campaign: string;
     initial_conflict: string;
@@ -227,7 +296,7 @@ export type Game = {
       public_goal: string;
       reputation: number;
     }[];
-    ruleset: { name: string };
+    ruleset: { id: string; name: string };
     world: { name: string; description: string };
     scene: string;
     location: string;
@@ -313,6 +382,11 @@ export type Game = {
     user_text: string;
     narrative: string;
     events: {
+      hp_before?: number;
+      hp_after?: number;
+      maximum?: number;
+      target?: string;
+      outcome?: string;
       text: string;
       kind?: string;
       success?: boolean;
@@ -378,6 +452,7 @@ export const skills: Record<string, string> = {
   survival: "Выживание",
 };
 export const purposes: Record<string, string> = {
+  feature_healing: "Лечение способностью",
   spell_attack: "Атака заклинанием",
   spell_save: "Спасбросок против заклинания",
   spell_damage: "Урон заклинания",
@@ -391,3 +466,26 @@ export const purposes: Record<string, string> = {
   death: "Спасбросок от смерти",
 };
 export const signed = (v: number) => (v >= 0 ? `+${v}` : String(v));
+
+export type AttackPreview = {
+  target_ac: number;
+  weapon: string;
+  name: string;
+  target: string;
+  target_name: string;
+  available: boolean;
+  reason: string;
+  distance: number;
+  reach: number;
+  hit_percent: number;
+  advantage: number;
+  sources: { name: string; value: number }[];
+  modifier: number;
+  damage_modifier: number;
+  die: number;
+  damage: number[];
+  critical_damage: number[];
+  damage_note: string;
+  cost: string;
+  breakdown: Record<string, number>;
+};

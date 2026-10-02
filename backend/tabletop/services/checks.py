@@ -17,6 +17,10 @@ class CheckService:
             self.runtime.check(state, c, a, events)
 
     def check(self, state, c, a, events):
+        if c.check_id:
+            from .universal import UniversalChecks
+
+            return UniversalChecks(self.runtime).request(state, c, a, events)
         if c.type == "check":
             self.runtime.spend(state.encounter)
         dc = DifficultyResolver.resolve(state.ruleset, c.difficulty)
@@ -101,7 +105,7 @@ class CheckService:
             else self.runtime.rules.check_modifier(a, ability, skill, state.ruleset)
         )
         advantage, sources = self.runtime.rules.conditions.advantage(
-            a, state.ruleset, c.type, ability=ability
+            a, state.ruleset, c.type, ability=ability, skill=skill
         )
         self.runtime.pending(
             state,
@@ -145,7 +149,15 @@ class CheckService:
             events[-1]["sources"] = p.advantage_sources
         state.session_state.pending = None
         state.session_state.mode = p.resume
-        if p.purpose.startswith("spell_") or p.purpose == "concentration":
+        if p.check_id:
+            from .universal import UniversalChecks
+
+            UniversalChecks(self.runtime).resolve(
+                state, p.check_id, a, roll, events, dc=p.dc
+            )
+        elif p.purpose == "feature_healing":
+            self.runtime.features_service.resolve_healing(state, p.target, roll, events)
+        elif p.purpose.startswith("spell_") or p.purpose == "concentration":
             self.runtime.spells_service.resolve(
                 state, p.purpose, p.actor, roll, p.dc, events
             )
@@ -267,4 +279,7 @@ class CheckService:
                     break
         self.runtime.progression_service.reconcile(state, events)
         WorldService.advance(state, events)
+        from ..events import state_changes
+
+        state_changes(original, state, events)
         return (self.runtime.validate(state), events)

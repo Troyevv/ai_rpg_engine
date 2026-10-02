@@ -129,6 +129,7 @@ class EncounterService:
                 state,
                 "attack",
                 aid,
+                ability=a.attacks[weapon].ability,
                 modifier=self.runtime.rules.attack_modifier(a, weapon),
                 target=target,
                 dc=t.armor_class,
@@ -148,7 +149,9 @@ class EncounterService:
             a = state.actor(aid)
             modifier = self.runtime.rules.modifier(a.abilities["dexterity"])
             if state.controllers[aid].controller == "PLAYER":
-                self.runtime.pending(state, "initiative", aid, modifier=modifier)
+                self.runtime.pending(
+                    state, "initiative", aid, modifier=modifier, ability="dexterity"
+                )
                 event(events, a.name + ": брось инициативу.", kind="pending")
                 return
             s.initiative_results[aid] = self.runtime.combat.roll(
@@ -267,7 +270,17 @@ class EncounterService:
             decision = self.runtime.ai.decision(state, aid)
             event(
                 events,
-                a.name + ": " + decision.behavior,
+                a.name
+                + ": "
+                + {
+                    "Attack": "атака",
+                    "EndTurn": "завершает ход",
+                    "UseFeature": "применяет способность",
+                    "CastSpell": "применяет магию",
+                    "Move": "перемещается",
+                    "Flee": "отступает",
+                    "Heal": "лечится",
+                }.get(decision.behavior, decision.behavior),
                 kind="ai_decision",
                 actor=aid,
                 behavior=decision.behavior,

@@ -20,6 +20,7 @@ class MoveCommand(ActorCommand):
 
 
 class CheckCommand(ActorCommand):
+    check_id: str = Field(default="", max_length=80)
     type: Literal["check"] = "check"
     ability: Ability = "wisdom"
     skill: str = Field(default="", max_length=80)
@@ -30,6 +31,7 @@ class CheckCommand(ActorCommand):
 
 
 class SaveCommand(ActorCommand):
+    check_id: str = Field(default="", max_length=80)
     type: Literal["save"] = "save"
     ability: Ability = "wisdom"
     difficulty: Difficulty = "MEDIUM"
@@ -99,6 +101,7 @@ class UseItemCommand(ActorCommand):
 
 
 class EquipmentCommand(ActorCommand):
+    slot: str = Field(default="", max_length=40)
     type: Literal["equip", "unequip"]
     item_id: str = Field(min_length=1, max_length=80)
 
@@ -112,6 +115,13 @@ class TakeItemCommand(ActorCommand):
 
 class DropItemCommand(ActorCommand):
     type: Literal["drop_item"] = "drop_item"
+    item_id: str = Field(min_length=1, max_length=80)
+    quantity: int = Field(default=1, ge=1, le=100)
+
+
+class TransferItemCommand(ActorCommand):
+    type: Literal["transfer_item"] = "transfer_item"
+    target: str = Field(min_length=1, max_length=80)
     item_id: str = Field(min_length=1, max_length=80)
     quantity: int = Field(default=1, ge=1, le=100)
 
@@ -169,6 +179,7 @@ ActionCommand = Annotated[
         EquipmentCommand,
         TakeItemCommand,
         DropItemCommand,
+        TransferItemCommand,
         RestCommand,
         HelpCommand,
         CombatActionCommand,

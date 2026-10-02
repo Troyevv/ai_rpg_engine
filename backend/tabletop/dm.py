@@ -85,6 +85,8 @@ class DMAgent:
             )
         prompt = (
             "Ты DM настольной RPG. Верни только одну JSON команду по схеме. "
+            "Для доступных available_checks выбери check/save с check_id: только движок применяет их последствия. "
+            "Без неопределённости и значимых последствий используй look/dialogue/interact, без броска. "
             "Используй семантическую difficulty, никогда dc или результат броска. "
             "Для поиска: check purpose=search без target. Для убеждения: check purpose=persuade target=NPC. "
             "Магия: cast_spell с известным spell_id, target и необязательным slot_level. Ячейки и броски определяет движок. "

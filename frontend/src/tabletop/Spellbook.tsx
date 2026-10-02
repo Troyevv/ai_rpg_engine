@@ -118,6 +118,13 @@ export function Spellbook({
                   blocked ||
                   !available ||
                   !hasSlot ||
+                  !state.usable_actions?.some(
+                    (a) =>
+                      a.kind === "spell" &&
+                      a.id === spell.id &&
+                      a.slot_level === level &&
+                      a.targets.some((t) => t.id === target),
+                  ) ||
                   level < spell.level ||
                   (!!state.encounter &&
                     !(spell.casting_time === "BONUS_ACTION"

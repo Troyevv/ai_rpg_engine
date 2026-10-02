@@ -101,6 +101,9 @@ def tabletop_stream(**kwargs):
         for actor in campaign.characters + campaign.creatures:
             actor.build.feature_choices = ['defense_style']
         idea = json.loads(kwargs['messages'][-1]['content'])['options']['idea']
+        if idea == 'gameplay acceptance':
+            from tabletop_gameplay_fixture import gameplay_definition
+            campaign = gameplay_definition()
         if idea == 'invalid references':
             campaign.characters[1].knowledge.append('missing_secret')
             campaign.characters[1].relationships['missing_actor'] = 10
@@ -121,6 +124,8 @@ def tabletop_stream(**kwargs):
                 {'id':'look','label':'Осмотреть стены','command':{'type':'look'}},
                 {'id':'check','label':'Проверить течение','command':{'type':'check','ability':'strength','skill':'athletics'}},
             ]}
+        checks={'Ищу следы':'investigation_check','Я от капитана':'deception_check','Карабкаюсь по стене':'climb_check','Изучаю руну':'arcana_check','Прокрадываюсь мимо стража':'stealth_check'}
+        if action in checks:command={'type':'check','check_id':checks[action]}
         value=json.dumps(command)
     else:
         context=json.loads(kwargs['messages'][-1]['content'])['context']
@@ -164,8 +169,11 @@ if __name__ == '__main__':
     from tabletop_fixture import Fixed
     class BrowserDice(DiceEngine):
         def roll(self,expression,**kwargs):
-            value=(4 if kwargs.get('purpose') in ('spell_damage','spell_healing') else ({'initiative':1,'attack':12,'damage':2}.get(kwargs.get('purpose'),10) if kwargs.get('actor')=='sentinel' else 8 if kwargs.get('purpose')=='damage' else 20))
-            return DiceEngine(Fixed(*([value]*10))).roll(expression,**kwargs)
+            value=(4 if kwargs.get('purpose') in ('spell_damage','spell_healing','feature_healing') else ({'initiative':1,'attack':12,'damage':2}.get(kwargs.get('purpose'),10) if kwargs.get('actor')=='sentinel' else 8 if kwargs.get('purpose')=='damage' else 20))
+            if os.getenv("E2E_GAMEPLAY")=="1" and kwargs.get("purpose")=="check" and kwargs.get("modifier",0)>=3: value=1
+            class Bounded:
+                def randint(self,lo,hi):return min(hi,max(lo,value))
+            return DiceEngine(Bounded()).roll(expression,**kwargs)
     dice=BrowserDice()
     app.state.tabletop_runtime.dice=dice
     app.state.tabletop_runtime.combat.dice=dice

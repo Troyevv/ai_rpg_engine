@@ -106,7 +106,7 @@ class RulesEngine:
             if actor.death_failures == 3:
                 actor.conditions = ["dead"]
 
-    def validate_build(self, build, rules):
+    def validate_build(self, build, rules, *, preview=False):
         if (
             build.character_class not in rules.classes
             or build.species not in rules.species
@@ -115,7 +115,11 @@ class RulesEngine:
             raise ValueError("Неизвестный класс, вид или происхождение")
         if set(build.abilities) != set(rules.abilities):
             raise ValueError("Нужны все шесть характеристик")
-        if build.ability_method == "point_buy":
+        if build.ability_method == "allocation":
+            remaining = self.allocation_remaining(build.abilities, rules)
+            if remaining and not preview:
+                raise ValueError("Распредели все очки характеристик")
+        elif build.ability_method == "point_buy":
             self.point_buy_cost(build.abilities, rules)
         elif sorted(build.abilities.values()) != sorted(rules.ability_array):
             raise ValueError(
@@ -128,7 +132,9 @@ class RulesEngine:
             or not set(build.skills) <= set(cls["skills"])
         ):
             raise ValueError("Выбери допустимые навыки класса")
-        if sorted(build.equipment) not in [
+        if build.purchases is not None:
+            self.shop_remaining(build, rules)
+        elif sorted(build.equipment) not in [
             sorted(e) for e in cls.get("equipment_choices", [cls["equipment"]])
         ]:
             raise ValueError(
@@ -159,11 +165,43 @@ class RulesEngine:
             raise ValueError("Превышен бюджет point buy")
         return spent
 
-    def build_character(self, definition, rules):
+    @staticmethod
+    def allocation_remaining(abilities, rules):
+        c = rules.allocation
+        if not c or any(
+            v < c["minimum"] or v > c["maximum"] for v in abilities.values()
+        ):
+            raise ValueError("Характеристики вне допустимого диапазона")
+        remaining = c["points"] - sum(v - c["base"] for v in abilities.values())
+        if remaining < 0:
+            raise ValueError("Недостаточно очков характеристик")
+        return remaining
+
+    @staticmethod
+    def shop_remaining(build, rules):
+        if rules.version < 4 or build.purchases is None:
+            raise ValueError("Стартовый магазин недоступен")
+        items = {i.id: i for i in rules.items}
+        total = 0
+        for entry in build.purchases:
+            item = items.get(entry.item_id)
+            if not item or item.type == "quest" or item.value <= 0:
+                raise ValueError("Этот предмет нельзя купить на старте")
+            total += item.value * entry.quantity
+        capital = (
+            rules.starting_gold
+            + rules.classes[build.character_class].get("starting_gold", 0)
+            + rules.backgrounds[build.background].get("starting_gold", 0)
+        )
+        if total > capital:
+            raise ValueError("Недостаточно золота")
+        return capital - total
+
+    def build_character(self, definition, rules, *, preview=False):
         from .models import CharacterSheet
         from .definitions import InventoryEntry
 
-        b = self.validate_build(definition.build, rules)
+        b = self.validate_build(definition.build, rules, preview=preview)
         cls = rules.classes[b.character_class]
         hp = max(1, cls["hit_die"] + self.modifier(b.abilities["constitution"]))
         inventory = [
@@ -174,6 +212,8 @@ class RulesEngine:
             )
             for i in b.equipment
         ]
+        if b.purchases is not None:
+            inventory = [e.model_copy(deep=True) for e in b.purchases]
         background = rules.backgrounds[b.background]
         inventory.extend(
             InventoryEntry(item_id=i) for i in background.get("equipment", [])
@@ -183,10 +223,16 @@ class RulesEngine:
             dict.fromkeys(
                 cls.get("features", [])
                 + rules.species[b.species].get("features", [])
+                + background.get("features", [])
                 + b.feature_choices
             )
         )
         actor = CharacterSheet(
+            gold=self.shop_remaining(b, rules) if b.purchases is not None else 0,
+            equipment_slots=rules.equipment_slots.copy(),
+            languages=background.get("languages", []),
+            tool_proficiencies=background.get("tools", []),
+            background_tags=background.get("tags", []),
             id=definition.id,
             name=b.name,
             character_class=b.character_class,
@@ -240,6 +286,10 @@ class RulesEngine:
         return actor
 
     def equipment_stats(self, actor, items):
+        if actor.equipment_slots:
+            from .equipment import EquipmentEngine
+
+            return EquipmentEngine.calculate(actor, items, self)
         from .models import Attack
 
         actor.attacks = {}

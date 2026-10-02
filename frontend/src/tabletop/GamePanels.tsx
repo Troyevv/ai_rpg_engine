@@ -101,7 +101,16 @@ export function RollCard({
         <h2>{skills[p.skill] || purposes[p.purpose] || p.purpose}</h2>
         {p.reason && <p>{p.reason}</p>}
         <p>
-          {abilities[p.ability]} ·{" "}
+          {[
+            "check",
+            "save",
+            "attack",
+            "spell_save",
+            "concentration",
+            "initiative",
+          ].includes(p.purpose)
+            ? `${abilities[p.ability]} · `
+            : ""}
           <strong>
             {p.expression} {signed(p.modifier)}
           </strong>
@@ -131,7 +140,13 @@ export function RollResult({
   event: e,
   name,
 }: {
-  event: { roll?: Roll; success?: boolean; dc?: number; skill?: string };
+  event: {
+    roll?: Roll;
+    success?: boolean;
+    dc?: number;
+    skill?: string;
+    outcome?: string;
+  };
   name: string;
 }) {
   const r = e.roll!;
@@ -141,6 +156,27 @@ export function RollResult({
         <small>
           {name} · {skills[e.skill || ""] || purposes[r.purpose] || r.purpose}
         </small>
+        {r.components && (
+          <div className="tt-dice-tray" aria-label="Результаты кубиков">
+            {r.components.map((c, i) => (
+              <div key={i}>
+                {c.raw.map((v, j) => (
+                  <span
+                    className={`tt-die tt-d${c.die} ${r.advantage && c.die === 20 ? (j === c.raw.indexOf(c.selected) ? "tt-selected-die" : "tt-discarded-die") : ""}`}
+                    key={j}
+                  >
+                    <small>d{c.die}</small>
+                    <b>{v}</b>
+                  </span>
+                ))}
+                <small>
+                  {c.sign < 0 ? "−" : "+"}
+                  {c.selected}
+                </small>
+              </div>
+            ))}
+          </div>
+        )}
         <p>
           [{r.raw.join(", ")}]{" "}
           {r.advantage !== 0 ? `выбрано ${r.selected} · ` : ""}
@@ -149,7 +185,17 @@ export function RollResult({
         {e.dc !== undefined && <small>Сложность {e.dc}</small>}
       </div>
       <strong>
-        {e.success === undefined ? r.total : e.success ? "✓ Успех" : "Неудача"}
+        {e.outcome === "CRITICAL_SUCCESS"
+          ? "Критический успех"
+          : e.outcome === "CRITICAL_FAILURE"
+            ? "Критическая неудача"
+            : e.outcome === "PARTIAL_SUCCESS"
+              ? "Частичный успех"
+              : e.success === undefined
+                ? r.total
+                : e.success
+                  ? "✓ Успех"
+                  : "Неудача"}
       </strong>
     </div>
   );
@@ -236,6 +282,19 @@ export function CharacterSheet({
         a.feature_definitions.map((f) => (
           <article key={f.id}>
             <h3>{f.name}</h3>
+            <small>
+              Источник:{" "}
+              {{
+                CLASS: "класс",
+                SUBCLASS: "подкласс",
+                SPECIES: "вид",
+                BACKGROUND: "происхождение",
+                FEAT: "черта",
+                ITEM: "предмет",
+                CONDITION: "состояние",
+              }[f.source] || f.source}{" "}
+              · уровень {f.level}
+            </small>
             <p>{f.description}</p>
             <small>
               {f.activation === "PASSIVE"
@@ -244,7 +303,7 @@ export function CharacterSheet({
                   ? "Бонусное действие"
                   : "Действие"}
               {f.resource &&
-                ` · осталось ${a.resources[f.resource] || 0}/${f.uses}`}
+                ` · осталось ${a.resources[f.resource] || 0}/${f.uses} · восстановление: ${f.recharge === "short" ? "короткий отдых" : f.recharge === "long" ? "долгий отдых" : "нет"}`}
             </small>
           </article>
         ))

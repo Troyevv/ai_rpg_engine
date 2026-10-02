@@ -12,8 +12,15 @@ async function press(page: Page, name: string | RegExp) {
     includeHidden: true,
   });
   await target.waitFor({ state: "attached" });
+  const details = target.locator("xpath=ancestor::details[1]");
+  if (!(await target.isVisible()) && (await details.count()))
+    await details.locator("summary").click();
   const actions = page.getByRole("button", { name: "Действия", exact: true });
-  if (!(await target.isVisible()) && (await actions.isVisible()))
+  if (
+    !(await target.isVisible()) &&
+    (await actions.isVisible()) &&
+    (await target.evaluate((el) => !!el.closest(".tt-action-panel")))
+  )
     await actions.click();
   await target.click();
 }
@@ -179,7 +186,7 @@ test("generated campaign, quest, combat, loot, expansion and real server restart
     await click("Закончить ход");
     await press(page, /^Атаковать Страж:/);
     await press(page, "Бросить кубик");
-    await expect(page.getByRole("status")).toContainText("Урон");
+    await expect(page.locator(".tt-roll-card")).toContainText("Урон");
     await click("Бросить кубик");
     await click("Открыть: Сумка стража");
     await click("Взять: Старинная монета ×3");

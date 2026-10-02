@@ -14,7 +14,14 @@ class InventoryService:
         a = state.actor(aid)
         e = state.encounter
         t = c.type
-        if t in ("take_item", "drop_item", "equip", "unequip", "use_item"):
+        if t in (
+            "take_item",
+            "drop_item",
+            "transfer_item",
+            "equip",
+            "unequip",
+            "use_item",
+        ):
             self.runtime.inventory(state, c, a, events)
 
     @staticmethod
@@ -77,7 +84,19 @@ class InventoryService:
             )
             self.runtime.add(a.inventory, c.item_id, getattr(c, "quantity", 1))
         else:
-            entry = self.runtime.entry(a, c.item_id)
+            entry = next(
+                (
+                    e
+                    for e in a.inventory
+                    if e.item_id == c.item_id
+                    and (
+                        not getattr(c, "slot", "")
+                        or e.slot == c.slot
+                        or c.type == "equip"
+                    )
+                ),
+                None,
+            )
             if not entry:
                 raise ValueError("Предмета нет в инвентаре")
             if c.type == "use_item":
@@ -92,13 +111,30 @@ class InventoryService:
                     or state.relation(a.faction, recipient.faction) != "ALLY"
                 ):
                     raise ValueError("Цель лечения недоступна")
+                before = recipient.hp
                 self.runtime.rules.heal(recipient, item.healing)
                 self.runtime.remove(a.inventory, c.item_id, 1)
                 event(
                     events,
                     f"{recipient.name}: лечение до {item.healing} HP.",
                     kind="healing",
+                    target=recipient.id,
+                    hp_before=before,
+                    hp_after=recipient.hp,
+                    maximum=recipient.max_hp,
                 )
+            elif c.type == "transfer_item":
+                recipient = state.actor(c.target)
+                if (
+                    recipient.id == a.id
+                    or recipient.id not in state.party
+                    or recipient.location != a.location
+                    or abs(recipient.position - a.position) > 5
+                ):
+                    raise ValueError("Получатель недоступен")
+                self.runtime.remove(a.inventory, c.item_id, c.quantity)
+                self.runtime.add(recipient.inventory, c.item_id, c.quantity)
+                self.runtime.rules.equipment_stats(recipient, state.items)
             elif c.type == "drop_item":
                 self.runtime.remove(a.inventory, c.item_id, getattr(c, "quantity", 1))
                 obj = WorldObject(
@@ -113,6 +149,10 @@ class InventoryService:
                         )
                     ],
                 )
+            elif c.type == "equip" and a.equipment_slots:
+                from ..equipment import EquipmentEngine
+
+                EquipmentEngine.equip(a, state.items, entry, c.slot)
             elif c.type == "equip":
                 if item.type not in ("weapon", "armor"):
                     raise ValueError("Предмет нельзя экипировать")
@@ -133,6 +173,7 @@ class InventoryService:
             {
                 "take_item": "Предмет получен: ",
                 "drop_item": "Предмет оставлен: ",
+                "transfer_item": "Предмет передан: ",
                 "use_item": "Предмет использован: ",
                 "equip": "Экипировано: ",
                 "unequip": "Снято: ",

@@ -134,6 +134,13 @@ class TabletopRuntime:
                 self.drive(state, events)
         self.progression_service.reconcile(state, events)
         WorldService.advance(state, events)
+        if not state.encounter and state.session_state.mechanical_resolution_complete:
+            from .services.universal import UniversalChecks
+
+            UniversalChecks(self).passive(state, events)
+        from .events import state_changes
+
+        state_changes(original, state, events)
         return (self.validate(state), events)
 
     def apply(self, state, c, aid, events):
@@ -185,6 +192,7 @@ class TabletopRuntime:
             "save": self.checks_service,
             "take_item": self.inventory_service,
             "drop_item": self.inventory_service,
+            "transfer_item": self.inventory_service,
             "equip": self.inventory_service,
             "unequip": self.inventory_service,
             "use_item": self.inventory_service,

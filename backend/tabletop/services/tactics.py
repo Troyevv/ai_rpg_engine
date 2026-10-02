@@ -112,7 +112,7 @@ class TacticalService:
             ability, skill = "strength", "athletics"
         modifier = self.runtime.rules.check_modifier(a, ability, skill, state.ruleset)
         advantage, sources = self.runtime.rules.conditions.advantage(
-            a, state.ruleset, "check"
+            a, state.ruleset, "check", ability=ability, skill=skill
         )
         payload = dict(
             ability=ability,

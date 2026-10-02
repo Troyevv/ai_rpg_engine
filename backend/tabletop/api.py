@@ -21,6 +21,7 @@ from .catalog import load_ruleset
 from .dm import DMAgent, DMContextBuilder
 from .generation import CampaignGenerator, CharacterRoleplayGenerator
 from .services.content import ContentService
+from .progress import RequestProgress
 
 
 class Request(Credential):
@@ -44,6 +45,10 @@ class ActionRequest(Request):
         return self
 
 
+class ImpactRequest(Credential):
+    command: CommandType
+
+
 class RollRequest(Request):
     pending_id: str = Field(min_length=1, max_length=100)
 
@@ -64,7 +69,7 @@ class NewGameRequest(NewGame, Credential):
 
 class BuildRequest(Credential):
     build: CharacterBuild
-    ruleset_id: str = "d20-fantasy-v1"
+    ruleset_id: str = "d20-fantasy-v2"
 
 
 class CharacterGenerationRequest(Credential):
@@ -78,6 +83,7 @@ def install(app, shared_repo, credentials):
     repo = TabletopRepository(shared_repo.path)
     app.state.tabletop_debug = os.getenv("TABLETOP_DEBUG") == "1"
     runtime = TabletopRuntime()
+    progress = RequestProgress()
     compiler = CampaignCompiler()
     app.state.tabletop_repository = repo
     app.state.tabletop_runtime = runtime
@@ -132,7 +138,9 @@ def install(app, shared_repo, credentials):
         return state, fp
 
     def finish(gid, body, fp, state, events, dm, text):
+        progress.set(gid, body.request_id, "saving")
         if repo.commit(gid, body.revision, body.request_id, fp, state, events, text):
+            progress.set(gid, body.request_id, "narration")
             try:
                 narrative = dm.narrate(gid, state, events, text)
             except Exception:
@@ -155,13 +163,18 @@ def install(app, shared_repo, credentials):
         )
 
     @router.get("/catalog")
-    def catalog(ruleset_id: str = "d20-fantasy-v1"):
+    def catalog(ruleset_id: str = "d20-fantasy-v2"):
         rules = load_ruleset(ruleset_id)
         default = CharacterBuild(
             feature_choices=rules.classes["fighter"].get("feature_choices", [])[
                 : rules.classes["fighter"].get("feature_choice_count", 0)
             ]
         )
+        if rules.allocation:
+            default.ability_method = "allocation"
+            default.abilities = {a: rules.allocation["base"] for a in rules.abilities}
+            default.purchases = []
+            default.equipment = []
         return {
             **rules.model_dump(),
             "default_build": default.model_dump(),
@@ -191,10 +204,19 @@ def install(app, shared_repo, credentials):
                 build=body.build,
             ),
             rules,
+            preview=True,
         )
         engine.equipment_stats(actor, {i.id: i for i in rules.items})
         return {
             "sheet": actor.model_dump(),
+            "attacks": {k: engine.attack_modifier(actor, k) for k in actor.attacks},
+            "damage": {
+                k: engine.damage_modifier(actor, k, rules) for k in actor.attacks
+            },
+            "initiative": engine.modifier(actor.abilities["dexterity"]),
+            "valid": body.build.ability_method != "allocation"
+            or engine.allocation_remaining(body.build.abilities, rules) == 0,
+            "gold_remaining": actor.gold,
             "modifiers": {a: engine.modifier(v) for a, v in actor.abilities.items()},
             "skills": {
                 s: engine.check_modifier(actor, a, s, rules)
@@ -202,10 +224,14 @@ def install(app, shared_repo, credentials):
             },
             "saves": {a: engine.save_modifier(actor, a) for a in actor.abilities},
             "points_remaining": (
-                rules.point_buy["budget"]
-                - engine.point_buy_cost(body.build.abilities, rules)
-                if body.build.ability_method == "point_buy"
-                else None
+                engine.allocation_remaining(body.build.abilities, rules)
+                if body.build.ability_method == "allocation"
+                else (
+                    rules.point_buy["budget"]
+                    - engine.point_buy_cost(body.build.abilities, rules)
+                    if body.build.ability_method == "point_buy"
+                    else None
+                )
             ),
         }
 
@@ -300,6 +326,25 @@ def install(app, shared_repo, credentials):
     def get(gid: str):
         return snapshot(gid)
 
+    @router.post("/games/{gid}/impact")
+    def impact(gid: str, body: ImpactRequest):
+        from .preview import build_impact
+
+        if body.command.type not in ("equip", "unequip", "level_up"):
+            raise ValueError("Предпросмотр поддерживает экипировку и повышение уровня")
+        _, state = repo.load(gid)
+        aid = body.command.actor_id or state.session_state.controlled_actor
+        after, _ = runtime.execute(state, body.command)
+        return {
+            "before": build_impact(state.actor(aid), state.ruleset),
+            "after": build_impact(after.actor(aid), state.ruleset),
+            "catalog": {
+                "features": {
+                    k: v.model_dump() for k, v in state.ruleset.features.items()
+                }
+            },
+        }
+
     @router.get("/games/{gid}/context")
     def context(gid: str):
         _, state = repo.load(gid)
@@ -325,7 +370,12 @@ def install(app, shared_repo, credentials):
         )
         return snapshot(gid)
 
+    @router.get("/games/{gid}/progress/{request_id}")
+    def request_progress(gid: str, request_id: str):
+        return progress.get(gid, request_id)
+
     @router.post("/games/{gid}/actions")
+    @progress.tracked
     def action(gid: str, body: ActionRequest):
         state, fp = prepare(gid, body, "action")
         if state is None:
@@ -338,11 +388,19 @@ def install(app, shared_repo, credentials):
             raise ValueError("Сначала выбери вариант ожидающего действия")
         dm = agent(body)
         try:
+            progress.set(
+                gid,
+                body.request_id,
+                "interpretation" if body.command is None else "rules",
+            )
             command = body.command or dm.interpret(gid, state, body.text)
         except ValueError:
             raise
         except Exception:
             raise ValueError("DM недоступен. Состояние не изменено.") from None
+        progress.set(
+            gid, body.request_id, "generation" if command.type == "expand" else "rules"
+        )
         if command.type == "expand":
             after, events = ContentService(runtime).execute(gid, state, command, dm)
         else:
@@ -380,6 +438,7 @@ def install(app, shared_repo, credentials):
             "unequip": "Снять",
             "take_item": "Взять предмет",
             "drop_item": "Оставить предмет",
+            "transfer_item": "Передать предмет",
             "interact": "Взаимодействовать",
             "flee": "Покинуть бой",
             "guard": "Защититься",
@@ -396,11 +455,13 @@ def install(app, shared_repo, credentials):
         )
 
     @router.post("/games/{gid}/roll")
+    @progress.tracked
     def roll(gid: str, body: RollRequest):
         state, fp = prepare(gid, body, "roll")
         if state is None:
             return snapshot(gid)
         dm = agent(body)
+        progress.set(gid, body.request_id, "roll")
         after, events = runtime.resolve_roll(state, body.pending_id)
         return finish(gid, body, fp, after, events, dm, "Бросить кубик")
 

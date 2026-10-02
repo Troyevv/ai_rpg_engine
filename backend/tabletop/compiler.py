@@ -71,12 +71,66 @@ class CampaignCompiler:
                 d.secrets,
                 d.encounters,
                 d.schedules,
+                d.checks,
             )
         ]
         all_ids = [i for group in groups for i in group]
         if len(all_ids) != len(set(all_ids)):
             raise ValueError("ID должны быть уникальны между типами сущностей")
-        _, locations, _, actors, items, objects, _, secrets, encounters, _ = groups
+        _, locations, _, actors, items, objects, _, secrets, encounters, _, _ = groups
+
+        for check in d.checks:
+            if check.skill and rules.skills.get(check.skill) != check.ability:
+                raise ValueError("Навык проверки не соответствует характеристике")
+            if check.save and check.skill:
+                raise ValueError("Спасбросок не использует навык")
+            effects = (
+                check.success
+                + check.failure
+                + (check.critical_success or [])
+                + (check.critical_failure or [])
+                + check.partial
+            )
+            if check.passive and (
+                check.skill not in ("perception", "insight")
+                or check.failure
+                or any(
+                    e.type not in ("reveal_secret", "reveal_object") for e in effects
+                )
+            ):
+                raise ValueError("Пассивная проверка только обнаруживает сведения")
+            if not effects:
+                raise ValueError("Проверка требует значимых последствий")
+            for effect in effects:
+                if (
+                    effect.type == "reveal_secret"
+                    and secrets[effect.target].location_id != check.location_id
+                ):
+                    raise ValueError(
+                        "Проверка раскрывает сведения только текущей сцены"
+                    )
+                if (
+                    effect.type == "reveal_object"
+                    and objects[effect.target].location_id != check.location_id
+                ):
+                    raise ValueError(
+                        "Проверка обнаруживает объекты только текущей сцены"
+                    )
+                if (
+                    effect.type == "reveal_secret"
+                    and secrets[effect.target].disclosure == "never"
+                ):
+                    raise ValueError("Проверка не может раскрывать запретный секрет")
+                if (
+                    effect.type in ("attitude", "alert")
+                    and effect.target in d.starting_party
+                ):
+                    raise ValueError("Проверка не управляет чувствами игрока")
+                if (
+                    effect.type == "move"
+                    and effect.target not in locations[check.location_id].connections
+                ):
+                    raise ValueError("Проверка перемещения требует соседнюю локацию")
 
         def require(ok, message):
             if not ok:
@@ -258,6 +312,7 @@ class CampaignCompiler:
             "CreateRegion": "regions",
             "CreateSecret": "secrets",
             "CreateSchedule": "schedules",
+            "CreateCheck": "checks",
         }
         created_secret_ids = {
             op.value.id for op in mutation.operations if op.type == "CreateSecret"
@@ -275,6 +330,21 @@ class CampaignCompiler:
         existing_secrets = {s.id for s in d.secrets}
         for op in mutation.operations:
             if op.type in collections:
+                if op.type == "CreateCheck":
+                    effects = (
+                        op.value.success
+                        + op.value.failure
+                        + (op.value.critical_success or [])
+                        + (op.value.critical_failure or [])
+                        + op.value.partial
+                    )
+                    if any(
+                        e.type == "reveal_secret" and e.target in existing_secrets
+                        for e in effects
+                    ):
+                        raise ValueError(
+                            "Нельзя раскрывать старые секреты новыми проверками"
+                        )
                 if op.type == "CreateSchedule":
                     if op.value.actor_id not in created_actor_ids:
                         raise ValueError(
