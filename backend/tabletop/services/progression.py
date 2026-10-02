@@ -23,6 +23,8 @@ class ProgressionService:
             state.rewarded_progression.append(key)
             for aid in state.party:
                 a = state.actor(aid)
+                if a.template_id:
+                    continue
                 xp = state.ruleset.progression[kind + "_xp"]
                 milestone = state.ruleset.progression["milestone_" + kind]
                 a.xp += xp
@@ -39,6 +41,8 @@ class ProgressionService:
 
     @staticmethod
     def options(state, a):
+        if a.template_id:
+            return {"available": False, "maximum": True}
         rule = state.ruleset.levels.get(str(a.level + 1))
         eligible = bool(
             rule

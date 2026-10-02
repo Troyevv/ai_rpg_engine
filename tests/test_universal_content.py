@@ -175,6 +175,10 @@ def test_creatures_take_stats_from_template():
     assert actor.hp == 21 and actor.armor_class == 13
     assert actor.attacks["pulse"].expression == "2d4"
     assert "attributes" not in d.creature_instances[0].model_dump()
+    state.party.append("echo_one")
+    from backend.tabletop.projection import public_state
+
+    assert public_state(state)["characters"]["echo_one"]["progression"]["available"] is False
 
 
 def test_multiple_semantic_issues_have_exact_entities():
