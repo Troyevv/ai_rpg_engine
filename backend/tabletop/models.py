@@ -36,7 +36,23 @@ ABILITIES = (
 )
 
 
+from .content import (
+    SkillDefinition,
+    ResourceDefinition,
+    DamageTypeDefinition,
+    EquipmentProfile,
+    ResourceCost,
+    MagazineComponent,
+)
+
+
 class Ruleset(Model):
+    world_features: list[str] = []
+    currency_label: str = "золота"
+    skill_definitions: dict[str, SkillDefinition] = {}
+    resource_definitions: dict[str, ResourceDefinition] = {}
+    damage_types: dict[str, DamageTypeDefinition] = {}
+    equipment_profiles: dict[str, EquipmentProfile] = {}
     id: str
     name: str
     version: Literal[2, 3, 4] = 2
@@ -46,6 +62,7 @@ class Ruleset(Model):
     allocation: dict[str, int] = {}
     starting_gold: int = Field(default=0, ge=0)
     equipment_slots: dict[str, str] = {}
+    equipment_layout: dict[str, dict[str, str]] = {}
     point_buy: dict[str, int | dict[str, int]] = {}
     features: dict[str, FeatureDefinition] = {}
     spells: dict[str, SpellDefinition] = {}
@@ -71,6 +88,12 @@ class Ruleset(Model):
 
 
 class Attack(Model):
+    item_id: str = ""
+    expression: str = ""
+    damage_type: str = ""
+    accuracy: int | None = None
+    resource_usage: list[ResourceCost] = []
+    magazine: MagazineComponent | None = None
     name: str
     ability: Ability = "strength"
     die: Literal[4, 6, 8, 10, 12] = 6
@@ -85,8 +108,13 @@ class ActorControl(Model):
 
 
 class CharacterSheet(Model):
+    active_effects: list[dict] = []
+    template_id: str = ""
+    damage_modifiers: dict[str, float] = {}
+    item_resources: dict[str, int] = {}
     gold: int = Field(default=0, ge=0)
     equipment_slots: dict[str, str] = {}
+    equipment_layout: dict[str, dict[str, str]] = {}
     languages: list[str] = []
     tool_proficiencies: list[str] = []
     background_tags: list[str] = []
@@ -177,6 +205,7 @@ class Encounter(Model):
 
 
 class PendingRoll(Model):
+    modifier_breakdown: dict[str, int] = {}
     check_id: str = ""
     id: str
     reason: str = ""

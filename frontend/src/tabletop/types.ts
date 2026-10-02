@@ -46,6 +46,10 @@ export type Feature = {
   effects: { type: string; value: number; key: string }[];
 };
 export type Catalog = {
+  currency_label?: string;
+  setting_id?: string;
+  setting_revision?: number;
+  draft_id?: string;
   allocation: {
     base: number;
     points: number;
@@ -54,6 +58,7 @@ export type Catalog = {
   };
   starting_gold: number;
   equipment_slots: Record<string, string>;
+  equipment_layout?: Record<string, { position: string; group: string }>;
   spells: Record<string, Spell>;
   spellcasting: Record<
     string,
@@ -120,6 +125,8 @@ export type Catalog = {
   default_build: Build;
 };
 export type Item = {
+  starting_available?: boolean;
+  components?: { type: string; damage_expression?: string }[];
   slots: string[];
   hands: number;
   armor_category: string;
@@ -144,8 +151,10 @@ export type Entry = {
   slot?: string;
 };
 export type Sheet = {
+  resource_definitions?: Record<string, { name: string; maximum: number }>;
   gold: number;
   equipment_slots: Record<string, string>;
+  equipment_layout?: Record<string, { position: string; group: string }>;
   equipment_bonuses: Record<string, number>;
   id: string;
   name: string;
@@ -205,6 +214,8 @@ export type Sheet = {
   controller: { controller: string; player_id: string | null };
 };
 export type Command = {
+  mode?: string;
+  action_id?: string;
   type: string;
   check_id?: string;
   slot?: string;
@@ -276,6 +287,7 @@ export type Game = {
         half_on_save?: boolean;
       }[];
     }[];
+    context_actions?: { id: string; name: string; description: string }[];
     checks: {
       id: string;
       name: string;
@@ -356,6 +368,7 @@ export type Game = {
       modifier: number;
       critical: boolean;
       advantage: number;
+      modifier_breakdown?: Record<string, number>;
       advantage_sources: { name: string; value: number }[];
       ability: string;
       skill: string;
@@ -468,6 +481,13 @@ export const purposes: Record<string, string> = {
 export const signed = (v: number) => (v >= 0 ? `+${v}` : String(v));
 
 export type AttackPreview = {
+  expression?: string;
+  damage_type?: string;
+  resource_cost?: { resource_id: string; amount: number }[];
+  mode?: string;
+  ammunition_cost?: number;
+  ammunition_remaining?: number;
+  magazine?: { capacity: number; reload_cost: string } | null;
   target_ac: number;
   weapon: string;
   name: string;

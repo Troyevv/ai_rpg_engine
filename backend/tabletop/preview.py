@@ -16,83 +16,108 @@ def attack_previews(state, actor):
         return []
     result = []
     for weapon, attack in actor.attacks.items():
-        for target_id in encounter.order:
-            target = state.actor(target_id)
-            if not state.hostile(actor.id, target_id) or target.hp <= 0:
-                continue
-            reason = ""
-            try:
-                combat.validate_attack(state, actor.id, target_id, weapon)
-                if encounter.order[encounter.index] != actor.id:
-                    raise ValueError("Сейчас ход другого участника")
-                if not encounter.action and not encounter.attacks_remaining:
-                    raise ValueError("Доступные атаки закончились")
-                if rules.conditions.blocked(actor, state.ruleset):
-                    raise ValueError("Состояние не позволяет атаковать")
-                if (
-                    state.session_state.pending
-                    or state.session_state.choice
-                    or state.session_state.reaction
-                ):
-                    raise ValueError("Сначала заверши ожидающее действие")
-            except ValueError as exc:
-                reason = str(exc)
-            distance = abs(actor.position - target.position)
-            advantage, sources = rules.conditions.advantage(
-                actor, state.ruleset, "attack", target, distance=distance
-            )
-            modifier = rules.attack_modifier(actor, weapon)
-            outcomes = list(product(range(1, 21), repeat=2 if advantage else 1))
-            selected = [max(v) if advantage > 0 else min(v) for v in outcomes]
-            hits = sum(
-                rules.hit(
-                    SimpleNamespace(selected=v, total=v + modifier), target.armor_class
+        for mode in (attack.magazine.modes if attack.magazine else ["single"]):
+            for target_id in encounter.order:
+                target = state.actor(target_id)
+                if not state.hostile(actor.id, target_id) or target.hp <= 0:
+                    continue
+                reason = ""
+                try:
+                    combat.validate_attack(state, actor.id, target_id, weapon, mode)
+                    if encounter.order[encounter.index] != actor.id:
+                        raise ValueError("Сейчас ход другого участника")
+                    if not encounter.action and not encounter.attacks_remaining:
+                        raise ValueError("Доступные атаки закончились")
+                    if rules.conditions.blocked(actor, state.ruleset):
+                        raise ValueError("Состояние не позволяет атаковать")
+                    if (
+                        state.session_state.pending
+                        or state.session_state.choice
+                        or state.session_state.reaction
+                    ):
+                        raise ValueError("Сначала заверши ожидающее действие")
+                except ValueError as exc:
+                    reason = str(exc)
+                distance = abs(actor.position - target.position)
+                advantage, sources = rules.conditions.advantage(
+                    actor, state.ruleset, "attack", target, distance=distance
                 )
-                for v in selected
-            )
-            damage_modifier = rules.damage_modifier(actor, weapon, state.ruleset)
-            low, high = max(0, 1 + damage_modifier), max(
-                0, attack.die + damage_modifier
-            )
-            critical_low = max(
-                0,
-                (attack.die + 1 if state.ruleset.critical == "max_dice" else 2)
-                + damage_modifier,
-            )
-            critical_high = max(0, attack.die * 2 + damage_modifier)
-            result.append(
-                dict(
-                    weapon=weapon,
-                    name=attack.name,
-                    target=target_id,
-                    target_name=target.name,
-                    available=not reason,
-                    reason=reason,
-                    distance=distance,
-                    reach=attack.reach,
-                    hit_percent=round(100 * hits / len(selected), 2),
-                    advantage=advantage,
-                    sources=sources,
-                    target_ac=target.armor_class,
-                    modifier=modifier,
-                    damage_modifier=damage_modifier,
-                    die=attack.die,
-                    damage=[low, high],
-                    critical_damage=[critical_low, critical_high],
-                    damage_note="До защиты и сопротивления цели",
-                    cost="Действие / оставшаяся атака",
-                    breakdown={
-                        "Характеристика": rules.modifier(
-                            actor.abilities[attack.ability]
-                        ),
-                        "Владение": (
-                            rules.proficiency(actor) if attack.proficient else 0
-                        ),
-                        "Способности": actor.bonuses.get("attack_bonus", 0),
-                        "Состояния": rules.conditions.bonus(actor, "attack_bonus"),
-                    },
+                modifier = rules.attack_modifier(actor, weapon)
+                outcomes = list(product(range(1, 21), repeat=2 if advantage else 1))
+                selected = [max(v) if advantage > 0 else min(v) for v in outcomes]
+                hits = sum(
+                    rules.hit(
+                        SimpleNamespace(selected=v, total=v + modifier),
+                        target.armor_class,
+                    )
+                    for v in selected
                 )
-            )
+                damage_modifier = rules.damage_modifier(actor, weapon, state.ruleset)
+                expression = attack.expression or f"1d{attack.die}"
+
+                def bounds(critical=False):
+                    low = high = damage_modifier
+                    for sign, count, sides in DiceEngine.parse(expression):
+                        lo, hi = (count, count * sides) if sides else (count, count)
+                        if critical and sides:
+                            if state.ruleset.critical == "max_dice":
+                                lo += count * sides
+                                hi += count * sides
+                            else:
+                                lo *= 2
+                                hi *= 2
+                        low += min(sign * lo, sign * hi)
+                        high += max(sign * lo, sign * hi)
+                    return max(0, low), max(0, high)
+
+                low, high = bounds()
+                critical_low, critical_high = bounds(True)
+                result.append(
+                    dict(
+                        weapon=weapon,
+                        mode=mode,
+                        ammunition_cost=(
+                            attack.magazine.modes[mode] if attack.magazine else 0
+                        ),
+                        ammunition_remaining=actor.item_resources.get(
+                            attack.item_id, 0
+                        ),
+                        name=attack.name,
+                        target=target_id,
+                        target_name=target.name,
+                        available=not reason,
+                        reason=reason,
+                        distance=distance,
+                        reach=attack.reach,
+                        hit_percent=round(100 * hits / len(selected), 2),
+                        advantage=advantage,
+                        sources=sources,
+                        target_ac=target.armor_class,
+                        modifier=modifier,
+                        damage_modifier=damage_modifier,
+                        die=attack.die,
+                        expression=expression,
+                        damage_type=attack.damage_type,
+                        resource_cost=[c.model_dump() for c in attack.resource_usage],
+                        magazine=(
+                            attack.magazine.model_dump() if attack.magazine else None
+                        ),
+                        damage=[low, high],
+                        critical_damage=[critical_low, critical_high],
+                        damage_note="До защиты и сопротивления цели",
+                        cost="Действие / оставшаяся атака",
+                        breakdown={
+                            "Характеристика": rules.modifier(
+                                actor.abilities[attack.ability]
+                            ),
+                            "Владение": (
+                                rules.proficiency(actor) if attack.proficient else 0
+                            ),
+                            "Способности": actor.bonuses.get("attack_bonus", 0),
+                            "Состояния": rules.conditions.bonus(actor, "attack_bonus"),
+                        },
+                    )
+                )
     return result
 
 
@@ -147,7 +172,7 @@ def usable_actions(state, actor):
                             if kind == "feature"
                             else {"spell_id": definition.id, "slot_level": level}
                         ),
-                        target=target.id
+                        target=target.id,
                     )
                     try:
                         service = (

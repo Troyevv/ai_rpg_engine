@@ -142,7 +142,7 @@ test("Gameplay 1.0: builder, five check domains, combat and equipment restart", 
     await click("Купить: Кинжал");
     await click("Купить: Лечебное зелье");
     await click("Купить: Кольчуга");
-    await click("Снять: Кольчуга");
+    await click("Надеть: Кинжал");
     await click("Надеть: Кожаная броня");
     await expect(page.getByLabel("Бюджет снаряжения")).toContainText(
       "Осталось: 35",

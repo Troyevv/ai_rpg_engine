@@ -5,6 +5,26 @@ from .models import Attack
 
 class EquipmentEngine:
     @staticmethod
+    def hand_slots(actor):
+        if actor.equipment_layout:
+            return {
+                slot
+                for slot, layout in actor.equipment_layout.items()
+                if layout["group"] == "hand" or layout["position"] in ("left", "right")
+            }
+        return {"MAIN_HAND", "OFF_HAND"}
+
+    @staticmethod
+    def body_slots(actor):
+        if actor.equipment_layout:
+            return {
+                slot
+                for slot, layout in actor.equipment_layout.items()
+                if layout["position"] == "body"
+            }
+        return {"TORSO"}
+
+    @staticmethod
     def equip(actor, items, entry, slot=""):
         item = items[entry.item_id]
         allowed = [s for s in item.slots if s in actor.equipment_slots]
@@ -34,9 +54,9 @@ class EquipmentEngine:
                 continue
             conflict = (
                 other.slot == slot
-                or (item.hands == 2 and other.slot in ("MAIN_HAND", "OFF_HAND"))
+                or (item.hands == 2 and other.slot in EquipmentEngine.hand_slots(actor))
                 or (
-                    slot in ("MAIN_HAND", "OFF_HAND")
+                    slot in EquipmentEngine.hand_slots(actor)
                     and items[other.item_id].hands == 2
                 )
             )
@@ -64,7 +84,11 @@ class EquipmentEngine:
             ):
                 raise ValueError("Несовместимые предметы или занятый слот")
             occupied[entry.slot] = item
-        if any(i.hands == 2 for i in occupied.values()) and "OFF_HAND" in occupied:
+        hands = EquipmentEngine.hand_slots(actor)
+        if (
+            any(i.hands == 2 for slot, i in occupied.items() if slot in hands)
+            and len(set(occupied) & hands) > 1
+        ):
             raise ValueError("Двуручное оружие занимает обе руки")
         actor.attacks = {}
         dex = rules.modifier(actor.abilities["dexterity"])
@@ -74,7 +98,7 @@ class EquipmentEngine:
             if item.type == "armor":
                 if item.armor_category not in actor.proficiencies:
                     raise ValueError("Нет владения этим типом брони")
-                if slot == "TORSO":
+                if slot in EquipmentEngine.body_slots(actor):
                     actor.armor_class = item.armor_base + min(item.dex_cap, dex)
             if item.type == "weapon":
                 actor.attacks[item.id] = Attack(
@@ -84,9 +108,24 @@ class EquipmentEngine:
                     reach=item.reach,
                     proficient=item.weapon_category in actor.proficiencies,
                 )
+            for component in item.components:
+                if component.type == "weapon":
+                    attack = actor.attacks[item.id]
+                    attack.item_id = item.id
+                    attack.expression = component.damage_expression
+                    attack.damage_type = component.damage_type
+                    attack.resource_usage = component.resource_usage
+                elif component.type == "magazine":
+                    actor.attacks[item.id].magazine = component
+                    actor.item_resources.setdefault(item.id, component.initial)
+                elif component.type == "tool":
+                    actor.equipment_bonuses["check:" + component.skill_id] = (
+                        actor.equipment_bonuses.get("check:" + component.skill_id, 0)
+                        + component.modifier
+                    )
             if item.stealth_disadvantage:
                 actor.equipment_bonuses["stealth_disadvantage"] = 1
-        if "TORSO" not in occupied:
+        if not set(occupied) & EquipmentEngine.body_slots(actor):
             for ability in actor.abilities:
                 if "unarmored_ability:" + ability in actor.bonuses:
                     actor.armor_class += rules.modifier(actor.abilities[ability])

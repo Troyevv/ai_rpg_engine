@@ -1,3 +1,4 @@
+import { ChoiceControl, ChoiceOption } from "@/components/choice/ChoiceControl";
 import { ActionImpact } from "./ActionImpact";
 import { useState } from "react";
 import { abilities, signed, type Command, type Sheet } from "./types";
@@ -59,36 +60,36 @@ export function LevelUp({
           {options.subclasses.length > 0 && (
             <label>
               Подкласс
-              <select
+              <ChoiceControl
                 aria-label="Подкласс"
                 value={subclass}
                 onChange={(e) => setSubclass(e.target.value)}
               >
-                <option value="">Выбери путь</option>
+                <ChoiceOption value="">Выбери путь</ChoiceOption>
                 {options.subclasses.map((s) => (
-                  <option key={s.id} value={s.id}>
+                  <ChoiceOption key={s.id} value={s.id}>
                     {s.name} — {s.description}
-                  </option>
+                  </ChoiceOption>
                 ))}
-              </select>
+              </ChoiceControl>
             </label>
           )}
           {options.asi && (
             <>
               <label>
                 Характеристики или черта
-                <select
+                <ChoiceControl
                   aria-label="Улучшение уровня"
                   value={feat}
                   onChange={(e) => setFeat(e.target.value)}
                 >
-                  <option value="">Два очка характеристик</option>
+                  <ChoiceOption value="">Два очка характеристик</ChoiceOption>
                   {options.feats.map((f) => (
-                    <option key={f.id} value={f.id}>
+                    <ChoiceOption key={f.id} value={f.id}>
                       {f.name} — {f.description}
-                    </option>
+                    </ChoiceOption>
                   ))}
-                </select>
+                </ChoiceControl>
               </label>
               {!feat && (
                 <div className="tt-form-grid">
@@ -98,7 +99,7 @@ export function LevelUp({
                   ].map(([value, setter], i) => (
                     <label key={i}>
                       Очко {i + 1}
-                      <select
+                      <ChoiceControl
                         aria-label={`Очко характеристики ${i + 1}`}
                         value={value as string}
                         onChange={(e) =>
@@ -106,11 +107,11 @@ export function LevelUp({
                         }
                       >
                         {Object.entries(abilities).map(([id, name]) => (
-                          <option key={id} value={id}>
+                          <ChoiceOption key={id} value={id}>
                             {name} ({hero.abilities[id]})
-                          </option>
+                          </ChoiceOption>
                         ))}
-                      </select>
+                      </ChoiceControl>
                     </label>
                   ))}
                 </div>

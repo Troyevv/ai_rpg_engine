@@ -2,7 +2,7 @@
 
 from typing import Literal
 from pydantic import Field
-from .definitions import Model, Ability
+from .contracts import Model, Ability
 
 
 class SpellDefinition(Model):

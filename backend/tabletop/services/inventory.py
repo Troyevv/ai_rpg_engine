@@ -100,7 +100,19 @@ class InventoryService:
             if not entry:
                 raise ValueError("Предмета нет в инвентаре")
             if c.type == "use_item":
-                if item.type != "consumable" or not item.healing:
+                consumable = next(
+                    (
+                        part
+                        for part in item.components
+                        if part.type in ("consumable", "medical")
+                    ),
+                    None,
+                )
+                if item.type != "consumable" or not (
+                    item.healing
+                    or consumable
+                    and (consumable.healing or consumable.feature_id)
+                ):
                     raise ValueError(
                         "У предмета нет поддерживаемого эффекта использования"
                     )
@@ -111,18 +123,41 @@ class InventoryService:
                     or state.relation(a.faction, recipient.faction) != "ALLY"
                 ):
                     raise ValueError("Цель лечения недоступна")
-                before = recipient.hp
-                self.runtime.rules.heal(recipient, item.healing)
+                if consumable and consumable.healing:
+                    self.runtime.pending(
+                        state,
+                        "feature_healing",
+                        a.id,
+                        expression=consumable.healing,
+                        target=recipient.id,
+                        reason=item.name,
+                    )
+                elif consumable and consumable.feature_id:
+                    from ..effects import EffectsEngine
+
+                    feature = state.ruleset.features[consumable.feature_id]
+                    for effect in feature.effects:
+                        if effect.type not in EffectsEngine.ACTIVE:
+                            raise ValueError("Предмет требует поддерживаемого эффекта")
+                        EffectsEngine.validate(state, a, recipient, effect)
+                    for effect in feature.effects:
+                        EffectsEngine.apply(
+                            self.runtime, state, a, recipient, effect, events
+                        )
+                else:
+                    before = recipient.hp
+                    self.runtime.rules.heal(recipient, item.healing)
+                    event(
+                        events,
+                        f"{recipient.name}: лечение до {item.healing} HP.",
+                        kind="healing",
+                        target=recipient.id,
+                        hp_before=before,
+                        hp_after=recipient.hp,
+                        maximum=recipient.max_hp,
+                        amount=recipient.hp - before,
+                    )
                 self.runtime.remove(a.inventory, c.item_id, 1)
-                event(
-                    events,
-                    f"{recipient.name}: лечение до {item.healing} HP.",
-                    kind="healing",
-                    target=recipient.id,
-                    hp_before=before,
-                    hp_after=recipient.hp,
-                    maximum=recipient.max_hp,
-                )
             elif c.type == "transfer_item":
                 recipient = state.actor(c.target)
                 if (
@@ -149,6 +184,8 @@ class InventoryService:
                         )
                     ],
                 )
+            elif c.type == "equip" and a.template_id:
+                raise ValueError("Шаблон существа не задаёт профиль экипировки")
             elif c.type == "equip" and a.equipment_slots:
                 from ..equipment import EquipmentEngine
 
@@ -164,7 +201,14 @@ class InventoryService:
             else:
                 entry.equipped = False
         if c.type == "use_item":
-            self.runtime.spend(state.encounter)
+            self.runtime.spend(
+                state.encounter,
+                (
+                    "bonus_action"
+                    if consumable and consumable.action_cost == "BONUS_ACTION"
+                    else "action"
+                ),
+            )
         else:
             self.runtime.interaction(state)
         self.runtime.rules.equipment_stats(a, state.items)

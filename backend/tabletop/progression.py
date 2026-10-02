@@ -1,7 +1,7 @@
 """Trusted per-level rules; runtime accepts choices rather than stat patches."""
 
 from pydantic import Field
-from .definitions import Model
+from .contracts import Model
 
 
 class LevelRule(Model):

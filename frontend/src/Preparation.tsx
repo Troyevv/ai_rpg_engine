@@ -1,5 +1,6 @@
-import {Versions} from "./Versions";
-import {Diagnostics} from "./Diagnostics";
+import { ChoiceControl, ChoiceOption } from "@/components/choice/ChoiceControl";
+import { Versions } from "./Versions";
+import { Diagnostics } from "./Diagnostics";
 import { useEffect, useState } from "react";
 import { Download, Send, Plus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -41,9 +42,13 @@ export function Preparation({
   const [text, setText] = useState("");
   const [name, setName] = useState("Новая история");
   const [saveName, setSaveName] = useState("");
-  const [versionKind,setVersionKind] = useState<"idea"|"summary"|null>(null);
-  const [removed,setRemoved] = useState<{id:string;name:string;revision:number}[]>([]);
-  const [diagnostics,setDiagnostics] = useState(false);
+  const [versionKind, setVersionKind] = useState<"idea" | "summary" | null>(
+    null,
+  );
+  const [removed, setRemoved] = useState<
+    { id: string; name: string; revision: number }[]
+  >([]);
+  const [diagnostics, setDiagnostics] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const refresh = () => {
@@ -94,7 +99,18 @@ export function Preparation({
     });
   return (
     <main className="preparation">
-      {workspace&&<><Diagnostics workspaceId={workspace.id} open={diagnostics} onOpenChange={setDiagnostics}/><Button variant="ghost" onClick={()=>setDiagnostics(true)}>Запросы и расходы мастерской</Button></>}
+      {workspace && (
+        <>
+          <Diagnostics
+            workspaceId={workspace.id}
+            open={diagnostics}
+            onOpenChange={setDiagnostics}
+          />
+          <Button variant="ghost" onClick={() => setDiagnostics(true)}>
+            Запросы и расходы мастерской
+          </Button>
+        </>
+      )}
       <div className="page-heading">
         <div>
           <p className="eyebrow">Мастерская историй</p>
@@ -104,18 +120,18 @@ export function Preparation({
         <Sparkles size={30} className="accent" />
       </div>
       <div className="workspace-bar">
-        <select
+        <ChoiceControl
           aria-label="Подготовка"
           value={id}
           onChange={(e) => setId(e.target.value)}
         >
-          <option value="">Выбрать сценарий</option>
+          <ChoiceOption value="">Выбрать сценарий</ChoiceOption>
           {list.map((w) => (
-            <option key={w.id} value={w.id}>
+            <ChoiceOption key={w.id} value={w.id}>
               {w.name}
-            </option>
+            </ChoiceOption>
           ))}
-        </select>
+        </ChoiceControl>
         <Input
           aria-label="Название сценария"
           value={name}
@@ -136,16 +152,69 @@ export function Preparation({
           Новый сценарий
         </Button>
       </div>
-      {workspace&&<Versions kind={versionKind||"summary"} owner={workspace.id} open={!!versionKind} close={()=>setVersionKind(null)} changed={refresh}/>}
-      <details><summary>Удалённые сценарии</summary><Button variant="ghost" onClick={()=>void api<typeof removed>("/workspaces?deleted=true").then(setRemoved).catch(e=>toast.error(e.message))}>Обновить корзину</Button>{removed.map(w=><div key={w.id}>{w.name}<Button size="sm" onClick={()=>void run(async()=>{await api(`/workspaces/${w.id}/restore`,{revision:w.revision});setList(await api("/workspaces"));setRemoved(await api("/workspaces?deleted=true"));setId(w.id)})}>Восстановить</Button></div>)}</details>
-      {workspace && onDraft && <Button disabled={busy || active(job) || !workspace.idea} onClick={()=>onDraft(workspace.id)}>Продолжить в редакторе мира</Button>}
+      {workspace && (
+        <Versions
+          kind={versionKind || "summary"}
+          owner={workspace.id}
+          open={!!versionKind}
+          close={() => setVersionKind(null)}
+          changed={refresh}
+        />
+      )}
+      <details>
+        <summary>Удалённые сценарии</summary>
+        <Button
+          variant="ghost"
+          onClick={() =>
+            void api<typeof removed>("/workspaces?deleted=true")
+              .then(setRemoved)
+              .catch((e) => toast.error(e.message))
+          }
+        >
+          Обновить корзину
+        </Button>
+        {removed.map((w) => (
+          <div key={w.id}>
+            {w.name}
+            <Button
+              size="sm"
+              onClick={() =>
+                void run(async () => {
+                  await api(`/workspaces/${w.id}/restore`, {
+                    revision: w.revision,
+                  });
+                  setList(await api("/workspaces"));
+                  setRemoved(await api("/workspaces?deleted=true"));
+                  setId(w.id);
+                })
+              }
+            >
+              Восстановить
+            </Button>
+          </div>
+        ))}
+      </details>
+      {workspace && onDraft && (
+        <Button
+          disabled={busy || active(job) || !workspace.idea}
+          onClick={() => onDraft(workspace.id)}
+        >
+          Продолжить в редакторе мира
+        </Button>
+      )}
       {workspace ? (
         <>
           <div className="preparation-grid">
             <section className="document">
               <p className="eyebrow">01 · Сценарист</p>
               <h2>Замысел</h2>
-              <Button variant="ghost" size="sm" onClick={()=>setVersionKind("idea")}>Версии сценария</Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setVersionKind("idea")}
+              >
+                Версии сценария
+              </Button>
               {workspace.idea ? (
                 <details open>
                   <summary>Сценарий готов</summary>
@@ -208,8 +277,39 @@ export function Preparation({
             <section className="document">
               <p className="eyebrow">02 · Генератор выжимки</p>
               <h2>Основа мира</h2>
-              <Button variant="ghost" size="sm" onClick={()=>setVersionKind("summary")}>Версии выжимки</Button>
-              {workspace.summary&&<Button variant="ghost" size="sm" disabled={busy||active(job)} onClick={()=>{if(window.confirm("Удалить текущую выжимку? Её версии и сохранённые миры останутся."))void run(async()=>{const h=await api<{active_id:number}>(`/documents/summary/${id}`);await api(`/documents/summary/${id}`,{content:"",expected_head:h.active_id});refresh()})}}>Удалить выжимку</Button>}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setVersionKind("summary")}
+              >
+                Версии выжимки
+              </Button>
+              {workspace.summary && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy || active(job)}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "Удалить текущую выжимку? Её версии и сохранённые миры останутся.",
+                      )
+                    )
+                      void run(async () => {
+                        const h = await api<{ active_id: number }>(
+                          `/documents/summary/${id}`,
+                        );
+                        await api(`/documents/summary/${id}`, {
+                          content: "",
+                          expected_head: h.active_id,
+                        });
+                        refresh();
+                      });
+                  }}
+                >
+                  Удалить выжимку
+                </Button>
+              )}
               {workspace.summary ? (
                 <details open>
                   <summary>
@@ -277,7 +377,29 @@ export function Preparation({
               )}
             </section>
           </div>
-          <Button variant="ghost" disabled={busy||active(job)} onClick={()=>{if(window.confirm("Удалить сценарий вместе с рабочей выжимкой? Сохранённые миры и история версий останутся."))void run(async()=>{await api(`/workspaces/${id}`,{revision:workspace.revision},"DELETE");setId("");setWorkspace(null);setList(await api("/workspaces"))})}}>Удалить сценарий</Button>
+          <Button
+            variant="ghost"
+            disabled={busy || active(job)}
+            onClick={() => {
+              if (
+                window.confirm(
+                  "Удалить сценарий вместе с рабочей выжимкой? Сохранённые миры и история версий останутся.",
+                )
+              )
+                void run(async () => {
+                  await api(
+                    `/workspaces/${id}`,
+                    { revision: workspace.revision },
+                    "DELETE",
+                  );
+                  setId("");
+                  setWorkspace(null);
+                  setList(await api("/workspaces"));
+                });
+            }}
+          >
+            Удалить сценарий
+          </Button>
           <Button
             className="reset-button"
             variant="ghost"

@@ -1,3 +1,4 @@
+import { ChoiceControl, ChoiceOption } from "@/components/choice/ChoiceControl";
 import { useState } from "react";
 import { AttackPreview } from "./AttackPreview";
 import {
@@ -67,20 +68,20 @@ export function CombatActions({
             <>
               <label>
                 Выбрать действие
-                <select
+                <ChoiceControl
                   value={`${a.id}:${a.slot_level}`}
                   onChange={(ev) => setChosen(ev.target.value)}
                 >
                   {options.map((o) => (
-                    <option
+                    <ChoiceOption
                       key={`${o.id}:${o.slot_level}`}
                       value={`${o.id}:${o.slot_level}`}
                     >
                       {o.name}
                       {o.slot_level ? ` · ячейка ${o.slot_level}` : ""}
-                    </option>
+                    </ChoiceOption>
                   ))}
-                </select>
+                </ChoiceControl>
               </label>
               <p>{a.description}</p>
               <p>
@@ -92,16 +93,16 @@ export function CombatActions({
               </p>
               <label>
                 Цель
-                <select
+                <ChoiceControl
                   value={t?.id || ""}
                   onChange={(ev) => setTarget(ev.target.value)}
                 >
                   {a.targets.map((t) => (
-                    <option key={t.id} value={t.id}>
+                    <ChoiceOption key={t.id} value={t.id}>
                       {t.name} · {t.distance} футов
-                    </option>
+                    </ChoiceOption>
                   ))}
-                </select>
+                </ChoiceControl>
               </label>
               {t && (
                 <p>

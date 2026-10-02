@@ -39,9 +39,20 @@ class SaveCommand(ActorCommand):
 
 
 class AttackCommand(ActorCommand):
+    mode: Literal["single", "burst", "automatic"] = "single"
     type: Literal["attack"] = "attack"
     target: str = Field(min_length=1, max_length=80)
     weapon: str = Field(default="", max_length=80)
+
+
+class ContextActionCommand(ActorCommand):
+    type: Literal["context_action"] = "context_action"
+    action_id: str = Field(min_length=1, max_length=80)
+
+
+class ReloadCommand(ActorCommand):
+    type: Literal["reload"] = "reload"
+    item_id: str = Field(min_length=1, max_length=80)
 
 
 class LevelUpCommand(ActorCommand):
@@ -166,6 +177,8 @@ ActionCommand = Annotated[
         CheckCommand,
         SaveCommand,
         AttackCommand,
+        ReloadCommand,
+        ContextActionCommand,
         UseFeatureCommand,
         CastSpellCommand,
         LevelUpCommand,

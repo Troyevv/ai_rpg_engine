@@ -12,12 +12,15 @@ class RestService:
         e = state.encounter
         t = c.type
         if t == "rest":
+            from ..resources import ResourceEngine
+
             if e:
                 raise ValueError("Во время боя отдых невозможен")
             if c.rest == "short":
                 if state.ruleset.version < 3 and a.resources.get("hit_dice", 0) <= 0:
                     raise ValueError("Кости здоровья закончились")
                 self.runtime.features_service.recharge(a, state.ruleset, "short")
+                ResourceEngine.recover(a, state.ruleset, "short")
                 if a.resources.get("hit_dice", 0) > 0:
                     a.resources["hit_dice"] -= 1
                     self.runtime.rules.heal(
@@ -34,6 +37,7 @@ class RestService:
                     if ally.location == a.location and "dead" not in ally.conditions:
                         self.runtime.rules.heal(ally, ally.max_hp)
                         ally.resources.update(hit_dice=ally.level, recovery=1)
+                        ResourceEngine.recover(ally, state.ruleset, "long")
                         for slot in ally.spell_slots.values():
                             slot.remaining = slot.maximum
                         self.runtime.features_service.recharge(

@@ -35,6 +35,9 @@ class EncounterEngine:
 
     @staticmethod
     def reset_turn(state):
+        from .effects import EffectsEngine
+
+        EffectsEngine.expire(state)
         e = state.encounter
         a = state.actor(e.order[e.index])
         e.action = e.bonus_action = e.free_interaction = True
@@ -112,7 +115,7 @@ class EncounterEngine:
         )
         return True
 
-    def validate_attack(self, state, actor_id, target_id, weapon):
+    def validate_attack(self, state, actor_id, target_id, weapon, mode="single"):
         a, t = state.actor(actor_id), state.actor(target_id)
         self.rules.attack_modifier(a, weapon)
         if (
@@ -126,9 +129,12 @@ class EncounterEngine:
             raise ValueError("Цель не участвует в бою")
         if abs(a.position - t.position) > a.attacks[weapon].reach:
             raise ValueError("Цель вне досягаемости")
+        from .resources import ResourceEngine
+
+        ResourceEngine.validate_attack(a, a.attacks[weapon], mode)
         return a, t
 
-    def damage(self, state, target, amount, critical, events):
+    def damage(self, state, target, amount, critical, events, damage_type=""):
         if "guard" in target.conditions:
             amount = max(0, amount - 2)
             target.conditions.remove("guard")
@@ -138,6 +144,9 @@ class EncounterEngine:
             for c in self.rules.conditions.definitions(target, state.ruleset)
         ):
             amount //= 2
+        from math import floor
+
+        amount = max(0, floor(amount * target.damage_modifiers.get(damage_type, 1)))
         before = target.hp
         dealt = self.rules.damage(target, amount, critical)
         if dealt and target.concentration:
@@ -164,8 +173,11 @@ class EncounterEngine:
         )
         return dealt
 
-    def npc_attack(self, state, actor_id, target_id, weapon, events):
-        a, t = self.validate_attack(state, actor_id, target_id, weapon)
+    def npc_attack(self, state, actor_id, target_id, weapon, events, mode="single"):
+        a, t = self.validate_attack(state, actor_id, target_id, weapon, mode)
+        from .resources import ResourceEngine
+
+        ResourceEngine.spend_attack(a, a.attacks[weapon], mode)
         advantage, sources = self.rules.conditions.advantage(
             a, state.ruleset, "attack", t, distance=abs(a.position - t.position)
         )
@@ -189,13 +201,15 @@ class EncounterEngine:
             w = a.attacks[weapon]
             damage = self.roll(
                 events,
-                f"1d{w.die}",
+                w.expression or f"1d{w.die}",
                 modifier=self.rules.damage_modifier(a, weapon, state.ruleset),
                 critical=roll.selected == 20,
                 critical_rule=state.ruleset.critical,
                 purpose="damage",
                 actor=a.id,
             )
-            self.damage(state, t, damage.total, roll.selected == 20, events)
+            self.damage(
+                state, t, damage.total, roll.selected == 20, events, w.damage_type
+            )
         else:
             event(events, f"{a.name} промахивается.", kind="miss")

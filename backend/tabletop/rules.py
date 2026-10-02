@@ -2,6 +2,7 @@
 
 from .models import CharacterSheet
 from .conditions import ConditionEngine
+from .effects import EffectsEngine
 
 
 class RulesEngine:
@@ -12,6 +13,7 @@ class RulesEngine:
         return (
             self.modifier(actor.abilities[actor.attacks[weapon].ability])
             + actor.bonuses.get("damage_bonus", 0)
+            + EffectsEngine.bonus(actor, "damage_bonus")
             + sum(c.damage_bonus for c in self.conditions.definitions(actor, rules))
         )
 
@@ -23,15 +25,40 @@ class RulesEngine:
     def proficiency(actor):
         return actor.proficiency_bonus
 
+    @staticmethod
+    def valid_skill(rules, skill, ability):
+        definition = rules.skill_definitions.get(skill)
+        return (
+            not skill
+            or rules.skills.get(skill) == ability
+            or bool(definition and ability in definition.alternate_abilities)
+        )
+
     def check_modifier(self, actor, ability, skill, rules):
-        if skill and (skill not in rules.skills or rules.skills[skill] != ability):
+        if not self.valid_skill(rules, skill, ability):
             raise ValueError("Навык не соответствует характеристике")
         return (
             self.modifier(actor.abilities[ability])
             + (self.proficiency(actor) if skill in actor.skill_proficiencies else 0)
             + actor.bonuses.get("check_bonus", 0)
+            + EffectsEngine.bonus(actor, "check_bonus", skill or ability)
             + actor.bonuses.get("check_bonus:" + (skill or ability), 0)
+            + actor.equipment_bonuses.get("check:" + (skill or ability), 0)
         )
+
+    def check_breakdown(self, actor, ability, skill, rules):
+        return {
+            "Характеристика": self.modifier(actor.abilities[ability]),
+            "Навык / владение": (
+                self.proficiency(actor) if skill in actor.skill_proficiencies else 0
+            ),
+            "Особенности": actor.bonuses.get("check_bonus", 0)
+            + actor.bonuses.get("check_bonus:" + (skill or ability), 0),
+            "Снаряжение": actor.equipment_bonuses.get("check:" + (skill or ability), 0),
+            "Временные эффекты": EffectsEngine.bonus(
+                actor, "check_bonus", skill or ability
+            ),
+        }
 
     def save_modifier(self, actor, ability):
         return (
@@ -45,10 +72,17 @@ class RulesEngine:
         attack = actor.attacks.get(weapon)
         if not attack:
             raise ValueError("Оружие недоступно")
+        if attack.accuracy is not None:
+            return (
+                attack.accuracy
+                + actor.bonuses.get("attack_bonus", 0)
+                + self.conditions.bonus(actor, "attack_bonus")
+            )
         return (
             self.modifier(actor.abilities[attack.ability])
             + (self.proficiency(actor) if attack.proficient else 0)
             + actor.bonuses.get("attack_bonus", 0)
+            + EffectsEngine.bonus(actor, "attack_bonus")
             + self.conditions.bonus(actor, "attack_bonus")
         )
 
@@ -185,7 +219,12 @@ class RulesEngine:
         total = 0
         for entry in build.purchases:
             item = items.get(entry.item_id)
-            if not item or item.type == "quest" or item.value <= 0:
+            if (
+                not item
+                or not item.starting_available
+                or item.type == "quest"
+                or item.value <= 0
+            ):
                 raise ValueError("Этот предмет нельзя купить на старте")
             total += item.value * entry.quantity
         capital = (
@@ -225,6 +264,7 @@ class RulesEngine:
                 + rules.species[b.species].get("features", [])
                 + background.get("features", [])
                 + b.feature_choices
+                + rules.world_features
             )
         )
         actor = CharacterSheet(
@@ -283,9 +323,23 @@ class RulesEngine:
         from .services.spells import SpellService
 
         SpellService.initialize(actor, b, rules)
+        for rid in cls.get("resources", []) + background.get("resources", []):
+            actor.resources[rid] = rules.resource_definitions[rid].initial
+        profile = rules.equipment_profiles.get(
+            rules.species[b.species].get("equipment_profile", "")
+        )
+        if profile:
+            actor.equipment_slots = {slot.id: slot.name for slot in profile.slots}
+            actor.equipment_layout = {
+                slot.id: {"position": slot.position, "group": slot.group}
+                for slot in profile.slots
+            }
         return actor
 
     def equipment_stats(self, actor, items):
+        if actor.template_id:
+            # Instance inventory transfers must not replace template-derived attacks/AC.
+            return
         if actor.equipment_slots:
             from .equipment import EquipmentEngine
 

@@ -76,6 +76,21 @@ class TabletopRuntime:
 
     def pending(self, state, purpose, actor, **kwargs):
         c = state.controllers[actor]
+        if purpose in ("check", "save") and kwargs.get("ability"):
+            sheet = state.actor(actor)
+            kwargs["modifier_breakdown"] = (
+                self.rules.check_breakdown(
+                    sheet, kwargs["ability"], kwargs.get("skill", ""), state.ruleset
+                )
+                if purpose == "check"
+                else {
+                    "Характеристика": self.rules.modifier(
+                        sheet.abilities[kwargs["ability"]]
+                    ),
+                    "Владение и эффекты": kwargs.get("modifier", 0)
+                    - self.rules.modifier(sheet.abilities[kwargs["ability"]]),
+                }
+            )
         state.session_state.pending = PendingRoll(
             id=uuid4().hex,
             purpose=purpose,
@@ -98,6 +113,9 @@ class TabletopRuntime:
     def execute(self, original, command, player_id="local"):
         state = original.model_copy(deep=True)
         events = []
+        from .effects import EffectsEngine
+
+        EffectsEngine.expire(state)
         command = Command.model_validate(
             command.model_dump() if hasattr(command, "model_dump") else command
         )
@@ -134,6 +152,7 @@ class TabletopRuntime:
                 self.drive(state, events)
         self.progression_service.reconcile(state, events)
         WorldService.advance(state, events)
+        EffectsEngine.expire(state)
         if not state.encounter and state.session_state.mechanical_resolution_complete:
             from .services.universal import UniversalChecks
 
@@ -164,7 +183,10 @@ class TabletopRuntime:
             raise ValueError("Сейчас ход другого участника")
         if t == "request_choice":
             return self.choices.request(state, c, aid, events)
+        from .context_actions import ContextActionService
+
         services = {
+            "context_action": ContextActionService(self),
             "level_up": self.progression_service,
             "cast_spell": self.spells_service,
             "prepare_spells": self.spells_service,
@@ -198,6 +220,7 @@ class TabletopRuntime:
             "use_item": self.inventory_service,
             "start_encounter": self.encounters_service,
             "attack": self.encounters_service,
+            "reload": self.encounters_service,
             "end_turn": self.encounters_service,
             "dodge": self.encounters_service,
             "dash": self.encounters_service,
@@ -242,9 +265,9 @@ class TabletopRuntime:
     def inventory(self, state, c, a, events):
         return self.inventory_service.inventory(state, c, a, events)
 
-    def attack(self, state, aid, target, weapon, events, reaction=False):
+    def attack(self, state, aid, target, weapon, events, reaction=False, mode="single"):
         return self.encounters_service.attack(
-            state, aid, target, weapon, events, reaction
+            state, aid, target, weapon, events, reaction, mode
         )
 
     def initiative(self, state, events):

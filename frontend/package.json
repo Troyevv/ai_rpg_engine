@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc -b && vite build",
-    "test:e2e": "playwright test"
+    "build": "npm run check:choices && tsc -b && vite build",
+    "test:e2e": "playwright test",
+    "check:choices": "node scripts/no-native-choice.mjs"
   },
   "dependencies": {
     "react": "^19.1.0",

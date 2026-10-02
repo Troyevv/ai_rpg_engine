@@ -11,6 +11,29 @@ class EncounterService:
         a = state.actor(aid)
         e = state.encounter
         t = c.type
+        if t == "reload":
+            from ..resources import ResourceEngine
+
+            attack = a.attacks.get(c.item_id)
+            if not attack or not attack.magazine:
+                raise ValueError("Оружие с магазином не экипировано")
+            if e:
+                self.runtime.spend(
+                    e,
+                    (
+                        "bonus_action"
+                        if attack.magazine.reload_cost == "BONUS_ACTION"
+                        else "action"
+                    ),
+                )
+            count = ResourceEngine.reload(a, state.items, c.item_id)
+            event(
+                events,
+                f"Перезарядка: {count} боеприпасов.",
+                kind="reload",
+                item_id=c.item_id,
+                amount=count,
+            )
         if t == "start_encounter":
             if e:
                 raise ValueError("Бой уже идёт")
@@ -55,7 +78,12 @@ class EncounterService:
             else:
                 raise ValueError("Доступные атаки закончились")
             self.runtime.attack(
-                state, aid, c.target, c.weapon or next(iter(a.attacks)), events
+                state,
+                aid,
+                c.target,
+                c.weapon or next(iter(a.attacks)),
+                events,
+                mode=c.mode,
             )
         if t == "end_turn":
             if not e:
@@ -118,9 +146,12 @@ class EncounterService:
                     }[t],
                 )
 
-    def attack(self, state, aid, target, weapon, events, reaction=False):
-        a, t = self.runtime.combat.validate_attack(state, aid, target, weapon)
+    def attack(self, state, aid, target, weapon, events, reaction=False, mode="single"):
+        a, t = self.runtime.combat.validate_attack(state, aid, target, weapon, mode)
         if state.controllers[aid].controller == "PLAYER":
+            from ..resources import ResourceEngine
+
+            ResourceEngine.spend_attack(a, a.attacks[weapon], mode)
             advantage, sources = self.runtime.rules.conditions.advantage(
                 a, state.ruleset, "attack", t, distance=abs(a.position - t.position)
             )
@@ -140,7 +171,7 @@ class EncounterService:
             )
             event(events, f"{a.name} атакует {t.name}. Брось кубик.", kind="pending")
         else:
-            self.runtime.combat.npc_attack(state, aid, target, weapon, events)
+            self.runtime.combat.npc_attack(state, aid, target, weapon, events, mode)
 
     def initiative(self, state, events):
         s = state.session_state

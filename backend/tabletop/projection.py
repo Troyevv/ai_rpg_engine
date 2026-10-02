@@ -54,6 +54,11 @@ class PublicProjection:
                 species_name=state.ruleset.species.get(a.species, {}).get(
                     "name", a.species
                 ),
+                resource_definitions={
+                    k: v.model_dump()
+                    for k, v in state.ruleset.resource_definitions.items()
+                    if k in a.resources
+                },
                 modifiers={k: rules.modifier(v) for k, v in a.abilities.items()},
                 skill_modifiers={
                     k: rules.check_modifier(a, ability, k, state.ruleset)
@@ -319,13 +324,23 @@ class DMProjection:
                 for a in relevant
                 if a.id not in state.party
             ],
+            "context_actions": public_state(state).get("context_actions", []),
             "recent_events": (events or [])[-15:],
         }
 
 
 # Compatibility alias for read adapters, not a canonical serialization method.
 def public_state(state):
-    return PublicProjection.build(state)
+    result = PublicProjection.build(state)
+    from .context_actions import eligible
+
+    actor = state.actor(state.session_state.controlled_actor)
+    result["context_actions"] = [
+        dict(id=a.id, name=a.name, description=a.description)
+        for a in state.definition.context_actions
+        if eligible(state, actor, a)
+    ]
+    return result
 
 
 class NarrationProjection:

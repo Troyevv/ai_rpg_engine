@@ -54,6 +54,7 @@ class RollRequest(Request):
 
 
 class GenerateRequest(Credential):
+    setting_id: str | None = None
     config: ModelConfig
     options: GenerationOptions
 
@@ -68,6 +69,9 @@ class NewGameRequest(NewGame, Credential):
 
 
 class BuildRequest(Credential):
+    draft_id: str | None = None
+    setting_id: str | None = None
+    setting_revision: int | None = None
     build: CharacterBuild
     ruleset_id: str = "d20-fantasy-v2"
 
@@ -162,13 +166,45 @@ def install(app, shared_repo, credentials):
             },
         )
 
+    from .setting_api import install as install_setting_api
+
+    install_setting_api(router, repo, agent, validation_response)
+
+    def selected_rules(ruleset_id, setting_id=None, revision=None, draft_id=None):
+        if draft_id:
+            from .content_registry import campaign_rules
+
+            return campaign_rules(
+                CampaignDefinition.model_validate(repo.draft(draft_id)["definition"])
+            )
+        if setting_id:
+            from .setting_repository import SettingRepository
+            from .content_registry import setting_rules
+
+            return setting_rules(
+                SettingRepository(repo).get(setting_id, revision)["definition"]
+            )
+        return load_ruleset(ruleset_id)
+
     @router.get("/catalog")
-    def catalog(ruleset_id: str = "d20-fantasy-v2"):
-        rules = load_ruleset(ruleset_id)
+    def catalog(
+        ruleset_id: str = "d20-fantasy-v2",
+        setting_id: str | None = None,
+        setting_revision: int | None = None,
+        draft_id: str | None = None,
+    ):
+        rules = selected_rules(ruleset_id, setting_id, setting_revision, draft_id)
+        cls = "fighter" if "fighter" in rules.classes else next(iter(rules.classes))
+        entry = rules.classes[cls]
         default = CharacterBuild(
-            feature_choices=rules.classes["fighter"].get("feature_choices", [])[
-                : rules.classes["fighter"].get("feature_choice_count", 0)
-            ]
+            character_class=cls,
+            species=next(iter(rules.species)),
+            background=next(iter(rules.backgrounds)),
+            skills=entry["skills"][: entry["skill_count"]],
+            equipment=entry["equipment"],
+            feature_choices=entry.get("feature_choices", [])[
+                : entry.get("feature_choice_count", 0)
+            ],
         )
         if rules.allocation:
             default.ability_method = "allocation"
@@ -178,6 +214,9 @@ def install(app, shared_repo, credentials):
         return {
             **rules.model_dump(),
             "default_build": default.model_dump(),
+            "draft_id": draft_id,
+            "setting_id": setting_id,
+            "setting_revision": setting_revision,
             "developer_mode": app.state.tabletop_debug,
         }
 
@@ -185,7 +224,12 @@ def install(app, shared_repo, credentials):
     def build(body: BuildRequest):
         from .rules import RulesEngine
 
-        RulesEngine().validate_build(body.build, load_ruleset(body.ruleset_id))
+        RulesEngine().validate_build(
+            body.build,
+            selected_rules(
+                body.ruleset_id, body.setting_id, body.setting_revision, body.draft_id
+            ),
+        )
         return {"valid": True}
 
     @router.post("/build/preview")
@@ -193,7 +237,9 @@ def install(app, shared_repo, credentials):
         from .definitions import CharacterDefinition
         from .rules import RulesEngine
 
-        rules = load_ruleset(body.ruleset_id)
+        rules = selected_rules(
+            body.ruleset_id, body.setting_id, body.setting_revision, body.draft_id
+        )
         engine = RulesEngine()
         actor = engine.build_character(
             CharacterDefinition(
@@ -273,7 +319,22 @@ def install(app, shared_repo, credentials):
     def generate(body: GenerateRequest):
         did = uuid4().hex
         try:
-            definition = CampaignGenerator(agent(body)).generate(did, body.options)
+            if body.setting_id:
+                from .setting_repository import SettingRepository
+                from .campaign_generation import CampaignGenerator2, CampaignOptions
+                from .content import SettingDefinition
+
+                world = SettingRepository(repo).get(body.setting_id)
+                if world["status"] != "CONFIRMED":
+                    raise ValueError("Сначала подтверди мир")
+                options = CampaignOptions.model_validate(
+                    body.options.model_dump(include=set(CampaignOptions.model_fields))
+                )
+                definition = CampaignGenerator2(agent(body)).generate(
+                    did, SettingDefinition.model_validate(world["definition"]), options
+                )
+            else:
+                definition = CampaignGenerator(agent(body)).generate(did, body.options)
         except CampaignValidationError as exc:
             invalid_id = None
             if exc.definition is not None:

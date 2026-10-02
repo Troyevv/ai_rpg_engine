@@ -222,7 +222,7 @@ class CheckService:
                     state,
                     "damage",
                     p.actor,
-                    expression=f"1d{w.die}",
+                    expression=w.expression or f"1d{w.die}",
                     modifier=self.runtime.rules.damage_modifier(
                         a, p.weapon, state.ruleset
                     ),
@@ -246,7 +246,12 @@ class CheckService:
                     self.runtime.resume_reaction(state, events)
         elif p.purpose == "damage":
             self.runtime.combat.damage(
-                state, state.actor(p.target), roll.total, p.critical, events
+                state,
+                state.actor(p.target),
+                roll.total,
+                p.critical,
+                events,
+                a.attacks[p.weapon].damage_type if p.weapon in a.attacks else "",
             )
             if state.encounter:
                 self.runtime.combat.ended(state, events)
@@ -279,6 +284,9 @@ class CheckService:
                     break
         self.runtime.progression_service.reconcile(state, events)
         WorldService.advance(state, events)
+        from ..effects import EffectsEngine
+
+        EffectsEngine.expire(state)
         from ..events import state_changes
 
         state_changes(original, state, events)

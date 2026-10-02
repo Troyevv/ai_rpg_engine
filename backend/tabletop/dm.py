@@ -51,6 +51,7 @@ class DMAgent:
                         max_tokens=(
                             max(config.get("max_tokens", 2000), 10000)
                             if stage in ("campaign_generation", "content_generation")
+                            or stage.startswith("authoring_")
                             else min(config.get("max_tokens", 2000), 4000)
                         ),
                         response_format={"type": "json_object"} if structured else None,

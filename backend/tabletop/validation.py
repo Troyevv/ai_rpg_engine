@@ -1,7 +1,7 @@
 """Deterministic cross-reference validation; never repairs or mutates definitions."""
 
 from types import SimpleNamespace
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError, Field
 
 
 class ValidationIssue(BaseModel):
@@ -11,6 +11,10 @@ class ValidationIssue(BaseModel):
     entity_id: str
     field: str
     reference: str = ""
+    stage: str = "reference"
+    source_id: str = ""
+    target_id: str = ""
+    context: dict = Field(default_factory=dict)
     message: str
 
 
@@ -50,6 +54,7 @@ def schema_error(exc: ValidationError):
         issues.append(
             ValidationIssue(
                 code=error["type"],
+                stage="schema",
                 entity_type="campaign",
                 entity_id="",
                 field=field,
@@ -66,7 +71,7 @@ class CampaignReferenceValidator:
             "region": {x.id for x in d.regions},
             "location": {x.id for x in d.locations},
             "faction": {x.id for x in d.factions},
-            "actor": {x.id for x in d.characters + d.creatures},
+            "actor": {x.id for x in d.characters + d.creatures + d.creature_instances},
             "secret": {x.id for x in d.secrets},
             "item": {x.id for x in ruleset.items + d.items},
             "object": {x.id for x in d.objects},
@@ -93,6 +98,8 @@ class CampaignReferenceValidator:
                         entity_id=entity.id,
                         field=field,
                         reference=reference,
+                        source_id=entity.id,
+                        target_id=reference,
                         message=f"{entity.name} ({entity.id}): {field} → отсутствует {labels[target]} «{reference}».",
                     )
                 )
@@ -119,6 +126,103 @@ class CampaignReferenceValidator:
                     "item",
                 )
                 many(kind, a, "build.equipment", a.build.equipment, "item")
+        for actor in d.creature_instances:
+            check("creature", actor, "location_id", actor.location_id, "location")
+            check("creature", actor, "faction_id", actor.faction_id, "faction")
+            many("creature", actor, "knowledge", actor.knowledge, "secret")
+            many("creature", actor, "relationships", actor.relationships, "actor")
+            many("creature", actor, "inventory", actor.inventory, "item")
+            template = (
+                d.setting_definition.content.creatures.get(actor.template_id)
+                if d.setting_definition
+                else None
+            )
+            if not template:
+                issues.append(
+                    ValidationIssue(
+                        code="missing_content_reference",
+                        entity_type="creature",
+                        entity_id=actor.id,
+                        field="template_id",
+                        target_id=actor.template_id,
+                        reference=actor.template_id,
+                        message="Шаблон существа отсутствует в Setting",
+                    )
+                )
+            else:
+                if actor.current_hp is not None and actor.current_hp > template.base_hp:
+                    issues.append(
+                        ValidationIssue(
+                            code="creature_hp_bounds",
+                            entity_type="creature",
+                            entity_id=actor.id,
+                            field="current_hp",
+                            message="HP экземпляра превышает максимум шаблона",
+                        )
+                    )
+                for rid, amount in actor.resources.items():
+                    definition = d.setting_definition.content.resources.get(rid)
+                    if (
+                        rid not in template.resources
+                        or not definition
+                        or not 0 <= amount <= definition.maximum
+                    ):
+                        issues.append(
+                            ValidationIssue(
+                                code="invalid_resource",
+                                entity_type="creature",
+                                entity_id=actor.id,
+                                field="resources",
+                                reference=rid,
+                                message="Недопустимый ресурс экземпляра",
+                            )
+                        )
+        for action in d.context_actions:
+            check(
+                "context_action", action, "location_id", action.location_id, "location"
+            )
+            if action.object_id:
+                check("context_action", action, "object_id", action.object_id, "object")
+            if action.actor_id:
+                check("context_action", action, "actor_id", action.actor_id, "actor")
+            for field, ref, available in [
+                ("check_id", action.check_id, {c.id for c in d.checks}),
+                ("feature_id", action.feature_id, set(ruleset.features)),
+            ]:
+                if ref and ref not in available:
+                    issues.append(
+                        ValidationIssue(
+                            code="unknown_reference",
+                            entity_type="context_action",
+                            entity_id=action.id,
+                            field=field,
+                            reference=ref,
+                            message="Контекстное действие ссылается на отсутствующий контент",
+                        )
+                    )
+            for field, available in [
+                ("skills", ruleset.skills),
+                ("backgrounds", ruleset.backgrounds),
+                ("archetypes", ruleset.classes),
+                ("features", ruleset.features),
+                ("items", targets["item"]),
+                ("equipment", targets["item"]),
+                ("knowledge", targets["secret"]),
+                ("conditions", ruleset.condition_definitions),
+                ("without_conditions", ruleset.condition_definitions),
+            ]:
+                for ref in getattr(action.requirements, field):
+                    if ref not in available:
+                        issues.append(
+                            ValidationIssue(
+                                code="missing_content_reference",
+                                entity_type="context_action",
+                                entity_id=action.id,
+                                field="requirements." + field,
+                                reference=ref,
+                                message="Требование действия ссылается на отсутствующий контент",
+                            )
+                        )
         for s in d.secrets:
             check("secret", s, "location_id", s.location_id, "location")
         for o in d.objects:

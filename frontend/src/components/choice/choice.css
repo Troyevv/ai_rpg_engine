@@ -1,0 +1,185 @@
+.choice-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  text-align: left;
+  font: inherit;
+}
+.choice-trigger > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.choice-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.25);
+  z-index: 2000;
+}
+.choice-content {
+  position: fixed;
+  left: var(--choice-left);
+  top: var(--choice-top);
+  width: var(--choice-width);
+  max-width: calc(100vw - 24px);
+  max-height: min(70dvh, 550px);
+  z-index: 2001;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: var(--surface-1);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  box-shadow: 0 16px 60px #0006;
+  box-sizing: border-box;
+}
+.choice-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.choice-heading h2 {
+  font-size: 1rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.choice-heading button {
+  width: 44px;
+  height: 44px;
+  flex: none;
+}
+.choice-options {
+  overflow: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+}
+.choice-options > button {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 12px;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.choice-options > button[aria-selected="true"] {
+  background: var(--surface-3);
+  border-color: var(--accent);
+}
+.choice-options > button:focus-visible,
+.choice-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.choice-options small {
+  display: block;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+.choice-options > button:disabled {
+  opacity: 0.5;
+}
+.choice-search {
+  width: 100%;
+  min-height: 44px;
+  flex: none;
+  box-sizing: border-box;
+}
+.choice-segments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.choice-segments button {
+  flex: 1;
+  min-height: 44px;
+  padding: 8px;
+  white-space: normal;
+}
+.choice-segments button[aria-pressed="true"],
+.choice-cards button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--surface-3);
+}
+.choice-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 12px;
+}
+.choice-cards button {
+  min-height: 44px;
+  text-align: left;
+  white-space: normal;
+}
+.choice-multi label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+}
+.choice-stepper {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.choice-stepper button {
+  min-width: 44px;
+  min-height: 44px;
+}
+.choice-stepper output {
+  min-width: 2ch;
+  text-align: center;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+@media (max-width: 767px) {
+  .choice-content {
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: 85dvh;
+    border-radius: 18px 18px 0 0;
+    padding: 16px max(16px, env(safe-area-inset-right))
+      max(16px, env(safe-area-inset-bottom))
+      max(16px, env(safe-area-inset-left));
+  }
+  .choice-overlay {
+    background: rgb(0 0 0 / 0.55);
+  }
+  .choice-content input {
+    font-size: 16px;
+  }
+}

@@ -1,3 +1,4 @@
+import { ChoiceControl, ChoiceOption } from "@/components/choice/ChoiceControl";
 import {
   HeroSummary,
   CombatHUD,
@@ -220,7 +221,7 @@ export function Tabletop({
         <button disabled={busy} onClick={() => setCreating(true)}>
           Новая кампания
         </button>
-        <select
+        <ChoiceControl
           aria-label="Сохранённая кампания"
           value={game?.id || ""}
           disabled={busy}
@@ -230,15 +231,15 @@ export function Tabletop({
             )
           }
         >
-          <option value="" disabled>
+          <ChoiceOption value="" disabled>
             Выбрать кампанию
-          </option>
+          </ChoiceOption>
           {games.map((g) => (
-            <option key={g.id} value={g.id}>
+            <ChoiceOption key={g.id} value={g.id}>
               {g.name}
-            </option>
+            </ChoiceOption>
           ))}
-        </select>
+        </ChoiceControl>
         <span className="tt-note">
           AI-ведущий · {prefs.game.model || "выбери модель в настройках"}
         </span>
@@ -451,6 +452,18 @@ export function Tabletop({
                       {c.name}
                     </button>
                   ))}
+                {s.context_actions?.map((action) => (
+                  <button
+                    key={action.id}
+                    disabled={blocked}
+                    title={action.description}
+                    onClick={() =>
+                      act({ type: "context_action", action_id: action.id })
+                    }
+                  >
+                    {action.name}
+                  </button>
+                ))}
                 {s.choice && (
                   <div className="tt-roll-prompt" role="status">
                     <h2>{s.choice.prompt}</h2>
@@ -780,14 +793,42 @@ export function Tabletop({
                   {a.equipment_bonuses?.stealth_disadvantage ? (
                     <p>Тяжёлая броня: помеха Скрытности</p>
                   ) : null}
-                  <div className="tt-paper-doll" aria-label="Слоты экипировки">
+                  <div
+                    className="tt-paper-doll"
+                    aria-label="Слоты экипировки"
+                    style={
+                      a.equipment_layout &&
+                      Object.keys(a.equipment_layout).length
+                        ? { gridTemplateAreas: "none" }
+                        : undefined
+                    }
+                  >
                     {Object.entries(a.equipment_slots || {}).map(
                       ([slot, label]) => {
                         const entry = a.inventory.find(
                           (e) => e.equipped && e.slot === slot,
                         );
                         return (
-                          <div key={slot} style={{ gridArea: slot }}>
+                          <div
+                            key={slot}
+                            style={
+                              a.equipment_layout?.[slot]
+                                ? {
+                                    gridColumn:
+                                      a.equipment_layout[slot].position ===
+                                      "left"
+                                        ? "1"
+                                        : a.equipment_layout[slot].position ===
+                                            "right"
+                                          ? "3"
+                                          : a.equipment_layout[slot]
+                                                .position === "extra"
+                                            ? "auto"
+                                            : "2",
+                                  }
+                                : { gridArea: slot }
+                            }
+                          >
                             <small>{label}</small>
                             <strong>
                               {entry ? s.items[entry.item_id]?.name : "Пусто"}
