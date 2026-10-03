@@ -55,7 +55,7 @@ def rank(state, user_text, kind='turn'):
     facts={fid:max(knowledge.get(fid,0),POLICY['fact']+max((scores.get(cid,0)//4 for cid in f.get('character_ids',[])),default=0))
            for fid,f in world['facts'].items()}
     events={eid:POLICY['event']+max((scores.get(cid,0)//3 for cid in e['participants']),default=0)
-            +max(0,15-(now-(e.get('minute') or 0))//60)
+            +max(0,15-(now-(e['minute'] if e.get('minute') is not None else e.get('recorded_minute',0)))//60)
             for eid,e in world['events'].items()}
     relations={rid:max(scores.get(r['source_id'],0),scores.get(r['target_id'],0))
                + (30 if r['source_id'] in present and r['target_id'] in present else 0)

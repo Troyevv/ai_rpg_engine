@@ -22,9 +22,12 @@ def api(tmp_path):
 
 
 def wait_job(client, jid):
+    from engine import live
     for _ in range(200):
         job = client.get('/api/jobs/' + jid).json()
-        if job['status'] not in ('generating', 'extracting', 'validating'):
+        # The saved status precedes the final timing/variant write. Snapshot
+        # assertions must wait for that worker to finish, not race the write.
+        if job['status'] not in ('generating', 'extracting', 'validating') and not live(jid):
             return job
         time.sleep(.01)
     raise AssertionError('job timed out')

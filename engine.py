@@ -221,6 +221,8 @@ def run_job(path, job_id, handle):
             if any(request['stage'].startswith('world_simulation') for request in storage.request_log(job_id=job_id)):
                 timings['background_simulation']=time.perf_counter()-stage_started
             state=compatibility_view(state)
+            from backend.services.turn_delta.final_state import assert_world_invariants
+            assert_world_invariants(state,before)
             with storage.connect() as db:
                 db.execute('UPDATE game_jobs SET audience_json=? WHERE id=?',(json.dumps(audience),job_id))
             if not handle.cancelled.is_set():

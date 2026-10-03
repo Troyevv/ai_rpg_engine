@@ -145,13 +145,14 @@ class RuntimeStorage:
         by_job={}
         for request in requests:by_job.setdefault(request['job_id'],[]).append(request)
         with self.connect() as db:
-            turns=[dict(r) for r in db.execute("""SELECT t.id,t.sequence,t.active_variant_id,t.timing_json,
+            turns=[dict(r) for r in db.execute("""SELECT t.id,t.sequence,t.active_variant_id,t.timing_json,t.changes_json,
                 v.job_id,j.warnings_json,j.repair_diagnostics_json FROM turns t
                 LEFT JOIN response_variants v ON v.id=t.active_variant_id
                 LEFT JOIN game_jobs j ON j.id=v.job_id
                 WHERE t.save_id=? ORDER BY t.sequence DESC LIMIT 30""",(save_id,))]
         for turn in turns:
             turn['timing']=json.loads(turn.pop('timing_json') or 'null')
+            turn['derivations']=json.loads(turn.pop('changes_json') or '{}').get('derivations',[])
             turn['repairs']=json.loads(turn.pop('repair_diagnostics_json') or '[]')
             turn['warnings']=json.loads(turn.pop('warnings_json') or '[]')
             turn['requests']=by_job.get(turn['job_id'],[])

@@ -1,0 +1,89 @@
+{
+  "narrative": "Илья поговорил с Людой. Люда сказала ему, что анализ положительный. Илья попрощался и вышел в коридор. Люда ушла в ординаторскую.",
+  "payload": {
+    "scene": {
+      "text": "Илья в коридоре.",
+      "time": "День 1 09:03",
+      "elapsed_minutes": 3,
+      "location": "коридор",
+      "present_ids": [
+        "character_1"
+      ]
+    },
+    "choices": [
+      {
+        "action": "Действие 0",
+        "speech": ""
+      },
+      {
+        "action": "Действие 1",
+        "speech": ""
+      },
+      {
+        "action": "Действие 2",
+        "speech": ""
+      },
+      {
+        "action": "Действие 3",
+        "speech": ""
+      },
+      {
+        "action": "Действие 4",
+        "speech": ""
+      },
+      {
+        "action": "Действие 5",
+        "speech": ""
+      }
+    ],
+    "world_delta": {
+      "facts": [
+        {
+          "id": "f",
+          "text": "Анализ положительный",
+          "evidence": "анализ положительный"
+        }
+      ],
+      "events": [
+        {
+          "id": "e",
+          "text": "Люда сообщила результат анализа",
+          "participants": [
+            "character_1",
+            "character_2"
+          ],
+          "witnesses": [
+            "character_1",
+            "character_2"
+          ],
+          "fact_ids": [
+            "f"
+          ],
+          "medium": "conversation",
+          "location": "кабинет",
+          "evidence": "Люда сказала ему, что анализ положительный.",
+          "minute": 542,
+          "order": 10
+        }
+      ],
+      "knowledge": [
+        {
+          "actor_id": "character_2",
+          "fact_id": "f",
+          "source_event_id": "e",
+          "status": "known",
+          "evidence": "анализ положительный"
+        }
+      ],
+      "transitions": [
+        {
+          "actor_id": "character_1",
+          "to_location": "коридор",
+          "evidence": "Илья попрощался и вышел в коридор.",
+          "minute": 541,
+          "order": 0
+        }
+      ]
+    }
+  }
+}

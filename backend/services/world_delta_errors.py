@@ -42,6 +42,7 @@ def sanitize_secondary(delta, error, original_indices):
     section, index = error.section, error.index
     records = delta[section]
     warning = dict(error.warning, index=original_indices[section][index])
+    warning['action'] = 'drop_field' if error.path else 'drop_record'
     if error.path:
         record = records[index]
         parent = record

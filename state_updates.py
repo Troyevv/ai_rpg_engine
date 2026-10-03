@@ -167,33 +167,45 @@ def apply_world_updates(before, payload, narrative, user_text, turn, kind='turn'
     """
     from backend.services.world_delta_errors import sanitize_secondary
     from backend.services.pov import apply_scene_policy
-    from backend.services.world import record_scene
     from backend.services.world_delta import apply_delta, SecondaryDeltaError
     from backend.services.world_delta import add_promotions, WorldDelta
     from backend.services.timeline import current_time
-    try:
-        payload = json.loads(payload) if isinstance(payload,str) else deepcopy(payload)
-    except json.JSONDecodeError as exc:
-        raise StructuralDeltaError(str(exc),'schema_invalid') from exc
-    exact_keys(payload, ('scene','choices','world_delta'), ('scene','choices','world_delta'))
-    warnings=[]
-    from pydantic import ValidationError
-    try:
-        WorldDelta.model_validate(payload['world_delta'])
-    except ValidationError as exc:
-        raise StructuralDeltaError(str(exc),'schema_invalid',section='world_delta') from exc
-    original_indices={section:list(range(len(entries))) for section,entries in payload['world_delta'].items() if isinstance(entries,list)}
+    from backend.services.turn_delta.canonical import RawExtraction
+    payload=RawExtraction.parse(payload).payload
+    from backend.services.delta_salvage import salvage_missing_evidence, cascade_removed
+    raw=payload['world_delta']
+    original_indices={section:list(range(len(entries))) for section,entries in (raw.items() if isinstance(raw,dict) else []) if isinstance(entries,list)}
+    original=deepcopy(raw)
+    warnings=salvage_missing_evidence(raw,original_indices,discard_unsupported)
+    removed={section:{original[section][w['index']]['id'] for w in warnings if w['section']==section}
+             for section in ('facts','events')}
+    warnings.extend(cascade_removed(raw,before,removed,original_indices))
     iterations=0
     while True:
-        # The scene/choice validator is shared with older saves; never pass legacy
-        # patches through its mutation path.
+        # Every retry starts with the original copy; discarded claims cannot leak.
         try:
             delta=WorldDelta.model_validate(payload['world_delta']).model_dump(exclude_none=True)
             prepared=add_promotions(before,delta['promotions'],narrative,user_text)
-            state,choices,_=apply_updates(prepared,{'scene':payload['scene'],'choices':payload['choices']},narrative,user_text,turn,kind)
+            from backend.services.turn_delta.canonical import prepare_scene, CanonicalTurnDelta
+            state,choices=prepare_scene(prepared,payload,kind)
             state,audience=apply_scene_policy(prepared,state,payload,kind,simulation=simulation)
-            record_scene(state,payload,turn,kind)
-            state=apply_delta(state,payload['world_delta'],narrative,user_text,turn,since=current_time(before),promotions_prepared=True)
+            from backend.services.turn_delta.references import validate_references
+            from backend.services.turn_delta.provenance import validate_provenance
+            validate_references(prepared,delta)
+            validate_provenance(delta,narrative,user_text)
+            interval_start=current_time(before)
+            if simulation:
+                observed=prepared['world']['scenes'][prepared['camera']['scene_id']].get('end_minute')
+                if type(observed) is int and 0<=observed<=interval_start:interval_start=observed
+            canonical=CanonicalTurnDelta.resolve(prepared,state,delta,interval_start)
+            movement_plan=canonical.spatial
+            if kind=='background' and before.get('camera',{}).get('scope')!='scene' and before.get('protagonist_id') in movement_plan['involved']:
+                raise StructuralDeltaError('Закулисье включает основного персонажа','scene_invalid')
+            from backend.services.turn_delta.scene_sync import apply_locations
+            apply_locations(state,movement_plan,turn,kind)
+            state=apply_delta(state,canonical.claims,narrative,user_text,turn,since=interval_start,promotions_prepared=True,before_state=prepared,movement_plan=movement_plan,spatial_prepared=True)
+            audience=sorted(set(audience)|movement_plan['involved'])
+            payload['derivations']=[dict(d,index=original_indices['transitions'][d['index']]) if d['section']=='transitions' else d for d in movement_plan['derivations']]
             return state,choices,payload,audience,warnings
         except SecondaryDeltaError as exc:
             if not discard_unsupported:raise
@@ -201,7 +213,10 @@ def apply_world_updates(before, payload, narrative, user_text, turn, kind='turn'
             if iterations>4096:
                 raise StructuralDeltaError('Sanitization iteration limit','sanitization_internal',repairable=False)
             previous=deepcopy(payload['world_delta'])
+            if not exc.path and exc.section in removed:
+                removed[exc.section].add(payload['world_delta'][exc.section][exc.index]['id'])
             warnings.append(sanitize_secondary(payload['world_delta'],exc,original_indices))
+            warnings.extend(cascade_removed(payload['world_delta'],before,removed,original_indices))
             if previous==payload['world_delta']:
                 raise StructuralDeltaError('Sanitization made no progress','sanitization_internal',repairable=False)
 

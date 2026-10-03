@@ -87,28 +87,13 @@ def normalize(original):
 
 
 def record_scene(state, changes, sequence, kind):
-    """Update only observed participants; keep off-camera points and other scenes."""
-    world = state['world']
-    meta = state['scene_meta']
-    participants = meta['present_ids']
-    prior = world['scenes'].get(state.get('camera',{}).get('scene_id'))
-    same = prior and prior['location']==meta['location'] and set(prior['participants'])==set(participants)
-    sid = prior['id'] if same else identity('scene',sequence,meta['location'],sorted(participants))
-    now = current_time(state)
-    scene = world['scenes'].setdefault(sid,dict(id=sid, start_minute=now, event_ids=[]))
-    scene.update(participants=participants,location=meta['location'],end_minute=now,text=state['scene'],status='active')
-    state['camera'] = {'scene_id':sid,'mode':'observer' if kind=='background' else 'actor','scope':state.get('camera',{}).get('scope','world')}
-    if kind=='background':
-        state['controlled_actor_id'] = None
-    for cid in participants:
-        c = world['characters'][cid]
-        c.update(location=meta['location'],scene_id=sid,minute=now)
-        # Remove a moved participant from its old live scene, retaining its history.
-        for other in world['scenes'].values():
-            if other['id']!=sid and cid in other['participants']:
-                other['participants'].remove(cid)
-                if not other['participants']:other['status']='ended'
-    return sid
+    """Compatibility facade; live spatial writes belong to scene_sync only."""
+    from backend.services.turn_delta.scene_sync import apply_locations
+    meta=state['scene_meta'];world=state['world']
+    positions={cid:c.get('location') for cid,c in world['characters'].items()}
+    for cid in meta['present_ids']:positions[cid]=meta['location']
+    return apply_locations(state,dict(positions=positions,involved=set(meta['present_ids']),
+        final_present=meta['present_ids']),sequence,kind)
 
 
 def apply_legacy(state, changes, sequence, kind):
@@ -166,7 +151,7 @@ def timeline(state, visibility='player'):
     events=state['world']['events'].values()
     known_events={k.get('source_event_id') for k in state['world']['knowledge'].values() if k['actor_id']==actor and k['status']=='known'}
     rows=[e for e in events if e.get('player_observed')] if visibility=='player' else [e for e in events if actor in e['witnesses'] or e['id'] in known_events]
-    return sorted(rows,key=lambda e:(e['minute'] if e['minute'] is not None else -1,e['id']))
+    return sorted(rows,key=lambda e:(e['minute'] if e['minute'] is not None else e.get('recorded_minute',-1),e.get('order') or 0,e['id']))
 
 
 def record_narrative(state, narrative, sequence, observed=True, previous_events=()):
@@ -178,7 +163,7 @@ def record_narrative(state, narrative, sequence, observed=True, previous_events=
         minute=current_time(state),scene_meta=deepcopy(state['scene_meta']),narrative=narrative,
         participants=list(scene['participants']),player_observed=observed,pov_actor_id=state.get('controlled_actor_id'))
     for eid,event in world['events'].items():
-        if eid not in previous_events and event['source_sequence']==sequence and event['scene_id']==scene['id']:
+        if eid not in previous_events and event['source_sequence']==sequence:
             event['source_record_id']=rid
     scene['last_record_id']=rid
     return rid

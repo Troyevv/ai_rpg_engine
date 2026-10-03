@@ -1,0 +1,1 @@
+Reconstructed failure classes from manual reports, not captured production requests. Each JSON is run through run_job, commit, request/timing diagnostics and canonical invariants. Optional metadata is intentionally incomplete.

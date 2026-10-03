@@ -1,0 +1,92 @@
+{
+  "reconstructed": true,
+  "narrative": "Илья и Люда разговаривают в кабинете. Илья прощается и выходит в коридор. Люда идёт в ординаторскую.",
+  "initial": [
+    "character_1",
+    "character_2"
+  ],
+  "kind": "pov",
+  "config": {
+    "actor_id": "character_2"
+  },
+  "payload": {
+    "scene": {
+      "text": "Завершённый ход",
+      "time": "День 1 09:03",
+      "elapsed_minutes": 3,
+      "location": "коридор",
+      "present_ids": [
+        "character_2"
+      ]
+    },
+    "choices": [
+      {
+        "action": "Действие 0",
+        "speech": ""
+      },
+      {
+        "action": "Действие 1",
+        "speech": ""
+      },
+      {
+        "action": "Действие 2",
+        "speech": ""
+      },
+      {
+        "action": "Действие 3",
+        "speech": ""
+      },
+      {
+        "action": "Действие 4",
+        "speech": ""
+      },
+      {
+        "action": "Действие 5",
+        "speech": ""
+      }
+    ],
+    "world_delta": {
+      "transitions": [],
+      "facts": [
+        {
+          "id": "f",
+          "text": "Анализ положительный",
+          "evidence": "Илья и Люда разговаривают в кабинете. Илья прощается и выходит в коридор. Люда идёт в ординаторскую."
+        }
+      ],
+      "events": [
+        {
+          "id": "e",
+          "text": "Разговор",
+          "participants": [
+            "character_1",
+            "character_2"
+          ],
+          "witnesses": [
+            "character_1",
+            "character_2"
+          ],
+          "fact_ids": [
+            "f"
+          ],
+          "medium": "conversation",
+          "evidence": "Илья и Люда разговаривают в кабинете. Илья прощается и выходит в коридор. Люда идёт в ординаторскую."
+        }
+      ],
+      "knowledge": [
+        {
+          "actor_id": "character_2",
+          "fact_id": "f",
+          "source_event_id": "e",
+          "status": "known",
+          "evidence": "Илья и Люда разговаривают в кабинете. Илья прощается и выходит в коридор. Люда идёт в ординаторскую."
+        }
+      ]
+    }
+  },
+  "expected_positions": {
+    "character_1": "кабинет",
+    "character_2": "коридор"
+  },
+  "warning_codes": []
+}

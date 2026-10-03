@@ -43,15 +43,17 @@ def build_context(state, history, user_text, kind, context_length, reserve, extr
     if extraction_text is not None:
         from backend.services.world_delta import WorldDelta, KNOWLEDGE_CONTRACT, RELATION_CONTRACT
         from backend.services.player_agency import PLAYER_AGENCY_CONTRACT
+        from backend.services.turn_delta.contract import TURN_DELTA_CONTRACT
+        rules += "\n"+TURN_DELTA_CONTRACT
         rules += '\n'+PLAYER_AGENCY_CONTRACT
         rules += '\n'+KNOWLEDGE_CONTRACT+'\n'+RELATION_CONTRACT
         rules += '\nКаноническая JSON Schema поля world_delta:\n'+encoded(WorldDelta.model_json_schema())
     from backend.services.timeline import current_time,label
-    dynamic = '\nЕдиное время мира: '+label(current_time(state))+'. Не возвращай время назад. В scene.time используй День N (день недели) HH:MM. Переход POV синхронный, без флешбэка.'
+    dynamic = '\nЕдиное время мира: '+label(current_time(state))+'. Не возвращай время назад. Переход POV синхронный, без флешбэка.'
     dynamic += ('\nПРАВИЛО ЧАСОВ: действия и разговоры занимают игровое время. При извлечении добавь в scene '
                 'elapsed_minutes — целую длительность показанного хода. Оцени по действиям (короткий обмен обычно 1–3 минуты), '
-                'учти явно прошедшее время; не сохраняй старые часы автоматически. scene.time — конечное время, '
-                'согласованное с elapsed_minutes. Ноль допустим для мгновенной реакции, стартового/POV-вступления '
+                'учти явно прошедшее время; не сохраняй старые часы автоматически. scene.time — необязательная legacy подпись, '
+                'Runtime вычисляет её из elapsed_minutes. Ноль допустим для мгновенной реакции, стартового/POV-вступления '
                 'или параллельной симуляции до текущего времени. Не делай необоснованных таймскипов. '
                 'Неделя циклична: после воскресенья понедельник; День N продолжает расти. '
                 'Это правило уточняет старые инструкции о сохранении времени.')

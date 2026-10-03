@@ -31,8 +31,23 @@ class Fact(Record):
     secret: bool=False
     character_ids: list[str]=Field(default_factory=list,max_length=50)
 
+class Transition(Record):
+    actor_id: str
+    minute: int|None=Field(default=None,ge=0,description='Optional known time; not required for movement.')
+    order: int|None=Field(default=None,ge=0,description='Optional route order. Distinct off-camera destinations need unambiguous order; final camera positions are derived from scene.')
+    from_location: str|None=Field(default=None,description='Deprecated input, ignored by Runtime.')
+
+    @staticmethod
+    def _schema(schema):
+        schema.get('properties',{}).pop('from_location',None)
+
+    model_config=ConfigDict(extra='forbid',strict=True,json_schema_extra=_schema)
+    to_location: str=Field(min_length=1,max_length=200,pattern=r'\S',description='Destination, not a body movement inside the same room.')
+
 class Event(Record):
-    minute: int|None=Field(default=None,ge=0)
+    order: int|None=Field(default=None,ge=0,description='Optional known relative order; omit when unknown.')
+    location: str|None=Field(default=None,min_length=1,max_length=200,description='Event location if known from its source. Omit when unknown; do not infer from final camera.')
+    minute: int|None=Field(default=None,ge=0,description="Optional known event minute. Omit rather than invent a precise time.")
     id: str=Field(min_length=1,max_length=120)
     text: str=Field(min_length=1,max_length=12000)
     participants: list[str]=Field(max_length=50)
@@ -54,8 +69,12 @@ class PlayerEvidence(BaseModel):
     obligations: list[str]|None=Field(default=None,max_length=20,description='Полные цитаты явных обещаний игрока, по одной на новое обязательство.')
 
 class Character(Record):
+    @staticmethod
+    def _schema(schema):
+        schema.get('properties',{}).pop('location',None)
+    model_config=ConfigDict(extra='forbid',strict=True,json_schema_extra=_schema)
     id: str
-    location: str|None=None
+    location: str|None=Field(default=None,min_length=1,max_length=200,description="Deprecated redundant input; ignored. Final State Resolver owns location.")
     situation: str|None=None
     goals: list[str]|None=Field(default=None,max_length=20,description=PLAYER_SOURCE_DESCRIPTION)
     intentions: list[str]|None=Field(default=None,max_length=20,description=PLAYER_SOURCE_DESCRIPTION)
@@ -107,6 +126,7 @@ class Scheduled(Record):
 
 class WorldDelta(BaseModel):
     model_config=ConfigDict(extra='forbid',strict=True)
+    transitions: list[Transition]=Field(default_factory=list,max_length=100,description="Source-backed location changes. actor_id, to_location, evidence. Final camera members need no movement; scene owns their endpoint. Off-camera changes need movement.")
     promotions: list[Promotion]=Field(default_factory=list,max_length=10)
     facts: list[Fact]=Field(default_factory=list,max_length=50)
     events: list[Event]=Field(default_factory=list,max_length=50)
@@ -135,32 +155,24 @@ def add_promotions(state, promotions, narrative, user_text):
     return state
 
 
-def apply_delta(state, payload, narrative, user_text, sequence, since=None, promotions_prepared=False):
-    from state_updates import normalized_evidence, EvidenceError
+def apply_delta(state, payload, narrative, user_text, sequence, since=None, promotions_prepared=False, before_state=None, movement_plan=None, spatial_prepared=False):
     delta=WorldDelta.model_validate(payload).model_dump(exclude_none=True)
     state=deepcopy(state) if promotions_prepared else add_promotions(state,delta['promotions'],narrative,user_text)
     world=state['world']
     for previous in world['relationships'].values():
         previous.pop('change',None)
-    camera=world['scenes'][state['camera']['scene_id']]
-    present=set(camera['participants'])
     actors=set(world['characters'])
-    sources=[normalized_evidence(narrative),normalized_evidence(user_text)]
+    from backend.services.turn_delta.references import validate_references, require
+    from backend.services.turn_delta.provenance import validate_provenance
+    from backend.services.turn_delta.resolver import resolve_final_state
+    validate_references(state,delta)
+    validate_provenance(delta,narrative,user_text)
+    movement_plan=movement_plan or resolve_final_state(before_state or state,state,delta,since)
+    involved=movement_plan['involved']
     now=current_time(state)
-    def require(ok,message,code="invalid_reference"):
-        if not ok:raise StructuralDeltaError('World Delta: '+message,code)
-    def refs(values):
-        require(set(values)<=actors,'неизвестный персонаж','unknown_character')
-    # Check identity conflicts before applying any candidate changes.
-    for section,entries in delta.items():
-        seen=set()
-        for index,item in enumerate(entries):
-            key=item.get('id')
-            if key is None:key=(item['actor_id'],item['fact_id']) if 'actor_id' in item else (item['source_id'],item['target_id'])
-            require(key not in seen,'повтор сущности в delta','canonical_id_conflict')
-            seen.add(key)
+    def refs(values):require(set(values)<=actors,'неизвестный персонаж','unknown_character')
     for promotion in delta['promotions']:
-        require(promotion['id'] in present,'новый NPC не участвует в текущей сцене')
+        require(promotion['id'] in involved,'новый NPC не участвует в текущей сцене')
     for f in delta['facts']:
         refs(f['character_ids'])
         old=world['facts'].get(f['id'])
@@ -169,32 +181,14 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None, prom
             for k in world['knowledge'].values():
                 if k['fact_id']==f['id']:k['status']='unknown'
         world['facts'][f['id']]={**f,'evidence':[f['evidence']]}
-    new_events={}
-    for e in delta['events']:
-        refs(e['participants']); refs(e['witnesses'])
-        require(e['id'] not in world['events'],'event id уже существует','canonical_id_conflict')
-        require(set(e['participants'])<=present and set(e['witnesses'])<=present,'событие или свидетель вне текущей сцены','scene_event_membership')
-        require(set(e['fact_ids'])<=set(world['facts']),'неизвестный факт события')
-        minute=e.get('minute',now)
-        require((since if since is not None else now)<=minute<=now,'событие вне подтверждаемого интервала сцены','invalid_time')
-        if camera.get('start_minute') is None or minute<camera['start_minute']:
-            camera['start_minute']=minute
-        record=dict(e,minute=minute,scene_id=camera['id'],source_sequence=sequence,player_observed=True)
-        world['events'][e['id']]=record
-        new_events[e['id']]=record
-        camera['event_ids'].append(e['id'])
-        for cid in e['participants']:world['characters'][cid]['last_event_id']=e['id']
-    for index,k in enumerate(delta['knowledge']):
-        refs([k['actor_id']])
-        require(k['fact_id'] in world['facts'],'неизвестный факт знания')
-        event=new_events.get(k['source_event_id'])
-        if (event is None or k['actor_id'] not in event['witnesses']
-                or k['fact_id'] not in event['fact_ids'] or event['medium'] not in KNOWLEDGE_CHANNELS):
-            raise SecondaryDeltaError('knowledge',index,'нет подтверждённого пути передачи знания',entity=k['actor_id']+':'+k['fact_id'],code='knowledge_path_invalid')
-        world['knowledge'][k['actor_id']+':'+k['fact_id']]=k
+    from backend.services.turn_delta.events import apply_events
+    from backend.services.turn_delta.knowledge import apply_knowledge
+    from backend.services.turn_delta.scene_sync import apply_locations
+    new_events=apply_events(state,before_state or state,delta['events'],sequence,since)
+    apply_knowledge(world,delta['knowledge'],new_events,KNOWLEDGE_CHANNELS)
+    if not spatial_prepared:apply_locations(state,movement_plan,sequence)
     for index,c in enumerate(delta['characters']):
-        refs([c['id']]); require(c['id'] in present,'состояние отсутствующего NPC без сцены')
-        if 'location' in c:require(c['location']==camera['location'],'место участника не совпадает со сценой')
+        refs([c['id']]); require(c['id'] in involved,'персонаж не участвовал в текущем ходе','character_not_involved')
         if c['id']==state['controlled_actor_id']:
             for field in PLAYER_FIELDS:
                 if field not in c:continue
@@ -204,13 +198,13 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None, prom
                         else 'Обязательство controlled actor не задано игроком' if field=='obligations'
                         else 'Решение controlled actor не задано игроком')
                     raise SecondaryDeltaError('characters',index,reason,field,c['id'],code='controlled_actor_'+field+'_unsupported')
-        updates={k:v for k,v in c.items() if k not in ('id','evidence','player_evidence')}
+        updates={k:v for k,v in c.items() if k not in ('id','evidence','player_evidence','location')}
         if updates:
             world['characters'][c['id']].update(updates)
             world['characters'][c['id']]['minute']=now
     for index,r in enumerate(delta['relationships']):
         refs([r['source_id'],r['target_id']])
-        require(r['source_id']!=r['target_id'] and r['source_id'] in present,'недопустимая направленная связь')
+        require(r['source_id']!=r['target_id'] and r['source_id'] in involved,'недопустимая направленная связь')
         import math
         require(all(math.isfinite(v) and -100<=v<=100 for v in r['dimensions'].values()),'аспекты должны быть в диапазоне -100..100')
         for dimension in r['dimensions']:
@@ -237,15 +231,8 @@ def apply_delta(state, payload, narrative, user_text, sequence, since=None, prom
             require(e['id'] in world['scheduled_events'],'неизвестное отложенное событие')
             require(e.get('resolved_event_id') in new_events,'завершение требует события текущего хода')
             require(bool(set(world['scheduled_events'][e['id']]['participants']).intersection(new_events[e['resolved_event_id']]['participants'])),'событие не связано с участниками обязательства')
-            if e['status']=='resolved':require(new_events[e['resolved_event_id']]['minute']>=world['scheduled_events'][e['id']]['due_minute'],'событие завершено раньше срока')
+            if e['status']=='resolved':require((new_events[e['resolved_event_id']]['minute'] if new_events[e['resolved_event_id']]['minute'] is not None else now)>=world['scheduled_events'][e['id']]['due_minute'],'событие завершено раньше срока')
         world['scheduled_events'][e['id']]=e
-    # Validate semantic structure first, so an unsupported quote cannot mask a
-    # fatal ID, scene or time error in the same record. Mutations are on a copy.
-    for section,entries in delta.items():
-        for index,item in enumerate(entries):
-            if not any(normalized_evidence(item['evidence']) in s for s in sources):
-                if section=='promotions':
-                    raise EvidenceError(f'Изменение world_delta.{section}[{index}].evidence не подтверждено цитатой из хода.')
-                entity=item.get('id') or item.get('actor_id') or item.get('source_id')
-                raise SecondaryDeltaError(section,index,'Нет подтверждённой цитаты текущего хода',entity=entity,cause_field='evidence',code='evidence_unsupported')
+    from backend.services.turn_delta.final_state import validate_final_state
+    validate_final_state(before_state or state,state,movement_plan)
     return state
