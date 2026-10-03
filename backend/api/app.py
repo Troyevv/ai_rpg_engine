@@ -388,6 +388,12 @@ def create_app(db_path=None, recover=True):
     @app.post('/api/models/list')
     def models(body: Models):
         try:
+            if body.provider == 'compatible':
+                spec=llm.PROVIDERS['compatible']
+                if not spec.base_url:raise ValueError('Не задан COMPATIBLE_BASE_URL')
+                key=credentials.resolve('compatible',body.key()) or os.getenv(spec.key_env,'')
+                with llm.OpenAI(base_url=spec.base_url,api_key=key,timeout=30.0,max_retries=0) as client:
+                    return {'models':sorted(m.id for m in client.models.list().data),'loaded':[]}
             if body.provider == 'deepseek':
                 return {'models': llm.get_deepseek_models(credentials.resolve('deepseek',body.key())), 'loaded': []}
             return {'models': llm.get_available_models(), 'loaded': llm.get_loaded_models()}
@@ -425,6 +431,9 @@ def create_app(db_path=None, recover=True):
 
     from backend.api.drafts import install
     install(app,repo,preparation,credentials,job)
+
+    from backend.tabletop.api import install as install_tabletop
+    install_tabletop(app, repo, credentials)
 
     dist = ROOT / 'frontend' / 'dist'
     if (dist / 'assets').is_dir():

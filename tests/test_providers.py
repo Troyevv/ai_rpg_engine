@@ -78,3 +78,16 @@ def test_deepseek_game_retry_and_no_persisted_credentials(tmp_path):
     with storage.connect() as conn:
         dump = '\n'.join(conn.iterdump())
     assert 'private' not in dump
+
+def test_compatible_provider_uses_shared_stream_and_environment(monkeypatch):
+    import llm
+    monkeypatch.setitem(llm.PROVIDERS,'compatible',llm.ProviderSpec('https://example.invalid/v1','COMPATIBLE_API_KEY'))
+    monkeypatch.setenv('COMPATIBLE_API_KEY','compatible-test-key')
+    client=MagicMock();stream=MagicMock()
+    stream.__iter__.return_value=iter([NS(choices=[NS(delta=NS(content='Ответ'),finish_reason='stop')])])
+    client.chat.completions.create.return_value=stream
+    with patch('llm.OpenAI',return_value=client) as factory:
+        assert list(chat_stream('custom-model',[],provider='compatible',require_complete=True))==['Ответ']
+    assert factory.call_args.kwargs['base_url']=='https://example.invalid/v1'
+    assert factory.call_args.kwargs['api_key']=='compatible-test-key'
+    stream.close.assert_called_once()

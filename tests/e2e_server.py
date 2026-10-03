@@ -4,6 +4,7 @@ from canonical_fixture import canonical
 import json
 import re
 import os
+os.environ["TABLETOP_DEBUG"] = "1"
 from pathlib import Path
 import sys
 import tempfile
@@ -90,8 +91,70 @@ def stream(**kwargs):
         yield value[i:i+60]
 
 
+def tabletop_stream(**kwargs):
+    from tabletop_fixture import definition
+    prompt=kwargs['messages'][0]['content']
+    if 'playable CampaignDefinition' in prompt:
+        campaign = definition()
+        campaign.ruleset_id = 'd20-fantasy-v1'
+        campaign.ruleset_version = 3
+        for actor in campaign.characters + campaign.creatures:
+            actor.build.feature_choices = ['defense_style']
+        idea = json.loads(kwargs['messages'][-1]['content'])['options']['idea']
+        if idea == 'gameplay acceptance':
+            from tabletop_gameplay_fixture import gameplay_definition
+            campaign = gameplay_definition()
+        if idea == 'invalid references':
+            campaign.characters[1].knowledge.append('missing_secret')
+            campaign.characters[1].relationships['missing_actor'] = 10
+        value=campaign.model_dump_json()
+    elif 'roleplay-портрет героя' in prompt:
+        requested = json.loads(kwargs['messages'][-1]['content'])['field']
+        portrait = {'name':'Александр','appearance':'Серый плащ','biography':'Бывший городской стражник.','personality':'Немногословный и упрямый.','ideals':'Защищать слабых.','bonds':'Старая стража.','flaws':'Не доверяет начальству.'}
+        value = json.dumps(portrait if requested == 'all' else {requested:portrait[requested]})
+    elif 'CampaignMutation JSON' in prompt:
+        value=json.dumps({'operations':[{'type':'CreateLocation','value':{'id':'observatory','name':'Обсерватория','region_id':'district'}},{'type':'ConnectLocations','first':'market','second':'observatory'}]})
+    elif kwargs.get('response_format'):
+        action = json.loads(kwargs['messages'][-1]['content']).get('action', '')
+        command = {'type': 'look'}
+        if action == 'Пробираюсь через затопленный тоннель':
+            command = {'type':'check','ability':'strength','skill':'athletics','difficulty':'MEDIUM','reason':'Сильное течение'}
+        elif action == 'Уточнить путь':
+            command = {'type':'request_choice','prompt':'Как обследуешь проход?', 'options':[
+                {'id':'look','label':'Осмотреть стены','command':{'type':'look'}},
+                {'id':'check','label':'Проверить течение','command':{'type':'check','ability':'strength','skill':'athletics'}},
+            ]}
+        checks={'Ищу следы':'investigation_check','Я от капитана':'deception_check','Карабкаюсь по стене':'climb_check','Изучаю руну':'arcana_check','Прокрадываюсь мимо стража':'stealth_check'}
+        if action in checks:command={'type':'check','check_id':checks[action]}
+        value=json.dumps(command)
+    else:
+        context=json.loads(kwargs['messages'][-1]['content'])['context']
+        value='\n'.join(e['text'] for e in context['events'] if 'roll' not in e)
+    if kwargs.get('on_usage'):kwargs['on_usage']({'prompt_tokens':100,'completion_tokens':50})
+    yield value
+
+llm.chat_stream = tabletop_stream
+
 engine.chat_stream = stream
-preparation.chat_stream = stream
+hold_next_preparation = False
+
+def preparation_stream(**kwargs):
+    global hold_next_preparation
+    hold = hold_next_preparation
+    hold_next_preparation = False
+    for chunk in stream(**kwargs):
+        yield chunk
+        if hold:
+            # Browser reconnection must observe an in-flight generation, independent
+            # of device speed. Only the cancellation test enables this one-shot gate.
+            deadline=time.monotonic()+30
+            while time.monotonic()<deadline:
+                if kwargs.get('cancel_event') and kwargs['cancel_event'].is_set():
+                    raise RuntimeError('Генерация остановлена.')
+                time.sleep(.05)
+            hold=False
+
+preparation.chat_stream = preparation_stream
 engine.find_loaded_model = preparation.find_loaded_model = lambda _: {'config': {'context_length':32768}}
 llm.get_available_models = lambda: ['local-model']
 llm.get_loaded_models = lambda: [{'model_key':'local-model','display_name':'Test local model'}]
@@ -102,6 +165,24 @@ llm.unload_all_models = lambda: 1
 if __name__ == '__main__':
     path = os.getenv('E2E_DB_PATH') or str(Path(tempfile.mkdtemp())/'e2e.sqlite3')
     app = create_app(path)
+    from backend.tabletop.dice import DiceEngine
+    from tabletop_fixture import Fixed
+    class BrowserDice(DiceEngine):
+        def roll(self,expression,**kwargs):
+            value=(4 if kwargs.get('purpose') in ('spell_damage','spell_healing','feature_healing') else ({'initiative':1,'attack':12,'damage':2}.get(kwargs.get('purpose'),10) if kwargs.get('actor')=='sentinel' else 8 if kwargs.get('purpose')=='damage' else 20))
+            if os.getenv("E2E_GAMEPLAY")=="1" and kwargs.get("purpose")=="check" and kwargs.get("modifier",0)>=3: value=1
+            class Bounded:
+                def randint(self,lo,hi):return min(hi,max(lo,value))
+            return DiceEngine(Bounded()).roll(expression,**kwargs)
+    dice=BrowserDice()
+    app.state.tabletop_runtime.dice=dice
+    app.state.tabletop_runtime.combat.dice=dice
+    @app.post('/test/hold-preparation')
+    def hold_preparation():
+        global hold_next_preparation
+        hold_next_preparation=True
+        return {'held':True}
+
     @app.post('/test/seed')
     def seed():
         repo = app.state.repository

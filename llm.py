@@ -21,6 +21,7 @@ class ProviderSpec:
 # New compatible services can be registered here without changing game logic.
 PROVIDERS = {
     'local': ProviderSpec(OPENAI_BASE_URL, default_key='lm-studio'),
+    'compatible': ProviderSpec(os.getenv('COMPATIBLE_BASE_URL', ''), 'COMPATIBLE_API_KEY'),
     'deepseek': ProviderSpec(DEEPSEEK_BASE_URL, 'DEEPSEEK_API_KEY', extra_body={'thinking': {'type': 'disabled'}}, thinking_models=('deepseek-flash','deepseek-v4-flash','deepseek-v4-flash-vision-exp','deepseek-v4-pro')),
 }
 
@@ -272,6 +273,8 @@ def chat_stream(
         raise ValueError('Неизвестный провайдер модели.')
     remote = provider != 'local'
     spec = PROVIDERS[provider]
+    if not spec.base_url:
+        raise ValueError('Настрой COMPATIBLE_BASE_URL на сервере для OpenAI-совместимого API.')
     key = spec.default_key if not remote else ((api_key or '').strip() or os.getenv(spec.key_env, '').strip())
     if not key:
         raise ValueError('Укажи API-ключ провайдера.')

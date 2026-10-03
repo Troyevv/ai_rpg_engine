@@ -1,0 +1,3000 @@
+{
+  "id": "d20-fantasy-v1",
+  "name": "D20 Fantasy 1.0",
+  "version": 3,
+  "capabilities": [
+    "checks",
+    "combat",
+    "rests",
+    "inventory",
+    "exploration",
+    "dialogue",
+    "spellcasting"
+  ],
+  "abilities": [
+    "strength",
+    "dexterity",
+    "constitution",
+    "intelligence",
+    "wisdom",
+    "charisma"
+  ],
+  "ability_array": [
+    15,
+    14,
+    13,
+    12,
+    10,
+    8
+  ],
+  "skills": {
+    "athletics": "strength",
+    "stealth": "dexterity",
+    "perception": "wisdom",
+    "persuasion": "charisma",
+    "investigation": "intelligence",
+    "survival": "wisdom",
+    "acrobatics": "dexterity",
+    "sleight_of_hand": "dexterity",
+    "arcana": "intelligence",
+    "history": "intelligence",
+    "nature": "intelligence",
+    "religion": "intelligence",
+    "animal_handling": "wisdom",
+    "insight": "wisdom",
+    "medicine": "wisdom",
+    "deception": "charisma",
+    "intimidation": "charisma",
+    "performance": "charisma"
+  },
+  "difficulty": {
+    "TRIVIAL": 5,
+    "EASY": 10,
+    "MEDIUM": 15,
+    "HARD": 20,
+    "VERY_HARD": 25,
+    "EXTREME": 30
+  },
+  "check_die": 20,
+  "critical": "double_dice",
+  "short_rest_minutes": 60,
+  "long_rest_minutes": 480,
+  "conditions": [
+    "dodge",
+    "helped",
+    "guard",
+    "unconscious",
+    "stable",
+    "dead",
+    "fled"
+  ],
+  "progression": {
+    "max_level": 20,
+    "proficiency_base": 2,
+    "proficiency_interval": 4,
+    "encounter_xp": 150,
+    "quest_xp": 300,
+    "milestone_quest": 1,
+    "milestone_encounter": 0
+  },
+  "classes": {
+    "fighter": {
+      "name": "Воин",
+      "description": "Владение атлетикой.",
+      "hit_die": 10,
+      "saves": [
+        "strength",
+        "constitution"
+      ],
+      "primary_abilities": [
+        "strength",
+        "constitution"
+      ],
+      "skills": [
+        "athletics",
+        "perception",
+        "survival",
+        "persuasion"
+      ],
+      "skill_count": 2,
+      "equipment": [
+        "sword",
+        "leather",
+        "potion"
+      ],
+      "equipment_choices": [
+        [
+          "sword",
+          "leather",
+          "potion"
+        ],
+        [
+          "bow",
+          "leather",
+          "potion"
+        ]
+      ],
+      "features": [
+        "martial_training",
+        "second_wind"
+      ],
+      "armor": [
+        "light",
+        "medium",
+        "heavy",
+        "shield"
+      ],
+      "weapons": [
+        "simple",
+        "martial"
+      ],
+      "feature_choices": [
+        "defense_style",
+        "athletic_style"
+      ],
+      "feature_choice_count": 1
+    },
+    "rogue": {
+      "name": "Плут",
+      "description": "Ловкость рук +2.",
+      "hit_die": 8,
+      "saves": [
+        "dexterity",
+        "intelligence"
+      ],
+      "primary_abilities": [
+        "dexterity",
+        "intelligence"
+      ],
+      "skills": [
+        "stealth",
+        "sleight_of_hand",
+        "acrobatics",
+        "investigation",
+        "deception",
+        "insight",
+        "perception"
+      ],
+      "skill_count": 4,
+      "equipment": [
+        "dagger",
+        "leather",
+        "potion"
+      ],
+      "equipment_choices": [
+        [
+          "dagger",
+          "leather",
+          "potion"
+        ]
+      ],
+      "features": [
+        "cunning",
+        "cunning_dash",
+        "cunning_disengage"
+      ],
+      "armor": [
+        "light"
+      ],
+      "weapons": [
+        "simple",
+        "finesse"
+      ]
+    },
+    "ranger": {
+      "name": "Следопыт",
+      "description": "Выживание +2.",
+      "hit_die": 10,
+      "saves": [
+        "strength",
+        "dexterity"
+      ],
+      "primary_abilities": [
+        "strength",
+        "dexterity"
+      ],
+      "skills": [
+        "survival",
+        "perception",
+        "nature",
+        "animal_handling",
+        "stealth",
+        "athletics"
+      ],
+      "skill_count": 3,
+      "equipment": [
+        "bow",
+        "leather",
+        "potion"
+      ],
+      "equipment_choices": [
+        [
+          "bow",
+          "leather",
+          "potion"
+        ]
+      ],
+      "features": [
+        "pathfinder",
+        "steady_aim"
+      ],
+      "armor": [
+        "light",
+        "medium",
+        "shield"
+      ],
+      "weapons": [
+        "simple",
+        "martial"
+      ]
+    },
+    "barbarian": {
+      "name": "Варвар",
+      "description": "Максимум здоровья +2.",
+      "hit_die": 12,
+      "saves": [
+        "strength",
+        "constitution"
+      ],
+      "primary_abilities": [
+        "strength",
+        "constitution"
+      ],
+      "skills": [
+        "athletics",
+        "intimidation",
+        "survival",
+        "perception",
+        "animal_handling"
+      ],
+      "skill_count": 2,
+      "equipment": [
+        "axe",
+        "leather",
+        "potion"
+      ],
+      "equipment_choices": [
+        [
+          "axe",
+          "leather",
+          "potion"
+        ]
+      ],
+      "features": [
+        "hardy",
+        "rage"
+      ],
+      "armor": [
+        "light",
+        "medium",
+        "shield"
+      ],
+      "weapons": [
+        "simple",
+        "martial"
+      ]
+    },
+    "cleric": {
+      "name": "Жрец",
+      "description": "Религия +2.",
+      "hit_die": 8,
+      "saves": [
+        "wisdom",
+        "charisma"
+      ],
+      "primary_abilities": [
+        "wisdom",
+        "charisma"
+      ],
+      "skills": [
+        "religion",
+        "medicine",
+        "insight",
+        "persuasion",
+        "history"
+      ],
+      "skill_count": 2,
+      "equipment": [
+        "mace",
+        "leather",
+        "potion"
+      ],
+      "equipment_choices": [
+        [
+          "mace",
+          "leather",
+          "potion"
+        ]
+      ],
+      "features": [
+        "divine_lore",
+        "healing_touch"
+      ],
+      "armor": [
+        "light",
+        "medium",
+        "shield"
+      ],
+      "weapons": [
+        "simple"
+      ]
+    },
+    "wizard": {
+      "name": "Маг",
+      "description": "Магия +2.",
+      "hit_die": 6,
+      "saves": [
+        "intelligence",
+        "wisdom"
+      ],
+      "primary_abilities": [
+        "intelligence",
+        "wisdom"
+      ],
+      "skills": [
+        "arcana",
+        "history",
+        "investigation",
+        "insight",
+        "medicine",
+        "religion"
+      ],
+      "skill_count": 2,
+      "equipment": [
+        "staff",
+        "potion"
+      ],
+      "equipment_choices": [
+        [
+          "staff",
+          "potion"
+        ]
+      ],
+      "features": [
+        "arcane_lore",
+        "arcane_ward"
+      ],
+      "armor": [],
+      "weapons": [
+        "simple"
+      ]
+    },
+    "scout": {
+      "name": "Разведчик",
+      "description": "Выживание +2.",
+      "hit_die": 10,
+      "saves": [
+        "strength",
+        "dexterity"
+      ],
+      "primary_abilities": [
+        "strength",
+        "dexterity"
+      ],
+      "skills": [
+        "survival",
+        "perception",
+        "nature",
+        "animal_handling",
+        "stealth",
+        "athletics"
+      ],
+      "skill_count": 2,
+      "equipment": [
+        "bow",
+        "leather",
+        "potion"
+      ],
+      "equipment_choices": [
+        [
+          "bow",
+          "leather",
+          "potion"
+        ]
+      ],
+      "features": [
+        "pathfinder"
+      ],
+      "armor": [
+        "light",
+        "medium",
+        "shield"
+      ],
+      "weapons": [
+        "simple",
+        "martial"
+      ]
+    }
+  },
+  "species": {
+    "human": {
+      "name": "Человек",
+      "speed": 30,
+      "features": [
+        "human_training"
+      ],
+      "description": "Владение убеждением."
+    },
+    "elf": {
+      "name": "Эльф",
+      "speed": 30,
+      "features": [
+        "keen_senses"
+      ],
+      "description": "Владение восприятием."
+    },
+    "dwarf": {
+      "name": "Дварф",
+      "speed": 25,
+      "features": [
+        "dwarven_resilience"
+      ],
+      "description": "Максимум здоровья +2."
+    },
+    "halfling": {
+      "name": "Полурослик",
+      "speed": 25,
+      "features": [
+        "nimble"
+      ],
+      "description": "Акробатика +1 сверх обычного модификатора."
+    },
+    "half_elf": {
+      "name": "Полуэльф",
+      "speed": 30,
+      "features": [
+        "empathy"
+      ],
+      "description": "Владение проницательностью."
+    },
+    "orc": {
+      "name": "Орк",
+      "speed": 30,
+      "features": [
+        "orc_endurance"
+      ],
+      "description": "Максимум здоровья +3."
+    }
+  },
+  "backgrounds": {
+    "wanderer": {
+      "name": "Странник",
+      "skills": [
+        "survival",
+        "nature"
+      ],
+      "equipment": [
+        "ration",
+        "torch"
+      ],
+      "proficiencies": [
+        "navigation"
+      ],
+      "hooks": [
+        "Найти дорогу к утраченному дому."
+      ],
+      "description": "Найти дорогу к утраченному дому."
+    },
+    "soldier": {
+      "name": "Солдат",
+      "skills": [
+        "athletics",
+        "intimidation"
+      ],
+      "equipment": [
+        "insignia",
+        "ration"
+      ],
+      "proficiencies": [
+        "vehicles"
+      ],
+      "hooks": [
+        "Встретить бывших сослуживцев."
+      ],
+      "description": "Встретить бывших сослуживцев."
+    },
+    "scholar": {
+      "name": "Учёный",
+      "skills": [
+        "arcana",
+        "history"
+      ],
+      "equipment": [
+        "book"
+      ],
+      "proficiencies": [
+        "languages"
+      ],
+      "hooks": [
+        "Исследовать загадку местных архивов."
+      ],
+      "description": "Исследовать загадку местных архивов."
+    },
+    "acolyte": {
+      "name": "Послушник",
+      "skills": [
+        "religion",
+        "insight"
+      ],
+      "equipment": [
+        "symbol"
+      ],
+      "proficiencies": [
+        "rituals"
+      ],
+      "hooks": [
+        "Помочь общине в опасности."
+      ],
+      "description": "Помочь общине в опасности."
+    },
+    "artisan": {
+      "name": "Ремесленник",
+      "skills": [
+        "investigation",
+        "persuasion"
+      ],
+      "equipment": [
+        "tools"
+      ],
+      "proficiencies": [
+        "crafting"
+      ],
+      "hooks": [
+        "Найти редкий материал для важного заказа."
+      ],
+      "description": "Найти редкий материал для важного заказа."
+    },
+    "urchin": {
+      "name": "Беспризорник",
+      "skills": [
+        "sleight_of_hand",
+        "stealth"
+      ],
+      "equipment": [
+        "tools"
+      ],
+      "proficiencies": [
+        "thieves_tools"
+      ],
+      "hooks": [
+        "Защитить тех, кто остался на улице."
+      ],
+      "description": "Защитить тех, кто остался на улице."
+    },
+    "entertainer": {
+      "name": "Артист",
+      "skills": [
+        "performance",
+        "acrobatics"
+      ],
+      "equipment": [
+        "instrument"
+      ],
+      "proficiencies": [
+        "music"
+      ],
+      "hooks": [
+        "Узнать историю, достойную новой песни."
+      ],
+      "description": "Узнать историю, достойную новой песни."
+    }
+  },
+  "items": [
+    {
+      "id": "sword",
+      "name": "Меч",
+      "type": "weapon",
+      "weapon_die": 8,
+      "weapon_category": "martial"
+    },
+    {
+      "id": "bow",
+      "name": "Лук",
+      "type": "weapon",
+      "weapon_die": 6,
+      "weapon_ability": "dexterity",
+      "reach": 60,
+      "weapon_category": "martial"
+    },
+    {
+      "id": "leather",
+      "name": "Кожаная броня",
+      "type": "armor",
+      "armor_base": 12,
+      "dex_cap": 3
+    },
+    {
+      "id": "potion",
+      "name": "Лечебное зелье",
+      "type": "consumable",
+      "healing": 8,
+      "description": "Восстанавливает 8 HP, расходуется при использовании."
+    },
+    {
+      "id": "dagger",
+      "name": "Кинжал",
+      "type": "weapon",
+      "weapon_die": 4,
+      "weapon_ability": "dexterity",
+      "weapon_category": "finesse"
+    },
+    {
+      "id": "axe",
+      "name": "Секира",
+      "type": "weapon",
+      "weapon_die": 12,
+      "weapon_ability": "strength",
+      "weapon_category": "martial"
+    },
+    {
+      "id": "mace",
+      "name": "Булава",
+      "type": "weapon",
+      "weapon_die": 6,
+      "weapon_ability": "strength"
+    },
+    {
+      "id": "staff",
+      "name": "Посох",
+      "type": "weapon",
+      "weapon_die": 6,
+      "weapon_ability": "strength"
+    },
+    {
+      "id": "ration",
+      "name": "Походный рацион",
+      "type": "miscellaneous"
+    },
+    {
+      "id": "torch",
+      "name": "Факел",
+      "type": "miscellaneous"
+    },
+    {
+      "id": "book",
+      "name": "Книга",
+      "type": "miscellaneous"
+    },
+    {
+      "id": "tools",
+      "name": "Набор инструментов",
+      "type": "miscellaneous"
+    },
+    {
+      "id": "insignia",
+      "name": "Знак службы",
+      "type": "miscellaneous"
+    },
+    {
+      "id": "symbol",
+      "name": "Символ веры",
+      "type": "miscellaneous"
+    },
+    {
+      "id": "instrument",
+      "name": "Музыкальный инструмент",
+      "type": "miscellaneous"
+    }
+  ],
+  "point_buy": {
+    "budget": 27,
+    "minimum": 8,
+    "maximum": 15,
+    "costs": {
+      "8": 0,
+      "9": 1,
+      "10": 2,
+      "11": 3,
+      "12": 4,
+      "13": 5,
+      "14": 7,
+      "15": 9
+    }
+  },
+  "features": {
+    "human_training": {
+      "id": "human_training",
+      "name": "Широкий кругозор",
+      "description": "Владение убеждением.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "skill_proficiency",
+          "key": "persuasion",
+          "value": 0
+        }
+      ]
+    },
+    "keen_senses": {
+      "id": "keen_senses",
+      "name": "Острые чувства",
+      "description": "Владение восприятием.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "skill_proficiency",
+          "key": "perception",
+          "value": 0
+        }
+      ]
+    },
+    "dwarven_resilience": {
+      "id": "dwarven_resilience",
+      "name": "Дварфская стойкость",
+      "description": "Максимум здоровья +2.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "max_hp",
+          "key": "",
+          "value": 2
+        }
+      ]
+    },
+    "nimble": {
+      "id": "nimble",
+      "name": "Проворство",
+      "description": "Акробатика +1 сверх обычного модификатора.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "check_bonus",
+          "key": "acrobatics",
+          "value": 1
+        }
+      ]
+    },
+    "empathy": {
+      "id": "empathy",
+      "name": "Два наследия",
+      "description": "Владение проницательностью.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "skill_proficiency",
+          "key": "insight",
+          "value": 0
+        }
+      ]
+    },
+    "orc_endurance": {
+      "id": "orc_endurance",
+      "name": "Выносливость",
+      "description": "Максимум здоровья +3.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "max_hp",
+          "key": "",
+          "value": 3
+        }
+      ]
+    },
+    "martial_training": {
+      "id": "martial_training",
+      "name": "Боевая подготовка",
+      "description": "Владение атлетикой.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "skill_proficiency",
+          "key": "athletics",
+          "value": 0
+        }
+      ]
+    },
+    "cunning": {
+      "id": "cunning",
+      "name": "Ловкие руки",
+      "description": "Ловкость рук +2.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "check_bonus",
+          "key": "sleight_of_hand",
+          "value": 2
+        }
+      ]
+    },
+    "pathfinder": {
+      "id": "pathfinder",
+      "name": "Следопыт",
+      "description": "Выживание +2.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "check_bonus",
+          "key": "survival",
+          "value": 2
+        }
+      ]
+    },
+    "hardy": {
+      "id": "hardy",
+      "name": "Закалка",
+      "description": "Максимум здоровья +2.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "max_hp",
+          "key": "",
+          "value": 2
+        }
+      ]
+    },
+    "divine_lore": {
+      "id": "divine_lore",
+      "name": "Священное знание",
+      "description": "Религия +2.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "check_bonus",
+          "key": "religion",
+          "value": 2
+        }
+      ]
+    },
+    "arcane_lore": {
+      "id": "arcane_lore",
+      "name": "Арканное знание",
+      "description": "Магия +2.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "check_bonus",
+          "key": "arcana",
+          "value": 2
+        }
+      ]
+    },
+    "defense_style": {
+      "id": "defense_style",
+      "name": "Защитный стиль",
+      "description": "Класс доспеха +1.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "armor_class",
+          "key": "",
+          "value": 1
+        }
+      ]
+    },
+    "athletic_style": {
+      "id": "athletic_style",
+      "name": "Атлетический стиль",
+      "description": "Атлетика +2.",
+      "activation": "PASSIVE",
+      "effects": [
+        {
+          "type": "check_bonus",
+          "key": "athletics",
+          "value": 2
+        }
+      ]
+    },
+    "second_wind": {
+      "id": "second_wind",
+      "name": "Второе дыхание",
+      "description": "Восстановить 5 + уровень HP; один раз до отдыха.",
+      "activation": "BONUS_ACTION",
+      "resource": "SECOND_WIND",
+      "uses": 1,
+      "recharge": "short",
+      "target": "self",
+      "effects": [
+        {
+          "type": "heal",
+          "value": 5
+        }
+      ]
+    },
+    "rage": {
+      "id": "rage",
+      "name": "Ярость",
+      "description": "До конца боя: +2 урона оружием и половина входящего урона.",
+      "activation": "BONUS_ACTION",
+      "resource": "RAGE",
+      "uses": 2,
+      "recharge": "long",
+      "target": "self",
+      "effects": [
+        {
+          "type": "condition",
+          "key": "rage"
+        }
+      ]
+    },
+    "cunning_dash": {
+      "id": "cunning_dash",
+      "name": "Хитрый рывок",
+      "description": "Рывок бонусным действием.",
+      "activation": "BONUS_ACTION",
+      "resource": "",
+      "uses": 0,
+      "recharge": "none",
+      "target": "self",
+      "effects": [
+        {
+          "type": "dash"
+        }
+      ]
+    },
+    "cunning_disengage": {
+      "id": "cunning_disengage",
+      "name": "Хитрый отход",
+      "description": "Отход бонусным действием.",
+      "activation": "BONUS_ACTION",
+      "resource": "",
+      "uses": 0,
+      "recharge": "none",
+      "target": "self",
+      "effects": [
+        {
+          "type": "disengage"
+        }
+      ]
+    },
+    "steady_aim": {
+      "id": "steady_aim",
+      "name": "Прицеливание",
+      "description": "Преимущество следующей атаки; две активации до отдыха.",
+      "activation": "BONUS_ACTION",
+      "resource": "FOCUS",
+      "uses": 2,
+      "recharge": "short",
+      "target": "self",
+      "effects": [
+        {
+          "type": "condition",
+          "key": "focused"
+        }
+      ]
+    },
+    "healing_touch": {
+      "id": "healing_touch",
+      "name": "Исцеляющее касание",
+      "description": "Лечение себя или союзника рядом на 5 + уровень HP.",
+      "activation": "ACTION",
+      "resource": "HEALING_TOUCH",
+      "uses": 2,
+      "recharge": "long",
+      "target": "ally",
+      "effects": [
+        {
+          "type": "heal",
+          "value": 5
+        }
+      ]
+    },
+    "arcane_ward": {
+      "id": "arcane_ward",
+      "name": "Магическая защита",
+      "description": "Поглотить 2 урона от следующего попадания до своего следующего хода.",
+      "activation": "BONUS_ACTION",
+      "resource": "ARCANE_WARD",
+      "uses": 1,
+      "recharge": "short",
+      "target": "self",
+      "effects": [
+        {
+          "type": "condition",
+          "key": "guard"
+        }
+      ]
+    },
+    "fighter_training_2": {
+      "id": "fighter_training_2",
+      "name": "Воин: мастерство 2",
+      "level": 2,
+      "description": "Бонус +1 к урону оружием.",
+      "effects": [
+        {
+          "type": "damage_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "fighter_training_5": {
+      "id": "fighter_training_5",
+      "name": "Воин: мастерство 5",
+      "level": 5,
+      "description": "Ещё одна атака в рамках действия атаки.",
+      "effects": [
+        {
+          "type": "extra_attack",
+          "value": 1
+        }
+      ]
+    },
+    "fighter_training_7": {
+      "id": "fighter_training_7",
+      "name": "Воин: мастерство 7",
+      "level": 7,
+      "description": "Максимум HP увеличивается на 4.",
+      "effects": [
+        {
+          "type": "max_hp",
+          "value": 4
+        }
+      ]
+    },
+    "fighter_training_10": {
+      "id": "fighter_training_10",
+      "name": "Воин: мастерство 10",
+      "level": 10,
+      "description": "Бонус +1 к основному спасброску класса.",
+      "effects": [
+        {
+          "type": "save_bonus",
+          "key": "strength",
+          "value": 1
+        }
+      ]
+    },
+    "fighter_training_13": {
+      "id": "fighter_training_13",
+      "name": "Воин: мастерство 13",
+      "level": 13,
+      "description": "Бонус +1 к урону оружием.",
+      "effects": [
+        {
+          "type": "damage_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "fighter_training_15": {
+      "id": "fighter_training_15",
+      "name": "Воин: мастерство 15",
+      "level": 15,
+      "description": "Максимум HP увеличивается на 4.",
+      "effects": [
+        {
+          "type": "max_hp",
+          "value": 4
+        }
+      ]
+    },
+    "fighter_training_18": {
+      "id": "fighter_training_18",
+      "name": "Воин: мастерство 18",
+      "level": 18,
+      "description": "Бонус +1 к основному спасброску класса.",
+      "effects": [
+        {
+          "type": "save_bonus",
+          "key": "strength",
+          "value": 1
+        }
+      ]
+    },
+    "fighter_training_20": {
+      "id": "fighter_training_20",
+      "name": "Воин: мастерство 20",
+      "level": 20,
+      "description": "Ещё одна атака в рамках действия атаки.",
+      "effects": [
+        {
+          "type": "extra_attack",
+          "value": 1
+        }
+      ]
+    },
+    "rogue_training_2": {
+      "id": "rogue_training_2",
+      "name": "Плут: мастерство 2",
+      "level": 2,
+      "description": "Бонус +1 к урону оружием.",
+      "effects": [
+        {
+          "type": "damage_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "rogue_training_5": {
+      "id": "rogue_training_5",
+      "name": "Плут: мастерство 5",
+      "level": 5,
+      "description": "Бонус +1 к урону оружием.",
+      "effects": [
+        {
+          "type": "damage_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "rogue_training_7": {
+      "id": "rogue_training_7",
+      "name": "Плут: мастерство 7",
+      "level": 7,
+      "description": "Максимум HP увеличивается на 4.",
+      "effects": [
+        {
+          "type": "max_hp",
+          "value": 4
+        }
+      ]
+    },
+    "rogue_training_10": {
+      "id": "rogue_training_10",
+      "name": "Плут: мастерство 10",
+      "level": 10,
+      "description": "Бонус +1 к основному спасброску класса.",
+      "effects": [
+        {
+          "type": "save_bonus",
+          "key": "dexterity",
+          "value": 1
+        }
+      ]
+    },
+    "rogue_training_13": {
+      "id": "rogue_training_13",
+      "name": "Плут: мастерство 13",
+      "level": 13,
+      "description": "Бонус +1 к урону оружием.",
+      "effects": [
+        {
+          "type": "damage_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "rogue_training_15": {
+      "id": "rogue_training_15",
+      "name": "Плут: мастерство 15",
+      "level": 15,
+      "description": "Максимум HP увеличивается на 4.",
+      "effects": [
+        {
+          "type": "max_hp",
+          "value": 4
+        }
+      ]
+    },
+    "rogue_training_18": {
+      "id": "rogue_training_18",
+      "name": "Плут: мастерство 18",
+      "level": 18,
+      "description": "Бонус +1 к основному спасброску класса.",
+      "effects": [
+        {
+          "type": "save_bonus",
+          "key": "dexterity",
+          "value": 1
+        }
+      ]
+    },
+    "rogue_training_20": {
+      "id": "rogue_training_20",
+      "name": "Плут: мастерство 20",
+      "level": 20,
+      "description": "Бонус +1 к урону оружием.",
+      "effects": [
+        {
+          "type": "damage_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "ranger_training_2": {
+      "id": "ranger_training_2",
+      "name": "Следопыт: мастерство 2",
+      "level": 2,
+      "description": "Бонус +1 к урону оружием.",
+      "effects": [
+        {
+          "type": "damage_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "ranger_training_5": {
+      "id": "ranger_training_5",
+      "name": "Следопыт: мастерство 5",
+      "level": 5,
+      "description": "Ещё одна атака в рамках действия атаки.",
+      "effects": [
+        {
+          "type": "extra_attack",
+          "value": 1
+        }
+      ]
+    },
+    "ranger_training_7": {
+      "id": "ranger_training_7",
+      "name": "Следопыт: мастерство 7",
+      "level": 7,
+      "description": "Максимум HP увеличивается на 4.",
+      "effects": [
+        {
+          "type": "max_hp",
+          "value": 4
+        }
+      ]
+    },
+    "ranger_training_10": {
+      "id": "ranger_training_10",
+      "name": "Следопыт: мастерство 10",
+      "level": 10,
+      "description": "Бонус +1 к основному спасброску класса.",
+      "effects": [
+        {
+          "type": "save_bonus",
+          "key": "strength",
+          "value": 1
+        }
+      ]
+    },
+    "ranger_training_13": {
+      "id": "ranger_training_13",
+      "name": "Следопыт: мастерство 13",
+      "level": 13,
+      "description": "Бонус +1 к урону оружием.",
+      "effects": [
+        {
+          "type": "damage_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "ranger_training_15": {
+      "id": "ranger_training_15",
+      "name": "Следопыт: мастерство 15",
+      "level": 15,
+      "description": "Максимум HP увеличивается на 4.",
+      "effects": [
+        {
+          "type": "max_hp",
+          "value": 4
+        }
+      ]
+    },
+    "ranger_training_18": {
+      "id": "ranger_training_18",
+      "name": "Следопыт: мастерство 18",
+      "level": 18,
+      "description": "Бонус +1 к основному спасброску класса.",
+      "effects": [
+        {
+          "type": "save_bonus",
+          "key": "strength",
+          "value": 1
+        }
+      ]
+    },
+    "ranger_training_20": {
+      "id": "ranger_training_20",
+      "name": "Следопыт: мастерство 20",
+      "level": 20,
+      "description": "Бонус +1 к урону оружием.",
+      "effects": [
+        {
+          "type": "damage_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "barbarian_training_2": {
+      "id": "barbarian_training_2",
+      "name": "Варвар: мастерство 2",
+      "level": 2,
+      "description": "Бонус +1 к урону оружием.",
+      "effects": [
+        {
+          "type": "damage_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "barbarian_training_5": {
+      "id": "barbarian_training_5",
+      "name": "Варвар: мастерство 5",
+      "level": 5,
+      "description": "Ещё одна атака в рамках действия атаки.",
+      "effects": [
+        {
+          "type": "extra_attack",
+          "value": 1
+        }
+      ]
+    },
+    "barbarian_training_7": {
+      "id": "barbarian_training_7",
+      "name": "Варвар: мастерство 7",
+      "level": 7,
+      "description": "Максимум HP увеличивается на 4.",
+      "effects": [
+        {
+          "type": "max_hp",
+          "value": 4
+        }
+      ]
+    },
+    "barbarian_training_10": {
+      "id": "barbarian_training_10",
+      "name": "Варвар: мастерство 10",
+      "level": 10,
+      "description": "Бонус +1 к основному спасброску класса.",
+      "effects": [
+        {
+          "type": "save_bonus",
+          "key": "strength",
+          "value": 1
+        }
+      ]
+    },
+    "barbarian_training_13": {
+      "id": "barbarian_training_13",
+      "name": "Варвар: мастерство 13",
+      "level": 13,
+      "description": "Бонус +1 к урону оружием.",
+      "effects": [
+        {
+          "type": "damage_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "barbarian_training_15": {
+      "id": "barbarian_training_15",
+      "name": "Варвар: мастерство 15",
+      "level": 15,
+      "description": "Максимум HP увеличивается на 4.",
+      "effects": [
+        {
+          "type": "max_hp",
+          "value": 4
+        }
+      ]
+    },
+    "barbarian_training_18": {
+      "id": "barbarian_training_18",
+      "name": "Варвар: мастерство 18",
+      "level": 18,
+      "description": "Бонус +1 к основному спасброску класса.",
+      "effects": [
+        {
+          "type": "save_bonus",
+          "key": "strength",
+          "value": 1
+        }
+      ]
+    },
+    "barbarian_training_20": {
+      "id": "barbarian_training_20",
+      "name": "Варвар: мастерство 20",
+      "level": 20,
+      "description": "Бонус +1 к урону оружием.",
+      "effects": [
+        {
+          "type": "damage_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "cleric_training_2": {
+      "id": "cleric_training_2",
+      "name": "Жрец: мастерство 2",
+      "level": 2,
+      "description": "Бонус +1 к атакам.",
+      "effects": [
+        {
+          "type": "attack_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "cleric_training_5": {
+      "id": "cleric_training_5",
+      "name": "Жрец: мастерство 5",
+      "level": 5,
+      "description": "Бонус +1 к атакам.",
+      "effects": [
+        {
+          "type": "attack_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "cleric_training_7": {
+      "id": "cleric_training_7",
+      "name": "Жрец: мастерство 7",
+      "level": 7,
+      "description": "Максимум HP увеличивается на 4.",
+      "effects": [
+        {
+          "type": "max_hp",
+          "value": 4
+        }
+      ]
+    },
+    "cleric_training_10": {
+      "id": "cleric_training_10",
+      "name": "Жрец: мастерство 10",
+      "level": 10,
+      "description": "Бонус +1 к основному спасброску класса.",
+      "effects": [
+        {
+          "type": "save_bonus",
+          "key": "wisdom",
+          "value": 1
+        }
+      ]
+    },
+    "cleric_training_13": {
+      "id": "cleric_training_13",
+      "name": "Жрец: мастерство 13",
+      "level": 13,
+      "description": "Бонус +1 к атакам.",
+      "effects": [
+        {
+          "type": "attack_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "cleric_training_15": {
+      "id": "cleric_training_15",
+      "name": "Жрец: мастерство 15",
+      "level": 15,
+      "description": "Максимум HP увеличивается на 4.",
+      "effects": [
+        {
+          "type": "max_hp",
+          "value": 4
+        }
+      ]
+    },
+    "cleric_training_18": {
+      "id": "cleric_training_18",
+      "name": "Жрец: мастерство 18",
+      "level": 18,
+      "description": "Бонус +1 к основному спасброску класса.",
+      "effects": [
+        {
+          "type": "save_bonus",
+          "key": "wisdom",
+          "value": 1
+        }
+      ]
+    },
+    "cleric_training_20": {
+      "id": "cleric_training_20",
+      "name": "Жрец: мастерство 20",
+      "level": 20,
+      "description": "Бонус +1 к атакам.",
+      "effects": [
+        {
+          "type": "attack_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "wizard_training_2": {
+      "id": "wizard_training_2",
+      "name": "Маг: мастерство 2",
+      "level": 2,
+      "description": "Бонус +1 к атакам.",
+      "effects": [
+        {
+          "type": "attack_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "wizard_training_5": {
+      "id": "wizard_training_5",
+      "name": "Маг: мастерство 5",
+      "level": 5,
+      "description": "Бонус +1 к атакам.",
+      "effects": [
+        {
+          "type": "attack_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "wizard_training_7": {
+      "id": "wizard_training_7",
+      "name": "Маг: мастерство 7",
+      "level": 7,
+      "description": "Максимум HP увеличивается на 4.",
+      "effects": [
+        {
+          "type": "max_hp",
+          "value": 4
+        }
+      ]
+    },
+    "wizard_training_10": {
+      "id": "wizard_training_10",
+      "name": "Маг: мастерство 10",
+      "level": 10,
+      "description": "Бонус +1 к основному спасброску класса.",
+      "effects": [
+        {
+          "type": "save_bonus",
+          "key": "intelligence",
+          "value": 1
+        }
+      ]
+    },
+    "wizard_training_13": {
+      "id": "wizard_training_13",
+      "name": "Маг: мастерство 13",
+      "level": 13,
+      "description": "Бонус +1 к атакам.",
+      "effects": [
+        {
+          "type": "attack_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "wizard_training_15": {
+      "id": "wizard_training_15",
+      "name": "Маг: мастерство 15",
+      "level": 15,
+      "description": "Максимум HP увеличивается на 4.",
+      "effects": [
+        {
+          "type": "max_hp",
+          "value": 4
+        }
+      ]
+    },
+    "wizard_training_18": {
+      "id": "wizard_training_18",
+      "name": "Маг: мастерство 18",
+      "level": 18,
+      "description": "Бонус +1 к основному спасброску класса.",
+      "effects": [
+        {
+          "type": "save_bonus",
+          "key": "intelligence",
+          "value": 1
+        }
+      ]
+    },
+    "wizard_training_20": {
+      "id": "wizard_training_20",
+      "name": "Маг: мастерство 20",
+      "level": 20,
+      "description": "Бонус +1 к атакам.",
+      "effects": [
+        {
+          "type": "attack_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "fighter_path_1": {
+      "id": "fighter_path_1",
+      "name": "Чемпион",
+      "level": 3,
+      "description": "Постоянный бонус +1 к урону оружием.",
+      "effects": [
+        {
+          "type": "damage_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "fighter_path_2": {
+      "id": "fighter_path_2",
+      "name": "Защитник",
+      "level": 3,
+      "description": "Постоянный бонус +1 к КД.",
+      "effects": [
+        {
+          "type": "armor_class",
+          "value": 1
+        }
+      ]
+    },
+    "rogue_path_1": {
+      "id": "rogue_path_1",
+      "name": "Разведчик",
+      "level": 3,
+      "description": "Постоянный бонус +1 к урону оружием.",
+      "effects": [
+        {
+          "type": "damage_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "rogue_path_2": {
+      "id": "rogue_path_2",
+      "name": "Дуэлянт",
+      "level": 3,
+      "description": "Постоянный бонус +1 к КД.",
+      "effects": [
+        {
+          "type": "armor_class",
+          "value": 1
+        }
+      ]
+    },
+    "ranger_path_1": {
+      "id": "ranger_path_1",
+      "name": "Следопыт",
+      "level": 3,
+      "description": "Постоянный бонус +1 к урону оружием.",
+      "effects": [
+        {
+          "type": "damage_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "ranger_path_2": {
+      "id": "ranger_path_2",
+      "name": "Страж",
+      "level": 3,
+      "description": "Постоянный бонус +1 к КД.",
+      "effects": [
+        {
+          "type": "armor_class",
+          "value": 1
+        }
+      ]
+    },
+    "barbarian_path_1": {
+      "id": "barbarian_path_1",
+      "name": "Берсерк",
+      "level": 3,
+      "description": "Постоянный бонус +1 к урону оружием.",
+      "effects": [
+        {
+          "type": "damage_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "barbarian_path_2": {
+      "id": "barbarian_path_2",
+      "name": "Хранитель",
+      "level": 3,
+      "description": "Постоянный бонус +1 к КД.",
+      "effects": [
+        {
+          "type": "armor_class",
+          "value": 1
+        }
+      ]
+    },
+    "cleric_path_1": {
+      "id": "cleric_path_1",
+      "name": "Свет",
+      "level": 3,
+      "description": "Постоянный бонус +1 к атакам.",
+      "effects": [
+        {
+          "type": "attack_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "cleric_path_2": {
+      "id": "cleric_path_2",
+      "name": "Защита",
+      "level": 3,
+      "description": "Постоянный бонус +1 к КД.",
+      "effects": [
+        {
+          "type": "armor_class",
+          "value": 1
+        }
+      ]
+    },
+    "wizard_path_1": {
+      "id": "wizard_path_1",
+      "name": "Эвокация",
+      "level": 3,
+      "description": "Постоянный бонус +1 к атакам.",
+      "effects": [
+        {
+          "type": "attack_bonus",
+          "value": 1
+        }
+      ]
+    },
+    "wizard_path_2": {
+      "id": "wizard_path_2",
+      "name": "Ограждение",
+      "level": 3,
+      "description": "Постоянный бонус +1 к КД.",
+      "effects": [
+        {
+          "type": "armor_class",
+          "value": 1
+        }
+      ]
+    },
+    "tough": {
+      "id": "tough",
+      "name": "Крепкий",
+      "description": "Максимум HP +6.",
+      "effects": [
+        {
+          "type": "max_hp",
+          "value": 6
+        }
+      ]
+    },
+    "mobile": {
+      "id": "mobile",
+      "name": "Подвижный",
+      "description": "Скорость +5 футов.",
+      "effects": [
+        {
+          "type": "speed",
+          "value": 5
+        }
+      ]
+    },
+    "versatile": {
+      "id": "versatile",
+      "name": "Универсал",
+      "description": "Все проверки характеристик +1.",
+      "effects": [
+        {
+          "type": "check_bonus",
+          "value": 1
+        }
+      ]
+    }
+  },
+  "spells": {
+    "fire_bolt": {
+      "id": "fire_bolt",
+      "name": "Огненная стрела",
+      "level": 0,
+      "classes": [
+        "wizard"
+      ],
+      "school": "evocation",
+      "description": "Атака заклинанием: 1d10 урона. Не расходует ячейку.",
+      "damage": "1d10",
+      "attack_roll": true,
+      "range": 120
+    },
+    "ray_of_frost": {
+      "id": "ray_of_frost",
+      "name": "Луч холода",
+      "level": 0,
+      "classes": [
+        "wizard"
+      ],
+      "school": "evocation",
+      "description": "Атака заклинанием: 1d8 урона.",
+      "damage": "1d8",
+      "attack_roll": true,
+      "range": 60
+    },
+    "sacred_flame": {
+      "id": "sacred_flame",
+      "name": "Священное пламя",
+      "level": 0,
+      "classes": [
+        "cleric"
+      ],
+      "school": "evocation",
+      "description": "Спасбросок Ловкости; при провале 1d8 урона.",
+      "damage": "1d8",
+      "save": "dexterity"
+    },
+    "magic_missile": {
+      "id": "magic_missile",
+      "name": "Волшебная стрела",
+      "level": 1,
+      "classes": [
+        "wizard"
+      ],
+      "school": "evocation",
+      "description": "Гарантированно наносит 3d4+3 урона одной цели. Усиление: +1d4 за ячейку выше первой.",
+      "damage": "3d4+3",
+      "upcast": 1,
+      "range": 120
+    },
+    "burning_hands": {
+      "id": "burning_hands",
+      "name": "Огненный веер",
+      "level": 1,
+      "classes": [
+        "wizard"
+      ],
+      "school": "evocation",
+      "description": "Область 10 футов вокруг цели, включая союзников; 3d6 урона, половина при успешном спасброске.",
+      "damage": "3d6",
+      "save": "dexterity",
+      "half_on_save": true,
+      "target_type": "area",
+      "area": 10,
+      "range": 15,
+      "upcast": 1
+    },
+    "cure_wounds": {
+      "id": "cure_wounds",
+      "name": "Лечение ран",
+      "level": 1,
+      "classes": [
+        "cleric",
+        "ranger"
+      ],
+      "school": "evocation",
+      "description": "Союзник рядом восстанавливает 1d8 + модификатор магии HP.",
+      "healing": "1d8",
+      "target_type": "ally",
+      "range": 5,
+      "upcast": 1
+    },
+    "healing_word": {
+      "id": "healing_word",
+      "name": "Исцеляющее слово",
+      "level": 1,
+      "classes": [
+        "cleric"
+      ],
+      "school": "evocation",
+      "description": "Бонусное действие: 1d4 + модификатор магии HP союзнику.",
+      "healing": "1d4",
+      "target_type": "ally",
+      "casting_time": "BONUS_ACTION",
+      "range": 60,
+      "upcast": 1
+    },
+    "bless": {
+      "id": "bless",
+      "name": "Благословение",
+      "level": 1,
+      "classes": [
+        "cleric"
+      ],
+      "school": "evocation",
+      "description": "Концентрация: +1 к атакам и спасброскам выбранного союзника до 10 раундов.",
+      "target_type": "ally",
+      "effects": [
+        "blessed"
+      ],
+      "concentration": true,
+      "duration": 10
+    },
+    "entangle": {
+      "id": "entangle",
+      "name": "Опутывание",
+      "level": 1,
+      "classes": [
+        "ranger"
+      ],
+      "school": "evocation",
+      "description": "Провал спасброска Силы в области: опутан до окончания концентрации, максимум 10 раундов.",
+      "target_type": "area",
+      "area": 10,
+      "save": "strength",
+      "effects": [
+        "restrained"
+      ],
+      "concentration": true,
+      "duration": 10
+    },
+    "hold_person": {
+      "id": "hold_person",
+      "name": "Удержание",
+      "level": 2,
+      "classes": [
+        "cleric",
+        "wizard"
+      ],
+      "school": "evocation",
+      "description": "Провал спасброска Мудрости: оглушение до 3 раундов концентрации.",
+      "save": "wisdom",
+      "effects": [
+        "stunned"
+      ],
+      "concentration": true,
+      "duration": 3
+    },
+    "scorching_ray": {
+      "id": "scorching_ray",
+      "name": "Палящий луч",
+      "level": 2,
+      "classes": [
+        "wizard"
+      ],
+      "school": "evocation",
+      "description": "Атака заклинанием: 4d6 урона одной цели.",
+      "attack_roll": true,
+      "damage": "4d6",
+      "upcast": 2,
+      "range": 120
+    },
+    "fireball": {
+      "id": "fireball",
+      "name": "Огненный шар",
+      "level": 3,
+      "classes": [
+        "wizard"
+      ],
+      "school": "evocation",
+      "description": "Область 20 футов, включая союзников: 8d6 урона, половина при успехе спасброска.",
+      "damage": "8d6",
+      "save": "dexterity",
+      "half_on_save": true,
+      "target_type": "area",
+      "area": 20,
+      "range": 120,
+      "upcast": 1
+    },
+    "arcane_burst_4": {
+      "id": "arcane_burst_4",
+      "name": "Ледяной взрыв",
+      "level": 4,
+      "school": "evocation",
+      "classes": [
+        "wizard",
+        "cleric"
+      ],
+      "range": 120,
+      "target_type": "area",
+      "area": 20,
+      "damage": "6d8",
+      "save": "dexterity",
+      "half_on_save": true,
+      "upcast": 0,
+      "description": "Область 20 футов, включая союзников: 6d8 урона, половина при успехе спасброска."
+    },
+    "greater_healing_4": {
+      "id": "greater_healing_4",
+      "name": "Великое лечение 4",
+      "level": 4,
+      "school": "restoration",
+      "classes": [
+        "cleric",
+        "ranger"
+      ],
+      "range": 30,
+      "target_type": "ally",
+      "healing": "4d8",
+      "upcast": 1,
+      "description": "Лечение союзника: 4d8 + модификатор магии HP."
+    },
+    "arcane_burst_5": {
+      "id": "arcane_burst_5",
+      "name": "Небесный огонь",
+      "level": 5,
+      "school": "evocation",
+      "classes": [
+        "wizard",
+        "cleric"
+      ],
+      "range": 120,
+      "target_type": "area",
+      "area": 20,
+      "damage": "8d8",
+      "save": "dexterity",
+      "half_on_save": true,
+      "upcast": 0,
+      "description": "Область 20 футов, включая союзников: 8d8 урона, половина при успехе спасброска."
+    },
+    "greater_healing_5": {
+      "id": "greater_healing_5",
+      "name": "Великое лечение 5",
+      "level": 5,
+      "school": "restoration",
+      "classes": [
+        "cleric",
+        "ranger"
+      ],
+      "range": 30,
+      "target_type": "ally",
+      "healing": "5d8",
+      "upcast": 1,
+      "description": "Лечение союзника: 5d8 + модификатор магии HP."
+    },
+    "arcane_burst_6": {
+      "id": "arcane_burst_6",
+      "name": "Громовой шторм",
+      "level": 6,
+      "school": "evocation",
+      "classes": [
+        "wizard",
+        "cleric"
+      ],
+      "range": 120,
+      "target_type": "area",
+      "area": 20,
+      "damage": "10d8",
+      "save": "dexterity",
+      "half_on_save": true,
+      "upcast": 0,
+      "description": "Область 20 футов, включая союзников: 10d8 урона, половина при успехе спасброска."
+    },
+    "arcane_burst_7": {
+      "id": "arcane_burst_7",
+      "name": "Звёздный дождь",
+      "level": 7,
+      "school": "evocation",
+      "classes": [
+        "wizard",
+        "cleric"
+      ],
+      "range": 120,
+      "target_type": "area",
+      "area": 20,
+      "damage": "12d8",
+      "save": "dexterity",
+      "half_on_save": true,
+      "upcast": 0,
+      "description": "Область 20 футов, включая союзников: 12d8 урона, половина при успехе спасброска."
+    },
+    "arcane_burst_8": {
+      "id": "arcane_burst_8",
+      "name": "Солнечный взрыв",
+      "level": 8,
+      "school": "evocation",
+      "classes": [
+        "wizard",
+        "cleric"
+      ],
+      "range": 120,
+      "target_type": "area",
+      "area": 20,
+      "damage": "14d8",
+      "save": "dexterity",
+      "half_on_save": true,
+      "upcast": 0,
+      "description": "Область 20 футов, включая союзников: 14d8 урона, половина при успехе спасброска."
+    },
+    "arcane_burst_9": {
+      "id": "arcane_burst_9",
+      "name": "Катаклизм",
+      "level": 9,
+      "school": "evocation",
+      "classes": [
+        "wizard",
+        "cleric"
+      ],
+      "range": 120,
+      "target_type": "area",
+      "area": 20,
+      "damage": "16d8",
+      "save": "dexterity",
+      "half_on_save": true,
+      "upcast": 0,
+      "description": "Область 20 футов, включая союзников: 16d8 урона, половина при успехе спасброска."
+    }
+  },
+  "spellcasting": {
+    "wizard": {
+      "ability": "intelligence",
+      "known": 5,
+      "prepared": 2,
+      "defaults": [
+        "fire_bolt",
+        "ray_of_frost",
+        "magic_missile",
+        "burning_hands"
+      ],
+      "slots": {
+        "1": 2
+      }
+    },
+    "cleric": {
+      "ability": "wisdom",
+      "known": 5,
+      "prepared": 2,
+      "defaults": [
+        "sacred_flame",
+        "cure_wounds",
+        "healing_word",
+        "bless"
+      ],
+      "slots": {
+        "1": 2
+      }
+    },
+    "ranger": {
+      "ability": "wisdom",
+      "known": 3,
+      "prepared": 2,
+      "defaults": [
+        "cure_wounds",
+        "entangle"
+      ],
+      "slots": {
+        "1": 2
+      }
+    }
+  },
+  "levels": {
+    "1": {
+      "xp": 0,
+      "proficiency": 2,
+      "asi": false,
+      "subclass": false,
+      "features": {},
+      "spell_slots": {
+        "wizard": {
+          "1": 2
+        },
+        "cleric": {
+          "1": 2
+        },
+        "ranger": {
+          "1": 2
+        }
+      },
+      "learn_spells": 0
+    },
+    "2": {
+      "xp": 300,
+      "proficiency": 2,
+      "asi": false,
+      "subclass": false,
+      "features": {
+        "fighter": [
+          "fighter_training_2"
+        ],
+        "rogue": [
+          "rogue_training_2"
+        ],
+        "ranger": [
+          "ranger_training_2"
+        ],
+        "barbarian": [
+          "barbarian_training_2"
+        ],
+        "cleric": [
+          "cleric_training_2"
+        ],
+        "wizard": [
+          "wizard_training_2"
+        ]
+      },
+      "spell_slots": {
+        "wizard": {
+          "1": 4
+        },
+        "cleric": {
+          "1": 4
+        },
+        "ranger": {
+          "1": 4
+        }
+      },
+      "learn_spells": 2
+    },
+    "3": {
+      "xp": 900,
+      "proficiency": 2,
+      "asi": false,
+      "subclass": true,
+      "features": {},
+      "spell_slots": {
+        "wizard": {
+          "1": 4,
+          "2": 2
+        },
+        "cleric": {
+          "1": 4,
+          "2": 2
+        },
+        "ranger": {
+          "1": 4,
+          "2": 2
+        }
+      },
+      "learn_spells": 2
+    },
+    "4": {
+      "xp": 2700,
+      "proficiency": 2,
+      "asi": true,
+      "subclass": false,
+      "features": {},
+      "spell_slots": {
+        "wizard": {
+          "1": 4,
+          "2": 2
+        },
+        "cleric": {
+          "1": 4,
+          "2": 2
+        },
+        "ranger": {
+          "1": 4,
+          "2": 2
+        }
+      },
+      "learn_spells": 2
+    },
+    "5": {
+      "xp": 6500,
+      "proficiency": 3,
+      "asi": false,
+      "subclass": false,
+      "features": {
+        "fighter": [
+          "fighter_training_5"
+        ],
+        "rogue": [
+          "rogue_training_5"
+        ],
+        "ranger": [
+          "ranger_training_5"
+        ],
+        "barbarian": [
+          "barbarian_training_5"
+        ],
+        "cleric": [
+          "cleric_training_5"
+        ],
+        "wizard": [
+          "wizard_training_5"
+        ]
+      },
+      "spell_slots": {
+        "wizard": {
+          "1": 4,
+          "2": 3,
+          "3": 2
+        },
+        "cleric": {
+          "1": 4,
+          "2": 3,
+          "3": 2
+        },
+        "ranger": {
+          "1": 4,
+          "2": 3,
+          "3": 2
+        }
+      },
+      "learn_spells": 2
+    },
+    "6": {
+      "xp": 14000,
+      "proficiency": 3,
+      "asi": false,
+      "subclass": false,
+      "features": {},
+      "spell_slots": {
+        "wizard": {
+          "1": 4,
+          "2": 3,
+          "3": 2
+        },
+        "cleric": {
+          "1": 4,
+          "2": 3,
+          "3": 2
+        },
+        "ranger": {
+          "1": 4,
+          "2": 3,
+          "3": 2
+        }
+      },
+      "learn_spells": 2
+    },
+    "7": {
+      "xp": 23000,
+      "proficiency": 3,
+      "asi": false,
+      "subclass": false,
+      "features": {
+        "fighter": [
+          "fighter_training_7"
+        ],
+        "rogue": [
+          "rogue_training_7"
+        ],
+        "ranger": [
+          "ranger_training_7"
+        ],
+        "barbarian": [
+          "barbarian_training_7"
+        ],
+        "cleric": [
+          "cleric_training_7"
+        ],
+        "wizard": [
+          "wizard_training_7"
+        ]
+      },
+      "spell_slots": {
+        "wizard": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 2
+        },
+        "cleric": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 2
+        },
+        "ranger": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 2
+        }
+      },
+      "learn_spells": 2
+    },
+    "8": {
+      "xp": 34000,
+      "proficiency": 3,
+      "asi": true,
+      "subclass": false,
+      "features": {},
+      "spell_slots": {
+        "wizard": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 2
+        },
+        "cleric": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 2
+        },
+        "ranger": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 2
+        }
+      },
+      "learn_spells": 2
+    },
+    "9": {
+      "xp": 48000,
+      "proficiency": 4,
+      "asi": false,
+      "subclass": false,
+      "features": {},
+      "spell_slots": {
+        "wizard": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 2
+        },
+        "cleric": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 2
+        },
+        "ranger": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 2
+        }
+      },
+      "learn_spells": 2
+    },
+    "10": {
+      "xp": 64000,
+      "proficiency": 4,
+      "asi": false,
+      "subclass": false,
+      "features": {
+        "fighter": [
+          "fighter_training_10"
+        ],
+        "rogue": [
+          "rogue_training_10"
+        ],
+        "ranger": [
+          "ranger_training_10"
+        ],
+        "barbarian": [
+          "barbarian_training_10"
+        ],
+        "cleric": [
+          "cleric_training_10"
+        ],
+        "wizard": [
+          "wizard_training_10"
+        ]
+      },
+      "spell_slots": {
+        "wizard": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 2
+        },
+        "cleric": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 2
+        },
+        "ranger": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 2
+        }
+      },
+      "learn_spells": 2
+    },
+    "11": {
+      "xp": 85000,
+      "proficiency": 4,
+      "asi": false,
+      "subclass": false,
+      "features": {},
+      "spell_slots": {
+        "wizard": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 3,
+          "6": 1
+        },
+        "cleric": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 3,
+          "6": 1
+        },
+        "ranger": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 2
+        }
+      },
+      "learn_spells": 2
+    },
+    "12": {
+      "xp": 100000,
+      "proficiency": 4,
+      "asi": true,
+      "subclass": false,
+      "features": {},
+      "spell_slots": {
+        "wizard": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 3,
+          "6": 1
+        },
+        "cleric": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 3,
+          "6": 1
+        },
+        "ranger": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 2
+        }
+      },
+      "learn_spells": 2
+    },
+    "13": {
+      "xp": 120000,
+      "proficiency": 5,
+      "asi": false,
+      "subclass": false,
+      "features": {
+        "fighter": [
+          "fighter_training_13"
+        ],
+        "rogue": [
+          "rogue_training_13"
+        ],
+        "ranger": [
+          "ranger_training_13"
+        ],
+        "barbarian": [
+          "barbarian_training_13"
+        ],
+        "cleric": [
+          "cleric_training_13"
+        ],
+        "wizard": [
+          "wizard_training_13"
+        ]
+      },
+      "spell_slots": {
+        "wizard": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 3,
+          "6": 1,
+          "7": 1
+        },
+        "cleric": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 3,
+          "6": 1,
+          "7": 1
+        },
+        "ranger": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 2
+        }
+      },
+      "learn_spells": 2
+    },
+    "14": {
+      "xp": 140000,
+      "proficiency": 5,
+      "asi": false,
+      "subclass": false,
+      "features": {},
+      "spell_slots": {
+        "wizard": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 3,
+          "6": 1,
+          "7": 1
+        },
+        "cleric": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 3,
+          "6": 1,
+          "7": 1
+        },
+        "ranger": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 2
+        }
+      },
+      "learn_spells": 2
+    },
+    "15": {
+      "xp": 165000,
+      "proficiency": 5,
+      "asi": false,
+      "subclass": false,
+      "features": {
+        "fighter": [
+          "fighter_training_15"
+        ],
+        "rogue": [
+          "rogue_training_15"
+        ],
+        "ranger": [
+          "ranger_training_15"
+        ],
+        "barbarian": [
+          "barbarian_training_15"
+        ],
+        "cleric": [
+          "cleric_training_15"
+        ],
+        "wizard": [
+          "wizard_training_15"
+        ]
+      },
+      "spell_slots": {
+        "wizard": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 3,
+          "6": 1,
+          "7": 1,
+          "8": 1
+        },
+        "cleric": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 3,
+          "6": 1,
+          "7": 1,
+          "8": 1
+        },
+        "ranger": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 2
+        }
+      },
+      "learn_spells": 2
+    },
+    "16": {
+      "xp": 195000,
+      "proficiency": 5,
+      "asi": true,
+      "subclass": false,
+      "features": {},
+      "spell_slots": {
+        "wizard": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 3,
+          "6": 1,
+          "7": 1,
+          "8": 1
+        },
+        "cleric": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 3,
+          "6": 1,
+          "7": 1,
+          "8": 1
+        },
+        "ranger": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 2
+        }
+      },
+      "learn_spells": 2
+    },
+    "17": {
+      "xp": 225000,
+      "proficiency": 6,
+      "asi": false,
+      "subclass": false,
+      "features": {},
+      "spell_slots": {
+        "wizard": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 3,
+          "6": 1,
+          "7": 1,
+          "8": 1,
+          "9": 1
+        },
+        "cleric": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 3,
+          "6": 1,
+          "7": 1,
+          "8": 1,
+          "9": 1
+        },
+        "ranger": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 2
+        }
+      },
+      "learn_spells": 2
+    },
+    "18": {
+      "xp": 265000,
+      "proficiency": 6,
+      "asi": false,
+      "subclass": false,
+      "features": {
+        "fighter": [
+          "fighter_training_18"
+        ],
+        "rogue": [
+          "rogue_training_18"
+        ],
+        "ranger": [
+          "ranger_training_18"
+        ],
+        "barbarian": [
+          "barbarian_training_18"
+        ],
+        "cleric": [
+          "cleric_training_18"
+        ],
+        "wizard": [
+          "wizard_training_18"
+        ]
+      },
+      "spell_slots": {
+        "wizard": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 3,
+          "6": 1,
+          "7": 1,
+          "8": 1,
+          "9": 1
+        },
+        "cleric": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 3,
+          "6": 1,
+          "7": 1,
+          "8": 1,
+          "9": 1
+        },
+        "ranger": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 2
+        }
+      },
+      "learn_spells": 2
+    },
+    "19": {
+      "xp": 305000,
+      "proficiency": 6,
+      "asi": true,
+      "subclass": false,
+      "features": {},
+      "spell_slots": {
+        "wizard": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 3,
+          "6": 1,
+          "7": 1,
+          "8": 1,
+          "9": 1
+        },
+        "cleric": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 3,
+          "6": 1,
+          "7": 1,
+          "8": 1,
+          "9": 1
+        },
+        "ranger": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 2
+        }
+      },
+      "learn_spells": 2
+    },
+    "20": {
+      "xp": 355000,
+      "proficiency": 6,
+      "asi": false,
+      "subclass": false,
+      "features": {
+        "fighter": [
+          "fighter_training_20"
+        ],
+        "rogue": [
+          "rogue_training_20"
+        ],
+        "ranger": [
+          "ranger_training_20"
+        ],
+        "barbarian": [
+          "barbarian_training_20"
+        ],
+        "cleric": [
+          "cleric_training_20"
+        ],
+        "wizard": [
+          "wizard_training_20"
+        ]
+      },
+      "spell_slots": {
+        "wizard": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 3,
+          "6": 1,
+          "7": 1,
+          "8": 1,
+          "9": 1
+        },
+        "cleric": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 3,
+          "6": 1,
+          "7": 1,
+          "8": 1,
+          "9": 1
+        },
+        "ranger": {
+          "1": 4,
+          "2": 3,
+          "3": 3,
+          "4": 3,
+          "5": 2
+        }
+      },
+      "learn_spells": 2
+    }
+  },
+  "subclasses": {
+    "fighter": {
+      "fighter_path_1": {
+        "id": "fighter_path_1",
+        "name": "Чемпион",
+        "description": "Постоянный бонус +1 к урону оружием.",
+        "features": [
+          "fighter_path_1"
+        ]
+      },
+      "fighter_path_2": {
+        "id": "fighter_path_2",
+        "name": "Защитник",
+        "description": "Постоянный бонус +1 к КД.",
+        "features": [
+          "fighter_path_2"
+        ]
+      }
+    },
+    "rogue": {
+      "rogue_path_1": {
+        "id": "rogue_path_1",
+        "name": "Разведчик",
+        "description": "Постоянный бонус +1 к урону оружием.",
+        "features": [
+          "rogue_path_1"
+        ]
+      },
+      "rogue_path_2": {
+        "id": "rogue_path_2",
+        "name": "Дуэлянт",
+        "description": "Постоянный бонус +1 к КД.",
+        "features": [
+          "rogue_path_2"
+        ]
+      }
+    },
+    "ranger": {
+      "ranger_path_1": {
+        "id": "ranger_path_1",
+        "name": "Следопыт",
+        "description": "Постоянный бонус +1 к урону оружием.",
+        "features": [
+          "ranger_path_1"
+        ]
+      },
+      "ranger_path_2": {
+        "id": "ranger_path_2",
+        "name": "Страж",
+        "description": "Постоянный бонус +1 к КД.",
+        "features": [
+          "ranger_path_2"
+        ]
+      }
+    },
+    "barbarian": {
+      "barbarian_path_1": {
+        "id": "barbarian_path_1",
+        "name": "Берсерк",
+        "description": "Постоянный бонус +1 к урону оружием.",
+        "features": [
+          "barbarian_path_1"
+        ]
+      },
+      "barbarian_path_2": {
+        "id": "barbarian_path_2",
+        "name": "Хранитель",
+        "description": "Постоянный бонус +1 к КД.",
+        "features": [
+          "barbarian_path_2"
+        ]
+      }
+    },
+    "cleric": {
+      "cleric_path_1": {
+        "id": "cleric_path_1",
+        "name": "Свет",
+        "description": "Постоянный бонус +1 к атакам.",
+        "features": [
+          "cleric_path_1"
+        ]
+      },
+      "cleric_path_2": {
+        "id": "cleric_path_2",
+        "name": "Защита",
+        "description": "Постоянный бонус +1 к КД.",
+        "features": [
+          "cleric_path_2"
+        ]
+      }
+    },
+    "wizard": {
+      "wizard_path_1": {
+        "id": "wizard_path_1",
+        "name": "Эвокация",
+        "description": "Постоянный бонус +1 к атакам.",
+        "features": [
+          "wizard_path_1"
+        ]
+      },
+      "wizard_path_2": {
+        "id": "wizard_path_2",
+        "name": "Ограждение",
+        "description": "Постоянный бонус +1 к КД.",
+        "features": [
+          "wizard_path_2"
+        ]
+      }
+    }
+  },
+  "feats": [
+    "tough",
+    "mobile",
+    "versatile"
+  ]
+}
