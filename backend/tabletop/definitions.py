@@ -3,32 +3,24 @@
 from typing import Annotated, Literal, Union
 from pydantic import BaseModel, ConfigDict, Field
 
-Ability = Literal[
-    "strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"
-]
-Difficulty = Literal["TRIVIAL", "EASY", "MEDIUM", "HARD", "VERY_HARD", "EXTREME"]
-ControllerType = Literal["PLAYER", "AI", "DM"]
-Id = Annotated[str, Field(min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9_-]+$")]
-
-
-class Model(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class Named(Model):
-    id: Id
-    name: str = Field(min_length=1, max_length=120)
-    description: str = Field(default="", max_length=5000)
+from .contracts import Ability, Difficulty, ControllerType, Id, Model, Named
 
 
 class InventoryEntry(Model):
+    container_id: str = ""
     item_id: Id
     quantity: int = Field(default=1, ge=1, le=10000)
     equipped: bool = False
     slot: str = ""
 
 
+from .content import ItemComponent, SettingDefinition, CreatureInstance
+
+
 class ItemDefinition(Named):
+    requirements: list[Id] = []
+    starting_available: bool = True
+    components: list[ItemComponent] = []
     type: Literal["weapon", "armor", "consumable", "quest", "miscellaneous"] = (
         "miscellaneous"
     )
@@ -40,13 +32,13 @@ class ItemDefinition(Named):
     weight: float = Field(default=0, ge=0, le=1000)
     value: int = Field(default=0, ge=0, le=100000)
     properties: list[str] = Field(default_factory=list, max_length=12)
-    weapon_category: Literal["simple", "martial", "finesse"] = "simple"
-    armor_category: Literal["light", "medium", "heavy", "shield"] = "light"
+    weapon_category: str = "simple"
+    armor_category: str = "light"
     weapon_die: Literal[4, 6, 8, 10, 12] = 6
     weapon_ability: Ability = "strength"
-    reach: int = Field(default=5, ge=5, le=120)
-    armor_base: int = Field(default=10, ge=10, le=18)
-    dex_cap: int = Field(default=5, ge=0, le=5)
+    reach: int = Field(default=5, ge=1, le=1000)
+    armor_base: int = Field(default=10, ge=0, le=22)
+    dex_cap: int = Field(default=5, ge=0, le=10)
     healing: int = Field(default=0, ge=0, le=30)
 
 
@@ -126,7 +118,11 @@ class Secret(Named):
     difficulty: Difficulty = "MEDIUM"
 
 
+from .context_actions import ContextAction, ObjectCapability
+
+
 class WorldObject(Named):
+    components: list[ObjectCapability] = []
     location_id: Id
     hidden: bool = False
     locked: bool = False
@@ -197,6 +193,9 @@ class SceneCheck(Named):
 
 
 class CampaignDefinition(Model):
+    context_actions: list[ContextAction] = []
+    setting_definition: SettingDefinition | None = None
+    creature_instances: list[CreatureInstance] = []
     schema_version: Literal[1] = 1
     id: Id
     name: str = Field(min_length=1, max_length=120)

@@ -337,8 +337,22 @@ class GameAI:
         self.registry = registry or BehaviorRegistry()
 
     def decision(self, state, actor_id):
+        context = Considerations(state, actor_id)
+        weights = (
+            {
+                "aggressive": {"Attack": 1.2, "MoveToTarget": 1.1},
+                "defensive": {"Dodge": 3, "SeekCover": 2, "ProtectAlly": 1.6},
+                "support": {"Help": 3, "ProtectAlly": 2, "UseFeature": 1.5},
+                "cautious": {"Flee": 1.5, "Disengage": 1.4, "SeekCover": 2, "Dodge": 2},
+            }[context.actor.ai_profile]
+            if context.actor.template_id
+            else {}
+        )
         return UtilityScorer.choose(
-            self.registry.options(Considerations(state, actor_id))
+            [
+                Decision(d.behavior, d.score * weights.get(d.behavior, 1), d.command)
+                for d in self.registry.options(context)
+            ]
         )
 
     def decide(self, state, actor_id):

@@ -43,11 +43,20 @@ class UniversalChecks:
         dc = state.ruleset.difficulty[c.difficulty]
         if c.category == "stealth" and c.actor_id:
             enemy = state.actor(c.actor_id)
+            passive_skill = next(
+                (
+                    k
+                    for k, v in state.ruleset.skill_definitions.items()
+                    if "PASSIVE_PERCEPTION" in v.tags
+                ),
+                "perception" if "perception" in state.ruleset.skills else "",
+            )
+            passive_ability = state.ruleset.skills.get(passive_skill, "wisdom")
             dc = max(
                 dc,
                 10
                 + self.runtime.rules.check_modifier(
-                    enemy, "wisdom", "perception", state.ruleset
+                    enemy, passive_ability, passive_skill, state.ruleset
                 ),
             )
         self.runtime.pending(
@@ -74,7 +83,7 @@ class UniversalChecks:
                 target_dc,
                 10
                 + self.runtime.rules.check_modifier(
-                    enemy, "wisdom", "perception", state.ruleset
+                    enemy, passive_ability, passive_skill, state.ruleset
                 ),
             )
         success = roll.total >= target_dc

@@ -349,7 +349,11 @@ def test_generated_draft_start_expand_and_staged_usage(api):
         kw["on_usage"]({"prompt_tokens": 123, "completion_tokens": 45})
         prompt = kw["messages"][0]["content"]
         yield (
-            definition().model_dump_json()
+            __import__("json").dumps(
+                __import__(
+                    "backend.tabletop.authoring", fromlist=["authoring_payload"]
+                ).authoring_payload(definition().model_dump())
+            )
             if "playable CampaignDefinition" in prompt
             else (
                 extension().model_dump_json()

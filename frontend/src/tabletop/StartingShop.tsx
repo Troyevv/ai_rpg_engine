@@ -9,6 +9,15 @@ export function StartingShop({
   change: (b: Build) => void;
 }) {
   const bought = build.purchases || [];
+  const hands = Object.keys(catalog.equipment_layout || {}).length
+    ? Object.entries(catalog.equipment_layout!)
+        .filter(
+          ([, layout]) =>
+            layout.group === "hand" ||
+            ["left", "right"].includes(layout.position),
+        )
+        .map(([id]) => id)
+    : ["MAIN_HAND", "OFF_HAND"];
   const capital =
     catalog.starting_gold +
     (catalog.classes[build.character_class].starting_gold || 0) +
@@ -20,40 +29,16 @@ export function StartingShop({
     0,
   );
   const buy = (id: string) => {
-    const item = catalog.items.find((i) => i.id === id)!;
     const entries = bought.map((e) => ({ ...e }));
-    const existing = entries.find((e) => e.item_id === id);
-    if (existing) {
-      existing.quantity++;
-      existing.equipped = false;
-      existing.slot = "";
-    } else {
-      const allowed =
-        item.type !== "armor" ||
-        catalog.classes[build.character_class].armor?.includes(
-          item.armor_category,
-        );
-      const slot = allowed ? item.slots[0] || "" : "";
-      entries.forEach((e) => {
-        if (
-          slot &&
-          (e.slot === slot ||
-            (item.hands === 2 &&
-              ["MAIN_HAND", "OFF_HAND"].includes(e.slot || "")) ||
-            (["MAIN_HAND", "OFF_HAND"].includes(slot) &&
-              catalog.items.find((i) => i.id === e.item_id)?.hands === 2))
-        ) {
-          e.equipped = false;
-          e.slot = "";
-        }
-      });
+    const existing = entries.find((e) => e.item_id === id && !e.equipped);
+    if (existing) existing.quantity++;
+    else
       entries.push({
         item_id: id,
         quantity: 1,
-        equipped: !!slot,
-        slot,
+        equipped: false,
+        slot: "",
       } as Entry);
-    }
     change({ ...build, purchases: entries });
   };
   return (
@@ -61,27 +46,34 @@ export function StartingShop({
       <h3>Стартовый магазин</h3>
       <p role="status" aria-label="Бюджет снаряжения">
         Капитал: {capital} · Потрачено: {spent} · Осталось: {capital - spent}{" "}
-        золота
+        {catalog.currency_label || "золота"}
       </p>
       <p>
-        Остаток золота сохранится у героя. Покупки с подходящим слотом
-        надеваются; смена класса может потребовать снять недоступную броню.
+        Остаток средств сохранится у героя. Покупки попадают в рюкзак. Экипируй
+        нужные предметы отдельно.
       </p>
       <div className="tt-catalog-grid">
         {catalog.items
-          .filter((i) => i.value > 0 && i.type !== "quest")
+          .filter(
+            (i) =>
+              i.starting_available !== false &&
+              i.value > 0 &&
+              i.type !== "quest",
+          )
           .map((i) => {
             const own = bought.find((e) => e.item_id === i.id);
             return (
               <article className="tt-feature" key={i.id}>
                 <h3>
-                  {i.name} · {i.value} золота
+                  {i.name} · {i.value} {catalog.currency_label || "золота"}
                 </h3>
                 <p>{i.description}</p>
                 {i.type === "weapon" && (
                   <p>
-                    Урон 1d{i.weapon_die} + модификатор ·{" "}
-                    {i.hands === 2 ? "две руки" : "одна рука"}
+                    Урон{" "}
+                    {i.components?.find((c) => c.type === "weapon")
+                      ?.damage_expression || `1d${i.weapon_die}`}{" "}
+                    + модификатор · {i.hands === 2 ? "две руки" : "одна рука"}
                   </p>
                 )}
                 {i.type === "armor" && (
@@ -98,7 +90,7 @@ export function StartingShop({
                     : "Не куплено"}
                 </p>
                 <button
-                  disabled={capital - spent < i.value || !!own?.equipped}
+                  disabled={capital - spent < i.value}
                   onClick={() => buy(i.id)}
                 >
                   Купить: {i.name}
@@ -122,8 +114,11 @@ export function StartingShop({
                       Вернуть: {i.name}
                     </button>
                     {!own.equipped &&
-                      own.quantity === 1 &&
-                      i.slots.length > 0 && (
+                      i.slots.length > 0 &&
+                      (i.type !== "armor" ||
+                        catalog.classes[build.character_class].armor?.includes(
+                          i.armor_category,
+                        )) && (
                         <button
                           onClick={() => {
                             const entries = bought.map((e) => ({ ...e }));
@@ -141,10 +136,8 @@ export function StartingShop({
                               if (
                                 e.slot === slot ||
                                 (i.hands === 2 &&
-                                  ["MAIN_HAND", "OFF_HAND"].includes(
-                                    e.slot || "",
-                                  )) ||
-                                (["MAIN_HAND", "OFF_HAND"].includes(slot) &&
+                                  hands.includes(e.slot || "")) ||
+                                (hands.includes(slot) &&
                                   catalog.items.find((i) => i.id === e.item_id)
                                     ?.hands === 2)
                               ) {
@@ -152,6 +145,13 @@ export function StartingShop({
                                 e.slot = "";
                               }
                             });
+                            if (entry.quantity > 1) {
+                              entries.push({
+                                ...entry,
+                                quantity: entry.quantity - 1,
+                              });
+                              entry.quantity = 1;
+                            }
                             entry.equipped = true;
                             entry.slot = slot;
                             change({ ...build, purchases: entries });

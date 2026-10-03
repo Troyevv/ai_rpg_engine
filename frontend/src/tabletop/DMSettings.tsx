@@ -1,3 +1,8 @@
+import {
+  ChoiceControl,
+  ChoiceOption,
+  SegmentedControl,
+} from "@/components/choice/ChoiceControl";
 import { useState } from "react";
 export type Settings = {
   check_frequency?: string;
@@ -20,22 +25,27 @@ export function DMSettings({
   provider: () => void;
 }) {
   const [s, set] = useState(value);
-  const select = (key: keyof Settings, label: string, options: string[][]) => (
-    <label>
-      {label}
-      <select
-        aria-label={label}
-        value={String(s[key])}
-        onChange={(e) => set({ ...s, [key]: e.target.value })}
-      >
-        {options.map(([v, l]) => (
-          <option key={v} value={v}>
-            {l}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
+  const select = (key: keyof Settings, label: string, options: string[][]) => {
+    const Control = ["strictness", "check_frequency", "length"].includes(key)
+      ? SegmentedControl
+      : ChoiceControl;
+    return (
+      <label>
+        {label}
+        <Control
+          aria-label={label}
+          value={String(s[key])}
+          onChange={(e) => set({ ...s, [key]: e.target.value })}
+        >
+          {options.map(([v, l]) => (
+            <ChoiceOption key={v} value={v}>
+              {l}
+            </ChoiceOption>
+          ))}
+        </Control>
+      </label>
+    );
+  };
   return (
     <section className="tt-panel tt-settings">
       <h1>AI-ведущий</h1>

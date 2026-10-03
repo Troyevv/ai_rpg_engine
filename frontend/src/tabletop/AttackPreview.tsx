@@ -1,3 +1,4 @@
+import { ChoiceControl, ChoiceOption } from "@/components/choice/ChoiceControl";
 import { useState } from "react";
 import { signed, type AttackPreview as Preview, type Command } from "./types";
 export function AttackPreview({
@@ -11,27 +12,31 @@ export function AttackPreview({
 }) {
   const [selection, setSelection] = useState("");
   const p =
-    previews.find((p) => `${p.weapon}:${p.target}` === selection) ||
-    previews[0];
+    previews.find(
+      (p) => `${p.weapon}:${p.target}:${p.mode || "single"}` === selection,
+    ) || previews[0];
   if (!p) return null;
   return (
     <section className="tt-combat-preview" aria-label="Предпросмотр атаки">
       <h3>Атака</h3>
       <label>
         Оружие и цель
-        <select
-          value={`${p.weapon}:${p.target}`}
+        <ChoiceControl
+          value={`${p.weapon}:${p.target}:${p.mode || "single"}`}
           onChange={(e) => setSelection(e.target.value)}
         >
           {previews.map((p) => (
-            <option
-              key={`${p.weapon}:${p.target}`}
-              value={`${p.weapon}:${p.target}`}
+            <ChoiceOption
+              key={`${p.weapon}:${p.target}:${p.mode || "single"}`}
+              value={`${p.weapon}:${p.target}:${p.mode || "single"}`}
             >
               {p.name} → {p.target_name}
-            </option>
+              {p.magazine
+                ? ` · ${{ single: "Одиночный", burst: "Очередь", automatic: "Автоматический" }[p.mode || "single"] || p.mode}`
+                : ""}
+            </ChoiceOption>
           ))}
-        </select>
+        </ChoiceControl>
       </label>
       <p>
         КД цели: {p.target_ac} · порог по сумме: {p.target_ac - p.modifier}+
@@ -46,10 +51,33 @@ export function AttackPreview({
             : "обычный бросок"}
       </p>
       <p>
-        Урон: 1d{p.die} {signed(p.damage_modifier)} · {p.damage.join("–")} ·
-        критический {p.critical_damage.join("–")}
+        Урон: {p.expression || `1d${p.die}`} {signed(p.damage_modifier)} ·{" "}
+        {p.damage.join("–")} · критический {p.critical_damage.join("–")}
       </p>
       <small>{p.damage_note}</small>
+      {p.damage_type && <p>Тип урона: {p.damage_type}</p>}
+      {p.resource_cost?.map((cost) => (
+        <p key={cost.resource_id}>
+          Расход: {cost.resource_id} · {cost.amount}
+        </p>
+      ))}
+      {p.magazine && (
+        <p>
+          Боеприпасы: {p.ammunition_remaining} / {p.magazine.capacity} · расход{" "}
+          {p.ammunition_cost}
+        </p>
+      )}
+      {p.magazine && (
+        <button
+          disabled={blocked}
+          onClick={() => act({ type: "reload", item_id: p.weapon })}
+        >
+          Перезарядить ·{" "}
+          {p.magazine.reload_cost === "BONUS_ACTION"
+            ? "бонусное действие"
+            : "действие"}
+        </button>
+      )}
       <p>
         Дистанция {p.distance} / {p.reach} футов · {p.cost}
       </p>
@@ -70,7 +98,12 @@ export function AttackPreview({
         className="tt-primary"
         disabled={blocked || !p.available}
         onClick={() =>
-          act({ type: "attack", weapon: p.weapon, target: p.target })
+          act({
+            type: "attack",
+            weapon: p.weapon,
+            target: p.target,
+            mode: p.mode || "single",
+          })
         }
       >
         Атаковать: {p.target_name}

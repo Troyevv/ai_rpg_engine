@@ -44,6 +44,18 @@ export function HeroSummary({ hero }: { hero: Sheet }) {
             </strong>
           </p>
         ))}
+      {Object.entries(hero.resource_definitions || {})
+        .filter(
+          ([id]) => !hero.feature_definitions.some((f) => f.resource === id),
+        )
+        .map(([id, r]) => (
+          <p key={id}>
+            {r.name}:{" "}
+            <strong>
+              {hero.resources[id] || 0}/{r.maximum}
+            </strong>
+          </p>
+        ))}
       {hero.concentration && (
         <p>
           Концентрация:{" "}
@@ -119,6 +131,16 @@ export function RollCard({
         {["check", "save", "spell_save", "concentration"].includes(
           p.purpose,
         ) && <small>Сложность: {p.dc ?? "скрыта"}</small>}
+        {p.modifier_breakdown && (
+          <dl>
+            {Object.entries(p.modifier_breakdown).map(([name, value]) => (
+              <div key={name}>
+                <dt>{name}</dt>
+                <dd>{signed(value)}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
         {p.advantage_sources?.length > 0 && (
           <p>
             {p.advantage > 0
@@ -241,6 +263,19 @@ export function CharacterSheet({
             {!a.progression.maximum && ` / ${a.progression.required_xp}`}
           </p>
           <p>{a.appearance}</p>
+          {!!a.background_contacts?.length && (
+            <p>Контакты: {a.background_contacts.join("; ")}</p>
+          )}
+          {a.background_knowledge?.map((text, i) => (
+            <p key={i}>{text}</p>
+          ))}
+          {Object.entries(a.background_reputation || {}).map(
+            ([name, value]) => (
+              <p key={name}>
+                Репутация · {name}: {signed(value)}
+              </p>
+            ),
+          )}
         </>
       ) : section === "Характеристики" ? (
         <div className="tt-stat-grid">

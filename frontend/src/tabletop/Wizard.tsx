@@ -1,3 +1,11 @@
+import { AuthoringProgress, useAuthoring } from "./AuthoringProgress";
+import { SettingEditor } from "./SettingEditor";
+import {
+  ChoiceControl,
+  ChoiceOption,
+  Stepper,
+  SegmentedControl,
+} from "@/components/choice/ChoiceControl";
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../api";
 import { CharacterCreator } from "./CharacterCreator";
@@ -21,6 +29,9 @@ export function Wizard({
   done: (game: Game) => void;
   cancel: () => void;
 }) {
+  const authoring = useAuthoring("campaign");
+  const [settingId, setSettingId] = useState<string | null>(null);
+  const [worldEditor, setWorldEditor] = useState(true);
   const [progressionMode, setProgressionMode] = useState("xp");
   const [creatorValid, setCreatorValid] = useState(false);
   const [catalog, setCatalog] = useState<Catalog | null>(null),
@@ -83,9 +94,14 @@ export function Wizard({
   }
   const choose = async (d: Draft) => {
     const c = await api<Catalog>(
-      `/tabletop/catalog?ruleset_id=${encodeURIComponent(String(d.definition.ruleset_id))}`,
+      `/tabletop/catalog?draft_id=${encodeURIComponent(d.id)}&ruleset_id=${encodeURIComponent(String(d.definition.ruleset_id))}${d.definition.setting_definition ? `&setting_id=${(d.definition.setting_definition as { id: string }).id}&setting_revision=${(d.definition.setting_definition as { revision: number }).revision}` : ""}`,
     );
-    if (catalog?.id !== c.id) setBuild(c.default_build);
+    if (
+      catalog?.id !== c.id ||
+      catalog?.setting_id !== c.setting_id ||
+      catalog?.setting_revision !== c.setting_revision
+    )
+      setBuild(c.default_build);
     setCatalog(c);
     setDraft(d);
     setDiagnostics(null);
@@ -103,6 +119,55 @@ export function Wizard({
   const cls = catalog.classes[build.character_class];
   return (
     <main className="tt-wizard tt-panel">
+      {step === 0 && (
+        <>
+          <button onClick={() => setWorldEditor(!worldEditor)}>
+            {worldEditor ? "Скрыть редактор мира" : "Создать или выбрать мир"}
+          </button>
+          {worldEditor && (
+            <SettingEditor
+              prefs={prefs}
+              apiKey={apiKey}
+              onUse={(world) => {
+                setSettingId(world.id);
+                setWorldEditor(false);
+                setOptions((o) => ({
+                  ...o,
+                  genre: world.definition.genre as string,
+                  setting: world.definition.description,
+                  technology: world.definition.technology_description as string,
+                  magic: world.definition.supernatural_description as string,
+                }));
+              }}
+            />
+          )}
+          {settingId && <p>Приключение использует выбранный мир.</p>}
+        </>
+      )}
+      <AuthoringProgress
+        job={authoring.job}
+        busy={busy}
+        resume={() =>
+          void run(async () =>
+            choose(
+              await authoring.generate<Draft>(
+                {
+                  ...authoring.job!.request,
+                  config: prefs.summary,
+                  api_key: apiKey,
+                },
+                true,
+              ),
+            ),
+          )
+        }
+      />
+      {!settingId && step === 0 && (
+        <p>
+          Сначала создай или выбери мир выше. Сохранённые черновики доступны без
+          повторной генерации.
+        </p>
+      )}
       <span className="tt-eyebrow">Новая кампания · {step + 1} / 4</span>
       <h1>
         {
@@ -164,7 +229,7 @@ export function Wizard({
               value={options.idea}
               onChange={(e) => change("idea", e.target.value)}
               maxLength={6000}
-              placeholder="Мрачное фэнтези. Я бывший охотник на чудовищ. В шахтёрском городе пропадают люди…"
+              placeholder="Кто герой, что произошло и с какой ситуации начинается приключение?"
             />
           </label>
           <label className="tt-toggle">
@@ -188,36 +253,41 @@ export function Wizard({
                 adventure_type: "Тип приключения",
                 starting_situation: "Стартовая ситуация",
                 wishes: "Пожелания",
-              }).map(([key, label]) => (
-                <label key={key}>
-                  {label}
-                  <input
-                    value={String(options[key as keyof typeof options])}
-                    maxLength={key === "wishes" ? 3000 : 120}
-                    onChange={(e) => change(key, e.target.value)}
-                  />
-                </label>
-              ))}
+              })
+                .filter(
+                  ([key]) =>
+                    !["genre", "setting", "technology", "magic"].includes(key),
+                )
+                .map(([key, label]) => (
+                  <label key={key}>
+                    {label}
+                    <input
+                      value={String(options[key as keyof typeof options])}
+                      maxLength={key === "wishes" ? 3000 : 120}
+                      onChange={(e) => change(key, e.target.value)}
+                    />
+                  </label>
+                ))}
               <label>
                 Размер партии
-                <input
-                  type="number"
+                <Stepper
+                  label="Размер партии"
                   min={1}
                   max={4}
                   value={options.party_size}
-                  onChange={(e) => change("party_size", Number(e.target.value))}
+                  onChange={(value) => change("party_size", value)}
                 />
               </label>
               <label>
                 Сложность
-                <select
+                <SegmentedControl
                   value={options.difficulty}
                   onChange={(e) => change("difficulty", e.target.value)}
                 >
-                  <option value="EASY">Легко</option>
-                  <option value="MEDIUM">Средне</option>
-                  <option value="HARD">Сложно</option>
-                </select>
+                  <ChoiceOption value="EASY">Легко</ChoiceOption>
+                  <ChoiceOption value="MEDIUM">Средне</ChoiceOption>
+                  <ChoiceOption value="HARD">Сложно</ChoiceOption>
+                </SegmentedControl>
               </label>
             </div>
           )}
@@ -229,16 +299,20 @@ export function Wizard({
           <button
             className="tt-primary"
             disabled={
-              busy || options.idea.trim().length < 3 || !prefs.game.model
+              busy ||
+              !settingId ||
+              options.idea.trim().length < 3 ||
+              !prefs.summary.model
             }
             onClick={() =>
               void run(async () =>
                 choose(
-                  await api<Draft>("/tabletop/generate", {
+                  await authoring.generate<Draft>({
                     options,
+                    setting_id: settingId,
                     config: {
-                      ...prefs.game,
-                      max_tokens: Math.max(10000, prefs.game.max_tokens),
+                      ...prefs.summary,
+                      max_tokens: Math.max(10000, prefs.summary.max_tokens),
                     },
                     api_key: apiKey || undefined,
                   }),
@@ -251,7 +325,7 @@ export function Wizard({
           {!!drafts.length && (
             <label>
               Продолжить черновик
-              <select
+              <ChoiceControl
                 defaultValue=""
                 onChange={(e) =>
                   e.target.value &&
@@ -262,14 +336,14 @@ export function Wizard({
                   )
                 }
               >
-                <option value="">Выбрать</option>
+                <ChoiceOption value="">Выбрать</ChoiceOption>
                 {drafts.map((d) => (
-                  <option key={d.id} value={d.id}>
+                  <ChoiceOption key={d.id} value={d.id}>
                     {d.name}
                     {d.generation_status === "INVALID" ? " (ошибки)" : ""}
-                  </option>
+                  </ChoiceOption>
                 ))}
-              </select>
+              </ChoiceControl>
             </label>
           )}
           <details>
@@ -379,14 +453,18 @@ export function Wizard({
       {step === 3 && (
         <label>
           Развитие персонажа
-          <select
+          <ChoiceControl
             aria-label="Развитие персонажа"
             value={progressionMode}
             onChange={(e) => setProgressionMode(e.target.value)}
           >
-            <option value="xp">Опыт за завершённые задания и бои</option>
-            <option value="milestone">Вехи за завершённые задания</option>
-          </select>
+            <ChoiceOption value="xp">
+              Опыт за завершённые задания и бои
+            </ChoiceOption>
+            <ChoiceOption value="milestone">
+              Вехи за завершённые задания
+            </ChoiceOption>
+          </ChoiceControl>
         </label>
       )}
       <footer>
@@ -411,6 +489,9 @@ export function Wizard({
                   await api("/tabletop/build/validate", {
                     build,
                     ruleset_id: catalog.id,
+                    setting_id: catalog.setting_id,
+                    setting_revision: catalog.setting_revision,
+                    draft_id: catalog.draft_id,
                   });
                 if (step < 3) setStep(step + 1);
                 else if (draft)

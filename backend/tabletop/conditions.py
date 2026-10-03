@@ -2,7 +2,7 @@
 
 from typing import Literal
 from pydantic import Field
-from .definitions import Model
+from .contracts import Model
 
 
 class ConditionDefinition(Model):
@@ -65,6 +65,11 @@ class ConditionEngine:
         cls, actor, rules, purpose, target=None, ability="", distance=5, skill=""
     ):
         sources = []
+        from .effects import EffectsEngine
+
+        for key, value in (("advantage", 1), ("disadvantage", -1)):
+            if EffectsEngine.bonus(actor, key, purpose):
+                sources.append({"name": "Эффект способности", "value": value})
         if skill == "stealth" and actor.equipment_bonuses.get("stealth_disadvantage"):
             sources.append({"name": "Тяжёлая броня", "value": -1})
         for c in cls.definitions(actor, rules):

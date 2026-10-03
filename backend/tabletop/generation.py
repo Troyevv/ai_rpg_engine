@@ -6,11 +6,13 @@ from .validation import CampaignValidationError, ValidationIssue, schema_error
 from .definitions import CampaignDefinition, CampaignMutation
 from .compiler import CampaignCompiler
 from .catalog import load_ruleset
+from .authoring import stage_schema, AuthoringCompiler
 
 
 def authoring_catalog(rules):
     # Authoring needs level-one choices, not all twenty advancement tables.
     data = rules.model_dump()
+    data["items"] = [item.model_dump(exclude_defaults=True) for item in rules.items]
     return {
         k: data[k]
         for k in (
@@ -94,7 +96,18 @@ class CampaignGenerator:
             "Object contents содержит InventoryEntry. Quest required_item — ID реально доступного предмета. "
             + REFERENCE_CONTRACT
             + "\nСхема: "
-            + json.dumps(CampaignDefinition.model_json_schema(), ensure_ascii=False)
+            + json.dumps(
+                stage_schema(
+                    "CampaignAuthor",
+                    CampaignDefinition,
+                    [
+                        k
+                        for k in CampaignDefinition.model_fields
+                        if k != "setting_definition"
+                    ],
+                ).model_json_schema(),
+                ensure_ascii=False,
+            )
         )
         raw = self.dm.call(
             draft_id,
@@ -115,9 +128,24 @@ class CampaignGenerator:
             True,
         )
         try:
-            definition = CampaignDefinition.model_validate_json(raw)
+            schema = stage_schema(
+                "CampaignAuthor",
+                CampaignDefinition,
+                [
+                    k
+                    for k in CampaignDefinition.model_fields
+                    if k != "setting_definition"
+                ],
+            )
+            definition = CampaignDefinition.model_validate(
+                AuthoringCompiler.stage(schema.model_validate_json(raw, strict=True))
+            )
         except ValidationError as exc:
-            raise schema_error(exc) from None
+            from .authoring import authoring_issues
+
+            raise CampaignValidationError(
+                authoring_issues(exc, raw, draft_id, "schema"), stage="schema"
+            ) from None
         try:
             definition = CampaignCompiler().validate(definition)
             if (

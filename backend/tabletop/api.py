@@ -54,6 +54,8 @@ class RollRequest(Request):
 
 
 class GenerateRequest(Credential):
+    authoring_id: str | None = None
+    setting_id: str | None = None
     config: ModelConfig
     options: GenerationOptions
 
@@ -68,6 +70,9 @@ class NewGameRequest(NewGame, Credential):
 
 
 class BuildRequest(Credential):
+    draft_id: str | None = None
+    setting_id: str | None = None
+    setting_revision: int | None = None
     build: CharacterBuild
     ruleset_id: str = "d20-fantasy-v2"
 
@@ -162,13 +167,45 @@ def install(app, shared_repo, credentials):
             },
         )
 
+    from .setting_api import install as install_setting_api
+
+    install_setting_api(router, repo, agent, validation_response)
+
+    def selected_rules(ruleset_id, setting_id=None, revision=None, draft_id=None):
+        if draft_id:
+            from .content_registry import campaign_rules
+
+            return campaign_rules(
+                CampaignDefinition.model_validate(repo.draft(draft_id)["definition"])
+            )
+        if setting_id:
+            from .setting_repository import SettingRepository
+            from .content_registry import setting_rules
+
+            return setting_rules(
+                SettingRepository(repo).get(setting_id, revision)["definition"]
+            )
+        return load_ruleset(ruleset_id)
+
     @router.get("/catalog")
-    def catalog(ruleset_id: str = "d20-fantasy-v2"):
-        rules = load_ruleset(ruleset_id)
+    def catalog(
+        ruleset_id: str = "d20-fantasy-v2",
+        setting_id: str | None = None,
+        setting_revision: int | None = None,
+        draft_id: str | None = None,
+    ):
+        rules = selected_rules(ruleset_id, setting_id, setting_revision, draft_id)
+        cls = "fighter" if "fighter" in rules.classes else next(iter(rules.classes))
+        entry = rules.classes[cls]
         default = CharacterBuild(
-            feature_choices=rules.classes["fighter"].get("feature_choices", [])[
-                : rules.classes["fighter"].get("feature_choice_count", 0)
-            ]
+            character_class=cls,
+            species=next(iter(rules.species)),
+            background=next(iter(rules.backgrounds)),
+            skills=entry["skills"][: entry["skill_count"]],
+            equipment=entry["equipment"],
+            feature_choices=entry.get("feature_choices", [])[
+                : entry.get("feature_choice_count", 0)
+            ],
         )
         if rules.allocation:
             default.ability_method = "allocation"
@@ -178,6 +215,9 @@ def install(app, shared_repo, credentials):
         return {
             **rules.model_dump(),
             "default_build": default.model_dump(),
+            "draft_id": draft_id,
+            "setting_id": setting_id,
+            "setting_revision": setting_revision,
             "developer_mode": app.state.tabletop_debug,
         }
 
@@ -185,7 +225,12 @@ def install(app, shared_repo, credentials):
     def build(body: BuildRequest):
         from .rules import RulesEngine
 
-        RulesEngine().validate_build(body.build, load_ruleset(body.ruleset_id))
+        RulesEngine().validate_build(
+            body.build,
+            selected_rules(
+                body.ruleset_id, body.setting_id, body.setting_revision, body.draft_id
+            ),
+        )
         return {"valid": True}
 
     @router.post("/build/preview")
@@ -193,7 +238,9 @@ def install(app, shared_repo, credentials):
         from .definitions import CharacterDefinition
         from .rules import RulesEngine
 
-        rules = load_ruleset(body.ruleset_id)
+        rules = selected_rules(
+            body.ruleset_id, body.setting_id, body.setting_revision, body.draft_id
+        )
         engine = RulesEngine()
         actor = engine.build_character(
             CharacterDefinition(
@@ -206,7 +253,7 @@ def install(app, shared_repo, credentials):
             rules,
             preview=True,
         )
-        engine.equipment_stats(actor, {i.id: i for i in rules.items})
+        engine.equipment_stats(actor, {i.id: i for i in rules.items}, rules)
         return {
             "sheet": actor.model_dump(),
             "attacks": {k: engine.attack_modifier(actor, k) for k in actor.attacks},
@@ -271,29 +318,65 @@ def install(app, shared_repo, credentials):
 
     @router.post("/generate")
     def generate(body: GenerateRequest):
-        did = uuid4().hex
+        from .authoring_jobs import AuthoringJobs
+        from .setting_repository import SettingRepository
+        from .campaign_generation import CampaignGenerator2, CampaignOptions
+        from .content import SettingDefinition
+
+        jobs = AuthoringJobs(repo)
+        did = body.authoring_id or uuid4().hex
+        request = body.model_dump(exclude={"config", "api_key", "authoring_id"})
         try:
-            definition = CampaignGenerator(agent(body)).generate(did, body.options)
+            with jobs.run(did, "campaign", request) as checkpoint:
+                if checkpoint.result is not None:
+                    return checkpoint.result
+                if body.setting_id:
+                    source = checkpoint.cached("_source")
+                    if source is None:
+                        source = SettingRepository(repo).get(body.setting_id)
+                        checkpoint.save("_source", source)
+                    definition = CampaignGenerator2(
+                        agent(body), checkpoint=checkpoint
+                    ).generate(
+                        did,
+                        SettingDefinition.model_validate(source["definition"]),
+                        CampaignOptions.model_validate(
+                            {
+                                k: v
+                                for k, v in body.options.model_dump().items()
+                                if k in CampaignOptions.model_fields
+                            }
+                        ),
+                    )
+                else:
+                    definition = CampaignGenerator(agent(body)).generate(
+                        did, body.options
+                    )
+                result = repo.save_draft(definition, source="generated")
+                with repo.connect() as db:
+                    db.execute(
+                        "UPDATE tabletop_requests SET game_id=? WHERE game_id=?",
+                        (result["id"], did),
+                    )
+                result = repo.draft(result["id"])
+                checkpoint.complete(result)
+                return result
         except CampaignValidationError as exc:
             invalid_id = None
             if exc.definition is not None:
                 invalid_id = repo.save_invalid_draft(
                     exc.definition, exc.issues, exc.stage, did
                 )
-            return validation_response(exc, invalid_id)
+            response = validation_response(exc, invalid_id)
+            payload = json.loads(response.body)
+            payload["authoring_id"] = did
+            return JSONResponse(status_code=409, content=payload)
         except ValueError:
             raise
         except Exception:
             raise ValueError(
                 "Генерация недоступна. Проверь модель и соединение."
             ) from None
-        result = repo.save_draft(definition, source="generated")
-        with repo.connect() as db:
-            db.execute(
-                "UPDATE tabletop_requests SET game_id=? WHERE game_id=?",
-                (result["id"], did),
-            )
-        return repo.draft(result["id"])
 
     @router.get("/games")
     def games():

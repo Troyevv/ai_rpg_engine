@@ -14,6 +14,7 @@ from backend.tabletop.definitions import (
     InventoryEntry,
 )
 from backend.tabletop.generation import CampaignGenerator
+from backend.tabletop.authoring import authoring_payload
 from backend.tabletop.repository import TabletopRepository
 from backend.tabletop.validation import (
     CampaignReferenceValidator,
@@ -173,7 +174,7 @@ def test_generator_contract_and_single_call_without_repair(invalid):
     else:
         d.characters[1].relationships["traveler"] = 10
     dm = Mock(config=CONFIG)
-    dm.call.return_value = d.model_dump_json()
+    dm.call.return_value = json.dumps(authoring_payload(d.model_dump()))
     generator = CampaignGenerator(dm)
     if invalid:
         with pytest.raises(CampaignValidationError) as caught:
@@ -192,7 +193,9 @@ def test_generator_contract_and_single_call_without_repair(invalid):
 def generate(c, d):
     with patch(
         "llm.chat_stream",
-        return_value=iter([d if isinstance(d, str) else d.model_dump_json()]),
+        return_value=iter(
+            [d if isinstance(d, str) else json.dumps(authoring_payload(d.model_dump()))]
+        ),
     ) as llm:
         response = c.post(
             "/api/tabletop/generate",

@@ -94,6 +94,16 @@ test("Gameplay 1.0: builder, five check domains, combat and equipment restart", 
     await click("Настольная RPG");
     await click("Создать кампанию");
     await page
+      .getByLabel("Описание нового мира")
+      .fill("Город стеклянных архивов: голоса застывают в приливах.");
+    await click("Создать структуру мира");
+    await page
+      .getByRole("button", {
+        name: "Подтвердить мир и создать кампанию",
+        exact: true,
+      })
+      .click();
+    await page
       .getByLabel("Идея приключения", { exact: true })
       .fill("gameplay acceptance");
     await click("Сгенерировать мир");
@@ -142,7 +152,7 @@ test("Gameplay 1.0: builder, five check domains, combat and equipment restart", 
     await click("Купить: Кинжал");
     await click("Купить: Лечебное зелье");
     await click("Купить: Кольчуга");
-    await click("Снять: Кольчуга");
+    await click("Надеть: Кинжал");
     await click("Надеть: Кожаная броня");
     await expect(page.getByLabel("Бюджет снаряжения")).toContainText(
       "Осталось: 35",
