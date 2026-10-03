@@ -1,3 +1,4 @@
+from runtime_v3_fixture import wire
 from canonical_fixture import canonical
 import json
 from pathlib import Path
@@ -68,7 +69,7 @@ def test_deepseek_game_retry_and_no_persisted_credentials(tmp_path):
     with patch('engine.launch'):
         engine.retry(storage, job, config, api_key='new-private-key')
     with patch('engine.find_loaded_model', side_effect=AssertionError('must not call LM Studio')), \
-         patch('engine.chat_stream', return_value=iter([json.dumps(canonical(result()))])) as retry_stream:
+         patch('engine.chat_stream', return_value=iter([json.dumps(wire(canonical(result()),NARRATIVE,storage.get_snapshot(save)))])) as retry_stream:
         engine.run_job(storage.path, job, engine.Worker(api_key='new-private-key'))
     assert retry_stream.call_count == 1
     assert retry_stream.call_args.kwargs['api_key'] == 'new-private-key'

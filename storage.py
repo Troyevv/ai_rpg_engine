@@ -45,6 +45,8 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
         self.init_documents()
         from backend.repositories.living_world import migrate
         migrate(self)
+        from backend.runtime_v3.repository import migrate_database
+        migrate_database(self)
 
     @contextmanager
     def connect(self):
@@ -98,10 +100,12 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             raise ValueError('Название прохождения должно содержать от 1 до 120 символов.')
         world = self.get_world(world_id)
         with self.connect() as db:
+            from backend.runtime_v3.repository import migrate_snapshot
+            snapshot,_=migrate_snapshot(db,world['state'])
             sid = db.execute('INSERT INTO saves(world_id,name,state_json) VALUES(?,?,?)',
-                              (world_id, name, json.dumps(world['state'], ensure_ascii=False))).lastrowid
+                              (world_id, name, json.dumps(snapshot, ensure_ascii=False))).lastrowid
             from backend.repositories.living_world import project
-            project(db,sid,world['state'])
+            project(db,sid,snapshot)
             return sid
 
     def list_saves(self, world_id):
@@ -115,8 +119,14 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             if row is None:
                 raise ValueError('Прохождение не найдено.')
             result = dict(row)
-            from backend.services.world import normalize
-            result['state'] = normalize(json.loads(result.pop('state_json')))
+            from backend.runtime_v3.selectors import ui_view
+            from backend.runtime_v3.repository import read_history
+            snapshot=json.loads(result.pop('state_json'))
+            from backend.runtime_v3.models import assert_world_state_v3_invariants
+            assert_world_state_v3_invariants(snapshot['world_state'])
+            history,warnings=read_history(db,snapshot.get('history_head'))
+            result['state']=ui_view(snapshot,history)
+            result['history_warnings']=warnings
             return result
 
     def list_turns(self, save_id):
@@ -134,16 +144,28 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             if expected_revision is not None and row['revision'] != expected_revision:
                 raise ValueError('Сейв изменился. Обнови сцену.')
             state = json.loads(row['state_json'])
-            known = {c['id'] for c in state['characters']}
-            if any(cid not in known for cid in metadata['present_ids']):
-                raise ValueError('В сцене указан неизвестный персонаж.')
-            from backend.services.world import normalize, record_scene
-            from backend.services.timeline import advance
+            from backend.runtime_v3.models import Location, identity, assert_world_state_v3_invariants
+            from backend.services.timeline import parse_time
             from backend.repositories.living_world import project
-            state = normalize(state)
-            advance(state,state,metadata)
-            state['scene_meta'] = metadata
-            record_scene(state,{},'manual','background' if state['controlled_actor_id'] is None else 'turn')
+            world=state['world_state'];before=json.loads(row['state_json'])['world_state']
+            lid=identity('location',metadata['location'].strip().casefold())
+            world['locations'].setdefault(lid,Location(id=lid,name=metadata['location']).model_dump())
+            present=metadata['present_ids']
+            if any(cid not in world['characters'] for cid in present):raise ValueError('Неизвестный персонаж.')
+            world['camera'].update(location_id=lid,present_character_ids=present)
+            for cid in present:world['characters'][cid]['location_id']=lid
+            minute=parse_time(metadata['time'],world['meta']['world_time'])
+            if minute is not None:world['meta']['world_time']=minute
+            assert_world_state_v3_invariants(world,before)
             project(db,save_id,state)
             db.execute("UPDATE saves SET state_json=?, revision=revision+1, updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
                        (json.dumps(state, ensure_ascii=False), save_id))
+
+    def get_snapshot(self, save_id):
+        with self.connect() as db:
+            row=db.execute('SELECT state_json FROM saves WHERE id=?',(save_id,)).fetchone()
+            if not row:raise ValueError('Прохождение не найдено.')
+            snapshot=json.loads(row[0])
+            from backend.runtime_v3.models import assert_world_state_v3_invariants
+            assert_world_state_v3_invariants(snapshot['world_state'])
+            return snapshot

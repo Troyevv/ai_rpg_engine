@@ -33,7 +33,7 @@ def test_repeated_turns_advance_and_regeneration_does_not_double_time(db):
     jid=repo.begin_job(sid,'','start',CONFIG);run(repo,jid)
     start=current_time(repo.get_save(sid)['state'])
     for i in range(3):
-        change=result();change['scene']['time']=label(start+i)
+        change=result();change['scene']['time']=label(start+i);change['scene']['elapsed_minutes']=1
         jid=repo.begin_job(sid,'Говорить','turn',CONFIG);run(repo,jid,change)
         assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
         assert current_time(repo.get_save(sid)['state'])==start+i+1

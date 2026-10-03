@@ -1,3 +1,4 @@
+from runtime_v3_fixture import wire
 from canonical_fixture import canonical
 import json
 import pytest
@@ -55,7 +56,7 @@ def test_motivation_does_not_rewrite_generation_snapshots(api):
     client,app=api
     _,save=new_save(client)
     def stream(**kwargs):
-        yield json.dumps(canonical(result()),ensure_ascii=False) if kwargs.get('response_format') else NARRATIVE
+        yield json.dumps(wire(canonical(result()),NARRATIVE,app.state.repository.get_snapshot(save['id'])),ensure_ascii=False) if kwargs.get('response_format') else NARRATIVE
     with patch('engine.chat_stream',side_effect=stream):
         job=client.post(f"/api/saves/{save['id']}/turns",json={'kind':'start','revision':save['revision'],'config':REMOTE,'api_key':'test'}).json()
         assert wait_job(client,job['id'])['status']=='saved'

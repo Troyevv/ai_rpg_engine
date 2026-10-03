@@ -66,24 +66,27 @@ def test_versions_dedup_and_independent_saves(tmp_path):
     assert db.get_world(world_id)['source_md'] == summary()
 
 
-def test_existing_sqlite_save_projects_old_card_without_changing_stored_data(tmp_path):
+def test_existing_sqlite_save_migrates_old_card_once(tmp_path):
     import json
     from backend.services.world import CARD_FIELDS
     db=Storage(tmp_path/'existing.sqlite3')
     wid=db.save_world('Старый мир',summary())
     sid=db.create_save(wid,'Первое прохождение')
     with db.connect() as conn:
-        raw=json.loads(conn.execute('SELECT state_json FROM saves WHERE id=?',(sid,)).fetchone()[0])
+        raw=db.get_world(wid)['state']
         card=raw['characters'][0]['fields'];card['Суть']=card.pop('Характер')
         for key in CARD_FIELDS:
             if key not in ('Статус','Внешность','Характер'):card.pop(key,None)
         conn.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(raw,ensure_ascii=False),sid))
+    with db.connect() as conn:conn.execute("DELETE FROM schema_migrations WHERE name='runtime_v3'")
+    db=Storage(db.path)
     loaded=db.get_save(sid)['state']['characters'][0]['fields']
     assert loaded['Характер']==card['Суть']
     assert all(loaded[key]=='' for key in CARD_FIELDS if key not in ('Статус','Внешность','Характер'))
     with db.connect() as conn:
         unchanged=json.loads(conn.execute('SELECT state_json FROM saves WHERE id=?',(sid,)).fetchone()[0])
-    assert unchanged==raw
+    assert unchanged['schema_version']==3
+    assert Storage(db.path).get_snapshot(sid)==unchanged
 
 
 def test_invalid_import_does_not_write(tmp_path):

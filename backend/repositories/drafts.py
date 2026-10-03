@@ -105,6 +105,8 @@ class DraftStorage:
                 version=db.execute('SELECT COALESCE(MAX(version),0)+1 FROM worlds WHERE name_key=?',(name.casefold(),)).fetchone()[0]
                 world_id=db.execute('INSERT INTO worlds(name,name_key,version,source_md,digest) VALUES(?,?,?,?,?)',(name,name.casefold(),version,source,digest)).lastrowid
                 db.executemany('INSERT INTO world_parts VALUES(?,?,?)',[(world_id,k,dump(v)) for k,v in state.items()])
+            from backend.runtime_v3.repository import migrate_snapshot
+            state,_=migrate_snapshot(db,state)
             sid=db.execute('INSERT INTO saves(world_id,name,state_json) VALUES(?,?,?)',(world_id,'Новое прохождение',dump(state))).lastrowid
             project(db,sid,state)
             result={'world':world_id,'save':sid,'version_id':version_id}

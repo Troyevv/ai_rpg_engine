@@ -30,7 +30,7 @@ test("persistent key, thinking, memory, visible player actions, variants and acc
  await diagnostics(page);
  await expect(page.getByRole('dialog')).toContainText('Cache');
  await expect(page.getByRole('dialog')).toContainText('low');
- await expect(page.getByRole('dialog')).toContainText('Текущая сцена');
+ await expect(page.getByRole('dialog')).toContainText('Текущее состояние / GM-only');
  await page.getByRole('button',{name:'Показать архив откатов'}).click();
  await expect(page.getByRole('dialog')).toContainText('variant_switch');
  await page.getByRole('button',{name:'Закрыть',exact:true}).click();

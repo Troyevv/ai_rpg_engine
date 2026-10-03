@@ -1,3 +1,4 @@
+from runtime_v3_fixture import wire
 import json
 from copy import deepcopy
 from threading import Event
@@ -7,10 +8,9 @@ import pytest
 import engine
 from canonical_fixture import canonical, fixture_sequence
 from backend.repositories.preparation import Repository
-from backend.services.pov import apply_scene_policy, controlled
+from backend.services.pov import controlled
 from backend.services.memory import compact
 from context_builder import build_context
-from state_updates import apply_updates
 from test_engine import db, CONFIG, NARRATIVE, result, run
 from test_runtime import generate
 from test_worlds import summary
@@ -29,7 +29,7 @@ def background():
 def generate_background(storage,sid,kind='background'):
     job=storage.begin_job(sid,'',kind,CONFIG)
     def stream(**kw):
-        yield json.dumps(canonical(background(),fixture_sequence(storage,job)),ensure_ascii=False) if kw.get('response_format') else SECRET
+        yield json.dumps(wire(canonical(background(),fixture_sequence(storage,job)),SECRET,json.loads(storage.get_job(job)['before_json'])),ensure_ascii=False) if kw.get('response_format') else SECRET
     with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=stream):
         engine.run_job(storage.path,job,engine.Worker())
     assert storage.get_job(job)['status']=='saved',storage.get_job(job)['error']
@@ -90,12 +90,16 @@ def test_switch_actor_roles_and_stale_revision(db):
     with pytest.raises(ValueError,match='изменился'):
         storage.switch_actor(sid,'character_1',state['revision'])
     payload=result();payload['characters']=[{'id':'character_2','goal':'Новая цель','evidence':NARRATIVE}]
-    with pytest.raises(ValueError):
-        apply_updates(switched['state'],payload,NARRATIVE,'',1)
+    from backend.runtime_v3.resolver import StateResolver
+    snapshot=storage.get_snapshot(sid)
+    resolved=StateResolver(snapshot['world_state'],NARRATIVE,'').resolve(wire(payload,NARRATIVE,snapshot))
+    assert resolved.state['characters']['character_2']['goals']==snapshot['world_state']['characters']['character_2']['goals']
+    assert any(w.get('field')=='goals' for w in resolved.warnings)
     payload['characters'][0]['id']='character_1'
-    apply_updates(switched['state'],payload,NARRATIVE,'',1)
+    resolved=StateResolver(snapshot['world_state'],NARRATIVE,'').resolve(wire(payload,NARRATIVE,snapshot))
+    assert resolved.state['characters']['character_1']['goals']==['Новая цель']
     storage.switch_actor(sid,'character_1',switched['revision'])
-    assert storage.get_save(sid)['state']['scene']==state['state']['scene']
+    assert storage.get_snapshot(sid)['world_state']['characters']['character_1']['location_id']==storage.get_snapshot(sid)['world_state']['camera']['location_id']
 
 
 def test_backstage_is_canonical_and_regenerates_without_leaking_history(db):
@@ -107,13 +111,13 @@ def test_backstage_is_canonical_and_regenerates_without_leaking_history(db):
     assert turn['kind']=='background' and turn['pov_actor_id'] is None
     assert json.loads(turn['audience_json'])==['character_3','character_4']
     assert state['scene']=='Тайная встреча у подвала.' and state['world_clock']['last_event_time']=='День 1 (Пн) 18:25'
-    assert state['actor_scenes']['character_1']['text']==scene
+    assert json.loads(storage.get_job(original)['before_json'])['world_state']['camera']['situation']==scene
     assert controlled(state) is None
     assert state['facts'][-1]['known_by']==['character_3','character_4']
     assert state['relationships'][-1]['change']['direction']=='up'
-    messages=build_context(state,storage.list_turns(sid),'Продолжить','turn',32768,2000)
+    messages=build_context(storage.get_snapshot(sid),storage.list_turns(sid),'Продолжить','turn',32768,2000)
     assert SECRET not in [m['content'] for m in messages if m['role']=='assistant']
-    pov=next(m['content'] for m in messages if m['content'].startswith('POV и знания'))
+    pov=next(m['content'] for m in messages if m['content'].startswith('Знания POV'))
     assert 'Тайный ключ передан.' not in pov
     newer=generate_background(storage,sid,'regenerate')
     assert storage.get_job(original)['context_json']==storage.get_job(newer)['context_json']
@@ -125,16 +129,12 @@ def test_backstage_is_canonical_and_regenerates_without_leaking_history(db):
     assert storage.get_save(sid)['state']['controlled_actor_id']=='character_3'
 
 
-@pytest.mark.parametrize('violation',['participant','knowledge','reaction'])
-def test_backstage_rejects_absent_actor_changes(db,violation):
-    storage,_,sid=db
-    before=storage.get_save(sid)['state'];p=background()
-    if violation=='participant':p['scene']['present_ids'].append('character_1')
-    if violation=='knowledge':p['facts'][0]['known_by'].append('character_1')
-    if violation=='reaction':p['relationships'][0]['source_id']='character_1'
-    after,_,changes=apply_updates(before,p,SECRET,'',0,kind='background')
-    with pytest.raises(ValueError):apply_scene_policy(before,after,changes,'background')
-    assert storage.get_save(sid)['state']==before
+def test_default_world_camera_excludes_protagonist(db):
+    from backend.runtime_v3.camera import observe
+    storage,_,sid=db;snapshot=storage.get_snapshot(sid)
+    with pytest.raises(ValueError):observe(snapshot,actor_id='character_1')
+    explicit=observe(snapshot,actor_id='character_1',allow_protagonist=True)
+    assert explicit['world_state']['camera']['controlled_actor_id'] is None
 
 
 def test_memory_compaction_scopes_inputs_to_witnesses(db):

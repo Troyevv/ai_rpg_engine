@@ -32,12 +32,36 @@ NARRATIVE = '''Персонаж 1 подвигает свободный стул
 
 def stream(**kwargs):
     full='\n'.join(m['content'] for m in kwargs['messages'])
-    observer='Тип хода: background' in full or 'Режим observer:' in full
+    observer='Тип хода: background' in full or 'Режим observer:' in full or 'mode=observer' in full
     if 'Каноническая JSON Schema WorldState' in full:
         from test_draft_world import fixture
         value=json.dumps(fixture(),ensure_ascii=False)
     elif 'Ты редактор RPG' in full:
         value=json.dumps({'value':'Обновлённая внешность'},ensure_ascii=False)
+    elif kwargs.get('response_format') and 'RawTurnResult v3' in full:
+        block=next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only'))
+        state=json.loads(block.split('\n',1)[1]);camera=state['camera']
+        observer=camera['mode']=='observer'
+        task=json.loads(next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод')).split('\n',1)[1])
+        present=camera['present_character_ids']
+        location_id=camera['location_id'];locations=[]
+        if task['kind']=='start' or (observer and location_id is None):
+            from backend.runtime_v3.models import identity
+            place='Подвал' if observer else 'Кухня'
+            location_id=identity('location',place.casefold())
+            present=['character_3','character_4'] if observer and 'character_3' in present else present if observer else ['character_1','character_2']
+            if location_id not in state['locations']:locations=[dict(id=location_id,name=place,evidence=SECRET if observer else NARRATIVE)]
+        payload=dict(locations=locations,final_scene=dict(location_id=location_id,
+            present_character_ids=present,situation='Тайная встреча.' if observer else 'Разговор на кухне.',elapsed_minutes=1),
+            choices=[] if observer else [dict(action='Действие '+str(i),speech='Реплика '+str(i)) for i in range(6)])
+        evidence=SECRET if observer else 'Садись, поговорим'
+        fid='key_'+sha256(full.encode()).hexdigest()[:12]
+        payload['events']=[dict(id='event',text='Передача ключа.' if observer else 'Собеседник предложил поговорить.',
+            participants=present,witnesses=present,fact_ids=[fid] if observer else [],medium='conversation',evidence=evidence)]
+        if observer:
+            payload['facts']=[dict(id=fid,text='Тайный ключ передан.',character_ids=present,evidence=evidence)]
+            payload['knowledge_gained']=[dict(actor_id=cid,fact_id=fid,source_event_id='event',evidence=evidence) for cid in present]
+        value=json.dumps(payload,ensure_ascii=False)
     elif kwargs.get('response_format'):
         payload=background() if observer else result()
         match=re.search(r'Единое время мира: (День \d+(?: \([А-Яа-я]+\))? \d{2}:\d{2})',full)

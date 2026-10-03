@@ -9,6 +9,16 @@ from backend.services.pov import protagonist,visible,actor_view
 
 
 def compact(storage, job, state, history, config, generate, cancelled):
+    if state.get('schema_version')==3:
+        from backend.runtime_v3.selectors import ui_view
+        projection=ui_view(state)
+        projection['memory_maintenance']=deepcopy(state.get('memory_maintenance',{}))
+        compacted=compact(storage,job,projection,history,config,generate,cancelled)
+        result=deepcopy(state)
+        result['memory']=compacted.get('memory',{})
+        if 'memory_maintenance' in compacted:result['memory_maintenance']=compacted['memory_maintenance']
+        else:result.pop('memory_maintenance',None)
+        return result
     state=deepcopy(state)
     sequence=max((t['sequence'] for t in history),default=-1)
     if sequence<state.get('memory_maintenance',{}).get('retry_after_sequence',-1):

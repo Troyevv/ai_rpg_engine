@@ -6,8 +6,8 @@ from unittest.mock import patch
 import pytest
 import engine
 from canonical_fixture import canonical, fixture_sequence
+from runtime_v3_fixture import wire
 from context_builder import build_context, estimate
-from state_updates import apply_updates, choice_input
 from storage import Storage
 from test_worlds import summary
 
@@ -33,7 +33,7 @@ def run(storage, job_id, extraction=None):
     calls = []
     def stream(**kwargs):
         calls.append(kwargs)
-        yield json.dumps(canonical(result() if extraction is None else extraction, fixture_sequence(storage,job_id)), ensure_ascii=False) if kwargs.get('response_format') else NARRATIVE
+        yield json.dumps(wire(canonical(result() if extraction is None else extraction, fixture_sequence(storage,job_id)),NARRATIVE,json.loads(storage.get_job(job_id)['before_json'])), ensure_ascii=False) if kwargs.get('response_format') else NARRATIVE
     with patch('engine.find_loaded_model', return_value={'config': {'context_length': 32768}}), patch('engine.chat_stream', side_effect=stream):
         engine.run_job(storage.path, job_id, engine.Worker())
     return calls
@@ -42,6 +42,7 @@ def run(storage, job_id, extraction=None):
 def test_start_then_free_input_and_atomic_rollback(db):
     storage, wid, sid = db
     initial = storage.get_save(sid)['state']
+    original_world=storage.get_world(wid)['state']
     job = storage.begin_job(sid, '', 'start', CONFIG)
     with pytest.raises(ValueError):
         storage.begin_job(sid, '', 'start', CONFIG)
@@ -53,7 +54,7 @@ def test_start_then_free_input_and_atomic_rollback(db):
     assert len(json.loads(first['choices_json'])) == 6
     with pytest.raises(ValueError):
         storage.begin_job(sid, '', 'start', CONFIG)
-    assert storage.get_world(wid)['state'] == initial
+    assert storage.get_world(wid)['state'] == original_world
     after_start = storage.get_save(sid)['state']
     action = 'Илья молча садится на стул.'
     job2 = storage.begin_job(sid, action, 'turn', CONFIG)
@@ -70,7 +71,7 @@ def test_start_then_free_input_and_atomic_rollback(db):
 def test_extraction_retry_does_not_regenerate_narrative(db):
     storage, wid, sid = db
     job = storage.begin_job(sid, '', 'start', CONFIG)
-    bad = result(); bad['choices'] = bad['choices'][:5]
+    bad = result(); bad['scene']['present_ids'] = ['missing']
     run(storage, job, bad)
     assert storage.get_job(job)['status'] == 'error'
     assert storage.get_job(job)['narrative_complete']
@@ -86,11 +87,11 @@ def test_cancel_late_result_and_revision_checks(db):
     job = storage.begin_job(sid, '', 'start', CONFIG)
     storage.job_progress(job, 'validating', narrative=NARRATIVE, complete=True)
     storage.job_progress(job, 'stopped')
-    state, choices, changes = apply_updates(storage.get_save(sid)['state'], result(), NARRATIVE, '', 0)
+    state, choices, changes = storage.get_snapshot(sid), [], {}
     with pytest.raises(ValueError):
         storage.commit_job(job, state, choices, changes)
     assert storage.list_turns(sid) == []
-    storage.update_scene_meta(sid, {'time': '19:00', 'location': 'Двор', 'present_ids': []})
+    storage.update_scene_meta(sid, {'time': '19:00', 'location': 'Двор', 'present_ids': ['character_1']})
     with pytest.raises(ValueError):
         storage.retry_job(job)
     with pytest.raises(ValueError):
@@ -118,18 +119,16 @@ def test_invalid_patch_and_relationship_arrow_lifetime(db):
     payload = result()
     payload['relationships'] = [{'source_id': 'character_2', 'target_id': 'character_1', 'text': 'Стало больше доверия.',
                                  'direction': 'up', 'aspect': 'доверие', 'reason': 'Пригласил поговорить', 'evidence': 'Садись, поговорим'}]
-    state, choices, changes = apply_updates(before, payload, NARRATIVE, '', 0)
+    job = storage.begin_job(sid, '', 'start', CONFIG)
+    run(storage, job, payload)
+    assert storage.get_job(job)['status'] == 'saved'
+    state = storage.get_save(sid)['state']
     assert state['relationships'][-1]['change']['direction'] == 'up'
-    next_state, _, _ = apply_updates(state, result(), NARRATIVE, 'Ответ', 1)
-    assert all('change' not in r for r in next_state['relationships'])
-    assert choice_input(choices[0]) == 'Действие 0: «Реплика 0»'
-    for broken in [dict(payload, characters=[{'id': 'missing', 'now': 'Там', 'evidence': NARRATIVE}]),
-                   dict(payload, characters=[{'id': 'character_1', 'goal': 'Влюбиться', 'evidence': NARRATIVE}]),
-                   dict(payload, facts=[{'text': 'Выдумка', 'known_by': ['character_1'], 'evidence': 'нет в тексте'}]),
-                   dict(payload, choices=[payload['choices'][0]] * 6)]:
-        with pytest.raises(ValueError):
-            apply_updates(before, broken, NARRATIVE, '', 0)
-    assert storage.get_save(sid)['state'] == before
+    job = storage.begin_job(sid, 'Ответ', 'turn', CONFIG)
+    run(storage, job)
+    assert storage.get_job(job)['status'] == 'saved'
+    assert all('change' not in r for r in storage.get_save(sid)['state']['relationships'])
+    assert before != state
 
 
 def test_context_budget_rejects_core_overflow(db):
@@ -166,12 +165,16 @@ def test_commit_is_atomic_if_save_update_fails(db):
     initial = storage.get_save(sid)['state']
     job = storage.begin_job(sid, '', 'start', CONFIG)
     storage.job_progress(job, 'validating', narrative=NARRATIVE, complete=True)
-    state, choices, changes = apply_updates(initial, result(), NARRATIVE, '', 0)
+    from backend.runtime_v3.resolver import StateResolver
+    state=storage.get_snapshot(sid)
+    resolved=StateResolver(state['world_state'],NARRATIVE,'').resolve(wire(result(),NARRATIVE,state))
+    state['world_state']=resolved.state
+    choices,changes=resolved.choices,{}
     with storage.connect() as conn:
         conn.execute("CREATE TRIGGER fail_commit BEFORE UPDATE ON saves BEGIN SELECT RAISE(ABORT, 'test'); END")
     import sqlite3
     with pytest.raises(sqlite3.IntegrityError):
-        storage.commit_job(job, state, choices, changes)
+        storage.commit_job(job, state, choices, changes, history_batch=resolved.history)
     assert storage.list_turns(sid) == []
     assert storage.get_save(sid)['state'] == initial
 
@@ -190,7 +193,9 @@ def test_migration_of_old_database_preserves_existing_save(tmp_path):
     ''')
     connection.close()
     storage = Storage(path)
-    assert storage.get_save(1)['state'] == {'scene': 'Старая сцена'}
+    assert storage.get_save(1)['state']['scene'] == 'Старая сцена'
+    assert storage.get_snapshot(1)['schema_version']==3
+    with pytest.raises(ValueError,match='нет персонажей'):storage.begin_job(1,'','start',CONFIG)
     assert storage.get_save(1)['revision'] == 0
     Storage(path)  # Idempotent initialization.
     with storage.connect() as conn:
@@ -207,17 +212,16 @@ def test_migration_of_old_database_preserves_existing_save(tmp_path):
     ('', NARRATIVE, '', False),
 ])
 def test_evidence_formatting_without_accepting_invented_quotes(db, quote, narrative, player, valid):
-    from state_updates import EvidenceError
+    from backend.runtime_v3.resolver import StateResolver
     storage, _, sid = db
-    before = storage.get_save(sid)['state']
-    payload = result()
+    before = storage.get_snapshot(sid)
+    payload = wire(result(), narrative, before)
     payload['events'][0]['evidence'] = quote
-    if valid:
-        apply_updates(before, payload, narrative, player, 0)
-    else:
-        with pytest.raises(EvidenceError, match=r'events\[0\].evidence'):
-            apply_updates(before, payload, narrative, player, 0)
-    assert storage.get_save(sid)['state'] == before
+    resolved = StateResolver(before['world_state'], narrative, player).resolve(payload)
+    assert bool(resolved.history['events']) == valid
+    if not valid:
+        assert any(w['section'] == 'events' for w in resolved.warnings)
+    assert storage.get_snapshot(sid) == before
 
 
 @pytest.mark.parametrize('outcome', ['fixed', 'invalid', 'stopped'])
@@ -243,7 +247,7 @@ def test_evidence_repair_is_bounded_atomic_and_keeps_narrative(db, outcome):
             if outcome == 'stopped':
                 engine.stop(storage, job)
                 worker.cancelled.set()
-        yield json.dumps(canonical(payload), ensure_ascii=False)
+        yield json.dumps(wire(canonical(payload),NARRATIVE,storage.get_snapshot(sid)), ensure_ascii=False)
     with patch('engine.chat_stream', side_effect=stream):
         engine.run_job(storage.path, job, worker)
     assert len(calls) == 3

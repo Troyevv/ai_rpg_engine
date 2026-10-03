@@ -60,7 +60,7 @@ class EngineStorage:
                 raise ValueError('Сначала начни игру.')
             before, replaces = save['state_json'], None
             if kind=='pov':
-                from backend.services.pov import transition
+                from backend.runtime_v3.camera import transition
                 target=config.get('actor_id')
                 source=config.get('source_turn_id')
                 if source is not None and (not last or last['id']!=source or last['kind']!='background' or target not in json.loads(last['audience_json'])):
@@ -89,15 +89,19 @@ class EngineStorage:
                 if context_json is None:
                     raise ValueError('У старого хода нет снимка исходного контекста. Точная перегенерация недоступна.')
                 before, replaces, user_text, kind = last['before_json'], last['id'], last['user_text'], last['kind']
-            from backend.services.pov import controlled
+            from backend.runtime_v3.models import assert_world_state_v3_invariants
+            assert_world_state_v3_invariants(json.loads(before)['world_state'])
+            if not json.loads(before)['world_state']['characters']:
+                raise ValueError('В старом сохранении нет персонажей. Сначала подготовь мир для игры.')
+            from backend.runtime_v3.camera import controlled
             if kind == 'turn' and controlled(json.loads(before)) is None:
                 raise ValueError('Камера наблюдает мир. Выбери персонажа для управления или продолжи наблюдение.')
             if kind == 'background':
-                from backend.services.director import observe
+                from backend.runtime_v3.camera import observe
                 observe(json.loads(before),config.get('camera_actor_id'),config.get('camera_scene_id'),config.get('camera_direct',False))
             if kind == 'turn' and not user_text.strip():
                 raise ValueError('Напиши действие.')
-            from backend.services.pov import controlled
+            from backend.runtime_v3.camera import controlled
             config = dict(config)
             config.setdefault('_prompts',self.prompt_snapshot(db))
             job_id = uuid.uuid4().hex
@@ -139,7 +143,7 @@ class EngineStorage:
             session_id = self.ensure_session(db, job['save_id'])
             db.execute("UPDATE game_jobs SET status='extracting',error='',warnings_json='[]',config_json=?,session_id=? WHERE id=?", (json.dumps(settings),session_id,job_id))
 
-    def commit_job(self, job_id, state, choices, changes, timing=None):
+    def commit_job(self, job_id, state, choices, changes, timing=None, history_batch=None):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             job = db.execute('SELECT * FROM game_jobs WHERE id=?', (job_id,)).fetchone()
@@ -156,6 +160,11 @@ class EngineStorage:
                            (job['save_id'], 'regenerate', json.dumps(dict(old), ensure_ascii=False)))
                 self._rollback_after(db, job['save_id'], old['sequence'], json.loads(job['config_json']).get('rollback_following',False))
             sequence = old['sequence'] if job['replaces_id'] is not None else db.execute('SELECT COALESCE(MAX(sequence),-1)+1 FROM turns WHERE save_id=?', (job['save_id'],)).fetchone()[0]
+            from backend.runtime_v3.models import assert_world_state_v3_invariants
+            from backend.runtime_v3.repository import append_history
+            assert_world_state_v3_invariants(state['world_state'],json.loads(job['before_json'])['world_state'])
+            if history_batch is not None:
+                state=dict(state,history_head=append_history(db,state.get('history_head'),history_batch))
             after = json.dumps(state, ensure_ascii=False)
             values = (job['user_text'], job['narrative'], job['before_json'], after, job['kind'],
                       json.dumps(choices,ensure_ascii=False), json.dumps(changes,ensure_ascii=False))
