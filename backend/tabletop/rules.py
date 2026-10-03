@@ -39,7 +39,14 @@ class RulesEngine:
             raise ValueError("Навык не соответствует характеристике")
         return (
             self.modifier(actor.abilities[ability])
-            + (self.proficiency(actor) if skill in actor.skill_proficiencies else 0)
+            + (
+                self.proficiency(actor)
+                if (
+                    skill in actor.skill_proficiencies
+                    or actor.bonuses.get("skill_proficiency:" + skill)
+                )
+                else 0
+            )
             + actor.bonuses.get("check_bonus", 0)
             + EffectsEngine.bonus(actor, "check_bonus", skill or ability)
             + actor.bonuses.get("check_bonus:" + (skill or ability), 0)
@@ -50,7 +57,12 @@ class RulesEngine:
         return {
             "Характеристика": self.modifier(actor.abilities[ability]),
             "Навык / владение": (
-                self.proficiency(actor) if skill in actor.skill_proficiencies else 0
+                self.proficiency(actor)
+                if (
+                    skill in actor.skill_proficiencies
+                    or actor.bonuses.get("skill_proficiency:" + skill)
+                )
+                else 0
             ),
             "Особенности": actor.bonuses.get("check_bonus", 0)
             + actor.bonuses.get("check_bonus:" + (skill or ability), 0),
@@ -311,7 +323,10 @@ class RulesEngine:
             location=definition.location_id,
             goals=definition.goals[:],
             knowledge=definition.knowledge[:],
-            public_lore=definition.public_lore[:],
+            public_lore=definition.public_lore[:] + background.get("knowledge", []),
+            background_contacts=background.get("contacts", []),
+            background_knowledge=background.get("knowledge", []),
+            background_reputation=background.get("reputation", {}),
             relationships=definition.relationships.copy(),
             morale=definition.morale,
             attitude=definition.attitude,
@@ -336,7 +351,11 @@ class RulesEngine:
             }
         return actor
 
-    def equipment_stats(self, actor, items):
+    def equipment_stats(self, actor, items, ruleset=None):
+        if ruleset is not None:
+            from .item_effects import ItemEffects
+
+            ItemEffects.sync(actor, items, ruleset)
         if actor.template_id:
             # Instance inventory transfers must not replace template-derived attacks/AC.
             return

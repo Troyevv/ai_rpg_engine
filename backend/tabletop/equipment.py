@@ -27,6 +27,10 @@ class EquipmentEngine:
     @staticmethod
     def equip(actor, items, entry, slot=""):
         item = items[entry.item_id]
+        if not set(item.requirements) <= set(actor.features) - set(
+            actor.equipment_grants
+        ):
+            raise ValueError("Не выполнены требования предмета")
         allowed = [s for s in item.slots if s in actor.equipment_slots]
         slot = slot or next(
             (
@@ -63,6 +67,7 @@ class EquipmentEngine:
             if conflict:
                 other.equipped = False
                 other.slot = ""
+        entry.container_id = ""
         entry.slot = slot
         entry.equipped = True
 
@@ -74,6 +79,12 @@ class EquipmentEngine:
                 entry.slot = ""
                 continue
             item = items[entry.item_id]
+            if entry.container_id:
+                raise ValueError("Предмет в контейнере нельзя экипировать")
+            if not set(item.requirements) <= set(actor.features) - set(
+                actor.equipment_grants
+            ):
+                raise ValueError("Не выполнены требования предмета")
             if not entry.slot:
                 entry.slot = next((s for s in item.slots if s not in occupied), "")
             if (
@@ -125,6 +136,15 @@ class EquipmentEngine:
                     )
             if item.stealth_disadvantage:
                 actor.equipment_bonuses["stealth_disadvantage"] = 1
+        for entry in actor.inventory:
+            if entry.equipped or entry.container_id:
+                continue
+            for component in items[entry.item_id].components:
+                if component.type == "tool" and not component.requires_equipped:
+                    key = "check:" + component.skill_id
+                    actor.equipment_bonuses[key] = (
+                        actor.equipment_bonuses.get(key, 0) + component.modifier
+                    )
         if not set(occupied) & EquipmentEngine.body_slots(actor):
             for ability in actor.abilities:
                 if "unarmored_ability:" + ability in actor.bonuses:

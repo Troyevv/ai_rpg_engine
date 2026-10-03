@@ -192,7 +192,8 @@ class EncounterEngine:
         roll = self.roll(
             events,
             "1d20",
-            modifier=self.rules.attack_modifier(a, weapon),
+            modifier=self.rules.attack_modifier(a, weapon)
+            + ResourceEngine.mode_effect(a.attacks[weapon], mode).attack_bonus,
             advantage=advantage,
             purpose="attack",
             actor=a.id,
@@ -201,8 +202,11 @@ class EncounterEngine:
             w = a.attacks[weapon]
             damage = self.roll(
                 events,
-                w.expression or f"1d{w.die}",
-                modifier=self.rules.damage_modifier(a, weapon, state.ruleset),
+                ResourceEngine.mode_effect(w, mode).damage_expression
+                or w.expression
+                or f"1d{w.die}",
+                modifier=self.rules.damage_modifier(a, weapon, state.ruleset)
+                + ResourceEngine.mode_effect(w, mode).damage_bonus,
                 critical=roll.selected == 20,
                 critical_rule=state.ruleset.critical,
                 purpose="damage",

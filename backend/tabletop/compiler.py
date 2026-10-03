@@ -404,7 +404,7 @@ class CampaignCompiler:
             for a in d.characters + d.creatures
         }
         for a in actors.values():
-            RulesEngine().equipment_stats(a, items)
+            RulesEngine().equipment_stats(a, items, rules)
         from .creatures import build_creature
 
         for instance in d.creature_instances:
@@ -450,6 +450,18 @@ class CampaignCompiler:
             },
             quests={
                 q.id: "active" if not q.giver_id else "available" for q in d.quests
+            },
+            faction_reputation={
+                f.id: max(
+                    -100,
+                    min(100, actors[controlled].background_reputation.get(f.id, 0)),
+                )
+                for f in d.factions
+                if f.id in actors[controlled].background_reputation
+            },
+            player_knowledge={
+                "background_" + str(i): text
+                for i, text in enumerate(actors[controlled].background_knowledge)
             },
             known_locations=[d.starting_location],
             schedule_due={s.id: s.delay_minutes * 60 for s in d.schedules},
@@ -562,7 +574,7 @@ class CampaignCompiler:
         state.items.update(index(new_items))
         for a in new_actors:
             actor = RulesEngine().build_character(a, state.ruleset)
-            RulesEngine().equipment_stats(actor, state.items)
+            RulesEngine().equipment_stats(actor, state.items, state.ruleset)
             state.npcs[a.id] = actor
             state.controllers[a.id] = ActorControl(actor_id=a.id, controller="AI")
         for o in new_objects:

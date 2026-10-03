@@ -6,6 +6,8 @@ import {
   RollResult,
   CharacterSheet,
 } from "./tabletop/GamePanels";
+import { DiceTray } from "./tabletop/dice/DiceTray";
+import type { Roll } from "./tabletop/types";
 import { ActionImpact } from "./tabletop/ActionImpact";
 import { CombatActions } from "./tabletop/CombatActions";
 import { DMSettings } from "./tabletop/DMSettings";
@@ -58,6 +60,8 @@ export function Tabletop({
     [olderHistory, setOlderHistory] = useState(false);
   const [runtimeStage, setRuntimeStage] = useState("");
   const lock = useRef(false);
+  const currentTab = useRef(tab);
+  currentTab.current = tab;
   const historyEnd = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (game?.state.pending || game?.state.choice || game?.state.reaction) {
@@ -106,6 +110,22 @@ export function Tabletop({
       setBusy(false);
     }
   }
+  const [visualRolls, setVisualRolls] = useState<Roll[] | null>(null);
+  const rollAnimationDone = useRef<(() => void) | null>(null);
+  const finishRollAnimation = () => {
+    setVisualRolls(null);
+    rollAnimationDone.current?.();
+    rollAnimationDone.current = null;
+  };
+  useEffect(
+    () => () => {
+      rollAnimationDone.current?.();
+    },
+    [],
+  );
+  useEffect(() => {
+    if (tab !== "Игра" && visualRolls) finishRollAnimation();
+  }, [tab, visualRolls]);
   const accept = (g: Game) => {
     setGame(g);
     setCreating(false);
@@ -141,16 +161,27 @@ export function Tabletop({
           .catch(() => {});
       }, 500);
       try {
-        setGame(
-          await api<Game>(`/tabletop/games/${game.id}/${path}`, {
-            ...payload,
-            revision: game.revision,
-            request_id: requestId,
-            ...(model
-              ? { config: prefs.game, api_key: apiKey || undefined }
-              : {}),
-          }),
-        );
+        const next = await api<Game>(`/tabletop/games/${game.id}/${path}`, {
+          ...payload,
+          revision: game.revision,
+          request_id: requestId,
+          ...(model
+            ? { config: prefs.game, api_key: apiKey || undefined }
+            : {}),
+        });
+        const rolls = next.history
+          .filter((turn) => turn.revision > game.revision)
+          .flatMap((turn) =>
+            turn.events.flatMap((event) => (event.roll ? [event.roll] : [])),
+          );
+        if (rolls.length && currentTab.current === tab)
+          await new Promise<void>((resolve) => {
+            setTab("Игра");
+            setMobileActions(false);
+            rollAnimationDone.current = resolve;
+            setVisualRolls(rolls);
+          });
+        setGame(next);
         setText("");
         setContext("");
         setMobileActions(false);
@@ -487,7 +518,10 @@ export function Tabletop({
                     ))}
                   </div>
                 )}
-                {pending && (
+                {visualRolls && (
+                  <DiceTray rolls={visualRolls} done={finishRollAnimation} />
+                )}
+                {pending && !visualRolls && (
                   <RollCard
                     pending={pending}
                     name={name(pending.actor)}
@@ -726,6 +760,28 @@ export function Tabletop({
                           purpose: "unlock",
                           target: o.id,
                         })}
+                        {o.capabilities?.includes("breakable") &&
+                          o.hit_points !== 0 &&
+                          button(`Разрушить: ${o.name}`, {
+                            type: "object_action",
+                            target: o.id,
+                            operation: "break",
+                          })}
+                        {o.capabilities?.includes("cover") &&
+                          button(`Укрыться: ${o.name}`, {
+                            type: "object_action",
+                            target: o.id,
+                            operation: "cover",
+                          })}
+                        {o.can_activate &&
+                          button(`Активировать: ${o.name}`, {
+                            type: "object_action",
+                            target: o.id,
+                            operation: "activate",
+                          })}
+                        {o.hit_points != null && (
+                          <p>Прочность: {o.hit_points}</p>
+                        )}
                         {o.contents.map((x) =>
                           button(
                             `Взять: ${s.items[x.item_id]?.name || x.item_id} ×${x.quantity}`,
@@ -846,10 +902,21 @@ export function Tabletop({
                           <h3>
                             {item?.name || entry.item_id} ×{entry.quantity}
                             {entry.equipped ? " · экипировано" : ""}
+                            {entry.container_id
+                              ? ` · в ${s.items[entry.container_id]?.name || entry.container_id}`
+                              : ""}
                           </h3>
                           <details>
                             <summary>Осмотреть и действия</summary>
                             <p>{item?.description}</p>
+                            {item?.components?.some(
+                              (c) => c.type === "energy",
+                            ) && (
+                              <p>
+                                Источник энергии расходуется при использовании.
+                                Восстанавливает ресурс до максимума.
+                              </p>
+                            )}
                             <p>
                               Вес {item?.weight} · ценность {item?.value}
                             </p>
@@ -883,7 +950,10 @@ export function Tabletop({
                                         : undefined,
                                     },
                                   )}
-                                {item?.type === "consumable" &&
+                                {(item?.type === "consumable" ||
+                                  item?.components?.some(
+                                    (c) => c.type === "energy",
+                                  )) &&
                                   s.party.map((target) =>
                                     button(`Использовать на ${name(target)}`, {
                                       type: "use_item",
@@ -909,6 +979,52 @@ export function Tabletop({
                                       quantity: 1,
                                     }),
                                   )}
+                                {entry.container_id ? (
+                                  button("Достать один", {
+                                    type: "unpack_item",
+                                    actor_id: id,
+                                    item_id: entry.item_id,
+                                    target: entry.container_id,
+                                    quantity: 1,
+                                  })
+                                ) : (
+                                  <>
+                                    {a.inventory
+                                      .filter(
+                                        (b) =>
+                                          b.item_id !== entry.item_id &&
+                                          !b.container_id &&
+                                          s.items[b.item_id]?.components?.some(
+                                            (c) => c.type === "container",
+                                          ),
+                                      )
+                                      .map((b) =>
+                                        button(
+                                          `Убрать в ${s.items[b.item_id].name}`,
+                                          {
+                                            type: "store_item",
+                                            actor_id: id,
+                                            item_id: entry.item_id,
+                                            target: b.item_id,
+                                            quantity: 1,
+                                          },
+                                        ),
+                                      )}
+                                    {s.objects
+                                      .filter(
+                                        (o) => o.opened && o.capacity != null,
+                                      )
+                                      .map((o) =>
+                                        button(`Положить в ${o.name}`, {
+                                          type: "store_item",
+                                          actor_id: id,
+                                          item_id: entry.item_id,
+                                          target: o.id,
+                                          quantity: 1,
+                                        }),
+                                      )}
+                                  </>
+                                )}
                                 {button("Оставить один", {
                                   type: "drop_item",
                                   actor_id: id,

@@ -1,0 +1,44 @@
+.tt-dice-tray {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 12px;
+  background: var(--panel);
+}
+.tt-dice-surface {
+  height: 220px;
+  width: 100%;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+.tt-dice-surface canvas {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+}
+.tt-dice-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.tt-dice-values span {
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-weight: 700;
+}
+.tt-die-muted {
+  opacity: 0.4;
+}
+.tt-dice-tray button {
+  min-height: 44px;
+  margin-top: 8px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tt-dice-surface {
+    display: none;
+  }
+}

@@ -126,6 +126,14 @@ class CampaignReferenceValidator:
                     "item",
                 )
                 many(kind, a, "build.equipment", a.build.equipment, "item")
+                background = ruleset.backgrounds.get(a.build.background, {})
+                many(
+                    kind,
+                    a,
+                    "build.background.reputation",
+                    background.get("reputation", {}),
+                    "faction",
+                )
         for actor in d.creature_instances:
             check("creature", actor, "location_id", actor.location_id, "location")
             check("creature", actor, "faction_id", actor.faction_id, "faction")
@@ -226,6 +234,75 @@ class CampaignReferenceValidator:
         for s in d.secrets:
             check("secret", s, "location_id", s.location_id, "location")
         for o in d.objects:
+            for i, part in enumerate(o.components):
+                for ref in part.action_ids:
+                    action = next((a for a in d.context_actions if a.id == ref), None)
+                    if (
+                        action is None
+                        or action.object_id != o.id
+                        or action.location_id != o.location_id
+                    ):
+                        issues.append(
+                            ValidationIssue(
+                                code="invalid_object_action",
+                                entity_type="object",
+                                entity_id=o.id,
+                                field=f"components.{i}.action_ids",
+                                target_id=ref,
+                                message="Действие должно принадлежать этому объекту в той же локации",
+                            )
+                        )
+                if part.feature_id and part.feature_id not in ruleset.features:
+                    issues.append(
+                        ValidationIssue(
+                            code="missing_content_reference",
+                            entity_type="object",
+                            entity_id=o.id,
+                            field=f"components.{i}.feature_id",
+                            target_id=part.feature_id,
+                            message="Способность объекта не найдена",
+                        )
+                    )
+                if part.damage_type and part.damage_type not in ruleset.damage_types:
+                    issues.append(
+                        ValidationIssue(
+                            code="missing_content_reference",
+                            entity_type="object",
+                            entity_id=o.id,
+                            field=f"components.{i}.damage_type",
+                            target_id=part.damage_type,
+                            message="Тип урона объекта не найден",
+                        )
+                    )
+                if (
+                    part.type == "container"
+                    and part.capacity is not None
+                    and sum(e.quantity for e in o.contents) > part.capacity
+                ):
+                    issues.append(
+                        ValidationIssue(
+                            code="container_capacity_exceeded",
+                            entity_type="object",
+                            entity_id=o.id,
+                            field="contents",
+                            message="Содержимое превышает вместимость контейнера",
+                        )
+                    )
+                if part.damage_expression:
+                    from .dice import DiceEngine
+
+                    try:
+                        DiceEngine.parse(part.damage_expression)
+                    except ValueError:
+                        issues.append(
+                            ValidationIssue(
+                                code="invalid_dice",
+                                entity_type="object",
+                                entity_id=o.id,
+                                field=f"components.{i}.damage_expression",
+                                message="Некорректное выражение урона",
+                            )
+                        )
             check("object", o, "location_id", o.location_id, "location")
             many("object", o, "secrets", o.secrets, "secret")
             many(

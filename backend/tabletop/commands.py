@@ -95,6 +95,20 @@ class UseObjectCommand(ActorCommand):
     target: str = Field(min_length=1, max_length=80)
 
 
+class ObjectActionCommand(ActorCommand):
+    type: Literal["object_action"] = "object_action"
+    target: str = Field(min_length=1, max_length=80)
+    operation: Literal["break", "cover", "activate"]
+    weapon: str = ""
+
+
+class StoreItemCommand(ActorCommand):
+    type: Literal["store_item", "unpack_item"]
+    item_id: str = Field(min_length=1, max_length=80)
+    target: str = Field(min_length=1, max_length=80)
+    quantity: int = Field(default=1, ge=1, le=100)
+
+
 class InteractCommand(ActorCommand):
     type: Literal["interact"] = "interact"
     target: str = Field(min_length=1, max_length=80)
@@ -187,6 +201,8 @@ ActionCommand = Annotated[
         TacticalCommand,
         UseObjectCommand,
         InteractCommand,
+        ObjectActionCommand,
+        StoreItemCommand,
         DialogueCommand,
         UseItemCommand,
         EquipmentCommand,

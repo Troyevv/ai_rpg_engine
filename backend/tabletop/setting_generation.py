@@ -3,6 +3,7 @@
 import json
 from pydantic import create_model, ValidationError
 from .contracts import Model
+from .authoring import stage_schema, AuthoringCompiler, authoring_issues
 from .content import SettingDefinition, SettingFoundation, ContentRegistry
 from .content_registry import SettingValidator
 from .validation import CampaignValidationError, ValidationIssue
@@ -40,14 +41,21 @@ class AuthoringFailure(CampaignValidationError):
 
 
 class StagedAuthor:
-    def __init__(self, dm, progress=None):
+    def __init__(self, dm, progress=None, checkpoint=None):
+        self.checkpoint = checkpoint
         self.dm = dm
         self.progress = progress or (lambda stage: None)
 
     def run(self, id, stage, schema, context, validate, contract):
+        if self.checkpoint:
+            cached = self.checkpoint.cached(stage)
+            if cached is not None:
+                return validate(schema.model_validate(cached, strict=True))
         issues = []
         for attempt in range(2):
             self.progress(stage)
+            if self.checkpoint:
+                self.checkpoint.progress(stage)
             raw = self.dm.call(
                 id,
                 "authoring_" + stage,
@@ -56,7 +64,11 @@ class StagedAuthor:
                         "role": "system",
                         "content": contract
                         + "\nВерни только JSON по схеме:\n"
-                        + json.dumps(schema.model_json_schema(), ensure_ascii=False),
+                        + json.dumps(
+                            schema.model_json_schema(),
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ),
                     },
                     {
                         "role": "user",
@@ -67,34 +79,59 @@ class StagedAuthor:
                                 "attempt": attempt + 1,
                             },
                             ensure_ascii=False,
+                            separators=(",", ":"),
                         ),
                     },
                 ],
                 True,
             )
             try:
-                result = schema.model_validate_json(raw)
-                return validate(result)
+                result = schema.model_validate_json(raw, strict=True)
+                compiled = validate(result)
+                if self.checkpoint:
+                    self.checkpoint.save(stage, result.model_dump(mode="json"))
+                return compiled
             except ValidationError as exc:
-                issues = [
-                    ValidationIssue(
-                        code=e["type"],
-                        stage=stage,
-                        entity_type="authoring",
-                        entity_id=id,
-                        field=".".join(map(str, e["loc"])),
-                        message=e["msg"],
-                    )
-                    for e in exc.errors(include_input=False)
-                ]
+                issues = authoring_issues(exc, raw, id, stage)
             except CampaignValidationError as exc:
                 issues = [i.model_copy(update={"stage": stage}) for i in exc.issues]
         raise AuthoringFailure(issues, stage, context)
 
 
+def setting_authoring_context(setting, fields):
+    """Only editable sections need full definitions; other sections provide ID/name references."""
+    if setting is None:
+        return None
+    data = setting.model_dump(exclude={"content"})
+    data["content"] = {}
+    for key in type(setting.content).model_fields:
+        entries = getattr(setting.content, key)
+        if key in fields:
+            data["content"][key] = (
+                {
+                    id: (
+                        value.model_dump(exclude_defaults=True)
+                        if hasattr(value, "model_dump")
+                        else value
+                    )
+                    for id, value in entries.items()
+                }
+                if isinstance(entries, dict)
+                else entries
+            )
+        elif isinstance(entries, dict):
+            data["content"][key] = {
+                id: {"id": id, "name": getattr(value, "name", id)}
+                for id, value in entries.items()
+            }
+        else:
+            data["content"][key] = entries
+    return data
+
+
 class SettingGenerator:
-    def __init__(self, dm, progress=None):
-        self.author = StagedAuthor(dm, progress)
+    def __init__(self, dm, progress=None, checkpoint=None):
+        self.author = StagedAuthor(dm, progress, checkpoint)
 
     def generate(self, id, concept, existing=None, section=None):
         if not self.author.dm.config:
@@ -154,25 +191,22 @@ class SettingGenerator:
                     SettingFoundation,
                     {
                         "concept": concept,
-                        "setting": draft.model_dump() if draft else None,
+                        "setting": (
+                            draft.model_dump(exclude={"content"}) if draft else None
+                        ),
                     },
                     validate_foundation,
                     contract,
                 )
             else:
-                schema = create_model(
-                    "SettingStage_" + stage,
-                    __base__=Model,
-                    **{
-                        field: (ContentRegistry.model_fields[field].annotation, ...)
-                        for field in fields
-                    }
-                )
+                schema = stage_schema("SettingStage_" + stage, ContentRegistry, fields)
 
                 def validate(value):
                     candidate = draft.model_copy(deep=True)
-                    for field in fields:
-                        setattr(candidate.content, field, getattr(value, field))
+                    compiled = AuthoringCompiler.stage(value)
+                    content = candidate.content.model_dump()
+                    content.update(compiled)
+                    candidate.content = ContentRegistry.model_validate(content)
                     for field in ("archetypes", "backgrounds", "species"):
                         previous = getattr(draft.content, field)
                         if (
@@ -202,7 +236,10 @@ class SettingGenerator:
                     id,
                     stage,
                     schema,
-                    {"concept": concept, "setting": draft.model_dump()},
+                    {
+                        "concept": concept,
+                        "setting": setting_authoring_context(draft, fields),
+                    },
                     validate,
                     contract,
                 )

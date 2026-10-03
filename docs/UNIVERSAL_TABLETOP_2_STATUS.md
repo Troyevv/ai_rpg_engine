@@ -1,37 +1,62 @@
-# Universal Tabletop 2.0 — implementation checkpoint
+# Universal Tabletop 2.0 — acceptance status
 
-This branch is a work in progress stacked on PR #32. It is **not full acceptance of the specification** and must stay draft.
+PR #33 continues on `codex/universal-tabletop-2`, stacked on PR #32. No merge or deployment is included. Automated acceptance uses fixture authoring responses; **live-provider acceptance remains open**.
 
-## Implemented
+## Authoring boundary
 
-- Separate, versioned SettingDefinition and ContentRegistry persistence; campaigns contain a fixed setting snapshot.
-- Six-stage setting and campaign authors, strict schemas, dependency validation, structured semantic issues and at most two attempts per failed stage.
-- Setting editor, section regeneration, saved world selection, campaign and character flow using the selected snapshot.
-- Core-only rules catalog and explicit old catalog import. Three independent content fixtures compile, use resources and survive SQLite reload without importing fantasy content.
-- Creature templates/instances and deterministic threat/budget selection.
-- Custom skills, alternate abilities, damage modifiers, resource costs, magazines, reload and server-validated single/burst/automatic mode costs.
-- Declarative effects, contextual action requirements, ability requirements and temporary effect expiry. Runtime transactions validate before committing state.
-- Profile-driven equipment slots, armor placement and hand conflicts; starting purchases remain unequipped; unavailable starting items are rejected by the server.
-- Application-wide shared choice popup/sheet, search, keyboard/focus support, mobile Back handling and AST guard against native select/option/datalist controls.
-- Regression fixes: preserve catalog when regenerating foundation; aggregate duplicate resource costs; retain template combat statistics during inventory changes; preserve protection-ring AC during import; validate character builds against the campaign snapshot.
+The new-world flow is Setting → Campaign → Character. Generation uses the model configured for the generator. Existing saves, imported definitions and legacy drafts remain supported.
 
-## Verification
+LLM output crosses strict Authoring DTO → deterministic AuthoringCompiler → domain definitions → reference and semantic validation. Item forms use named component fields; containers use a positive integer `container_capacity`; contextual actions use one explicit operation and reference. Invalid strings, unknown fields, conflicting references and incompatible capability fields are rejected, never coerced or removed. A regression covers four actions and four objects, including precise field/entity diagnostics and the two-attempt retry bound.
 
-The final response/PR records exact test counts for its commit. Verification includes backend regressions, frontend build, the native-choice guard and browser runs. The new mobile scenario covers setting generation/edit/save, campaign generation, character allocation, shop purchase/equip, game creation and browser reload at 360×800, 390×844 and 412×915.
+Targeted schema audit:
 
-All authoring responses in tests are fixtures. These tests do **not** establish real model quality, world coherence, encounter balance or live provider reliability.
+| Content | Authoring representation |
+| --- | --- |
+| Context actions | Explicit operation/reference DTO; compiler selects the domain operation |
+| Item components | Named optional component forms, no discriminator union in LLM output |
+| Objects | Explicit capabilities and mechanical fields; compiler builds typed components |
+| Effects, resources, creature templates, checks, powers | Existing flat typed definitions; strict validation, no redundant DTO layer |
+| Encounters | Flat requests; deterministic template selection and threat budget, no generated runtime stats |
 
-## Remaining acceptance work
+Late setting stages receive complete editable sections and an ID/name index for the other sections. They no longer resend full advancement tables and unrelated definitions. Campaign authoring omits default item fields and receives creature selection metadata. The complete registry remains unchanged and is used by validators. Token estimates are conservative estimates, not provider tokenizer measurements; model context limits still apply.
 
-- Make the setting-first staged flow the default and remove the legacy one-shot generation path from new-campaign UX, while retaining old saves/drafts.
-- Persist failed generation stage checkpoints, support resuming, and expose actual per-stage progress in the editor.
-- Complete runtime behavior for all declared item components (including energy/container capacity and item-granted effects/requirements), all object capabilities, and creature AI profiles. Some declarations currently validate/store metadata without a complete runtime/UI path.
-- Complete generic equipment handling in the starting shop UI (runtime handles custom slot profiles, but its conflict preview still contains legacy hand IDs).
-- Integrate background contacts/knowledge/reputation fully into campaign creation and runtime presentation.
-- Finish custom damage types in every power path and mode-specific firing mechanics beyond ammunition costs.
-- Audit generated-world context size, semantic cross-references and all declarative effects against the complete specification.
-- Add one new-setting end-to-end scenario including checks, template-based combat, loot and an actual server restart; the current new-setting scenario stops after game/browser reload. Legacy gameplay tests cover combat/restart separately.
-- Run real LLM smoke tests for at least three unrelated user-created universes. No provider credentials or running local model were available in this environment.
-- Complete visual review of the new authoring editor and comprehensive acceptance traceability.
+SQLite checkpoints retain each validated stage, frozen source snapshot, current stage and structured issues. Resume after a process restart revalidates cached DTOs and calls the model only for unfinished stages. Completed requests are idempotent; changed input requires a new job. Credentials are excluded from persisted job requests. The editor displays saved stage progress and resume. Execution locking follows the application's single-process server model.
 
-No merge or deployment is part of this checkpoint.
+## Runtime and UI coverage
+
+| Area | Implemented path and evidence |
+| --- | --- |
+| Setting snapshot | Versioned worlds, selected-world creator and immutable campaign content; independent-world fixtures survive SQLite reload |
+| Items | Weapon/armor/tool/ammunition/magazine behavior, consumable and medical features, finite energy sources, carried/world containers with capacity and explicit store/unpack UI |
+| Energy sources | One inventory unit restores up to its declared capacity, bounded by the resource maximum; the unit is consumed, preventing refill through transfer/reload |
+| Item effects | Equipped items grant active/passive features; bonuses reverse on unequip; resource initialization cannot refill through toggling; feature-ID requirements are validated |
+| Equipment | Profile-based slots and hand conflicts in runtime, creator shop and equipment UI; purchasing remains separate from equipping |
+| Objects | Open/unlock, capacity, break attack/damage rolls, cover, terminal/environment features and typed hazard damage; local visibility and encounter-loot gates remain enforced |
+| Context actions | Conditions and references select a declared check, interaction or granted feature; arbitrary feature execution remains forbidden |
+| Firing modes | Separate ammo costs, accuracy modifiers, damage expression/bonus; preview and player/NPC resolution share mode data |
+| Powers | Custom damage type and resource costs pass through attack, automatic, save and area resolution; immunity/resistance/vulnerability and NPC resolution regressions |
+| Background | Equipment, skills, resources, hooks and proficiencies plus contacts/knowledge in the character UI, known facts and initial faction reputation |
+| Creatures | Template stats remain independent of class progression; AI profile influences tactical utility weights |
+| Gameplay | Browser scenario generates a setting and campaign, creates a character, performs checks, fights template creatures, takes loot, changes equipment and restarts the actual server |
+| Choice UI | Shared choices throughout Narrative/Tabletop; native select/option/datalist AST guard remains in the build |
+
+## Dice presentation
+
+Three.js controlled 3D motion precedes the existing result card. The backend owns every result; animation never rolls or determines game mechanics. Supported solids: d4/d6/d8/d10/d12/d20; d100 uses two correctly labeled percentile dice. Compound rolls render their actual dice, advantage/disadvantage dims the unselected result, modifiers remain in the breakdown. Visual pools stop at 12 dice while retaining the full canonical result.
+
+Motion lasts about 1.5 seconds plus a short resting pause. Skip, reduced motion, WebGL fallback and a completion timeout preserve interaction. Changing tabs finishes the visual wait, so spell/inventory navigation cannot strand a server-resolved roll. GPU resources are disposed. Desktop/mobile tests cover rendering, percentile labels, compound pools, selection, skip, reduced motion and width; resting faces were visually reviewed. This is mobile emulation, not a physical-device benchmark.
+
+## Verification record
+
+- Initial full backend run: 697 passed, one reputation regression found. The fix and related world/content regressions then passed (30 tests).
+- Final related authoring/content/object/world regressions: 70 passed.
+- Frontend production build and native-choice guard passed.
+- Full browser run: 90 passed, 10 intentionally skipped duplicate layout cases, two mobile failures. One was caused by rebuilding the served frontend during the run; the other exposed a late roll response overriding tab navigation and was fixed.
+- Both failed scenarios plus dice checks were rerun on desktop/mobile: 10 passed. The spellbook regression now deliberately delays the roll response until after tab navigation. CI status is recorded separately in the PR.
+
+## Remaining external acceptance
+
+- Real model generation smoke tests for unrelated user-created settings. No DeepSeek/OpenAI credentials or configured local model endpoint were available; fixtures do not establish real model compliance, story quality or encounter balance.
+- Physical-phone performance and final user playtesting. Responsive browser emulation and WebGL checks do not establish frame rates on the user's phone.
+
+Keep this distinction when reviewing acceptance; do not describe fixture generation as a successful real-provider test.

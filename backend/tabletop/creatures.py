@@ -11,6 +11,7 @@ def build_creature(instance, setting):
         id=instance.id,
         name=instance.name,
         template_id=template.id,
+        ai_profile=template.ai_profile,
         character_class="",
         species=template.id,
         abilities=template.attributes.copy(),

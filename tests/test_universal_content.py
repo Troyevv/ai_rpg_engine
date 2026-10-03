@@ -1,4 +1,5 @@
 import pytest
+from backend.tabletop.authoring import authoring_payload
 from backend.tabletop.catalog import load_ruleset
 from backend.tabletop.content_migration import import_catalog
 from backend.tabletop.content_registry import SettingValidator, setting_rules, average
@@ -178,7 +179,10 @@ def test_creatures_take_stats_from_template():
     state.party.append("echo_one")
     from backend.tabletop.projection import public_state
 
-    assert public_state(state)["characters"]["echo_one"]["progression"]["available"] is False
+    assert (
+        public_state(state)["characters"]["echo_one"]["progression"]["available"]
+        is False
+    )
 
 
 def test_multiple_semantic_issues_have_exact_entities():
@@ -225,7 +229,7 @@ def test_campaign_stages_validate_before_game_creation():
         replies.append(
             {"requests": []} if stage == "encounters" else {k: data[k] for k in fields}
         )
-    dm = ScriptedDM(replies)
+    dm = ScriptedDM([authoring_payload(r) for r in replies])
     result = CampaignGenerator2(dm).generate(
         "generation",
         d.setting_definition,
@@ -527,7 +531,7 @@ def test_campaign_retries_invalid_region_at_locations_stage():
             invalid["locations"][0]["region_id"] = "missing"
             replies.append(invalid)
         replies.append(reply)
-    dm = ScriptedDM(replies)
+    dm = ScriptedDM([authoring_payload(r) for r in replies])
     CampaignGenerator2(dm).generate(
         "generation",
         d.setting_definition,

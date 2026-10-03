@@ -9,6 +9,15 @@ export function StartingShop({
   change: (b: Build) => void;
 }) {
   const bought = build.purchases || [];
+  const hands = Object.keys(catalog.equipment_layout || {}).length
+    ? Object.entries(catalog.equipment_layout!)
+        .filter(
+          ([, layout]) =>
+            layout.group === "hand" ||
+            ["left", "right"].includes(layout.position),
+        )
+        .map(([id]) => id)
+    : ["MAIN_HAND", "OFF_HAND"];
   const capital =
     catalog.starting_gold +
     (catalog.classes[build.character_class].starting_gold || 0) +
@@ -127,10 +136,8 @@ export function StartingShop({
                               if (
                                 e.slot === slot ||
                                 (i.hands === 2 &&
-                                  ["MAIN_HAND", "OFF_HAND"].includes(
-                                    e.slot || "",
-                                  )) ||
-                                (["MAIN_HAND", "OFF_HAND"].includes(slot) &&
+                                  hands.includes(e.slot || "")) ||
+                                (hands.includes(slot) &&
                                   catalog.items.find((i) => i.id === e.item_id)
                                     ?.hands === 2)
                               ) {

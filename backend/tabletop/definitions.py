@@ -7,6 +7,7 @@ from .contracts import Ability, Difficulty, ControllerType, Id, Model, Named
 
 
 class InventoryEntry(Model):
+    container_id: str = ""
     item_id: Id
     quantity: int = Field(default=1, ge=1, le=10000)
     equipped: bool = False
@@ -17,6 +18,7 @@ from .content import ItemComponent, SettingDefinition, CreatureInstance
 
 
 class ItemDefinition(Named):
+    requirements: list[Id] = []
     starting_available: bool = True
     components: list[ItemComponent] = []
     type: Literal["weapon", "armor", "consumable", "quest", "miscellaneous"] = (

@@ -15,9 +15,7 @@ for (const [width, height] of [
     await page
       .getByRole("button", { name: "Создать кампанию", exact: true })
       .click();
-    await page
-      .getByRole("button", { name: "Создать или выбрать мир", exact: true })
-      .click();
+
     await page
       .getByLabel("Описание нового мира")
       .fill("Общество живёт внутри стеклянных приливов и собирает голоса.");

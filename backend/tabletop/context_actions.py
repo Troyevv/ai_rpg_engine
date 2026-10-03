@@ -36,6 +36,7 @@ class ContextAction(Named):
 
 
 class ObjectCapability(Model):
+    capacity: int | None = Field(default=None, ge=1, le=1000)
     type: Literal[
         "interactable",
         "container",
@@ -126,4 +127,8 @@ class ContextActionService:
             )
         else:
             c = Command(type="interact", target=action.object_id, actor_id=aid)
+        if action.feature_id:
+            return self.runtime.features_service.execute(
+                state, c, aid, events, granted=True
+            )
         self.runtime.apply(state, c, aid, events)

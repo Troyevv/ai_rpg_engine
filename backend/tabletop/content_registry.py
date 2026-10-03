@@ -213,6 +213,7 @@ class SettingValidator:
         for item in c.items.values():
             refs("item", item, "equipment_slots", item.equipment_slots, slots)
             refs("item", item, "effects", item.effects, c.features)
+            refs("item", item, "requirements", item.requirements, c.features)
             for comp in item.components:
                 if comp.type == "weapon":
                     dice("item", item, "damage_expression", comp.damage_expression)
@@ -236,9 +237,40 @@ class SettingValidator:
                         dice("item", item, "healing", comp.healing)
                     if comp.feature_id:
                         refs("item", item, "feature_id", [comp.feature_id], c.features)
+                        feature = c.features.get(comp.feature_id)
+                        if feature and feature.activation != comp.action_cost:
+                            issue(
+                                "incompatible_item_action",
+                                "item",
+                                item.id,
+                                "components.feature_id",
+                                "Стоимость способности должна совпадать с действием предмета",
+                            )
+                    if (
+                        sum(
+                            bool(v)
+                            for v in (comp.fixed_healing, comp.healing, comp.feature_id)
+                        )
+                        != 1
+                    ):
+                        issue(
+                            "ambiguous_consumable",
+                            "item",
+                            item.id,
+                            "components",
+                            "Выбери один эффект предмета: фиксированное лечение, кубики или способность",
+                        )
                 elif comp.type in ("artifact", "key", "currency", "quest"):
                     refs("item", item, "feature_ids", comp.feature_ids, c.features)
                 elif comp.type == "magazine":
+                    for mode, effect in comp.mode_effects.items():
+                        if effect.damage_expression:
+                            dice(
+                                "item",
+                                item,
+                                "mode_effects." + mode + ".damage_expression",
+                                effect.damage_expression,
+                            )
                     ammunition = {
                         a.ammo_type
                         for i in c.items.values()
@@ -300,15 +332,38 @@ class SettingValidator:
                     "area",
                     "Эффект не поддерживает область",
                 )
-            if feature.activation == "PASSIVE" and any(
-                e.type in EffectsEngine.ACTIVE for e in feature.effects
+            passive = {
+                "unarmed_die",
+                "unarmored_ability",
+                "max_hp",
+                "armor_class",
+                "speed",
+                "skill_proficiency",
+                "resource",
+                "check_bonus",
+                "save_bonus",
+                "attack_bonus",
+                "damage_bonus",
+                "extra_attack",
+            }
+            active = EffectsEngine.ACTIVE | {
+                "heal_dice",
+                "restore_slot",
+                "heal",
+                "condition",
+                "dash",
+                "disengage",
+            }
+            if any(
+                e.type not in (passive if feature.activation == "PASSIVE" else active)
+                for e in feature.effects
             ):
                 issue(
                     "invalid_passive_effect",
                     "feature",
                     feature.id,
                     "activation",
-                    "Активный эффект требует действия",
+                    "Тип эффекта не соответствует способу активации",
                 )
             refs(
                 "feature", feature, "resource_cost", feature.resource_cost, c.resources
@@ -335,6 +390,17 @@ class SettingValidator:
                 if effect.type in ("resource", "spend_resource", "restore_resource"):
                     refs("feature", feature, "effects.key", [effect.key], c.resources)
         for power in c.powers.values():
+            if power.damage_type:
+                refs("power", power, "damage_type", [power.damage_type], c.damage_types)
+            refs("power", power, "resource_cost", power.resource_cost, c.resources)
+            if any(v < 0 for v in power.resource_cost.values()):
+                issue(
+                    "invalid_resource_cost",
+                    "power",
+                    power.id,
+                    "resource_cost",
+                    "Стоимость не может быть отрицательной",
+                )
             refs("power", power, "classes", power.classes, c.archetypes)
             for field in ("damage", "healing"):
                 if getattr(power, field):
@@ -375,6 +441,7 @@ def item_adapter(item: ContentItem):
         slots=item.equipment_slots,
         components=item.components,
         features=item.effects,
+        requirements=item.requirements,
         starting_available=item.starting_available,
     )
     for comp in item.components:

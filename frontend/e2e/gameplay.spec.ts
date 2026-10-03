@@ -94,6 +94,16 @@ test("Gameplay 1.0: builder, five check domains, combat and equipment restart", 
     await click("Настольная RPG");
     await click("Создать кампанию");
     await page
+      .getByLabel("Описание нового мира")
+      .fill("Город стеклянных архивов: голоса застывают в приливах.");
+    await click("Создать структуру мира");
+    await page
+      .getByRole("button", {
+        name: "Подтвердить мир и создать кампанию",
+        exact: true,
+      })
+      .click();
+    await page
       .getByLabel("Идея приключения", { exact: true })
       .fill("gameplay acceptance");
     await click("Сгенерировать мир");

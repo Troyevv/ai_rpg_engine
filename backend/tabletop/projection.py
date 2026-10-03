@@ -120,6 +120,17 @@ class PublicProjection:
                         "description": o.description,
                         "opened": status.opened,
                         "contents": contents,
+                        "capabilities": [c.type for c in o.components],
+                        "can_activate": any(
+                            c.feature_id
+                            for c in o.components
+                            if c.type in ("terminal", "environment", "interactable")
+                        ),
+                        "capacity": next(
+                            (c.capacity for c in o.components if c.type == "container"),
+                            None,
+                        ),
+                        "hit_points": status.hit_points,
                     }
                 )
         location = next(x for x in state.definition.locations if x.id == hero.location)

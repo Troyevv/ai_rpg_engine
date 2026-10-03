@@ -9,6 +9,7 @@ from .content_registry import SettingValidator, setting_rules, creature_threat
 from .compiler import CampaignCompiler
 from .generation import REFERENCE_CONTRACT, authoring_catalog
 from .setting_generation import StagedAuthor
+from .authoring import stage_schema, AuthoringCompiler
 from .validation import CampaignValidationError, ValidationIssue
 
 
@@ -139,11 +140,11 @@ class CampaignGenerator2:
         ("society", ("factions", "faction_relations", "characters", "starting_party")),
         ("objects", ("quests", "secrets", "objects")),
         ("encounters", ()),
-        ("checks_schedules", ("checks", "schedules", "context_actions")),
+        ("checks_schedules", ("checks", "schedules", "context_actions", "objects")),
     )
 
-    def __init__(self, dm, progress=None):
-        self.author = StagedAuthor(dm, progress)
+    def __init__(self, dm, progress=None, checkpoint=None):
+        self.author = StagedAuthor(dm, progress, checkpoint)
 
     def generate(self, id, setting, options):
         setting = SettingValidator().validate(setting)
@@ -195,16 +196,8 @@ class CampaignGenerator2:
             if stage == "encounters":
                 schema = EncounterRequests
             else:
-                schema = create_model(
-                    "CampaignStage_" + stage,
-                    __base__=Model,
-                    **{
-                        f: (
-                            CampaignDefinition.model_fields[f].annotation,
-                            deepcopy(CampaignDefinition.model_fields[f]),
-                        )
-                        for f in fields
-                    },
+                schema = stage_schema(
+                    "CampaignStage_" + stage, CampaignDefinition, fields
                 )
 
             def validate(value):
@@ -240,7 +233,22 @@ class CampaignGenerator2:
                             i.model_dump() for i in instances
                         )
                 else:
-                    candidate.update(value.model_dump())
+                    candidate.update(AuthoringCompiler.stage(value))
+                    if stage == "checks_schedules" and {
+                        o["id"] for o in candidate["objects"]
+                    } != {o["id"] for o in payload["objects"]}:
+                        raise CampaignValidationError(
+                            [
+                                ValidationIssue(
+                                    code="stage_identity_change",
+                                    stage=stage,
+                                    entity_type="campaign",
+                                    entity_id=id,
+                                    field="objects",
+                                    message="Сохрани все объекты предыдущего этапа; здесь можно связать их с готовыми действиями",
+                                )
+                            ]
+                        )
                 if stage == "locations":
                     places = {l["id"]: l for l in candidate["locations"]}
                     issues = []
@@ -346,7 +354,14 @@ class CampaignGenerator2:
                     "world": setting.model_dump(exclude={"content"}),
                     "catalog": authoring_catalog(rules),
                     "creatures": {
-                        k: v.model_dump() for k, v in setting.content.creatures.items()
+                        k: {
+                            "id": k,
+                            "name": v.name,
+                            "habitats": v.habitats,
+                            "threat": v.threat,
+                            "rarity": v.rarity,
+                        }
+                        for k, v in setting.content.creatures.items()
                     },
                     "campaign": {
                         k: v for k, v in payload.items() if k != "setting_definition"

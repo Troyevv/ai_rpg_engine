@@ -161,7 +161,9 @@ class EncounterService:
                 "attack",
                 aid,
                 ability=a.attacks[weapon].ability,
-                modifier=self.runtime.rules.attack_modifier(a, weapon),
+                modifier=self.runtime.rules.attack_modifier(a, weapon)
+                + ResourceEngine.mode_effect(a.attacks[weapon], mode).attack_bonus,
+                firing_mode=mode,
                 target=target,
                 dc=t.armor_class,
                 weapon=weapon,

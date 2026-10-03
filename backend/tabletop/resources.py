@@ -3,6 +3,16 @@
 
 class ResourceEngine:
     @staticmethod
+    def mode_effect(attack, mode="single"):
+        from .content import FiringMode
+
+        return (
+            attack.magazine.mode_effects.get(mode, FiringMode())
+            if attack.magazine
+            else FiringMode()
+        )
+
+    @staticmethod
     def attack_costs(attack):
         costs = {}
         for cost in attack.resource_usage:
@@ -46,6 +56,7 @@ class ResourceEngine:
             e
             for e in actor.inventory
             if not e.equipped
+            and not e.container_id
             and any(
                 c.type == "ammo" and c.ammo_type == mag.ammo_type
                 for c in items[e.item_id].components

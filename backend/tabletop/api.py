@@ -54,6 +54,7 @@ class RollRequest(Request):
 
 
 class GenerateRequest(Credential):
+    authoring_id: str | None = None
     setting_id: str | None = None
     config: ModelConfig
     options: GenerationOptions
@@ -252,7 +253,7 @@ def install(app, shared_repo, credentials):
             rules,
             preview=True,
         )
-        engine.equipment_stats(actor, {i.id: i for i in rules.items})
+        engine.equipment_stats(actor, {i.id: i for i in rules.items}, rules)
         return {
             "sheet": actor.model_dump(),
             "attacks": {k: engine.attack_modifier(actor, k) for k in actor.attacks},
@@ -317,44 +318,65 @@ def install(app, shared_repo, credentials):
 
     @router.post("/generate")
     def generate(body: GenerateRequest):
-        did = uuid4().hex
-        try:
-            if body.setting_id:
-                from .setting_repository import SettingRepository
-                from .campaign_generation import CampaignGenerator2, CampaignOptions
-                from .content import SettingDefinition
+        from .authoring_jobs import AuthoringJobs
+        from .setting_repository import SettingRepository
+        from .campaign_generation import CampaignGenerator2, CampaignOptions
+        from .content import SettingDefinition
 
-                world = SettingRepository(repo).get(body.setting_id)
-                if world["status"] != "CONFIRMED":
-                    raise ValueError("Сначала подтверди мир")
-                options = CampaignOptions.model_validate(
-                    body.options.model_dump(include=set(CampaignOptions.model_fields))
-                )
-                definition = CampaignGenerator2(agent(body)).generate(
-                    did, SettingDefinition.model_validate(world["definition"]), options
-                )
-            else:
-                definition = CampaignGenerator(agent(body)).generate(did, body.options)
+        jobs = AuthoringJobs(repo)
+        did = body.authoring_id or uuid4().hex
+        request = body.model_dump(exclude={"config", "api_key", "authoring_id"})
+        try:
+            with jobs.run(did, "campaign", request) as checkpoint:
+                if checkpoint.result is not None:
+                    return checkpoint.result
+                if body.setting_id:
+                    source = checkpoint.cached("_source")
+                    if source is None:
+                        source = SettingRepository(repo).get(body.setting_id)
+                        checkpoint.save("_source", source)
+                    definition = CampaignGenerator2(
+                        agent(body), checkpoint=checkpoint
+                    ).generate(
+                        did,
+                        SettingDefinition.model_validate(source["definition"]),
+                        CampaignOptions.model_validate(
+                            {
+                                k: v
+                                for k, v in body.options.model_dump().items()
+                                if k in CampaignOptions.model_fields
+                            }
+                        ),
+                    )
+                else:
+                    definition = CampaignGenerator(agent(body)).generate(
+                        did, body.options
+                    )
+                result = repo.save_draft(definition, source="generated")
+                with repo.connect() as db:
+                    db.execute(
+                        "UPDATE tabletop_requests SET game_id=? WHERE game_id=?",
+                        (result["id"], did),
+                    )
+                result = repo.draft(result["id"])
+                checkpoint.complete(result)
+                return result
         except CampaignValidationError as exc:
             invalid_id = None
             if exc.definition is not None:
                 invalid_id = repo.save_invalid_draft(
                     exc.definition, exc.issues, exc.stage, did
                 )
-            return validation_response(exc, invalid_id)
+            response = validation_response(exc, invalid_id)
+            payload = json.loads(response.body)
+            payload["authoring_id"] = did
+            return JSONResponse(status_code=409, content=payload)
         except ValueError:
             raise
         except Exception:
             raise ValueError(
                 "Генерация недоступна. Проверь модель и соединение."
             ) from None
-        result = repo.save_draft(definition, source="generated")
-        with repo.connect() as db:
-            db.execute(
-                "UPDATE tabletop_requests SET game_id=? WHERE game_id=?",
-                (result["id"], did),
-            )
-        return repo.draft(result["id"])
 
     @router.get("/games")
     def games():

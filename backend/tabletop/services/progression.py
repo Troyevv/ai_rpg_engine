@@ -163,6 +163,15 @@ class ProgressionService:
         a.max_hp += hp_gain
         a.hp += hp_gain
         a.resources["hit_dice"] = a.resources.get("hit_dice", 0) + 1
+        # Remove reversible item grants before promoting the same feature to intrinsic.
+        from ..item_effects import ItemEffects
+
+        equipped = [(entry, entry.equipped) for entry in a.inventory]
+        for entry, _ in equipped:
+            entry.equipped = False
+        ItemEffects.sync(a, state.items, state.ruleset)
+        for entry, value in equipped:
+            entry.equipped = value
         new_features = [fid for fid in new_features if fid not in a.features]
         FeatureEngine.apply_passives(
             a, [state.ruleset.features[i] for i in new_features]
@@ -175,7 +184,7 @@ class ProgressionService:
                 maximum=maximum,
                 remaining=previous.remaining + max(0, maximum - previous.maximum),
             )
-        self.runtime.rules.equipment_stats(a, state.items)
+        self.runtime.rules.equipment_stats(a, state.items, state.ruleset)
         event(
             events,
             f"{a.name} достигает уровня {a.level}.",

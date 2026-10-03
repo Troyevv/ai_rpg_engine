@@ -126,7 +126,11 @@ export type Catalog = {
 };
 export type Item = {
   starting_available?: boolean;
-  components?: { type: string; damage_expression?: string }[];
+  components?: {
+    type: string;
+    damage_expression?: string;
+    capacity?: number;
+  }[];
   slots: string[];
   hands: number;
   armor_category: string;
@@ -145,12 +149,16 @@ export type Item = {
   value: number;
 };
 export type Entry = {
+  container_id?: string;
   item_id: string;
   quantity: number;
   equipped: boolean;
   slot?: string;
 };
 export type Sheet = {
+  background_contacts?: string[];
+  background_knowledge?: string[];
+  background_reputation?: Record<string, number>;
   resource_definitions?: Record<string, { name: string; maximum: number }>;
   gold: number;
   equipment_slots: Record<string, string>;
@@ -214,6 +222,7 @@ export type Sheet = {
   controller: { controller: string; player_id: string | null };
 };
 export type Command = {
+  operation?: "break" | "cover" | "activate";
   mode?: string;
   action_id?: string;
   type: string;
@@ -332,6 +341,10 @@ export type Game = {
       name: string;
       description: string;
       opened: boolean;
+      capabilities?: string[];
+      can_activate?: boolean;
+      capacity?: number;
+      hit_points?: number;
       contents: Entry[];
     }[];
     items: Record<string, Item>;

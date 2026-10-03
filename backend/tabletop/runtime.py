@@ -185,7 +185,12 @@ class TabletopRuntime:
             return self.choices.request(state, c, aid, events)
         from .context_actions import ContextActionService
 
+        from .object_actions import ObjectActions
+
         services = {
+            "object_action": ObjectActions(self),
+            "store_item": self.inventory_service,
+            "unpack_item": self.inventory_service,
             "context_action": ContextActionService(self),
             "level_up": self.progression_service,
             "cast_spell": self.spells_service,

@@ -3,11 +3,12 @@
 from tabletop_gameplay_fixture import gameplay_definition
 from backend.tabletop.catalog import load_ruleset
 from backend.tabletop.content_migration import import_catalog
-from backend.tabletop.content import ContentItem
+from backend.tabletop.content import ContentItem, CreatureTemplate
 
 
 def authoring_reply(prompt, request):
     import json
+    from backend.tabletop.authoring import authoring_payload
 
     world = import_catalog(load_ruleset("d20-fantasy-v2"))
     world.id = "test_universal"
@@ -23,13 +24,45 @@ def authoring_reply(prompt, request):
             value=item.value,
             components=[dict(type="quest" if item.type == "quest" else "currency")],
         )
+    world.content.creatures["glass_guard"] = CreatureTemplate(
+        id="glass_guard",
+        name="Страж",
+        attributes={
+            k: 10
+            for k in (
+                "strength",
+                "dexterity",
+                "constitution",
+                "intelligence",
+                "wisdom",
+                "charisma",
+            )
+        },
+        base_hp=18,
+        base_armor=12,
+        attacks=[
+            dict(
+                id="strike",
+                name="Удар",
+                damage_type="physical",
+                damage_expression="1d4",
+                accuracy=2,
+            )
+        ],
+        ai_profile="aggressive",
+    )
     d.setting_definition = world
     d.ruleset_id = "d20-core-v1"
     d.items = []
-    d.characters.extend(d.creatures)
     d.creatures = []
     d.encounters = []
     d.schedules = []
+    for check in d.checks:
+        if check.actor_id == "sentinel":
+            check.actor_id = "guard_battle_1"
+        for effect in check.failure:
+            if effect.target == "sentinel":
+                effect.target = "guard_battle_1"
     for actor in d.characters:
         actor.knowledge = []
     schema = json.loads(prompt.split("Верни только JSON по схеме:\n", 1)[1])
@@ -66,9 +99,21 @@ def authoring_reply(prompt, request):
                     row["equipment"] = []
                     if group == "archetypes":
                         row["equipment_choices"] = []
-        return {k: data[k] for k in schema["properties"]}
+        return authoring_payload({k: data[k] for k in schema["properties"]})
     if title == "EncounterRequests":
-        return {"requests": []}
+        return {
+            "requests": [
+                dict(
+                    id="guard_battle",
+                    name="Страж архива",
+                    location_id="vault",
+                    faction_id="wardens",
+                    difficulty="MEDIUM",
+                    available_creatures=["glass_guard"],
+                    loot_object="spoils",
+                )
+            ]
+        }
     if title.startswith("CampaignStage_"):
-        return {k: d.model_dump()[k] for k in schema["properties"]}
+        return authoring_payload({k: d.model_dump()[k] for k in schema["properties"]})
     raise ValueError("Unknown fixture stage")

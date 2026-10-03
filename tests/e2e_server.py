@@ -213,7 +213,9 @@ def tabletop_stream(**kwargs):
         if idea == "invalid references":
             campaign.characters[1].knowledge.append("missing_secret")
             campaign.characters[1].relationships["missing_actor"] = 10
-        value = campaign.model_dump_json()
+        from backend.tabletop.authoring import authoring_payload
+
+        value = json.dumps(authoring_payload(campaign.model_dump()), ensure_ascii=False)
     elif "roleplay-портрет героя" in prompt:
         requested = json.loads(kwargs["messages"][-1]["content"])["field"]
         portrait = {
@@ -349,7 +351,10 @@ if __name__ == "__main__":
                     {"initiative": 1, "attack": 12, "damage": 2}.get(
                         kwargs.get("purpose"), 10
                     )
-                    if kwargs.get("actor") == "sentinel"
+                    if (
+                        kwargs.get("actor") == "sentinel"
+                        or str(kwargs.get("actor", "")).startswith("guard_battle_")
+                    )
                     else 8 if kwargs.get("purpose") == "damage" else 20
                 )
             )

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from .rules import RulesEngine
 from .encounter import EncounterEngine
 from .dice import DiceEngine
+from .resources import ResourceEngine
 
 
 def attack_previews(state, actor):
@@ -42,7 +43,10 @@ def attack_previews(state, actor):
                 advantage, sources = rules.conditions.advantage(
                     actor, state.ruleset, "attack", target, distance=distance
                 )
-                modifier = rules.attack_modifier(actor, weapon)
+                mode_effect = ResourceEngine.mode_effect(attack, mode)
+                modifier = (
+                    rules.attack_modifier(actor, weapon) + mode_effect.attack_bonus
+                )
                 outcomes = list(product(range(1, 21), repeat=2 if advantage else 1))
                 selected = [max(v) if advantage > 0 else min(v) for v in outcomes]
                 hits = sum(
@@ -52,8 +56,15 @@ def attack_previews(state, actor):
                     )
                     for v in selected
                 )
-                damage_modifier = rules.damage_modifier(actor, weapon, state.ruleset)
-                expression = attack.expression or f"1d{attack.die}"
+                damage_modifier = (
+                    rules.damage_modifier(actor, weapon, state.ruleset)
+                    + mode_effect.damage_bonus
+                )
+                expression = (
+                    mode_effect.damage_expression
+                    or attack.expression
+                    or f"1d{attack.die}"
+                )
 
                 def bounds(critical=False):
                     low = high = damage_modifier
@@ -114,6 +125,7 @@ def attack_previews(state, actor):
                                 rules.proficiency(actor) if attack.proficient else 0
                             ),
                             "Способности": actor.bonuses.get("attack_bonus", 0),
+                            "Режим огня": mode_effect.attack_bonus,
                             "Состояния": rules.conditions.bonus(actor, "attack_bonus"),
                         },
                     )

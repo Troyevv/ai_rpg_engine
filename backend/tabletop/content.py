@@ -63,7 +63,14 @@ class AmmoComponent(Model):
     ammo_type: Id
 
 
+class FiringMode(Model):
+    attack_bonus: int = Field(default=0, ge=-10, le=10)
+    damage_bonus: int = Field(default=0, ge=-20, le=100)
+    damage_expression: str = ""
+
+
 class MagazineComponent(Model):
+    mode_effects: dict[Literal["single", "burst", "automatic"], FiringMode] = {}
     type: Literal["magazine"] = "magazine"
     ammo_type: Id
     capacity: int = Field(ge=1, le=1000)
@@ -75,6 +82,8 @@ class MagazineComponent(Model):
 
     @model_validator(mode="after")
     def bounds(self):
+        if not set(self.mode_effects) <= set(self.modes):
+            raise ValueError("Mode effect requires declared ammunition cost")
         if self.initial > self.capacity or any(
             v > self.capacity for v in self.modes.values()
         ):

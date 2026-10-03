@@ -18,6 +18,7 @@ class SettingSave(Credential):
 
 
 class SettingGenerate(Credential):
+    authoring_id: str | None = None
     config: ModelConfig
     concept: str = Field(min_length=3, max_length=12000)
     section: str | None = None
@@ -26,6 +27,13 @@ class SettingGenerate(Credential):
 
 def install(router, repo, agent, validation_response):
     worlds = SettingRepository(repo)
+    from .authoring_jobs import AuthoringJobs
+
+    jobs = AuthoringJobs(repo)
+
+    @router.get("/authoring/{id}")
+    def authoring_job(id: str):
+        return jobs.public(id)
 
     @router.get("/settings/schema")
     def schema():
@@ -66,21 +74,46 @@ def install(router, repo, agent, validation_response):
 
     @router.post("/settings/worlds/generate")
     def generate_world(body: SettingGenerate):
-        existing = worlds.get(body.setting_id) if body.setting_id else None
-        id = body.setting_id or uuid4().hex
+        request = body.model_dump(exclude={"config", "api_key", "authoring_id"})
+        id = body.authoring_id or uuid4().hex
         try:
-            definition = SettingGenerator(agent(body)).generate(
-                id,
-                body.concept,
-                (
-                    SettingDefinition.model_validate(existing["definition"])
-                    if existing
-                    else None
-                ),
-                body.section,
-            )
-            if not existing:
-                definition.id = id
-            return worlds.save(definition, existing["revision"] if existing else None)
+            with jobs.run(id, "setting", request) as checkpoint:
+                if checkpoint.result is not None:
+                    return checkpoint.result
+                source = checkpoint.cached("_source")
+                if source is None:
+                    source = {
+                        "world": (
+                            worlds.get(body.setting_id) if body.setting_id else None
+                        )
+                    }
+                    checkpoint.save("_source", source)
+                existing = source["world"]
+                definition = SettingGenerator(
+                    agent(body), checkpoint=checkpoint
+                ).generate(
+                    id,
+                    body.concept,
+                    (
+                        SettingDefinition.model_validate(existing["definition"])
+                        if existing
+                        else None
+                    ),
+                    body.section,
+                )
+                if not existing:
+                    definition.id = id
+                result = worlds.save(
+                    definition, existing["revision"] if existing else None
+                )
+                checkpoint.complete(result)
+                return result
         except CampaignValidationError as exc:
-            return validation_response(exc)
+            response = validation_response(exc)
+            import json
+
+            payload = json.loads(response.body)
+            payload["authoring_id"] = id
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse(status_code=409, content=payload)

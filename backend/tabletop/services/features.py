@@ -7,12 +7,12 @@ class FeatureService:
     def __init__(self, runtime):
         self.runtime = runtime
 
-    def execute(self, state, command, aid, events, validate_only=False):
+    def execute(self, state, command, aid, events, validate_only=False, granted=False):
         actor = state.actor(aid)
         feature = state.ruleset.features.get(command.feature_id)
         if (
             not feature
-            or feature.id not in actor.features
+            or (feature.id not in actor.features and not granted)
             or feature.level > actor.level
         ):
             raise ValueError("Особенность недоступна персонажу")

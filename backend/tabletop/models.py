@@ -108,6 +108,15 @@ class ActorControl(Model):
 
 
 class CharacterSheet(Model):
+    equipment_grants: list[str] = []
+    equipment_effect_bonuses: dict[str, int] = {}
+    equipment_hp_bonus: int = 0
+    equipment_speed_bonus: int = 0
+    initialized_item_features: list[str] = []
+    background_contacts: list[str] = []
+    background_knowledge: list[str] = []
+    background_reputation: dict[str, int] = {}
+    ai_profile: Literal["aggressive", "defensive", "support", "cautious"] = "aggressive"
     active_effects: list[dict] = []
     template_id: str = ""
     damage_modifiers: dict[str, float] = {}
@@ -205,6 +214,8 @@ class Encounter(Model):
 
 
 class PendingRoll(Model):
+    firing_mode: Literal["single", "burst", "automatic"] = "single"
+    object_id: str = ""
     modifier_breakdown: dict[str, int] = {}
     check_id: str = ""
     id: str
@@ -221,6 +232,9 @@ class PendingRoll(Model):
         "spell_damage",
         "spell_healing",
         "feature_healing",
+        "object_attack",
+        "object_damage",
+        "hazard_damage",
         "concentration",
     ]
     actor: str
@@ -290,6 +304,7 @@ class SessionState(Model):
 
 
 class ObjectState(Model):
+    hit_points: int | None = Field(default=None, ge=0)
     revealed: bool = True
     opened: bool = False
     unlocked: bool = False
@@ -381,6 +396,43 @@ class GameState(Model):
                 raise ValueError("Источник состояния не найден")
             if any(x.item_id not in self.items for x in a.inventory):
                 raise ValueError("Неизвестный предмет")
+        for actor in actors.values():
+            for entry in actor.inventory:
+                if not entry.container_id:
+                    continue
+                bags = [
+                    e
+                    for e in actor.inventory
+                    if e.item_id == entry.container_id and not e.container_id
+                ]
+                part = (
+                    next(
+                        (
+                            c
+                            for c in self.items[entry.container_id].components
+                            if c.type == "container"
+                        ),
+                        None,
+                    )
+                    if entry.container_id in self.items
+                    else None
+                )
+                if (
+                    not bags
+                    or not part
+                    or entry.equipped
+                    or entry.item_id == entry.container_id
+                ):
+                    raise ValueError("Некорректная ссылка на контейнер")
+                if (
+                    sum(
+                        e.quantity
+                        for e in actor.inventory
+                        if e.container_id == entry.container_id
+                    )
+                    > part.capacity
+                ):
+                    raise ValueError("Вместимость контейнера превышена")
         p = self.session_state.pending
         if (self.session_state.mode == "AWAITING_ROLL") != (p is not None):
             raise ValueError("Некорректный ожидающий бросок")

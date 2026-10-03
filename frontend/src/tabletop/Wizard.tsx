@@ -1,3 +1,4 @@
+import { AuthoringProgress, useAuthoring } from "./AuthoringProgress";
 import { SettingEditor } from "./SettingEditor";
 import {
   ChoiceControl,
@@ -28,8 +29,9 @@ export function Wizard({
   done: (game: Game) => void;
   cancel: () => void;
 }) {
+  const authoring = useAuthoring("campaign");
   const [settingId, setSettingId] = useState<string | null>(null);
-  const [worldEditor, setWorldEditor] = useState(false);
+  const [worldEditor, setWorldEditor] = useState(true);
   const [progressionMode, setProgressionMode] = useState("xp");
   const [creatorValid, setCreatorValid] = useState(false);
   const [catalog, setCatalog] = useState<Catalog | null>(null),
@@ -142,6 +144,30 @@ export function Wizard({
           {settingId && <p>Приключение использует выбранный мир.</p>}
         </>
       )}
+      <AuthoringProgress
+        job={authoring.job}
+        busy={busy}
+        resume={() =>
+          void run(async () =>
+            choose(
+              await authoring.generate<Draft>(
+                {
+                  ...authoring.job!.request,
+                  config: prefs.summary,
+                  api_key: apiKey,
+                },
+                true,
+              ),
+            ),
+          )
+        }
+      />
+      {!settingId && step === 0 && (
+        <p>
+          Сначала создай или выбери мир выше. Сохранённые черновики доступны без
+          повторной генерации.
+        </p>
+      )}
       <span className="tt-eyebrow">Новая кампания · {step + 1} / 4</span>
       <h1>
         {
@@ -230,7 +256,6 @@ export function Wizard({
               })
                 .filter(
                   ([key]) =>
-                    !settingId ||
                     !["genre", "setting", "technology", "magic"].includes(key),
                 )
                 .map(([key, label]) => (
@@ -274,17 +299,20 @@ export function Wizard({
           <button
             className="tt-primary"
             disabled={
-              busy || options.idea.trim().length < 3 || !prefs.game.model
+              busy ||
+              !settingId ||
+              options.idea.trim().length < 3 ||
+              !prefs.summary.model
             }
             onClick={() =>
               void run(async () =>
                 choose(
-                  await api<Draft>("/tabletop/generate", {
+                  await authoring.generate<Draft>({
                     options,
                     setting_id: settingId,
                     config: {
-                      ...prefs.game,
-                      max_tokens: Math.max(10000, prefs.game.max_tokens),
+                      ...prefs.summary,
+                      max_tokens: Math.max(10000, prefs.summary.max_tokens),
                     },
                     api_key: apiKey || undefined,
                   }),

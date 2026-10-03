@@ -1,3 +1,4 @@
+import { AuthoringProgress, useAuthoring } from "./AuthoringProgress";
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../api";
 import type { Preferences } from "../types";
@@ -351,6 +352,7 @@ export function SettingEditor({
   apiKey: string;
   onUse: (world: World) => void;
 }) {
+  const authoring = useAuthoring("setting");
   const [list, setList] = useState<{ id: string; name: string }[]>([]),
     [world, setWorld] = useState<World | null>(null),
     [draft, setDraft] = useState<Definition | null>(null),
@@ -399,6 +401,25 @@ export function SettingEditor({
   return (
     <section className="tt-panel setting-editor">
       <h2>Миры</h2>
+      <AuthoringProgress
+        job={authoring.job}
+        busy={busy}
+        resume={() =>
+          void run(async () => {
+            accept(
+              await authoring.generate<World>(
+                {
+                  ...authoring.job!.request,
+                  config: prefs.summary,
+                  api_key: apiKey,
+                },
+                true,
+              ),
+            );
+            await refresh();
+          })
+        }
+      />
       <p>Создай вселенную один раз и используй её в разных приключениях.</p>
       {error && (
         <p role="alert" className="tt-error">
@@ -432,7 +453,7 @@ export function SettingEditor({
           onClick={() =>
             void run(async () => {
               accept(
-                await api<World>("/tabletop/settings/worlds/generate", {
+                await authoring.generate<World>({
                   concept,
                   config: prefs.summary,
                   api_key: apiKey,
@@ -547,7 +568,7 @@ export function SettingEditor({
                   void run(async () => {
                     await save();
                     accept(
-                      await api<World>("/tabletop/settings/worlds/generate", {
+                      await authoring.generate<World>({
                         concept: concept || draft.description || draft.name,
                         config: prefs.summary,
                         api_key: apiKey,
