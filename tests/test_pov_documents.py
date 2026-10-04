@@ -97,7 +97,8 @@ def test_switch_actor_roles_and_stale_revision(db):
     assert any(w.get('field')=='goals' for w in resolved.warnings)
     payload['characters'][0]['id']='character_1'
     resolved=StateResolver(snapshot['world_state'],NARRATIVE,'').resolve(wire(payload,NARRATIVE,snapshot))
-    assert resolved.state['characters']['character_1']['goals']==['Новая цель']
+    from backend.runtime_v3.lifecycle import active_texts
+    assert active_texts(resolved.state['characters']['character_1']['goals'])==['Новая цель']
     storage.switch_actor(sid,'character_1',switched['revision'])
     assert storage.get_snapshot(sid)['world_state']['characters']['character_1']['location_id']==storage.get_snapshot(sid)['world_state']['camera']['location_id']
 
@@ -110,11 +111,11 @@ def test_backstage_is_canonical_and_regenerates_without_leaking_history(db):
     state=storage.get_save(sid)['state'];turn=storage.list_turns(sid)[-1]
     assert turn['kind']=='background' and turn['pov_actor_id'] is None
     assert json.loads(turn['audience_json'])==['character_3','character_4']
-    assert state['scene']=='Тайная встреча у подвала.' and state['world_clock']['last_event_time']=='День 1 (Пн) 18:25'
+    assert state['scene']=='Тайная встреча у подвала.' and state['world_clock']['last_event_time']=='День 1 · Пн · 18:25'
     assert json.loads(storage.get_job(original)['before_json'])['world_state']['camera']['situation']==scene
     assert controlled(state) is None
     assert state['facts'][-1]['known_by']==['character_3','character_4']
-    assert state['relationships'][-1]['change']['direction']=='up'
+    assert 'change' not in state['relationships'][-1]  # New dimensions have no numeric baseline.
     messages=build_context(storage.get_snapshot(sid),storage.list_turns(sid),'Продолжить','turn',32768,2000)
     assert SECRET not in [m['content'] for m in messages if m['role']=='assistant']
     pov=next(m['content'] for m in messages if m['content'].startswith('Знания POV'))

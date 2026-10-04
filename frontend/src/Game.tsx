@@ -1,3 +1,5 @@
+import {TimeSkip} from './TimeSkip';
+import {RuntimeNotifications} from './RuntimeNotifications';
 import {useMotionPreset} from "./motion";
 import {Timing} from './Timing';
 import { useEffect, useRef, useState } from "react";
@@ -48,6 +50,7 @@ export function Game({
   apiKey: string;
 }) {
   const mobile=useMobile();
+  const [notices,setNotices]=useState(()=>localStorage.getItem('relationship-notices')!=='off');
   const [away,setAway]=useState(false);
   const input=useRef<HTMLTextAreaElement>(null);
   const mainActor=save?.state.protagonist_id||save?.state.characters.find(c=>c.is_player)?.id;
@@ -80,7 +83,7 @@ export function Game({
   const { job, reconnecting } = useJob(submitted ?? save?.job, refresh);
   const awaitingCommit=job?.status==='saved'&&job.revision===save?.revision&&!save?.turns.some(t=>t.variants?.some(v=>v.job_id===job.id));
   const pending = active(job)||!!awaitingCommit;
-  useEffect(()=>{if(submitted&&save?.job?.id===submitted.id&&!active(save.job))setSubmitted(null)},[save?.job,submitted]);
+
   useEffect(() => {
     const id = requestAnimationFrame(() => {
       if (scroll.current && pinned.current)
@@ -99,13 +102,14 @@ export function Game({
       setBusy(false);
     }
   };
-  const turn = (kind: "start" | "turn" | "regenerate" | "background", text = draft, target?:number, rollback=false) =>
+  const turn = (kind: "start" | "turn" | "regenerate" | "background", text = draft, target?:number, rollback=false, timeSkip?:{duration:number;reason:string}) =>
     run(async () => {
       if (!save) return;
       const j = await api<Job>(`/saves/${save.id}/turns`, {
         kind,
         text,
         target_turn_id: target,
+        time_skip: timeSkip,
         rollback_following: rollback,
         config: prefs.game,
         revision: save.revision,
@@ -157,6 +161,7 @@ export function Game({
     );
   return (
     <main className="game">
+      <RuntimeNotifications save={save} job={submitted?job:null} enabled={notices}/>
       {save&&<WorldCamera save={save} open={cameraOpen} onOpenChange={setCameraOpen} busy={busy||pending} observe={observe} control={switchActor}/>}
       {save&&<Diagnostics saveId={save.id} jobId={diagnosticJob} open={diagnostics} onOpenChange={setDiagnostics}/>}
       {mobile&&save?<MobileScene save={save} meta={meta} busy={busy||pending} switchActor={switchActor} background={()=>void turn("background","")} openCharacter={openCharacter} openCamera={()=>setCameraOpen(true)}/>:<>{save&&<div className="pov-controls">
@@ -187,6 +192,7 @@ export function Game({
         </div>
       </div>
       </>}
+      {save?.state.last_time_skip&&<details className="skip-diagnostics"><summary>Пропуск времени: {save.state.last_time_skip.elapsed_minutes} мин{save.state.last_time_skip.interrupted?' · прерван':''}</summary><p>Запрошено: {save.state.last_time_skip.requested_duration} мин · Кандидатов: {save.state.last_time_skip.background_candidates} · Симуляций: {save.state.last_time_skip.simulated_candidates||0} · Объединено: {save.state.last_time_skip.merged_candidates||0} · Пропущено: {save.state.last_time_skip.skipped_candidates||0} · LLM мира: {save.state.last_time_skip.living_world_llm_calls||0}</p></details>}
       <div
         className="story-scroll"
         ref={scroll}
@@ -363,6 +369,8 @@ export function Game({
                     ))}
                   </motion.div>
                   <div className="turn-actions">
+                    <TimeSkip save={save} disabled={busy||pending||actorId===null} submit={(duration,reason)=>void turn('turn',`Жду ${duration} минут.${reason?' '+reason:''}`,undefined,false,{duration,reason})}/>
+                    <label className="small"><input type="checkbox" checked={notices} onChange={e=>{setNotices(e.target.checked);localStorage.setItem('relationship-notices',e.target.checked?'on':'off')}}/> Показывать изменения отношений</label>
                     <Button
                       variant="ghost"
                       size="sm"

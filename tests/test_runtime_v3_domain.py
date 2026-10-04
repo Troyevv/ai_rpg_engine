@@ -1,5 +1,6 @@
 """v3 contract tests: no live state depends on historical provenance."""
 from copy import deepcopy
+from backend.runtime_v3.lifecycle import active_texts
 import pytest
 from backend.runtime_v3.models import WorldStateV3, Character, Location, assert_world_state_v3_invariants
 from backend.runtime_v3.resolver import StateResolver
@@ -59,7 +60,7 @@ def test_mixed_local_drops_do_not_lose_other_changes():
     result=StateResolver(initial(),QUOTE,'Я подхожу к окну.').resolve(p)
     assert result.state['characters']['a']['situation']=='У двери'
     assert result.state['characters']['a']['emotion']==''
-    assert result.state['characters']['a']['goals']==['найти сестру']
+    assert active_texts(result.state['characters']['a']['goals'])==['найти сестру']
     assert result.state['characters']['b']['situation']=='У окна'
     assert result.state['relationships']['a:b']['dimensions']=={'trust':55}
     assert len(result.warnings)==4 and result.history['events']
@@ -71,7 +72,8 @@ def test_mixed_local_drops_do_not_lose_other_changes():
 def test_player_source_is_accepted(field,value,player,evidence):
     p=payload();p['character_changes']=[dict(id='a',**{field:value},player_evidence={field:evidence})]
     result=StateResolver(initial(),QUOTE,player).resolve(p)
-    assert result.state['characters']['a'][field]==value
+    actual=result.state['characters']['a'][field]
+    assert (actual if field=='emotion' else active_texts(actual))==value
 
 
 def test_offcamera_ambiguous_route_fatal():

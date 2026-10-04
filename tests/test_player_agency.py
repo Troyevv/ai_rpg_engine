@@ -4,12 +4,14 @@ import pytest
 from test_engine import db,CONFIG,NARRATIVE
 from runtime_v3_fixture import execute
 from backend.services.player_agency import supported_player_field
-from backend.runtime_v3.models import identity
+from backend.runtime_v3.models import identity, assert_world_state_v3_invariants
+from backend.runtime_v3.lifecycle import active_texts
 
 
 def seed(repo,sid):
     state=repo.get_snapshot(sid)
     state['world_state']['characters']['character_1'].update(goals=['Сохранить дом'],intentions=['Забрать письмо'],emotion='спокоен',obligations=[])
+    state['world_state']=assert_world_state_v3_invariants(state['world_state'])
     with repo.connect() as conn:conn.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(state),sid))
     return state
 
@@ -47,7 +49,8 @@ def test_explicit_player_declarations(db,text,field,value):
     p=character_payload({field:value},player_evidence={field:text if field=='emotion' else [text]})
     job=repo.begin_job(sid,text,'start',CONFIG)
     assert len(execute(repo,job,p,NARRATIVE))==2
-    assert repo.get_snapshot(sid)['world_state']['characters']['character_1'][field]==value
+    actual=repo.get_snapshot(sid)['world_state']['characters']['character_1'][field]
+    assert (actual if field=='emotion' else active_texts(actual))==value
     assert not repo.turn_diagnostics(sid)[0]['warnings']
 
 

@@ -3,7 +3,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from hashlib import sha256
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from backend.services.relation_dimensions import RELATION_DIMENSIONS
 from backend.services.world_delta_errors import StructuralDeltaError
 
@@ -16,8 +16,24 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True, allow_inf_nan=False)
 
 
+class Calendar(StrictModel):
+    start_minute: int = Field(ge=0)
+    start_weekday: int = Field(ge=0, le=6)
+    start_date: str | None = None
+
+
+class Motivation(StrictModel):
+    id: str
+    text: str
+    status: Literal['active', 'completed', 'cancelled', 'failed', 'superseded'] = 'active'
+    source_sequence: int | None = None
+    evidence: str = ''
+    due_minute: int | None = Field(default=None, ge=0)
+
+
 class Meta(StrictModel):
     schema_version: Literal[3] = 3
+    calendar: Calendar | None = None
     turn_id: int = Field(default=0, ge=0)
     world_time: int = Field(default=0, ge=0)
 
@@ -34,10 +50,22 @@ class Character(StrictModel):
     id: str
     location_id: str | None = None
     situation: str = ''
+    physical_state: str = ''
     emotion: str = ''
-    goals: list[str] = Field(default_factory=list)
-    intentions: list[str] = Field(default_factory=list)
-    obligations: list[str] = Field(default_factory=list)
+    emotion_source_sequence: int | None = None
+    goals: list[Motivation] = Field(default_factory=list)
+    intentions: list[Motivation] = Field(default_factory=list)
+    obligations: list[Motivation] = Field(default_factory=list)
+
+    @model_validator(mode='before')
+    @classmethod
+    def legacy_motivations(cls, value):
+        if not isinstance(value, dict): return value
+        value = deepcopy(value)
+        for field in ('goals', 'intentions', 'obligations'):
+            value[field] = [dict(id=identity(field, value.get('id'), i, item), text=item)
+                if isinstance(item, str) else item for i, item in enumerate(value.get(field, []))]
+        return value
 
 
 class Location(StrictModel):
@@ -83,6 +111,8 @@ class ScheduledEvent(StrictModel):
     status: Literal['pending', 'resolved', 'cancelled'] = 'pending'
     condition: str = ''
     type: str = 'event'
+    location_id: str | None = None
+    interrupts: bool = False
     last_attempt_minute: int | None = Field(default=None, ge=0)
 
 
@@ -139,6 +169,9 @@ def assert_world_state_v3_invariants(state, before=None):
         for key, item in value[section].items():
             if set(item['character_ids']) - actors.keys():
                 fatal('неизвестный связанный персонаж', section=section, entity=key)
+    for item in value['scheduled_events'].values():
+        if item['location_id'] is not None and item['location_id'] not in locations:
+            fatal('неизвестное место scheduled event', section='scheduled_events', entity=item['id'])
     if before and (value['meta']['world_time'] < before['meta']['world_time'] or value['meta']['turn_id'] < before['meta']['turn_id']):
         fatal('время или номер хода движется назад')
     return value

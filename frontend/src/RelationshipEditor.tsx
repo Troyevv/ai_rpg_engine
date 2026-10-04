@@ -7,7 +7,7 @@ import {Button} from './components/ui/button';
 import {Textarea} from './components/ui/textarea';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from './components/ui/dialog';
 
-const labels:Record<string,string>={trust:'Доверие',affection:'Привязанность',attraction:'Влечение',irritation:'Раздражение',fear:'Страх',jealousy:'Ревность',respect:'Уважение'};
+import {relationshipLabels as labels} from './lib/relationships';
 type Edit={target_id:string;context:string;dimensions:Record<string,number>;delete?:boolean};
 export function RelationshipEditor({save,card,refresh}:{save:Save;card:Character;refresh:()=>void}){
  const relations=Object.values(save.state.world?.relationships||{}).filter(r=>r.source_id===card.id);

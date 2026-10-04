@@ -35,8 +35,11 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     rules+=f'\nRuntime v3. controlled_actor_id={actor}; mode={camera["mode"]}; world_time={state["meta"]["world_time"]} минут. '
     rules+='Не назначай controlled_actor действия, слова, решения или чувства. Карточки и внутренние состояния NPC — GM-only; не пересказывай психологию, используй индивидуальный стиль речи. При написании диалогов используй «Стиль общения» каждого персонажа: лексику, длину фраз, юмор и реакцию на конфликт. '
     rules+='Предлагай 6 choices объектов action/speech для controlled_actor; для observer choices=[].'
+    rules+=' Lifecycle: используй goals_updates/intentions_updates/obligations_updates со стабильным id существующей записи и status completed/cancelled/failed, evidence текущего хода. Не удаляй историю. Controlled actor: завершение только при однозначном выполнении, новые записи только явно заявленные игроком. situation обновляй для каждого присутствующего, включая controlled actor; для общей объективной ситуации final_scene.situation приложи точную цитату situation_evidence; это объективная ситуация, не эмоция. Спать без указанного срока не означает произвольный скачок: заверши засыпанием, предложи выбрать время.'
+    if snapshot.get('_time_skip'):
+        rules+=' Детерминированный Time Skip: '+json.dumps(snapshot['_time_skip'],ensure_ascii=False)+'. Описывай только до actual_target, не позже. При interrupted начни сцену прерывания. Не выдавай hidden события как знание игрока.'
     if validation_feedback:rules+='\nИсправь структурную ошибку, верни полный JSON:\n'+validation_feedback
-    present=set(camera['present_character_ids'])
+    present=set(camera['present_character_ids']) | set(snapshot.get('_background_actor_ids', []))
     for card in snapshot['character_cards']:
         if any(re.search(r'(?<!\w)'+re.escape(alias)+r'(?!\w)',user_text,re.I) for alias in [card['name'],*card.get('aliases',[])] if alias):present.add(card['id'])
     relevant_facts={k['fact_id'] for k in state['knowledge'].values() if k['actor_id'] in present and k['status']!='unknown'}
@@ -48,6 +51,11 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         relationships=[r for r in state['relationships'].values() if r['source_id'] in present or r['target_id'] in present],
         threads=[t for t in state['threads'].values() if t['status']!='resolved' and (not t['character_ids'] or set(t['character_ids']) & present)],
         scheduled_events=[e for e in state['scheduled_events'].values() if e['status']=='pending'])
+    from copy import deepcopy
+    current['characters']=deepcopy(current['characters'])
+    for character in current['characters'].values():
+        for field in ('goals','intentions','obligations'):
+            character[field]=[entry for entry in character[field] if isinstance(entry,str) or entry['status']=='active']
     campaign=snapshot.get('campaign',{})
     # Static campaign material only: old import sections also contain duplicate
     # character cards and runtime tables, which are not a second context source.
@@ -59,11 +67,11 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         block('Карточки присутствующих / GM-only',[c for c in snapshot['character_cards'] if c['id'] in present]),
         block('Индекс персонажей',[dict(id=c['id'],name=c['name']) for c in snapshot['character_cards']]),
         block('Знания POV',[dict(k,text=state['facts'][k['fact_id']]['text']) for k in state['knowledge'].values() if k['actor_id']==actor and k['status']!='unknown'])]
-    memory=snapshot.get('memory',{})
-    scoped=memory if kind=='background' else memory.get('per_actor',{}).get(actor,memory if actor==main and not memory.get('per_actor') else {})
-    messages.append(block('Память',scoped))
+    messages.append(block('Память', {'strategy':'canonical_history', 'llm_calls':0}))
     from backend.runtime_v3.director import plan
-    recent_history=[e for e in (world_history or {}).get('events',[]) if isinstance(e,dict) and isinstance(e.get('text'),str) and isinstance(e.get('participants'),list) and any(isinstance(cid,str) and cid in present for cid in e['participants'])][-12:]
+    from backend.runtime_v3.history_selector import HistorySelector
+    recent_history=HistorySelector(state,world_history).select(actor,camera['location_id'],present,
+        [t['id'] for t in current['threads']],min(2400,max(0,(context_length-reserve)//6)))
     messages.append(block('Недавняя история / GM-only',recent_history))
     messages.append(block('Director / GM-only',plan(state,kind,world_history)))
     historical=[]

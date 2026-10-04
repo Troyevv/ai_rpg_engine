@@ -3,7 +3,7 @@ import json
 import re
 from typing import Literal
 
-ThemeId = Literal['graphite', 'gothic', 'parchment', 'noir', 'neon']
+ThemeId = Literal['graphite', 'gothic', 'parchment', 'noir', 'neon', 'cyberpunk', 'industrial', 'medieval', 'arcane', 'urban', 'street', 'terminal', 'space', 'post-apocalypse', 'biotech', 'occult', 'retro']
 
 
 def suggested_theme(text):

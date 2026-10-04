@@ -1,5 +1,6 @@
 """Player-authored edits: no LLM or narrative evidence, strict current invariants."""
 from copy import deepcopy
+from backend.runtime_v3.lifecycle import replace_active
 from backend.runtime_v3.models import Relationship,assert_world_state_v3_invariants
 from backend.services.relation_dimensions import RELATION_DIMENSIONS
 
@@ -10,7 +11,8 @@ def edit_motivation(snapshot,actor_id,goals,intentions):
     for value,maximum in ((goals,4000),(intentions,2000)):
         if not isinstance(value,list) or len(value)>20 or any(not isinstance(v,str) or not v.strip() or len(v)>maximum for v in value):
             raise ValueError('Недопустимый размер цели или намерений.')
-    state['characters'][actor_id].update(goals=[v.strip() for v in goals],intentions=[v.strip() for v in intentions])
+    for field, values in (('goals', goals), ('intentions', intentions)):
+        state['characters'][actor_id][field] = replace_active(state['characters'][actor_id][field], [v.strip() for v in values], actor_id, field, state['meta']['turn_id'])
     assert_world_state_v3_invariants(state)
     return result
 

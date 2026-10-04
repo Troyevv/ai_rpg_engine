@@ -14,7 +14,8 @@ def test_canonical_v3_turn_persists_its_timing(db):
     turn=storage.list_turns(sid)[0]
     timing=json.loads(turn['timing_json'])
     assert set(['narrative','extraction','validation_apply','total'])<=timing.keys()
-    assert not {'memory_compaction','background_simulation','extraction_repair'} & timing.keys()
+    assert timing['memory_compaction']==0
+    assert not {'background_simulation','extraction_repair'} & timing.keys()
     assert timing['total']+0.005>=sum(timing[k] for k in ('narrative','extraction','validation_apply'))
     assert storage.get_job(job)['timing_json']==turn['timing_json']
     with storage.connect() as conn:

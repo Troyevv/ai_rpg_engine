@@ -75,17 +75,17 @@ def test_variants_reuse_exact_context_restore_state_and_preserve_descendants(db)
         storage.select_variant(sid,first['id'],variants[1]['id'],revision)
 
 
-def test_memory_compacts_archives_and_regeneration_uses_pre_response_memory(db):
+def test_canonical_memory_does_not_compact_and_regeneration_reuses_context(db):
     storage,_,sid=db
     cfg={**CONFIG,'recent_turns':2,'memory_batch':2}
     generate(storage,sid,'start',config=cfg)
     for i in range(5):
         generate(storage,sid,text=f'Действие {i}',config=cfg)
     state=storage.get_save(sid)['state']
-    assert state['memory']['through_sequence']==2
+    assert not state['memory']
     turns=storage.list_turns(sid)
     assert len(turns)==6
-    assert sum(t['memory_archived'] for t in turns)==3
+    assert not any(t['memory_archived'] for t in turns)
     assert turns[0]['assistant_text']==NARRATIVE
     job=storage.latest_job(sid)
     messages=json.loads(job['context_json'])
@@ -96,7 +96,7 @@ def test_memory_compacts_archives_and_regeneration_uses_pre_response_memory(db):
     assert replacement['context_json']==job['context_json']
     assert json.loads(replacement['memory_before_json'])==memory_before
     with storage.connect() as conn:
-        assert conn.execute('SELECT COUNT(*) FROM memory_versions').fetchone()[0]==3
+        assert conn.execute('SELECT COUNT(*) FROM memory_versions').fetchone()[0]==0
     restored=Storage(storage.path)
     assert restored.get_save(sid)['state']==storage.get_save(sid)['state']
 

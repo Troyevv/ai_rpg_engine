@@ -63,6 +63,11 @@ def claim_matches(field, value, quote):
     pattern = PATTERNS.get(field)
     if pattern:
         match = pattern.fullmatch(source)
+        if field == 'obligations' and not match:
+            promise = re.fullmatch(r'(?:хорошо|договорились|обещаю),? (сегодня|завтра|послезавтра) (отвезу|привезу|заберу|помогу) (.+)', source)
+            if promise and not re.search(r'\b(?:не|но|если|или)\b', promise[3]):
+                verb={'отвезу':'отвезти','привезу':'привезти','заберу':'забрать','помогу':'помочь'}[promise[2]]
+                return claim in {source, f'{verb} {promise[3]} {promise[1]}', f'{promise[1]} {verb} {promise[3]}'}
         if match:
             # Keep all negation, object and scope words in the literal body.
             forms = literal_forms(match[1]) | {source}
@@ -78,6 +83,8 @@ def claim_matches(field, value, quote):
                     forms.add(f'приехать к {arrival[1]} {arrival[2]} к {clock}')
             return claim in forms
         return False
+    if re.fullmatch(r'мне (?:страшно|грустно|тревожно|радостно|стыдно)', source):
+        return claim in {source, source.removeprefix('мне ')}
     match = re.fullmatch(r'я (\w+)(.*)', source)
     if match and match[1] in EMOTIONS:
         tail = match[2]

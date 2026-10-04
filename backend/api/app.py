@@ -176,6 +176,9 @@ def create_app(db_path=None, recover=True):
     @app.post('/api/saves/{sid}/turns')
     def turn(sid: int, body: Turn):
         settings = body.config.model_dump()
+        if body.time_skip:
+            if body.kind != 'turn': raise ValueError('Time Skip допустим только для нового хода.')
+            settings['time_skip'] = body.time_skip.model_dump()
         settings['expected_revision'] = body.revision
         settings['target_turn_id'] = body.target_turn_id
         settings['rollback_following'] = body.rollback_following

@@ -1,12 +1,14 @@
 """Disposable read projections. None of these scene IDs may enter WorldStateV3."""
 from copy import deepcopy
 from backend.runtime_v3.models import identity
-from backend.services.timeline import label
+from backend.runtime_v3.time_skip import calendar_label
+from backend.runtime_v3.lifecycle import active_texts
 
 
 def ui_view(snapshot, history=None):
     state=deepcopy(snapshot['world_state']);history=history or {}
     camera=state['camera'];now=state['meta']['world_time']
+    label=lambda minute: calendar_label(state, minute)
     cards=deepcopy(snapshot['character_cards'])
     names={c['id']:c['name'] for c in cards}
     locations=state['locations']
@@ -25,21 +27,21 @@ def ui_view(snapshot, history=None):
     world=dict(version=2,characters={},facts={},knowledge=deepcopy(state['knowledge']),relationships=deepcopy(state['relationships']),
         threads=deepcopy(state['threads']),scheduled_events={},scenes=scenes,events={},scene_records={})
     for change in history.get('relationship_changes',[]):
-        if not isinstance(change,dict) or change.get('turn_id')!=state['meta']['turn_id']:continue
+        if not isinstance(change,dict) or change.get('turn_id')!=state['meta']['turn_id'] or change.get('player_observed') is not True or not change.get('before'):continue
         key=change.get('entity')
         if not isinstance(key,str) or key not in world['relationships']:continue
         prior=change.get('before') or {};after=change.get('after') or {}
         if not isinstance(prior,dict) or not isinstance(after,dict):continue
         previous=prior.get('dimensions',{});current=after.get('dimensions',{})
         if not isinstance(previous,dict) or not isinstance(current,dict):continue
-        differences=[v-previous.get(d,0) for d,v in current.items() if type(v) in (int,float) and type(previous.get(d,0)) in (int,float)]
+        differences=[(v-previous[d])*(1 if d in ('trust','affection','respect','attraction') else -1) for d,v in current.items() if d in previous and type(v) in (int,float) and type(previous[d]) in (int,float)]
         if differences and any(differences):
             value=max(differences,key=abs)
-            world['relationships'][key]['change']=dict(direction='up' if value>0 else 'down',reason=after.get('context',''))
+            world['relationships'][key]['change']=dict(direction='mixed' if any(v>0 for v in differences) and any(v<0 for v in differences) else 'up' if value>0 else 'down',reason=after.get('context',''))
     for cid,c in state['characters'].items():
-        world['characters'][cid]=dict(c,location=place(c['location_id']) if c['location_id'] else None,
+        world['characters'][cid]=dict(c,goals=active_texts(c['goals']),intentions=active_texts(c['intentions']),obligations=active_texts(c['obligations']),lifecycle={k:c[k] for k in ('goals','intentions','obligations')},location=place(c['location_id']) if c['location_id'] else None,
             scene_id=sid if cid in camera['present_character_ids'] else 'view:'+c['location_id'] if c['location_id'] else None,
-            minute=now,last_event_id=None,short_goal='\n'.join(c['goals']))
+            minute=now,last_event_id=None,short_goal='\n'.join(active_texts(c['goals'])))
     for fid,f in state['facts'].items():world['facts'][fid]=dict(f,secret=f['visibility']=='secret',evidence=[])
     for eid,e in state['scheduled_events'].items():world['scheduled_events'][eid]=dict(e,participants=e['character_ids'])
     for e in history.get('events',[]):
@@ -60,13 +62,13 @@ def ui_view(snapshot, history=None):
             scene_meta=t.get('scene_meta',dict(time=label(t.get('world_time',now)),location=place(t.get('camera',{}).get('location_id')),present_ids=t.get('camera',{}).get('present_character_ids',[]))))
     for card in cards:
         c=state['characters'][card['id']]
-        card['fields'].update({'Сейчас':c['situation'],'Чего хочет':'\n'.join(c['goals']),'Намерения':'\n'.join(c['intentions'])})
+        card['fields'].update({'Сейчас':c['situation'],'Чего хочет':'\n'.join(active_texts(c['goals'])),'Намерения':'\n'.join(active_texts(c['intentions']))})
     metadata=dict(time=label(now),location=place(camera['location_id']),present_ids=list(camera['present_character_ids']))
     campaign=deepcopy(snapshot.get('campaign',{}))
     result=dict(campaign,characters=cards,world=world,controlled_actor_id=camera['controlled_actor_id'],
         protagonist_id=campaign.get('protagonist_id') or next((c['id'] for c in cards if c.get('is_player')),None),
         camera=dict(scene_id=sid,mode=camera['mode'],scope='scene'),scene=camera['situation'],scene_meta=metadata,
-        world_clock=dict(minute=now,last_event_time=label(now)),memory=deepcopy(snapshot.get('memory',{})),
+        world_clock=dict(minute=now,last_event_time=label(now),calendar=state['meta'].get('calendar')),memory=deepcopy(snapshot.get('memory',{})),
         sections=dict(campaign.get('sections',{}),scene=camera['situation']),
         relationships=[dict(r,text=r['context'],target_name=names[r['target_id']]) for r in world['relationships'].values()],
         facts=[dict(f,known_by=[k['actor_id'] for k in state['knowledge'].values() if k['fact_id']==f['id'] and k['status']=='known']) for f in state['facts'].values()],
@@ -74,4 +76,7 @@ def ui_view(snapshot, history=None):
         events=[dict(e,text=e['text'],character_ids=e['participants'],turn=e['source_sequence']) for e in world['events'].values() if e['player_observed']],
         locations=[dict(l,text=l['description'] or l['name']) for l in locations.values()])
     result['runtime_version']=3
+    result['last_time_skip']=deepcopy(snapshot.get('last_time_skip'))
+    from backend.runtime_v3.notifications import notifications
+    result['notifications']=notifications(state, history)
     return result

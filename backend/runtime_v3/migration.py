@@ -15,8 +15,10 @@ class MigrationResult:
 
 def migrate_v2(original):
     if original.get('schema_version') == 3:
-        assert_world_state_v3_invariants(original['world_state'])
-        return MigrationResult(deepcopy(original), WorldHistoryV3().to_dict(), [])
+        original = deepcopy(original)
+        original['world_state'] = assert_world_state_v3_invariants(original['world_state'])
+        initialize_calendar(original['world_state'])
+        return MigrationResult(original, WorldHistoryV3().to_dict(), [])
     # The only legacy normalization boundary. No runtime code imports v2 apply.
     from backend.services.world import normalize
     from backend.services.timeline import current_time
@@ -124,6 +126,7 @@ def migrate_v2(original):
         state['scheduled_events'][eid] = ScheduledEvent(id=eid, description=e['description'],
             character_ids=[cid for cid in e.get('participants',[]) if cid in actors], due_minute=e.get('due_minute'), status=e.get('status','pending'),
             condition=e.get('condition',''), type=e.get('type','event')).model_dump()
+    initialize_calendar(state)
     assert_world_state_v3_invariants(state)
     # Presentation metadata is deliberately not a second mutable world.
     retained = ('world_summary','summary','title','setting','genre','tone','protagonist_id','world_id','sections','story_notes','campaign')
@@ -135,3 +138,11 @@ def migrate_v2(original):
         campaign={key:deepcopy(old[key]) for key in retained if key in old},
         memory=deepcopy(old.get('memory', {})), history_head=None)
     return MigrationResult(snapshot, history.to_dict(), report)
+
+
+def initialize_calendar(state, start=None):
+    meta = state['meta']
+    if not meta.get('calendar'):
+        start = meta['world_time'] if start is None else start
+        meta['calendar'] = dict(start_minute=start, start_weekday=start // 1440 % 7, start_date=None)
+    return state
