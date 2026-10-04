@@ -37,8 +37,10 @@ test('world themes persist across reload and devices; portals inherit theme; all
   const contrast=await page.locator('html').evaluate(el=>{
    const css=getComputedStyle(el);
    const luminance=(token:string)=>{
-    const hex=css.getPropertyValue(token).trim().slice(1);
-    const rgb=[0,2,4].map(i=>parseInt(hex.slice(i,i+2),16)/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);
+    // Resolve color-mix semantic tokens in the browser rather than assuming hex.
+    const canvas=document.createElement('canvas');canvas.width=canvas.height=1;
+    const ctx=canvas.getContext('2d')!;ctx.fillStyle=css.getPropertyValue(token).trim();ctx.fillRect(0,0,1,1);
+    const rgb=Array.from(ctx.getImageData(0,0,1,1).data).slice(0,3).map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);
     return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;
    };
    return [['--text','--bg'],['--text-muted','--surface-2'],['--text-subtle','--bg'],['--accent','--accent-soft'],['--accent-contrast','--accent']].map(([a,b])=>{

@@ -60,7 +60,7 @@ def extraction_schema():
         'knowledge_gained':record(dict(actor_id=string,fact_id=string,status={'enum':['known','suspected','unknown']},
             source_event_id=dict(type='string',description='Event ЭТОГО extraction: actor_id входит в witnesses, fact_id входит в fact_ids, medium observation/conversation/message/testimony/discovery. Иначе запись опустить.')),
             ('actor_id','fact_id','source_event_id','evidence')),
-        'character_changes':record(dict(id=string,situation=string,emotion=string,goals=strings,intentions=strings,obligations=strings,
+        'character_changes':record(dict(id=string,situation=string,physical_state=string,emotion=string,goals=strings,intentions=strings,obligations=strings,
             player_evidence=obj(dict(emotion=string,goals=strings,intentions=strings,obligations=strings))), ('id',)),
         'relationship_changes':record(dict(source_id=string,target_id=string,context=string,
             dimensions=obj({d:{'type':'number','minimum':-100,'maximum':100} for d in RELATION_DIMENSIONS})), ('source_id','target_id','evidence')),
@@ -68,6 +68,12 @@ def extraction_schema():
         'thread_changes':record(dict(id=string,description=string,character_ids=strings,status={'enum':['active','developing','dormant','resolved','paused']},state=string,relevance={'type':'number','minimum':0,'maximum':1}), ('id','evidence')),
         'scheduled_event_changes':record(dict(id=string,description=string,character_ids=strings,due_minute={'type':'integer','minimum':0},status={'enum':['pending','resolved','cancelled']},condition=string,type=string), ('id','evidence')),
     }
+    for field in ('goals', 'intentions', 'obligations'):
+        definitions['character_changes']['properties'][field+'_updates'] = dict(type='array', items=record(dict(
+            id=string, text=string, status={'enum':['active','completed','cancelled','failed','superseded']},
+            due_minute={'type':'integer','minimum':0}), ('status','evidence')))
+    definitions['scheduled_event_changes']['properties']['location_id'] = string
+    definitions['scheduled_event_changes']['properties']['interrupts'] = {'type':'boolean', 'description':'Только установленное событие, требующее восприятия или участия controlled actor.'}
     from backend.services.world import CARD_FIELDS
     definitions['promotions']['properties']['fields']=obj({key:string for key in CARD_FIELDS},CARD_FIELDS)
     from backend.services.player_agency import PLAYER_SOURCE_DESCRIPTION
@@ -75,7 +81,7 @@ def extraction_schema():
         definitions['character_changes']['properties'][field]=dict(definitions['character_changes']['properties'][field],description=PLAYER_SOURCE_DESCRIPTION)
     definitions['relationship_changes']['properties']['dimensions']['description']='Закрытый набор: '+', '.join(RELATION_DIMENSIONS)+'. Не добавляй ключи; иной смысл — в context.'
     schema = obj(dict(final_scene=obj(dict(location_id={'type':['string','null']},present_character_ids=strings,
-        situation=string,elapsed_minutes={'type':'integer','minimum':0,'maximum':10080}), ('location_id','present_character_ids')),
+        situation=string,situation_evidence=evidence,elapsed_minutes={'type':'integer','minimum':0,'maximum':10080}), ('location_id','present_character_ids')),
         choices={'type':'array','items':obj(dict(action=string,speech=string),('action','speech'))}, **{key:{'type':'array','items':value} for key,value in definitions.items()}), ('final_scene',))
     schema['description'] = ('RawTurnResult: только наблюдения и подтверждённые изменения. Не создавай StatePatch. '
         'Final scene задаёт конечное положение участников; movements нужны только для остальных. '

@@ -46,10 +46,11 @@ for(const width of [360,390,412,430,1440])test(`inspector layout ${width}px`,asy
    await appearance.locator('summary').click();
   }
   if(tab==='Память'){
-   const source=dialog.locator('details').filter({has:page.locator('summary',{hasText:/^Исходная выжимка$/})});
+   const source=dialog.locator('.inspect-reveal').filter({has:page.locator(':scope > summary',{hasText:'Архив старой LLM-памяти (не используется ведущим)'})});
+   await expect(source).toHaveCount(1);
    await expect(source.locator('.prose').first()).not.toBeVisible();
    await source.locator('summary').first().click();await expect(source.locator('.prose').first()).toBeVisible();await expect(source).toContainText('Полная исходная память.');
-   await source.locator('summary').first().click();
+   await source.locator('summary').first().click();await expect(source.locator('.prose').first()).not.toBeVisible();
   }
   await page.screenshot({path:`test-results/inspector-${width}-${tab}.png`});
  }

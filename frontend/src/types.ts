@@ -1,3 +1,4 @@
+import type {RuntimeNotice} from './RuntimeNotifications';
 export type Provider = "local" | "deepseek" | "compatible";
 export type Section =
   "game" | "world" | "characters" | "memory" | "branches" | "settings";
@@ -52,8 +53,10 @@ export interface State {
   protagonist_id?: string;
   controlled_actor_id?: string|null;
   camera?: {scene_id:string;mode:'actor'|'observer';scope?:'world'|'scene'};
-  world?: {version:number;characters:Record<string,{location:string|null;minute:number|null;scene_id:string|null;situation?:string;short_goal?:string;goals?:string[];intentions?:string[];emotion?:string;obligations?:string[]}>;scenes:Record<string,{id:string;participants:string[];location:string;start_minute:number|null;end_minute:number|null;status:string}>;facts?:Record<string,WorldFact>;knowledge?:Record<string,Knowledge>;threads?:Record<string,Thread>;events?:Record<string,WorldEvent>;relationships?:Record<string,WorldRelation>};
-  world_clock?: {last_event_time:string;minute?:number};
+  notifications?:RuntimeNotice[];
+  last_time_skip?:{requested_duration:number;elapsed_minutes:number;interrupted:boolean;background_candidates:number;simulated_candidates?:number;skipped_candidates?:number;merged_candidates?:number;living_world_llm_calls?:number};
+  world?: {version:number;characters:Record<string,{location:string|null;minute:number|null;scene_id:string|null;situation?:string;physical_state?:string;short_goal?:string;goals?:string[];intentions?:string[];emotion?:string;emotion_source_sequence?:number|null;lifecycle?:Record<string,{id:string;text:string;status:string}[]>;obligations?:string[]}>;scenes:Record<string,{id:string;participants:string[];location:string;start_minute:number|null;end_minute:number|null;status:string}>;facts?:Record<string,WorldFact>;knowledge?:Record<string,Knowledge>;threads?:Record<string,Thread>;events?:Record<string,WorldEvent>;relationships?:Record<string,WorldRelation>};
+  world_clock?: {last_event_time:string;minute?:number;calendar?:{start_minute:number;start_weekday:number;start_date?:string|null}};
   memory?: {id: string; summary: string; through_sequence: number; per_actor?:Record<string,{summary:string;through_sequence:number}>};
   scene: string;
   scene_meta?: Scene;
@@ -107,6 +110,7 @@ export interface Turn {
   timing?: Record<string,number>|null;
 }
 export interface Job {
+  replaces_id?:number|null;
   phase?: "scenario" | "world" | "retrying" | "validating" | "saving" | "editing" | "";
   progress_chars?: number;
   id: string;

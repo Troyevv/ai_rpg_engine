@@ -52,7 +52,7 @@ def test_background_participant_anchor_and_return_time(db):
     jid=intro(repo,sid,'character_1')
     assert repo.get_job(jid)['status']=='saved'
     state=repo.get_save(sid)['state']
-    assert state['scene_meta']['location']=='Кухня' and state['scene_meta']['time']=='День 1 (Пн) 18:25'
+    assert state['scene_meta']['location']=='Кухня' and state['scene_meta']['time']=='День 1 · Пн · 18:25'
     assert state['world']['characters']['character_3']['location']=='Подвал'
     assert all('character_1' not in f['known_by'] for f in state['facts'])
 

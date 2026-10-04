@@ -137,6 +137,14 @@ def run_job(path, job_id, handle):
                 target = next(t for t in history if t['id'] == job['replaces_id'])
                 history = [t for t in history if t['sequence'] < target['sequence']]
             sequence = history[-1]['sequence'] + 1 if history else 0
+            from backend.runtime_v3.time_skip import TimeSkipRequest, parse_skip, plan_skip
+            skip_request = None
+            if job['kind'] == 'turn':
+                now = before['world_state']['meta']['world_time']
+                manual_skip = config.get('time_skip')
+                skip_request = TimeSkipRequest(now, now+manual_skip['duration'], manual_skip.get('reason',''), 'manual') if manual_skip else parse_skip(job['user_text'], now, before['character_cards'])
+            skip_result = plan_skip(before['world_state'], skip_request) if skip_request else None
+            if skip_result: before['_time_skip'] = skip_result
             narrative = job['narrative']
 
             def on_stream(stream):
@@ -159,10 +167,7 @@ def run_job(path, job_id, handle):
                         raise ValueError('Сохранённый контекст не помещается в выбранную модель. Увеличь контекст или уменьши лимит ответа.')
                 else:
                     stage_started=time.perf_counter()
-                    before = compact(storage, job, before, history, dict(config,context_length=context),
-                                     lambda messages: generate('memory',messages,output_budget(dict(config,context_length=context)),0.1), handle.cancelled)
-                    if any(request['stage']=='memory' for request in storage.request_log(job_id=job_id)):
-                        timings['memory_compaction']=time.perf_counter()-stage_started
+                    timings['memory_compaction']=0.0
                     if handle.cancelled.is_set():
                         return
                     messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
@@ -203,12 +208,20 @@ def run_job(path, job_id, handle):
                     from dataclasses import asdict
                     from backend.runtime_v3.raw import RawTurnResult
                     raw=RawTurnResult.parse(result)
-                    resolved=StateResolver(before['world_state'],narrative,job['user_text'],turn_id=sequence+1).resolve(raw)
+                    if skip_result: raw.final_scene['elapsed_minutes'] = skip_result['elapsed_minutes']
+                    elif job['kind']=='turn' and __import__('re').match(r'^(?:я )?(?:ложусь спать|сплю)\b',job['user_text'].strip(),__import__('re').I):
+                        raw.final_scene['elapsed_minutes']=0
+                    resolved=StateResolver(before['world_state'],narrative,job['user_text'],turn_id=sequence+1,actor_names={c['id']:c['name'] for c in before['character_cards']}).resolve(raw)
                     state=deepcopy(before)
+                    state.pop('_time_skip', None)
+                    state.pop('last_time_skip', None)
                     state['world_state']=resolved.state
+                    if skip_result:
+                        changes_skip=deepcopy(skip_result)
+                        state['last_time_skip']=changes_skip
                     state['character_cards'].extend(resolved.cards)
                     choices=resolved.choices if job['kind']!='background' else []
-                    changes={'raw_turn_result':asdict(raw), 'state_patch':asdict(resolved.patch)}
+                    changes={'time_skip':skip_result, 'raw_turn_result':asdict(raw), 'state_patch':asdict(resolved.patch)}
                     audience=list(resolved.state['camera']['present_character_ids'])
                     warnings=resolved.warnings
                     history_batch=resolved.history
@@ -240,6 +253,11 @@ def run_job(path, job_id, handle):
             from backend.runtime_v3.models import StatePatch
             final=state['world_state'];prior=before['world_state']
             combined={section:{key:value for key,value in final[section].items() if value!=prior[section].get(key)} for section in resolved.patch.upserts}
+            if skip_result:
+                skip_result.update(state.get('last_time_skip', {}))
+                skip_result['living_world_llm_calls']=sum(r['stage'].startswith('world_simulation') for r in storage.request_log(job_id=job_id))
+                state['last_time_skip']=skip_result
+                changes['time_skip']=skip_result
             changes['state_patch']=asdict(StatePatch(resolved.patch.before_hash,final['meta'],final['camera'],combined))
             with storage.connect() as db:
                 db.execute('UPDATE game_jobs SET audience_json=? WHERE id=?',(json.dumps(audience),job_id))

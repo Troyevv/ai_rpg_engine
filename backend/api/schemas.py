@@ -27,7 +27,12 @@ class Generation(Credential):
     revision: int = Field(ge=0)
     config: ModelConfig
 
+class TimeSkip(DTO):
+    duration: int = Field(ge=1, le=10080)
+    reason: str = Field(default='', max_length=1000)
+
 class Turn(Credential):
+    time_skip: TimeSkip | None = None
     target_turn_id: int | None = None
     rollback_following: bool = False
     kind: Literal['start', 'turn', 'regenerate','background'] = 'turn'

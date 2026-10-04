@@ -8,6 +8,7 @@ import unicodedata
 from pydantic import ValidationError
 from backend.runtime_v3.models import (Character, Location, Fact, Knowledge, Relationship,
     Thread, ScheduledEvent, StatePatch, WorldHistoryV3, identity, fatal, assert_world_state_v3_invariants)
+from backend.runtime_v3.lifecycle import active_texts, replace_active, apply_changes
 from backend.runtime_v3.raw import RawTurnResult
 from backend.runtime_v3.history import INFORMATION_MEDIA
 from backend.services.relation_dimensions import RELATION_DIMENSIONS
@@ -30,9 +31,12 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None):
+        self.actor_names=actor_names or {}
         self.before = assert_world_state_v3_invariants(before)
         self.state = deepcopy(self.before)
+        from backend.runtime_v3.migration import initialize_calendar
+        initialize_calendar(self.state)
         self.sources = [normalized(narrative), normalized(player_input)]
         self.player_input, self.narrative, self.observed = player_input, narrative, observed
         self.turn_id = turn_id if turn_id is not None else before['meta']['turn_id'] + 1
@@ -148,6 +152,9 @@ class StateResolver:
                 self.history.movements.append(dict(actor_id=cid,from_location_id=origin,to_location_id=lid,
                     derived_from='final_scene',turn_id=self.turn_id))
             s['characters'][cid]['location_id'] = lid
+        controlled=camera['controlled_actor_id']
+        if controlled is not None and self.supported({'evidence':scene.get('situation_evidence')}):
+            s['characters'][controlled]['situation']=situation
         for i, item in self.records(raw,'facts'):
             fields = {key:item[key] for key in ('id','text','visibility','character_ids') if key in item}
             entry = self.typed(Fact,fields,'facts',i)
@@ -192,16 +199,16 @@ class StateResolver:
                 actor not in event['witnesses'] or fact not in event['fact_ids'] or event['medium'] not in INFORMATION_MEDIA):
                 self.warn('knowledge_gained',i,'нет подтверждённого пути передачи знания',code='knowledge_path_invalid'); continue
             entry = self.typed(Knowledge,dict(actor_id=actor,fact_id=fact,status=item.get('status','known')),'knowledge_gained',i)
-            if entry:
+            if entry and not (not self.observed and actor == self.before['camera']['controlled_actor_id']):
                 s['knowledge'][actor+':'+fact] = entry
                 self.history.knowledge_acquisitions.append(dict(entry,source_event_id=event['id'],evidence=item['evidence'],turn_id=self.turn_id))
         for i, item in self.records(raw,'character_changes',evidence=False):
             cid = self.actor(item.get('id'),'character_changes',i)
             actor = s['characters'][cid]
-            for key in ('situation','emotion','goals','intentions','obligations'):
+            for key in ('situation','physical_state','emotion','goals','intentions','obligations'):
                 if key not in item: continue
                 value = item[key]
-                valid_type = isinstance(value,str) if key in ('situation','emotion') else isinstance(value,list) and all(isinstance(v,str) for v in value)
+                valid_type = isinstance(value,str) if key in ('situation','physical_state','emotion') else isinstance(value,list) and all(isinstance(v,str) for v in value)
                 if not valid_type:
                     self.warn('character_changes',i,'неправильный тип поля',key,cid); continue
                 if cid == camera['controlled_actor_id'] and key in PLAYER_FIELDS:
@@ -209,11 +216,13 @@ class StateResolver:
                     proof=evidence.get(key) if isinstance(evidence,dict) else None
                     if proof is None and isinstance(item.get('evidence'),str):
                         proof=item['evidence'] if key=='emotion' else [item['evidence']]
-                    if not supported_player_field(key,value,actor[key],self.player_input,proof):
+                    if not supported_player_field(key,value,active_texts(actor[key]) if key != 'emotion' else actor[key],self.player_input,proof):
                         self.warn('character_changes',i,'состояние controlled actor не задано игроком',key,cid,'controlled_actor_unsupported'); continue
                 elif not self.supported(item):
                     self.warn('character_changes',i,'нет подтверждённого источника',key,cid,'evidence_unsupported'); continue
-                actor[key] = deepcopy(value)
+                actor[key] = replace_active(actor[key], value, cid, key, self.turn_id-1) if key in ('goals','intentions','obligations') else deepcopy(value)
+                if key == 'emotion' and cid == camera['controlled_actor_id']: actor['emotion_source_sequence'] = self.turn_id-1
+            apply_changes(self, item, cid, i)
         for i, item in self.records(raw,'relationship_changes'):
             source = self.actor(item.get('source_id'),'relationship_changes',i)
             target = self.actor(item.get('target_id'),'relationship_changes',i)
@@ -230,7 +239,7 @@ class StateResolver:
                     self.warn('relationship_changes',i,'неизвестное или некорректное измерение отношений','dimensions.'+dim,key,'relationship_dimension_invalid')
                 else: entry['dimensions'][dim]=value
             s['relationships'][key]=entry
-            self.history.relationship_changes.append(dict(entity=key,before=deepcopy(self.before['relationships'].get(key)),after=deepcopy(entry),turn_id=self.turn_id))
+            self.history.relationship_changes.append(dict(entity=key,before=deepcopy(self.before['relationships'].get(key)),after=deepcopy(entry),turn_id=self.turn_id,player_observed=self.observed))
         for section, destination, model in (('thread_changes','threads',Thread),('scheduled_event_changes','scheduled_events',ScheduledEvent)):
             for i,item in self.records(raw,section):
                 eid=item.get('id')
@@ -247,7 +256,8 @@ class StateResolver:
         digest = sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
         patch = StatePatch(digest,deepcopy(s['meta']),deepcopy(s['camera']),upserts)
         state = patch.apply(self.before)
-        self.history.state_changes.append(dict(turn_id=self.turn_id,upserts=deepcopy(upserts)))
+        self.history.state_changes.append(dict(turn_id=self.turn_id,upserts=deepcopy(upserts),
+            before_characters={cid:deepcopy(self.before['characters'].get(cid)) for cid in upserts['characters']},player_observed=self.observed))
         record_id=identity('record',self.turn_id,self.narrative,self.observed)
         for event in self.history.events:
             event.update(source_record_id=record_id,source_sequence=self.turn_id-1)

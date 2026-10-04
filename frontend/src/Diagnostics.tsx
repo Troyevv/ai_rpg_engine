@@ -57,6 +57,7 @@ export function Diagnostics({saveId,workspaceId,jobId,open,onOpenChange}:{saveId
   {tab==='performance'&&<>
    <h3>{turn?`Ход #${turn.sequence}`:'Выбранный вариант'}</h3><Timing timing={timing}/>
    <RequestTotals rows={filtered}/>
+   <p className="small">LLM памяти: {filtered.filter(r=>r.stage==='memory').length} · Narrative: {filtered.filter(r=>r.stage==='narrative').length} · Extraction: {filtered.filter(r=>r.stage==='extraction').length} · Living World: {filtered.filter(r=>r.stage.startsWith('world_simulation')).length}</p>
    {filtered.some(r=>isRepair(r.stage))?<section><h4>Причина repair</h4>{repairs.length?repairs.map((r,i)=><details key={i} open><summary>{r.stage} · {r.repair_error_code}</summary><p>{r.repair_error_type}: {r.repair_reason}</p><p>{r.section} {r.index!=null?`[${r.index}]`:''} {r.field} {r.entity}</p></details>):<p>Причина не сохранена для старого хода.</p>}</section>:<p>Repair: не выполнялся</p>}
    <RepairStatistics turns={turns}/>
    {!!turn?.derivations?.length&&<details className="delta-derivations"><summary>DERIVE · Вычислено движком (без LLM)</summary>{turn.derivations.map((d,i)=><p key={i}>{d.entity}: {d.origin??'неизвестное место'} → {d.destination}{d.code==='final_location_derived_from_scene'?' (из конечной сцены)':d.code==='initial_location_derived_from_scene'?' (из исходной сцены)':''}</p>)}</details>}

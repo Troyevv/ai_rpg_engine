@@ -123,7 +123,8 @@ def test_invalid_patch_and_relationship_arrow_lifetime(db):
     run(storage, job, payload)
     assert storage.get_job(job)['status'] == 'saved'
     state = storage.get_save(sid)['state']
-    assert state['relationships'][-1]['change']['direction'] == 'up'
+    # A newly measured dimension has no numerical baseline: never invent +N from zero.
+    assert 'change' not in state['relationships'][-1]
     job = storage.begin_job(sid, 'Ответ', 'turn', CONFIG)
     run(storage, job)
     assert storage.get_job(job)['status'] == 'saved'

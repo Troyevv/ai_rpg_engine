@@ -57,11 +57,10 @@ def migrate_snapshot(db, source):
     """Idempotent even when the same before snapshot occurs in many variants."""
     from hashlib import sha256
     if source.get('schema_version')==3:
-        assert_world_state_v3_invariants(source['world_state'])
-        return deepcopy(source),[]
+        return migrate_v2(source).snapshot,[]
     digest=sha256(json.dumps(source,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
     row=db.execute('SELECT snapshot_json,report_json FROM world_migrations_v3 WHERE source_hash=?',(digest,)).fetchone()
-    if row:return json.loads(row[0]),json.loads(row[1])
+    if row:return migrate_v2(json.loads(row[0])).snapshot,json.loads(row[1])
     result=migrate_v2(source)
     snapshot=result.snapshot
     snapshot['history_head']=append_history(db,None,result.history)
@@ -85,7 +84,19 @@ def migrate_database(storage):
     with storage.connect() as db:
         db.execute('BEGIN IMMEDIATE')
         initialize(db)
-        if db.execute("SELECT 1 FROM schema_migrations WHERE name='runtime_v3'").fetchone():return
+        if db.execute("SELECT COUNT(*) FROM schema_migrations WHERE name IN ('runtime_v3','runtime_v3_lifecycle_calendar')").fetchone()[0]==2:return
+        starts = {}
+        for row in db.execute('SELECT id,state_json FROM saves').fetchall():
+            candidate = json.loads(row['state_json'])
+            first = db.execute('SELECT before_json FROM turns WHERE save_id=? ORDER BY sequence LIMIT 1', (row['id'],)).fetchone()
+            if first: candidate = json.loads(first[0])
+            starts[row['id']] = migrate_v2(candidate).snapshot['world_state']['meta']['world_time']
+        def migrated(source, save_id):
+            result, report = migrate_snapshot(db, source)
+            if not source.get('world_state', {}).get('meta', {}).get('calendar') and save_id in starts:
+                start = starts[save_id]
+                result['world_state']['meta']['calendar'] = dict(start_minute=start, start_weekday=start//1440%7, start_date=None)
+            return result, report
         for table, columns in (('saves',('state_json',)),('turns',('before_json','after_json')),
             ('game_jobs',('before_json','memory_before_json')),('actor_switches',('before_json','after_json'))):
             exists=db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(table,)).fetchone()
@@ -95,18 +106,19 @@ def migrate_database(storage):
             for row in db.execute('SELECT rowid AS migration_row,* FROM '+table).fetchall():
                 for column in fields:
                     if row[column]:
-                        snapshot,_=migrate_snapshot(db,json.loads(row[column]))
+                        snapshot,_=migrated(json.loads(row[column]), row['id'] if table=='saves' else row['save_id'])
                         db.execute('UPDATE '+table+' SET '+column+'=? WHERE rowid=?',(json.dumps(snapshot,ensure_ascii=False),row['migration_row']))
         for table in ('response_variants','archived_turns'):
             for row in db.execute('SELECT rowid AS migration_row,* FROM '+table).fetchall():
                 payload=json.loads(row['payload'])
                 for field in ('before_json','after_json'):
-                    if payload.get(field):payload[field]=json.dumps(migrate_snapshot(db,json.loads(payload[field]))[0],ensure_ascii=False)
+                    if payload.get(field):payload[field]=json.dumps(migrated(json.loads(payload[field]), row['save_id'])[0],ensure_ascii=False)
                 db.execute('UPDATE '+table+' SET payload=? WHERE rowid=?',(json.dumps(payload,ensure_ascii=False),row['migration_row']))
                 if table=='response_variants' and row['memory_before_json']:
-                    snapshot,_=migrate_snapshot(db,json.loads(row['memory_before_json']))
+                    snapshot,_=migrated(json.loads(row['memory_before_json']), row['save_id'])
                     db.execute('UPDATE response_variants SET memory_before_json=? WHERE rowid=?',(json.dumps(snapshot,ensure_ascii=False),row['migration_row']))
         from backend.repositories.living_world import project
         for row in db.execute('SELECT id,state_json FROM saves').fetchall():
             project(db,row['id'],json.loads(row['state_json']))
-        db.execute("INSERT INTO schema_migrations(name) VALUES('runtime_v3')")
+        db.execute("INSERT OR IGNORE INTO schema_migrations(name) VALUES('runtime_v3')")
+        db.execute("INSERT OR IGNORE INTO schema_migrations(name) VALUES('runtime_v3_lifecycle_calendar')")
