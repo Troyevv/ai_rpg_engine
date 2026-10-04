@@ -126,3 +126,46 @@ for (const extension of ['md', 'txt', 'json']) {
   expect(exported).toEqual(draft.state);
  });
 }
+
+for (const input of ['state', 'wrapper', 'markdown', 'broken']) {
+ test(`pasted world import ${input} detects format`, async ({page,request}) => {
+  const seed=await (await request.post('/test/seed')).json();
+  const world=await (await request.get(`/api/worlds/${seed.world}`)).json();
+  const source=await (await request.post('/api/workspaces',{data:{name:'Ручной импорт'}})).json();
+  const prepared=await request.post(`/api/workspaces/${source.id}/draft/import`,{data:{revision:source.revision,text:world.source_md}});
+  expect(prepared.ok()).toBeTruthy();
+  const draft=await (await request.get(`/api/workspaces/${source.id}/draft?author=true`)).json();
+  const text=input==='markdown' ? world.source_md : input==='broken' ? '{"campaign":' :
+   ` \n${JSON.stringify(input==='wrapper' ? {state:draft.state} : draft.state)}\n `;
+  const bodies: Record<string,unknown>[]=[];
+  let generationRequests=0;
+  page.on('request', r => {
+   if (r.url().endsWith('/draft/import')) bodies.push(r.postDataJSON());
+   if (r.url().includes('/generate')) generationRequests++;
+  });
+  await page.goto('/');await nav(page,'Создать');
+  await page.getByRole('button',{name:'Импортировать',exact:true}).click();
+  await page.getByLabel('Название черновика').fill(source.name);
+  const textarea=page.getByLabel('Описание мира или текст импорта');
+  await textarea.fill(text);
+  await expect(textarea).toBeVisible(); // Pasted JSON must remain editable.
+  const submit=page.getByRole('button',{name:'Открыть в редакторе',exact:true});
+  if (input==='broken') {
+   await expect(page.getByRole('alert')).toContainText('Не удалось прочитать JSON: ошибка синтаксиса.');
+   await expect(submit).toBeDisabled();
+   expect(bodies).toHaveLength(0);
+   // Correcting JSON recovers the canonical route without losing the textarea.
+   await textarea.fill(JSON.stringify({state:draft.state}));
+   await expect(page.getByRole('alert')).toHaveCount(0);
+  }
+  await expect(page.getByRole('status')).toContainText(input==='markdown' ? 'Распознано: текстовая выжимка' : 'Распознано: JSON World State');
+  await submit.click();
+  await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
+  expect(bodies).toHaveLength(1);
+  expect(bodies[0].format).toBe(input==='markdown' ? 'text' : 'json');
+  expect(generationRequests).toBe(0);
+  const wid=await page.evaluate(()=>localStorage.getItem('draftWorkspace'));
+  const imported=await (await request.get(`/api/workspaces/${wid}/draft?author=true`)).json();
+  expect(imported.state).toEqual(draft.state);
+ });
+}
