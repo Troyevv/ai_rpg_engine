@@ -30,7 +30,7 @@ class EncounterRequest(Model):
     name: str
     description: str = ""
     location_id: Id
-    faction_id: Id
+    faction_id: Id | None = None
     difficulty: Difficulty = "MEDIUM"
     habitats: list[str] = []
     available_creatures: list[Id] = []
@@ -144,41 +144,42 @@ class CampaignGenerator2:
         self.author = StagedAuthor(dm, progress, checkpoint)
 
     def generate(self, id, setting, options):
-        from .semantic import SemanticCampaignDTO
+        from .blueprints import CampaignBlueprint, world_context
         from .semantic_authoring import generate_semantic, compile_stage
-        from .semantic_campaign import SemanticCampaignCompiler
+        from .procedural_campaign import ProceduralCampaignGenerator
 
         setting = SettingValidator().validate(setting)
-        # Display names and descriptions, not executable registry or canonical IDs.
+        checkpoint = self.author.checkpoint
+        legacy = checkpoint.cached("campaign_semantics") if checkpoint else None
+        if legacy is not None:
+            from copy import deepcopy
+            from .semantic_campaign import SemanticCampaignCompiler
+
+            legacy = deepcopy(legacy)
+            for npc in legacy.get("npcs", []):
+                # Old checkpoint version used knowledge exclusively for secret references.
+                if "known_secrets" not in npc:
+                    npc["known_secrets"] = npc.pop("knowledge", [])
+            return compile_stage(
+                self.author,
+                "campaign_compile",
+                lambda: SemanticCampaignCompiler().compile(
+                    id, legacy, setting, options
+                ),
+            )
         context = {
-            "options": options.model_dump(exclude={"generation"}),
-            "coverage_targets": options.generation.targets,
-            "world": {
-                "name": setting.name,
-                "description": setting.description,
-                "tone": setting.tone,
-                "lore": setting.custom_lore,
-                "content": {
-                    group: [
-                        {"name": v.name, "description": v.description}
-                        for v in getattr(setting.content, group).values()
-                    ]
-                    for group in (
-                        "species",
-                        "archetypes",
-                        "backgrounds",
-                        "skills",
-                        "items",
-                        "creatures",
-                    )
-                },
-            },
+            "options": options.model_dump(
+                exclude={"generation", "party_size", "difficulty", "scale"}
+            ),
+            "world": world_context(setting),
         }
-        dto = generate_semantic(
-            self.author, id, "campaign_semantics", SemanticCampaignDTO, context
+        blueprint = generate_semantic(
+            self.author, id, "campaign_blueprint", CampaignBlueprint, context
         )
         return compile_stage(
             self.author,
             "campaign_compile",
-            lambda: SemanticCampaignCompiler().compile(id, dto, setting, options),
+            lambda: ProceduralCampaignGenerator().generate(
+                id, blueprint, setting, options
+            ),
         )

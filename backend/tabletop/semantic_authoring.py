@@ -8,11 +8,63 @@ from .setting_generation import AuthoringFailure
 CONTRACT = (
     "Создай содержательный мир или открытую приключенческую ситуацию по запросу на русском. "
     "Сохрани свободу действий игрока. Используй только ограниченные семантические данные схемы: "
-    "имена, смысл, роли, цели, отношения и намерения. Ссылки — точные названия концептов. "
+    "имена, смысл, темы, цели и намерения. Для blueprint не создавай ссылки между сущностями: граф построит код. "
     "Не создавай код, формулы, DSL, характеристики, build игрока, кубики, internal IDs или механику. "
-    "Unsupported способности обозначай intent=unsupported с полным описанием. "
+    "Не заполняй мир множеством сущностей: достаточно нескольких выразительных творческих семейств. "
+    "knowledge — обычные знания, не ссылки на секреты. "
     "Не добавляй жанровые предположения. Не помещай тайны в публичные описания. Механики выберет компилятор. "
 )
+
+
+def exception_diagnostics(dm, exc, stage, attempt):
+    """Retain useful failure evidence without persisting credentials or headers."""
+    import os
+    import re
+    import requests
+    import openai
+
+    config = dm.config if isinstance(dm.config, dict) else {}
+    message = str(exc)
+    secrets = [getattr(dm, "api_key", None)]
+    secrets += [
+        v
+        for k, v in os.environ.items()
+        if any(t in k.upper() for t in ("API_KEY", "TOKEN", "PASSWORD", "SECRET"))
+    ]
+    secrets += [
+        v
+        for k, v in config.items()
+        if any(t in k.lower() for t in ("key", "token", "password", "authorization"))
+        and isinstance(v, str)
+    ]
+    for secret in sorted((v for v in secrets if v), key=len, reverse=True):
+        message = message.replace(secret, "[REDACTED]")
+    message = re.sub(
+        r"(?im)(authorization|api[-_ ]?key|token|password|cookie)\s*['\"]?\s*[:=]\s*[^\n,}]+",
+        r"\1=[REDACTED]",
+        message,
+    )
+    message = re.sub(r"(?i)Bearer\s+\S+|sk-[A-Za-z0-9_-]+", "[REDACTED]", message)
+    message = re.sub(r"https?://[^\s]+", "[URL REDACTED]", message)
+    is_provider = isinstance(
+        exc,
+        (TimeoutError, ConnectionError, requests.RequestException, openai.OpenAIError),
+    )
+    # RuntimeError/ValueError are raised by the existing provider adapter for response/configuration errors.
+    adapter_error = isinstance(exc, (RuntimeError, ValueError))
+    return dict(
+        code="provider_error"
+        if is_provider
+        else "provider_response_error"
+        if adapter_error
+        else "authoring_internal_error",
+        exception_type=type(exc).__name__,
+        provider=config.get("provider", "unknown"),
+        model=config.get("model", "unknown"),
+        stage=stage,
+        original_message=message[:2000],
+        attempt=attempt,
+    )
 
 
 def generate_semantic(author, id, stage, schema, context):
@@ -57,15 +109,17 @@ def generate_semantic(author, id, stage, schema, context):
                 True,
             )
         except Exception as exc:
+            details = exception_diagnostics(author.dm, exc, stage, attempt + 1)
             raise AuthoringFailure(
                 [
                     ValidationIssue(
-                        code="provider_error",
+                        code=details.pop("code"),
+                        context=details,
                         stage=stage,
                         entity_type="authoring",
                         entity_id=id,
                         field="provider",
-                        message="Провайдер не вернул ответ; проверь соединение и настройки.",
+                        message="Не удалось получить творческое описание. Подробности сохранены в диагностике.",
                     )
                 ],
                 stage,
@@ -89,7 +143,7 @@ def generate_semantic(author, id, stage, schema, context):
             ]
             continue
         if checkpoint:
-            checkpoint.save(stage, dto.model_dump(mode="json"))
+            checkpoint.save(stage, dto.model_dump(mode="json", exclude_unset=True))
         return dto
     raise AuthoringFailure(issues, stage, context)
 

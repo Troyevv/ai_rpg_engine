@@ -215,7 +215,7 @@ class ScriptedDM:
 
 def test_campaign_stages_validate_before_game_creation():
     from backend.tabletop.campaign_generation import CampaignGenerator2, CampaignOptions
-    from semantic_fixture import campaign as semantic_campaign
+    from semantic_fixture import campaign_blueprint as semantic_campaign
 
     dm = ScriptedDM([semantic_campaign()])
     result = CampaignGenerator2(dm).generate(
@@ -352,9 +352,17 @@ def test_contextual_action_checks_inventory_and_player_knowledge():
 def test_foundation_regeneration_preserves_registry_and_revision():
     from backend.tabletop.setting_generation import SettingGenerator
     from backend.tabletop.procedural_content import ProceduralContentCompiler
-    from semantic_fixture import world as semantic_world
+    from semantic_fixture import world_blueprint as semantic_world
+    from backend.tabletop.blueprints import WorldBlueprint
+    from backend.tabletop.procedural_world import ProceduralWorldGenerator
+    from backend.tabletop.generation_config import GenerationConfig
 
-    world = ProceduralContentCompiler().compile("world", semantic_world(), revision=7)
+    world = ProceduralWorldGenerator().generate(
+        "world",
+        WorldBlueprint.model_validate(semantic_world()),
+        GenerationConfig(),
+        revision=7,
+    )
     result = SettingGenerator(ScriptedDM([{"name": "Новое название"}])).generate(
         world.id, "Новое описание", world, "foundation"
     )
@@ -366,9 +374,14 @@ def test_foundation_regeneration_preserves_registry_and_revision():
 def test_foundation_regeneration_rejects_changed_identity():
     from backend.tabletop.setting_generation import SettingGenerator, AuthoringFailure
     from backend.tabletop.procedural_content import ProceduralContentCompiler
-    from semantic_fixture import world as semantic_world
+    from semantic_fixture import world_blueprint as semantic_world
+    from backend.tabletop.blueprints import WorldBlueprint
+    from backend.tabletop.procedural_world import ProceduralWorldGenerator
+    from backend.tabletop.generation_config import GenerationConfig
 
-    world = ProceduralContentCompiler().compile("world", semantic_world())
+    world = ProceduralWorldGenerator().generate(
+        "world", WorldBlueprint.model_validate(semantic_world()), GenerationConfig()
+    )
     reply = {"name": "Other", "id": "different"}
     with pytest.raises(AuthoringFailure) as exc:
         SettingGenerator(ScriptedDM([reply, reply])).generate(
@@ -491,7 +504,7 @@ def test_starting_shop_rejects_registry_unavailable_item():
 
 def test_campaign_retries_invalid_region_at_locations_stage():
     from backend.tabletop.campaign_generation import CampaignGenerator2, CampaignOptions
-    from semantic_fixture import campaign as semantic_campaign
+    from semantic_fixture import campaign_blueprint as semantic_campaign
 
     valid = semantic_campaign()
     from copy import deepcopy
@@ -502,7 +515,7 @@ def test_campaign_retries_invalid_region_at_locations_stage():
     CampaignGenerator2(dm).generate(
         "generation", setting(), CampaignOptions(idea="Чужая вселенная")
     )
-    assert [call[0] for call in dm.calls] == ["authoring_campaign_semantics"] * 2
+    assert [call[0] for call in dm.calls] == ["authoring_campaign_blueprint"] * 2
 
 
 @pytest.mark.parametrize(

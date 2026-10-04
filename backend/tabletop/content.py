@@ -262,7 +262,7 @@ class CreatureInstance(Named):
 
     template_id: Id
     location_id: Id
-    faction_id: Id
+    faction_id: Id | None = None
     current_hp: int | None = Field(default=None, ge=0, le=1000)
     conditions: list[str] = []
     resources: dict[Id, int] = {}
@@ -308,7 +308,7 @@ class SettingFoundation(Named):
 class SettingDefinition(SettingFoundation):
     generation_config: GenerationConfig = Field(default_factory=GenerationConfig)
     generation_metadata: dict[str, dict] = {}
-    compiler_version: Literal["", "semantic-1"] = ""
+    compiler_version: Literal["", "semantic-1", "procedural-2"] = ""
     semantic_source: dict = {}
     diagnostics: list[dict] = []
     schema_version: Literal[1] = 1
@@ -323,6 +323,12 @@ class SettingDefinition(SettingFoundation):
     def validate_semantic_source(cls, value):
         if value:
             from .semantic import SemanticSettingDTO
+            from .blueprints import WorldBlueprint
 
-            return SemanticSettingDTO.model_validate(value).model_dump()
+            schema = (
+                WorldBlueprint
+                if "premise" in value and "professions" not in value
+                else SemanticSettingDTO
+            )
+            return schema.model_validate(value).model_dump()
         return value

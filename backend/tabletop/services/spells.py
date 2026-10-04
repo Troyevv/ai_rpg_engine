@@ -97,10 +97,7 @@ class SpellService:
             raise ValueError("Цель заклинания вне досягаемости")
         if spell.target_type == "self" and target.id != aid:
             raise ValueError("Нужна цель: сам заклинатель")
-        if (
-            spell.target_type == "ally"
-            and state.relation(a.faction, target.faction) != "ALLY"
-        ):
+        if spell.target_type == "ally" and not state.allied(a.id, target.id):
             raise ValueError("Нужна союзная цель")
         if spell.target_type in ("enemy", "area") and (
             not state.encounter

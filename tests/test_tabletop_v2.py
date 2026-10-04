@@ -346,19 +346,20 @@ def test_generated_draft_start_expand_and_staged_usage(api):
     c, app = api
 
     def stream(**kw):
-        from semantic_fixture import world, campaign
+        from semantic_fixture import (
+            world_blueprint as world,
+            campaign_blueprint as campaign,
+        )
         from backend.tabletop.procedural_content import stable_id
 
         kw["on_usage"]({"prompt_tokens": 123, "completion_tokens": 45})
         prompt = kw["messages"][0]["content"]
-        if "SemanticSettingDTO" in prompt:
+        if "WorldBlueprint" in prompt:
             yield json.dumps(world())
-        elif "SemanticCampaignDTO" in prompt:
+        elif "CampaignBlueprint" in prompt:
             yield json.dumps(campaign())
-        elif "SemanticExpansionDTO" in prompt:
-            yield json.dumps(
-                {"locations": [{"name": "Башня", "connections": ["Площадь"]}]}
-            )
+        elif "ExpansionBlueprint" in prompt:
+            yield json.dumps({"locations": [{"name": "Башня"}]})
         else:
             yield "Мир продолжает жить."
 
@@ -374,8 +375,8 @@ def test_generated_draft_start_expand_and_staged_usage(api):
         assert res.status_code == 200, res.text
         d = res.json()
         assert {u["stage"] for u in d["usage"]} == {
-            "authoring_setting_semantics",
-            "authoring_campaign_semantics",
+            "authoring_setting_blueprint",
+            "authoring_campaign_blueprint",
         }
         g = c.post(
             "/api/tabletop/games",
@@ -394,9 +395,9 @@ def test_generated_draft_start_expand_and_staged_usage(api):
         ).json()
     assert "Башня" in [l["name"] for l in g["state"]["locations"]]
     assert {
-        "authoring_setting_semantics",
-        "authoring_campaign_semantics",
-        "authoring_content_semantics",
+        "authoring_setting_blueprint",
+        "authoring_campaign_blueprint",
+        "authoring_content_blueprint",
     } <= {u["stage"] for u in g["usage"]}
     assert "NEVER_DISCLOSE" not in json.dumps(g) and "REMOTE_SECRET" not in json.dumps(
         g

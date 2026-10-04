@@ -82,7 +82,8 @@ def campaign():
                 location="Площадь",
                 faction="Хранители",
                 profession="Хранитель",
-                knowledge=["След"],
+                known_secrets=["След"],
+                knowledge=["История деревни"],
             )
         ],
         secrets=[
@@ -127,4 +128,78 @@ def campaign():
                 creatures=["Осколок"],
             )
         ],
+    )
+
+
+def world_blueprint():
+    return dict(
+        name="Стеклянные приливы",
+        premise="Город сохраняет голоса в кристаллах.",
+        genre="Неизвестный мир",
+        tone="Тревожное исследование",
+        themes=["Память"],
+        peoples=[
+            dict(name="Слушатели", description="Воспринимают колебания кристаллов.")
+        ],
+        archetypes=[
+            dict(name="Хранитель", description="Защищает архивы."),
+            dict(name="Певец", description="Работает с голосами."),
+        ],
+        origins=[dict(name="Архивист", description="Изучал историю голосов.")],
+        skill_domains=[dict(name="Слух", description="Различение и передача голосов.")],
+        equipment_families=[
+            dict(
+                name="Резонатор",
+                purpose="weapon",
+                medium="field",
+                description="Направляет резонанс.",
+            ),
+            dict(name="Оболочка", purpose="protection"),
+            dict(name="Лекарство", purpose="recovery"),
+        ],
+        power_traditions=[
+            dict(
+                name="Голос",
+                description="Сохранённые голоса меняют кристаллы.",
+                practice="learned",
+            )
+        ],
+        threat_families=[
+            dict(
+                name="Осколок",
+                nature="construct",
+                description="Самостоятельный кристалл, поглощающий голоса.",
+            )
+        ],
+        locations=[dict(name="Архив", description="Хранилище памяти.")],
+        world_rules=["Голоса сохраняются в кристаллах."],
+    )
+
+
+def campaign_blueprint():
+    return dict(
+        name="Пропавшие голоса",
+        premise="Архив теряет память.",
+        central_conflict="Хранители скрывают потерю голосов.",
+        starting_situation="Дверь архива открыта.",
+        player_hooks=["Исследовать исчезновение"],
+        locations=[
+            dict(name="Площадь", description="Место встреч слушателей."),
+            dict(name="Архив", description="Хранилище голосов."),
+        ],
+        actors=[
+            dict(
+                name="Смотритель",
+                description="Следит за архивом.",
+                motivation="Сохранить память",
+                knowledge=["История деревни"],
+            )
+        ],
+        secret_ideas=[
+            dict(name="След", description="Голоса уносит неизвестный хранитель.")
+        ],
+        quest_hooks=[
+            dict(name="Найти голоса", description="Выяснить причину исчезновения.")
+        ],
+        developments=["Вернуть голоса", "Договориться"],
     )

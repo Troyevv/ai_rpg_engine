@@ -29,6 +29,7 @@ class SemanticModel(Model):
 
 
 class Concept(SemanticModel):
+    key: str = Field(default="", max_length=120)  # Internal procedural identity.
     name: Name
     description: Text = ""
     tags: Names = []
@@ -164,12 +165,12 @@ class SemanticSettingDTO(Concept):
     supernatural: Text = ""
     cultures: list[Concept] = Field(default_factory=list, max_length=10)
     factions: list[Concept] = Field(default_factory=list, max_length=10)
-    lore: list[Text] = Field(default_factory=list, max_length=20)
+    lore: list[Text] = Field(default_factory=list, max_length=40)
     species: list[SemanticSpecies] = Field(min_length=1, max_length=10)
     professions: list[SemanticProfession] = Field(min_length=1, max_length=10)
     backgrounds: list[SemanticBackground] = Field(min_length=1, max_length=10)
     skills: list[SemanticSkill] = Field(min_length=1, max_length=20)
-    items: list[SemanticItem] = Field(default_factory=list, max_length=40)
+    items: list[SemanticItem] = Field(default_factory=list, max_length=100)
     creatures: list[SemanticCreature] = Field(default_factory=list, max_length=20)
     damage_concepts: list[Concept] = Field(default_factory=list, max_length=12)
     conditions: list[SemanticCondition] = Field(default_factory=list, max_length=10)
@@ -188,7 +189,7 @@ class SemanticSettingDTO(Concept):
             "damage_concepts",
             "conditions",
         ):
-            values = [v.name.casefold().strip() for v in getattr(self, key)]
+            values = [(v.key or v.name).casefold().strip() for v in getattr(self, key)]
             if len(set(values)) != len(values):
                 raise ValueError("Duplicate semantic names: " + key)
         return self
@@ -209,14 +210,15 @@ class SemanticFaction(Concept):
 
 class SemanticNPC(Concept):
     location: Name
-    faction: Name
+    faction: Name | None = None
     species: str = Field(default="", max_length=120)
     profession: str = Field(default="", max_length=120)
     background: str = Field(default="", max_length=120)
     role: Role = "support"
     personality: Text = ""
     motivation: Text = ""
-    knowledge: Names = []
+    knowledge: list[Text] = Field(default_factory=list, max_length=20)
+    known_secrets: Names = []
     relationships: dict[Name, Literal["friendly", "neutral", "hostile"]] = Field(
         default_factory=dict, max_length=20
     )
@@ -286,7 +288,7 @@ class SemanticQuest(Concept):
 
 class SemanticEncounter(Concept):
     location: Name
-    faction: Name
+    faction: Name | None = None
     difficulty: Power = "medium"
     creatures: Names = []
     environment: Names = []
@@ -304,9 +306,10 @@ class SemanticCampaignDTO(Concept):
     starting_situation: Annotated[str, Field(min_length=1, max_length=2000)]
     starting_location: Name
     player_hooks: Names = []
+    player_faction: Name | None = None
     compatibility: Names = []
     locations: list[SemanticLocation] = Field(min_length=1, max_length=20)
-    factions: list[SemanticFaction] = Field(min_length=1, max_length=10)
+    factions: list[SemanticFaction] = Field(default_factory=list, max_length=10)
     npcs: list[SemanticNPC] = Field(default_factory=list, max_length=30)
     secrets: list[SemanticSecret] = Field(default_factory=list, max_length=30)
     objects: list[SemanticObject] = Field(default_factory=list, max_length=30)
@@ -318,7 +321,7 @@ class SemanticCampaignDTO(Concept):
     @model_validator(mode="after")
     def references(self):
         groups = {
-            k: {v.name for v in getattr(self, k)}
+            k: {v.key or v.name for v in getattr(self, k)}
             for k in (
                 "locations",
                 "factions",
@@ -340,6 +343,8 @@ class SemanticCampaignDTO(Concept):
             if name not in groups[group]:
                 raise ValueError(f"Unknown {group} concept: {name}")
 
+        if self.player_faction is not None:
+            ref(self.player_faction, "factions")
         ref(self.starting_location, "locations")
         for group in ("npcs", "secrets", "objects", "quests", "encounters", "checks"):
             for value in getattr(self, group):
@@ -348,21 +353,22 @@ class SemanticCampaignDTO(Concept):
             for name in v.connections:
                 ref(name, "locations")
         for v in self.npcs:
-            ref(v.faction, "factions")
-            for name in v.knowledge:
+            if v.faction is not None:
+                ref(v.faction, "factions")
+            for name in v.known_secrets:
                 ref(name, "secrets")
             for name in v.relationships:
                 ref(name, "npcs")
         for v in self.factions:
             for name in v.allies + v.enemies:
                 ref(name, "factions")
-                if name == v.name or name in v.allies and name in v.enemies:
+                if name == (v.key or v.name) or name in v.allies and name in v.enemies:
                     raise ValueError("Conflicting faction relationship")
         for v in self.objects:
             for name in v.secrets:
                 ref(name, "secrets")
                 if (
-                    next(s.location for s in self.secrets if s.name == name)
+                    next(s.location for s in self.secrets if (s.key or s.name) == name)
                     != v.location
                 ):
                     raise ValueError("Secret and object must share location")
@@ -372,10 +378,11 @@ class SemanticCampaignDTO(Concept):
             for name in v.dependencies:
                 ref(name, "quests")
         for v in self.encounters:
-            ref(v.faction, "factions")
+            if v.faction is not None:
+                ref(v.faction, "factions")
         for v in self.checks:
             ref(v.reveals, "secrets")
-            secret = next(s for s in self.secrets if s.name == v.reveals)
+            secret = next(s for s in self.secrets if (s.key or s.name) == v.reveals)
             if secret.location != v.location or secret.disclosure == "never":
                 raise ValueError("Challenge cannot reveal that secret")
         reached, todo = set(), [self.starting_location]
@@ -384,7 +391,11 @@ class SemanticCampaignDTO(Concept):
             if name not in reached:
                 reached.add(name)
                 todo.extend(
-                    next(v.connections for v in self.locations if v.name == name)
+                    next(
+                        v.connections
+                        for v in self.locations
+                        if (v.key or v.name) == name
+                    )
                 )
         if reached != groups["locations"]:
             raise ValueError("Locations must be reachable from starting location")
@@ -404,12 +415,7 @@ class SemanticExpansionDTO(SemanticModel):
     def unique_new_concepts(self):
         for group in ("items", "creatures", "locations", "npcs", "objects"):
             entries = getattr(self, group)
-            names = [v.name.strip().casefold() for v in entries]
+            names = [(v.key or v.name).strip().casefold() for v in entries]
             if len(names) != len(set(names)):
                 raise ValueError("Duplicate new concepts: " + group)
         return self
-
-
-# Public architectural names; these are the same contracts, not parallel formats.
-WorldBlueprint = SemanticSettingDTO
-CampaignBlueprint = SemanticCampaignDTO

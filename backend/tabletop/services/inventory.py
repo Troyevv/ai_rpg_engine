@@ -194,7 +194,7 @@ class InventoryService:
                 if (
                     recipient.location != a.location
                     or abs(recipient.position - a.position) > 5
-                    or state.relation(a.faction, recipient.faction) != "ALLY"
+                    or not state.allied(a.id, recipient.id)
                 ):
                     raise ValueError("Цель лечения недоступна")
                 if consumable and consumable.healing:

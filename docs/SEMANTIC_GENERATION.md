@@ -1,53 +1,80 @@
-# Procedural world and campaign generation
+# Compact creative blueprints and procedural generation
 
-This iteration continues PR #33 (`codex/universal-tabletop-2`).
+Current implementation in PR #33; compiler version `procedural-2`. This replaces the previous model-generated full semantic world/campaign, rather than introducing a second production generator.
 
-## Authority boundary
+## Provider boundary and calls
 
-`SemanticSettingDTO` / `WorldBlueprint` and `SemanticCampaignDTO` / `CampaignBlueprint` contain bounded concepts, display-name links and narrative intent. They do not import executable models. The provider cannot select IDs, dice, Effect trees, exact modifiers, prices, build attributes, equipment IDs, or player identity.
+- World: **one** `authoring_setting_blueprint` call returning `WorldBlueprint`.
+- Campaign: **one** `authoring_campaign_blueprint` call returning `CampaignBlueprint` and receiving bounded `world_context`.
+- World + campaign happy path: **two calls**. Each blueprint allows at most **one** schema/semantic repair. Provider failures are reported without automatic retries.
+- On-demand expansion: one `authoring_content_blueprint` call for a small local `ExpansionBlueprint`, with at most one schema repair. Code attaches its ideas to the current location.
+- Optional character portrait and in-game interpretation/narration remain separate user-driven operations. They are not world/campaign generation stages.
 
-`ProceduralContentCompiler` builds the existing `ContentRegistry` and `SettingDefinition`. `SemanticCampaignCompiler` builds the existing `CampaignDefinition`. Existing RulesEngine, DiceEngine and runtime execute their output. No new genre-specific engine or preset worlds are introduced.
+Blueprints contain creative ideas, names, descriptions, world rules, themes, a few families, conflicts and hooks. They contain no keys/IDs, graph edges, NPC builds, resources, slots, prices, dice, DCs, encounter budgets or target counts. Inline affiliation ideas avoid requiring the provider to match another concept's name. Absent optional lists are valid.
 
-- Setting generation: one semantic request, at most one semantic/schema repair, then deterministic compilation.
-- Campaign generation: one semantic request using a compact setting catalog, at most one repair, then deterministic compilation.
-- Compiler/reference/mechanical failures never return to the provider for repair.
-- Valid semantic output is checkpointed before compilation. Resume after a compiler failure reuses that output; API jobs also retain the frozen source setting.
-- Provider, schema, semantic, compiler and mechanical diagnostics are distinct. Unsupported abilities have an explicit narrative-only fallback.
+World profiles and campaign lengths are **not sent to the provider**. The same creative blueprint is used for SMALL/NORMAL/LARGE and SHORT/NORMAL/LONG; tests compare the complete prompts across profiles. Blueprint output limits are fixed at 6000 tokens. The campaign context uses original blueprint semantics, including factions, cultures, world rules, equipment, threats, locations and traditions. Imported worlds use a bounded semantic summary, not the registry.
 
-## World compiler
+## Code-owned pipeline
 
-Factories own weapons, armor, items (including medical supplies, tools, devices and ammunition), features/effects, resources and creatures. Species, skills, professions, backgrounds, conditions and initial advancement tables are assembled in the same compiler. Prepared-slot casting retains known spells, prepared spells, cantrips and slots; it does not become generic mana.
+```text
+WorldBlueprint -> ProceduralWorldGenerator -> internal SemanticSettingDTO
+               -> ProceduralContentCompiler -> existing SettingDefinition
 
-`GenerationConfig` is the server-owned scale policy. SMALL/NORMAL/LARGE supply minimum starting coverage. Species count follows the fiction; secondary concepts expand into named variants of authored families. Missing basic equipment categories get generic starter capabilities. This guarantees usable coverage, not the narrative diversity of separately authored concepts.
+World + CampaignBlueprint -> ProceduralCampaignGenerator
+                         -> internal SemanticCampaignDTO
+                         -> SemanticCampaignCompiler -> existing CampaignDefinition
+```
 
-`EconomyGenerator` prices category, power, rarity, availability profile and seeded variation. Starting wealth covers class loadouts. `BalanceEngine` shares damage/DC/tier, encounter and loot budgets and checks starter weapon/armor/creature bounds. These are approximate starter budgets, not official CR or extensive playtest balance.
+`blueprints.py` is the provider contract. `semantic.py` remains an internal compiler input and compatibility format for saved sources/checkpoints. The old blueprint aliases to the large DTOs are removed. The obsolete domain-reference prompt is removed. The old no-setting campaign entry point delegates to the same two generators. No raw domain graph is generated by a model.
 
-## Campaign compiler
+Existing weapon, armor, item/ammunition/device, feature/effect, resource, creature, economy, NPC-build, check, object, loot and encounter factories retain mechanical authority. Existing validators, RulesEngine, DiceEngine and combat execution remain the runtime. Generated spells retain the existing supported level 0–1 damage/healing forms; learned traditions use prepared slots, while technical traditions do not produce spellcasting.
 
-`CampaignGenerationConfig` supplies SHORT/NORMAL/LONG coverage, seed and party-level encounter context. Location semantics carry environment, mood and danger without combat coordinates. NPC builds use legal registry choices and seeded secondary allocation. Encounter composition uses derived threat, party context, difficulty and a seeded candidate order. Objects receive supported capabilities; checks and loot are built from the registry.
+## Coverage and topology
 
-New campaigns have a `PlayerPlaceholder` and no player CharacterBuild. Campaign validation accepts it; game compilation requires a valid user-selected build. Optional AI companion slots are filled independently. Legacy embedded-player campaigns still load.
+`world_coverage` now combines authored families with code-owned functional roles and contexts. Professions differ in tactical roles, primary attributes and abilities; backgrounds in expertise and experience; skills in application and attribute; equipment in reach, handling, damage, protection, mobility or skill; threats in tactics and threat/defence tier. Names/descriptions use the authored family plus the role, not numeric clone suffixes. Authored concepts are retained. No per-entity decoration call is required.
 
-Quest goals, clues, dependencies, possible resolutions and consequences are retained, with stable prerequisite references. They remain open situation descriptions: the existing runtime's quest-resolution operations are not expanded into a universal arbitrary-goal solver in this change. Dependencies are authoring metadata, not automatic narrative scripting.
+No threat family means no creature catalog, even in LARGE. Phenomena become environmental hazards when building the campaign; the first player species is never converted into an enemy. Equipment slots use a neutral standard profile and do not assert a humanoid creature shape.
 
-## Lazy generation and persistence
+Campaign code builds a seeded connected location graph, secondary place functions, actor roles and builds, affiliations, secret facets, evidence objects, checks, quest goals/dependencies, loot and encounter requests. Dependencies form an acyclic earlier-quest graph; secrets are allocated before holders/checks/objects. Profiles change procedural targets, not authored-response size. Authored locations are preserved even if their count exceeds SHORT's minimum. Creature-free worlds retain investigation and environmental situations without forced combat encounters.
 
-`SemanticExpansionDTO` replaces raw `CampaignMutation` model output. New locations, NPCs, objects, items and creature templates pass through the same factories and validators. Mechanical additions live in `CampaignDefinition.content_overlay`; the original setting snapshot remains unchanged. Existing entities cannot be overwritten, old secrets cannot be assigned to newly generated objects/NPCs, and failed compilation leaves the original state untouched.
+Seeded variation uses existing SHA-256-derived random streams. Identical blueprint, config, seed and compiler version produce identical output. Authored ideas stay fixed while variant selection, location links, assignments, loot candidates, creature composition and prices may vary. Snapshot loading never reruns generation.
 
-World/campaign snapshots persist original blueprints, config/seed, compiled content, compiler version and per-entity provenance. Lazy blueprints and overlay content also persist. Loading existing games does not rerun generation. Existing versioned setting rows, campaign serialization and legacy import remain the persistence boundary.
+## References, knowledge and optional factions
 
-Random streams use SHA-256 of seed, category and entity context instead of Python's process-dependent hash. Identical blueprint/config/seed/compiler version reproduces mechanics. IDs use normalized concept names. Different seeds vary prices, creature health, secondary content and encounter selection within budgets.
+Procedural concepts get stable internal keys such as `place/0`, `actor/0` and `secret/0` before graph assembly. Compilers hash those keys into runtime IDs. References use keys or registry IDs, not display names; a test renames every campaign display name and verifies unchanged identity and valid references. Legacy internal DTO inputs may still use unambiguous names. `pick` rejects unknown/ambiguous explicit references. Omitted optional choices may select a legal default and record a diagnostic. Requested unavailable loot is omitted with a diagnostic rather than replaced by an unrelated item.
 
-## Verification (2026-10-04)
+New semantic NPCs explicitly separate:
 
-- Final backend regression: **717 passed** (one dependency deprecation warning).
-- Production frontend build and no-native-choice guard: passed.
-- Added tests cover forbidden mechanical inputs, safe feature fallback, legal NPC casting/builds, same-seed reproducibility, different-seed variation, coverage, four unrelated thematic fixtures (including no-magic cyberpunk), immutable snapshots, compiler-failure resume, lazy overlay rollback/restart, ammunition/device components, and API world → campaign → creator validation → shop → game → restart.
-- Generated encounters enter the existing combat runtime in integration tests.
-- Browser E2E could not execute: no Chromium was installed; the download returned a truncated archive. Updated semantic browser fixtures are committed, but this is not a browser acceptance pass.
-- No `CombatMapGenerator`/`generateCombatMap` implementation was found in the current tabletop sources. Its separate integration contract is therefore **not verified**; location/encounter semantics are retained for that boundary. The renderer was not modified.
-- No configured provider credentials were found in the execution environment. **Zero real-provider calls** were made. Creative output quality and provider schema compliance remain unverified.
+- `knowledge`: ordinary prose facts; never validated as secret references.
+- `known_secrets`: validated references to existing secrets.
 
-## Remaining acceptance / limitations
+At the existing runtime compatibility boundary, ordinary knowledge maps to `public_lore`, while `known_secrets` maps to the legacy persisted `CharacterDefinition.knowledge` secret-ID field. The runtime field is deliberately not reinterpreted: old games retain their disclosure behavior. Old persisted semantic sources and cached campaign responses migrate the previous semantic `knowledge` field to `known_secrets` on read. No SQL/game-state migration is needed. New ordinary knowledge survives creation, expansion and reload.
 
-The full requested DoD is not claimed complete: browser and real-provider acceptance and the separate combat-map contract remain outstanding. Procedural coverage uses bounded family variants, not unlimited original lore. Unsupported mechanics stay narrative-only with diagnostics. Starter spell generation is limited to supported damage/healing spell forms and levels 0–1; advancement preserves compatibility but does not invent a complete twenty-level spell catalog. Broad freeform quest resolution still uses the pre-existing runtime operations.
+NPCs, creature instances, encounter requests and player placeholders accept `faction_id=None`; campaigns may have no factions. Player affiliation is set only from explicit `player_affiliation`, never the first faction. Missing membership is neutral, not an implicit alliance. A small actor-alliance adapter recognizes self/party independently of membership, so healing, transfers and AI support work without fabricated factions. Existing hostile attitudes permit independent threats to enter combat. Reputation processing skips independent quest givers. These changes support nullable membership without a parallel combat system.
+
+## Persistence, resume and diagnostics
+
+Validated blueprints are checkpointed **before** procedural generation/compilation. A failed compiler resumes from that blueprint with zero new provider calls. Full successful jobs retain their frozen setting and result. Old `setting_semantics` / `campaign_semantics` checkpoints still compile without repeating their successful model calls.
+
+World/campaign snapshots retain original blueprint, config/seed, compiler version, provenance and compiled content. Lazy content still uses atomic overlays and cannot alter the frozen original setting. Its newly saved expansion records retain the compact blueprint and compiler version; old internal expansion records remain readable. Partial creative regeneration is available only for worlds with a compact blueprint; legacy worlds remain manually editable or fully regenerable. Foundation-only changes preserve the existing registry and revision.
+
+Provider diagnostics retain exception type, provider, model, stage, attempt and a sanitized original message. API keys, credentials, Authorization/cookie values and credential-bearing URLs are redacted. Unexpected adapter programming errors have `authoring_internal_error`, not `provider_error`. The UI shows a safe summary with expandable diagnostics. Compiler/reference/mechanical failures never become provider errors and never trigger a model repair.
+
+## Verification and optional real-provider smoke
+
+`tests/test_procedural_blueprints.py` covers profile-independent prompts/call counts, invalid and truncated JSON, unknown fields, missing optional sections, timeout/provider/internal errors, redaction, stable keyed references, knowledge separation, optional factions, role/mechanical coverage, reproducibility, phenotype-free hazards, existing combat, independent-party healing/reputation, persistence, old checkpoint compatibility, compiler resume and long creative fields. Existing direct factory/runtime/API fixtures remain and provider fixtures now return compact blueprints.
+
+The real-provider smoke test is opt-in and skips cleanly without configuration/credentials:
+
+```bash
+TABLETOP_SMOKE_PROVIDER=deepseek TABLETOP_SMOKE_MODEL=<configured-model> \
+  python -m pytest tests/test_procedural_blueprints.py -k real_provider -q
+```
+
+Use the selected provider's existing key environment (`DEEPSEEK_API_KEY` or `COMPATIBLE_API_KEY`; compatible providers also require `COMPATIBLE_BASE_URL`). Do not put keys in command arguments. Local providers require an explicitly configured running endpoint. Normal test runs perform no external API calls. The smoke validates concept -> world blueprint -> compiled world -> campaign blueprint -> compiled campaign, reporting failures instead of substituting fixtures.
+
+Validation for this iteration: **740 backend tests passed, 1 real-provider smoke skipped**. Production frontend build and native-choice guard passed. Targeted undefined-name checks passed in the modified generation modules. No real-provider calls or browser E2E pass are claimed: no provider credentials/configuration or installed browser were available. The existing frontend chunk-size warning and dependency deprecation warning remain.
+
+## Limits
+
+Procedural role combinations and quest/evidence primitives are finite, not unlimited authored stories. Additional secret facets are derived from the supplied ideas and should be reviewed for narrative quality. Some unsupported mechanics remain descriptive; the spell factory is not a complete twenty-level spell catalog. Quest prerequisites and resolutions remain authoring metadata executed through the existing quest operations, not a new arbitrary-goal solver. The separate CombatMapGenerator contract is outside this change. No renderer, Narrative mode, Paper Doll, Timeline or character-creator redesign is included. Real-provider story quality and browser acceptance are distinct from fixture/backend validation.

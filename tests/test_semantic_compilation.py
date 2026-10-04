@@ -1,7 +1,7 @@
 import json
 import pytest
 from pydantic import ValidationError
-from semantic_fixture import world, campaign
+from semantic_fixture import world, campaign, world_blueprint, campaign_blueprint
 from backend.tabletop.semantic import (
     SemanticSettingDTO,
     SemanticCampaignDTO,
@@ -97,9 +97,9 @@ class DM:
 
 
 def test_generators_only_request_semantics_and_bound_repair():
-    bad = world()
-    bad["items"][0]["damage_expression"] = "1d999"
-    dm = DM([bad, world()])
+    bad = world_blueprint()
+    bad["equipment_families"][0]["damage_expression"] = "1d999"
+    dm = DM([bad, world_blueprint()])
     s = SettingGenerator(dm).generate("world", "Новый мир")
     assert len(dm.calls) == 2
     prompt = dm.calls[0][2][0]["content"]
@@ -111,7 +111,7 @@ def test_generators_only_request_semantics_and_bound_repair():
         "resource_cost",
     ):
         assert forbidden not in prompt
-    dm = DM([campaign()])
+    dm = DM([campaign_blueprint()])
     d = CampaignGenerator2(dm).generate("c", s, CampaignOptions(idea="Пропажа"))
     assert d.player_slot and len(dm.calls) == 1
     assert "damage_expression" not in json.dumps(dm.calls)
@@ -124,7 +124,7 @@ def test_compiler_failure_does_not_retry_model_and_resume_uses_dto(
     from backend.tabletop.authoring_jobs import AuthoringJobs
 
     jobs = AuthoringJobs(TabletopRepository(tmp_path / "jobs.db"))
-    dm = DM([world()])
+    dm = DM([world_blueprint()])
     real = ProceduralContentCompiler.compile
 
     def fail(*args, **kwargs):
@@ -135,7 +135,7 @@ def test_compiler_failure_does_not_retry_model_and_resume_uses_dto(
         with jobs.run("job", "setting", {"concept": "мир"}) as cp:
             SettingGenerator(dm, checkpoint=cp).generate("world", "мир")
     assert len(dm.calls) == 1
-    assert "setting_semantics" in jobs.get("job")["outputs"]
+    assert "setting_blueprint" in jobs.get("job")["outputs"]
     monkeypatch.setattr(ProceduralContentCompiler, "compile", real)
     jobs = AuthoringJobs(TabletopRepository(tmp_path / "jobs.db"))
     with jobs.run("job", "setting", {"concept": "мир"}) as cp:
@@ -193,6 +193,13 @@ def test_universal_seeded_worlds_coverage_and_campaign(genre, skill, weapon, spe
     data = world()
     data["genre"] = genre
     data["name"] = genre
+    original_skill = data["skills"][0]["name"]
+    original_weapon = data["items"][0]["name"]
+    data = json.loads(
+        json.dumps(data, ensure_ascii=False)
+        .replace(original_skill, skill)
+        .replace(original_weapon, weapon)
+    )
     data["skills"][0]["name"] = skill
     data["items"][0]["name"] = weapon
     data["species"][0]["name"] = species
@@ -225,10 +232,15 @@ def test_universal_seeded_worlds_coverage_and_campaign(genre, skill, weapon, spe
         party_size=2,
         generation=CampaignGenerationConfig(seed=61, profile="SHORT"),
     )
-    first = SemanticCampaignCompiler().compile("c", campaign(), a, opts)
-    second = SemanticCampaignCompiler().compile("c", campaign(), a, opts)
+    campaign_data = json.loads(
+        json.dumps(campaign(), ensure_ascii=False).replace("Слух", skill)
+    )
+    first = SemanticCampaignCompiler().compile("c", campaign_data, a, opts)
+    second = SemanticCampaignCompiler().compile("c", campaign_data, a, opts)
     assert first.model_dump() == second.model_dump()
-    assert len(first.locations) >= opts.generation.targets["locations"]
+    assert len(first.locations) == len(
+        campaign()["locations"]
+    )  # Legacy DTO compiles as authored; blueprint owns coverage.
     state = CampaignCompiler().compile(first, first.characters[0].build)
     assert len(state.party) == 2
     from backend.tabletop.commands import Command
@@ -298,7 +310,9 @@ def test_api_world_campaign_character_shop_start(tmp_path, monkeypatch):
     def call(self, id, stage, messages, structured):
         calls.append(stage)
         return json.dumps(
-            world() if stage == "authoring_setting_semantics" else campaign()
+            world_blueprint()
+            if stage == "authoring_setting_blueprint"
+            else campaign_blueprint()
         )
 
     monkeypatch.setattr(DMAgent, "call", call)
@@ -362,7 +376,7 @@ def test_api_world_campaign_character_shop_start(tmp_path, monkeypatch):
         )
         assert response.status_code == 200, response.text
         gid = response.json()["id"]
-        assert calls == ["authoring_setting_semantics", "authoring_campaign_semantics"]
+        assert calls == ["authoring_setting_blueprint", "authoring_campaign_blueprint"]
     with TestClient(create_app(path)) as client:
         response = client.get("/api/tabletop/games/" + gid)
         assert response.status_code == 200

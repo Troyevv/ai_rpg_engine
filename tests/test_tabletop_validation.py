@@ -167,18 +167,21 @@ def test_semantic_guards_stay_strict(change):
 
 @pytest.mark.parametrize("invalid", [False, True])
 def test_generator_contract_and_bounded_semantic_repair(invalid):
-    from semantic_fixture import world, campaign
+    from semantic_fixture import (
+        world_blueprint as world,
+        campaign_blueprint as campaign,
+    )
 
     data = campaign()
     if invalid:
-        data["npcs"][0]["knowledge"] = ["Unknown secret"]
+        data["actors"][0]["known_secrets"] = ["Unknown secret"]
     dm = Mock(config=CONFIG)
     dm.call.side_effect = [json.dumps(world()), json.dumps(data), json.dumps(data)]
     generator = CampaignGenerator(dm)
     if invalid:
         with pytest.raises(CampaignValidationError) as caught:
             generator.generate("draft", GenerationOptions(idea="Город архивов"))
-        assert all(i.code == "semantic_generation_error" for i in caught.value.issues)
+        assert all(i.code == "schema_error" for i in caught.value.issues)
         assert dm.call.call_count == 3
     else:
         result = generator.generate("draft", GenerationOptions(idea="Город архивов"))
@@ -282,7 +285,7 @@ def test_schema_errors_are_friendly_and_do_not_persist(api, raw):
     response = generate(c, raw)
     assert response.status_code == 409
     assert (
-        response.json()["stage"] == "setting_semantics"
+        response.json()["stage"] == "setting_blueprint"
         and response.json()["draft_id"] is None
     )
     assert all(

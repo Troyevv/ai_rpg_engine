@@ -6,9 +6,11 @@ type Job = {
   stage: string;
   completed_stages: string[];
   request: Record<string, unknown>;
-  issues: { field: string; message: string }[];
+  issues: { field: string; message: string; context?: Record<string, unknown> }[];
 };
 const labels: Record<string, string> = {
+  setting_blueprint: "Творческая основа мира",
+  campaign_blueprint: "Замысел кампании",
   setting_semantics: "Генерация мира",
   setting_compile: "Создание и проверка игрового контента",
   campaign_semantics: "Сюжетная ситуация, NPC и конфликты",
@@ -95,9 +97,15 @@ export function AuthoringProgress({
       </p>
       <p>Сохранено этапов: {job.completed_stages.length}</p>
       {job.issues.map((issue, i) => (
-        <p key={i}>
-          {issue.field}: {issue.message}
-        </p>
+        <div key={i}>
+          <p>{issue.field}: {issue.message}</p>
+          {issue.context?.exception_type != null && (
+            <details>
+              <summary>Диагностика ошибки</summary>
+              <pre>{JSON.stringify(issue.context, null, 2)}</pre>
+            </details>
+          )}
+        </div>
       ))}
       <button disabled={busy} onClick={resume}>
         Продолжить с сохранённого этапа

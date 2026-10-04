@@ -579,7 +579,7 @@ export function SettingEditor({
             >
               Подтвердить мир и создать кампанию
             </button>
-            {section !== "overview" && draft.semantic_source && Object.keys(draft.semantic_source as object).length > 0 && (
+            {section !== "overview" && draft.semantic_source && "premise" in (draft.semantic_source as object) && (
               <button
                 disabled={busy}
                 onClick={() =>

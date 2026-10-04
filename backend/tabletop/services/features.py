@@ -31,10 +31,7 @@ class FeatureService:
             raise ValueError("Цель особенности недоступна")
         if feature.target == "self" and target.id != actor.id:
             raise ValueError("Особенность применяется только к себе")
-        if (
-            feature.target == "ally"
-            and state.relation(actor.faction, target.faction) != "ALLY"
-        ):
+        if feature.target == "ally" and not state.allied(actor.id, target.id):
             raise ValueError("Нужна союзная цель")
         if feature.target == "enemy" and not state.hostile(aid, target.id):
             raise ValueError("Нужна враждебная цель")
@@ -82,7 +79,7 @@ class FeatureService:
                 and (
                     state.hostile(actor.id, other.id)
                     if feature.target == "enemy"
-                    else state.relation(actor.faction, other.faction) == "ALLY"
+                    else state.allied(actor.id, other.id)
                 )
             ]
             for other in area_targets:

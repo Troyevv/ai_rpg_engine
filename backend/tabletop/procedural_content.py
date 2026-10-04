@@ -24,7 +24,7 @@ from .spells import SpellDefinition, SpellcastingFeature
 from .content_registry import SettingValidator, average
 from .validation import ValidationIssue, CampaignValidationError
 
-VERSION = "semantic-1"
+VERSION = "procedural-2"
 ABILITIES = (
     "strength",
     "dexterity",
@@ -62,16 +62,28 @@ def diagnostic(code, name, message):
     return dict(code=code, entity=name, message=message)
 
 
+def concept_key(value):
+    return value.key or value.name
+
+
 def pick(registry, name="", diagnostics=None):
-    for key, value in sorted(registry.items()):
-        if value.name.casefold() == name.casefold():
-            return key
-    if name and diagnostics is not None:
+    if name in registry:
+        return name
+    matches = [
+        key
+        for key, value in registry.items()
+        if value.name.casefold() == name.casefold()
+    ]
+    if len(matches) == 1:
+        return matches[0]  # Compatibility for old semantic snapshots only.
+    if name:
+        raise ValueError("Unknown or ambiguous registry reference: " + name)
+    if diagnostics is not None:
         diagnostics.append(
             diagnostic(
-                "reference_fallback",
-                name,
-                "Неизвестный концепт; выбран совместимый контент.",
+                "default_selection",
+                "",
+                "Не задан вариант; выбран допустимый базовый вариант.",
             )
         )
     return next(iter(sorted(registry)), "")
@@ -373,7 +385,7 @@ class ItemFactory:
             for f in v.capabilities
         ]
         return ContentItem(
-            id=stable_id("item", v.name),
+            id=stable_id("item", concept_key(v)),
             name=v.name,
             description=v.description,
             category=v.category,
@@ -402,7 +414,7 @@ class CreatureFactory:
         stats[PRIMARY[v.role]] = 12 + tier * 2
         stats["constitution"] = 12
         return CreatureTemplate(
-            id=stable_id("creature", v.name),
+            id=stable_id("creature", concept_key(v)),
             name=v.name,
             description=v.description,
             category=v.role,
@@ -412,7 +424,7 @@ class CreatureFactory:
             base_armor={"fragile": 10, "normal": 12, "armored": 14}[v.defense],
             attacks=[
                 CreatureAttack(
-                    id=stable_id("attack", v.name),
+                    id=stable_id("attack", concept_key(v)),
                     name=v.attack[:120] or v.name,
                     damage_type=pick(c.damage_types, v.damage_concept, diagnostics),
                     damage_expression=BalanceEngine.dice[tier],
@@ -456,7 +468,7 @@ class ProceduralContentCompiler:
         context = GeneratorContext(config.seed)
         c, diagnostics = ContentRegistry(), []
         for v in dto.skills:
-            key = stable_id("skill", v.name)
+            key = stable_id("skill", concept_key(v))
             c.skills[key] = SkillDefinition(
                 id=key,
                 name=v.name,
@@ -465,7 +477,7 @@ class ProceduralContentCompiler:
                 tags=v.tags,
             )
         for v in dto.damage_concepts:
-            key = stable_id("damage", v.name)
+            key = stable_id("damage", concept_key(v))
             c.damage_types[key] = DamageTypeDefinition(
                 id=key, name=v.name, description=v.description
             )
@@ -473,19 +485,23 @@ class ProceduralContentCompiler:
             c.damage_types["physical"] = DamageTypeDefinition(
                 id="physical", name="Физический"
             )
-        c.equipment_profiles["humanoid"] = EquipmentProfile(
-            id="humanoid",
+        c.equipment_profiles["standard"] = EquipmentProfile(
+            id="standard",
             name="Базовое снаряжение",
             slots=[
-                EquipmentSlot(id="MAIN_HAND", name="Основная рука", position="left"),
-                EquipmentSlot(id="OFF_HAND", name="Вторая рука", position="right"),
+                EquipmentSlot(
+                    id="MAIN_HAND", name="Основной инструмент", position="left"
+                ),
+                EquipmentSlot(
+                    id="OFF_HAND", name="Второй инструмент", position="right"
+                ),
                 EquipmentSlot(id="TORSO", name="Корпус", position="body"),
             ],
         )
         from .conditions import ConditionDefinition
 
         for v in dto.conditions:
-            key = stable_id("condition", v.name)
+            key = stable_id("condition", concept_key(v))
             effects = {
                 "hindered": dict(speed_multiplier=0.5),
                 "disoriented": dict(checks=-1),
@@ -505,12 +521,13 @@ class ProceduralContentCompiler:
                 id=key, name=v.name, expires="turn_start", **effects
             )
         for v in dto.species:
-            key = stable_id("species", v.name)
+            key = stable_id("species", concept_key(v))
             c.species[key] = SpeciesDefinition(
                 id=key,
                 name=v.name,
                 description=v.description,
                 speed={"slow": 25, "normal": 30, "fast": 35}[v.movement],
+                equipment_profile="standard",
                 features=[
                     FeatureFactory.build(f, v.name, c, diagnostics, "SPECIES")
                     for f in v.traits
@@ -523,7 +540,7 @@ class ProceduralContentCompiler:
             )
             c.items[item.id] = item
         for v in dto.professions:
-            key = stable_id("class", v.name)
+            key = stable_id("class", concept_key(v))
             primary = PRIMARY[v.role]
             skills = list(
                 dict.fromkeys(pick(c.skills, n, diagnostics) for n in v.expertise)
@@ -659,7 +676,7 @@ class ProceduralContentCompiler:
                     slots={"1": 2},
                 )
         for v in dto.backgrounds:
-            key = stable_id("background", v.name)
+            key = stable_id("background", concept_key(v))
             c.backgrounds[key] = BackgroundDefinition(
                 id=key,
                 name=v.name,

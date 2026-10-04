@@ -144,7 +144,7 @@ def test_api_resume_preserves_stages_and_does_not_persist_credentials(
     from backend.api.app import create_app
     from backend.tabletop.dm import DMAgent
     from backend.tabletop.procedural_content import ProceduralContentCompiler
-    from semantic_fixture import world
+    from semantic_fixture import world_blueprint as world
 
     calls = []
 
@@ -171,13 +171,13 @@ def test_api_resume_preserves_stages_and_does_not_persist_credentials(
         assert response.status_code == 409
         job = client.get("/api/tabletop/authoring/resume-world").json()
         assert job["status"] == "FAILED" and job["stage"] == "setting_compile"
-        assert job["completed_stages"] == ["setting_semantics"]
+        assert job["completed_stages"] == ["setting_blueprint"]
         assert "test-key-never-persist" not in json.dumps(job)
     monkeypatch.setattr(ProceduralContentCompiler, "compile", real)
     with TestClient(create_app(path)) as client:
         response = client.post("/api/tabletop/settings/worlds/generate", json=request)
         assert response.status_code == 200, response.text
-        assert calls == ["authoring_setting_semantics"]
+        assert calls == ["authoring_setting_blueprint"]
         assert (
             client.post("/api/tabletop/settings/worlds/generate", json=request).json()
             == response.json()

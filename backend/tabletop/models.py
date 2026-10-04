@@ -170,7 +170,7 @@ class CharacterSheet(Model):
     condition_sources: dict[str, str] = {}
     death_successes: int = 0
     death_failures: int = 0
-    faction: str
+    faction: str | None = None
     location: str
     goals: list[str] = []
     traits: list[str] = []
@@ -352,6 +352,8 @@ class GameState(Model):
         return self.actors()[actor_id]
 
     def relation(self, first, second):
+        if first is None or second is None:
+            return "NEUTRAL"
         if first == second:
             return "ALLY"
         for r in self.definition.faction_relations:
@@ -359,8 +361,25 @@ class GameState(Model):
                 return r.relation
         return "NEUTRAL"
 
+    def allied(self, a, b):
+        return (
+            a == b
+            or (a in self.party and b in self.party)
+            or self.relation(self.actor(a).faction, self.actor(b).faction) == "ALLY"
+        )
+
     def hostile(self, a, b):
-        return self.relation(self.actor(a).faction, self.actor(b).faction) == "HOSTILE"
+        if a == b or (a in self.party and b in self.party):
+            return False
+        first, second = self.actor(a), self.actor(b)
+        if self.relation(first.faction, second.faction) == "HOSTILE":
+            return True
+        # Independent threats have an explicit attitude, not a synthetic faction.
+        if first.faction is None or second.faction is None:
+            return (a in self.party and second.attitude == "hostile") or (
+                b in self.party and first.attitude == "hostile"
+            )
+        return False
 
     @property
     def encounter(self):

@@ -3,6 +3,7 @@
 from .semantic import SemanticCampaignDTO
 from .procedural_content import (
     stable_id,
+    concept_key,
     pick,
     PRIMARY,
     ABILITIES,
@@ -91,10 +92,17 @@ class LootBuilder:
         cap = BalanceEngine.loot_budget(difficulty)
         remaining = cap
         for intent in intents:
+            requested = (
+                pick(setting.content.items, intent.item, diagnostics)
+                if intent.item
+                else None
+            )
             candidates = {
                 k: v
                 for k, v in setting.content.items.items()
-                if v.category == intent.category and v.value <= remaining
+                if v.category == intent.category
+                and v.value <= remaining
+                and (requested is None or k == requested)
             }
             if not candidates:
                 diagnostics.append(
@@ -145,7 +153,7 @@ class ObjectBuilder:
                 )
             components.append(comp)
         return WorldObject(
-            id=stable_id("object", v.name),
+            id=stable_id("object", concept_key(v)),
             name=v.name,
             description=v.description,
             location_id=stable_id("location", v.location),
@@ -162,8 +170,8 @@ class ObjectBuilder:
 
 
 class CheckBuilder:
-    def build(self, v, setting, difficulty):
-        skill = pick(setting.content.skills, v.expertise)
+    def build(self, v, setting, difficulty, diagnostics=None):
+        skill = pick(setting.content.skills, v.expertise, diagnostics)
         # Difficulty labels resolve to the fixed core DC table at runtime.
         bands = ["EASY", "MEDIUM", "HARD"]
         n = min(
@@ -181,7 +189,7 @@ class CheckBuilder:
             ),
         )
         return SceneCheck(
-            id=stable_id("check", v.name),
+            id=stable_id("check", concept_key(v)),
             name=v.name,
             description=v.description,
             location_id=stable_id("location", v.location),
@@ -202,30 +210,31 @@ class SemanticCampaignCompiler:
         dto = SemanticCampaignDTO.model_validate(
             value.model_dump() if isinstance(value, SemanticCampaignDTO) else value
         )
-        from .generation_coverage import campaign_coverage
 
         source = dto.model_dump()
         config = options.generation
         setting = SettingValidator().validate(setting)
-        dto = campaign_coverage(dto, setting, config)
         rules = setting_rules(setting)
         diagnostics = []
         location = stable_id("location", dto.starting_location)
-        faction = stable_id("faction", dto.factions[0].name)
+        faction = (
+            stable_id("faction", dto.player_faction) if dto.player_faction else None
+        )
         chars = []
         for v in dto.npcs:
             chars.append(
                 CharacterDefinition(
-                    id=stable_id("npc", v.name),
+                    id=stable_id("npc", concept_key(v)),
                     name=v.name,
                     description=v.description,
                     location_id=stable_id("location", v.location),
-                    faction_id=stable_id("faction", v.faction),
+                    faction_id=stable_id("faction", v.faction) if v.faction else None,
                     build=NPCBuildFactory().build(v, setting, diagnostics, config.seed),
                     goals=[v.motivation] if v.motivation else [],
                     personality=v.personality[:1500],
                     attitude=v.attitude,
-                    knowledge=[stable_id("secret", n) for n in v.knowledge],
+                    knowledge=[stable_id("secret", n) for n in v.known_secrets],
+                    public_lore=v.knowledge,
                     relationships={
                         stable_id("npc", n): {
                             "friendly": 25,
@@ -248,7 +257,7 @@ class SemanticCampaignCompiler:
             concept = SemanticNPC(
                 name=f"Спутник {n + 1}",
                 location=dto.starting_location,
-                faction=dto.factions[0].name,
+                faction=dto.player_faction,
                 role="support",
             )
             actor = CharacterDefinition(
@@ -274,10 +283,13 @@ class SemanticCampaignCompiler:
             candidates = [
                 k
                 for k, c in setting.content.creatures.items()
-                if not v.creatures or c.name in v.creatures
+                if not v.creatures or c.name in v.creatures or k in v.creatures
             ]
-            if not candidates:
-                candidates = list(setting.content.creatures)
+            if (
+                v.creatures
+                and len({pick(setting.content.creatures, n) for n in v.creatures}) == 0
+            ):
+                raise ValueError("No requested creatures")
             if not candidates:
                 diagnostics.append(
                     diagnostic(
@@ -288,11 +300,11 @@ class SemanticCampaignCompiler:
                 )
                 continue
             request = EncounterRequest(
-                id=stable_id("encounter", v.name),
+                id=stable_id("encounter", concept_key(v)),
                 name=v.name,
                 description=v.description,
                 location_id=stable_id("location", v.location),
-                faction_id=stable_id("faction", v.faction),
+                faction_id=stable_id("faction", v.faction) if v.faction else None,
                 available_creatures=candidates,
                 difficulty=DIFFICULTY[v.difficulty],
             )
@@ -334,18 +346,14 @@ class SemanticCampaignCompiler:
                 for name in names:
                     pair = tuple(
                         sorted(
-                            (stable_id("faction", v.name), stable_id("faction", name))
+                            (
+                                stable_id("faction", concept_key(v)),
+                                stable_id("faction", name),
+                            )
                         )
                     )
                     if pair in relations and relations[pair] != kind:
-                        diagnostics.append(
-                            diagnostic(
-                                "relationship_fallback",
-                                v.name,
-                                "Противоречивые отношения фракций сведены к HOSTILE.",
-                            )
-                        )
-                        kind = "HOSTILE"
+                        raise ValueError("Conflicting faction relationships")
                     relations[pair] = kind
         d = CampaignDefinition(
             id=id,
@@ -365,7 +373,7 @@ class SemanticCampaignCompiler:
             regions=[Region(id="region_main", name=dto.name)],
             locations=[
                 Location(
-                    id=stable_id("location", v.name),
+                    id=stable_id("location", concept_key(v)),
                     name=v.name,
                     description=v.description,
                     region_id="region_main",
@@ -378,7 +386,7 @@ class SemanticCampaignCompiler:
             ],
             factions=[
                 Faction(
-                    id=stable_id("faction", v.name),
+                    id=stable_id("faction", concept_key(v)),
                     name=v.name,
                     description=v.description,
                     public_goal="; ".join(v.goals)[:1000],
@@ -398,7 +406,7 @@ class SemanticCampaignCompiler:
             ],
             secrets=[
                 Secret(
-                    id=stable_id("secret", v.name),
+                    id=stable_id("secret", concept_key(v)),
                     name=v.name,
                     description=v.description,
                     location_id=stable_id("location", v.location),
@@ -408,7 +416,7 @@ class SemanticCampaignCompiler:
             ],
             quests=[
                 Quest(
-                    id=stable_id("quest", v.name),
+                    id=stable_id("quest", concept_key(v)),
                     name=v.name,
                     description=v.description,
                     location_id=stable_id("location", v.location),
@@ -425,7 +433,8 @@ class SemanticCampaignCompiler:
                 for v in dto.quests
             ],
             checks=[
-                CheckBuilder().build(v, setting, options.difficulty) for v in dto.checks
+                CheckBuilder().build(v, setting, options.difficulty, diagnostics)
+                for v in dto.checks
             ],
             encounters=encounters,
             initial_conflict=dto.premise,

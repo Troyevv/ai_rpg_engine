@@ -261,7 +261,8 @@ class CampaignCompiler:
                 "Слот должен начинать в стартовой локации",
             )
             require(
-                slot.faction_id in {f.id for f in d.factions},
+                slot.faction_id is None
+                or slot.faction_id in {f.id for f in d.factions},
                 "unknown_reference",
                 "player_slot",
                 slot.id,

@@ -127,7 +127,7 @@ class EncounterService:
                 else:
                     ally = state.actor(c.target)
                     if (
-                        state.relation(a.faction, ally.faction) != "ALLY"
+                        not state.allied(a.id, ally.id)
                         or ally.id == aid
                         or ally.location != a.location
                         or (ally.hp <= 0)

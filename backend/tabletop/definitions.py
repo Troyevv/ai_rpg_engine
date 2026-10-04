@@ -99,7 +99,7 @@ class CharacterBuild(Model):
 
 class CharacterDefinition(Named):
     location_id: Id
-    faction_id: Id
+    faction_id: Id | None = None
     build: CharacterBuild = Field(default_factory=CharacterBuild)
     controller: ControllerType = "AI"
     player_id: str | None = None
@@ -204,7 +204,7 @@ class SceneCheck(Named):
 class PlayerPlaceholder(Model):
     id: Id = "player_slot"
     starting_location: Id
-    faction_id: Id
+    faction_id: Id | None = None
     hooks: list[str] = []
     compatibility: list[str] = []
 
@@ -230,7 +230,7 @@ class CampaignDefinition(Model):
     setting: Setting
     regions: list[Region] = Field(min_length=1, max_length=30)
     locations: list[Location] = Field(min_length=1, max_length=150)
-    factions: list[Faction] = Field(min_length=1, max_length=30)
+    factions: list[Faction] = Field(default_factory=list, max_length=30)
     faction_relations: list[FactionRelation] = []
     characters: list[CharacterDefinition] = Field(default_factory=list, max_length=100)
     creatures: list[CharacterDefinition] = []
@@ -253,7 +253,15 @@ class CampaignDefinition(Model):
     def validate_semantic_source(cls, value):
         if value:
             from .semantic import SemanticCampaignDTO
+            from .blueprints import CampaignBlueprint
+            from copy import deepcopy
 
+            if "starting_location" not in value:
+                return CampaignBlueprint.model_validate(value).model_dump()
+            value = deepcopy(value)
+            for npc in value.get("npcs", []):
+                if "known_secrets" not in npc:
+                    npc["known_secrets"] = npc.pop("knowledge", [])
             return SemanticCampaignDTO.model_validate(value).model_dump()
         return value
 

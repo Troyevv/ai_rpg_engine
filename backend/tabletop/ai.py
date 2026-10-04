@@ -26,9 +26,7 @@ class Considerations:
         self.allies = [
             state.actor(i)
             for i in self.encounter.order
-            if i != actor
-            and state.relation(self.actor.faction, state.actor(i).faction) == "ALLY"
-            and state.actor(i).hp > 0
+            if i != actor and state.allied(actor, i) and state.actor(i).hp > 0
         ]
         self.danger = 1 - self.actor.hp / self.actor.max_hp
         self.target = min(

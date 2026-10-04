@@ -5,7 +5,7 @@ from pydantic import create_model, ValidationError
 from .authoring import authoring_issues
 from .validation import CampaignValidationError
 
-SETTING_STAGES = (("setting_semantics", ()), ("setting_compile", ()))
+SETTING_STAGES = (("setting_blueprint", ()), ("setting_compile", ()))
 
 
 class AuthoringFailure(CampaignValidationError):
@@ -108,99 +108,113 @@ class SettingGenerator:
         self.author = StagedAuthor(dm, progress, checkpoint)
 
     def generate(self, id, concept, existing=None, section=None, generation=None):
-        from .semantic import SemanticSettingDTO, SemanticModel
+        from .blueprints import WorldBlueprint, world_context
+        from .semantic import SemanticModel
         from .semantic_authoring import generate_semantic, compile_stage
-        from .procedural_content import ProceduralContentCompiler
+        from .procedural_world import ProceduralWorldGenerator
+        from .generation_config import GenerationConfig
 
         if not self.author.dm.config:
             raise ValueError("Настрой провайдера и модель")
-        from .generation_config import GenerationConfig
-
         generation = generation or (
             existing.generation_config if existing else GenerationConfig()
         )
-        schema = SemanticSettingDTO
-        source = existing.semantic_source if existing else None
-        if section and not source:
-            raise ValueError(
-                "Для раздела старого мира нужен semantic source; доступна полная перегенерация или ручное редактирование"
+        checkpoint = self.author.checkpoint
+        # Resume already successful pre-blueprint jobs without a new provider request.
+        legacy = checkpoint.cached("setting_semantics") if checkpoint else None
+        if legacy is not None:
+            from .procedural_content import ProceduralContentCompiler
+
+            return compile_stage(
+                self.author,
+                "setting_compile",
+                lambda: ProceduralContentCompiler().compile(
+                    existing.id if existing else id,
+                    legacy,
+                    existing.revision if existing else 0,
+                    generation,
+                ),
             )
+        source = existing.semantic_source if existing else None
+        has_blueprint = source and "premise" in source and "professions" not in source
+        schema = WorldBlueprint
         groups = {
             "foundation": (
                 "name",
-                "description",
+                "premise",
                 "genre",
                 "tone",
                 "themes",
-                "era",
-                "technology",
-                "supernatural",
+                "world_rules",
                 "lore",
             ),
-            "society": (
-                "species",
-                "professions",
-                "backgrounds",
-                "cultures",
-                "factions",
-            ),
-            "skills_features": (
-                "skills",
-                "professions",
-                "species",
-                "backgrounds",
-                "conditions",
-                "damage_concepts",
-            ),
-            "bestiary": ("creatures",),
-            "equipment": ("items", "professions", "backgrounds"),
-            "world_mechanics": ("environments", "interactions", "conditions"),
-            "archetypes": ("professions",),
-            "features": ("professions", "species"),
-            "powers": ("professions",),
-            "spellcasting": ("professions",),
-            "resources": ("professions",),
-            "levels": ("professions",),
-            "subclasses": ("professions",),
-            "feats": ("professions",),
-            "equipment_profiles": ("species",),
-            "damage_types": ("damage_concepts",),
+            "society": ("peoples", "archetypes", "origins", "cultures", "factions"),
+            "skills_features": ("skill_domains", "archetypes", "power_traditions"),
+            "bestiary": ("threat_families",),
+            "creatures": ("threat_families",),
+            "equipment": ("equipment_families",),
+            "items": ("equipment_families",),
+            "world_mechanics": ("world_rules", "locations", "power_traditions"),
+            "archetypes": ("archetypes",),
+            "skills": ("skill_domains",),
+            "backgrounds": ("origins",),
+            "species": ("peoples",),
+            "equipment_profiles": ("peoples",),
         }
+        for key in (
+            "features",
+            "powers",
+            "spellcasting",
+            "resources",
+            "levels",
+            "subclasses",
+            "feats",
+            "damage_types",
+            "conditions",
+        ):
+            groups[key] = ("power_traditions", "archetypes")
         if section:
-            fields = groups.get(section, (section,))
-            if not set(fields) <= set(SemanticSettingDTO.model_fields):
+            if not has_blueprint:
                 raise ValueError(
-                    "Раздел редактируется вместе с semantic-профессиями или предметами"
+                    "Для частичной генерации нужен compact blueprint; старый мир можно редактировать вручную или перегенерировать целиком"
                 )
             from copy import deepcopy
 
+            fields = groups.get(section, (section,))
+            if not set(fields) <= set(WorldBlueprint.model_fields):
+                raise ValueError("Неизвестный раздел blueprint")
+            selected_fields = {}
+            for key in fields:
+                field = deepcopy(WorldBlueprint.model_fields[key])
+                field.default = None
+                field.default_factory = None
+                selected_fields[key] = (
+                    WorldBlueprint.model_fields[key].annotation,
+                    field,
+                )
             schema = create_model(
-                "SemanticSettingSection",
-                __base__=SemanticModel,
-                **{
-                    k: (
-                        SemanticSettingDTO.model_fields[k].annotation,
-                        deepcopy(SemanticSettingDTO.model_fields[k]),
-                    )
-                    for k in fields
-                },
+                "WorldBlueprintSection", __base__=SemanticModel, **selected_fields
             )
         context = {
             "concept": concept,
-            "existing_semantics": source,
-            "coverage_targets": generation.targets,
+            "existing_world": world_context(existing) if existing else None,
         }
-        value = generate_semantic(self.author, id, "setting_semantics", schema, context)
-        dto = SemanticSettingDTO.model_validate(
-            {**(source or {}), **value.model_dump()}
+        value = generate_semantic(self.author, id, "setting_blueprint", schema, context)
+        blueprint = WorldBlueprint.model_validate(
+            {**(source if section else {}), **value.model_dump(exclude_unset=True)}
         )
-        return compile_stage(
+        result = compile_stage(
             self.author,
             "setting_compile",
-            lambda: ProceduralContentCompiler().compile(
+            lambda: ProceduralWorldGenerator().generate(
                 existing.id if existing else id,
-                dto,
-                existing.revision if existing else 0,
+                blueprint,
                 generation,
+                existing.revision if existing else 0,
             ),
         )
+        if section == "foundation":
+            result.content = existing.content.model_copy(deep=True)
+            result.generation_metadata = existing.generation_metadata.copy()
+            result.starting_currency = existing.starting_currency
+        return result
