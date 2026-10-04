@@ -27,7 +27,11 @@ class CampaignValidationError(ValueError):
 
     def public_message(self):
         heading = {
-            "reference": "Модель создала мир с некорректными связями.",
+            "reference": "Обнаружены некорректные связи в содержимом.",
+            "setting_compile": "Не удалось собрать игровые правила мира.",
+            "campaign_compile": "Не удалось собрать кампанию.",
+            "setting_semantics": "Не удалось получить описание мира.",
+            "campaign_semantics": "Не удалось получить описание приключения.",
             "schema": "Ответ модели не соответствует структуре кампании.",
             "semantic": "Мир нарушает правила кампании.",
         }.get(self.stage, "Определение кампании некорректно.")
@@ -309,6 +313,7 @@ class CampaignReferenceValidator:
                 "object", o, "contents.item_id", [e.item_id for e in o.contents], "item"
             )
         for q in d.quests:
+            many("quest", q, "prerequisites", q.prerequisites, "quest")
             check("quest", q, "location_id", q.location_id, "location")
             check("quest", q, "giver_id", q.giver_id, "actor")
             check("quest", q, "required_item", q.required_item, "item")

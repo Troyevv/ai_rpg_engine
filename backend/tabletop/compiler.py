@@ -221,7 +221,8 @@ class CampaignCompiler:
             "Повтор участника в стартовой партии",
         )
         require(
-            any(
+            d.player_slot is not None
+            or any(
                 actors[i].controller == "PLAYER"
                 and (actors[i].player_id or "local") == "local"
                 for i in d.starting_party
@@ -232,6 +233,41 @@ class CampaignCompiler:
             "starting_party",
             "В партии нужен локальный игрок",
         )
+
+        if d.player_slot:
+            slot = d.player_slot
+            require(
+                slot.id not in seen,
+                "duplicate_id",
+                "player_slot",
+                slot.id,
+                "id",
+                "Слот игрока конфликтует с сущностью",
+            )
+            require(
+                not any(a.controller == "PLAYER" for a in actors.values()),
+                "player_agency",
+                "campaign",
+                d.id,
+                "player_slot",
+                "Слот и готовый игрок взаимоисключающие",
+            )
+            require(
+                slot.starting_location == d.starting_location,
+                "starting_party_mismatch",
+                "player_slot",
+                slot.id,
+                "starting_location",
+                "Слот должен начинать в стартовой локации",
+            )
+            require(
+                slot.faction_id in {f.id for f in d.factions},
+                "unknown_reference",
+                "player_slot",
+                slot.id,
+                "faction_id",
+                "Неизвестная фракция игрока",
+            )
 
         def inventory(entries, kind, entity, field):
             for n, e in enumerate(entries):
@@ -387,7 +423,28 @@ class CampaignCompiler:
 
     def compile(self, definition, character=None):
         d = self.validate(definition).model_copy(deep=True)
-        if character:
+        if d.player_slot:
+            if character is None:
+                raise ValueError("Создай персонажа перед началом игры")
+            from .definitions import CharacterDefinition
+
+            placeholder = d.player_slot
+            RulesEngine().validate_build(character, campaign_rules(d))
+            d.characters.append(
+                CharacterDefinition(
+                    id=placeholder.id,
+                    name=character.name,
+                    location_id=placeholder.starting_location,
+                    faction_id=placeholder.faction_id,
+                    controller="PLAYER",
+                    player_id="local",
+                    build=character,
+                )
+            )
+            d.starting_party.insert(0, placeholder.id)
+            d.player_slot = None
+            d = self.validate(d)
+        elif character:
             slot = next(
                 a
                 for a in d.characters + d.creatures + d.creature_instances

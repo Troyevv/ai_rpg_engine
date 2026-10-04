@@ -1,3 +1,4 @@
+import { choose } from "./choices";
 import { test, expect, type Page } from "@playwright/test";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -92,21 +93,10 @@ test("Gameplay 1.0: builder, five check domains, combat and equipment restart", 
     await start();
     await page.goto(base);
     await click("Настольная RPG");
+    // This scenario checks the existing runtime. Semantic authoring is covered in universal.spec.ts.
+    const draft = await (await page.request.post(`${base}/test/tabletop-draft`, { data: { idea: "gameplay acceptance" } })).json();
     await click("Создать кампанию");
-    await page
-      .getByLabel("Описание нового мира")
-      .fill("Город стеклянных архивов: голоса застывают в приливах.");
-    await click("Создать структуру мира");
-    await page
-      .getByRole("button", {
-        name: "Подтвердить мир и создать кампанию",
-        exact: true,
-      })
-      .click();
-    await page
-      .getByLabel("Идея приключения", { exact: true })
-      .fill("gameplay acceptance");
-    await click("Сгенерировать мир");
+    await choose(page.getByLabel("Продолжить черновик"), draft.id);
     await expect(
       page.getByRole("heading", { name: "Исчезнувшая рукопись", exact: true }),
     ).toBeVisible();

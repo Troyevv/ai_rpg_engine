@@ -143,20 +143,22 @@ def test_api_resume_preserves_stages_and_does_not_persist_credentials(
     from fastapi.testclient import TestClient
     from backend.api.app import create_app
     from backend.tabletop.dm import DMAgent
-    from universal_fixture import authoring_reply
+    from backend.tabletop.procedural_content import ProceduralContentCompiler
+    from semantic_fixture import world
 
     calls = []
-    failing = True
 
     def call(self, id, stage, messages, structured):
         calls.append(stage)
-        if failing and stage == "authoring_bestiary":
-            return '{"creatures": {"bad": {}}}'
-        return json.dumps(
-            authoring_reply(messages[0]["content"], json.loads(messages[-1]["content"]))
-        )
+        return json.dumps(world())
 
     monkeypatch.setattr(DMAgent, "call", call)
+    real = ProceduralContentCompiler.compile
+
+    def fail(*args, **kwargs):
+        raise ValueError("Injected compiler failure")
+
+    monkeypatch.setattr(ProceduralContentCompiler, "compile", fail)
     path = tmp_path / "resume.db"
     request = dict(
         authoring_id="resume-world",
@@ -166,27 +168,21 @@ def test_api_resume_preserves_stages_and_does_not_persist_credentials(
     )
     with TestClient(create_app(path)) as client:
         response = client.post("/api/tabletop/settings/worlds/generate", json=request)
-        assert response.status_code == 409, response.text
+        assert response.status_code == 409
         job = client.get("/api/tabletop/authoring/resume-world").json()
-        assert job["status"] == "FAILED" and job["stage"] == "bestiary"
-        assert job["completed_stages"] == ["foundation", "society", "skills_features"]
+        assert job["status"] == "FAILED" and job["stage"] == "setting_compile"
+        assert job["completed_stages"] == ["setting_semantics"]
         assert "test-key-never-persist" not in json.dumps(job)
-    first = calls[:]
-    failing = False
+    monkeypatch.setattr(ProceduralContentCompiler, "compile", real)
     with TestClient(create_app(path)) as client:
         response = client.post("/api/tabletop/settings/worlds/generate", json=request)
         assert response.status_code == 200, response.text
-        assert calls[len(first) :] == [
-            "authoring_bestiary",
-            "authoring_equipment",
-            "authoring_world_mechanics",
-        ]
-        count = len(calls)
+        assert calls == ["authoring_setting_semantics"]
         assert (
             client.post("/api/tabletop/settings/worlds/generate", json=request).json()
             == response.json()
         )
-        assert len(calls) == count
+        assert len(calls) == 1
 
 
 def test_late_stage_context_uses_reference_index_without_changing_registry():

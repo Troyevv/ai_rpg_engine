@@ -87,10 +87,10 @@ for (const [width, height] of [
       .getByRole("button", { name: "8. Снаряжение", exact: true })
       .click();
     await page
-      .getByRole("button", { name: "Купить: Кинжал", exact: true })
+      .getByRole("button", { name: "Купить: Резонатор", exact: true })
       .click();
     await page
-      .getByRole("button", { name: "Надеть: Кинжал", exact: true })
+      .getByRole("button", { name: "Надеть: Резонатор", exact: true })
       .click();
     await page.getByRole("button", { name: "Далее", exact: true }).click();
     await page
@@ -106,9 +106,9 @@ for (const [width, height] of [
       await page.request.get(`/api/tabletop/games/${gameId}`)
     ).json();
     expect(
-      saved.state.characters.traveler.inventory.some(
+      saved.state.characters[saved.state.controlled_actor].inventory.some(
         (e: { item_id: string; equipped: boolean }) =>
-          e.item_id === "dagger" && e.equipped,
+          e.item_id.startsWith("item_") && e.equipped,
       ),
     ).toBe(true);
     await page.reload();

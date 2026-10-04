@@ -166,38 +166,48 @@ def test_semantic_guards_stay_strict(change):
 
 
 @pytest.mark.parametrize("invalid", [False, True])
-def test_generator_contract_and_single_call_without_repair(invalid):
-    d = definition()
+def test_generator_contract_and_bounded_semantic_repair(invalid):
+    from semantic_fixture import world, campaign
+
+    data = campaign()
     if invalid:
-        d.characters[1].knowledge.append("unknown_secret")
-        d.characters[1].relationships["unknown_npc"] = 1
-    else:
-        d.characters[1].relationships["traveler"] = 10
+        data["npcs"][0]["knowledge"] = ["Unknown secret"]
     dm = Mock(config=CONFIG)
-    dm.call.return_value = json.dumps(authoring_payload(d.model_dump()))
+    dm.call.side_effect = [json.dumps(world()), json.dumps(data), json.dumps(data)]
     generator = CampaignGenerator(dm)
     if invalid:
         with pytest.raises(CampaignValidationError) as caught:
             generator.generate("draft", GenerationOptions(idea="Город архивов"))
-        assert len(caught.value.issues) == 2
-        assert caught.value.definition == d
+        assert all(i.code == "semantic_generation_error" for i in caught.value.issues)
+        assert dm.call.call_count == 3
     else:
-        assert generator.generate("draft", GenerationOptions(idea="Город архивов")) == d
-    dm.call.assert_called_once()
-    prompt = dm.call.call_args.args[2][0]["content"]
-    assert prompt.index("knowledge[]") < prompt.index("Схема:")
-    assert "верни []" in prompt and "верни {}" in prompt
-    assert "relationships: ключи только characters.id или creatures.id" in prompt
+        result = generator.generate("draft", GenerationOptions(idea="Город архивов"))
+        assert result.player_slot and all(
+            a.controller == "AI" for a in result.characters
+        )
+        assert dm.call.call_count == 2
+    assert "CharacterBuild" not in json.dumps(dm.call.call_args_list, default=str)
 
 
 def generate(c, d):
-    with patch(
-        "llm.chat_stream",
-        return_value=iter(
-            [d if isinstance(d, str) else json.dumps(authoring_payload(d.model_dump()))]
-        ),
-    ) as llm:
-        response = c.post(
+    if isinstance(d, str):
+        with patch("llm.chat_stream", side_effect=lambda *a, **k: iter([d])) as llm:
+            response = c.post(
+                "/api/tabletop/generate",
+                json={
+                    "options": {"idea": "Город архивов"},
+                    "config": CONFIG,
+                    "api_key": "secret",
+                },
+            )
+        assert llm.call_count == 2
+        return response
+
+    def reject(*args, **kwargs):
+        return CampaignCompiler().validate(d)
+
+    with patch.object(CampaignGenerator, "generate", side_effect=reject):
+        return c.post(
             "/api/tabletop/generate",
             json={
                 "options": {"idea": "Город архивов"},
@@ -205,8 +215,6 @@ def generate(c, d):
                 "api_key": "secret",
             },
         )
-    llm.assert_called_once()
-    return response
 
 
 def test_invalid_draft_survives_restart_and_manual_correction(api):
@@ -224,7 +232,7 @@ def test_invalid_draft_survives_restart_and_manual_correction(api):
     assert draft["generation_status"] == "INVALID"
     assert draft["definition"] == d.model_dump()
     assert draft["validation_issues"] == body["validation_issues"]
-    assert draft["usage"][0]["stage"] == "campaign_generation"
+    assert draft["usage"] == []  # Compiler rejection injected without provider calls.
     assert c.get("/api/tabletop/drafts").json()[0]["generation_status"] == "INVALID"
     assert c.get(f"/api/tabletop/drafts/{did}").json() == draft
     request = {
@@ -273,7 +281,10 @@ def test_schema_errors_are_friendly_and_do_not_persist(api, raw):
     c, app = api
     response = generate(c, raw)
     assert response.status_code == 409
-    assert response.json()["stage"] == "schema" and response.json()["draft_id"] is None
+    assert (
+        response.json()["stage"] == "setting_semantics"
+        and response.json()["draft_id"] is None
+    )
     assert all(
         term not in response.text
         for term in ("HIDDEN_PAYLOAD", "input_value", "pydantic", "Traceback")

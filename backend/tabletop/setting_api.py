@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from pydantic import Field
 from backend.api.schemas import Credential, ModelConfig
 from .content import SettingDefinition
+from .generation_config import GenerationConfig, WORLD_PROFILES, CAMPAIGN_PROFILES
 from .content_registry import SettingValidator
 from .setting_repository import SettingRepository
 from .setting_generation import SettingGenerator
@@ -18,6 +19,7 @@ class SettingSave(Credential):
 
 
 class SettingGenerate(Credential):
+    generation: GenerationConfig | None = None
     authoring_id: str | None = None
     config: ModelConfig
     concept: str = Field(min_length=3, max_length=12000)
@@ -34,6 +36,14 @@ def install(router, repo, agent, validation_response):
     @router.get("/authoring/{id}")
     def authoring_job(id: str):
         return jobs.public(id)
+
+    @router.get("/settings/generation-profiles")
+    def generation_profiles():
+        return {
+            "default": "NORMAL",
+            "profiles": WORLD_PROFILES,
+            "campaign_profiles": CAMPAIGN_PROFILES,
+        }
 
     @router.get("/settings/schema")
     def schema():
@@ -100,6 +110,7 @@ def install(router, repo, agent, validation_response):
                         else None
                     ),
                     body.section,
+                    body.generation,
                 )
                 if not existing:
                     definition.id = id

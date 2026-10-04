@@ -2,36 +2,10 @@
 
 import json
 from pydantic import create_model, ValidationError
-from .contracts import Model
-from .authoring import stage_schema, AuthoringCompiler, authoring_issues
-from .content import SettingDefinition, SettingFoundation, ContentRegistry
-from .content_registry import SettingValidator
-from .validation import CampaignValidationError, ValidationIssue
+from .authoring import authoring_issues
+from .validation import CampaignValidationError
 
-SETTING_STAGES = (
-    ("foundation", ()),
-    ("society", ("equipment_profiles", "species", "archetypes", "backgrounds")),
-    (
-        "skills_features",
-        (
-            "skills",
-            "damage_types",
-            "resources",
-            "features",
-            "powers",
-            "spellcasting",
-            "archetypes",
-            "backgrounds",
-            "species",
-            "levels",
-            "subclasses",
-            "feats",
-        ),
-    ),
-    ("bestiary", ("creatures",)),
-    ("equipment", ("items", "archetypes", "backgrounds")),
-    ("world_mechanics", ("world_mechanics",)),
-)
+SETTING_STAGES = (("setting_semantics", ()), ("setting_compile", ()))
 
 
 class AuthoringFailure(CampaignValidationError):
@@ -133,114 +107,100 @@ class SettingGenerator:
     def __init__(self, dm, progress=None, checkpoint=None):
         self.author = StagedAuthor(dm, progress, checkpoint)
 
-    def generate(self, id, concept, existing=None, section=None):
+    def generate(self, id, concept, existing=None, section=None, generation=None):
+        from .semantic import SemanticSettingDTO, SemanticModel
+        from .semantic_authoring import generate_semantic, compile_stage
+        from .procedural_content import ProceduralContentCompiler
+
         if not self.author.dm.config:
             raise ValueError("Настрой провайдера и модель")
-        draft = existing.model_copy(deep=True) if existing else None
-        stages = (
-            SETTING_STAGES
-            if section is None
-            else [v for v in SETTING_STAGES if v[0] == section]
+        from .generation_config import GenerationConfig
+
+        generation = generation or (
+            existing.generation_config if existing else GenerationConfig()
         )
-        if not stages and section in ContentRegistry.model_fields:
-            stages = [(section, (section,))]
-        if not stages:
-            raise ValueError("Неизвестный раздел мира")
-        for stage, fields in stages:
-            contract = (
-                "Создай содержимое произвольной вселенной на русском по концепции пользователя. "
-                "Механическое ядро неизменно: STR/DEX/CON/INT/WIS/CHA, d20, action/bonus/reaction/movement. "
-                "Не предполагай жанр. Не добавляй стандартное фэнтези, если его нет в концепции. "
-                "Используй только объявленные ID текущего и предыдущих этапов. Не придумывай ссылки на будущий контент. "
-                "Не выдавай состояние игры, произвольные патчи или результаты бросков. "
-                "Ресурсы, типы урона, навыки и названия профессий определяет мир. "
-                "На society задай equipment profile, минимум вид, профессию и происхождение; skill_count=0 до этапа навыков, пустые ещё не созданные equipment/features. "
-                "На skills_features создай тематические навыки, способности, ресурсы и типы урона; назначь их существующим профессиям/видам/происхождениям, сохраняя ID. "
-                "На equipment создай компоненты вещей и стартовые наборы профессий, сохраняя их ID. "
-                "Сложность существ оценивает движок; threat оставь 0. "
-                "При перегенерации учитывай зависимости всех остальных разделов. Исправь все previous_issues, не удаляя механики ради прохождения проверки."
+        schema = SemanticSettingDTO
+        source = existing.semantic_source if existing else None
+        if section and not source:
+            raise ValueError(
+                "Для раздела старого мира нужен semantic source; доступна полная перегенерация или ручное редактирование"
             )
-            if stage == "foundation":
-
-                def validate_foundation(value):
-                    if draft is None:
-                        return SettingDefinition(
-                            **value.model_dump(), content=ContentRegistry()
-                        )
-                    if value.id != draft.id:
-                        raise CampaignValidationError(
-                            [
-                                ValidationIssue(
-                                    code="stage_identity_change",
-                                    stage=stage,
-                                    entity_type="setting",
-                                    entity_id=draft.id,
-                                    field="id",
-                                    message="Сохрани ID существующего мира",
-                                )
-                            ]
-                        )
-                    candidate = draft.model_copy(deep=True)
-                    for key, field_value in value.model_dump().items():
-                        setattr(candidate, key, field_value)
-                    return SettingValidator().validate(candidate)
-
-                draft = self.author.run(
-                    id,
-                    stage,
-                    SettingFoundation,
-                    {
-                        "concept": concept,
-                        "setting": (
-                            draft.model_dump(exclude={"content"}) if draft else None
-                        ),
-                    },
-                    validate_foundation,
-                    contract,
+        groups = {
+            "foundation": (
+                "name",
+                "description",
+                "genre",
+                "tone",
+                "themes",
+                "era",
+                "technology",
+                "supernatural",
+                "lore",
+            ),
+            "society": (
+                "species",
+                "professions",
+                "backgrounds",
+                "cultures",
+                "factions",
+            ),
+            "skills_features": (
+                "skills",
+                "professions",
+                "species",
+                "backgrounds",
+                "conditions",
+                "damage_concepts",
+            ),
+            "bestiary": ("creatures",),
+            "equipment": ("items", "professions", "backgrounds"),
+            "world_mechanics": ("environments", "interactions", "conditions"),
+            "archetypes": ("professions",),
+            "features": ("professions", "species"),
+            "powers": ("professions",),
+            "spellcasting": ("professions",),
+            "resources": ("professions",),
+            "levels": ("professions",),
+            "subclasses": ("professions",),
+            "feats": ("professions",),
+            "equipment_profiles": ("species",),
+            "damage_types": ("damage_concepts",),
+        }
+        if section:
+            fields = groups.get(section, (section,))
+            if not set(fields) <= set(SemanticSettingDTO.model_fields):
+                raise ValueError(
+                    "Раздел редактируется вместе с semantic-профессиями или предметами"
                 )
-            else:
-                schema = stage_schema("SettingStage_" + stage, ContentRegistry, fields)
+            from copy import deepcopy
 
-                def validate(value):
-                    candidate = draft.model_copy(deep=True)
-                    compiled = AuthoringCompiler.stage(value)
-                    content = candidate.content.model_dump()
-                    content.update(compiled)
-                    candidate.content = ContentRegistry.model_validate(content)
-                    for field in ("archetypes", "backgrounds", "species"):
-                        previous = getattr(draft.content, field)
-                        if (
-                            section is None
-                            and previous
-                            and field in fields
-                            and set(previous) != set(getattr(candidate.content, field))
-                        ):
-                            raise CampaignValidationError(
-                                [
-                                    ValidationIssue(
-                                        code="stage_identity_change",
-                                        stage=stage,
-                                        entity_type="setting",
-                                        entity_id=id,
-                                        field=field,
-                                        message="Сохрани ID уже созданных сущностей",
-                                    )
-                                ]
-                            )
-                    return SettingValidator().validate(
-                        candidate,
-                        complete=bool(existing) or stage == SETTING_STAGES[-1][0],
+            schema = create_model(
+                "SemanticSettingSection",
+                __base__=SemanticModel,
+                **{
+                    k: (
+                        SemanticSettingDTO.model_fields[k].annotation,
+                        deepcopy(SemanticSettingDTO.model_fields[k]),
                     )
-
-                draft = self.author.run(
-                    id,
-                    stage,
-                    schema,
-                    {
-                        "concept": concept,
-                        "setting": setting_authoring_context(draft, fields),
-                    },
-                    validate,
-                    contract,
-                )
-        return SettingValidator().validate(draft)
+                    for k in fields
+                },
+            )
+        context = {
+            "concept": concept,
+            "existing_semantics": source,
+            "coverage_targets": generation.targets,
+        }
+        value = generate_semantic(self.author, id, "setting_semantics", schema, context)
+        dto = SemanticSettingDTO.model_validate(
+            {**(source or {}), **value.model_dump()}
+        )
+        return compile_stage(
+            self.author,
+            "setting_compile",
+            lambda: ProceduralContentCompiler().compile(
+                existing.id if existing else id,
+                dto,
+                existing.revision if existing else 0,
+                generation,
+            ),
+        )

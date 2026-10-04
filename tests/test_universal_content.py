@@ -215,32 +215,17 @@ class ScriptedDM:
 
 def test_campaign_stages_validate_before_game_creation():
     from backend.tabletop.campaign_generation import CampaignGenerator2, CampaignOptions
+    from semantic_fixture import campaign as semantic_campaign
 
-    d = campaign()
-    d.encounters = []
-    d.schedules = []
-    d.characters.extend(d.creatures)
-    d.creatures = []
-    for a in d.characters + d.creatures:
-        a.knowledge = []
-    data = d.model_dump()
-    replies = []
-    for stage, fields in CampaignGenerator2.stages:
-        replies.append(
-            {"requests": []} if stage == "encounters" else {k: data[k] for k in fields}
-        )
-    dm = ScriptedDM([authoring_payload(r) for r in replies])
+    dm = ScriptedDM([semantic_campaign()])
     result = CampaignGenerator2(dm).generate(
-        "generation",
-        d.setting_definition,
-        CampaignOptions(
-            idea="An unfamiliar universe", party_size=len(d.starting_party)
-        ),
+        "generation", setting(), CampaignOptions(idea="Unknown universe")
     )
-    assert (
-        len(dm.calls) == 6 and result.setting_definition.id == d.setting_definition.id
-    )
-    CampaignCompiler().compile(result)
+    assert len(dm.calls) == 1 and result.player_slot
+    assert result.setting_definition.id == setting().id
+    CampaignCompiler().validate(result)
+    with pytest.raises(ValueError, match="Создай персонажа"):
+        CampaignCompiler().compile(result)
 
 
 def test_authoring_retry_is_bounded_and_reports_failed_stage():
@@ -366,34 +351,30 @@ def test_contextual_action_checks_inventory_and_player_knowledge():
 
 def test_foundation_regeneration_preserves_registry_and_revision():
     from backend.tabletop.setting_generation import SettingGenerator
-    from backend.tabletop.content import SettingFoundation
+    from backend.tabletop.procedural_content import ProceduralContentCompiler
+    from semantic_fixture import world as semantic_world
 
-    world = setting()
-    world.revision = 7
-    foundation = {k: getattr(world, k) for k in SettingFoundation.model_fields}
-    foundation["name"] = "Новое название"
-    dm = ScriptedDM([foundation])
-    result = SettingGenerator(dm).generate(
+    world = ProceduralContentCompiler().compile("world", semantic_world(), revision=7)
+    result = SettingGenerator(ScriptedDM([{"name": "Новое название"}])).generate(
         world.id, "Новое описание", world, "foundation"
     )
     assert result.name == "Новое название"
-    assert result.content == world.content
-    assert result.revision == 7
+    assert result.content == world.content and result.revision == 7
     assert world.name != result.name
 
 
 def test_foundation_regeneration_rejects_changed_identity():
     from backend.tabletop.setting_generation import SettingGenerator, AuthoringFailure
-    from backend.tabletop.content import SettingFoundation
+    from backend.tabletop.procedural_content import ProceduralContentCompiler
+    from semantic_fixture import world as semantic_world
 
-    world = setting()
-    foundation = {k: getattr(world, k) for k in SettingFoundation.model_fields}
-    foundation["id"] = "different"
+    world = ProceduralContentCompiler().compile("world", semantic_world())
+    reply = {"name": "Other", "id": "different"}
     with pytest.raises(AuthoringFailure) as exc:
-        SettingGenerator(ScriptedDM([foundation, foundation])).generate(
+        SettingGenerator(ScriptedDM([reply, reply])).generate(
             world.id, "Change", world, "foundation"
         )
-    assert exc.value.issues[0].code == "stage_identity_change"
+    assert any(i.code == "schema_error" and i.field == "id" for i in exc.value.issues)
 
 
 def test_duplicate_attack_resource_cost_is_validated_as_total():
@@ -510,35 +491,18 @@ def test_starting_shop_rejects_registry_unavailable_item():
 
 def test_campaign_retries_invalid_region_at_locations_stage():
     from backend.tabletop.campaign_generation import CampaignGenerator2, CampaignOptions
+    from semantic_fixture import campaign as semantic_campaign
 
-    d = campaign()
-    d.encounters = []
-    d.schedules = []
-    d.characters.extend(d.creatures)
-    d.creatures = []
-    for actor in d.characters:
-        actor.knowledge = []
-    data = d.model_dump()
-    replies = []
-    for stage, fields in CampaignGenerator2.stages:
-        reply = (
-            {"requests": []} if stage == "encounters" else {k: data[k] for k in fields}
-        )
-        if stage == "locations":
-            from copy import deepcopy
+    valid = semantic_campaign()
+    from copy import deepcopy
 
-            invalid = deepcopy(reply)
-            invalid["locations"][0]["region_id"] = "missing"
-            replies.append(invalid)
-        replies.append(reply)
-    dm = ScriptedDM([authoring_payload(r) for r in replies])
+    invalid = deepcopy(valid)
+    invalid["locations"][0]["connections"] = ["Missing location"]
+    dm = ScriptedDM([invalid, valid])
     CampaignGenerator2(dm).generate(
-        "generation",
-        d.setting_definition,
-        CampaignOptions(idea="Чужая вселенная", party_size=len(d.starting_party)),
+        "generation", setting(), CampaignOptions(idea="Чужая вселенная")
     )
-    assert [call[0] for call in dm.calls].count("authoring_campaign_locations") == 2
-    assert len(dm.calls) == 7
+    assert [call[0] for call in dm.calls] == ["authoring_campaign_semantics"] * 2
 
 
 @pytest.mark.parametrize(

@@ -346,21 +346,21 @@ def test_generated_draft_start_expand_and_staged_usage(api):
     c, app = api
 
     def stream(**kw):
+        from semantic_fixture import world, campaign
+        from backend.tabletop.procedural_content import stable_id
+
         kw["on_usage"]({"prompt_tokens": 123, "completion_tokens": 45})
         prompt = kw["messages"][0]["content"]
-        yield (
-            __import__("json").dumps(
-                __import__(
-                    "backend.tabletop.authoring", fromlist=["authoring_payload"]
-                ).authoring_payload(definition().model_dump())
+        if "SemanticSettingDTO" in prompt:
+            yield json.dumps(world())
+        elif "SemanticCampaignDTO" in prompt:
+            yield json.dumps(campaign())
+        elif "SemanticExpansionDTO" in prompt:
+            yield json.dumps(
+                {"locations": [{"name": "Башня", "connections": ["Площадь"]}]}
             )
-            if "playable CampaignDefinition" in prompt
-            else (
-                extension().model_dump_json()
-                if "CampaignMutation JSON" in prompt
-                else "Мир продолжает жить."
-            )
-        )
+        else:
+            yield "Мир продолжает жить."
 
     with patch("llm.chat_stream", side_effect=stream):
         res = c.post(
@@ -373,13 +373,16 @@ def test_generated_draft_start_expand_and_staged_usage(api):
         )
         assert res.status_code == 200, res.text
         d = res.json()
-        assert d["usage"][0]["stage"] == "campaign_generation"
+        assert {u["stage"] for u in d["usage"]} == {
+            "authoring_setting_semantics",
+            "authoring_campaign_semantics",
+        }
         g = c.post(
             "/api/tabletop/games",
             json={
                 "draft_id": d["id"],
                 "draft_revision": d["revision"],
-                "character": CharacterBuild().model_dump(),
+                "character": d["definition"]["characters"][0]["build"],
             },
         ).json()
         g = send(
@@ -389,10 +392,12 @@ def test_generated_draft_start_expand_and_staged_usage(api):
             config=CONFIG,
             api_key="secret",
         ).json()
-    assert "tower" in [l["id"] for l in g["state"]["locations"]]
-    assert {"campaign_generation", "content_generation"} <= {
-        u["stage"] for u in g["usage"]
-    }
+    assert "Башня" in [l["name"] for l in g["state"]["locations"]]
+    assert {
+        "authoring_setting_semantics",
+        "authoring_campaign_semantics",
+        "authoring_content_semantics",
+    } <= {u["stage"] for u in g["usage"]}
     assert "NEVER_DISCLOSE" not in json.dumps(g) and "REMOTE_SECRET" not in json.dumps(
         g
     )

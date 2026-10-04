@@ -30,6 +30,14 @@ export function Wizard({
   cancel: () => void;
 }) {
   const authoring = useAuthoring("campaign");
+  const [generationProfile, setGenerationProfile] = useState("NORMAL");
+  const [generationSeed, setGenerationSeed] = useState(0);
+  const [generationProfiles, setGenerationProfiles] = useState<string[]>([]);
+  useEffect(() => {
+    api<{campaign_profiles:Record<string,unknown>}>("/tabletop/settings/generation-profiles")
+      .then((v) => setGenerationProfiles(Object.keys(v.campaign_profiles)))
+      .catch(() => setGenerationProfiles([]));
+  }, []);
   const [settingId, setSettingId] = useState<string | null>(null);
   const [worldEditor, setWorldEditor] = useState(true);
   const [progressionMode, setProgressionMode] = useState("xp");
@@ -242,6 +250,12 @@ export function Wizard({
           </label>
           {advanced && (
             <div className="tt-form-grid">
+              <label>Объём кампании
+                <ChoiceControl value={generationProfile} options={generationProfiles.map((v) => ({value:v,label:({SHORT:"Короткая",NORMAL:"Обычная",LONG:"Длинная"} as Record<string,string>)[v] || v}))} onValueChange={setGenerationProfile} />
+              </label>
+              <label>Seed кампании
+                <input type="number" min={0} max={2147483647} value={generationSeed} onChange={(e) => setGenerationSeed(Math.max(0,Math.min(2147483647,Math.trunc(Number(e.target.value)))))} />
+              </label>
               {Object.entries({
                 title: "Название",
                 genre: "Жанр",
@@ -308,7 +322,7 @@ export function Wizard({
               void run(async () =>
                 choose(
                   await authoring.generate<Draft>({
-                    options,
+                    options: {...options,generation:{profile:generationProfile,seed:generationSeed}},
                     setting_id: settingId,
                     config: {
                       ...prefs.summary,

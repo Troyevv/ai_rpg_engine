@@ -96,7 +96,9 @@ class PublicProjection:
                 "status": (
                     "выведен из боя"
                     if a.hp <= 0
-                    else "сбежал" if "fled" in a.conditions else "на сцене"
+                    else "сбежал"
+                    if "fled" in a.conditions
+                    else "на сцене"
                 ),
             }
             for k, a in state.npcs.items()
@@ -310,6 +312,23 @@ class DMProjection:
             ],
             "secrets": [
                 s.model_dump() for s in state.definition.secrets if s.location_id == loc
+            ],
+            "adventure_intents": [
+                {
+                    key: quest.get(key, [])
+                    for key in (
+                        "name",
+                        "goals",
+                        "conflicts",
+                        "clues",
+                        "dependencies",
+                        "possible_outcomes",
+                        "consequences",
+                    )
+                }
+                for quest in state.definition.semantic_source.get("quests", [])
+                if quest["location"]
+                == next(l.name for l in state.definition.locations if l.id == loc)
             ],
             "npc_intentions": [
                 {

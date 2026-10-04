@@ -1,9 +1,10 @@
 """Declarative authoring contracts: no runtime HP, dice results or state patches."""
 
 from typing import Annotated, Literal, Union
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .contracts import Ability, Difficulty, ControllerType, Id, Model, Named
+from .generation_config import CampaignGenerationConfig
 
 
 class InventoryEntry(Model):
@@ -14,7 +15,7 @@ class InventoryEntry(Model):
     slot: str = ""
 
 
-from .content import ItemComponent, SettingDefinition, CreatureInstance
+from .content import ItemComponent, SettingDefinition, CreatureInstance, ContentRegistry
 
 
 class ItemDefinition(Named):
@@ -47,6 +48,9 @@ class Region(Named):
 
 
 class Location(Named):
+    environment_tags: list[str] = []
+    danger_profile: str = ""
+    mood: str = ""
     region_id: Id
     connections: list[Id] = Field(default_factory=list, max_length=50)
     travel_minutes: dict[Id, Annotated[int, Field(ge=1, le=1440)]] = {}
@@ -136,6 +140,11 @@ class WorldObject(Named):
 
 
 class Quest(Named):
+    goals: list[str] = []
+    clues: list[str] = []
+    prerequisites: list[Id] = []
+    possible_resolutions: list[str] = []
+    consequences: list[str] = []
     giver_id: Id | None = None
     location_id: Id
     required_item: Id | None = None
@@ -192,7 +201,24 @@ class SceneCheck(Named):
     partial: list[CheckEffect] = []
 
 
+class PlayerPlaceholder(Model):
+    id: Id = "player_slot"
+    starting_location: Id
+    faction_id: Id
+    hooks: list[str] = []
+    compatibility: list[str] = []
+
+
 class CampaignDefinition(Model):
+    expansion_blueprints: list[dict] = Field(default_factory=list, max_length=100)
+    content_overlay: ContentRegistry = Field(default_factory=ContentRegistry)
+    generation_config: CampaignGenerationConfig = Field(
+        default_factory=CampaignGenerationConfig
+    )
+    entity_generation_metadata: dict[str, dict] = {}
+    player_slot: PlayerPlaceholder | None = None
+    semantic_source: dict = {}
+    diagnostics: list[dict] = []
     context_actions: list[ContextAction] = []
     setting_definition: SettingDefinition | None = None
     creature_instances: list[CreatureInstance] = []
@@ -206,7 +232,7 @@ class CampaignDefinition(Model):
     locations: list[Location] = Field(min_length=1, max_length=150)
     factions: list[Faction] = Field(min_length=1, max_length=30)
     faction_relations: list[FactionRelation] = []
-    characters: list[CharacterDefinition] = Field(min_length=1, max_length=100)
+    characters: list[CharacterDefinition] = Field(default_factory=list, max_length=100)
     creatures: list[CharacterDefinition] = []
     items: list[ItemDefinition] = Field(default_factory=list, max_length=150)
     objects: list[WorldObject] = Field(default_factory=list, max_length=200)
@@ -217,10 +243,19 @@ class CampaignDefinition(Model):
     checks: list[SceneCheck] = Field(default_factory=list, max_length=150)
     schedules: list[NPCSchedule] = Field(default_factory=list, max_length=100)
     plot_hooks: list[str] = Field(default_factory=list, max_length=20)
-    starting_party: list[Id] = Field(min_length=1, max_length=6)
+    starting_party: list[Id] = Field(default_factory=list, max_length=6)
     starting_location: Id
     starting_scene: str = Field(min_length=1, max_length=5000)
     generation_metadata: dict[str, str] = Field(default_factory=dict, max_length=10)
+
+    @field_validator("semantic_source")
+    @classmethod
+    def validate_semantic_source(cls, value):
+        if value:
+            from .semantic import SemanticCampaignDTO
+
+            return SemanticCampaignDTO.model_validate(value).model_dump()
+        return value
 
 
 # Each extension operation carries a whole, typed definition, never a field path.
@@ -322,6 +357,9 @@ class CampaignMutation(Model):
 
 
 class GenerationOptions(Model):
+    generation: CampaignGenerationConfig = Field(
+        default_factory=CampaignGenerationConfig
+    )
     idea: str = Field(min_length=3, max_length=6000)
     title: str = Field(default="", max_length=120)
     genre: str = Field(default="Фэнтези", max_length=120)

@@ -73,7 +73,9 @@ def stream(**kwargs):
             present = (
                 ["character_3", "character_4"]
                 if observer and "character_3" in present
-                else present if observer else ["character_1", "character_2"]
+                else present
+                if observer
+                else ["character_1", "character_2"]
             )
             if location_id not in state["locations"]:
                 locations = [
@@ -338,6 +340,35 @@ llm.unload_all_models = lambda: 1
 if __name__ == "__main__":
     path = os.getenv("E2E_DB_PATH") or str(Path(tempfile.mkdtemp()) / "e2e.sqlite3")
     app = create_app(path)
+
+    @app.post("/test/tabletop-draft")
+    def legacy_runtime_fixture(body: dict):
+        # Runtime/legacy-edit tests import stable fixtures. Semantic generation has its own browser test.
+        from tabletop_fixture import definition
+        from tabletop_gameplay_fixture import gameplay_definition
+        from backend.tabletop.repository import TabletopRepository
+        from backend.tabletop.compiler import CampaignCompiler
+        from backend.tabletop.validation import CampaignValidationError
+        from uuid import uuid4
+
+        idea = body.get("idea", "")
+        d = gameplay_definition() if idea == "gameplay acceptance" else definition()
+        if idea != "gameplay acceptance":
+            d.ruleset_id = "d20-fantasy-v1"
+            d.ruleset_version = 3
+            for actor in d.characters + d.creatures:
+                actor.build.feature_choices = ["defense_style"]
+        if idea == "invalid references":
+            d.characters[1].knowledge.append("missing_secret")
+            d.characters[1].relationships["missing_actor"] = 10
+        repo = TabletopRepository(path)
+        try:
+            CampaignCompiler().validate(d)
+        except CampaignValidationError as exc:
+            did = repo.save_invalid_draft(d, exc.issues, exc.stage, uuid4().hex)
+            return repo.draft(did)
+        return repo.save_draft(d)
+
     from backend.tabletop.dice import DiceEngine
     from tabletop_fixture import Fixed
 
@@ -355,7 +386,9 @@ if __name__ == "__main__":
                         kwargs.get("actor") == "sentinel"
                         or str(kwargs.get("actor", "")).startswith("guard_battle_")
                     )
-                    else 8 if kwargs.get("purpose") == "damage" else 20
+                    else 8
+                    if kwargs.get("purpose") == "damage"
+                    else 20
                 )
             )
             if (

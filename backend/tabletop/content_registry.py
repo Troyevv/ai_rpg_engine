@@ -37,7 +37,9 @@ def creature_threat(creature, registry):
         (
             max(0, e.value)
             if e.type == "heal"
-            else max(0, average(e.expression)) if e.type == "heal_dice" else 0
+            else max(0, average(e.expression))
+            if e.type == "heal_dice"
+            else 0
         )
         for f in features
         for e in f.effects
@@ -129,6 +131,7 @@ class SettingValidator:
                 issue("invalid_dice", kind, entry.id, field, str(exc))
 
         for group in (
+            "conditions",
             "skills",
             "species",
             "archetypes",
@@ -389,7 +392,31 @@ class SettingValidator:
                     )
                 if effect.type in ("resource", "spend_resource", "restore_resource"):
                     refs("feature", feature, "effects.key", [effect.key], c.resources)
+        from .conditions import default_conditions
+
+        conditions = {**default_conditions(), **c.conditions}
+        for feature in list(c.features.values()) + list(c.world_mechanics.values()):
+            for effect in feature.effects:
+                if effect.type in ("condition", "remove_condition"):
+                    refs("feature", feature, "effects.key", [effect.key], conditions)
+                if effect.type in ("check_bonus", "modify_check") and effect.key:
+                    refs(
+                        "feature",
+                        feature,
+                        "effects.key",
+                        [effect.key],
+                        set(c.skills)
+                        | {
+                            "strength",
+                            "dexterity",
+                            "constitution",
+                            "intelligence",
+                            "wisdom",
+                            "charisma",
+                        },
+                    )
         for power in c.powers.values():
+            refs("power", power, "effects", power.effects, conditions)
             if power.damage_type:
                 refs("power", power, "damage_type", [power.damage_type], c.damage_types)
             refs("power", power, "resource_cost", power.resource_cost, c.resources)
@@ -495,6 +522,8 @@ def setting_rules(setting):
     rules.backgrounds = {
         key: v.model_dump(exclude={"id"}) for key, v in c.backgrounds.items()
     }
+    rules.condition_definitions.update(c.conditions)
+    rules.conditions = list(dict.fromkeys(rules.conditions + list(c.conditions)))
     rules.features = {**c.features, **c.world_mechanics}
     rules.world_features = list(c.world_mechanics)
     rules.spells = c.powers
@@ -514,11 +543,68 @@ def setting_rules(setting):
     return rules
 
 
+def campaign_setting(definition):
+    """Return a validated detached content view; never mutate the bound world snapshot."""
+    from .catalog import load_ruleset
+    from .content_migration import import_catalog
+
+    setting = (
+        definition.setting_definition.model_copy(deep=True)
+        if definition.setting_definition
+        else import_catalog(load_ruleset(definition.ruleset_id))
+    )
+    for group in type(definition.content_overlay).model_fields:
+        additions = getattr(definition.content_overlay, group)
+        target = getattr(setting.content, group)
+        if isinstance(target, dict):
+            overlap = set(additions) & set(target)
+            if overlap:
+                raise ValueError(
+                    "Runtime content cannot overwrite setting IDs: "
+                    + ",".join(sorted(overlap))
+                )
+            target.update(additions)
+        elif additions:
+            setattr(setting.content, group, list(dict.fromkeys(target + additions)))
+    return SettingValidator().validate(setting)
+
+
 def campaign_rules(definition):
     from .catalog import load_ruleset
 
-    return (
-        setting_rules(definition.setting_definition)
-        if definition.setting_definition
-        else load_ruleset(definition.ruleset_id)
-    )
+    if not any(
+        getattr(definition.content_overlay, k)
+        for k in type(definition.content_overlay).model_fields
+    ):
+        return (
+            setting_rules(definition.setting_definition)
+            if definition.setting_definition
+            else load_ruleset(definition.ruleset_id)
+        )
+    patched = setting_rules(campaign_setting(definition))
+    if definition.setting_definition:
+        return patched
+    # Old saves keep their core rules. Only registered content is extended.
+    rules = load_ruleset(definition.ruleset_id)
+    for field in (
+        "skills",
+        "skill_definitions",
+        "classes",
+        "species",
+        "backgrounds",
+        "features",
+        "world_features",
+        "spells",
+        "spellcasting",
+        "levels",
+        "subclasses",
+        "feats",
+        "items",
+        "resource_definitions",
+        "damage_types",
+        "equipment_slots",
+        "equipment_profiles",
+        "condition_definitions",
+    ):
+        setattr(rules, field, getattr(patched, field))
+    return rules

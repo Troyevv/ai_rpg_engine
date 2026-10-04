@@ -28,8 +28,8 @@ async function press(page: Page, name: string | RegExp) {
 
 async function legacyDraft(page: Page, idea: string) {
   const response = await page.request.post(
-    new URL("/api/tabletop/generate", page.url()).href,
-    { data: { options: { idea }, config: { model: "local-model" } } },
+    new URL("/test/tabletop-draft", page.url()).href,
+    { data: { idea } },
   );
   const result = await response.json();
   const id = result.id || result.draft_id;

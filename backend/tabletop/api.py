@@ -350,13 +350,13 @@ def install(app, shared_repo, credentials):
                     )
                 else:
                     definition = CampaignGenerator(agent(body)).generate(
-                        did, body.options
+                        did, body.options, checkpoint=checkpoint
                     )
                 result = repo.save_draft(definition, source="generated")
                 with repo.connect() as db:
                     db.execute(
-                        "UPDATE tabletop_requests SET game_id=? WHERE game_id=?",
-                        (result["id"], did),
+                        "UPDATE tabletop_requests SET game_id=? WHERE game_id IN (?,?)",
+                        (result["id"], did, did + "_world"),
                     )
                 result = repo.draft(result["id"])
                 checkpoint.complete(result)

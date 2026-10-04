@@ -9,6 +9,10 @@ type Job = {
   issues: { field: string; message: string }[];
 };
 const labels: Record<string, string> = {
+  setting_semantics: "Генерация мира",
+  setting_compile: "Создание и проверка игрового контента",
+  campaign_semantics: "Сюжетная ситуация, NPC и конфликты",
+  campaign_compile: "Сборка и проверка кампании",
   foundation: "Основа мира",
   society: "Общество и роли",
   skills_features: "Навыки и способности",

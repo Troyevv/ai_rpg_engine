@@ -363,12 +363,18 @@ export function SettingEditor({
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [section, setSection] = useState("overview");
+  const [profiles, setProfiles] = useState<string[]>([]);
+  const [profile, setProfile] = useState("NORMAL");
+  const [seed, setSeed] = useState(0);
   const refresh = () =>
     api<{ id: string; name: string }[]>("/tabletop/settings/worlds").then(
       setList,
     );
   useEffect(() => {
     refresh().catch((e) => setError(e.message));
+    api<{ profiles: Record<string, unknown> }>("/tabletop/settings/generation-profiles")
+      .then((v) => setProfiles(Object.keys(v.profiles)))
+      .catch((e) => setError(e.message));
     api<Schema & { $defs: Record<string, Schema> }>("/tabletop/settings/schema")
       .then(setSchema)
       .catch((e) => setError(e.message));
@@ -426,6 +432,11 @@ export function SettingEditor({
           {error}
         </p>
       )}
+      {Array.isArray(draft?.diagnostics) && draft.diagnostics.length > 0 && (
+        <details><summary>Ограничения генерации ({draft.diagnostics.length})</summary>
+          <ul>{draft.diagnostics.map((value, index) => <li key={index}>{String((value as Record<string, Value>).message)}</li>)}</ul>
+        </details>
+      )}
       <ChoiceControl
         aria-label="Сохранённый мир"
         value={world?.id || ""}
@@ -447,6 +458,12 @@ export function SettingEditor({
           onChange={(e) => setConcept(e.target.value)}
         />
       </label>
+      <label>Объём мира
+        <ChoiceControl value={profile} options={profiles.map((v) => ({value:v,label:({SMALL:"Небольшой",NORMAL:"Обычный",LARGE:"Большой"} as Record<string,string>)[v] || v}))} onValueChange={setProfile} />
+      </label>
+      <label>Seed мира
+        <input type="number" min={0} max={2147483647} value={seed} onChange={(e) => setSeed(Math.max(0,Math.min(2147483647,Math.trunc(Number(e.target.value)))))} />
+      </label>
       <div className="setting-actions">
         <button
           disabled={busy || concept.trim().length < 3}
@@ -455,6 +472,7 @@ export function SettingEditor({
               accept(
                 await authoring.generate<World>({
                   concept,
+                  generation: {profile,seed},
                   config: prefs.summary,
                   api_key: apiKey,
                 }),
@@ -502,7 +520,7 @@ export function SettingEditor({
               {Object.entries(schema.properties || {})
                 .filter(
                   ([k]) =>
-                    !["content", "schema_version", "revision", "id"].includes(
+                    !["content", "schema_version", "revision", "id", "semantic_source", "compiler_version", "diagnostics", "generation_config", "generation_metadata"].includes(
                       k,
                     ),
                 )
@@ -561,7 +579,7 @@ export function SettingEditor({
             >
               Подтвердить мир и создать кампанию
             </button>
-            {section !== "overview" && (
+            {section !== "overview" && draft.semantic_source && Object.keys(draft.semantic_source as object).length > 0 && (
               <button
                 disabled={busy}
                 onClick={() =>

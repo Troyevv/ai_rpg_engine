@@ -1,9 +1,11 @@
 """Setting-owned content contracts. Settings cannot redefine attributes or turns."""
 
 from typing import Annotated, Literal
-from pydantic import Field, model_validator
+from pydantic import Field, model_validator, field_validator
 from .contracts import Model, Named, Id, Ability
 from .features import FeatureDefinition
+from .conditions import ConditionDefinition
+from .generation_config import GenerationConfig
 from .spells import SpellDefinition, SpellcastingFeature
 from .progression import LevelRule, SubclassDefinition
 
@@ -272,6 +274,7 @@ class CreatureInstance(Named):
 
 
 class ContentRegistry(Model):
+    conditions: dict[Id, ConditionDefinition] = {}
     skills: dict[Id, SkillDefinition] = {}
     species: dict[Id, SpeciesDefinition] = {}
     archetypes: dict[Id, Archetype] = {}
@@ -303,9 +306,23 @@ class SettingFoundation(Named):
 
 
 class SettingDefinition(SettingFoundation):
+    generation_config: GenerationConfig = Field(default_factory=GenerationConfig)
+    generation_metadata: dict[str, dict] = {}
+    compiler_version: Literal["", "semantic-1"] = ""
+    semantic_source: dict = {}
+    diagnostics: list[dict] = []
     schema_version: Literal[1] = 1
     revision: int = Field(default=0, ge=0)
     archetype_label: str = "Профессия / роль"
     currency_label: str = "монеты"
     starting_currency: int = Field(default=150, ge=0, le=100000)
     content: ContentRegistry
+
+    @field_validator("semantic_source")
+    @classmethod
+    def validate_semantic_source(cls, value):
+        if value:
+            from .semantic import SemanticSettingDTO
+
+            return SemanticSettingDTO.model_validate(value).model_dump()
+        return value
