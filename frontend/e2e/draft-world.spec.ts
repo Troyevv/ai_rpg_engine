@@ -81,3 +81,48 @@ test('draft trash and responsive workshop width', async ({page,request}) => {
   await page.setViewportSize({width:390,height:844});
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
+
+for (const extension of ['md', 'txt', 'json']) {
+ test(`world file import ${extension} opens existing editor`, async ({page,request}) => {
+  const seed=await (await request.post('/test/seed')).json();
+  const world=await (await request.get(`/api/worlds/${seed.world}`)).json();
+  const source=await (await request.post('/api/workspaces',{data:{name:'Источник импорта'}})).json();
+  const prepared=await request.post(`/api/workspaces/${source.id}/draft/import`,{data:{revision:source.revision,text:world.source_md}});
+  expect(prepared.ok()).toBeTruthy();
+  const draft=await (await request.get(`/api/workspaces/${source.id}/draft?author=true`)).json();
+  const filename=`готовый-мир.${extension}`;
+  const content=extension==='json' ? JSON.stringify(draft.state) : world.source_md;
+  let importBody: Record<string,unknown> | undefined;
+  let generationRequests=0;
+  page.on('request', r => {
+   if (r.url().endsWith('/draft/import')) importBody=r.postDataJSON();
+   if (r.url().includes('/generate')) generationRequests++;
+  });
+  await page.goto('/'); await nav(page,'Создать');
+  await page.getByRole('button',{name:'Импортировать',exact:true}).click();
+  await page.getByLabel('Название черновика').fill(source.name);
+  await expect(page.getByLabel('Файл мира')).toHaveAttribute('accept','.md,.txt,.json');
+  await page.getByLabel('Файл мира').setInputFiles({name:filename,mimeType:extension==='json'?'application/json':'text/plain',buffer:Buffer.from(content,'utf8')});
+  if (extension==='json') {
+   await expect(page.getByRole('status')).toContainText(filename);
+   await expect(page.getByLabel('Описание мира или текст импорта')).toHaveCount(0);
+  } else await expect(page.getByLabel('Описание мира или текст импорта')).toHaveValue(content);
+  await page.getByRole('button',{name:'Открыть в редакторе',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
+  expect(importBody?.format).toBe(extension==='json'?'json':'text');
+  expect(importBody?.text).toBe(content);
+  expect(generationRequests).toBe(0);
+  await page.getByRole('button',{name:'Автор мира',exact:true}).click();
+  await page.getByRole('button',{name:'Показать всё',exact:true}).click();
+  await page.locator('.workshop-tabs').getByRole('button',{name:'Ещё',exact:true}).click();
+  const downloadPromise=page.waitForEvent('download');
+  await page.getByRole('button',{name:'Экспорт JSON',exact:true}).click();
+  const download=await downloadPromise;
+  expect(download.suggestedFilename()).toBe('world.json');
+  const stream=await download.createReadStream();
+  const chunks: Buffer[]=[];
+  for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
+  const exported=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  expect(exported).toEqual(draft.state);
+ });
+}

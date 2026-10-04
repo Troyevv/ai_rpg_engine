@@ -7,6 +7,10 @@ from backend.services import draft_world as domain
 def dump(value):return json.dumps(value,ensure_ascii=False)
 
 
+def _invalid_json_constant(value):
+    raise ValueError(f'Некорректное JSON-значение: {value}.')
+
+
 class DraftStorage:
     def draft_phase(self,jid,phase,reset_progress=False):
         with self.connect() as db:
@@ -44,7 +48,34 @@ class DraftStorage:
         self._record_document(db,'world_draft',wid,dump({'state':state,'source':source,'warnings':warnings or [],'outline':outline,'generated':generated}),True,reason,source_id)
         db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))
 
-    def import_draft(self,wid,text,revision):
+    def import_draft(self,wid,text,revision,format='text'):
+        if format=='json':
+            try:
+                state=json.loads(text.lstrip('\ufeff'),parse_constant=_invalid_json_constant)
+            except (ValueError,RecursionError) as exc:
+                raise ValueError('Не удалось прочитать JSON: ошибка синтаксиса.') from exc
+            if not isinstance(state,dict):raise ValueError('JSON не содержит корректный World State. Нужен объект.')
+            if 'state' in state:state=state['state']
+            # Only the existing canonical aggregate is accepted, never legacy
+            # data that normalize() would migrate and seed from prose.
+            if not isinstance(state,dict) or not isinstance(state.get('world'),dict) or state['world'].get('version')!=2:
+                raise ValueError('JSON не содержит корректный World State.')
+            report=None
+            try:
+                state=domain.prepare(state)
+                report=domain.validate(state)
+                json.dumps(state,allow_nan=False)
+                # Drafts may contain validation errors for editing, but must
+                # remain readable through the existing player/editor response.
+                domain.player_view(state)
+            except (ValueError,TypeError,KeyError,AttributeError,OverflowError,RecursionError) as exc:
+                details='; '.join(report['errors']) if report and report['errors'] else str(exc) if isinstance(exc,ValueError) else ''
+                raise ValueError('JSON не содержит корректный World State.'+(' '+details if details else '')) from exc
+            with self.connect() as db:
+                db.execute('BEGIN IMMEDIATE');self._draft_workspace(db,wid,revision)
+                self._write_draft(db,wid,state,'import')
+            return
+        if format!='text':raise ValueError('Неизвестный формат импорта.')
         from world_parser import parse_summary
         state=domain.prepare(parse_summary(text.lstrip('\ufeff')))
         # Legacy unknown prose is retained; holders are never guessed.

@@ -610,3 +610,140 @@ def test_json_continuation_keeps_json_format():
     result,_=request_context(messages,'{"world":',32768,500,format_hint='json')
     assert 'JSON-объект' in result[-1]['content'] and 'Markdown' in result[-1]['content']
     assert 'Продолжи документ' not in result[-1]['content']
+
+
+@pytest.mark.parametrize('wrapper',[False,True])
+def test_canonical_json_import_preserves_full_draft(api,wrapper):
+    client,app=api
+    state=fixture()
+    state['campaign']['title']='Новый мир'  # JSON must not rename the campaign.
+    w=client.post('/api/workspaces',json={'name':'Другое название'}).json()
+    payload={'state':state} if wrapper else state
+    response=client.post(f"/api/workspaces/{w['id']}/draft/import",json={
+        'revision':w['revision'],'format':'json','text':json.dumps(payload,ensure_ascii=False)})
+    assert response.status_code==200,response.text
+    imported=response.json()
+    expected=domain.prepare(state)
+    assert imported['state']==domain.player_view(expected)
+    assert imported['validation']==domain.validate(expected)
+    assert imported['revision']==w['revision']+1
+    author=client.get(f"/api/workspaces/{w['id']}/draft?author=true").json()
+    assert author['state']==expected  # Includes secrets, knowledge and every canonical collection.
+    assert author['source_text']=='' and author['import_warnings']==[]
+    with app.state.repository.connect() as db:
+        record=json.loads(app.state.repository._draft_head(db,w['id'])['content'])
+        assert record['state']==expected and record['source']==''
+
+
+def test_json_import_never_parses_prose_or_calls_llm(api,monkeypatch):
+    client,app=api
+    state=fixture()
+    def forbidden(*args,**kwargs):raise AssertionError('JSON import must be direct')
+    monkeypatch.setattr('world_parser.parse_summary',forbidden)
+    monkeypatch.setattr('backend.services.preparation.Preparation.submit',forbidden)
+    monkeypatch.setattr('backend.services.preparation.chat_stream',forbidden)
+    monkeypatch.setattr('llm.chat_stream',forbidden)
+    monkeypatch.setattr('engine.chat_stream',forbidden)
+    w=client.post('/api/workspaces',json={'name':'JSON'}).json()
+    response=client.post(f"/api/workspaces/{w['id']}/draft/import",json={
+        'revision':w['revision'],'format':'json','text':json.dumps(state,ensure_ascii=False)})
+    assert response.status_code==200,response.text
+    assert response.json()['job'] is None
+    with app.state.repository.connect() as db:
+        assert db.execute('SELECT COUNT(*) FROM preparation_jobs').fetchone()[0]==0
+        assert db.execute('SELECT COUNT(*) FROM llm_requests').fetchone()[0]==0
+
+
+@pytest.mark.parametrize('text,message',[
+    ('{"campaign":','Не удалось прочитать JSON: ошибка синтаксиса.'),
+    ('{"number":NaN}','Не удалось прочитать JSON: ошибка синтаксиса.'),
+    ('{"hello":"world"}','JSON не содержит корректный World State.'),
+    ('[]','JSON не содержит корректный World State.'),
+    ('null','JSON не содержит корректный World State.'),
+    ('{"state":[]}','JSON не содержит корректный World State.'),
+    ('{"state":{"hello":"world"}}','JSON не содержит корректный World State.'),
+])
+def test_invalid_json_import_is_controlled_and_does_not_write(api,text,message):
+    client,_=api
+    path,before=make(client)
+    response=client.post(path+'/import',json={'revision':before['revision'],'format':'json','text':text})
+    assert 400<=response.status_code<500,response.text
+    assert message in response.json()['detail']
+    after=client.get(path+'?author=true').json()
+    assert after['state']==before['state']
+    assert after['revision']==before['revision'] and after['history']==before['history']
+
+
+@pytest.mark.parametrize('mutate',[
+    lambda s:s.update(characters='bad'),
+    lambda s:s.update(camera=[]),
+    lambda s:s['world'].update(facts=[]),
+    lambda s:s['world_clock'].update(minute='noon'),
+    lambda s:s['camera'].update(scene_id=[]),
+    lambda s:s['world']['knowledge'].update(bad={'actor_id':s['controlled_actor_id']}),
+    lambda s:s['world'].update(version=1),
+    lambda s:s.update(extra=float('inf')),
+])
+def test_json_structural_errors_do_not_cause_500(api,mutate):
+    client,_=api
+    state=fixture();mutate(state)
+    w=client.post('/api/workspaces',json={'name':'JSON'}).json()
+    response=client.post(f"/api/workspaces/{w['id']}/draft/import",json={
+        'revision':w['revision'],'format':'json','text':json.dumps(state,ensure_ascii=False).replace('Infinity','1e999')})
+    assert 400<=response.status_code<500,response.text
+    assert 'JSON не содержит корректный World State.' in response.json()['detail']
+    draft=client.get(f"/api/workspaces/{w['id']}/draft").json()
+    assert draft['state'] is None and draft['history']==[] and draft['revision']==w['revision']
+
+
+def test_json_validation_errors_are_editable_but_block_start(api):
+    client,_=api
+    state=fixture()
+    next(iter(state['world']['relationships'].values()))['target_id']='missing_character'
+    expected=domain.prepare(state);report=domain.validate(expected)
+    assert report['errors']
+    w=client.post('/api/workspaces',json={'name':'JSON'}).json()
+    path=f"/api/workspaces/{w['id']}/draft"
+    response=client.post(path+'/import',json={'revision':w['revision'],'format':'json','text':json.dumps(state)})
+    assert response.status_code==200,response.text
+    imported=response.json()
+    assert imported['validation']==report
+    assert client.get(path+'?author=true').json()['state']==expected
+    confirm=client.post(path+'/confirm',json={'revision':imported['revision'],'version_id':imported['version_id']})
+    assert 400<=confirm.status_code<500
+    assert report['errors'][0] in confirm.json()['detail']
+
+
+def test_json_warnings_do_not_block_import_or_start(api):
+    client,_=api
+    state=fixture();state['world']['scenes'][state['camera']['scene_id']]['text']=''
+    report=domain.validate(domain.prepare(state))
+    assert report['warnings'] and not report['errors']
+    w=client.post('/api/workspaces',json={'name':'JSON'}).json()
+    path=f"/api/workspaces/{w['id']}/draft"
+    response=client.post(path+'/import',json={'revision':w['revision'],'format':'json','text':json.dumps(state)})
+    assert response.status_code==200,response.text
+    imported=response.json()
+    assert imported['validation']==report
+    assert client.post(path+'/confirm',json={'revision':imported['revision'],'version_id':imported['version_id']}).status_code==200
+
+
+def test_json_export_roundtrip_uses_author_state(api):
+    client,_=api;path,before=make(client)
+    exported=client.get(path+f"/export?version_id={before['version_id']}&format=json")
+    assert exported.status_code==200,exported.text
+    assert exported.headers['content-type'].startswith('application/json')
+    assert exported.headers['content-disposition']=='attachment; filename="world.json"'
+    assert exported.text==json.dumps(before['state'],ensure_ascii=False,indent=2)
+    assert 'Тайная встреча' in exported.text
+    response=client.post(path+'/import',json={'revision':before['revision'],'format':'json','text':'\ufeff'+exported.text})
+    assert response.status_code==200,response.text
+    assert client.get(path+'?author=true').json()['state']==before['state']
+    assert 400<=client.get(path+f"/export?version_id={before['version_id']}&format=json").status_code<500
+
+
+def test_json_import_reuses_revision_conflict_checks(api):
+    client,_=api;path,before=make(client)
+    response=client.post(path+'/import',json={'revision':before['revision']-1,'format':'json','text':json.dumps(before['state'])})
+    assert response.status_code==409 and 'Конфликт ревизий' in response.json()['detail']
+    assert client.get(path+'?author=true').json()['history']==before['history']

@@ -91,6 +91,8 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
     const [authorAsk, setAuthorAsk] = useState(false);
     const [authorAcknowledged, setAuthorAcknowledged] = useState(false);
     const [text, setText] = useState('');
+    const [importFormat, setImportFormat] = useState<'text'|'json'>('text');
+    const [importFile, setImportFile] = useState('');
     const [name, setName] = useState('Новая история');
     const [useIdea, setUseIdea] = useState(false);
     const [busy, setBusy] = useState(false);
@@ -113,6 +115,10 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
     } | null>(null);
     const refresh = () => { if (id)
         void api<Draft>(`/workspaces/${id}/draft?author=${author}`).then(setDraft).catch(e => toast.error(e.message)); };
+    useEffect(() => { setImportFormat('text'); setImportFile(''); }, [id]);
+    useEffect(() => { if (mode !== 'import' && importFormat === 'json') {
+        setText(''); setImportFormat('text'); setImportFile('');
+    } }, [mode, importFormat]);
     useEffect(() => { void api<typeof list>('/workspaces').then(setList).catch(e => toast.error(e.message)); }, []);
     useEffect(() => { setDraft(null); if (id) {
         localStorage.setItem('draftWorkspace', id);
@@ -212,11 +218,12 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
       </details>
       {(!state || editingIdea) && <section className="workshop-inspiration">
         <div className="workshop-inspiration-head"><span className="workshop-step">01 · ЗАМЫСЕЛ</span><h2>{mode === 'import' ? 'Загрузи готовую выжимку' : 'С чего начинается история?'}</h2></div>
-        <p>{mode === 'import' ? 'Подойдёт старый .md или .txt. Можно вставить текст ниже.' : 'Пиши свободно, как Сценаристу: персонажи, атмосфера, отношения, важные события. Пробелы генератор заполнит сам.'}</p>
+        <p>{mode === 'import' ? 'Подойдёт .md, .txt или готовый .json мира. Можно вставить текст выжимки ниже.' : 'Пиши свободно, как Сценаристу: персонажи, атмосфера, отношения, важные события. Пробелы генератор заполнит сам.'}</p>
         {mode === 'quick' && !useIdea && <p className="workshop-footnote">Генератор сразу превратит замысел в готовый мир и выжимку. Сценарист доступен отдельно.</p>}
-        {mode === 'import' && <Input type="file" accept=".md,.txt" aria-label="Файл мира" onChange={e => { const f = e.target.files?.[0]; if (f) void f.text().then(setText); }}/ >}
+        {mode === 'import' && <Input type="file" accept=".md,.txt,.json" disabled={locked} aria-label="Файл мира" onChange={e => { const f = e.target.files?.[0]; if (f) void run(async () => {const content = await f.text(); setText(content); setImportFormat(f.name.toLowerCase().endsWith('.json') ? 'json' : 'text'); setImportFile(f.name);}); }}/ >}
+        {mode === 'import' && importFormat === 'json' && <p role="status">{importFile} · Будет импортирован готовый World State. <Button variant="ghost" onClick={() => {setText(''); setImportFormat('text'); setImportFile('');}}>Вставить текст выжимки</Button></p>}
         {!id && <Input aria-label="Название черновика" value={name} onChange={e => setName(e.target.value)} placeholder="Название истории (можно изменить позже)" />}
-        <Textarea className="workshop-idea-input" value={text} onChange={e => setText(e.target.value)} aria-label="Описание мира или текст импорта" placeholder={mode === 'import' ? 'Вставь здесь текст выжимки…' : 'Например: современная клиника. Я играю за врача. Придумай важных коллег и напряжённые, но живые отношения. Сейчас четверг, 14:00…'} />
+        {!(mode === 'import' && importFormat === 'json') && <Textarea className="workshop-idea-input" value={text} onChange={e => setText(e.target.value)} aria-label="Описание мира или текст импорта" placeholder={mode === 'import' ? 'Вставь здесь текст выжимки…' : 'Например: современная клиника. Я играю за врача. Придумай важных коллег и напряжённые, но живые отношения. Сейчас четверг, 14:00…'} />}
         {mode === 'quick' && draft && <label className="workshop-scenario-option"><input type="checkbox" checked={useIdea} onChange={e => setUseIdea(e.target.checked)}/> Взять за основу сценарий этого черновика</label>}
         <div className="workshop-create-actions">
           <Button disabled={locked || (!text.trim() && !useIdea)} onClick={() => void run(async () => {
@@ -227,13 +234,14 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
                 validation: {errors: [], warnings: []}, import_warnings: [], source_text: '', outline: '', history: [], job: null};
               setList(items => [w, ...items]);
             }
-            if (mode === 'import') await api(`/workspaces/${wid}/draft/import`, {text, revision: current.revision});
+            if (mode === 'import') await api(`/workspaces/${wid}/draft/import`, {text, format: importFormat, revision: current.revision});
             else {
               const j = await api<Job>(`/workspaces/${wid}/draft/generate`, {revision: current.revision, task: 'world', text, use_idea: useIdea, config: prefs.summary, api_key: apiKey});
               setDraft(d => d ? {...d, job: j} : current && {...current, job: j});
             }
             if (!id) setId(wid);
             setEditingIdea(false);
+            if (mode === 'import' && importFormat === 'json') {setText(''); setImportFormat('text'); setImportFile('');}
             if (mode === 'import') void api<Draft>(`/workspaces/${wid}/draft?author=${author}`).then(setDraft);
           })}>{mode === 'import' ? 'Открыть в редакторе' : state ? 'Создать новую версию мира' : 'Развить идею и создать мир'}</Button>
           {state && <Button variant="ghost" onClick={() => setEditingIdea(false)}>Вернуться к миру</Button>}
@@ -307,7 +315,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
             </>}
           {section === 'more' && <><h3>Дополнительно</h3><details className="workshop-detail"><summary>Стиль и правила повествования</summary>{author ? fields.campaign.map(f=>row('campaign','',f,state.campaign[f] || '')) : <p>{String(state.campaign.genre || '')} · {String(state.campaign.tone || '')}</p>}</details>
             <details className="workshop-detail"><summary>История версий · {draft?.history.length}</summary>{draft?.history.map((v,i)=><div className="workshop-version" key={v.id}><span>Версия {draft.history.length-i} · {v.reason}</span>{author && <Button disabled={locked||v.id===draft.version_id} variant="outline" onClick={() => void change({operation:'restore',source_id:v.id})}>Восстановить</Button>}</div>)}</details>
-            {author && <><details className="workshop-detail"><summary>Исходный замысел или импорт</summary><Markdown text={draft?.source_text || 'Мир создан генератором.'}/></details>{draft?.outline && <details className="workshop-detail"><summary>Как сценарист развил идею</summary><Markdown text={draft.outline}/></details>}<div className="workshop-export">{['md','txt'].map(format=><Button key={format} variant="outline" onClick={()=>void run(async()=>{const response=await fetch(`/api/workspaces/${id}/draft/export?version_id=${draft?.version_id}&format=${format}`);if(!response.ok)throw new Error('Не удалось экспортировать мир');download(await response.text(),`world.${format}`)})}>Скачать .{format}</Button>)}</div></>}
+            {author && <><details className="workshop-detail"><summary>Исходный замысел или импорт</summary><Markdown text={draft?.source_text || 'Исходный текст не сохранён.'}/></details>{draft?.outline && <details className="workshop-detail"><summary>Как сценарист развил идею</summary><Markdown text={draft.outline}/></details>}<div className="workshop-export">{['md','txt','json'].map(format=><Button key={format} variant="outline" onClick={()=>void run(async()=>{const response=await fetch(`/api/workspaces/${id}/draft/export?version_id=${draft?.version_id}&format=${format}`);if(!response.ok)throw new Error('Не удалось экспортировать мир');download(await response.text(),`world.${format}`)})}>{format === 'json' ? 'Экспорт JSON' : `Скачать .${format}`}</Button>)}</div></>}
           </>}
         </div>
         <div className="workshop-finish"><p>Всё готово? Начни игру в этом мире. Его можно будет редактировать до подтверждения.</p><Button disabled={locked || !!draft?.validation.errors.length} onClick={() => setConfirmStart(true)}>Подтвердить мир и начать игру</Button></div>
