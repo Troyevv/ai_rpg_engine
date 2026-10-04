@@ -1,0 +1,107 @@
+{
+  "id": "d20-core-v1",
+  "name": "D20 Mechanical Core",
+  "version": 4,
+  "capabilities": [
+    "checks",
+    "combat",
+    "rests",
+    "inventory",
+    "exploration",
+    "dialogue",
+    "spellcasting"
+  ],
+  "abilities": [
+    "strength",
+    "dexterity",
+    "constitution",
+    "intelligence",
+    "wisdom",
+    "charisma"
+  ],
+  "ability_array": [
+    15,
+    14,
+    13,
+    12,
+    10,
+    8
+  ],
+  "skills": {},
+  "difficulty": {
+    "TRIVIAL": 5,
+    "EASY": 10,
+    "MEDIUM": 15,
+    "HARD": 20,
+    "VERY_HARD": 25,
+    "EXTREME": 30
+  },
+  "check_die": 20,
+  "critical": "double_dice",
+  "short_rest_minutes": 60,
+  "long_rest_minutes": 480,
+  "conditions": [
+    "dodge",
+    "helped",
+    "guard",
+    "unconscious",
+    "stable",
+    "dead",
+    "fled"
+  ],
+  "progression": {
+    "max_level": 20,
+    "proficiency_base": 2,
+    "proficiency_interval": 4,
+    "encounter_xp": 150,
+    "quest_xp": 300,
+    "milestone_quest": 1,
+    "milestone_encounter": 0
+  },
+  "classes": {},
+  "species": {},
+  "backgrounds": {},
+  "items": [],
+  "point_buy": {
+    "budget": 27,
+    "minimum": 8,
+    "maximum": 15,
+    "costs": {
+      "8": 0,
+      "9": 1,
+      "10": 2,
+      "11": 3,
+      "12": 4,
+      "13": 5,
+      "14": 7,
+      "15": 9
+    }
+  },
+  "features": {},
+  "spells": {},
+  "spellcasting": {},
+  "levels": {},
+  "subclasses": {},
+  "feats": [],
+  "allocation": {
+    "base": 5,
+    "points": 42,
+    "minimum": 5,
+    "maximum": 18
+  },
+  "starting_gold": 150,
+  "equipment_slots": {
+    "HEAD": "Голова",
+    "NECK": "Шея",
+    "CLOAK": "Плащ",
+    "TORSO": "Торс",
+    "HANDS": "Перчатки",
+    "WAIST": "Пояс",
+    "LEGS": "Ноги",
+    "FEET": "Ступни",
+    "RING_1": "Кольцо I",
+    "RING_2": "Кольцо II",
+    "MAIN_HAND": "Основная рука",
+    "OFF_HAND": "Вторая рука"
+  }
+}

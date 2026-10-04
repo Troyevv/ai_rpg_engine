@@ -1,0 +1,130 @@
+"""Reusable setting authoring endpoints, separate from game mutation."""
+
+from uuid import uuid4
+from fastapi import APIRouter
+from pydantic import Field
+from backend.api.schemas import Credential, ModelConfig
+from .content import SettingDefinition
+from .generation_config import GenerationConfig, WORLD_PROFILES, CAMPAIGN_PROFILES
+from .content_registry import SettingValidator
+from .setting_repository import SettingRepository
+from .setting_generation import SettingGenerator
+from .validation import CampaignValidationError
+
+
+class SettingSave(Credential):
+    definition: SettingDefinition
+    revision: int | None = None
+    confirm: bool = False
+
+
+class SettingGenerate(Credential):
+    generation: GenerationConfig | None = None
+    authoring_id: str | None = None
+    config: ModelConfig
+    concept: str = Field(min_length=3, max_length=12000)
+    section: str | None = None
+    setting_id: str | None = None
+
+
+def install(router, repo, agent, validation_response):
+    worlds = SettingRepository(repo)
+    from .authoring_jobs import AuthoringJobs
+
+    jobs = AuthoringJobs(repo)
+
+    @router.get("/authoring/{id}")
+    def authoring_job(id: str):
+        return jobs.public(id)
+
+    @router.get("/settings/generation-profiles")
+    def generation_profiles():
+        return {
+            "default": "NORMAL",
+            "profiles": WORLD_PROFILES,
+            "campaign_profiles": CAMPAIGN_PROFILES,
+        }
+
+    @router.get("/settings/schema")
+    def schema():
+        return SettingDefinition.model_json_schema()
+
+    @router.get("/settings/worlds")
+    def list_worlds():
+        return worlds.list()
+
+    @router.get("/settings/worlds/{id}")
+    def get_world(id: str):
+        return worlds.get(id)
+
+    @router.post("/settings/worlds")
+    def save_world(body: SettingSave):
+        try:
+            return worlds.save(body.definition, body.revision, body.confirm)
+        except CampaignValidationError as exc:
+            return validation_response(exc)
+
+    @router.post("/settings/worlds/validate")
+    def validate_world(body: SettingSave):
+        try:
+            setting = SettingValidator().validate(body.definition)
+            return {"valid": True, "definition": setting.model_dump(), "issues": []}
+        except CampaignValidationError as exc:
+            return validation_response(exc)
+
+    @router.post("/settings/worlds/import-catalog")
+    def import_world():
+        from .catalog import load_ruleset
+        from .content_migration import import_catalog
+
+        setting = import_catalog(load_ruleset("d20-fantasy-v2"))
+        if any(s["id"] == setting.id for s in worlds.list()):
+            return worlds.get(setting.id)
+        return worlds.save(setting, confirm=True)
+
+    @router.post("/settings/worlds/generate")
+    def generate_world(body: SettingGenerate):
+        request = body.model_dump(exclude={"config", "api_key", "authoring_id"})
+        id = body.authoring_id or uuid4().hex
+        try:
+            with jobs.run(id, "setting", request) as checkpoint:
+                if checkpoint.result is not None:
+                    return checkpoint.result
+                source = checkpoint.cached("_source")
+                if source is None:
+                    source = {
+                        "world": (
+                            worlds.get(body.setting_id) if body.setting_id else None
+                        )
+                    }
+                    checkpoint.save("_source", source)
+                existing = source["world"]
+                definition = SettingGenerator(
+                    agent(body), checkpoint=checkpoint
+                ).generate(
+                    id,
+                    body.concept,
+                    (
+                        SettingDefinition.model_validate(existing["definition"])
+                        if existing
+                        else None
+                    ),
+                    body.section,
+                    body.generation,
+                )
+                if not existing:
+                    definition.id = id
+                result = worlds.save(
+                    definition, existing["revision"] if existing else None
+                )
+                checkpoint.complete(result)
+                return result
+        except CampaignValidationError as exc:
+            response = validation_response(exc)
+            import json
+
+            payload = json.loads(response.body)
+            payload["authoring_id"] = id
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse(status_code=409, content=payload)

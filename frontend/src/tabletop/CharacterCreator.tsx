@@ -1,3 +1,4 @@
+import { ChoiceControl, ChoiceOption } from "@/components/choice/ChoiceControl";
 import { useEffect, useState, useRef } from "react";
 import { api } from "../api";
 import type { Preferences } from "../types";
@@ -93,7 +94,13 @@ export function CharacterCreator({
     const timer = setTimeout(() => {
       api<Preview>(
         "/tabletop/build/preview",
-        { build, ruleset_id: catalog.id },
+        {
+          build,
+          draft_id: catalog.draft_id,
+          ruleset_id: catalog.id,
+          setting_id: catalog.setting_id,
+          setting_revision: catalog.setting_revision,
+        },
         "POST",
         controller.signal,
       )
@@ -366,7 +373,7 @@ export function CharacterCreator({
               ) : (
                 <label>
                   Метод характеристик
-                  <select
+                  <ChoiceControl
                     aria-label="Метод характеристик"
                     value={build.ability_method}
                     onChange={(e) =>
@@ -386,9 +393,11 @@ export function CharacterCreator({
                       })
                     }
                   >
-                    <option value="standard_array">Стандартный массив</option>
-                    <option value="point_buy">Point buy</option>
-                  </select>
+                    <ChoiceOption value="standard_array">
+                      Стандартный массив
+                    </ChoiceOption>
+                    <ChoiceOption value="point_buy">Point buy</ChoiceOption>
+                  </ChoiceControl>
                   {build.ability_method === "point_buy" && (
                     <p role="status" aria-label="Бюджет характеристик">
                       Осталось очков:{" "}
@@ -457,15 +466,15 @@ export function CharacterCreator({
                         </button>
                       </div>
                     ) : (
-                      <select
+                      <ChoiceControl
                         aria-label={abilities[a]}
                         value={build.abilities[a]}
                         onChange={(e) => setScore(a, Number(e.target.value))}
                       >
                         {catalog.ability_array.map((v) => (
-                          <option key={v}>{v}</option>
+                          <ChoiceOption key={v}>{v}</ChoiceOption>
                         ))}
-                      </select>
+                      </ChoiceControl>
                     )}
                     <span>
                       Модификатор{" "}
@@ -545,23 +554,26 @@ export function CharacterCreator({
             ) : (
               <label>
                 Стартовый набор
-                <select
+                <ChoiceControl
                   value={JSON.stringify(build.equipment)}
                   onChange={(e) =>
                     change("equipment", JSON.parse(e.target.value))
                   }
                 >
                   {(cls.equipment_choices || [cls.equipment]).map((items) => (
-                    <option key={items.join("-")} value={JSON.stringify(items)}>
+                    <ChoiceOption
+                      key={items.join("-")}
+                      value={JSON.stringify(items)}
+                    >
                       {items
                         .map(
                           (i) =>
                             catalog.items.find((x) => x.id === i)?.name || i,
                         )
                         .join(", ")}
-                    </option>
+                    </ChoiceOption>
                   ))}
-                </select>
+                </ChoiceControl>
                 <p>Предметы происхождения добавляются отдельно.</p>
               </label>
             ))}

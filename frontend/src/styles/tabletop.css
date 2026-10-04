@@ -1247,3 +1247,53 @@
 .tt-d100 {
   border-radius: 50%;
 }
+.setting-editor {
+  max-width: 100%;
+  min-width: 0;
+}
+.setting-fields {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.setting-fields label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.setting-fields textarea,
+.setting-fields input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+}
+.setting-fields details {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
+.setting-fields summary {
+  min-height: 44px;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.setting-entry {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 0;
+}
+.setting-add,
+.setting-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.setting-actions button {
+  min-height: 44px;
+  white-space: normal;
+}
+.setting-add input {
+  min-width: 0;
+  flex: 1;
+}

@@ -54,6 +54,11 @@ class PublicProjection:
                 species_name=state.ruleset.species.get(a.species, {}).get(
                     "name", a.species
                 ),
+                resource_definitions={
+                    k: v.model_dump()
+                    for k, v in state.ruleset.resource_definitions.items()
+                    if k in a.resources
+                },
                 modifiers={k: rules.modifier(v) for k, v in a.abilities.items()},
                 skill_modifiers={
                     k: rules.check_modifier(a, ability, k, state.ruleset)
@@ -91,7 +96,9 @@ class PublicProjection:
                 "status": (
                     "выведен из боя"
                     if a.hp <= 0
-                    else "сбежал" if "fled" in a.conditions else "на сцене"
+                    else "сбежал"
+                    if "fled" in a.conditions
+                    else "на сцене"
                 ),
             }
             for k, a in state.npcs.items()
@@ -115,6 +122,17 @@ class PublicProjection:
                         "description": o.description,
                         "opened": status.opened,
                         "contents": contents,
+                        "capabilities": [c.type for c in o.components],
+                        "can_activate": any(
+                            c.feature_id
+                            for c in o.components
+                            if c.type in ("terminal", "environment", "interactable")
+                        ),
+                        "capacity": next(
+                            (c.capacity for c in o.components if c.type == "container"),
+                            None,
+                        ),
+                        "hit_points": status.hit_points,
                     }
                 )
         location = next(x for x in state.definition.locations if x.id == hero.location)
@@ -295,6 +313,23 @@ class DMProjection:
             "secrets": [
                 s.model_dump() for s in state.definition.secrets if s.location_id == loc
             ],
+            "adventure_intents": [
+                {
+                    key: quest.get(key, [])
+                    for key in (
+                        "name",
+                        "goals",
+                        "conflicts",
+                        "clues",
+                        "dependencies",
+                        "possible_outcomes",
+                        "consequences",
+                    )
+                }
+                for quest in state.definition.semantic_source.get("quests", [])
+                if quest["location"]
+                == next(l.name for l in state.definition.locations if l.id == loc)
+            ],
             "npc_intentions": [
                 {
                     "id": a.id,
@@ -319,13 +354,23 @@ class DMProjection:
                 for a in relevant
                 if a.id not in state.party
             ],
+            "context_actions": public_state(state).get("context_actions", []),
             "recent_events": (events or [])[-15:],
         }
 
 
 # Compatibility alias for read adapters, not a canonical serialization method.
 def public_state(state):
-    return PublicProjection.build(state)
+    result = PublicProjection.build(state)
+    from .context_actions import eligible
+
+    actor = state.actor(state.session_state.controlled_actor)
+    result["context_actions"] = [
+        dict(id=a.id, name=a.name, description=a.description)
+        for a in state.definition.context_actions
+        if eligible(state, actor, a)
+    ]
+    return result
 
 
 class NarrationProjection:

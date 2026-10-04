@@ -2,11 +2,28 @@
 
 from typing import Literal
 from pydantic import Field
-from .definitions import Model
+from .contracts import Model
+from .context_actions import ActionRequirements
 
 
 class FeatureEffect(Model):
     type: Literal[
+        "damage",
+        "remove_condition",
+        "modify_check",
+        "modify_attack",
+        "modify_damage",
+        "grant_advantage",
+        "grant_disadvantage",
+        "move",
+        "push",
+        "pull",
+        "spend_resource",
+        "restore_resource",
+        "reveal_knowledge",
+        "modify_relationship",
+        "spawn_object",
+        "interact",
         "heal_dice",
         "restore_slot",
         "unarmed_die",
@@ -26,6 +43,7 @@ class FeatureEffect(Model):
         "disengage",
         "extra_attack",
     ]
+    duration: int = Field(default=60, ge=1, le=86400)
     expression: str = ""
     add_level: bool = False
     value: int = Field(default=0, ge=-20, le=100)
@@ -33,6 +51,7 @@ class FeatureEffect(Model):
 
 
 class FeatureDefinition(Model):
+    requirements: ActionRequirements = Field(default_factory=ActionRequirements)
     source: Literal[
         "CLASS", "SUBCLASS", "SPECIES", "BACKGROUND", "FEAT", "ITEM", "CONDITION"
     ] = "CLASS"
@@ -41,6 +60,8 @@ class FeatureDefinition(Model):
     level: int = Field(default=1, ge=1, le=20)
     description: str
     activation: Literal["PASSIVE", "ACTION", "BONUS_ACTION", "REACTION"] = "PASSIVE"
+    resource_cost: dict[str, int] = {}
+    area: int = Field(default=0, ge=0, le=60)
     resource: str = ""
     uses: int = Field(default=0, ge=0, le=20)
     recharge: Literal["short", "long", "none"] = "long"

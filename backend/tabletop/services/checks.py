@@ -149,7 +149,11 @@ class CheckService:
             events[-1]["sources"] = p.advantage_sources
         state.session_state.pending = None
         state.session_state.mode = p.resume
-        if p.check_id:
+        if p.purpose in ("object_attack", "object_damage", "hazard_damage"):
+            from ..object_actions import ObjectActions
+
+            ObjectActions(self.runtime).resolve(state, p, roll, events)
+        elif p.check_id:
             from .universal import UniversalChecks
 
             UniversalChecks(self.runtime).resolve(
@@ -212,20 +216,44 @@ class CheckService:
                 status.trap_triggered = True
                 status.opened = True
                 if not success:
-                    self.runtime.combat.damage(state, a, obj.trap_damage, False, events)
+                    hazard = next(
+                        (
+                            c
+                            for c in obj.components
+                            if c.type in ("hazard", "trap") and c.damage_expression
+                        ),
+                        None,
+                    )
+                    if hazard:
+                        self.runtime.pending(
+                            state,
+                            "hazard_damage",
+                            a.id,
+                            object_id=obj.id,
+                            expression=hazard.damage_expression,
+                            reason=obj.name,
+                        )
+                    else:
+                        self.runtime.combat.damage(
+                            state, a, obj.trap_damage, False, events
+                        )
                 self.runtime.reveal_object(state, obj, events)
             state.game_time += 6 if state.encounter else 60
         elif p.purpose == "attack":
             if self.runtime.rules.hit(roll, state.actor(p.target).armor_class):
                 w = a.attacks[p.weapon]
+                from ..resources import ResourceEngine
+
+                mode = ResourceEngine.mode_effect(w, p.firing_mode)
                 self.runtime.pending(
                     state,
                     "damage",
                     p.actor,
-                    expression=f"1d{w.die}",
+                    expression=mode.damage_expression or w.expression or f"1d{w.die}",
                     modifier=self.runtime.rules.damage_modifier(
                         a, p.weapon, state.ruleset
-                    ),
+                    )
+                    + mode.damage_bonus,
                     target=p.target,
                     weapon=p.weapon,
                     critical=roll.selected == 20,
@@ -246,7 +274,12 @@ class CheckService:
                     self.runtime.resume_reaction(state, events)
         elif p.purpose == "damage":
             self.runtime.combat.damage(
-                state, state.actor(p.target), roll.total, p.critical, events
+                state,
+                state.actor(p.target),
+                roll.total,
+                p.critical,
+                events,
+                a.attacks[p.weapon].damage_type if p.weapon in a.attacks else "",
             )
             if state.encounter:
                 self.runtime.combat.ended(state, events)
@@ -279,6 +312,9 @@ class CheckService:
                     break
         self.runtime.progression_service.reconcile(state, events)
         WorldService.advance(state, events)
+        from ..effects import EffectsEngine
+
+        EffectsEngine.expire(state)
         from ..events import state_changes
 
         state_changes(original, state, events)

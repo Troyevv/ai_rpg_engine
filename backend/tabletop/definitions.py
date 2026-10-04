@@ -1,34 +1,27 @@
 """Declarative authoring contracts: no runtime HP, dice results or state patches."""
 
 from typing import Annotated, Literal, Union
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-Ability = Literal[
-    "strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"
-]
-Difficulty = Literal["TRIVIAL", "EASY", "MEDIUM", "HARD", "VERY_HARD", "EXTREME"]
-ControllerType = Literal["PLAYER", "AI", "DM"]
-Id = Annotated[str, Field(min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9_-]+$")]
-
-
-class Model(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class Named(Model):
-    id: Id
-    name: str = Field(min_length=1, max_length=120)
-    description: str = Field(default="", max_length=5000)
+from .contracts import Ability, Difficulty, ControllerType, Id, Model, Named
+from .generation_config import CampaignGenerationConfig
 
 
 class InventoryEntry(Model):
+    container_id: str = ""
     item_id: Id
     quantity: int = Field(default=1, ge=1, le=10000)
     equipped: bool = False
     slot: str = ""
 
 
+from .content import ItemComponent, SettingDefinition, CreatureInstance, ContentRegistry
+
+
 class ItemDefinition(Named):
+    requirements: list[Id] = []
+    starting_available: bool = True
+    components: list[ItemComponent] = []
     type: Literal["weapon", "armor", "consumable", "quest", "miscellaneous"] = (
         "miscellaneous"
     )
@@ -40,13 +33,13 @@ class ItemDefinition(Named):
     weight: float = Field(default=0, ge=0, le=1000)
     value: int = Field(default=0, ge=0, le=100000)
     properties: list[str] = Field(default_factory=list, max_length=12)
-    weapon_category: Literal["simple", "martial", "finesse"] = "simple"
-    armor_category: Literal["light", "medium", "heavy", "shield"] = "light"
+    weapon_category: str = "simple"
+    armor_category: str = "light"
     weapon_die: Literal[4, 6, 8, 10, 12] = 6
     weapon_ability: Ability = "strength"
-    reach: int = Field(default=5, ge=5, le=120)
-    armor_base: int = Field(default=10, ge=10, le=18)
-    dex_cap: int = Field(default=5, ge=0, le=5)
+    reach: int = Field(default=5, ge=1, le=1000)
+    armor_base: int = Field(default=10, ge=0, le=22)
+    dex_cap: int = Field(default=5, ge=0, le=10)
     healing: int = Field(default=0, ge=0, le=30)
 
 
@@ -55,6 +48,9 @@ class Region(Named):
 
 
 class Location(Named):
+    environment_tags: list[str] = []
+    danger_profile: str = ""
+    mood: str = ""
     region_id: Id
     connections: list[Id] = Field(default_factory=list, max_length=50)
     travel_minutes: dict[Id, Annotated[int, Field(ge=1, le=1440)]] = {}
@@ -103,7 +99,7 @@ class CharacterBuild(Model):
 
 class CharacterDefinition(Named):
     location_id: Id
-    faction_id: Id
+    faction_id: Id | None = None
     build: CharacterBuild = Field(default_factory=CharacterBuild)
     controller: ControllerType = "AI"
     player_id: str | None = None
@@ -126,7 +122,11 @@ class Secret(Named):
     difficulty: Difficulty = "MEDIUM"
 
 
+from .context_actions import ContextAction, ObjectCapability
+
+
 class WorldObject(Named):
+    components: list[ObjectCapability] = []
     location_id: Id
     hidden: bool = False
     locked: bool = False
@@ -140,6 +140,11 @@ class WorldObject(Named):
 
 
 class Quest(Named):
+    goals: list[str] = []
+    clues: list[str] = []
+    prerequisites: list[Id] = []
+    possible_resolutions: list[str] = []
+    consequences: list[str] = []
     giver_id: Id | None = None
     location_id: Id
     required_item: Id | None = None
@@ -196,7 +201,27 @@ class SceneCheck(Named):
     partial: list[CheckEffect] = []
 
 
+class PlayerPlaceholder(Model):
+    id: Id = "player_slot"
+    starting_location: Id
+    faction_id: Id | None = None
+    hooks: list[str] = []
+    compatibility: list[str] = []
+
+
 class CampaignDefinition(Model):
+    expansion_blueprints: list[dict] = Field(default_factory=list, max_length=100)
+    content_overlay: ContentRegistry = Field(default_factory=ContentRegistry)
+    generation_config: CampaignGenerationConfig = Field(
+        default_factory=CampaignGenerationConfig
+    )
+    entity_generation_metadata: dict[str, dict] = {}
+    player_slot: PlayerPlaceholder | None = None
+    semantic_source: dict = {}
+    diagnostics: list[dict] = []
+    context_actions: list[ContextAction] = []
+    setting_definition: SettingDefinition | None = None
+    creature_instances: list[CreatureInstance] = []
     schema_version: Literal[1] = 1
     id: Id
     name: str = Field(min_length=1, max_length=120)
@@ -205,9 +230,9 @@ class CampaignDefinition(Model):
     setting: Setting
     regions: list[Region] = Field(min_length=1, max_length=30)
     locations: list[Location] = Field(min_length=1, max_length=150)
-    factions: list[Faction] = Field(min_length=1, max_length=30)
+    factions: list[Faction] = Field(default_factory=list, max_length=30)
     faction_relations: list[FactionRelation] = []
-    characters: list[CharacterDefinition] = Field(min_length=1, max_length=100)
+    characters: list[CharacterDefinition] = Field(default_factory=list, max_length=100)
     creatures: list[CharacterDefinition] = []
     items: list[ItemDefinition] = Field(default_factory=list, max_length=150)
     objects: list[WorldObject] = Field(default_factory=list, max_length=200)
@@ -218,10 +243,27 @@ class CampaignDefinition(Model):
     checks: list[SceneCheck] = Field(default_factory=list, max_length=150)
     schedules: list[NPCSchedule] = Field(default_factory=list, max_length=100)
     plot_hooks: list[str] = Field(default_factory=list, max_length=20)
-    starting_party: list[Id] = Field(min_length=1, max_length=6)
+    starting_party: list[Id] = Field(default_factory=list, max_length=6)
     starting_location: Id
     starting_scene: str = Field(min_length=1, max_length=5000)
     generation_metadata: dict[str, str] = Field(default_factory=dict, max_length=10)
+
+    @field_validator("semantic_source")
+    @classmethod
+    def validate_semantic_source(cls, value):
+        if value:
+            from .semantic import SemanticCampaignDTO
+            from .blueprints import CampaignBlueprint
+            from copy import deepcopy
+
+            if "starting_location" not in value:
+                return CampaignBlueprint.model_validate(value).model_dump()
+            value = deepcopy(value)
+            for npc in value.get("npcs", []):
+                if "known_secrets" not in npc:
+                    npc["known_secrets"] = npc.pop("knowledge", [])
+            return SemanticCampaignDTO.model_validate(value).model_dump()
+        return value
 
 
 # Each extension operation carries a whole, typed definition, never a field path.
@@ -323,6 +365,9 @@ class CampaignMutation(Model):
 
 
 class GenerationOptions(Model):
+    generation: CampaignGenerationConfig = Field(
+        default_factory=CampaignGenerationConfig
+    )
     idea: str = Field(min_length=3, max_length=6000)
     title: str = Field(default="", max_length=120)
     genre: str = Field(default="Фэнтези", max_length=120)

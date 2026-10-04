@@ -28,5 +28,6 @@ class ContentService:
                 "text": "Добавлен новый контент. Доступные переходы обновлены.",
                 "kind": "content",
                 "operations": [op.type for op in mutation.operations],
+                "registry_additions": getattr(mutation, "registry_additions", []),
             }
         ]

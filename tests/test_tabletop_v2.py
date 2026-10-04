@@ -346,17 +346,22 @@ def test_generated_draft_start_expand_and_staged_usage(api):
     c, app = api
 
     def stream(**kw):
+        from semantic_fixture import (
+            world_blueprint as world,
+            campaign_blueprint as campaign,
+        )
+        from backend.tabletop.procedural_content import stable_id
+
         kw["on_usage"]({"prompt_tokens": 123, "completion_tokens": 45})
         prompt = kw["messages"][0]["content"]
-        yield (
-            definition().model_dump_json()
-            if "playable CampaignDefinition" in prompt
-            else (
-                extension().model_dump_json()
-                if "CampaignMutation JSON" in prompt
-                else "Мир продолжает жить."
-            )
-        )
+        if "WorldBlueprint" in prompt:
+            yield json.dumps(world())
+        elif "CampaignBlueprint" in prompt:
+            yield json.dumps(campaign())
+        elif "ExpansionBlueprint" in prompt:
+            yield json.dumps({"locations": [{"name": "Башня"}]})
+        else:
+            yield "Мир продолжает жить."
 
     with patch("llm.chat_stream", side_effect=stream):
         res = c.post(
@@ -369,13 +374,16 @@ def test_generated_draft_start_expand_and_staged_usage(api):
         )
         assert res.status_code == 200, res.text
         d = res.json()
-        assert d["usage"][0]["stage"] == "campaign_generation"
+        assert {u["stage"] for u in d["usage"]} == {
+            "authoring_setting_blueprint",
+            "authoring_campaign_blueprint",
+        }
         g = c.post(
             "/api/tabletop/games",
             json={
                 "draft_id": d["id"],
                 "draft_revision": d["revision"],
-                "character": CharacterBuild().model_dump(),
+                "character": d["definition"]["characters"][0]["build"],
             },
         ).json()
         g = send(
@@ -385,10 +393,12 @@ def test_generated_draft_start_expand_and_staged_usage(api):
             config=CONFIG,
             api_key="secret",
         ).json()
-    assert "tower" in [l["id"] for l in g["state"]["locations"]]
-    assert {"campaign_generation", "content_generation"} <= {
-        u["stage"] for u in g["usage"]
-    }
+    assert "Башня" in [l["name"] for l in g["state"]["locations"]]
+    assert {
+        "authoring_setting_blueprint",
+        "authoring_campaign_blueprint",
+        "authoring_content_blueprint",
+    } <= {u["stage"] for u in g["usage"]}
     assert "NEVER_DISCLOSE" not in json.dumps(g) and "REMOTE_SECRET" not in json.dumps(
         g
     )

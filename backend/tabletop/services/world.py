@@ -70,6 +70,8 @@ class WorldService:
                 continue
             state.reputation_rewards.append(quest.id)
             faction = state.actor(quest.giver_id).faction
+            if faction is None:
+                continue
             state.faction_reputation[faction] = min(
                 10, state.faction_reputation.get(faction, 0) + 1
             )

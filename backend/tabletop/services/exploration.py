@@ -67,7 +67,13 @@ class ExplorationService:
             self.runtime.spend(state.encounter)
         else:
             self.runtime.interaction(state)
-        if obj.trap_damage and (not status.trap_triggered):
+        if (
+            obj.trap_damage
+            or any(
+                c.type in ("trap", "hazard") and c.damage_expression
+                for c in obj.components
+            )
+        ) and (not status.trap_triggered):
             self.runtime.pending(
                 state,
                 "save",

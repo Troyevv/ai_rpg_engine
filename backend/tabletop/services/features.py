@@ -7,18 +7,22 @@ class FeatureService:
     def __init__(self, runtime):
         self.runtime = runtime
 
-    def execute(self, state, command, aid, events, validate_only=False):
+    def execute(self, state, command, aid, events, validate_only=False, granted=False):
         actor = state.actor(aid)
         feature = state.ruleset.features.get(command.feature_id)
         if (
             not feature
-            or feature.id not in actor.features
+            or (feature.id not in actor.features and not granted)
             or feature.level > actor.level
         ):
             raise ValueError("Особенность недоступна персонажу")
         if feature.activation == "PASSIVE":
             raise ValueError("Пассивную особенность нельзя активировать")
         target = state.actor(command.target) if command.target else actor
+        from ..context_actions import requirements_met
+
+        if not requirements_met(state, actor, feature.requirements, target.id):
+            raise ValueError("Не выполнены требования способности")
         if (
             target.location != actor.location
             or "dead" in target.conditions
@@ -27,15 +31,16 @@ class FeatureService:
             raise ValueError("Цель особенности недоступна")
         if feature.target == "self" and target.id != actor.id:
             raise ValueError("Особенность применяется только к себе")
-        if (
-            feature.target == "ally"
-            and state.relation(actor.faction, target.faction) != "ALLY"
-        ):
+        if feature.target == "ally" and not state.allied(actor.id, target.id):
             raise ValueError("Нужна союзная цель")
         if feature.target == "enemy" and not state.hostile(aid, target.id):
             raise ValueError("Нужна враждебная цель")
-        if feature.resource and actor.resources.get(feature.resource, 0) <= 0:
-            raise ValueError("Ресурс особенности исчерпан")
+        costs = dict(feature.resource_cost)
+        if feature.resource:
+            costs[feature.resource] = costs.get(feature.resource, 0) + 1
+        for rid, cost in costs.items():
+            if cost < 0 or actor.resources.get(rid, 0) < cost:
+                raise ValueError("Недостаточно ресурса: " + rid)
         if (
             any(
                 effect.type in ("dash", "disengage", "condition")
@@ -44,7 +49,11 @@ class FeatureService:
             and not state.encounter
         ):
             raise ValueError("Эта особенность применяется в бою")
+        from ..effects import EffectsEngine
+
         for effect in feature.effects:
+            if effect.type in EffectsEngine.ACTIVE:
+                EffectsEngine.validate(state, actor, target, effect)
             if effect.type == "restore_slot" and (
                 effect.key not in actor.spell_slots
                 or actor.spell_slots[effect.key].remaining
@@ -53,6 +62,29 @@ class FeatureService:
                 raise ValueError("Нет потраченной ячейки для восстановления")
             if effect.type == "condition" and effect.key in target.conditions:
                 raise ValueError("Эффект уже действует")
+        area_targets = [target]
+        if feature.area:
+            if any(
+                effect.type not in EffectsEngine.ACTIVE for effect in feature.effects
+            ):
+                raise ValueError(
+                    "Область поддерживает только объявленные универсальные эффекты"
+                )
+            area_targets = [
+                other
+                for other in state.actors().values()
+                if other.location == target.location
+                and other.hp > 0
+                and abs(other.position - target.position) <= feature.area
+                and (
+                    state.hostile(actor.id, other.id)
+                    if feature.target == "enemy"
+                    else state.allied(actor.id, other.id)
+                )
+            ]
+            for other in area_targets:
+                for effect in feature.effects:
+                    EffectsEngine.validate(state, actor, other, effect)
         if feature.activation == "REACTION":
             if not state.encounter or not state.encounter.reaction.get(aid):
                 raise ValueError("Реакция недоступна")
@@ -74,10 +106,15 @@ class FeatureService:
                 state.encounter,
                 "bonus_action" if feature.activation == "BONUS_ACTION" else "action",
             )
-        if feature.resource:
-            actor.resources[feature.resource] -= 1
+        for rid, cost in costs.items():
+            actor.resources[rid] = actor.resources.get(rid, 0) - cost
         for effect in feature.effects:
-            if effect.type == "heal_dice":
+            if effect.type in EffectsEngine.ACTIVE:
+                for other in area_targets:
+                    EffectsEngine.apply(
+                        self.runtime, state, actor, other, effect, events
+                    )
+            elif effect.type == "heal_dice":
                 modifier = effect.value + (actor.level if effect.add_level else 0)
                 if state.controllers[aid].controller == "PLAYER":
                     self.runtime.pending(

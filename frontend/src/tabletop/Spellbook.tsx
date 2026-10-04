@@ -1,3 +1,4 @@
+import { ChoiceControl, ChoiceOption } from "@/components/choice/ChoiceControl";
 import { useEffect, useState } from "react";
 import type { Command, Game, Sheet } from "./types";
 
@@ -44,32 +45,32 @@ export function Spellbook({
       <div className="tt-form-grid">
         <label>
           Цель заклинания
-          <select
+          <ChoiceControl
             aria-label="Цель заклинания"
             value={target}
             onChange={(e) => setTarget(e.target.value)}
           >
             {targets.map((t) => (
-              <option key={t.id} value={t.id}>
+              <ChoiceOption key={t.id} value={t.id}>
                 {t.name}
-              </option>
+              </ChoiceOption>
             ))}
-          </select>
+          </ChoiceControl>
         </label>
         <label>
           Усиление
-          <select
+          <ChoiceControl
             aria-label="Круг ячейки"
             value={slot}
             onChange={(e) => setSlot(Number(e.target.value))}
           >
-            <option value={0}>Минимальная ячейка</option>
+            <ChoiceOption value={0}>Минимальная ячейка</ChoiceOption>
             {Object.keys(hero.spell_slots).map((level) => (
-              <option key={level} value={level}>
+              <ChoiceOption key={level} value={level}>
                 {level} круг
-              </option>
+              </ChoiceOption>
             ))}
-          </select>
+          </ChoiceControl>
         </label>
       </div>
       <div className="tt-catalog-grid">

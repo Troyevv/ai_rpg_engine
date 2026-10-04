@@ -1,3 +1,4 @@
+import { choose, choiceValues } from "./choices";
 import { test, expect, type Page } from "@playwright/test";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -23,6 +24,18 @@ async function press(page: Page, name: string | RegExp) {
   )
     await actions.click();
   await target.click();
+}
+
+async function legacyDraft(page: Page, idea: string) {
+  const response = await page.request.post(
+    new URL("/test/tabletop-draft", page.url()).href,
+    { data: { idea } },
+  );
+  const result = await response.json();
+  const id = result.id || result.draft_id;
+  expect(id, JSON.stringify(result)).toBeTruthy();
+  await press(page, "Создать кампанию");
+  await choose(page.getByLabel("Продолжить черновик"), id);
 }
 
 test("generated campaign, quest, combat, loot, expansion and real server restart", async ({
@@ -74,11 +87,7 @@ test("generated campaign, quest, combat, loot, expansion and real server restart
     await start();
     await page.goto(base);
     await press(page, "Настольная RPG");
-    await press(page, "Создать кампанию");
-    await page
-      .getByLabel("Идея приключения", { exact: true })
-      .fill("Город архивов, исчезнувшая рукопись");
-    await press(page, "Сгенерировать мир");
+    await legacyDraft(page, "Город архивов, исчезнувшая рукопись");
     await expect(
       page.getByRole("heading", { name: "Исчезнувшая рукопись", exact: true }),
     ).toBeVisible();
@@ -286,20 +295,13 @@ test("invalid generated draft shows all diagnostics and requires explicit correc
 }) => {
   await page.goto("/");
   await press(page, "Настольная RPG");
-  await press(page, "Создать кампанию");
-  await page
-    .getByLabel("Идея приключения", { exact: true })
-    .fill("invalid references");
-  await press(page, "Сгенерировать мир");
-  await expect(page.getByRole("alert")).toContainText("missing_secret");
-  await expect(page.getByRole("alert")).toContainText("missing_actor");
+  await legacyDraft(page, "invalid references");
+
   await page.getByText("Диагностика проверки (2)", { exact: true }).click();
   await expect(page.locator(".tt-diagnostics")).toContainText(
     "unknown_reference · character:archivist · knowledge",
   );
-  await page
-    .getByRole("button", { name: "Открыть невалидный черновик" })
-    .click();
+
   await expect(
     page.getByRole("button", { name: "Далее", exact: true }),
   ).toBeDisabled();
@@ -314,7 +316,7 @@ test("invalid generated draft shows all diagnostics and requires explicit correc
   });
   await page.reload();
   await press(page, "Создать кампанию");
-  await page.getByLabel("Продолжить черновик").selectOption(invalid.id);
+  await choose(page.getByLabel("Продолжить черновик"), invalid.id);
   await expect(
     page.getByRole("button", { name: "Далее", exact: true }),
   ).toBeDisabled();
@@ -342,20 +344,17 @@ test("AI DM check and choice have durable mechanical controls", async ({
   await page.goto("/");
   await press(page, "Настольная RPG");
   await expect(page.getByLabel("LLM DM", { exact: true })).toHaveCount(0);
-  await press(page, "Создать кампанию");
-  await page
-    .getByLabel("Идея приключения", { exact: true })
-    .fill("Протокол ведущего");
-  await press(page, "Сгенерировать мир");
+  await legacyDraft(page, "Протокол ведущего");
   await press(page, "Далее");
   await press(page, "Далее");
   await press(page, "Начать приключение");
   await expect(page.locator(".tt-playing")).toBeVisible();
   await press(page, "Настройки DM");
-  await page.getByLabel("Стиль", { exact: true }).selectOption("dark");
-  await page
-    .getByLabel("Сложность проверок", { exact: true })
-    .selectOption("always");
+  await choose(page.getByLabel("Стиль", { exact: true }), "dark");
+  await choose(
+    page.getByLabel("Сложность проверок", { exact: true }),
+    "always",
+  );
   await Promise.all([
     page.waitForResponse(
       (r) => r.url().endsWith("/settings") && r.request().method() === "POST",
@@ -365,10 +364,13 @@ test("AI DM check and choice have durable mechanical controls", async ({
   await page.reload();
   await expect(page.locator(".tt-playing")).toBeVisible();
   await press(page, "Настройки DM");
-  await expect(page.getByLabel("Стиль", { exact: true })).toHaveValue("dark");
+  await expect(page.getByLabel("Стиль", { exact: true })).toHaveAttribute(
+    "data-value",
+    "dark",
+  );
   await expect(
     page.getByLabel("Сложность проверок", { exact: true }),
-  ).toHaveValue("always");
+  ).toHaveAttribute("data-value", "always");
   await press(page, "Игра");
   const input = page.getByLabel("Твоё действие", { exact: true });
   await input.fill("Пробираюсь через затопленный тоннель");
@@ -405,11 +407,7 @@ test("point buy and AI portrait are reviewed before character creation", async (
 }, testInfo) => {
   await page.goto("/");
   await press(page, "Настольная RPG");
-  await press(page, "Создать кампанию");
-  await page
-    .getByLabel("Идея приключения", { exact: true })
-    .fill("Герой с характером");
-  await press(page, "Сгенерировать мир");
+  await legacyDraft(page, "Герой с характером");
   await press(page, "Далее");
   await page
     .getByLabel("Концепция героя", { exact: true })
@@ -423,9 +421,10 @@ test("point buy and AI portrait are reviewed before character creation", async (
     "Александр",
   );
   await press(page, "5. Характеристики");
-  await page
-    .getByLabel("Метод характеристик", { exact: true })
-    .selectOption("point_buy");
+  await choose(
+    page.getByLabel("Метод характеристик", { exact: true }),
+    "point_buy",
+  );
   await expect(
     page.getByRole("status", { name: "Бюджет характеристик" }),
   ).toContainText("Осталось очков: 27");
@@ -458,11 +457,7 @@ test("wizard creator and spellbook keep casting pending across reload", async ({
 }) => {
   await page.goto("/");
   await press(page, "Настольная RPG");
-  await press(page, "Создать кампанию");
-  await page
-    .getByLabel("Идея приключения", { exact: true })
-    .fill("Маг в библиотеке");
-  await press(page, "Сгенерировать мир");
+  await legacyDraft(page, "Маг в библиотеке");
   await press(page, "Далее");
   await press(page, "3. Класс");
   await page.getByRole("button", { name: /^Маг Кость здоровья/ }).click();
@@ -474,11 +469,26 @@ test("wizard creator and spellbook keep casting pending across reload", async ({
   await press(page, "Начать приключение");
   await press(page, "Перейти: Хранилище");
   await press(page, "Начать бой: Страж архива");
+  let releaseRoll!: () => void;
+  const rollResponse = new Promise<void>((resolve) => {
+    releaseRoll = resolve;
+  });
+  await page.route(
+    "**/api/tabletop/games/*/roll",
+    async (route) => {
+      const response = await route.fetch();
+      await rollResponse;
+      await route.fulfill({ response });
+    },
+    { times: 1 },
+  );
   await press(page, "Бросить кубик");
   await press(page, "Заклинания");
-  await page
-    .getByLabel("Цель заклинания", { exact: true })
-    .selectOption("sentinel");
+  releaseRoll();
+  await expect(page.getByRole("region", { name: "Боевой HUD" })).toContainText(
+    "Ход: Искатель",
+  );
+  await choose(page.getByLabel("Цель заклинания", { exact: true }), "sentinel");
   await press(page, "Сотворить: Огненная стрела");
   const snapshot = () =>
     page.evaluate(async () =>

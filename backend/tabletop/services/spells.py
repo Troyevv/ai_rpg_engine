@@ -74,6 +74,9 @@ class SpellService:
             or (spell.level and spell.id not in a.prepared_spells)
         ):
             raise ValueError("Заклинание не известно или не подготовлено")
+        for rid, cost in spell.resource_cost.items():
+            if cost < 0 or a.resources.get(rid, 0) < cost:
+                raise ValueError("Недостаточно ресурса: " + rid)
         level = c.slot_level or spell.level
         if spell.level == 0 and level != 0:
             raise ValueError("Заговор не расходует ячейку")
@@ -94,10 +97,7 @@ class SpellService:
             raise ValueError("Цель заклинания вне досягаемости")
         if spell.target_type == "self" and target.id != aid:
             raise ValueError("Нужна цель: сам заклинатель")
-        if (
-            spell.target_type == "ally"
-            and state.relation(a.faction, target.faction) != "ALLY"
-        ):
+        if spell.target_type == "ally" and not state.allied(a.id, target.id):
             raise ValueError("Нужна союзная цель")
         if spell.target_type in ("enemy", "area") and (
             not state.encounter
@@ -125,6 +125,8 @@ class SpellService:
             state.encounter,
             "bonus_action" if spell.casting_time == "BONUS_ACTION" else "action",
         )
+        for rid, cost in spell.resource_cost.items():
+            a.resources[rid] = a.resources.get(rid, 0) - cost
         if level:
             a.spell_slots[str(level)].remaining -= 1
         if spell.concentration:
@@ -380,6 +382,7 @@ class SpellService:
                     roll.total // 2 if cast.saved else roll.total,
                     cast.critical,
                     events,
+                    spell.damage_type,
                 )
             elif purpose == "spell_healing":
                 before = target.hp

@@ -39,9 +39,20 @@ class SaveCommand(ActorCommand):
 
 
 class AttackCommand(ActorCommand):
+    mode: Literal["single", "burst", "automatic"] = "single"
     type: Literal["attack"] = "attack"
     target: str = Field(min_length=1, max_length=80)
     weapon: str = Field(default="", max_length=80)
+
+
+class ContextActionCommand(ActorCommand):
+    type: Literal["context_action"] = "context_action"
+    action_id: str = Field(min_length=1, max_length=80)
+
+
+class ReloadCommand(ActorCommand):
+    type: Literal["reload"] = "reload"
+    item_id: str = Field(min_length=1, max_length=80)
 
 
 class LevelUpCommand(ActorCommand):
@@ -82,6 +93,20 @@ class TacticalCommand(ActorCommand):
 class UseObjectCommand(ActorCommand):
     type: Literal["use_object"] = "use_object"
     target: str = Field(min_length=1, max_length=80)
+
+
+class ObjectActionCommand(ActorCommand):
+    type: Literal["object_action"] = "object_action"
+    target: str = Field(min_length=1, max_length=80)
+    operation: Literal["break", "cover", "activate"]
+    weapon: str = ""
+
+
+class StoreItemCommand(ActorCommand):
+    type: Literal["store_item", "unpack_item"]
+    item_id: str = Field(min_length=1, max_length=80)
+    target: str = Field(min_length=1, max_length=80)
+    quantity: int = Field(default=1, ge=1, le=100)
 
 
 class InteractCommand(ActorCommand):
@@ -166,6 +191,8 @@ ActionCommand = Annotated[
         CheckCommand,
         SaveCommand,
         AttackCommand,
+        ReloadCommand,
+        ContextActionCommand,
         UseFeatureCommand,
         CastSpellCommand,
         LevelUpCommand,
@@ -174,6 +201,8 @@ ActionCommand = Annotated[
         TacticalCommand,
         UseObjectCommand,
         InteractCommand,
+        ObjectActionCommand,
+        StoreItemCommand,
         DialogueCommand,
         UseItemCommand,
         EquipmentCommand,

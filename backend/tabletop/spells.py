@@ -2,10 +2,12 @@
 
 from typing import Literal
 from pydantic import Field
-from .definitions import Model, Ability
+from .contracts import Model, Ability
 
 
 class SpellDefinition(Model):
+    damage_type: str = ""
+    resource_cost: dict[str, int] = {}
     id: str
     name: str
     level: int = Field(ge=0, le=9)
