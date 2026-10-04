@@ -1,4 +1,5 @@
 """Thin draft endpoints. All authoritative state and validation are backend-side."""
+import json
 from typing import Any, Literal
 from pydantic import Field
 from fastapi.responses import PlainTextResponse
@@ -8,6 +9,7 @@ from backend.services import draft_world as domain
 
 class Import(Revision):
     text: str = Field(min_length=1,max_length=2000000)
+    format: Literal['text','json'] = 'text'
 
 class Change(Revision):
     operation: Literal['patch','add','remove','restore']
@@ -38,7 +40,7 @@ def install(app,repo,preparation,credentials,job):
 
     @app.post('/api/workspaces/{wid}/draft/import')
     def import_world(wid:str,body:Import):
-        repo.import_draft(wid,body.text,body.revision)
+        repo.import_draft(wid,body.text,body.revision,body.format)
         return repo.draft(wid)
 
     @app.patch('/api/workspaces/{wid}/draft')
@@ -68,7 +70,8 @@ def install(app,repo,preparation,credentials,job):
     def confirm(wid:str,body:Confirm):return repo.confirm_draft(wid,body.revision,body.version_id)
 
     @app.get('/api/workspaces/{wid}/draft/export')
-    def export(wid:str,version_id:int,format:Literal['md','txt']='md'):
+    def export(wid:str,version_id:int,format:Literal['md','txt','json']='md'):
         value=repo.draft(wid,True)
         if value['version_id']!=version_id:raise ValueError('Версия изменилась. Обнови редактор.')
-        return PlainTextResponse(domain.export_markdown(value['state']),headers={'Content-Disposition':f'attachment; filename="world.{format}"'})
+        text=json.dumps(value['state'],ensure_ascii=False,indent=2) if format=='json' else domain.export_markdown(value['state'])
+        return PlainTextResponse(text,media_type='application/json' if format=='json' else 'text/plain',headers={'Content-Disposition':f'attachment; filename="world.{format}"'})
