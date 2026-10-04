@@ -1,3 +1,5 @@
+import {SkinHeader} from './ThemeDecorationLayer';
+import {useTheme,themes} from './ThemeProvider';
 import {TimeSkip} from './TimeSkip';
 import {RuntimeNotifications} from './RuntimeNotifications';
 import {useMotionPreset} from "./motion";
@@ -49,6 +51,8 @@ export function Game({
   prefs: Preferences;
   apiKey: string;
 }) {
+  const {presentation}=useTheme();
+  const decoration=themes.find(t=>t.id===presentation.theme_id)?.decoration||'none';
   const mobile=useMobile();
   const [notices,setNotices]=useState(()=>localStorage.getItem('relationship-notices')!=='off');
   const [away,setAway]=useState(false);
@@ -217,6 +221,7 @@ export function Game({
         >
           {save&&mobile&&<details className="mobile-story-tools"><summary>Диагностика</summary><Button size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Диагностика</Button></details>}{save&&!mobile&&<Button className="story-diagnostics" size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Диагностика</Button>}
           <div className="story-heading">
+            <SkinHeader pack={decoration}/>
             <p className="eyebrow">
               {save ? save.name : "Начало истории"}
             </p>

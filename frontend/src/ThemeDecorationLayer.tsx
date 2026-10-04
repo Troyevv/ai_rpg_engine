@@ -16,7 +16,48 @@ const motifs:Record<string,string>={
  occult:'M60 8 A52 52 0 1 1 59 8 M60 12 L90 102 L14 46 H108 L30 102 Z M8 8 L24 24 M96 96 L112 112 M8 112 L24 96 M96 24 L112 8',
  retro:'M10 12 Q10 4 20 4 H100 Q110 4 110 14 V106 Q110 116 100 116 H20 Q10 116 10 106 Z M24 20 H96 V72 H24 Z M26 94 A10 10 0 1 0 46 94 A10 10 0 1 0 26 94 M66 88 H96 M66 96 H96 M66 104 H96',
 };
-export function ThemeDecorationLayer({pack}:{pack:string}){
+// Artwork is data, not a separate copy of the game for every theme.
+const inscriptions:Record<string,[string,string]>={
+ cyberpunk:['NIGHT / LINK','SECTOR 07 · RX / TX'], medieval:['',''], noir:['CASE FILE / 014','PRIVATE · ARCHIVE'],
+ arcane:['✧  IX · IV · VII  ✧',''], gothic:['',''], terminal:['> STORY_BUFFER','[ ONLINE ]'],
+ space:['FLIGHT LOG / 07','ORB 024 · NAV / SYS'], industrial:['FIELD RECORD','MK IV / SERVICE'],
+ 'post-apocalypse':['SALVAGED / 07','REPAIRED · KEEP DRY'], parchment:['EX LIBRIS',''],
+ street:['AFTER HOURS','VOL. 01'], urban:['DISTRICT / 07','NORTH → CENTRAL'], biotech:['CELL / 09','MEMBRANE · SYNC'],
+ occult:['FIG. VII','SIGILLUM / NOCTIS'], retro:['STEREO / CHRONICLE','FM 88 · 108'],
+};
+const flourishes:Record<string,string>={
+ medieval:'M0 50H160L180 35L200 50L180 65L160 50 M440 50H640 M460 35L440 50L460 65 M70 27L78 22L130 66L126 71Z M113 70L132 49 M121 65L140 81 M134 85L144 75',
+ arcane:'M10 50H180 M460 50H630 M140 50l15 -15l15 15l-15 15Z M470 50l15 -15l15 15l-15 15Z',
+ gothic:'M10 80V40Q45 0 80 40V80 M90 80V40Q125 0 160 40V80 M480 80V40Q515 0 550 40V80 M560 80V40Q595 0 630 40V80',
+ noir:'M15 72H190 M450 72H620 M475 66h65v6h-65Z M490 57c-25 -18 25 -15 0 -37 M550 75q25 18 50 0',
+ terminal:'M12 20h12 M12 20v60h12 M628 20h-12 M628 20v60h-12 M45 65l12 -12l-12 -12 M70 65h50',
+ space:'M5 50H140L165 25H205 M435 75H475L500 50H635 M65 40v20 M95 35v30 M545 35v30 M575 40v20',
+ industrial:'M0 22H180V78H0 M460 22H640V78H460 M20 30l30 40 M50 30l30 40 M80 30l30 40 M110 30l30 40',
+ 'post-apocalypse':'M0 30L205 38 M435 62L640 70 M45 24v16 M65 25v17 M85 26v17 M515 58v17 M535 59v17 M555 60v17',
+ parchment:'M5 50Q80 10 155 50T230 50 M410 50Q460 10 535 50T635 50 M155 50q-20 -35 -45 -15q0 20 45 15 M485 50q20 35 45 15q0 -20 -45 -15',
+ street:'M15 75L180 20 M30 85L195 30 M460 20l140 60 M480 20l125 45',
+ urban:'M0 65H100L140 25H205 M435 25H485L525 65H640 M40 58v14 M75 58v14 M565 58v14 M600 58v14',
+ biotech:'M0 50C70 -20 130 120 210 50 M0 60C70 -10 130 130 210 60 M430 50C510 -20 570 120 640 50 M430 60C510 -10 570 130 640 60',
+ occult:'M15 50H190 M450 50H625 M60 20l35 60l35 -60Z M510 80l35 -60l35 60Z',
+ retro:'M10 75V25Q80 -5 150 25V75 M30 55L75 20 M490 75V25Q560 -5 630 25V75 M555 55L600 20 M165 30h35v40h-35Z M440 30h35v40h-35Z',
+ cyberpunk:'M0 15H180L200 35 M0 80H150L170 60 M440 35L460 15H640 M470 60L490 80H640 M20 30H100 M540 65H620',
+};
+/** This reserved header slot never overlaps narrative text or controls. */
+export function SkinHeader({pack}:{pack:string}) {
  if(pack==='none')return null;
- return <div className={`theme-decoration decoration-${pack}`} aria-hidden="true"><svg viewBox="0 0 120 120" className="decoration-top"><path d={motifs[pack]}/></svg><svg viewBox="0 0 120 120" className="decoration-bottom"><path d={motifs[pack]}/></svg><span className="decoration-rail"/></div>;
+ const [left,right]=inscriptions[pack]||['',''];
+ return <div className={`skin-header-art art-${pack}`} aria-hidden="true">
+  <svg viewBox="0 0 640 100" preserveAspectRatio="xMidYMid meet">
+   <path className="art-flourish" d={flourishes[pack]}/>
+   <g className="art-emblem" transform="translate(274 4) scale(.76)"><path d={motifs[pack]}/></g>
+   <text x="12" y="96">{left}</text><text x="628" y="96" textAnchor="end">{right}</text>
+  </svg>
+ </div>;
+}
+/** Ambient marks stay inside narrow screen gutters, never across the reading surface. */
+export function ThemeDecorationLayer({pack}:{pack:string}) {
+ if(pack==='none')return null;
+ return <div className={`theme-decoration decoration-${pack}`} aria-hidden="true">
+  <span className="decoration-edge edge-left"/><span className="decoration-edge edge-right"/>
+ </div>;
 }

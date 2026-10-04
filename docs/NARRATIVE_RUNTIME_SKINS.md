@@ -64,3 +64,38 @@ messages and notifications. Decoration is non-interactive and reduced on mobile.
 - Final desktop/mobile skin and Time Skip rerun: 2 passed.
 - Model outputs are mocked in automated tests. Real-provider narrative quality and
   physical-phone performance still require user playtesting.
+
+## Skin System v2 presentation follow-up (PR #34)
+
+The existing preset → base → decoration → palette composition remains in place.
+`ThemeDecorationLayer.tsx` now owns reusable, data-driven header artwork as well as
+non-interactive screen-edge marks. The header reserves its own space before the
+title: ornaments cannot sit over narrative paragraphs. CSS supplies material
+textures, panel-corner inlays and section dividers. Mobile retains a 56px artwork
+slot; desktop uses 100px. No external images, fonts or animation loops are loaded.
+
+Each pack has its own material and emblem: wood/iron/heraldry, monochrome dossier
+and blinds, neon HUD, arcane circles, gothic windows, CRT, spacecraft telemetry,
+brushed metal, repaired rust, paper, taped posters, concrete/transit, membranes,
+ritual seals and analog gauges. Graphite remains undecorated and Neon retains the
+Cyberpunk pack. Noir semantic status colours are also grayscale; arrows and text
+still convey status. Long-form narrative stays on an untextured reading surface.
+
+Skin borders now respect each component's existing border sides. The context
+strip has a single outer divider; the composer textarea has no redundant inner
+frame. Inspector E2E failed because the memory disclosure had been renamed to
+“Архив старой LLM-памяти (не используется ведущим)”, not because an overlay blocked
+clicks. The test now opens and closes that actual disclosure and checks its text.
+
+The six-family visual smoke test captures Graphite, Cyberpunk, Medieval, Noir,
+Arcane and Terminal on desktop/mobile. It checks visible distinct artwork,
+reserved geometry, inert decoration, border sides, overflow and usable controls.
+Screenshots are retained by the existing CI `browser-results` artifact step.
+These are screenshot smoke checks, not pixel-baseline comparisons. The existing
+all-preset test still covers 360/390/412/430px and desktop with time skip/rollback.
+
+Follow-up validation: full `python -m pytest -q` completed with 668 passed;
+`npm run build` passed; full `npx playwright test` completed with status `passed`
+and no failed tests in `frontend/test-results/.last-run.json`. Existing project
+exclusions for duplicate viewport matrices are unchanged; no new skips were added.
+Desktop and mobile screenshots were inspected for the representative families.
