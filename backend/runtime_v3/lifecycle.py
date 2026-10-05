@@ -1,8 +1,7 @@
 """Canonical motivation transitions. Legacy lists are read only at migration boundaries."""
 from copy import deepcopy
-import re
 from backend.runtime_v3.models import Motivation, identity
-from backend.services.player_agency import supported_player_field, declarations, normalized
+from backend.services.player_agency import supported_player_field, normalized
 
 FIELDS = ('goals', 'intentions', 'obligations')
 
@@ -26,32 +25,6 @@ def replace_active(records, texts, actor, field, sequence):
     return result
 
 
-def completion_supported(text, quote):
-    """Conservative lexical evidence gate; uncertainty leaves the item active."""
-    q = normalized(quote)
-    if re.search(r'\b(?:не|если|буду|собираюсь|планирую|возможно|потом)\b|\?', q): return False
-    tokens = {w[:5] for w in re.findall(r'[а-яa-z]{4,}', normalized(text))}
-    shared = tokens & {w[:5] for w in re.findall(r'[а-яa-z]{4,}', q)}
-    return bool(shared and re.search(r'ответил|ответила|сказал|заверш|закончил|выполн|доставил|отв[её]з|поел|поели|приш[её]л|пришли|достиг|получил|обсудил', q))
-
-
-
-def reply_supported(resolver, intention, quote):
-    """A literal affirmative reply can complete answering, but never the promised trip."""
-    if normalized(quote) not in {normalized(s) for s in declarations(resolver.player_input)}:
-        return False
-    if not re.fullmatch(r'(?:хорошо|договорились),? (?:сегодня|завтра|послезавтра) (?:отвезу|привезу|заберу|помогу) (?:тебя|тебе)', normalized(quote)):
-        return False
-    match=re.match(r'^ответить (\w+) (?:про|о|об) ',normalized(intention['text']))
-    if not match:return False
-    controlled=resolver.before['camera']['controlled_actor_id']
-    present=[cid for cid in resolver.before['camera']['present_character_ids'] if cid!=controlled]
-    if len(present)!=1:return False
-    name=resolver.actor_names.get(present[0],'').casefold().split(' ')[0]
-    if not name:return False
-    dative=name[:-1]+'е' if name.endswith(('а','я')) else name[:-1]+'ю' if name.endswith('й') else name+'у'
-    return match[1] in {name,dative}
-
 def apply_changes(resolver, item, cid, index):
     actor = resolver.state['characters'][cid]
     controlled = cid == resolver.state['camera']['controlled_actor_id']
@@ -62,11 +35,13 @@ def apply_changes(resolver, item, cid, index):
             old = next((r for r in actor[field] if r['id'] == change.get('id')), None)
             status = change.get('status', 'active')
             if old:
-                if old['status'] != 'active' or status not in ('completed','cancelled','failed','superseded'): continue
-                if controlled and (status != 'completed' or not (completion_supported(old['text'], change['evidence']) or field=='intentions' and reply_supported(resolver,old,change['evidence']))):
-                    resolver.warn('character_changes', index, 'выполнение не подтверждено', field, cid); continue
+                if old['status'] != 'active' or status not in ('completed','cancelled','failed','superseded','expired'): continue
+                # Semantics belong to existing Extraction; source must be current.
+                # Completing an established motivation does not create a player desire.
                 old.update(status=status, evidence=change['evidence'], source_sequence=resolver.turn_id-1)
             else:
+                if change.get('id'):
+                    resolver.warn('character_changes', index, 'неизвестный motivation ID', field, cid); continue
                 text = change.get('text')
                 if not isinstance(text, str) or not text.strip() or status != 'active': continue
                 if controlled and not supported_player_field(field, [text], [], resolver.player_input, [change['evidence']]):

@@ -71,6 +71,7 @@ def test_mixed_local_drops_do_not_lose_other_changes():
     ('intentions',['поговорить с Людой завтра'],'Решаю завтра поговорить с Людой.',['Решаю завтра поговорить с Людой'])])
 def test_player_source_is_accepted(field,value,player,evidence):
     p=payload();p['character_changes']=[dict(id='a',**{field:value},player_evidence={field:evidence})]
+    if field=='emotion': p['character_changes'][0]['emotion_assertion']='explicit_internal_state'
     result=StateResolver(initial(),QUOTE,player).resolve(p)
     actual=result.state['characters']['a'][field]
     assert (actual if field=='emotion' else active_texts(actual))==value

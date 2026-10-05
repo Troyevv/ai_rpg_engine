@@ -47,6 +47,7 @@ def test_unsupported_fields_drop_individually_and_commit(db,text,fields):
 def test_explicit_player_declarations(db,text,field,value):
     repo,_,sid=db;seed(repo,sid)
     p=character_payload({field:value},player_evidence={field:text if field=='emotion' else [text]})
+    if field=='emotion': p['character_changes'][0]['emotion_assertion']='explicit_internal_state'
     job=repo.begin_job(sid,text,'start',CONFIG)
     assert len(execute(repo,job,p,NARRATIVE))==2
     actual=repo.get_snapshot(sid)['world_state']['characters']['character_1'][field]
@@ -57,7 +58,7 @@ def test_explicit_player_declarations(db,text,field,value):
 def test_plain_evidence_can_confirm_explicit_player_source(db):
     repo,_,sid=db;seed(repo,sid);text='Я злюсь на неё.'
     job=repo.begin_job(sid,text,'start',CONFIG)
-    execute(repo,job,character_payload({'emotion':'злится'},evidence=text),NARRATIVE)
+    execute(repo,job,character_payload({'emotion':'злится','emotion_assertion':'explicit_internal_state'},evidence=text),NARRATIVE)
     assert repo.get_snapshot(sid)['world_state']['characters']['character_1']['emotion']=='злится'
 
 

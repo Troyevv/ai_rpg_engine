@@ -61,6 +61,7 @@ def extraction_schema():
             source_event_id=dict(type='string',description='Event ЭТОГО extraction: actor_id входит в witnesses, fact_id входит в fact_ids, medium observation/conversation/message/testimony/discovery. Иначе запись опустить.')),
             ('actor_id','fact_id','source_event_id','evidence')),
         'character_changes':record(dict(id=string,situation=string,physical_state=string,emotion=string,goals=strings,intentions=strings,obligations=strings,
+            emotion_assertion={'enum':['explicit_internal_state'], 'description':'Только явно выраженное внутреннее состояние controlled actor из player_input, не жест/поведение. Runtime проверяет источник, LLM — семантику.'},
             player_evidence=obj(dict(emotion=string,goals=strings,intentions=strings,obligations=strings))), ('id',)),
         'relationship_changes':record(dict(source_id=string,target_id=string,context=string,
             dimensions=obj({d:{'type':'number','minimum':-100,'maximum':100} for d in RELATION_DIMENSIONS})), ('source_id','target_id','evidence')),
@@ -70,7 +71,7 @@ def extraction_schema():
     }
     for field in ('goals', 'intentions', 'obligations'):
         definitions['character_changes']['properties'][field+'_updates'] = dict(type='array', items=record(dict(
-            id=string, text=string, status={'enum':['active','completed','cancelled','failed','superseded']},
+            id=string, text=string, status={'enum':['active','completed','cancelled','failed','superseded','expired']},
             due_minute={'type':'integer','minimum':0}), ('status','evidence')))
     definitions['scheduled_event_changes']['properties']['location_id'] = string
     definitions['scheduled_event_changes']['properties']['interrupts'] = {'type':'boolean', 'description':'Только установленное событие, требующее восприятия или участия controlled actor.'}
@@ -81,6 +82,9 @@ def extraction_schema():
         definitions['character_changes']['properties'][field]=dict(definitions['character_changes']['properties'][field],description=PLAYER_SOURCE_DESCRIPTION)
     definitions['relationship_changes']['properties']['dimensions']['description']='Закрытый набор: '+', '.join(RELATION_DIMENSIONS)+'. Не добавляй ключи; иной смысл — в context.'
     schema = obj(dict(final_scene=obj(dict(location_id={'type':['string','null']},present_character_ids=strings,
+        remote_interactions={'type':'array','items':record(dict(actor_id=string,
+            channel={'enum':['message','phone','video','radio','other']}), ('actor_id','channel','evidence')),
+            'description':'Только продолжающееся в конце хода активное удалённое взаимодействие. Старое сообщение, план позвонить и упоминание не подходят. Повторно подтверди каждый ход; отсутствие/[] завершает взаимодействие.'},
         situation=string,situation_evidence=evidence,elapsed_minutes={'type':'integer','minimum':0,'maximum':10080}), ('location_id','present_character_ids')),
         choices={'type':'array','items':obj(dict(action=string,speech=string),('action','speech'))}, **{key:{'type':'array','items':value} for key,value in definitions.items()}), ('final_scene',))
     schema['description'] = ('RawTurnResult: только наблюдения и подтверждённые изменения. Не создавай StatePatch. '
@@ -88,3 +92,38 @@ def extraction_schema():
         'Не копируй from_location, scene_id, last_event_id. Не придумывай время Event. '
         'Dimensions — закрытый набор; непредставимый смысл сохраняй в context.')
     return schema
+
+
+def prompt_schema():
+    """Validation-equivalent schema; prose lives once in the extraction contract."""
+    from collections import Counter
+    def structural(node):
+        if isinstance(node, dict): return {k:structural(v) for k,v in node.items() if k != 'description' or not isinstance(v, str)}
+        if isinstance(node, list): return [structural(v) for v in node]
+        return node
+    # Keep properties named "description"; remove only JSON Schema annotations.
+    schema = structural(extraction_schema())
+    counts = Counter()
+
+    def key(node):
+        return json.dumps(node, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+
+    def count(node):
+        if isinstance(node, dict):
+            if 'type' in node and len(key(node)) > 100:
+                counts[key(node)] += 1
+            for value in node.values(): count(value)
+        elif isinstance(node, list):
+            for value in node: count(value)
+    count(schema)
+    shared = {value: 'shared_'+str(index) for index, value in enumerate(sorted(k for k, n in counts.items() if n > 1))}
+
+    def compact(node, root=False):
+        if isinstance(node, dict):
+            if not root and key(node) in shared: return {'$ref':'#/$defs/'+shared[key(node)]}
+            return {name:compact(value) for name, value in node.items()}
+        if isinstance(node, list): return [compact(value) for value in node]
+        return node
+    result = compact(schema)
+    result['$defs'] = {name:compact(json.loads(value), root=True) for value, name in shared.items()}
+    return result

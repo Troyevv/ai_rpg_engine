@@ -34,10 +34,16 @@ def test_real_job_commit_reload_timing_and_variant(db):
     assert_world_state_v3_invariants(after['world_state'])
     diag=repo.turn_diagnostics(sid)[0]
     assert len(diag['requests'])==2 and diag['timing']['total']>0
+    selections={r['stage']:r['diagnostics']['selection'] for r in diag['requests']}
+    assert selections['narrative']['mode']=='Narrative'
+    assert selections['extraction']['mode']=='Extraction'
+    assert selections['extraction']['narrative_continuity']==0
     first=repo.list_turns(sid)[0];old_variant=first['active_variant_id']
     job=repo.begin_job(sid,'','regenerate',CONFIG)
     run(repo,job,raw_for(snapshot))
     assert repo.get_job(job)['status']=='saved',repo.get_job(job)['error']
+    replay=repo.turn_diagnostics(sid)[0]
+    assert next(r for r in replay['requests'] if r['stage']=='narrative')['diagnostics']['selection']==selections['narrative']
     second=repo.get_snapshot(sid)
     assert second['history_head']!=after['history_head']
     repo.select_variant(sid,first['id'],old_variant,repo.get_save(sid)['revision'])

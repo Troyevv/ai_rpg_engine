@@ -1,7 +1,7 @@
 """Conservative player-source verification, never psychological inference.
 
 Arbitrary paraphrase entailment cannot be proven without another model. Accept
-literal explicit declarations and a small set of lossless surface forms; reject
+source declarations and typed extraction assertions; reject
 ambiguous claims for repair/omission. This code never generates or rewrites values.
 """
 import re
@@ -19,12 +19,6 @@ PATTERNS = {
     'goals': re.compile(r'^(?:теперь\s+)?(?:моя\s+(?:(?:новая|главная)\s+)*цель|мои\s+(?:новые\s+)?цели)\s*(?:—|–|-|:|это)\s*(.+)$', re.I),
     'intentions': re.compile(r'^(?:я\s+)?(?:решаю|решил(?:а)?|намерен(?:а)?|планирую|собираюсь)\s+(.+)$', re.I),
     'obligations': re.compile(r'^(?:я\s+)?(?:обещаю|обязуюсь)\s+(.+)$', re.I),
-}
-# Only explicit emotion predicates, not gestures, tone, appearance or situations.
-EMOTIONS = {
-    'злюсь': 'злится', 'ревную': 'ревнует', 'боюсь': 'боится',
-    'тревожусь': 'тревожится', 'грущу': 'грустит', 'радуюсь': 'радуется',
-    'стыжусь': 'стыдится', 'смущаюсь': 'смущается', 'ненавижу': 'ненавидит',
 }
 CLEAR = {
     'goals': {'отказываюсь от всех прежних целей', 'у меня больше нет целей'},
@@ -83,28 +77,12 @@ def claim_matches(field, value, quote):
                     forms.add(f'приехать к {arrival[1]} {arrival[2]} к {clock}')
             return claim in forms
         return False
-    if re.fullmatch(r'мне (?:страшно|грустно|тревожно|радостно|стыдно)', source):
-        return claim in {source, source.removeprefix('мне ')}
-    match = re.fullmatch(r'я (\w+)(.*)', source)
-    if match and match[1] in EMOTIONS:
-        tail = match[2]
-        full = EMOTIONS[match[1]] + tail
-        forms = {source, full}
-        # A simple complement can be omitted; never drop negation/conditions or
-        # invent a different target. Only an explicit leading emotion assertion
-        # can survive a following concrete action; gestures alone never qualify.
-        if not tail or re.fullmatch(r' (?:на|из-за|за) [\w -]+', tail) and not re.search(r'\b(?:не|но|если|или|и)\b', tail):
-            forms.add(EMOTIONS[match[1]])
-        if re.fullmatch(r' и (?:я )?(?:сжимаю|отвожу|подхожу|смотрю|ухожу|закрываю|открываю) [\w -]+', tail):
-            forms.add(EMOTIONS[match[1]])
-        return claim in forms
-    # Open vocabulary remains possible without semantic guessing: retain exactly
-    # the feeling explicitly named by the player.
-    match = re.fullmatch(r'я (?:чувствую|испытываю) (.+)', source)
-    return bool(match and claim in {source, match[1]})
+    # No emotion vocabulary or gesture inference in Runtime. A literal state
+    # may be preserved; paraphrase semantics require Extraction's typed assertion.
+    return claim == source
 
 
-def supported_player_field(field, value, old_value, player_input, evidence):
+def supported_player_field(field, value, old_value, player_input, evidence, emotion_assertion=None):
     """No changes without explicit source; list omission never means deletion."""
     if value == old_value:
         return True
@@ -114,7 +92,9 @@ def supported_player_field(field, value, old_value, player_input, evidence):
     if not quotes or any(not isinstance(q, str) or normalized(q) not in valid_quotes for q in quotes):
         return False
     if field == 'emotion':
-        return len(quotes) == 1 and claim_matches(field, value, quotes[0])
+        return len(quotes) == 1 and isinstance(value, str) and (
+            emotion_assertion == 'explicit_internal_state' or
+            bool(normalized(value)) and normalized(value) in normalized(quotes[0]))
     old = old_value or []
     removed = any(item not in value for item in old)
     if not value:

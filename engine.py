@@ -163,6 +163,9 @@ def run_job(path, job_id, handle):
             if not job['narrative_complete']:
                 if job['context_json']:
                     messages = json.loads(job['context_json'])
+                    if config.get('_context_selection'):
+                        from backend.runtime_v3.context import ContextMessages
+                        messages = ContextMessages(messages, config['_context_selection'])
                     if estimate(messages)>context-config['max_tokens']-256:
                         raise ValueError('Сохранённый контекст не помещается в выбранную модель. Увеличь контекст или уменьши лимит ответа.')
                 else:
