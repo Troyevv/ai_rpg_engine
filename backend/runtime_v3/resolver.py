@@ -143,10 +143,9 @@ class StateResolver:
         moves = {}
         for i, item in self.records(raw,'movements'):
             cid = self.actor(item.get('actor_id'),'movements',i)
-            if cid in present: continue  # Final camera owns these endpoints.
             target = item.get('to_location_id')
             if not isinstance(target,str) or target not in s['locations']:
-                fatal('неизвестное конечное место off-camera перемещения','movement_endpoint_invalid',repairable=True,index=i)
+                fatal('неизвестное конечное место перемещения','movement_endpoint_invalid',repairable=True,index=i)
             order = item.get('order')
             if order is not None and (type(order) is not int or order < 0):
                 self.warn('movements',i,'некорректный необязательный order',field='order'); order = None
@@ -154,8 +153,14 @@ class StateResolver:
         for cid, route in moves.items():
             if len({r[1] for r in route}) > 1:
                 if any(r[0] is None for r in route) or len({r[0] for r in route}) != len(route):
-                    fatal('неоднозначное off-camera перемещение','movement_ambiguous',repairable=True,entity=cid)
+                    fatal('неоднозначное перемещение','movement_ambiguous',repairable=True,entity=cid)
                 route.sort(key=lambda r:r[0])
+            if cid in present:
+                if route[-1][1] != lid:
+                    fatal('конечное перемещение участника противоречит final_scene',
+                          'scene_movement_conflict', repairable=True, entity=cid,
+                          scene_location_id=lid, movement_location_id=route[-1][1])
+                continue  # Consistent redundant route; final_scene owns the endpoint.
             origin = s['characters'][cid]['location_id']
             for order,target,evidence in route:
                 self.history.movements.append(dict(actor_id=cid,from_location_id=origin,to_location_id=target,

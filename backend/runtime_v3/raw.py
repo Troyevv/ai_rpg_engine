@@ -128,3 +128,9 @@ def prompt_schema():
     result = compact(schema)
     result['$defs'] = {name:compact(json.loads(value), root=True) for value, name in shared.items()}
     return result
+
+
+def repair_feedback(diagnostic, payload, before):
+    """Retry-only context: never infer scene semantics from prose in Python."""
+    return json.dumps(dict(diagnostic=diagnostic, original_extraction=payload,
+        previous_camera=before['camera'], known_locations=before['locations']), ensure_ascii=False)

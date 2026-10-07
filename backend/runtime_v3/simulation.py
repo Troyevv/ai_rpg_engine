@@ -5,6 +5,7 @@ from backend.runtime_v3.camera import observe
 from backend.runtime_v3.director import background_candidate, interval_candidates
 from backend.runtime_v3.context import build_context
 from backend.runtime_v3.resolver import StateResolver
+from backend.runtime_v3.raw import repair_feedback
 from backend.runtime_v3.models import assert_world_state_v3_invariants,fatal
 from backend.services.world_delta_errors import StructuralDeltaError
 
@@ -45,7 +46,9 @@ def simulate(before_snapshot, snapshot, history_batch, context_length, config, g
             break
         except StructuralDeltaError as exc:
             if attempt==1 or not exc.repairable:raise
-            on_repair(exc.diagnostic('world_simulation_repair'));feedback=json.dumps(exc.diagnostic('world_simulation_repair'),ensure_ascii=False)
+            diagnostic = exc.diagnostic('world_simulation_repair')
+            on_repair(diagnostic)
+            feedback = repair_feedback(diagnostic, payload, camera['world_state'])
     result=deepcopy(snapshot)
     result['world_state']=resolved.state
     result['world_state']['camera']=deepcopy(state['camera'])
