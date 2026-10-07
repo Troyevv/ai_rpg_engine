@@ -44,14 +44,14 @@ def test_long_scene_isolation_projection_is_immutable():
     selection = describe_context(messages)['selection']
     assert selection['characters']['FULL_PRESENT'] == 2
     assert selection['characters']['COMPACT_REFERENCED'] == 1
-    assert selection['sections']['facts'] == {'selected':1, 'total':221}
+    assert selection['sections']['facts'] == {'selected':1, 'included':1, 'total':221}
 
 
 def test_scope_remote_referenced_old_message_entry_and_decay():
     snapshot = clean_world(); resolver = RelevanceResolver(); classifier = CharacterContextClassifier()
     classify = lambda scope: classifier.classify('c', scope)
     assert classify(resolver.resolve(snapshot, 'Спрашиваю Тимура, что случилось с Соней.')) == 'COMPACT_REFERENCED'
-    assert classify(resolver.resolve(snapshot, 'Перечитываю старое сообщение Сони.')) == 'COMPACT_REFERENCED'
+    assert classify(resolver.resolve(snapshot, 'Перечитываю старое сообщение Сони.')) == 'ACTIVE_REFERENCED'
     assert classify(resolver.resolve(snapshot, 'Пишу Соне: привет.')) == 'FULL_REMOTE'
     assert classify(resolver.resolve(snapshot, 'Пишу Соне: «Привет, как ты?»')) == 'FULL_REMOTE'
     snapshot['world_state']['camera']['remote_interactions'] = [dict(actor_id='c', channel='message', last_active_turn=1000)]

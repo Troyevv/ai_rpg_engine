@@ -2,7 +2,7 @@
 from copy import deepcopy
 from pathlib import Path
 import json
-from backend.runtime_v3.scope import RelevanceResolver, CharacterContextClassifier, FULL_PRESENT, FULL_REMOTE, COMPACT_REFERENCED, INDEX
+from backend.runtime_v3.scope import RelevanceResolver, CharacterContextClassifier, FULL_PRESENT, FULL_REMOTE, ACTIVE_REFERENCED, COMPACT_REFERENCED, INDEX
 from backend.runtime_v3.context_contract import EXTRACTION_CONTRACT, NARRATIVE_CONTRACT
 from backend.runtime_v3.raw import prompt_schema
 
@@ -40,15 +40,19 @@ def canonical_slice(state, scope, extraction=False):
     for character in current['characters'].values():
         for key in ('goals', 'intentions', 'obligations'):
             character[key] = [r for r in character[key] if isinstance(r, str) or r['status'] == 'active']
-        if character['id'] in scope.referenced_actor_ids and not extraction:
-            from backend.runtime_v3.scope import words
-            for key in ('goals', 'intentions', 'obligations'):
-                character[key] = [r for r in character[key] if words(r if isinstance(r, str) else r['text']) & scope.query_words]
-
-            # Compact runtime, not off-camera appearance or physical observations.
-            character.pop('physical_state', None)
-            character.pop('emotion', None)
-            character.pop('emotion_source_sequence', None)
+        if not extraction:
+            cid = character['id']
+            if cid in scope.referenced_actor_ids:
+                character.clear(); character['id'] = cid
+            elif cid in scope.active_actor_ids or cid in scope.remote_actor_ids:
+                from backend.runtime_v3.scope import words
+                # Off-camera runtime is not observable physical scenery.
+                for key in ('location_id', 'physical_state', 'emotion', 'emotion_source_sequence'):
+                    character.pop(key, None)
+                if not words(character.get('situation', '')) & scope.query_words:
+                    character.pop('situation', None)
+                for key in ('goals', 'intentions', 'obligations'):
+                    character[key] = [r for r in character[key] if words(r if isinstance(r, str) else r['text']) & scope.query_words][:3]
     return current
 
 
@@ -80,11 +84,18 @@ class NarrativeContextBuilder:
         prompt_name = 'background_prompt.md' if kind == 'background' else 'game_system_prompt.md'
         rules = (prompts or {}).get(prompt_name, {}).get('content') or (PROMPTS/prompt_name).read_text(encoding='utf-8')
         rules += '\n' + NARRATIVE_CONTRACT
-        cards, index = [], []
+        cards, index, behavioral = [], [], []
         classifier = CharacterContextClassifier()
         for card in snapshot['character_cards']:
             mode = classifier.classify(card['id'], scope)
             if mode in (FULL_PRESENT, FULL_REMOTE): cards.append(dict(card, context_mode=mode))
+            elif mode == ACTIVE_REFERENCED:
+                fields = card.get('fields', {})
+                behavioral.append(dict(id=card['id'], name=card['name'], context_mode=mode,
+                    role=fields.get('Роль', card.get('role', '')),
+                    personality=fields.get('Характер', card.get('personality', '')),
+                    communication_style=fields.get('Стиль общения', card.get('communication_style', '')),
+                    habits=fields.get('Привычки', '')[:500]))
             elif mode == COMPACT_REFERENCED:
                 cards.append(dict(id=card['id'], name=card['name'], context_mode=mode,
                                   role=card.get('fields', {}).get('Роль', card.get('role', ''))))
@@ -95,13 +106,18 @@ class NarrativeContextBuilder:
                     block('ContextScope / GM-only', scope.summary()),
                     block('Текущее состояние / GM-only', current),
                     block('Карточки присутствующих / GM-only', cards),
+                    block('Поведенческие профили / GM-only', behavioral),
                     block('Индекс персонажей', index),
                     block('Знания POV', pov_knowledge(state, scope.controlled_actor_id, current)),
+                    block('Знания действующих персонажей / GM-only', actor_knowledge(state, scope, current)),
                     block('Память', dict(strategy='canonical_history', llm_calls=0)),
                     block('Недавняя история / GM-only', scope.history_events),
                     block('Director / GM-only', plan(state, kind, scope=scope))]
         legacy = legacy_knowledge(snapshot, scope)
         if legacy: messages.append(block('Legacy knowledge / GM-only, ownership unknown', legacy))
+        # Knowledge rows are projected once into their ownership blocks.
+        current_without_knowledge = dict(current, knowledge=[])
+        messages[2] = block('Текущее состояние / GM-only', current_without_knowledge)
         # Up to SIX visible scenes; optional previous inputs, never trim prose for a target.
         for view in views:
             messages.extend([dict(role='user', content=view.get('user_text') or 'Продолжить.'),
@@ -129,8 +145,12 @@ class ExtractionContextBuilder:
 
 
 def pov_knowledge(state, actor, current):
-    return [dict(k, text=current['facts'][k['fact_id']]['text']) for k in current['knowledge']
-            if k['actor_id'] == actor and k['status'] != 'unknown']
+    return [k for k in current['knowledge'] if k['actor_id'] == actor]
+
+
+def actor_knowledge(state, scope, current):
+    active = scope.present_actor_ids | scope.remote_actor_ids | scope.active_actor_ids
+    return [k for k in current['knowledge'] if k['actor_id'] in active and k['actor_id'] != scope.controlled_actor_id]
 
 
 def build_context(snapshot, turns, user_text, kind, context_length, reserve, extraction_text=None,
@@ -158,27 +178,85 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         for i, message in enumerate(messages):
             if message['content'].startswith(title+'\n'): messages[i] = block(title, value); return
 
-    # Only optional records are removed under pressure. Full cards, continuity,
-    # motivations, current relationships, topical facts and imminent events survive.
-    if estimate(messages) > target:
-        replace_block('Индекс персонажей', [])
-        optional = [fid for fid in reversed(scope.fact_ids) if scope.fact_scores[fid] < 60]
-        for fid in optional:
-            if estimate(messages) <= target: break
-            del current['facts'][fid]
-            current['knowledge'] = [k for k in current['knowledge'] if k['fact_id'] != fid]
-            replace_block('Текущее состояние / GM-only', current)
+    selected = {key: len(current[key]) for key in ('locations', 'facts', 'knowledge', 'relationships', 'threads', 'scheduled_events')}
+    selected_history = list(scope.history_events)
+    def refresh_current():
+        replace_block('Текущее состояние / GM-only', current if builder.extraction else dict(current, knowledge=[]))
+        if not builder.extraction:
             replace_block('Знания POV', pov_knowledge(state, scope.controlled_actor_id, current))
+            replace_block('Знания действующих персонажей / GM-only', actor_knowledge(state, scope, current))
+
+    # Weak semantic-only actor candidates go before facts or behavioral identity.
+    if not builder.extraction and estimate(messages) > target:
+        title = 'Карточки присутствующих / GM-only'
+        card_message = next(m for m in messages if m['content'].startswith(title+'\n'))
+        cards = json.loads(card_message['content'].split('\n', 1)[1])
+        weak = sorted(scope.referenced_actor_ids - scope.structural_actor_ids,
+                      key=lambda cid: (scope.actor_scores.get(cid, 0), cid))
+        for cid in weak:
+            if estimate(messages) <= target: break
+            cards = [c for c in cards if c['id'] != cid]
+            current['characters'].pop(cid, None)
+            current['relationships'] = [r for r in current['relationships'] if cid not in (r['source_id'], r['target_id'])]
+            replace_block(title, cards)
+            refresh_current()
+
+    # Soft pressure removes supporting content, never the cheap identity index.
+    optional = sorted((fid for fid in scope.fact_ids if scope.fact_scores[fid] < 100),
+                      key=lambda fid: (scope.fact_scores[fid], fid))
+    for fid in optional:
+        if estimate(messages) <= target: break
+        del current['facts'][fid]
+        current['knowledge'] = [k for k in current['knowledge'] if k['fact_id'] != fid]
+        refresh_current()
+    if not builder.extraction:
+        for event in list(scope.history_events):
+            if estimate(messages) <= target: break
+            turn_id = event.get('turn_id')
+            if type(turn_id) is int and state['meta']['turn_id'] - turn_id < 3: continue
+            scope.history_events.remove(event)
+            replace_block('Недавняя история / GM-only', scope.history_events)
+        if estimate(messages) > target:
+            replace_block('Legacy knowledge / GM-only, ownership unknown', [])
+        # Only hard pressure can discard optional INDEX. Behavioral identity,
+        # ownership boundaries and all six visible scenes remain mandatory.
+        if estimate(messages) > hard_context_limit:
+            replace_block('Индекс персонажей', [])
     if estimate(messages) > hard_context_limit:
         raise ValueError('Контекст v3 не помещается в выбранную модель. Увеличь контекст или уменьши лимит ответа. Критические данные сцены и последние narrative сохранены.')
     classifier = CharacterContextClassifier()
-    counts = {mode: 0 for mode in (FULL_PRESENT, FULL_REMOTE, COMPACT_REFERENCED, INDEX)}
+    counts = {mode: 0 for mode in (FULL_PRESENT, FULL_REMOTE, ACTIVE_REFERENCED, COMPACT_REFERENCED, INDEX)}
     for cid in state['characters']: counts[classifier.classify(cid, scope)] += 1
-    sections = {key: dict(selected=len(current[key]), total=len(state[key]))
+    sections = {key: dict(selected=selected[key], included=len(current[key]), total=len(state[key]))
                 for key in ('locations', 'facts', 'knowledge', 'relationships', 'threads', 'scheduled_events')}
-    sections['history_events'] = dict(selected=0 if builder.extraction else len(scope.history_events), total=len((world_history or {}).get('events', [])))
+    sections['history_events'] = dict(selected=0 if builder.extraction else len(selected_history), included=0 if builder.extraction else len(scope.history_events), total=len((world_history or {}).get('events', [])))
+    def contents(title):
+        return next((json.loads(m['content'].split('\n', 1)[1]) for m in messages if m['content'].startswith(title+'\n')), [])
+    included_actors = (set(current['characters']) if builder.extraction else
+        {c['id'] for title in ('Карточки присутствующих / GM-only', 'Поведенческие профили / GM-only', 'Индекс персонажей') for c in contents(title)})
+    included_counts = {mode: sum(classifier.classify(cid, scope) == mode for cid in included_actors) for mode in counts}
+    selected_ids = dict(characters=set(state['characters']), locations=set(scope.location_ids), facts=set(scope.fact_ids),
+        threads=set(scope.thread_ids), scheduled_events=set(scope.scheduled_event_ids), knowledge=set(scope.knowledge_ids),
+        relationships=set(scope.relationship_pairs), history_events={e.get('id') for e in selected_history})
+    included_ids = dict(characters=included_actors, locations=set(current['locations']), facts=set(current['facts']),
+        threads={r['id'] for r in current['threads']}, scheduled_events={r['id'] for r in current['scheduled_events']},
+        knowledge={r['actor_id']+':'+r['fact_id'] for r in current['knowledge']},
+        relationships={r['source_id']+':'+r['target_id'] for r in current['relationships']},
+        history_events=set() if builder.extraction else {e.get('id') for e in scope.history_events})
+    entities = []
+    for entity_kind in selected_ids:
+        candidates = selected_ids[entity_kind] | {eid for t, eid in scope.semantic_scores if t == entity_kind}
+        for eid in sorted(candidates):
+            entities.append(dict(entity_type=entity_kind, entity_id=eid,
+                semantic_similarity=scope.semantic_scores.get((entity_kind, eid)),
+                selection_reasons=sorted(scope.selection_reasons.get((entity_kind, eid), {'INDEX'} if entity_kind == 'characters' else set())),
+                selected=eid in selected_ids[entity_kind], included=eid in included_ids[entity_kind]))
+    knowledge_counts = {'selected': selected['knowledge'], 'POV': sum(k['actor_id'] == scope.controlled_actor_id for k in current['knowledge'])}
+    for mode in (FULL_PRESENT, FULL_REMOTE, ACTIVE_REFERENCED):
+        knowledge_counts[mode] = sum(k['actor_id'] != scope.controlled_actor_id and classifier.classify(k['actor_id'], scope) == mode for k in current['knowledge'])
     diagnostics = dict(mode=('World Simulation ' if kind == 'background' else '') + ('Extraction' if builder.extraction else 'Narrative'),
-        characters=counts, character_total=len(state['characters']), sections=sections,
+        characters=counts, character_included=included_counts, knowledge=knowledge_counts,
+        semantic=scope.semantic_diagnostics, entities=entities, character_total=len(state['characters']), sections=sections,
         narrative_continuity=0 if builder.extraction else len(views), previous_player_inputs=0 if builder.extraction else len(views),
         target_context_budget=target, hard_context_limit=hard_context_limit, target_exceeded=estimate(messages)>target)
     return ContextMessages(messages, diagnostics)

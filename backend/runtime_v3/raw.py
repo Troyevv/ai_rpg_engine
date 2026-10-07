@@ -55,6 +55,7 @@ def extraction_schema():
         'promotions':record(dict(id=string,name=string,fields={'type':'object','additionalProperties':string}), ('id','name','fields','evidence')),
         'facts':record(dict(id=string,text=string,visibility={'enum':['public','secret']},character_ids=strings), ('id','text','evidence')),
         'events':record(dict(id=string,text=string,participants=strings,witnesses=strings,fact_ids=strings,
+            author_id=string,
             medium={'enum':['observation','conversation','message','testimony','discovery','action']},
             location_id=string,minute={'type':'integer','minimum':0},order={'type':'integer','minimum':0}), ('id','text','evidence')),
         'knowledge_gained':record(dict(actor_id=string,fact_id=string,status={'enum':['known','suspected','unknown']},

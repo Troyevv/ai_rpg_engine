@@ -67,7 +67,8 @@ def test_context_separates_current_knowledge_from_provenance_and_keeps_static_st
     card['fields']['Стиль общения']='Короткие фразы, сухой юмор'
     messages=build_context(snapshot,[],'Вспоминаю пароль','turn',32768,2000,world_history={'events':[]})
     knowledge=json.loads(next(m['content'] for m in messages if m['content'].startswith('Знания POV')).split('\n',1)[1])
-    assert knowledge[0]['text']=='Игрок знает пароль'
+    assert knowledge[0]==dict(actor_id=actor,fact_id='known',status='known')
+    assert str(messages).count('Игрок знает пароль')==1
     assert 'Короткие фразы, сухой юмор' in str(messages)
     current=json.loads(next(m['content'] for m in messages if m['content'].startswith('Текущее состояние')).split('\n',1)[1])
     assert 'scenes' not in current and 'events' not in current

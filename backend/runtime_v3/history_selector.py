@@ -19,7 +19,7 @@ class HistorySelector:
         ranked = []
         events = self.history.get('events', [])
         now = self.state['meta']['turn_id']
-        core = scope.present_actor_ids | scope.remote_actor_ids
+        core = scope.present_actor_ids | scope.remote_actor_ids | scope.active_actor_ids
         selected_facts = set(scope.fact_ids)
         for index, event in enumerate(events):
             if not isinstance(event, dict) or not isinstance(event.get('text'), str): continue
@@ -29,8 +29,9 @@ class HistorySelector:
             turn = event.get('turn_id')
             age = max(0, now-turn) if type(turn) is int else len(events)-index-1
             score = 100*bool(words(event['text']) & scope.query_words)
+            score += 100*scope.semantic_scores.get(('history_events', event.get('id')), 0)
             score += 60*bool(string_ids(event.get('fact_ids')) & selected_facts)
-            score += 40*bool(ids & scope.referenced_actor_ids)
+            score += 40*bool(ids & (scope.structural_actor_ids - core))
             score += 50*bool(event.get('thread_id') in scope.thread_ids)
             if age < 3:
                 score += (60, 30, 10)[age]*bool(ids & core)

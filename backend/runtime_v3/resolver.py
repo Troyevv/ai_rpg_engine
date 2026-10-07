@@ -203,6 +203,11 @@ class StateResolver:
             for key in ('minute','order'):
                 if type(item.get(key)) is int and item[key] >= 0: event[key]=item[key]
             if isinstance(item.get('location_id'),str) and item['location_id'] in s['locations']: event['location_id']=item['location_id']
+            if item.get('author_id') is not None:
+                author = item['author_id']
+                if isinstance(author, str) and author in lists['participants'] and medium == 'message':
+                    event['author_id'] = author
+                else: self.warn('events', i, 'неподтверждённый автор сообщения', 'author_id')
             events[eid] = event
             self.history.events.append(event)
         for i, item in self.records(raw,'knowledge_gained'):

@@ -6,11 +6,13 @@ def plan(state, kind, history=None, scope=None):
         from backend.runtime_v3.scope import RelevanceResolver
         scope = RelevanceResolver().resolve(dict(world_state=state, character_cards=[]), '', world_history=history)
     now = state['meta']['world_time']
-    due = [eid for eid in scope.scheduled_event_ids
-           if state['scheduled_events'][eid]['due_minute'] is not None
+    due = [eid for eid in scope.scheduled_event_ids if eid in scope.acting_scheduled_event_ids
+           and state['scheduled_events'][eid]['due_minute'] is not None
            and state['scheduled_events'][eid]['due_minute'] <= now]
     return dict(recent_event_ids=scope.event_ids, actors=sorted(scope.relevant_actor_ids),
         location_ids=scope.location_ids,
+        acting_actor_ids=sorted(scope.present_actor_ids | scope.remote_actor_ids | scope.active_actor_ids),
+        referenced_actor_ids=sorted(scope.referenced_actor_ids),
         triggers=(['camera_transition'] if kind in ('pov','background') else []) + (['scheduled_event_due'] if due else []),
         thread_ids=scope.thread_ids, due_event_ids=due,
         instruction='Не двигай все линии сразу. Намерение и просроченный срок — не свершившийся факт.')
