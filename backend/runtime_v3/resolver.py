@@ -121,6 +121,22 @@ class StateResolver:
         situation = scene.get('situation',camera['situation'])
         if not isinstance(situation,str):
             fatal('некорректное описание камеры', 'camera_invalid', repairable=True)
+        remote = []
+        claims = scene.get('remote_interactions', [])
+        if not isinstance(claims, list):
+            claims = []
+            self.warn('final_scene', 0, 'remote_interactions должен быть списком')
+        for index, interaction in enumerate(claims):
+            if not isinstance(interaction, dict) or not self.supported(interaction):
+                self.warn('final_scene', index, 'нет evidence удалённого взаимодействия'); continue
+            cid = interaction.get('actor_id')
+            if not isinstance(cid, str) or cid not in s['characters'] or cid in present or any(r['actor_id'] == cid for r in remote):
+                self.warn('final_scene', index, 'некорректный remote actor'); continue
+            from backend.runtime_v3.models import RemoteInteraction
+            record = self.typed(RemoteInteraction, dict(actor_id=cid, channel=interaction.get('channel'),
+                                last_active_turn=self.turn_id), 'final_scene', index)
+            if record: remote.append(record)
+        camera['remote_interactions'] = remote
         camera.update(location_id=lid,present_character_ids=present,situation=situation)
         s['camera'] = camera
         s['meta'].update(turn_id=self.turn_id,world_time=s['meta']['world_time']+elapsed)
@@ -187,6 +203,11 @@ class StateResolver:
             for key in ('minute','order'):
                 if type(item.get(key)) is int and item[key] >= 0: event[key]=item[key]
             if isinstance(item.get('location_id'),str) and item['location_id'] in s['locations']: event['location_id']=item['location_id']
+            if item.get('author_id') is not None:
+                author = item['author_id']
+                if isinstance(author, str) and author in lists['participants'] and medium == 'message':
+                    event['author_id'] = author
+                else: self.warn('events', i, 'неподтверждённый автор сообщения', 'author_id')
             events[eid] = event
             self.history.events.append(event)
         for i, item in self.records(raw,'knowledge_gained'):
@@ -216,7 +237,7 @@ class StateResolver:
                     proof=evidence.get(key) if isinstance(evidence,dict) else None
                     if proof is None and isinstance(item.get('evidence'),str):
                         proof=item['evidence'] if key=='emotion' else [item['evidence']]
-                    if not supported_player_field(key,value,active_texts(actor[key]) if key != 'emotion' else actor[key],self.player_input,proof):
+                    if not supported_player_field(key,value,active_texts(actor[key]) if key != 'emotion' else actor[key],self.player_input,proof,emotion_assertion=item.get('emotion_assertion')):
                         self.warn('character_changes',i,'состояние controlled actor не задано игроком',key,cid,'controlled_actor_unsupported'); continue
                 elif not self.supported(item):
                     self.warn('character_changes',i,'нет подтверждённого источника',key,cid,'evidence_unsupported'); continue

@@ -84,6 +84,11 @@ class RuntimeStorage:
         with self.connect() as db:
             db.execute('UPDATE game_jobs SET context_json=COALESCE(context_json,?),memory_before_json=COALESCE(memory_before_json,?) WHERE id=?',
                        (dump(messages), dump(before), job_id))
+            selection = getattr(messages, 'selection', None)
+            if selection is not None:
+                config = json.loads(db.execute('SELECT config_json FROM game_jobs WHERE id=?', (job_id,)).fetchone()[0])
+                config['_context_selection'] = selection
+                db.execute('UPDATE game_jobs SET config_json=? WHERE id=?', (dump(config), job_id))
 
     def record_repair(self, job_id, diagnostic):
         with self.connect() as db:

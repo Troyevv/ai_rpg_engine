@@ -39,7 +39,7 @@ def test_relationship_api_is_save_scoped_and_follows_controlled_actor(api):
     assert created.status_code==200,created.text
     updated=created.json();assert updated['state']['world']['relationships'][actor+':'+target]['context']=='Доверяет на работе'
     assert client.get(f"/api/saves/{other['id']}").json()['state']==other['state']
-    assert 'Доверяет на работе' in str(build_context(app.state.repository.get_snapshot(save['id']),[],'','turn',32768,2000))
+    assert 'Доверяет на работе' in str(build_context(app.state.repository.get_snapshot(save['id']),[],target,'turn',32768,2000))
     body.update(revision=updated['revision'],context='Разочарован поступком',dimensions={'trust':-10})
     changed=client.patch(url(actor),json=body).json()
     assert changed['state']['world']['relationships'][actor+':'+target]['dimensions']['trust']==-10
@@ -65,9 +65,10 @@ def test_context_separates_current_knowledge_from_provenance_and_keeps_static_st
     state['knowledge'][actor+':known']=Knowledge(actor_id=actor,fact_id='known').model_dump()
     card=next(c for c in snapshot['character_cards'] if c['id']==actor)
     card['fields']['Стиль общения']='Короткие фразы, сухой юмор'
-    messages=build_context(snapshot,[],'Осмотреться','turn',32768,2000,world_history={'events':[]})
+    messages=build_context(snapshot,[],'Вспоминаю пароль','turn',32768,2000,world_history={'events':[]})
     knowledge=json.loads(next(m['content'] for m in messages if m['content'].startswith('Знания POV')).split('\n',1)[1])
-    assert knowledge[0]['text']=='Игрок знает пароль'
+    assert knowledge[0]==dict(actor_id=actor,fact_id='known',status='known')
+    assert str(messages).count('Игрок знает пароль')==1
     assert 'Короткие фразы, сухой юмор' in str(messages)
     current=json.loads(next(m['content'] for m in messages if m['content'].startswith('Текущее состояние')).split('\n',1)[1])
     assert 'scenes' not in current and 'events' not in current

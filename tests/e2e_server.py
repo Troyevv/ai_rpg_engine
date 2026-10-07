@@ -31,6 +31,16 @@ NARRATIVE = '''Персонаж 1 подвигает свободный стул
 '''
 
 
+def runtime_v3_request(messages):
+    """Dispatch the fixture by schema, not by mutable prompt wording."""
+    for message in messages:
+        if message['content'].startswith('JSON Schema\n'):
+            schema=json.loads(message['content'].split('\n',1)[1])
+            return 'final_scene' in schema.get('properties', {})
+    # Exact old prompt snapshots remain playable during regeneration tests.
+    return any('RawTurnResult v3' in message['content'] for message in messages)
+
+
 def stream(**kwargs):
     full='\n'.join(m['content'] for m in kwargs['messages'])
     observer='Тип хода: background' in full or 'Режим observer:' in full or 'mode=observer' in full
@@ -39,7 +49,7 @@ def stream(**kwargs):
         value=json.dumps(fixture(),ensure_ascii=False)
     elif 'Ты редактор RPG' in full:
         value=json.dumps({'value':'Обновлённая внешность'},ensure_ascii=False)
-    elif kwargs.get('response_format') and 'RawTurnResult v3' in full:
+    elif kwargs.get('response_format') and runtime_v3_request(kwargs['messages']):
         block=next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only'))
         state=json.loads(block.split('\n',1)[1]);camera=state['camera']
         observer=camera['mode']=='observer'

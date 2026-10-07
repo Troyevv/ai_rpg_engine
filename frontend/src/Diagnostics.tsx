@@ -11,7 +11,7 @@ export interface RequestRecord {
  input_tokens:number|null; output_tokens:number|null; cached_input_tokens:number|null; cost_usd:string|null;
  response_text?:string|null; duration?:number|null; finish_reason?:string|null; max_tokens?:number|null;
  pricing:{version:string;period?:string}|null;
- diagnostics:{estimated_tokens:number;overhead_tokens?:number;token_method?:string;parts:{name:string;role:string;estimated_tokens:number;content:string}[]};
+ diagnostics:{selection?:{mode:string;characters:Record<string,number>;character_total:number;character_included?:Record<string,number>;knowledge?:Record<string,number>;semantic?:Record<string,unknown>;entities?:{entity_type:string;entity_id:string;semantic_similarity:number|null;selection_reasons:string[];selected:boolean;included:boolean}[];sections:Record<string,{selected:number;included?:number;total:number}>;narrative_continuity:number;previous_player_inputs:number;target_context_budget:number;hard_context_limit:number;target_exceeded:boolean}|null;estimated_tokens:number;overhead_tokens?:number;token_method?:string;parts:{name:string;role:string;estimated_tokens:number;content:string}[]};
  messages:{role:string;content:string}[];
 }
 interface Total {cost_usd:string;unknown_requests:number;input_tokens:number;output_tokens:number;cached_input_tokens:number}
@@ -80,6 +80,15 @@ export function Diagnostics({saveId,workspaceId,jobId,open,onOpenChange}:{saveId
     <RequestTotals rows={[request]}/>
     <p className="muted small">Контекст: ≈{request.diagnostics.estimated_tokens} токенов · max_tokens: {request.max_tokens??'—'} · Finish: {request.finish_reason??'—'} · Время: {request.duration==null?'—':request.duration.toFixed(1)+' с'} · Thinking: {request.thinking}</p>
     <p className="muted small">Тариф: {request.pricing?.version||'неизвестен'} {request.pricing?.period||''}. {request.diagnostics.token_method||'Размер контекста оценочный; usage API выше — фактический.'}</p>
+    {request.diagnostics.selection&&<section aria-label="Context Selection"><h4>Context Selection · {request.diagnostics.selection.mode}</h4>
+     <p className="small">Персонажи: выбрано / включено / всего</p><div className="usage-grid">{Object.entries(request.diagnostics.selection.characters).map(([mode,count])=><section key={mode}><span>{mode}</span><strong>{count} / {request.diagnostics.selection!.character_included?.[mode]??count} / {request.diagnostics.selection!.character_total}</strong></section>)}</div>
+     <table><thead><tr><th>Данные</th><th>Выбрано / включено / всего</th></tr></thead><tbody>{Object.entries(request.diagnostics.selection.sections).map(([name,v])=><tr key={name}><td>{name}</td><td>{v.selected} / {v.included??v.selected} / {v.total}</td></tr>)}</tbody></table>
+     {request.diagnostics.selection.knowledge&&<p>Knowledge: {Object.entries(request.diagnostics.selection.knowledge).map(([k,v])=>`${k}: ${v}`).join(' · ')}</p>}
+     {request.diagnostics.selection.semantic&&<details><summary>Semantic retrieval · производительность</summary><pre className="context-content">{JSON.stringify(request.diagnostics.selection.semantic,null,2)}</pre></details>}
+     {request.diagnostics.selection.entities&&<details><summary>Причины выбора сущностей</summary><table><thead><tr><th>Сущность</th><th>Similarity / reasons</th><th>Выбрано / включено</th></tr></thead><tbody>{request.diagnostics.selection.entities.map(e=><tr key={`${e.entity_type}:${e.entity_id}`}><td>{e.entity_type}: {e.entity_id}</td><td>{e.semantic_similarity?.toFixed(3)??'—'} · {e.selection_reasons.join(', ')}</td><td>{e.selected?'да':'нет'} / {e.included?'да':'нет'}</td></tr>)}</tbody></table></details>}
+     <p>Narrative continuity: {request.diagnostics.selection.narrative_continuity} · Previous player inputs: {request.diagnostics.selection.previous_player_inputs}</p>
+     <p>Мягкая цель: {request.diagnostics.selection.target_context_budget} · Предел входа: {request.diagnostics.selection.hard_context_limit}{request.diagnostics.selection.target_exceeded?' · Цель превышена для сохранения сцены':''}</p>
+    </section>}
     {request.response_text!=null&&<details><summary>Фактический ответ extraction</summary><pre className="context-content">{request.response_text}</pre></details>}
     {request.messages.map((m,i)=><details key={i}><summary>{i+1}. {request.diagnostics.parts?.[i]?.name||m.role} · ≈{request.diagnostics.parts?.[i]?.estimated_tokens??'—'} токенов</summary><pre className="context-content">{m.content}</pre></details>)}
    </>}

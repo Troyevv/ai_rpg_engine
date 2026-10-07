@@ -1,12 +1,20 @@
 """Deterministic director based on present locations, obligations and due items."""
 
-def plan(state, kind, history=None):
-    now=state['meta']['world_time'];present=set(state['camera']['present_character_ids'])
-    due=[e for e in state['scheduled_events'].values() if e['status']=='pending' and e['due_minute'] is not None and e['due_minute']<=now]
-    threads=sorted((t for t in state['threads'].values() if t['status']!='resolved'),key=lambda t:(-t['relevance'],t['id']))
-    recent=[e.get('id') for e in (history or {}).get('events',[]) if isinstance(e,dict) and isinstance(e.get('participants'),list) and any(isinstance(cid,str) and cid in present for cid in e['participants'])][-12:]
-    return dict(recent_event_ids=recent,triggers=(['camera_transition'] if kind in ('pov','background') else [])+(['scheduled_event_due'] if due else []),
-        thread_ids=[t['id'] for t in threads[:6]],due_event_ids=[e['id'] for e in due[:10]],
+def plan(state, kind, history=None, scope=None):
+    # All context consumers share the same resolver. Compatibility for direct callers.
+    if scope is None:
+        from backend.runtime_v3.scope import RelevanceResolver
+        scope = RelevanceResolver().resolve(dict(world_state=state, character_cards=[]), '', world_history=history)
+    now = state['meta']['world_time']
+    due = [eid for eid in scope.scheduled_event_ids if eid in scope.acting_scheduled_event_ids
+           and state['scheduled_events'][eid]['due_minute'] is not None
+           and state['scheduled_events'][eid]['due_minute'] <= now]
+    return dict(recent_event_ids=scope.event_ids, actors=sorted(scope.relevant_actor_ids),
+        location_ids=scope.location_ids,
+        acting_actor_ids=sorted(scope.present_actor_ids | scope.remote_actor_ids | scope.active_actor_ids),
+        referenced_actor_ids=sorted(scope.referenced_actor_ids),
+        triggers=(['camera_transition'] if kind in ('pov','background') else []) + (['scheduled_event_due'] if due else []),
+        thread_ids=scope.thread_ids, due_event_ids=due,
         instruction='Не двигай все линии сразу. Намерение и просроченный срок — не свершившийся факт.')
 
 

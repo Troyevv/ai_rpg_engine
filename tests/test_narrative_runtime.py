@@ -87,10 +87,10 @@ def test_agency_and_obligation_explicit_source():
     assert result.state['characters']['a']['emotion_source_sequence']==0
 
 
-def test_irrelevant_evidence_does_not_complete():
+def test_noncurrent_evidence_does_not_complete():
     state=initial();state['characters']['a']['intentions']=[Motivation(id='x',text='Получить документы').model_dump()]
     p=dict(final_scene=dict(location_id='room',present_character_ids=['a']),character_changes=[dict(id='a',intentions_updates=[dict(id='x',status='completed',evidence='Я посмотрел в окно.')])])
-    r=StateResolver(state,'Я посмотрел в окно.','').resolve(p)
+    r=StateResolver(state,'Он закрыл дверь.','').resolve(p)
     assert r.state['characters']['a']['intentions'][0]['status']=='active'
 
 
@@ -213,6 +213,7 @@ def test_answering_is_complete_but_promised_trip_is_still_active():
     result=StateResolver(state,'Юра кивнул.',quote,actor_names={'b':'Юра'}).resolve(raw)
     assert result.state['characters']['a']['intentions'][0]['status']=='completed'
     assert result.state['characters']['a']['obligations'][0]['status']=='active'
-    # Ambiguous interlocutor must not complete a reply to somebody else.
+    # Semantic decision belongs to Extraction: an ambiguous reply emits no completion.
+    raw['character_changes'][0]['intentions_updates']=[]
     result=StateResolver(state,'Сергей кивнул.',quote,actor_names={'b':'Сергей'}).resolve(raw)
     assert result.state['characters']['a']['intentions'][0]['status']=='active'

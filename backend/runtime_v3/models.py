@@ -25,7 +25,7 @@ class Calendar(StrictModel):
 class Motivation(StrictModel):
     id: str
     text: str
-    status: Literal['active', 'completed', 'cancelled', 'failed', 'superseded'] = 'active'
+    status: Literal['active', 'completed', 'cancelled', 'failed', 'superseded', 'expired'] = 'active'
     source_sequence: int | None = None
     evidence: str = ''
     due_minute: int | None = Field(default=None, ge=0)
@@ -38,12 +38,19 @@ class Meta(StrictModel):
     world_time: int = Field(default=0, ge=0)
 
 
+class RemoteInteraction(StrictModel):
+    actor_id: str
+    channel: Literal['message', 'phone', 'video', 'radio', 'other']
+    last_active_turn: int = Field(ge=0)
+
+
 class Camera(StrictModel):
     location_id: str | None = None
     present_character_ids: list[str] = Field(default_factory=list)
     controlled_actor_id: str | None = None
     mode: Literal['actor', 'observer'] = 'actor'
     situation: str = ''
+    remote_interactions: list[RemoteInteraction] = Field(default_factory=list)
 
 
 class Character(StrictModel):
@@ -152,6 +159,12 @@ def assert_world_state_v3_invariants(state, before=None):
         fatal('неизвестный controlled actor')
     if camera['mode'] == 'actor' and camera['controlled_actor_id'] not in present:
         fatal('controlled actor отсутствует в камере')
+    remote = camera['remote_interactions']
+    if len({r['actor_id'] for r in remote}) != len(remote):
+        fatal('повторный участник удалённого взаимодействия')
+    for interaction in remote:
+        if interaction['actor_id'] not in actors or interaction['actor_id'] in present or interaction['last_active_turn'] > value['meta']['turn_id']:
+            fatal('некорректный участник удалённого взаимодействия')
     for cid, actor in actors.items():
         if actor['location_id'] is not None and actor['location_id'] not in locations:
             fatal('неизвестное место персонажа', entity=cid)
