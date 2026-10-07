@@ -26,6 +26,12 @@ def actor_aliases(card):
     return names
 
 
+def location_aliases(location):
+    # Canonical names may be lowercase. Reuse the same surface inflections for
+    # location nouns so "на кухне" resolves existing "Кухня" before extraction.
+    return actor_aliases(dict(id=location['id'], name=location['name'].capitalize(), aliases=[location['name']]))
+
+
 def string_ids(value):
     return {item for item in value if isinstance(item, str)} if isinstance(value, list) else set()
 
@@ -116,7 +122,7 @@ class RelevanceResolver:
         current_location = camera['location_id']
         locations = {current_location} if current_location else set()
         for lid, location in state['locations'].items():
-            if mentions(query + '\n' + motivations, [lid, location['name']]): locations.add(lid)
+            if mentions(query + '\n' + motivations, location_aliases(location)): locations.add(lid)
         events = [e for e in (world_history or {}).get('events', [])
                   if isinstance(e, dict) and isinstance(e.get('text'), str)
                   and isinstance(e.get('participants'), list)
@@ -161,7 +167,7 @@ class RelevanceResolver:
             if state['scheduled_events'][eid].get('location_id'): locations.add(state['scheduled_events'][eid]['location_id'])
         thread_text = '\n'.join(state['threads'][tid]['description'] + ' ' + state['threads'][tid]['state'] for tid in scope.thread_ids)
         for lid, location in state['locations'].items():
-            if mentions(thread_text, [lid, location['name']]): locations.add(lid)
+            if mentions(thread_text, location_aliases(location)): locations.add(lid)
         # Imminent arrivals are referenced, never physically present or remote yet.
         for eid in scope.scheduled_event_ids:
             event = state['scheduled_events'][eid]

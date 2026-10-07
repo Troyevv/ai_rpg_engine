@@ -175,3 +175,13 @@ def test_conversation_topic_retains_facts_and_imminent_arrival_references_actor(
     scope=RelevanceResolver().resolve(snapshot,'Продолжить.',[dict(assistant_text='Скрипка всё ещё цела?')])
     assert scope.fact_ids==['violin']
     assert CharacterContextClassifier().classify('c',scope)=='COMPACT_REFERENCED'
+
+
+def test_completed_narrative_resolves_inflected_existing_location_before_extraction():
+    snapshot=clean_world();state=snapshot['world_state']
+    state['camera']['location_id']='loc_0'
+    for cid in ('a','b'): state['characters'][cid]['location_id']='loc_0'
+    messages=build(snapshot,text='Продолжить.',extraction_text='На кухне пахнет свежим кофе.')
+    current=section(messages,'Текущее состояние / GM-only')
+    assert 'kitchen' in current['locations']
+    assert current['locations']['kitchen']==state['locations']['kitchen']

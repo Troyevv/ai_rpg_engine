@@ -13,7 +13,7 @@ The old builder serialized a broad world slice and discarded narrative continuit
 
 Mention weights decay across the last three visible turns. An old protagonist participation is not a permanent history-selection reason. Threads, facts and schedules are ranked before assembly. The director receives selected thread/event IDs, not all global unresolved/due records. Facts are not included simply because a present actor knows them; selected Knowledge retains its actual owner and status.
 
-The implementation uses deterministic lexical relevance and common Russian name forms, not semantic search. Names/aliases or IDs resolve explicit references; implicit pronouns and unusual inflections rely on current participants, recent narrative, motivations and events. This is a quality boundary worth checking with representative live play.
+The implementation uses deterministic lexical relevance and common Russian name forms, not semantic search. Names/aliases or IDs resolve explicit references (including common inflected location names, such as «на кухне» → «Кухня»); implicit pronouns and unusual inflections rely on current participants, recent narrative, motivations and events. This is a quality boundary worth checking with representative live play.
 
 Narrative keeps up to six visible assistant scenes and their player inputs (respecting an explicitly smaller `recent_turns` setting). Extraction includes current canonical runtime, affected entity IDs, current input, completed narrative and schema. It omits old narrative, static cards, tone, global index and history. Schema descriptions are stated once in the extraction contract; shared `$defs` preserve validation constraints.
 
@@ -39,7 +39,7 @@ Canonical initial Facts/Knowledge replace matching imported knowledge lines in p
 
 ## Validation and benchmark
 
-- `python -m pytest -q`: 739 passed.
+- `python -m pytest -q`: 740 passed.
 - `cd frontend && npm run build`: passed (existing bundle-size warning).
 - New deterministic fixtures exercise selection/decay/remote entry, six-turn conversations and callbacks, emotional scenes, POV isolation, scene changes, lifecycle, emotion provenance, physical-state clearing, all relationship directions and manual baselines. Existing API/storage tests cover rollback, regenerate, variants, imports, time skip and background simulation.
 - Some prior tests assumed that every known fact must enter a prompt or that Python determines semantic completion. They now supply an explicit topic or assert current-source validation. Existing positive emotion fixtures emit the new extraction assertion; negative provenance/gesture cases remain covered.
