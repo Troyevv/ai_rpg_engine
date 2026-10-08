@@ -1,0 +1,155 @@
+"""Repository-owned Initial World State for Epic #36 manual/integration QA.
+
+This is the supported draft aggregate, not another Runtime schema. All loads go
+through JSON import, draft validation/confirmation and the normal migration.
+"""
+import json
+
+from backend.services import draft_world
+from backend.services.world import KINDS
+
+FIXTURE_VERSION = 1
+TITLE = 'DEV · Narrative QA · Два берега'
+START_MINUTE = 540  # Existing clock: Monday 09:00; real dates belong to #37.
+SCENE_ID = 'qa_opening'
+ACTOR_ID = 'qa_kirill'
+HOME = 'Озёрск — дом Лариных'
+WORKSHOP = 'Озёрск — мастерская'
+LIBRARY = 'Озёрск — библиотека'
+PIER = 'Озёрск — пристань'
+GARDEN = 'Речной Посад — сад'
+CAFE = 'Речной Посад — кафе'
+PRESENT = (ACTOR_ID, 'qa_vera', 'qa_timur')
+
+# Ages, kinship and occupations are current static card prose. Do not introduce
+# persisted family graphs, birthdays, residence or organization models here.
+PEOPLE = (
+    ('qa_kirill', 'Кирилл Ларин', '34 года', 'Реставратор, основной герой', HOME,
+     'Супруг Веры, отец Аси, сын Нины и Павла. Работает вместе с Олегом.'),
+    ('qa_vera', 'Вера Ларина', '33 года', 'Библиотекарь, супруга Кирилла', HOME,
+     'Мать Аси. Давно дружит с Мариной.'),
+    ('qa_asya', 'Ася Ларина', '9 лет', 'Школьница, дочь Кирилла и Веры', LIBRARY,
+     'Пришла с бабушкой Ниной на занятие по рисованию.'),
+    ('qa_nina', 'Нина Ларина', '61 год', 'Мать Кирилла, бабушка Аси', LIBRARY,
+     'Бывшая учительница. Супруга Павла.'),
+    ('qa_pavel', 'Павел Ларин', '64 года', 'Отец Кирилла, дедушка Аси', PIER,
+     'Ремонтировал лодки; знаком с работником пристани Борисом.'),
+    ('qa_timur', 'Тимур Серов', '35 лет', 'Близкий друг Кирилла, фотограф', HOME,
+     'Дружит с Кириллом со школы. Принёс снимки старой карты.'),
+    ('qa_oleg', 'Олег Рудин', '42 года', 'Коллега Кирилла, переплётчик', WORKSHOP,
+     'Работает в мастерской. Утром получил личное письмо.'),
+    ('qa_marina', 'Марина Белова', '32 года', 'Знакомая Кирилла, подруга Веры', LIBRARY,
+     'Организует занятия по рисованию в библиотеке.'),
+    ('qa_boris', 'Борис Туманов', '49 лет', 'Работник пристани', PIER,
+     'Знаком с Павлом по ремонту лодок.'),
+    ('qa_zoya', 'Зоя Лесная', '28 лет', 'Посетительница библиотеки', LIBRARY,
+     'Ищет старые краеведческие альбомы; с Лариными ещё не знакома.'),
+    ('qa_elena', 'Елена Ветрова', '59 лет', 'Тётя Веры, садовод', GARDEN,
+     'Живёт в Речном Посаде, в Южной долине.'),
+    ('qa_roman', 'Роман Луговой', '26 лет', 'Работник кафе', CAFE,
+     'Живёт в Речном Посаде. Иногда покупает травы у Елены.'),
+)
+
+
+def _base_world():
+    world = {'version': 2, **{kind: {} for kind in KINDS}}
+    cards = []
+    for cid, name, age, role, location, biography in PEOPLE:
+        cards.append(dict(id=cid, name=name, aliases=[], fields={
+            'Возраст': age, 'Роль': role, 'Статус': 'Живёт обычной жизнью.',
+            'Биография': biography,
+            'Характер': 'Внимателен к деталям, ценит ясность и доброжелательный разговор.',
+            'Стиль общения': 'Спокойные короткие фразы, уточняющие вопросы.',
+        }))
+        world['characters'][cid] = dict(
+            id=cid, location=location, situation='Находится в месте, указанном в карточке состояния.',
+            goals=[], intentions=[], obligations=[], emotion='', minute=START_MINUTE,
+            scene_id=SCENE_ID if cid in PRESENT else None, last_event_id=None)
+    world['characters']['qa_oleg']['goals'] = ['Подготовить старую карту к реставрации.']
+    world['characters']['qa_timur']['intentions'] = ['Показать Кириллу фотографии карты.']
+    world['characters']['qa_vera']['emotion'] = 'Спокойное любопытство.'
+    world['scenes'][SCENE_ID] = dict(
+        id=SCENE_ID, location=HOME, participants=list(PRESENT),
+        text='Утро в доме Лариных. Кирилл, Вера и Тимур сидят у стола. '
+             'Тимур положил рядом фотографии старой карты; разговор ещё не начался.',
+        start_minute=START_MINUTE, end_minute=START_MINUTE, status='active', event_ids=[])
+    for source, target, context, dimensions in (
+        (ACTOR_ID, 'qa_vera', 'Кирилл доверяет Вере.', {'trust': 70, 'affection': 65}),
+        ('qa_vera', ACTOR_ID, 'Вера тепло относится к Кириллу.', {'trust': 60, 'affection': 75}),
+        (ACTOR_ID, 'qa_timur', 'Давняя дружба.', {'trust': 55}),
+        ('qa_oleg', ACTOR_ID, 'Уважает аккуратность коллеги.', {'trust': 40}),
+    ):
+        world['relationships'][source + ':' + target] = dict(
+            source_id=source, target_id=target, context=context, dimensions=dimensions)
+    world['facts'] = {
+        'qa_library_open': dict(id='qa_library_open', text='Библиотека Озёрска вновь открыта после ремонта.',
+                                secret=False, character_ids=[], evidence=['Объявление у входа.']),
+        'qa_private_letter': dict(id='qa_private_letter', text='Олег получил предложение работать в Речном Посаде и ещё не ответил.',
+                                  secret=True, owner_id='qa_oleg', character_ids=['qa_oleg'], evidence=['Личное письмо.']),
+    }
+    # Historical acquisition is grounded; a public world fact is not broadcast
+    # to every Character. Knowledge and its absence are intentional QA inputs.
+    for eid, fid, witnesses, medium in (
+        ('qa_read_notice', 'qa_library_open', list(PRESENT), 'observation'),
+        ('qa_read_letter', 'qa_private_letter', ['qa_oleg'], 'message'),
+    ):
+        world['events'][eid] = dict(id=eid, text=world['facts'][fid]['text'],
+            participants=witnesses, witnesses=witnesses, fact_ids=[fid],
+            minute=480, medium=medium, evidence=world['facts'][fid]['evidence'][0],
+            player_observed=ACTOR_ID in witnesses)
+        for cid in witnesses:
+            world['knowledge'][cid + ':' + fid] = dict(
+                actor_id=cid, fact_id=fid, status='known', source_event_id=eid)
+    world['threads']['qa_map'] = dict(id='qa_map', description='Реставрация старой карты двух берегов.',
+        state='Фотографии готовы; работу над оригиналом ещё не начали.', public_state='Фотографии готовы.',
+        status='active', character_ids=[ACTOR_ID, 'qa_timur', 'qa_oleg'],
+        visible_to_ids=[ACTOR_ID, 'qa_timur', 'qa_oleg'], relevance=0.6)
+    locations = [dict(id=key, name=name, text=description) for key, name, description in (
+        ('qa_home', HOME, 'Дом в Озёрске, Северный край. Общий стол у окна.'),
+        ('qa_workshop', WORKSHOP, 'Мастерская Озёрска, Северный край. Рабочий стол для реставрации.'),
+        ('qa_library', LIBRARY, 'Библиотека Озёрска, Северный край. Читальный зал и стол для рисования.'),
+        ('qa_pier', PIER, 'Пристань Озёрска, Северный край. Здесь ремонтируют лодки.'),
+        ('qa_garden', GARDEN, 'Сад Речного Посада, Южная долина. Здесь живёт Елена.'),
+        ('qa_cafe', CAFE, 'Кафе Речного Посада, Южная долина. Здесь работает Роман.'),
+    )]
+    return dict(characters=cards, locations=locations, world=world,
+        protagonist_id=ACTOR_ID, controlled_actor_id=ACTOR_ID,
+        camera=dict(scene_id=SCENE_ID, mode='actor'), world_clock=dict(minute=START_MINUTE),
+        campaign=dict(title=TITLE, setting='Вымышленные современные города Озёрск и Речной Посад.',
+            era='Современность', genre='Повседневная история', tone='Спокойный, внимательный к деталям.',
+            description='Технический мир для ручной проверки Narrative. Все персонажи вымышлены.',
+            public_description='Утренний разговор о старой карте.',
+            rules='Добровольные решения Кирилла задаёт игрок. Скрытые знания не передаются автоматически.'))
+
+
+# Later issues register small deterministic transformations of a fresh base
+# aggregate here. Never add independently maintained copies of the whole world.
+CHECKPOINTS = {}
+
+
+def build_fixture(checkpoint='base'):
+    if checkpoint != 'base' and checkpoint not in CHECKPOINTS:
+        raise ValueError(f'Неизвестный checkpoint: {checkpoint}')
+    state = _base_world()
+    if checkpoint != 'base':
+        state = CHECKPOINTS[checkpoint](state)
+    state = draft_world.prepare(state)
+    report = draft_world.validate(state)
+    if report['errors']:
+        raise ValueError('Некорректная QA fixture: ' + '; '.join(report['errors']))
+    return state
+
+
+def load_fixture(repository, checkpoint='base'):
+    """Reset by creating a fresh save. No target save ID, UPDATE or DELETE path.
+
+    Storage IDs/timestamps/history pointers are ordinary persistence metadata;
+    fixture entity IDs and canonical starting values are deterministic.
+    """
+    state = build_fixture(checkpoint)
+    workspace = repository.create_workspace(f'{TITLE} · v{FIXTURE_VERSION} · {checkpoint}')
+    repository.import_draft(workspace['id'], json.dumps(state, ensure_ascii=False),
+                            workspace['revision'], format='json')
+    draft = repository.draft(workspace['id'], author=True)
+    result = repository.confirm_draft(workspace['id'], draft['revision'], draft['version_id'])
+    return dict(result, workspace=workspace['id'], fixture_version=FIXTURE_VERSION, checkpoint=checkpoint)
