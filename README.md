@@ -289,6 +289,10 @@ python launcher.py stop
 
 Production build React раздаётся FastAPI. `RPG_PORT` меняет порт, `RPG_DB_PATH` — SQLite-файл, `RPG_HOST` — интерфейс прослушивания.
 
+Для разработки Narrative доступен [детерминированный QA-мир и ручные сценарии](docs/manual_qa/narrative_v4/README.md).
+Команда `RPG_DEV_TOOLS=1 python scripts/narrative_test_world.py` загружает его в отдельную dev-БД;
+каждый повтор создаёт новое прохождение, сохраняя предыдущие.
+
 ## Телефон и PWA
 
 Для мобильного интерфейса предусмотрена отдельная компоновка. Для локальной установки PWA можно один раз выполнить `setup_https.bat`, установить локальный CA на телефоне и использовать HTTPS-адрес launcher.
