@@ -209,7 +209,7 @@ def run_job(path, job_id, handle):
                 try:
                     from copy import deepcopy
                     from dataclasses import asdict
-                    from backend.runtime_v3.raw import RawTurnResult
+                    from backend.runtime_v3.raw import RawTurnResult, repair_feedback
                     raw=RawTurnResult.parse(result)
                     if skip_result: raw.final_scene['elapsed_minutes'] = skip_result['elapsed_minutes']
                     elif job['kind']=='turn' and __import__('re').match(r'^(?:я )?(?:ложусь спать|сплю)\b',job['user_text'].strip(),__import__('re').I):
@@ -237,7 +237,7 @@ def run_job(path, job_id, handle):
                     if attempt == 1 or not exc.repairable:raise
                     diagnostic=exc.diagnostic('extraction_repair')
                     storage.record_repair(job_id,diagnostic)
-                    feedback = json.dumps(diagnostic,ensure_ascii=False)
+                    feedback = repair_feedback(diagnostic, result, before['world_state'])
                 finally:
                     timings['validation_apply']=timings.get('validation_apply',0)+time.perf_counter()-stage_started
             from backend.runtime_v3.simulation import simulate
