@@ -293,3 +293,18 @@ def test_repeated_unchanged_schedule_claim_does_not_roll_relative_deadline():
     second=StateResolver(first,text,'').resolve(raw).state
     assert second['scheduled_events']['trip']['time_reference_minute']==s['meta']['world_time']
     assert scheduled_time(second,second['scheduled_events']['trip'])['due_minute']==2520
+
+
+def test_legacy_sqlite_migration_preserves_explicit_calendar(tmp_path):
+    from backend.repositories.preparation import Repository
+    from devtools.narrative_test_world import build_fixture, load_fixture
+    repo=Repository(tmp_path/'explicit-calendar.sqlite')
+    sid=load_fixture(repo)['save']
+    legacy=build_fixture('calendar-evening')
+    with repo.connect() as db:
+        db.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(legacy),sid))
+        db.execute("DELETE FROM schema_migrations WHERE name='runtime_v3'")
+    loaded=Repository(repo.path).get_snapshot(sid)['world_state']
+    assert current_time(loaded)['date']=='2026-10-08'
+    assert loaded['meta']['calendar']['profile']['id']=='two-shores'
+    assert loaded['characters']['qa_vera']['birth_date']=='1993-10-09'
