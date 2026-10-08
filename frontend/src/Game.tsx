@@ -196,6 +196,7 @@ export function Game({
         </div>
       </div>
       </>}
+      {!!save?.state.world_clock?.nearby?.length&&<details className="skip-diagnostics"><summary>Ближайшие даты</summary><p className="muted small">Дата в календаре не означает, что запланировано празднование.</p>{save.state.world_clock.nearby.map(e=><p key={e.id}>{e.date} · {e.kind==='birthday'?`День рождения: ${e.character_ids.map(id=>save.state.characters.find(c=>c.id===id)?.name||id).join(', ')}`:e.name}</p>)}</details>}
       {save?.state.last_time_skip&&<details className="skip-diagnostics"><summary>Пропуск времени: {save.state.last_time_skip.elapsed_minutes} мин{save.state.last_time_skip.interrupted?' · прерван':''}</summary><p>Запрошено: {save.state.last_time_skip.requested_duration} мин · Кандидатов: {save.state.last_time_skip.background_candidates} · Симуляций: {save.state.last_time_skip.simulated_candidates||0} · Объединено: {save.state.last_time_skip.merged_candidates||0} · Пропущено: {save.state.last_time_skip.skipped_candidates||0} · LLM мира: {save.state.last_time_skip.living_world_llm_calls||0}</p></details>}
       <div
         className="story-scroll"

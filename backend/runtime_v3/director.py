@@ -1,4 +1,6 @@
 """Deterministic director based on present locations, obligations and due items."""
+from backend.runtime_v3.calendar import scheduled_due
+
 
 def plan(state, kind, history=None, scope=None):
     # All context consumers share the same resolver. Compatibility for direct callers.
@@ -7,8 +9,8 @@ def plan(state, kind, history=None, scope=None):
         scope = RelevanceResolver().resolve(dict(world_state=state, character_cards=[]), '', world_history=history)
     now = state['meta']['world_time']
     due = [eid for eid in scope.scheduled_event_ids if eid in scope.acting_scheduled_event_ids
-           and state['scheduled_events'][eid]['due_minute'] is not None
-           and state['scheduled_events'][eid]['due_minute'] <= now]
+           and scheduled_due(state, state['scheduled_events'][eid]) is not None
+           and scheduled_due(state, state['scheduled_events'][eid]) <= now]
     return dict(recent_event_ids=scope.event_ids, actors=sorted(scope.relevant_actor_ids),
         location_ids=scope.location_ids,
         acting_actor_ids=sorted(scope.present_actor_ids | scope.remote_actor_ids | scope.active_actor_ids),
@@ -26,7 +28,7 @@ def background_candidate(before, after):
         point=after['characters'][cid]
         return cid not in present and cid!=controlled and (camera['location_id'] is None or point['location_id']!=camera['location_id'])
     for event in sorted(after['scheduled_events'].values(),key=lambda e:(e['due_minute'] or 0,e['id'])):
-        if event['status']!='pending' or event['due_minute'] is None or event['due_minute']>now:continue
+        if event['status']!='pending' or scheduled_due(after,event) is None or scheduled_due(after,event)>now:continue
         if event.get('last_attempt_minute') is not None and now-event['last_attempt_minute']<30:continue
         for cid in event['character_ids']:
             if eligible(cid):return dict(actor_id=cid,reason='scheduled_event_due',scheduled_id=event['id'])
@@ -51,7 +53,7 @@ def interval_candidates(before, after, budget=6):
         return cid in after['characters'] and cid not in protected and cid!=controlled and after['characters'][cid]['location_id']!=after['camera']['location_id']
     candidates=[]
     for e in after['scheduled_events'].values():
-        if e['status']=='pending' and e['due_minute'] is not None and e['due_minute']<=now and (e.get('last_attempt_minute') is None or e['last_attempt_minute']<start):
+        if e['status']=='pending' and scheduled_due(after,e) is not None and scheduled_due(after,e)<=now and (e.get('last_attempt_minute') is None or e['last_attempt_minute']<start):
             ids=[cid for cid in e['character_ids'] if eligible(cid)]
             if ids:candidates.append(dict(actor_id=ids[0],actor_ids=ids,reason=e['description'],scheduled_id=e['id'],score=100))
     for cid,c in after['characters'].items():

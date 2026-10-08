@@ -66,6 +66,7 @@ def migrate_v2(original):
             lid = camera_location
         actors[cid] = Character(id=cid, location_id=lid,
             **{key:deepcopy(entry[key]) for key in ('situation','emotion','goals','intentions','obligations') if key in entry}).model_dump()
+        actors[cid]['birth_date'] = deepcopy(entry.get('birth_date'))
     actor = old.get('controlled_actor_id')
     present = camera_scene.get('participants', camera_meta.get('present_ids', []))
     present = list(dict.fromkeys(cid for cid in present if cid in actors))
@@ -125,9 +126,17 @@ def migrate_v2(original):
     for eid, e in world.get('scheduled_events', {}).items():
         state['scheduled_events'][eid] = ScheduledEvent(id=eid, description=e['description'],
             character_ids=[cid for cid in e.get('participants',[]) if cid in actors], due_minute=e.get('due_minute'), status=e.get('status','pending'),
-            condition=e.get('condition',''), type=e.get('type','event')).model_dump()
+            condition=e.get('condition',''), type=e.get('type','event'),
+            temporal=e.get('temporal'), time_reference_minute=e.get('time_reference_minute',state['meta']['world_time'])).model_dump()
+    configured = old.get('world_clock', {}).get('calendar')
+    if configured:
+        from backend.runtime_v3.models import Calendar
+        try: state['meta']['calendar'] = Calendar.model_validate(configured).model_dump()
+        except (ValueError, TypeError):
+            report.append(dict(section='calendar', reason='invalid optional calendar preserved in legacy history; relative time retained'))
+            history.legacy.append(dict(calendar=deepcopy(configured)))
     initialize_calendar(state)
-    assert_world_state_v3_invariants(state)
+    state = assert_world_state_v3_invariants(state)
     # Presentation metadata is deliberately not a second mutable world.
     retained = ('world_summary','summary','title','setting','genre','tone','protagonist_id','world_id','sections','story_notes','campaign')
     cards=deepcopy(old['characters'])
@@ -144,5 +153,6 @@ def initialize_calendar(state, start=None):
     meta = state['meta']
     if not meta.get('calendar'):
         start = meta['world_time'] if start is None else start
-        meta['calendar'] = dict(start_minute=start, start_weekday=start // 1440 % 7, start_date=None)
+        from backend.runtime_v3.models import Calendar
+        meta['calendar'] = Calendar(start_minute=start, start_weekday=start // 1440 % 7).model_dump()
     return state

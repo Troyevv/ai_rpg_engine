@@ -16,10 +16,78 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True, allow_inf_nan=False)
 
 
+class Observance(StrictModel):
+    id: str
+    name: str
+    month: int = Field(ge=1, le=24)
+    day: int = Field(ge=1, le=99)
+    character_ids: list[str] = Field(default_factory=list)
+
+
+class Season(StrictModel):
+    name: str
+    month: int = Field(ge=1, le=24)
+    day: int = Field(ge=1, le=99)
+
+
+class CalendarProfile(StrictModel):
+    id: str = 'gregorian'
+    system: Literal['gregorian', 'custom'] = 'gregorian'
+    month_lengths: list[int] = Field(default_factory=list, max_length=24)
+    month_names: list[str] = Field(default_factory=list, max_length=24)
+    weekday_names: list[str] = Field(default_factory=list, max_length=14)
+    observances: list[Observance] = Field(default_factory=list, max_length=128)
+    seasons: list[Season] = Field(default_factory=list, max_length=24)
+
+    @model_validator(mode='after')
+    def valid_profile(self):
+        from backend.runtime_v3.calendar import date_parts
+        if self.system == 'custom' and (not self.month_lengths or any(not 1 <= n <= 99 for n in self.month_lengths)):
+            raise ValueError('custom calendar requires month lengths in 1..99')
+        if self.system == 'gregorian' and self.month_lengths:
+            raise ValueError('Gregorian month lengths are defined by datetime')
+        if self.month_names and len(self.month_names) != (len(self.month_lengths) if self.system == 'custom' else 12):
+            raise ValueError('month_names must match months')
+        if self.system == 'gregorian' and self.weekday_names and len(self.weekday_names) != 7:
+            raise ValueError('Gregorian calendar has seven weekdays')
+        if len({o.id for o in self.observances}) != len(self.observances):
+            raise ValueError('duplicate observance ID')
+        for item in [*self.observances, *self.seasons]:
+            date_parts(f'2000-{item.month:02d}-{item.day:02d}', self.model_dump())
+        return self
+
+
 class Calendar(StrictModel):
     start_minute: int = Field(ge=0)
-    start_weekday: int = Field(ge=0, le=6)
+    start_weekday: int = Field(ge=0, le=13)
     start_date: str | None = None
+    profile: CalendarProfile = Field(default_factory=CalendarProfile)
+
+    @model_validator(mode='after')
+    def valid_anchor(self):
+        from backend.runtime_v3.calendar import date_parts
+        if self.start_weekday >= len(self.profile.weekday_names or range(7)):
+            raise ValueError('start_weekday outside profile week')
+        if self.start_date:
+            date_parts(self.start_date, self.profile.model_dump())
+            if self.profile.system == 'gregorian':
+                from datetime import date
+                self.start_weekday = date.fromisoformat(self.start_date).weekday()
+        return self
+
+
+class TemporalValue(StrictModel):
+    date: str | None = None
+    weekday: int | None = Field(default=None, ge=0, le=13)
+    day_offset: int | None = Field(default=None, ge=-366, le=366)
+    time: str | None = Field(default=None, pattern=r'^([01]\d|2[0-3]):[0-5]\d$')
+    day_period: Literal['night', 'morning', 'afternoon', 'evening'] | None = None
+
+    @model_validator(mode='after')
+    def one_temporal_basis(self):
+        if sum(v is not None for v in (self.date,self.weekday,self.day_offset)) != 1:
+            raise ValueError('temporal value requires exactly one date, weekday or day_offset')
+        return self
 
 
 class Motivation(StrictModel):
@@ -57,6 +125,7 @@ class Character(StrictModel):
     id: str
     location_id: str | None = None
     situation: str = ''
+    birth_date: str | None = None
     physical_state: str = ''
     emotion: str = ''
     emotion_source_sequence: int | None = None
@@ -121,6 +190,8 @@ class ScheduledEvent(StrictModel):
     location_id: str | None = None
     interrupts: bool = False
     last_attempt_minute: int | None = Field(default=None, ge=0)
+    temporal: TemporalValue | None = None
+    time_reference_minute: int | None = Field(default=None, ge=0)
 
 
 class WorldStateV3(StrictModel):
@@ -140,6 +211,7 @@ def fatal(message, code='current_state_invalid', repairable=False, **path):
 
 
 def assert_world_state_v3_invariants(state, before=None):
+    state = salvage_calendar_data(state)
     try:
         value = WorldStateV3.model_validate(state).model_dump()
     except ValidationError as exc:
@@ -225,3 +297,73 @@ class StatePatch:
             result[section].update(deepcopy(records))
         result['meta'], result['camera'] = deepcopy(self.meta), deepcopy(self.camera)
         return assert_world_state_v3_invariants(result, before)
+
+
+def salvage_calendar_data(state):
+    """Read boundary only: preserve old snapshots, degrade optional additions locally.
+
+    New imports are validated strictly before confirmation. Malformed old optional
+    data is logged and ignored in the read projection; stored history is untouched.
+    """
+    import logging
+    from backend.runtime_v3.calendar import date_parts
+    state = deepcopy(state)
+    if not isinstance(state, dict): return state
+    meta = state.get('meta', {})
+    cal = meta.get('calendar') if isinstance(meta,dict) else None
+    profile = {}
+    if isinstance(cal,dict):
+        profile = cal.get('profile') or {}
+        try:
+            # Salvage individual optional observances/seasons, keeping the rest.
+            base = {k:v for k,v in profile.items() if k not in ('observances','seasons')}
+            valid_profile = CalendarProfile.model_validate(base).model_dump()
+            for field, model in (('observances',Observance),('seasons',Season)):
+                items = profile.get(field,[])
+                if not isinstance(items,list): items=[]
+                seen = set()
+                for item in items[:128 if field=='observances' else 24]:
+                    try:
+                        item = model.model_validate(item).model_dump()
+                        date_parts(f"2000-{item['month']:02d}-{item['day']:02d}",valid_profile)
+                        key = item.get('id', (item['month'],item['day']))
+                        if key in seen: raise ValueError('duplicate calendar entry')
+                        seen.add(key)
+                        valid_profile[field].append(item)
+                    except (ValueError,TypeError,KeyError):
+                        logging.getLogger(__name__).warning('Ignoring malformed optional calendar %s entry',field)
+            profile = valid_profile
+        except (ValueError,TypeError,AttributeError):
+            logging.getLogger(__name__).warning('Ignoring invalid calendar profile; retaining relative time')
+            profile = CalendarProfile().model_dump()
+            cal['start_date'] = None
+            if type(cal.get('start_weekday')) is int: cal['start_weekday'] %= 7
+        cal['profile'] = profile
+        if cal.get('start_date') is not None:
+            try: date_parts(cal['start_date'],profile)
+            except (ValueError,TypeError):
+                logging.getLogger(__name__).warning('Ignoring invalid optional calendar start_date')
+                cal['start_date']=None
+    characters = state.get('characters',{})
+    if isinstance(characters,dict):
+        for character in characters.values():
+            if not isinstance(character,dict): continue
+            if character.get('birth_date') is not None:
+                try: date_parts(character['birth_date'],profile)
+                except (ValueError,TypeError):
+                    logging.getLogger(__name__).warning('Ignoring invalid optional birth_date for %s',character.get('id'))
+                    character['birth_date']=None
+    scheduled = state.get('scheduled_events',{})
+    if isinstance(scheduled,dict):
+        for event in scheduled.values():
+            if not isinstance(event,dict): continue
+            if event.get('temporal') is not None:
+                try: event['temporal'] = TemporalValue.model_validate(event['temporal']).model_dump()
+                except (ValueError,TypeError):
+                    logging.getLogger(__name__).warning('Ignoring invalid optional scheduled temporal value for %s',event.get('id'))
+                    event['temporal']=None
+            reference = event.get('time_reference_minute')
+            if reference is not None and (type(reference) is not int or reference < 0):
+                logging.getLogger(__name__).warning('Ignoring invalid temporal reference for %s',event.get('id'))
+                event['time_reference_minute']=None
+    return state

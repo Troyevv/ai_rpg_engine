@@ -52,7 +52,7 @@ def world_state_schema():
     character = obj({'id': ID, 'name': text('Имя персонажа'), 'is_player': {'type': 'boolean'},
                      'aliases': array(text('Другое имя')),'fields': card},
                     ('id','name','is_player','fields'), 'Карточка значимого персонажа.')
-    actor = obj({'id': ID, 'location': {'type':['string','null']},
+    actor = obj({'id': ID, 'birth_date': {'type':['string','null'], 'description':'Known birth date YYYY-MM-DD in the configured calendar; unknown remains null, never infer it from age.'}, 'location': {'type':['string','null']},
                  'situation': text('Что происходит с персонажем сейчас.'), 'goals': array(text('Краткосрочная цель')),
                  'intentions': array(text('Намерение и ближайшее действие')), 'obligations': array(text('Игровое обязательство')),
                  'emotion': text('Текущее эмоциональное состояние'), 'minute': OPTIONAL_MINUTE,
@@ -109,6 +109,19 @@ def world_state_schema():
                    'characters':array(character,'Значимые персонажи, каждый с полной постоянной карточкой.',1),
                    'protagonist_id':ID,'controlled_actor_id':ID,
                    'camera':obj({'scene_id':ID,'mode':{'type':'string','enum':['actor','observer']}},('scene_id','mode')),
-                   'world_clock':obj({'minute':MINUTE,'last_event_time':text('День N (день недели) HH:MM, согласован с minute.')},('minute','last_event_time')),
+                   'world_clock':obj({'calendar':calendar_schema(),'minute':MINUTE,'last_event_time':text('День N (день недели) HH:MM, согласован с minute.')},('minute','last_event_time')),
                    'world':world},('schema_version','campaign','locations','characters','protagonist_id',
                                   'controlled_actor_id','camera','world_clock','world'))}
+
+
+def calendar_schema():
+    # Use the canonical model contract; inline $defs under this nested schema.
+    from backend.runtime_v3.models import Calendar
+    schema = Calendar.model_json_schema()
+    definitions = schema.pop('$defs', {})
+    def inline(value):
+        if isinstance(value, list): return [inline(v) for v in value]
+        if not isinstance(value, dict): return value
+        if '$ref' in value: return inline(definitions[value['$ref'].split('/')[-1]])
+        return {k:inline(v) for k,v in value.items()}
+    return inline(schema)

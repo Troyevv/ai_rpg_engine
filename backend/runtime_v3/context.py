@@ -3,8 +3,9 @@ from copy import deepcopy
 from pathlib import Path
 import json
 from backend.runtime_v3.scope import RelevanceResolver, CharacterContextClassifier, FULL_PRESENT, FULL_REMOTE, ACTIVE_REFERENCED, COMPACT_REFERENCED, INDEX
-from backend.runtime_v3.context_contract import EXTRACTION_CONTRACT, NARRATIVE_CONTRACT
+from backend.runtime_v3.context_contract import EXTRACTION_CONTRACT, NARRATIVE_CONTRACT, TIME_CONTRACT
 from backend.runtime_v3.raw import prompt_schema
+from backend.runtime_v3.calendar import current_time, nearby_calendar, age_on, profile_of, scheduled_time
 
 PROMPTS = Path(__file__).resolve().parents[2] / 'prompts'
 
@@ -29,15 +30,17 @@ def visible_views(snapshot, turns, kind):
 
 
 def canonical_slice(state, scope, extraction=False):
-    current = dict(meta=state['meta'], camera=state['camera'],
+    current = dict(meta={k:v for k,v in state['meta'].items() if k != 'calendar'},
+        current_time=current_time(state), calendar_context=nearby_calendar(state, scope.relevant_actor_ids), camera=state['camera'],
         locations={lid: state['locations'][lid] for lid in scope.location_ids},
         characters={cid: deepcopy(state['characters'][cid]) for cid in sorted(scope.relevant_actor_ids)},
         facts={fid: state['facts'][fid] for fid in scope.fact_ids},
         knowledge=[state['knowledge'][key] for key in scope.knowledge_ids],
         relationships=[state['relationships'][key] for key in scope.relationship_pairs],
         threads=[state['threads'][tid] for tid in scope.thread_ids],
-        scheduled_events=[state['scheduled_events'][eid] for eid in scope.scheduled_event_ids])
+        scheduled_events=[dict(state['scheduled_events'][eid], temporal_projection=scheduled_time(state,state['scheduled_events'][eid])) for eid in scope.scheduled_event_ids])
     for character in current['characters'].values():
+        character['age'] = age_on(character.get('birth_date'), current['current_time']['date'], profile_of(state))
         for key in ('goals', 'intentions', 'obligations'):
             character[key] = [r for r in character[key] if isinstance(r, str) or r['status'] == 'active']
         if not extraction:
@@ -88,7 +91,12 @@ class NarrativeContextBuilder:
         classifier = CharacterContextClassifier()
         for card in snapshot['character_cards']:
             mode = classifier.classify(card['id'], scope)
-            if mode in (FULL_PRESENT, FULL_REMOTE): cards.append(dict(card, context_mode=mode))
+            if mode in (FULL_PRESENT, FULL_REMOTE):
+                card = deepcopy(card)
+                actor = state['characters'][card['id']]
+                age = age_on(actor.get('birth_date'),current_time(state)['date'],profile_of(state))
+                if age is not None: card['fields']['Возраст'] = str(age)
+                cards.append(dict(card, context_mode=mode))
             elif mode == ACTIVE_REFERENCED:
                 fields = card.get('fields', {})
                 behavioral.append(dict(id=card['id'], name=card['name'], context_mode=mode,
@@ -163,8 +171,11 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     views = all_views[-min(6, max(0, recent_turns)):] if recent_turns else []
     scope = RelevanceResolver().resolve(snapshot, user_text, all_views[-3:], world_history, extraction_text)
     current = canonical_slice(state, scope, extraction_text is not None)
+    if snapshot.get('_time_skip'):
+        current['time_skip_target'] = current_time(state,snapshot['_time_skip']['actual_target'])
     builder = ExtractionContextBuilder() if extraction_text is not None else NarrativeContextBuilder()
     rules, messages = builder.build(snapshot, scope, current, views, user_text, kind, prompts, extraction_text)
+    rules += '\n' + TIME_CONTRACT
     rules += f'\nRuntime v3. controlled_actor_id={camera["controlled_actor_id"]}; mode={camera["mode"]}; world_time={state["meta"]["world_time"]} минут.'
     if snapshot.get('_time_skip'): rules += '\nДетерминированный Time Skip: ' + json.dumps(snapshot['_time_skip'], ensure_ascii=False) + '. Описывай только до actual_target, не позже. Hidden не становится знанием игрока.'
     if validation_feedback: rules += '\nИсправь структурную ошибку, верни полный JSON:\n' + validation_feedback

@@ -8,9 +8,9 @@ import json
 from backend.services import draft_world
 from backend.services.world import KINDS
 
-FIXTURE_VERSION = 1
+FIXTURE_VERSION = 2
 TITLE = 'DEV · Narrative QA · Два берега'
-START_MINUTE = 540  # Existing clock: Monday 09:00; real dates belong to #37.
+START_MINUTE = 540  # Monday 2026-10-05, 09:00; Day 1 stays campaign-relative.
 SCENE_ID = 'qa_opening'
 ACTOR_ID = 'qa_kirill'
 HOME = 'Озёрск — дом Лариных'
@@ -22,11 +22,11 @@ CAFE = 'Речной Посад — кафе'
 PRESENT = (ACTOR_ID, 'qa_vera', 'qa_timur')
 
 # Ages, kinship and occupations are current static card prose. Do not introduce
-# persisted family graphs, birthdays, residence or organization models here.
+# persisted family graphs, residence or organization models here.
 PEOPLE = (
     ('qa_kirill', 'Кирилл Ларин', '34 года', 'Реставратор, основной герой', HOME,
      'Супруг Веры, отец Аси, сын Нины и Павла. Работает вместе с Олегом.'),
-    ('qa_vera', 'Вера Ларина', '33 года', 'Библиотекарь, супруга Кирилла', HOME,
+    ('qa_vera', 'Вера Ларина', '32 года', 'Библиотекарь, супруга Кирилла', HOME,
      'Мать Аси. Давно дружит с Мариной.'),
     ('qa_asya', 'Ася Ларина', '9 лет', 'Школьница, дочь Кирилла и Веры', LIBRARY,
      'Пришла с бабушкой Ниной на занятие по рисованию.'),
@@ -65,6 +65,7 @@ def _base_world():
             id=cid, location=location, situation='Находится в месте, указанном в карточке состояния.',
             goals=[], intentions=[], obligations=[], emotion='', minute=START_MINUTE,
             scene_id=SCENE_ID if cid in PRESENT else None, last_event_id=None)
+    world['characters']['qa_vera']['birth_date'] = '1993-10-06'
     world['characters']['qa_oleg']['goals'] = ['Подготовить старую карту к реставрации.']
     world['characters']['qa_timur']['intentions'] = ['Показать Кириллу фотографии карты.']
     world['characters']['qa_vera']['emotion'] = 'Спокойное любопытство.'
@@ -114,7 +115,7 @@ def _base_world():
     )]
     return dict(characters=cards, locations=locations, world=world,
         protagonist_id=ACTOR_ID, controlled_actor_id=ACTOR_ID,
-        camera=dict(scene_id=SCENE_ID, mode='actor'), world_clock=dict(minute=START_MINUTE),
+        camera=dict(scene_id=SCENE_ID, mode='actor'), world_clock=dict(minute=START_MINUTE,calendar=dict(start_minute=START_MINUTE,start_weekday=0,start_date='2026-10-05',profile=dict(id='two-shores',observances=[dict(id='map-day',name='День старых карт',month=10,day=5)],seasons=[]))),
         campaign=dict(title=TITLE, setting='Вымышленные современные города Озёрск и Речной Посад.',
             era='Современность', genre='Повседневная история', tone='Спокойный, внимательный к деталям.',
             description='Технический мир для ручной проверки Narrative. Все персонажи вымышлены.',
@@ -124,7 +125,31 @@ def _base_world():
 
 # Later issues register small deterministic transformations of a fresh base
 # aggregate here. Never add independently maintained copies of the whole world.
-CHECKPOINTS = {}
+def _calendar_evening(state):
+    clock = 3*1440+20*60+42
+    state['world_clock'].update(minute=clock,calendar=dict(start_minute=clock,start_weekday=3,start_date='2026-10-08',
+        profile=dict(id='two-shores',observances=[dict(id='bridge-day',name='День моста',month=10,day=9)])))
+    scene = state['world']['scenes'][SCENE_ID]
+    scene.update(start_minute=clock,end_minute=clock,text='Вечер в доме Лариных. Кирилл, Вера и Тимур рассматривают карту.')
+    for actor in state['world']['characters'].values(): actor['minute']=clock
+    state['world']['characters']['qa_vera']['birth_date']='1993-10-09'
+    state['world']['scheduled_events']['qa_friday_trip'] = dict(id='qa_friday_trip',description='Поездка в сад в пятницу вечером.',
+        participants=[ACTOR_ID,'qa_elena'],due_minute=0,status='pending',condition='В пятницу вечером')
+    return state
+
+
+def _calendar_leap(state):
+    state = _calendar_evening(state)
+    state['world_clock'].update(minute=1439,calendar=dict(start_minute=1439,start_weekday=2,start_date='2024-02-28'))
+    state['world']['characters']['qa_vera']['birth_date']='1992-02-29'
+    state['world']['scheduled_events']={}
+    scene=state['world']['scenes'][SCENE_ID]
+    scene.update(start_minute=1439,end_minute=1439,text='Поздний вечер в доме Лариных.')
+    for actor in state['world']['characters'].values(): actor['minute']=1439
+    return state
+
+
+CHECKPOINTS = {'calendar-evening':_calendar_evening,'calendar-leap':_calendar_leap}
 
 
 def build_fixture(checkpoint='base'):
