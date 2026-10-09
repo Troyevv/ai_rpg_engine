@@ -312,6 +312,20 @@ def create_app(db_path=None, recover=True):
         from backend.services.world import timeline
         return timeline(repo.get_save(sid)['state'],visibility)
 
+    @app.get('/api/saves/{sid}/calendar')
+    def calendar_projection(sid: int, start_date: str | None = None, end_date: str | None = None, minute: int | None = None):
+        from backend.runtime_v3.calendar import calendar_range, current_time, calendar_label
+        snapshot = repo.get_snapshot(sid)
+        state = snapshot['world_state']
+        if (start_date is None) != (end_date is None):
+            raise ValueError('Нужны обе границы диапазона календаря.')
+        if start_date is not None:
+            return calendar_range(state, start_date, end_date)
+        now = state['meta']['world_time']
+        if minute is not None and not max(0,now-10080) <= minute <= now+10080:
+            raise ValueError('Предпросмотр времени ограничен семью сутками.')
+        return dict(current=current_time(state,minute), label=calendar_label(state,minute))
+
     @app.get('/api/saves/{sid}/scene-records/{record_id}')
     def scene_record(sid: int, record_id: str):
         value=repo.get_save(sid)['state']['world']['scene_records'].get(record_id)

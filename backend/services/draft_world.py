@@ -101,6 +101,21 @@ def validate(state):
     cards=state['characters'];ids={c['id'] for c in cards}
     def require(ok,message):
         if not ok:errors.append(message)
+    from backend.runtime_v3.models import Calendar
+    from backend.runtime_v3.calendar import date_parts
+    configured = state.get('world_clock',{}).get('calendar')
+    profile = {}
+    if configured is not None:
+        try:
+            calendar = Calendar.model_validate(configured)
+            profile = calendar.profile.model_dump()
+            for observance in calendar.profile.observances:
+                require(not set(observance.character_ids)-ids,'Дата календаря ссылается на неизвестного персонажа.')
+        except (ValueError,TypeError): errors.append('Некорректная конфигурация календаря.')
+    for actor in world['characters'].values():
+        if actor.get('birth_date') is not None:
+            try: date_parts(actor['birth_date'],profile)
+            except (ValueError,TypeError,KeyError): errors.append('Некорректная дата рождения персонажа.')
     require(len(ids)==len(cards),'Повтор Character ID.')
     require(all(re.fullmatch(r'[\w-]{1,100}',cid) for cid in ids),'Некорректный Character ID.')
     require(len({c['name'].strip().casefold() for c in cards})==len(cards),'Повтор имени: проверь identities персонажей.')

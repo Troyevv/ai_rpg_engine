@@ -93,9 +93,11 @@ def migrate_database(storage):
             starts[row['id']] = migrate_v2(candidate).snapshot['world_state']['meta']['world_time']
         def migrated(source, save_id):
             result, report = migrate_snapshot(db, source)
-            if not source.get('world_state', {}).get('meta', {}).get('calendar') and save_id in starts:
+            if (not source.get('world_state', {}).get('meta', {}).get('calendar')
+                    and not source.get('world_clock', {}).get('calendar') and save_id in starts):
                 start = starts[save_id]
-                result['world_state']['meta']['calendar'] = dict(start_minute=start, start_weekday=start//1440%7, start_date=None)
+                from backend.runtime_v3.models import Calendar
+                result['world_state']['meta']['calendar'] = Calendar(start_minute=start, start_weekday=start//1440%7).model_dump()
             return result, report
         for table, columns in (('saves',('state_json',)),('turns',('before_json','after_json')),
             ('game_jobs',('before_json','memory_before_json')),('actor_switches',('before_json','after_json'))):

@@ -1,4 +1,4 @@
-# Ручные сценарии base v1
+# Ручные сценарии base v2
 
 Перед каждым независимым сценарием выполните reset по [README](README.md).
 Запишите commit SHA, fixture version, checkpoint, DB/save ID, провайдер/модель,

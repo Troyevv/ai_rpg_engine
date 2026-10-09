@@ -62,7 +62,7 @@ def test_base_uses_supported_initial_state_and_canonical_migration():
     assert state['camera']['present_character_ids'] == list(PRESENT)
     assert state['camera']['location_id'] == identity('location', HOME.casefold())
     assert state['meta']['world_time'] == START_MINUTE
-    assert state['meta']['calendar']['start_date'] is None
+    assert state['meta']['calendar']['start_date'] == '2026-10-05'
     assert state['relationships'][ACTOR_ID + ':qa_vera']['dimensions']['trust'] == 70
     assert state['relationships']['qa_vera:' + ACTOR_ID]['dimensions']['trust'] == 60
     assert state['knowledge']['qa_oleg:qa_private_letter']['status'] == 'known'

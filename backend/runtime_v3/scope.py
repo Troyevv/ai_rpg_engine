@@ -1,4 +1,6 @@
 """One disposable deterministic relevance scope per request, never canonical state."""
+from backend.runtime_v3.calendar import scheduled_due
+
 from dataclasses import dataclass, field
 import re
 
@@ -200,7 +202,7 @@ class RelevanceResolver:
         acting_scheduled = set()
         for eid, event in state['scheduled_events'].items():
             if event['status'] != 'pending': continue
-            due = event['due_minute']
+            due = scheduled_due(state, event)
             imminent = due is not None and due <= now + 60
             linked = bool(set(event['character_ids']) & scope.relevant_actor_ids) or bool(event.get('location_id') and event['location_id'] in locations)
             topic = bool(topic_words & words(event['description']))
@@ -219,7 +221,7 @@ class RelevanceResolver:
         # Imminent arrivals are referenced, never physically present or remote yet.
         for eid in scope.scheduled_event_ids:
             event = state['scheduled_events'][eid]
-            if event['due_minute'] is not None and event['due_minute'] <= now + 60:
+            if scheduled_due(state, event) is not None and scheduled_due(state, event) <= now + 60:
                 scope.referenced_actor_ids.update(set(event['character_ids']) - core)
         # Director due actions are personalized output requests, not presence.
         for eid in scope.scheduled_event_ids:

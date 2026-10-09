@@ -1,7 +1,7 @@
 """Shared deterministic time domain. Calendar labels never modify monotonic time."""
 from dataclasses import dataclass, asdict
 import re
-from backend.services.timeline import WEEKDAYS
+from backend.runtime_v3.calendar import calendar_label, scheduled_due
 
 
 @dataclass(frozen=True)
@@ -18,11 +18,6 @@ class TimeSkipRequest:
         if self.source not in ('manual','sleep','wait','travel','long_action','narrative'): raise ValueError('Неизвестный источник Time Skip.')
 
 
-def calendar_label(state, minute=None):
-    meta = state['meta']; minute = meta['world_time'] if minute is None else minute
-    cal = meta.get('calendar') or dict(start_minute=meta['world_time'], start_weekday=meta['world_time']//1440%7)
-    days = minute//1440-cal['start_minute']//1440
-    return f"День {days+1} · {WEEKDAYS[(cal['start_weekday']+days)%7]} · {minute%1440//60:02d}:{minute%60:02d}"
 
 
 NUMBERS = {'один':1,'одну':1,'два':2,'две':2,'три':3,'четыре':4,'пять':5,'шесть':6,'семь':7,'восемь':8,'девять':9,'десять':10,'двенадцать':12}
@@ -71,8 +66,8 @@ def parse_skip(text, now, cards=()):
 
 
 def plan_skip(state, request):
-    candidates = [e for e in state['scheduled_events'].values() if e['status']=='pending' and e['due_minute'] is not None
-                  and request.start_minute < e['due_minute'] <= request.target_minute]
+    candidates = [dict(e, due_minute=scheduled_due(state, e)) for e in state['scheduled_events'].values() if e['status']=='pending' and scheduled_due(state, e) is not None
+                  and request.start_minute < scheduled_due(state, e) <= request.target_minute]
     controlled = state['camera']['controlled_actor_id']
     def interrupts_actor(e):
         arrival=(request.wait_for_actor_id is not None and request.wait_for_actor_id in e['character_ids'] and e.get('type')=='arrival' and e.get('location_id') is not None and e['location_id']==state['camera']['location_id'])

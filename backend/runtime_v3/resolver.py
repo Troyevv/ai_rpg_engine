@@ -5,6 +5,7 @@ from hashlib import sha256
 import json
 import math
 import unicodedata
+from typing import Literal
 from pydantic import ValidationError
 from backend.runtime_v3.models import (Character, Location, Fact, Knowledge, Relationship,
     Thread, ScheduledEvent, StatePatch, WorldHistoryV3, identity, fatal, assert_world_state_v3_invariants)
@@ -31,7 +32,10 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, mode: Literal["turn", "background"] = "turn"):
+        if mode not in ("turn", "background"):
+            raise ValueError("Неизвестный режим StateResolver.")
+        self.mode = mode
         self.actor_names=actor_names or {}
         self.before = assert_world_state_v3_invariants(before)
         self.state = deepcopy(self.before)
@@ -118,6 +122,13 @@ class StateResolver:
         elapsed = scene.get('elapsed_minutes',0)
         if type(elapsed) is not int or not 0 <= elapsed <= 10080:
             fatal('некорректная длительность хода', 'invalid_time', repairable=True)
+        if self.mode == 'background' and elapsed:
+            # The enclosing turn/Time Skip already owns the clock. Ignore the
+            # proposal before deriving event/history timestamps or StatePatch.
+            self.warn('final_scene', 0, 'Длительность фоновой симуляции проигнорирована: время задано Runtime.',
+                      'elapsed_minutes', code='background_elapsed_ignored')
+            self.warnings[-1].update(proposed_minutes=elapsed, applied_minutes=0)
+            elapsed = 0
         situation = scene.get('situation',camera['situation'])
         if not isinstance(situation,str):
             fatal('некорректное описание камеры', 'camera_invalid', repairable=True)
@@ -213,6 +224,8 @@ class StateResolver:
                 if isinstance(author, str) and author in lists['participants'] and medium == 'message':
                     event['author_id'] = author
                 else: self.warn('events', i, 'неподтверждённый автор сообщения', 'author_id')
+            from backend.runtime_v3.calendar import current_time
+            if 'minute' in event: event['calendar_date'] = current_time(s,event['minute'])['date']
             events[eid] = event
             self.history.events.append(event)
         for i, item in self.records(raw,'knowledge_gained'):
@@ -231,6 +244,19 @@ class StateResolver:
         for i, item in self.records(raw,'character_changes',evidence=False):
             cid = self.actor(item.get('id'),'character_changes',i)
             actor = s['characters'][cid]
+            if 'birth_date' in item:
+                from backend.runtime_v3.calendar import date_parts, profile_of, current_time
+                try:
+                    birth = item['birth_date']
+                    date_parts(birth, profile_of(s))
+                    if not self.supported(item) or birth not in item.get('evidence',''):
+                        raise ValueError('birth date must be explicitly stated in evidence')
+                    today = current_time(s)['date']
+                    if today and birth > today: raise ValueError('birth date is in the future')
+                    if actor.get('birth_date') not in (None,birth): raise ValueError('cannot overwrite an established birthday')
+                    actor['birth_date'] = birth
+                except (ValueError,TypeError):
+                    self.warn('character_changes',i,'дата рождения не подтверждена или некорректна','birth_date',cid)
             for key in ('situation','physical_state','emotion','goals','intentions','obligations'):
                 if key not in item: continue
                 value = item[key]
@@ -273,8 +299,15 @@ class StateResolver:
                     self.warn(section,i,'отсутствует ID'); continue
                 fields=deepcopy(s[destination].get(eid,{}))
                 fields.update({key:item[key] for key in model.model_fields if key in item})
+                if destination == 'scheduled_events':
+                    # Runtime owns the reference, never trust an LLM-supplied anchor.
+                    fields['time_reference_minute'] = s[destination].get(eid,{}).get('time_reference_minute')
                 entry=self.typed(model,fields,section,i)
                 if entry:
+                    if destination == 'scheduled_events':
+                        prior = s[destination].get(eid)
+                        if prior is None or any(entry.get(k) != prior.get(k) for k in ('temporal','condition','due_minute')):
+                            entry['time_reference_minute'] = self.before['meta']['world_time']
                     for cid in entry['character_ids']: self.actor(cid,section,i)
                     s[destination][eid]=entry
         upserts = {section:{key:deepcopy(value) for key,value in s[section].items() if value != self.before[section].get(key)}
