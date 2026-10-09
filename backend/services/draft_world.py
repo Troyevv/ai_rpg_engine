@@ -172,10 +172,21 @@ def validate(state):
         require(not t.get('last_event_id') or t['last_event_id'] in world['events'],f'Линия {tid}: неизвестное последнее событие.')
     for eid,e in world['scheduled_events'].items():
         refs(e.get('participants',[]),ids,f'scheduled {eid}')
+        from backend.runtime_v3.models import ScheduledEvent
+        try:
+            scheduled = ScheduledEvent.model_validate({k:v for k,v in dict(e,character_ids=e.get('participants',[])).items() if k in ScheduledEvent.model_fields})
+            refs(scheduled.depends_on,set(world['scheduled_events']),f'scheduled dependencies {eid}')
+            require(eid not in scheduled.depends_on,f'Отложенное событие {eid}: зависимость от самого себя.')
+        except ValueError:
+            require(False,f'Отложенное событие {eid}: некорректные поля договорённости.')
+
         require(type(e.get('due_minute')) is int and e['due_minute']>=0,f'Отложенное событие {eid}: нужен срок.')
         require(e.get('status') in ('pending','resolved','cancelled'),f'Отложенное событие {eid}: некорректный статус.')
         require(isinstance(e.get('description'),str),f'Отложенное событие {eid}: нужно описание.')
         require(not e.get('resolved_event_id') or e['resolved_event_id'] in world['events'],f'Отложенное событие {eid}: неизвестное событие завершения.')
+    from backend.runtime_v3.commitments import invalid_dependencies
+    if not errors:
+        require(not invalid_dependencies(world['scheduled_events']), 'Циклические или неизвестные зависимости договорённостей.')
     for cid,c in world['characters'].items():
         require(c.get('location') is None or isinstance(c['location'],str),f'Персонаж {cid}: некорректное место.')
         require(isinstance(c.get('situation',''),str),f'Персонаж {cid}: некорректная ситуация.')

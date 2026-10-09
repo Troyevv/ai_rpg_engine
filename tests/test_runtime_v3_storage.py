@@ -57,7 +57,7 @@ def test_100_persisted_turns_and_history_corruption(tmp_path):
         p['final_scene'].update(location_id=location,present_character_ids=[actor])
         p['relationship_changes']=[dict(source_id='b',target_id='c',dimensions=dict(trust=turn),context='Разговор',evidence=QUOTE)]
         p['thread_changes']=[dict(id='thread',description='Найти письмо',character_ids=['a'],state=str(turn),evidence=QUOTE)]
-        p['scheduled_event_changes']=[dict(id='schedule',description='Встреча',character_ids=['b'],due_minute=1000,evidence=QUOTE)]
+        p['scheduled_event_changes']=[dict(id='schedule',description='Встреча',character_ids=['b'],temporal=dict(day_offset=0,time='16:40'),assertion='agreed',evidence=QUOTE)]
         if turn%7==0:p['knowledge_gained'][0]['source_event_id']='missing'
         resolved=StateResolver(snapshot['world_state'],QUOTE,'').resolve(p)
         with db:

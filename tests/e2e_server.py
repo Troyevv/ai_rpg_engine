@@ -193,6 +193,15 @@ if __name__ == '__main__':
         hold_next_preparation=True
         return {'held':True}
 
+    @app.post('/test/commitments-seed')
+    def commitments_seed():
+        from devtools.narrative_test_world import load_fixture
+        from test_narrative_test_world import ordinary_job
+        repo = app.state.repository
+        result = load_fixture(repo, 'commitments')
+        ordinary_job(repo,result['save'],'start')
+        return {'world':result['world'],'save':result['save']}
+
     @app.post('/test/calendar-seed')
     def calendar_seed():
         from devtools.narrative_test_world import load_fixture

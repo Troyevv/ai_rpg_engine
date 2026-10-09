@@ -140,6 +140,7 @@ def calendar_range(state, start_date, end_date, relevant_ids=None):
                 events.append(dict(id=f"{rule['id']}:{value}", date=value, kind=rule['kind'],
                                    name=rule['name'], character_ids=rule.get('character_ids',[])))
     return dict(current=current, start_date=start_date, end_date=end_date, days=days, events=events,
+                scheduled=scheduled_range(state, start_date, end_date, relevant_ids),
                 profile={k:profile.get(k) for k in ('id','system','month_names','weekday_names')})
 
 
@@ -200,3 +201,66 @@ def scheduled_time(state, event):
 
 def scheduled_due(state, event):
     return scheduled_time(state,event)['due_minute']
+
+
+def scheduled_window(state, event):
+    """Window boundaries are relevance thresholds, never invented appointment times.
+
+    The public scheduled_time compatibility projection stays stable for old callers.
+    All #66 consumers use this richer projection and preserve unresolved conditions.
+    """
+    start = scheduled_due(state, event)
+    temporal = event.get('temporal') or {}
+    precision = 'exact' if temporal.get('time') or not temporal and start is not None else 'period' if temporal.get('day_period') else 'day'
+    end = start
+    if start is not None and precision != 'exact':
+        if precision == 'day': end = start//1440*1440 + 1439
+        else:
+            clock = start % 1440
+            end = start//1440*1440 + next((n-1 for n,p in DAY_PERIODS if n > clock), 1439)
+    if event.get('end_temporal'):
+        endpoint = dict(event, temporal=event['end_temporal'], end_temporal=None, due_minute=None)
+        end = scheduled_window(state, endpoint)['end_minute']
+    now = state['meta']['world_time']
+    relevance = 'unresolved' if start is None else 'future' if now < start else 'overdue' if end is not None and now > end else 'due'
+    return dict(start_minute=start, end_minute=end, precision=precision, relevance=relevance,
+                condition=event.get('condition', ''), exact_time=temporal.get('time') if precision=='exact' else None)
+
+
+def scheduled_boundary(state, event):
+    """An established active interval next needs attention at its end."""
+    window = scheduled_window(state, event)
+    return window['end_minute'] if event.get('started_minute') is not None and event.get('end_temporal') else window['start_minute']
+
+
+def commitment_view(state, event):
+    window = scheduled_window(state, event)
+    category = ('CANCELLED PLAN' if event['status']=='cancelled' else 'FACT' if event['status']=='resolved'
+                else 'CURRENT STATE' if event.get('started_minute') is not None
+                else 'OVERDUE PLAN' if window['relevance']=='overdue' else 'PLAN')
+    return dict(event, context_category=category, temporal_projection=window,
+                interval_state=('cancelled' if event['status']=='cancelled' else 'completed' if event['status']=='resolved'
+                                else 'active' if event.get('started_minute') is not None else 'planned') if event.get('end_temporal') else None)
+
+
+def scheduled_range(state, start_date, end_date, relevant_ids=None, limit=500):
+    """Bounded, read-only canonical-ID projection for week/month/year browsing."""
+    profile = profile_of(state)
+    lo, hi = ordinal(start_date, profile), ordinal(end_date, profile)
+    if not 0 <= hi-lo < MAX_RANGE_DAYS: raise ValueError('Диапазон календаря слишком велик.')
+    items = []
+    for event in state['scheduled_events'].values():
+        if relevant_ids is not None and not set(event['character_ids']) & set(relevant_ids): continue
+        view = commitment_view(state, event); window = view['temporal_projection']
+        start, end = window['start_minute'], window['end_minute']
+        if start is None: continue
+        first, last = current_time(state, start), current_time(state, end if end is not None else start)
+        if not first['date'] or not last['date']: continue
+        if ordinal(first['date'], profile) > hi or ordinal(last['date'], profile) < lo: continue
+        items.append(dict(id=event['id'], source_id=event['id'], date=first['date'], end_date=last['date'],
+                          kind='interval' if event.get('end_temporal') else 'commitment' if event.get('commitment') else 'scheduled_event',
+                          type=event['type'], name=event['description'], character_ids=event['character_ids'],
+                          status=event['status'], outcome=event.get('outcome', ''), interval_state=view['interval_state'],
+                          context_category=view['context_category'], window=window))
+    items.sort(key=lambda e:(e['window']['start_minute'], e['id']))
+    return dict(items=items[:limit], truncated=len(items)>limit, limit=limit)

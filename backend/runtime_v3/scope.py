@@ -1,5 +1,5 @@
 """One disposable deterministic relevance scope per request, never canonical state."""
-from backend.runtime_v3.calendar import scheduled_due
+from backend.runtime_v3.calendar import scheduled_boundary as scheduled_due
 
 from dataclasses import dataclass, field
 import re
@@ -201,15 +201,17 @@ class RelevanceResolver:
         ranked_scheduled = []
         acting_scheduled = set()
         for eid, event in state['scheduled_events'].items():
-            if event['status'] != 'pending': continue
             due = scheduled_due(state, event)
-            imminent = due is not None and due <= now + 60
+            pending = event['status'] == 'pending'
+            imminent = pending and due is not None and due <= now + 60
             linked = bool(set(event['character_ids']) & scope.relevant_actor_ids) or bool(event.get('location_id') and event['location_id'] in locations)
             topic = bool(topic_words & words(event['description']))
             structural_link = bool(set(event['character_ids']) & scope.structural_actor_ids) or event.get('location_id') in structural_locations
-            if due is not None and due <= now and (structural_link or event.get('interrupts')):
+            if pending and due is not None and due <= now and (structural_link or event.get('interrupts')):
                 acting_scheduled.add(eid)
-            if (imminent and (linked or event.get('interrupts'))) or (linked and (topic or due is None)) or semantic('scheduled_events', eid):
+            recent_terminal = not pending and event.get('source_turn') is not None and state['meta']['turn_id']-event['source_turn'] <= 8
+            active_interval = pending and event.get('started_minute') is not None
+            if linked and (recent_terminal or active_interval) or (imminent and (linked or event.get('interrupts'))) or (linked and (topic or due is None)) or semantic('scheduled_events', eid):
                 ranked_scheduled.append((100*imminent + 40*linked + 30*topic + 70*semantic('scheduled_events', eid), eid))
         scope.scheduled_event_ids = [eid for _, eid in sorted(ranked_scheduled, key=lambda x: (-x[0], x[1]))[:12]]
         scope.acting_scheduled_event_ids = acting_scheduled & set(scope.scheduled_event_ids)
@@ -221,7 +223,7 @@ class RelevanceResolver:
         # Imminent arrivals are referenced, never physically present or remote yet.
         for eid in scope.scheduled_event_ids:
             event = state['scheduled_events'][eid]
-            if scheduled_due(state, event) is not None and scheduled_due(state, event) <= now + 60:
+            if event['status'] == 'pending' and scheduled_due(state, event) is not None and scheduled_due(state, event) <= now + 60:
                 scope.referenced_actor_ids.update(set(event['character_ids']) - core)
         # Director due actions are personalized output requests, not presence.
         for eid in scope.scheduled_event_ids:

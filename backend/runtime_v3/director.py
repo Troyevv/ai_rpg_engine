@@ -1,5 +1,5 @@
 """Deterministic director based on present locations, obligations and due items."""
-from backend.runtime_v3.calendar import scheduled_due
+from backend.runtime_v3.calendar import scheduled_boundary as scheduled_due
 
 
 def plan(state, kind, history=None, scope=None):

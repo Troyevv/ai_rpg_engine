@@ -74,6 +74,13 @@ def extraction_schema():
         definitions['character_changes']['properties'][field+'_updates'] = dict(type='array', items=record(dict(
             id=string, text=string, status={'enum':['active','completed','cancelled','failed','superseded','expired']},
             due_minute={'type':'integer','minimum':0}), ('status','evidence')))
+    scheduled = definitions['scheduled_event_changes']
+    from backend.runtime_v3.commitments import ASSERTIONS
+    scheduled['required'].append('assertion')
+    scheduled['properties'].update(assertion={'enum':list(ASSERTIONS)},
+        decision_actor_id=string, player_evidence=string, player_assertion={'enum':['explicit_choice']},
+        depends_on=dict(type='array', items=string, maxItems=16),
+        end_temporal=deepcopy(scheduled['properties']['temporal']))
     definitions['scheduled_event_changes']['properties']['location_id'] = string
     definitions['scheduled_event_changes']['properties']['interrupts'] = {'type':'boolean', 'description':'Только установленное событие, требующее восприятия или участия controlled actor.'}
     from backend.services.world import CARD_FIELDS

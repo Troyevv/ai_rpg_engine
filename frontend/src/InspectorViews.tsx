@@ -34,7 +34,7 @@ export function SceneOverview({ state, meta }: {
 export function WorldView({ state, meta }: {
     state: State;
     meta?: Scene;
-}) { return <div className="inspector-content"><SceneOverview state={state} meta={meta}/><h3>Места</h3><Items items={state.locations.map((l, i) => <Reveal key={i} title={l.name} text={l.text}/>)}/><h3>Факты мира</h3><FactRows state={state} values={facts(state).filter(f => !f.secret)}/></div>; }
+}) { return <div className="inspector-content"><SceneOverview state={state} meta={meta}/><CommitmentsView state={state}/><h3>Места</h3><Items items={state.locations.map((l, i) => <Reveal key={i} title={l.name} text={l.text}/>)}/><h3>Факты мира</h3><FactRows state={state} values={facts(state).filter(f => !f.secret)}/></div>; }
 export function RelationsView({ state, actor, save, refresh }: {
     state: State;
     actor?: string;
@@ -59,3 +59,22 @@ export function ThreadsView({ state }: {
 export function MemoryView({ state }: {
     state: State;
 }) { const [scope, setScope] = useState('player'); const actor = state.controlled_actor_id === undefined ? state.protagonist_id || state.characters.find(c => c.is_player)?.id : state.controlled_actor_id; const knowledge = Object.values(state.world?.knowledge || {}).filter(k => k.actor_id === actor && k.status !== 'unknown'); const events = state.world?.events ? Object.values(state.world.events).filter(e => scope === 'player' ? e.player_observed : e.witnesses.includes(actor || '') || knowledge.some(k => k.status === 'known' && k.source_event_id === e.id)).sort((a, b) => (b.minute ?? -1) - (a.minute ?? -1) || b.source_sequence - a.source_sequence) : (state.events || []).filter(e=>scope==='player'||e.character_ids.includes(actor||'')).slice().reverse().map((e, i) => ({ id: String(i), text: e.text, participants: e.character_ids, minute: null, source_sequence: e.turn })); return <div className="inspector-content"><h3>Важные факты</h3><FactRows state={state} values={facts(state).filter(f => !f.secret)}/><h3>События</h3><label className="small">Показать<select aria-label="Видимость событий" value={scope} onChange={e => setScope(e.target.value)}><option value="player">Известно игроку</option><option value="actor" disabled={!actor}>Известно персонажу</option></select></label><Items items={events.map(e => <Reveal key={e.id} title={brief(e.text, 100)} text={e.text} preview={false}><p className="small">{worldTime(e.minute,state.world_clock?.calendar)} · Ход {e.source_sequence}</p><p className="small">{names(state, e.participants)}</p></Reveal>)}/>{!events.length && <Empty>Событий пока нет.</Empty>}<h3>Знания текущего персонажа</h3>{actor ? <Items items={knowledge.map((k, i) => <Reveal key={i} title={k.status === 'known' ? 'Знает' : 'Подозревает'} text={state.world?.facts?.[k.fact_id]?.text || k.fact_id}/>)}/> : <Empty>Сейчас камера наблюдает мир без управляемого персонажа.</Empty>}<Reveal title="Архив старой LLM-памяти (не используется ведущим)" preview={false}><h4>Объективная память ведущего</h4><Markdown text={state.memory?.summary || 'Память ещё не сжималась.'}/>{Object.entries(state.memory?.per_actor || {}).map(([id, m]) => <Reveal key={id} title={nameOf(state, id)} text={m.summary} preview={false}/>)}</Reveal></div>; }
+
+
+function CommitmentsView({state}:{state:State}) {
+ const events=Object.values(state.world?.scheduled_events||{});
+ if(!events.length)return null;
+ const labels:Record<string,string>={'PLAN':'План','OVERDUE PLAN':'Просроченный план','CURRENT STATE':'Действующий период','FACT':'Завершено','CANCELLED PLAN':'Отменено'};
+ return <section aria-label="Договорённости и периоды"><h3>Договорённости и периоды</h3>
+  <p className="muted small">Сведения ведущего; не означают знания персонажей. Наступление срока не означает выполнение.</p>
+  <Items items={events.map(e=><Reveal key={e.id} title={e.description} info={e.outcome==='missed'?'Не выполнено':labels[e.context_category]||({pending:'План',resolved:'Завершено',cancelled:'Отменено'}[e.status])} preview={false}>
+   <p>{names(state,e.character_ids)}</p>
+   <p>{e.start_label ? (e.temporal_projection.precision==='exact'&&!e.interval_state ? e.start_label : `Окно: ${e.start_label} — ${e.end_label}`) : 'Срок не определён'}</p>
+   {e.condition&&<p>Условие: {e.condition}</p>}
+   {e.outcome==='blocked'&&<p>Есть препятствие; исход ещё не установлен.</p>}
+   {e.outcome==='dependency_cancelled'&&<p>Зависимый план потерял актуальность.</p>}
+   {!!e.depends_on?.length&&<p>Зависит от: {e.depends_on.map(id=>state.world?.scheduled_events?.[id]?.description||id).join(', ')}</p>}
+   {e.evidence&&<Reveal title="Основание последнего изменения" text={e.evidence}/>}
+  </Reveal>)}/>
+ </section>;
+}

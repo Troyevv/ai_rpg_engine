@@ -243,8 +243,8 @@ def test_structured_temporal_claim_is_runtime_anchored_and_survives_reload():
     text='В пятницу вечером едем на дачу.'
     raw=dict(final_scene=dict(location_id='home',present_character_ids=['ilya'],elapsed_minutes=1),
         scheduled_event_changes=[dict(id='trip',description='Поездка',character_ids=['ilya','sonya'],due_minute=0,
-            temporal=dict(weekday=4,day_period='evening'),time_reference_minute=999999,evidence=text)])
-    result=StateResolver(s,text,'').resolve(raw)
+            temporal=dict(weekday=4,day_period='evening'),time_reference_minute=999999,evidence=text,assertion='agreed',player_assertion='explicit_choice',player_evidence=text)])
+    result=StateResolver(s,text,text).resolve(raw)
     event=result.state['scheduled_events']['trip']
     assert event['time_reference_minute']==1257
     reloaded=migrate_v2(json.loads(json.dumps(snapshot(result.state)))).snapshot['world_state']
@@ -287,10 +287,10 @@ def test_repeated_unchanged_schedule_claim_does_not_roll_relative_deadline():
     text='Завтра вечером едем на дачу.'
     raw=dict(final_scene=dict(location_id='home',present_character_ids=['ilya'],elapsed_minutes=1),
         scheduled_event_changes=[dict(id='trip',description='Поездка',character_ids=['ilya','sonya'],
-            temporal=dict(day_offset=1,day_period='evening'),evidence=text)])
-    first=StateResolver(s,text,'').resolve(raw).state
+            temporal=dict(day_offset=1,day_period='evening'),evidence=text,assertion='agreed',player_assertion='explicit_choice',player_evidence=text)])
+    first=StateResolver(s,text,text).resolve(raw).state
     first['meta']['world_time']+=1440
-    second=StateResolver(first,text,'').resolve(raw).state
+    second=StateResolver(first,text,text).resolve(raw).state
     assert second['scheduled_events']['trip']['time_reference_minute']==s['meta']['world_time']
     assert scheduled_time(second,second['scheduled_events']['trip'])['due_minute']==2520
 

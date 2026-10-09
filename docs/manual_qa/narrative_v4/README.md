@@ -161,3 +161,7 @@ rollback/variant ожидания (либо объяснение неприме�
 Base v2 (#37): фиксированная дата 2026-10-05; Вера родилась 1993-10-06;
 на 5 октября явно настроен «День старых карт». Остальные birthdays неизвестны.
 Checkpoint `calendar-evening` и `calendar-leap` описаны в calendar.md.
+
+#66 добавляет checkpoint `commitments` поверх calendar-evening без изменения base.
+Сроки, переносы, отмены, интервалы и регрессия повторной встречи описаны в
+[commitments.md](commitments.md).

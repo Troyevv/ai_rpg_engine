@@ -128,6 +128,7 @@ def migrate_v2(original):
             character_ids=[cid for cid in e.get('participants',[]) if cid in actors], due_minute=e.get('due_minute'), status=e.get('status','pending'),
             condition=e.get('condition',''), type=e.get('type','event'),
             temporal=e.get('temporal'), time_reference_minute=e.get('time_reference_minute',state['meta']['world_time'])).model_dump()
+        state['scheduled_events'][eid].update({k:deepcopy(e[k]) for k in ('commitment','end_temporal','depends_on','started_minute','outcome','evidence','source_turn','interrupts') if k in e})
     configured = old.get('world_clock', {}).get('calendar')
     if configured:
         from backend.runtime_v3.models import Calendar

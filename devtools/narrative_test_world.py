@@ -149,7 +149,23 @@ def _calendar_leap(state):
     return state
 
 
-CHECKPOINTS = {'calendar-evening':_calendar_evening,'calendar-leap':_calendar_leap}
+def _commitments(state):
+    state = _calendar_evening(state)
+    events = state['world']['scheduled_events']
+    events['qa_friday_trip'].update(commitment=True, temporal=dict(weekday=4,day_period='evening'),
+        condition='После работы', evidence='Кирилл и Елена договорились о поездке.', source_turn=0)
+    events['qa_sunday_return'] = dict(id='qa_sunday_return', description='Возвращение из сада домой.',
+        participants=[ACTOR_ID], due_minute=0, status='pending', commitment=True,
+        temporal=dict(weekday=6,day_period='evening'), depends_on=['qa_friday_trip'],
+        evidence='Кирилл подтвердил возвращение в воскресенье.', source_turn=0)
+    events['qa_school_break'] = dict(id='qa_school_break', description='Каникулы Аси.',
+        participants=['qa_asya'], due_minute=0, status='pending', commitment=True, type='school_break',
+        temporal=dict(date='2026-10-10'), end_temporal=dict(date='2026-10-17'),
+        evidence='Установлены даты школьных каникул.', source_turn=0)
+    return state
+
+
+CHECKPOINTS = {'calendar-evening':_calendar_evening,'calendar-leap':_calendar_leap,'commitments':_commitments}
 
 
 def build_fixture(checkpoint='base'):

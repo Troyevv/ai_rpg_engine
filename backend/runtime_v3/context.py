@@ -5,7 +5,7 @@ import json
 from backend.runtime_v3.scope import RelevanceResolver, CharacterContextClassifier, FULL_PRESENT, FULL_REMOTE, ACTIVE_REFERENCED, COMPACT_REFERENCED, INDEX
 from backend.runtime_v3.context_contract import EXTRACTION_CONTRACT, NARRATIVE_CONTRACT, TIME_CONTRACT
 from backend.runtime_v3.raw import prompt_schema
-from backend.runtime_v3.calendar import current_time, nearby_calendar, age_on, profile_of, scheduled_time
+from backend.runtime_v3.calendar import current_time, nearby_calendar, age_on, profile_of, scheduled_time, commitment_view
 
 PROMPTS = Path(__file__).resolve().parents[2] / 'prompts'
 
@@ -38,7 +38,7 @@ def canonical_slice(state, scope, extraction=False):
         knowledge=[state['knowledge'][key] for key in scope.knowledge_ids],
         relationships=[state['relationships'][key] for key in scope.relationship_pairs],
         threads=[state['threads'][tid] for tid in scope.thread_ids],
-        scheduled_events=[dict(state['scheduled_events'][eid], temporal_projection=scheduled_time(state,state['scheduled_events'][eid])) for eid in scope.scheduled_event_ids])
+        scheduled_events=[commitment_view(state,state['scheduled_events'][eid]) for eid in scope.scheduled_event_ids])
     for character in current['characters'].values():
         character['age'] = age_on(character.get('birth_date'), current['current_time']['date'], profile_of(state))
         for key in ('goals', 'intentions', 'obligations'):

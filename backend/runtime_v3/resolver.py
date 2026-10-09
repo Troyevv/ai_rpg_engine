@@ -32,9 +32,10 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, mode: Literal["turn", "background"] = "turn"):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn"):
         if mode not in ("turn", "background"):
             raise ValueError("Неизвестный режим StateResolver.")
+        self.protected_actor_id = protected_actor_id or before['camera']['controlled_actor_id']
         self.mode = mode
         self.actor_names=actor_names or {}
         self.before = assert_world_state_v3_invariants(before)
@@ -292,30 +293,24 @@ class StateResolver:
                 else: entry['dimensions'][dim]=value
             s['relationships'][key]=entry
             self.history.relationship_changes.append(dict(entity=key,before=deepcopy(self.before['relationships'].get(key)),after=deepcopy(entry),turn_id=self.turn_id,player_observed=self.observed))
-        for section, destination, model in (('thread_changes','threads',Thread),('scheduled_event_changes','scheduled_events',ScheduledEvent)):
-            for i,item in self.records(raw,section):
-                eid=item.get('id')
-                if not isinstance(eid,str) or not eid:
-                    self.warn(section,i,'отсутствует ID'); continue
-                fields=deepcopy(s[destination].get(eid,{}))
-                fields.update({key:item[key] for key in model.model_fields if key in item})
-                if destination == 'scheduled_events':
-                    # Runtime owns the reference, never trust an LLM-supplied anchor.
-                    fields['time_reference_minute'] = s[destination].get(eid,{}).get('time_reference_minute')
-                entry=self.typed(model,fields,section,i)
-                if entry:
-                    if destination == 'scheduled_events':
-                        prior = s[destination].get(eid)
-                        if prior is None or any(entry.get(k) != prior.get(k) for k in ('temporal','condition','due_minute')):
-                            entry['time_reference_minute'] = self.before['meta']['world_time']
-                    for cid in entry['character_ids']: self.actor(cid,section,i)
-                    s[destination][eid]=entry
+        for i, item in self.records(raw, 'thread_changes'):
+            if not isinstance(item.get('id'), str) or not item['id']:
+                self.warn('thread_changes', i, 'отсутствует ID'); continue
+            fields = deepcopy(s['threads'].get(item.get('id'), {}))
+            fields.update({key:item[key] for key in Thread.model_fields if key in item})
+            entry = self.typed(Thread, fields, 'thread_changes', i)
+            if entry:
+                for cid in entry['character_ids']: self.actor(cid, 'thread_changes', i)
+                s['threads'][entry['id']] = entry
+        from backend.runtime_v3.commitments import apply_commitments
+        apply_commitments(self, raw)
         upserts = {section:{key:deepcopy(value) for key,value in s[section].items() if value != self.before[section].get(key)}
             for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events')}
         digest = sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
         patch = StatePatch(digest,deepcopy(s['meta']),deepcopy(s['camera']),upserts)
         state = patch.apply(self.before)
         self.history.state_changes.append(dict(turn_id=self.turn_id,upserts=deepcopy(upserts),
+            before_scheduled_events={eid:deepcopy(self.before['scheduled_events'].get(eid)) for eid in upserts['scheduled_events']},
             before_characters={cid:deepcopy(self.before['characters'].get(cid)) for cid in upserts['characters']},player_observed=self.observed))
         record_id=identity('record',self.turn_id,self.narrative,self.observed)
         for event in self.history.events:
