@@ -11,13 +11,16 @@ def ui_view(snapshot, history=None):
     camera=state['camera'];now=state['meta']['world_time']
     label=lambda minute: calendar_label(state, minute)
     cards=deepcopy(snapshot['character_cards'])
+    from backend.runtime_v3.kinship import visible_name
+    for card in cards:
+        card['name'] = visible_name(state,card['id'],camera['controlled_actor_id'],card['name'])
     names={c['id']:c['name'] for c in cards}
     locations=state['locations']
     def place(lid):return locations.get(lid,{}).get('name','Не указано') if isinstance(lid,str) else 'Не указано'
     scenes={}
     groups={}
     for cid,c in state['characters'].items():
-        if c['location_id'] is not None:groups.setdefault(c['location_id'],[]).append(cid)
+        if c['location_id'] is not None and c.get('life_status') != 'dead':groups.setdefault(c['location_id'],[]).append(cid)
     for lid,present in groups.items():
         sid='view:'+lid
         scenes[sid]=dict(id=sid,location=place(lid),participants=sorted(present),start_minute=now,end_minute=now,
@@ -91,6 +94,20 @@ def ui_view(snapshot, history=None):
         minutes.update(r['minute'] for r in rows if type(r.get('minute')) is int)
     result['world_clock']['calendar'] = dict(state['meta'].get('calendar') or {},
         labels={str(m): label(m) for m in minutes})
+    from backend.runtime_v3.kinship import genealogy, visible_relations
+    from backend.runtime_v3.life import capabilities
+    for cid, actor in world['characters'].items():
+        for field in ('life_fact_id','name_history','parentage_complete_fact_id'):
+            actor.pop(field,None)
+    result['life_state'] = ({'life_status':state['characters'][camera['controlled_actor_id']]['life_status'],
+        'conditions':[dict(id=c['id'],description=c['description'],status=c['status'],duration=c['duration'])
+                      for c in state['conditions'].values() if c['actor_id']==camera['controlled_actor_id']],
+        'names':[dict(previous=n['previous'],current=n['current'],date=n['date'],minute=n['minute'])
+                 for n in state['characters'][camera['controlled_actor_id']]['name_history']]}
+        if camera['controlled_actor_id'] else None)
+    result['genealogy'] = genealogy(dict(snapshot,world_state=state))
+    result['objective_relations'] = visible_relations(state,camera['controlled_actor_id'])
+    result['actor_capabilities'] = capabilities(state,camera['controlled_actor_id']) if camera['controlled_actor_id'] else None
     result['runtime_version']=3
     result['last_time_skip']=deepcopy(snapshot.get('last_time_skip'))
     from backend.runtime_v3.notifications import notifications

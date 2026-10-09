@@ -130,3 +130,47 @@ blocked — препятствие без установленного исхо�
 Отпуск не перемещает персонажа; каникулы не убирают образование. Само время не начинает
 и не завершает интервал. Не назначай штраф отношениям за срок/срыв автоматически.
 """
+
+LIFE_CONTRACT = '''
+Canonical life/social truth is separate from directed emotions and Character Knowledge.
+life_changes, condition_changes and social_relation_changes require assertion=established
+and a verbatim source proving completed/established truth, never a wish, proposal or future plan.
+No spouse from attraction, no parent from age/surname, no friendship from scene count.
+Intimacy does not imply affection, love, exclusivity, partnership or a promise: each
+emotional delta needs its own evidence. Never assign voluntary feelings to EXTERNAL actor.
+Family status changes do not alter names, residence, emotions, Knowledge or unrelated ties.
+A name change needs explicit evidence; controlled actor voluntary choices also need
+player_assertion=explicit_choice and player_evidence quoting player_input. NPC-initiated
+closure uses decision_actor_id. Adoptive/legal parent, biological parent, guardian,
+foster_parent and step_parent are distinct; an adoption must be completed and valid in setting.
+Close a specific relation ID; a new phase/reconnection uses a new ID. Marriage can close
+an established engagement via a separate explicit closure; never infer monogamy.
+Use facts with character_ids covering the affected identities and fact_id on new life/social
+records. Transfer Knowledge only through the existing witnessed informational event path;
+closure_fact_id is separate so learning the old tie does not reveal its later ending.
+Do not add fact IDs without creating the corresponding facts. No global disclosure.
+Conditions persist across scenes; only evidenced resolution releases their capability effects.
+condition effects only restrict capabilities (false); unknown_outcome does NOT mean recovered.
+Respect capability_projection: no ordinary actions/choices while can_act=false, no speech
+while can_speak=false, no self-movement while can_move=false. Dead actors stay historical,
+never ordinary active scene/remote/background participants, never new goals/emotions.
+Missing does not mean dead. Age does not create biography/roles/personality. Coarse
+explicit developmental_stage is setting-dependent, unknown adulthood is not adult eligibility.
+Current canonical display_name is authoritative; old prose retains historical names.
+Return choices=[] for a blocked controlled actor; world time/observation can continue.
+'''
+NARRATIVE_CONTRACT += '\n' + LIFE_CONTRACT
+EXTRACTION_CONTRACT += """
+Life/social changes: assertion=established plus verbatim evidence of completed truth.
+Never infer ties from attraction/age/names/scenes, adoption from affection, love from sex,
+or death from absence/time. Missing != dead. Conditions persist until explicit resolution;
+effects only restrict (false). Close a specific ID; reconnect with a new ID. No monogamy.
+Marriage/adoption change neither names, residence, emotions nor Knowledge automatically.
+Parent, adoptive_parent, guardian, foster_parent, step_parent are distinct; completed care
+status must be valid in setting. Voluntary EXTERNAL relation/name choices require
+player_assertion=explicit_choice + player_evidence. NPC closure: decision_actor_id.
+New fact_id must link a fact naming all endpoints; closure_fact_id is separate. Knowledge
+requires the normal witnessed event path. No disclosure or voluntary feeling fabrication.
+Dead actors get no ordinary updates. Blocked can_act yields choices=[]. Developmental
+stage needs explicit setting-aware evidence, never invented biography.
+"""

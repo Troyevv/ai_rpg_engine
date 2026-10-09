@@ -49,7 +49,21 @@ export interface Scene {
   location: string;
   present_ids: string[];
 }
+export interface SocialRelation {
+  id:string;kind:string;source_id:string;target_id:string;status:'active'|'closed';
+  certainty:'known'|'suspected';outcome:string;since?:number|null;since_date?:string|null;until?:number|null;until_date?:string|null;
+}
+export interface Genealogy {
+  nodes:{id:string;name:string;life_status:string}[];
+  edges:SocialRelation[];
+  kinship:{source_id:string;target_id:string;kind:string;lineage:string;generations?:number}[];
+  truncated:boolean;
+}
 export interface State {
+  life_state?:{life_status:string;conditions:{id:string;description:string;status:string;duration:string}[];names:{previous:string;current:string;date:string|null;minute:number}[]}|null;
+  genealogy?:Genealogy;
+  objective_relations?:SocialRelation[];
+  actor_capabilities?:{can_act:boolean;can_speak:boolean;can_move:boolean;conscious:boolean;can_perceive:boolean}|null;
   protagonist_id?: string;
   controlled_actor_id?: string|null;
   camera?: {scene_id:string;mode:'actor'|'observer';scope?:'world'|'scene'};

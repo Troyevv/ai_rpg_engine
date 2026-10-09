@@ -229,6 +229,7 @@ def scheduled_window(state, event):
 
 def scheduled_boundary(state, event):
     """An established active interval next needs attention at its end."""
+    if any(state['characters'].get(cid,{}).get('life_status')=='dead' for cid in event.get('character_ids',[])): return None
     window = scheduled_window(state, event)
     return window['end_minute'] if event.get('started_minute') is not None and event.get('end_temporal') else window['start_minute']
 

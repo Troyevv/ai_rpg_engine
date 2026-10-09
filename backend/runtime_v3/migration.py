@@ -17,6 +17,9 @@ def migrate_v2(original):
     if original.get('schema_version') == 3:
         original = deepcopy(original)
         original['world_state'] = assert_world_state_v3_invariants(original['world_state'])
+        for card in original.get('character_cards',[]):
+            actor = original['world_state']['characters'].get(card['id'])
+            if actor is not None and actor['display_name'] is None: actor['display_name'] = card['name']
         initialize_calendar(original['world_state'])
         return MigrationResult(original, WorldHistoryV3().to_dict(), [])
     # The only legacy normalization boundary. No runtime code imports v2 apply.
@@ -67,6 +70,9 @@ def migrate_v2(original):
         actors[cid] = Character(id=cid, location_id=lid,
             **{key:deepcopy(entry[key]) for key in ('situation','emotion','goals','intentions','obligations') if key in entry}).model_dump()
         actors[cid]['birth_date'] = deepcopy(entry.get('birth_date'))
+        for field in ('life_status','life_fact_id','capabilities','developmental_stage','name_history','display_name','parentage_complete_fact_id'):
+            if field in entry: actors[cid][field] = deepcopy(entry[field])
+        actors[cid]['display_name'] = actors[cid].get('display_name') or next((c['name'] for c in old['characters'] if c['id']==cid), None)
     actor = old.get('controlled_actor_id')
     present = camera_scene.get('participants', camera_meta.get('present_ids', []))
     present = list(dict.fromkeys(cid for cid in present if cid in actors))
@@ -129,6 +135,8 @@ def migrate_v2(original):
             condition=e.get('condition',''), type=e.get('type','event'),
             temporal=e.get('temporal'), time_reference_minute=e.get('time_reference_minute',state['meta']['world_time'])).model_dump()
         state['scheduled_events'][eid].update({k:deepcopy(e[k]) for k in ('commitment','end_temporal','depends_on','started_minute','outcome','evidence','source_turn','interrupts') if k in e})
+    state['objective_relations'] = deepcopy(world.get('objective_relations',{}))
+    state['conditions'] = deepcopy(world.get('conditions',{}))
     configured = old.get('world_clock', {}).get('calendar')
     if configured:
         from backend.runtime_v3.models import Calendar

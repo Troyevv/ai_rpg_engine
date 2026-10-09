@@ -59,14 +59,14 @@ test('card deletion cancellation and restore',async({page,request})=>{
  const selected=await(await request.post('/test/seed')).json();
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selected);
  await page.goto('/');await page.locator('.breadcrumb').click();
- const card=page.locator('.world-card-wrap').first();const name=await card.locator('strong').innerText();
+ const card=page.locator(`.world-card-wrap[data-world-id="${selected.world}"]`);const name=await card.locator('strong').innerText();
  await card.locator('.world-remove').click();
  const confirmation=page.getByRole('dialog').filter({has:page.getByRole('heading',{name:`Удалить «${name}»?`})});
  await expect(confirmation).toBeVisible();await expect(page.locator('.save-list')).toHaveCount(0);
  await confirmation.getByRole('button',{name:'Отмена',exact:true}).click();await expect(card).toBeVisible();
  await card.locator('.world-remove').click();await confirmation.getByRole('button',{name:'Удалить',exact:true}).click();
- await expect(confirmation).toHaveCount(0);await expect(page.locator('.world-card strong').filter({hasText:name})).toHaveCount(0);
+ await expect(confirmation).toHaveCount(0);await expect(card).toHaveCount(0);
  await page.getByText('Удалённые выжимки',{exact:true}).click();
- await page.getByRole('button',{name:'Восстановить',exact:true}).last().click();
- await expect(page.locator('.world-card strong').filter({hasText:name})).toBeVisible();
+ await page.locator(`[data-deleted-world-id="${selected.world}"]`).getByRole('button',{name:'Восстановить',exact:true}).click();
+ await expect(card).toBeVisible();
 });

@@ -165,3 +165,9 @@ Checkpoint `calendar-evening` и `calendar-leap` описаны в calendar.md.
 #66 добавляет checkpoint `commitments` поверх calendar-evening без изменения base.
 Сроки, переносы, отмены, интервалы и регрессия повторной встречи описаны в
 [commitments.md](commitments.md).
+
+## Семья и жизненное состояние (#38)
+
+Checkpoints `family`, `family-care`, `family-incapacitated` расширяют тот же base,
+не создавая другого формата мира. Сценарии/ожидания и проверки Knowledge, вариантов,
+reload/rollback: [relations.md](relations.md).

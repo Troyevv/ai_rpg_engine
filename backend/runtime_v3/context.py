@@ -56,6 +56,31 @@ def canonical_slice(state, scope, extraction=False):
                     character.pop('situation', None)
                 for key in ('goals', 'intentions', 'obligations'):
                     character[key] = [r for r in character[key] if words(r if isinstance(r, str) else r['text']) & scope.query_words][:3]
+    from backend.runtime_v3.life import capabilities
+    relevant = scope.relevant_actor_ids
+    current['objective_relations'] = [deepcopy(r) for r in state.get('objective_relations',{}).values()
+        if {r['source_id'],r['target_id']} & relevant][:64]
+    current['conditions'] = [deepcopy(c) for c in state.get('conditions',{}).values()
+        if c['actor_id'] in relevant and c['status'] in ('active','unknown_outcome')]
+    for cid, actor in current['characters'].items():
+        if extraction or cid not in scope.referenced_actor_ids:
+            projected = capabilities(state,cid)
+            if state['characters'][cid].get('life_status','unknown') != 'unknown' or state['characters'][cid].get('developmental_stage','unknown') != 'unknown' or any(not projected[k] for k in ('conscious','can_perceive','can_act','can_speak','can_move')):
+                actor['capability_projection'] = projected
+            # Unknown defaults are not facts and do not earn per-turn prompt space.
+            actor.pop('capabilities',None)
+            for field in ('life_fact_id','parentage_complete_fact_id','display_name'):
+                if actor.get(field) is None: actor.pop(field,None)
+            for field in ('life_status','developmental_stage'):
+                if actor.get(field)=='unknown': actor.pop(field,None)
+        # Identity history belongs in targeted history queries, not every prompt.
+        actor.pop('name_history',None)
+    from backend.runtime_v3.kinship import visible_relations
+    current['social_knowledge'] = {cid:visible_relations(state,cid) for cid in sorted(
+        scope.present_actor_ids | scope.remote_actor_ids | scope.active_actor_ids)}
+    for cid in current['social_knowledge']:
+        current['social_knowledge'][cid] = [r for r in current['social_knowledge'][cid]
+            if {r['source_id'],r['target_id']} & relevant][:64]
     return current
 
 
@@ -82,6 +107,9 @@ class NarrativeContextBuilder:
     extraction = False
 
     def build(self, snapshot, scope, current, views, user_text, kind, prompts, extraction_text):
+        snapshot = deepcopy(snapshot)
+        for card in snapshot['character_cards']:
+            card['name'] = snapshot['world_state']['characters'][card['id']].get('display_name') or card['name']
         from backend.runtime_v3.director import plan
         state = snapshot['world_state']; campaign = snapshot.get('campaign', {})
         prompt_name = 'background_prompt.md' if kind == 'background' else 'game_system_prompt.md'
@@ -137,6 +165,9 @@ class ExtractionContextBuilder:
     extraction = True
 
     def build(self, snapshot, scope, current, views, user_text, kind, prompts, extraction_text):
+        snapshot = deepcopy(snapshot)
+        for card in snapshot['character_cards']:
+            card['name'] = snapshot['world_state']['characters'][card['id']].get('display_name') or card['name']
         default = (PROMPTS/'state_update_prompt.md').read_text(encoding='utf-8')
         saved = (prompts or {}).get('state_update_prompt.md', {}).get('content')
         # Preserve user overrides, but do not send the bundled generic contract twice.

@@ -1,4 +1,5 @@
 """Deterministic director based on present locations, obligations and due items."""
+from backend.runtime_v3.life import capabilities
 from backend.runtime_v3.calendar import scheduled_boundary as scheduled_due
 
 
@@ -13,7 +14,7 @@ def plan(state, kind, history=None, scope=None):
            and scheduled_due(state, state['scheduled_events'][eid]) <= now]
     return dict(recent_event_ids=scope.event_ids, actors=sorted(scope.relevant_actor_ids),
         location_ids=scope.location_ids,
-        acting_actor_ids=sorted(scope.present_actor_ids | scope.remote_actor_ids | scope.active_actor_ids),
+        acting_actor_ids=sorted(cid for cid in scope.present_actor_ids | scope.remote_actor_ids | scope.active_actor_ids if capabilities(state,cid)['can_act']),
         referenced_actor_ids=sorted(scope.referenced_actor_ids),
         triggers=(['camera_transition'] if kind in ('pov','background') else []) + (['scheduled_event_due'] if due else []),
         thread_ids=scope.thread_ids, due_event_ids=due,
@@ -26,7 +27,7 @@ def background_candidate(before, after):
     camera=after['camera'];present=set(camera['present_character_ids']);controlled=camera['controlled_actor_id']
     def eligible(cid):
         point=after['characters'][cid]
-        return cid not in present and cid!=controlled and (camera['location_id'] is None or point['location_id']!=camera['location_id'])
+        return capabilities(after,cid)['can_act'] and cid not in present and cid!=controlled and (camera['location_id'] is None or point['location_id']!=camera['location_id'])
     for event in sorted(after['scheduled_events'].values(),key=lambda e:(e['due_minute'] or 0,e['id'])):
         if event['status']!='pending' or scheduled_due(after,event) is None or scheduled_due(after,event)>now:continue
         if event.get('last_attempt_minute') is not None and now-event['last_attempt_minute']<30:continue
@@ -50,7 +51,7 @@ def interval_candidates(before, after, budget=6):
     protected=set(after['camera']['present_character_ids'])
     controlled=after['camera']['controlled_actor_id']
     def eligible(cid):
-        return cid in after['characters'] and cid not in protected and cid!=controlled and after['characters'][cid]['location_id']!=after['camera']['location_id']
+        return cid in after['characters'] and capabilities(after,cid)['can_act'] and cid not in protected and cid!=controlled and after['characters'][cid]['location_id']!=after['camera']['location_id']
     candidates=[]
     for e in after['scheduled_events'].values():
         if e['status']=='pending' and scheduled_due(after,e) is not None and scheduled_due(after,e)<=now and (e.get('last_attempt_minute') is None or e['last_attempt_minute']<start):

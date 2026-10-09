@@ -99,7 +99,7 @@ class RelevanceResolver:
     def resolve(self, snapshot, user_text, recent_views=(), world_history=None, completed_narrative=None, semantic_retriever=None):
         state = snapshot['world_state']
         camera = state['camera']
-        cards = {c['id']: c for c in snapshot['character_cards']}
+        cards = {c['id']: dict(c,name=state['characters'].get(c['id'],{}).get('display_name') or c['name']) for c in snapshot['character_cards']}
         names = {cid: actor_aliases(c) for cid, c in cards.items()}
         scope = ContextScope(camera['controlled_actor_id'])
         scope.present_actor_ids = set(camera['present_character_ids'])
