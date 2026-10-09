@@ -70,6 +70,8 @@ def apply_commitments(resolver, raw):
         if resolver.mode == 'background' and resolver.protected_actor_id in entry['character_ids'] + (old or {}).get('character_ids', []):
             reject('Фоновая симуляция не меняет план protected actor.', 'background_commitment_protected'); continue
         for cid in entry['character_ids']: resolver.actor(cid, 'scheduled_event_changes', index)
+        if any(state['characters'][cid].get('life_status') == 'dead' for cid in entry['character_ids']):
+            reject('Участник умер; план не может стать выполненным или активным.'); continue
         if entry['location_id'] is not None and entry['location_id'] not in state['locations']:
             reject('Неизвестное место плана.'); continue
         if old and assertion not in ('rescheduled', 'agreed'):
@@ -135,3 +137,10 @@ def apply_commitments(resolver, raw):
                 event.update(status='cancelled', outcome='dependency_cancelled',
                              evidence=parent['evidence'], source_turn=resolver.turn_id)
                 changed = True
+
+
+def invalidate_dead_commitments(resolver, dead_ids):
+    """Commitment owner marks impossible participation, never successful completion."""
+    for event in resolver.state['scheduled_events'].values():
+        if event['status'] == 'pending' and dead_ids.intersection(event['character_ids']):
+            event.update(status='cancelled',outcome='cancelled',evidence='canonical:participant_dead',source_turn=resolver.turn_id)

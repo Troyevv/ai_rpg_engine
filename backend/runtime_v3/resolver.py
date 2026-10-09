@@ -116,9 +116,14 @@ class StateResolver:
         if not isinstance(present,list) or any(not isinstance(cid,str) for cid in present):
             fatal('повреждены участники final_scene', 'camera_invalid', repairable=True)
         present = list(dict.fromkeys(present))
+        from backend.runtime_v3.life import capabilities
+        dead_present = [cid for cid in present if s['characters'].get(cid, {}).get('life_status') == 'dead']
+        for cid in dead_present:
+            self.warn('final_scene',0,'Мёртвый персонаж не участвует в текущей сцене.',entity=cid)
+        present = [cid for cid in present if cid not in dead_present]
         for cid in present: self.actor(cid,'final_scene',0)
         camera = deepcopy(s['camera'])
-        if camera['mode']=='actor' and camera['controlled_actor_id'] not in present:
+        if camera['mode']=='actor' and camera['controlled_actor_id'] not in present and s['characters'].get(camera['controlled_actor_id'], {}).get('life_status') != 'dead':
             fatal('controlled actor отсутствует в final_scene', 'camera_actor_missing', repairable=True)
         elapsed = scene.get('elapsed_minutes',0)
         if type(elapsed) is not int or not 0 <= elapsed <= 10080:
@@ -144,6 +149,8 @@ class StateResolver:
             cid = interaction.get('actor_id')
             if not isinstance(cid, str) or cid not in s['characters'] or cid in present or any(r['actor_id'] == cid for r in remote):
                 self.warn('final_scene', index, 'некорректный remote actor'); continue
+            if not capabilities(s,cid)['can_act']:
+                self.warn('final_scene',index,'Участник недоступен для взаимодействия.'); continue
             from backend.runtime_v3.models import RemoteInteraction
             record = self.typed(RemoteInteraction, dict(actor_id=cid, channel=interaction.get('channel'),
                                 last_active_turn=self.turn_id), 'final_scene', index)
@@ -155,6 +162,8 @@ class StateResolver:
         moves = {}
         for i, item in self.records(raw,'movements'):
             cid = self.actor(item.get('actor_id'),'movements',i)
+            if not capabilities(s,cid)['can_move']:
+                self.warn('movements',i,'Персонаж не может самостоятельно перемещаться.',entity=cid); continue
             target = item.get('to_location_id')
             if not isinstance(target,str) or target not in s['locations']:
                 fatal('неизвестное конечное место перемещения','movement_endpoint_invalid',repairable=True,index=i)
@@ -242,9 +251,13 @@ class StateResolver:
             if entry and not (not self.observed and actor == self.before['camera']['controlled_actor_id']):
                 s['knowledge'][actor+':'+fact] = entry
                 self.history.knowledge_acquisitions.append(dict(entry,source_event_id=event['id'],evidence=item['evidence'],turn_id=self.turn_id))
+        from backend.runtime_v3.life import apply_life
+        apply_life(self,raw)
         for i, item in self.records(raw,'character_changes',evidence=False):
             cid = self.actor(item.get('id'),'character_changes',i)
             actor = s['characters'][cid]
+            if actor['life_status'] == 'dead':
+                self.warn('character_changes',i,'Мёртвый персонаж не получает обычные изменения состояния.',entity=cid); continue
             if 'birth_date' in item:
                 from backend.runtime_v3.calendar import date_parts, profile_of, current_time
                 try:
@@ -279,6 +292,8 @@ class StateResolver:
         for i, item in self.records(raw,'relationship_changes'):
             source = self.actor(item.get('source_id'),'relationship_changes',i)
             target = self.actor(item.get('target_id'),'relationship_changes',i)
+            if s['characters'][source]['life_status'] == 'dead':
+                self.warn('relationship_changes',i,'Мёртвый персонаж не меняет чувства.',entity=source); continue
             key = source+':'+target
             entry = deepcopy(s['relationships'].get(key,Relationship(source_id=source,target_id=target).model_dump()))
             if 'context' in item:
@@ -304,8 +319,10 @@ class StateResolver:
                 s['threads'][entry['id']] = entry
         from backend.runtime_v3.commitments import apply_commitments
         apply_commitments(self, raw)
+        from backend.runtime_v3.commitments import invalidate_dead_commitments
+        invalidate_dead_commitments(self,{cid for cid,c in s['characters'].items() if c['life_status']=='dead'})
         upserts = {section:{key:deepcopy(value) for key,value in s[section].items() if value != self.before[section].get(key)}
-            for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events')}
+            for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions')}
         digest = sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
         patch = StatePatch(digest,deepcopy(s['meta']),deepcopy(s['camera']),upserts)
         state = patch.apply(self.before)
@@ -320,4 +337,5 @@ class StateResolver:
             camera_before=deepcopy(self.before['camera']),camera=deepcopy(state['camera']),
             game_time_before=self.before['meta']['world_time'],world_time=state['meta']['world_time'],
             player_observed=self.observed))
-        return ResolvedTurn(state,patch,self.history.to_dict(),self.warnings,raw.choices,self.cards)
+        choices = raw.choices if controlled and capabilities(state,controlled)['can_act'] else []
+        return ResolvedTurn(state,patch,self.history.to_dict(),self.warnings,choices,self.cards)

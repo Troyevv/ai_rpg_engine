@@ -312,6 +312,11 @@ def create_app(db_path=None, recover=True):
         from backend.services.world import timeline
         return timeline(repo.get_save(sid)['state'],visibility)
 
+    @app.get('/api/saves/{sid}/genealogy')
+    def genealogy_projection(sid: int, root_id: str | None = None, depth: int = 3, limit: int = 100):
+        from backend.runtime_v3.kinship import genealogy
+        return genealogy(repo.get_snapshot(sid),root_id,depth=depth,limit=limit)
+
     @app.get('/api/saves/{sid}/calendar')
     def calendar_projection(sid: int, start_date: str | None = None, end_date: str | None = None, minute: int | None = None):
         from backend.runtime_v3.calendar import calendar_range, current_time, calendar_label

@@ -8,6 +8,7 @@ from backend.services.relation_dimensions import RELATION_DIMENSIONS
 def edit_motivation(snapshot,actor_id,goals,intentions):
     result=deepcopy(snapshot);state=result['world_state']
     if state['camera']['controlled_actor_id']!=actor_id:raise ValueError('Можно редактировать только управляемого персонажа.')
+    if state['characters'][actor_id].get('life_status')=='dead': raise ValueError('Мёртвый персонаж не получает новые цели.')
     for value,maximum in ((goals,4000),(intentions,2000)):
         if not isinstance(value,list) or len(value)>20 or any(not isinstance(v,str) or not v.strip() or len(v)>maximum for v in value):
             raise ValueError('Недопустимый размер цели или намерений.')
@@ -20,6 +21,7 @@ def edit_motivation(snapshot,actor_id,goals,intentions):
 def edit_relationship(snapshot,actor_id,target_id,context,dimensions,delete=False):
     result=deepcopy(snapshot);state=result['world_state']
     if state['camera']['controlled_actor_id']!=actor_id:raise ValueError('Редактировать можно только отношения управляемого персонажа.')
+    if state['characters'][actor_id].get('life_status')=='dead': raise ValueError('Мёртвый персонаж не меняет чувства.')
     if target_id not in state['characters'] or actor_id==target_id:raise ValueError('Выбери другого существующего персонажа.')
     key=actor_id+':'+target_id
     if delete:

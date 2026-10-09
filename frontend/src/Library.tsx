@@ -82,7 +82,7 @@ export function Library({
         </div>
         <div className="world-grid">
           {worlds.map((w) => (
-            <article className="world-card-wrap" key={w.id}><button
+            <article className="world-card-wrap" data-world-id={w.id} key={w.id}><button
               aria-label={`Открыть ${w.name}`}
               onClick={() => setSelected(w.id)}
               className={`world-card ${selected === w.id ? "selected" : ""}`}
@@ -149,7 +149,7 @@ export function Library({
             </div>
           </section>
         )}
-        <details><summary>Удалённые выжимки</summary><Button variant="ghost" onClick={()=>void api<WorldItem[]>("/worlds?deleted=true").then(setRemoved).catch(e=>toast.error(e.message))}>Обновить корзину</Button>{removed.map(w=><div key={w.id}>{w.name} · v{w.version}<Button size="sm" onClick={()=>void run(async()=>{await api(`/worlds/${w.id}/restore`,{});setWorlds(await api("/worlds"));setRemoved(await api("/worlds?deleted=true"));setSelected(w.id)})}>Восстановить</Button></div>)}</details>
+        <details><summary>Удалённые выжимки</summary><Button variant="ghost" onClick={()=>void api<WorldItem[]>("/worlds?deleted=true").then(setRemoved).catch(e=>toast.error(e.message))}>Обновить корзину</Button>{removed.map(w=><div data-deleted-world-id={w.id} key={w.id}>{w.name} · v{w.version}<Button size="sm" onClick={()=>void run(async()=>{await api(`/worlds/${w.id}/restore`,{});setWorlds(await api("/worlds"));setRemoved(await api("/worlds?deleted=true"));setSelected(w.id)})}>Восстановить</Button></div>)}</details>
         <details>
           <summary>
             <Upload size={16} />

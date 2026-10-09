@@ -165,7 +165,70 @@ def _commitments(state):
     return state
 
 
-CHECKPOINTS = {'calendar-evening':_calendar_evening,'calendar-leap':_calendar_leap,'commitments':_commitments}
+def _family(state):
+    from backend.runtime_v3.models import ObjectiveRelation, Condition
+    world=state['world']
+    world['objective_relations']={}
+    world['conditions']={}
+    for cid,c in world['characters'].items():
+        c.update(life_status='alive',developmental_stage='child' if cid=='qa_asya' else 'adult')
+    world['characters']['qa_asya']['birth_date']='2017-02-12'
+    def relation(rid,kind,a,b,observers):
+        fid=rid+'_fact'
+        world['facts'][fid]=dict(id=fid,text=f'Установленная связь: {kind}, {a}, {b}.',secret=True,
+                                character_ids=[a,b],evidence=['Исходные сведения QA.'])
+        eid=rid+'_event'
+        world['events'][eid]=dict(id=eid,text='Ранее установлена семейная связь.',participants=[a,b],
+            witnesses=observers,fact_ids=[fid],minute=0,medium='testimony',evidence='Исходные сведения QA.',player_observed=ACTOR_ID in observers)
+        for observer in observers:
+            world['knowledge'][observer+':'+fid]=dict(actor_id=observer,fact_id=fid,status='known',source_event_id=eid)
+        if kind in ('spouse','friend','partner','engaged'):a,b=sorted((a,b))
+        world['objective_relations'][rid]=ObjectiveRelation(id=rid,kind=kind,source_id=a,target_id=b,
+            since=0,fact_id=fid,evidence='Исходные сведения QA.',source_turn=0).model_dump()
+    for rid,kind,a,b in (
+        ('qa_marriage','spouse',ACTOR_ID,'qa_vera'),
+        ('qa_father','parent',ACTOR_ID,'qa_asya'),('qa_mother','parent','qa_vera','qa_asya'),
+        ('qa_grandmother','parent','qa_nina',ACTOR_ID),('qa_grandfather','parent','qa_pavel',ACTOR_ID),
+        ('qa_friend','friend',ACTOR_ID,'qa_timur')):
+        relation(rid,kind,a,b,[ACTOR_ID,'qa_vera'])
+    # Deliberately unknown to Kirill; never visible via genealogy IDs/counts.
+    relation('qa_secret_parent','parent','qa_elena','qa_zoya',['qa_elena'])
+    world['conditions']['qa_hand_injury']=Condition(id='qa_hand_injury',actor_id='qa_oleg',
+        description='Восстановление после травмы руки.',duration='temporary',effects=dict(can_act=False),
+        since=0,evidence='Исходные сведения QA.',source_turn=0).model_dump()
+    return state
+
+
+def _family_incapacitated(state):
+    from backend.runtime_v3.models import Condition
+    state=_family(state)
+    for cid,description,effects,duration in (
+        ('qa_unconscious','Кирилл без сознания; исход ещё не установлен.',{'conscious':False},'temporary'),
+        ('qa_leg','У Кирилла сохраняется ограничение движения.',{'can_move':False},'persistent')):
+        state['world']['conditions'][cid]=Condition(id=cid,actor_id=ACTOR_ID,description=description,
+            effects=effects,duration=duration,since=START_MINUTE,evidence='Установленное исходное состояние QA.',source_turn=0).model_dump()
+    return state
+
+
+def _family_care(state):
+    from backend.runtime_v3.models import ObjectiveRelation
+    state=_family(state);world=state['world']
+    # Care is legally established in this fictional setting, not inferred from affection.
+    # Kirill intentionally does not yet know: Vera is the observer for this checkpoint.
+    fid='qa_care_fact';actors=['qa_elena','qa_asya']
+    world['facts'][fid]=dict(id=fid,text='Елена стала опекуном Аси. Биологические родители не изменились.',
+        secret=True,character_ids=actors,evidence=['Ранее завершена процедура опеки.'])
+    world['events']['qa_care_event']=dict(id='qa_care_event',text=world['facts'][fid]['text'],participants=actors,
+        witnesses=['qa_vera','qa_elena'],fact_ids=[fid],minute=0,medium='testimony',
+        evidence='Ранее завершена процедура опеки.',player_observed=False)
+    for observer in ('qa_vera','qa_elena'):
+        world['knowledge'][observer+':'+fid]=dict(actor_id=observer,fact_id=fid,status='known',source_event_id='qa_care_event')
+    world['objective_relations']['qa_guardianship']=ObjectiveRelation(id='qa_guardianship',kind='guardian',
+        source_id='qa_elena',target_id='qa_asya',since=0,fact_id=fid,evidence='Ранее завершена процедура опеки.',source_turn=0).model_dump()
+    return state
+
+
+CHECKPOINTS = {'family':_family,'family-care':_family_care,'family-incapacitated':_family_incapacitated,'calendar-evening' :_calendar_evening,'calendar-leap':_calendar_leap,'commitments':_commitments}
 
 
 def build_fixture(checkpoint='base'):

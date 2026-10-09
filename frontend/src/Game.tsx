@@ -352,8 +352,9 @@ export function Game({
                     <Button disabled={busy} onClick={()=>switchActor(mainActor!)}>Вернуться к {save.state.characters.find(c=>c.id===mainActor)?.name.replace(' (ГГ)','')}</Button>
                     <label>Продолжить за персонажа…<select aria-label="Участник фоновой сцены" value="" disabled={busy} onChange={e=>switchActor(e.target.value,save.turns.at(-1)!.id)}><option value="">Выбрать участника</option>{save.state.characters.filter(c=>JSON.parse(save.turns.at(-1)?.audience_json||'[]').includes(c.id)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
                   </div>}
+                  {save.state.actor_capabilities?.can_act===false&&<p role="status">Персонаж сейчас не может действовать. Можно продолжить течение времени или наблюдать за миром.</p>}
                   <motion.div className="choices" key={save.turns.at(-1)?.active_variant_id} variants={choicesMotion} initial={initialChoice.current===save.turns.at(-1)?.active_variant_id?false:"hidden"} animate="visible">
-                    {(save.turns.at(-1)?.kind!=="background"&&(save.turns.at(-1)?.pov_actor_id||mainActor)===actorId?save.turns.at(-1)?.choices:[])?.map((c, i) => (
+                    {(save.state.actor_capabilities?.can_act!==false&&save.turns.at(-1)?.kind!=="background"&&(save.turns.at(-1)?.pov_actor_id||mainActor)===actorId?save.turns.at(-1)?.choices:[])?.map((c, i) => (
                       <motion.button
                         variants={choiceMotion}
                         className={selectedChoice===i?"choice-selected":""}
@@ -375,7 +376,7 @@ export function Game({
                     ))}
                   </motion.div>
                   <div className="turn-actions">
-                    <TimeSkip save={save} disabled={busy||pending||actorId===null} submit={(duration,reason)=>void turn('turn',`Жду ${duration} минут.${reason?' '+reason:''}`,undefined,false,{duration,reason})}/>
+                    <TimeSkip save={save} disabled={busy||pending||actorId===null} submit={(duration,reason)=>void turn('turn',save.state.actor_capabilities?.can_act===false?'':`Жду ${duration} минут.${reason?' '+reason:''}`,undefined,false,{duration,reason})}/>
                     <label className="small"><input type="checkbox" checked={notices} onChange={e=>{setNotices(e.target.checked);localStorage.setItem('relationship-notices',e.target.checked?'on':'off')}}/> Показывать изменения отношений</label>
                     <Button
                       variant="ghost"
@@ -447,7 +448,7 @@ export function Game({
             <Button
               aria-label="Отправить действие"
               size="icon"
-              disabled={actorId===null || busy || pending || !save.turns.length || !draft.trim()}
+              disabled={save.state.actor_capabilities?.can_act===false || actorId===null || busy || pending || !save.turns.length || !draft.trim()}
               onClick={() => turn("turn")}
             >
               <Send size={19} />

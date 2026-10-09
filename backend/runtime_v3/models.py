@@ -123,11 +123,70 @@ class Camera(StrictModel):
     remote_interactions: list[RemoteInteraction] = Field(default_factory=list)
 
 
+class Capabilities(StrictModel):
+    conscious: bool | None = None
+    can_perceive: bool | None = None
+    can_act: bool | None = None
+    can_speak: bool | None = None
+    can_move: bool | None = None
+
+
+class NameChange(StrictModel):
+    previous: str = Field(min_length=1)
+    current: str = Field(min_length=1)
+    minute: int = Field(ge=0)
+    date: str | None = None
+    turn_id: int = Field(ge=0)
+    evidence: str
+    fact_id: str | None = None
+
+
+class ObjectiveRelation(StrictModel):
+    id: str = Field(min_length=1)
+    kind: Literal['spouse', 'partner', 'engaged', 'parent', 'adoptive_parent',
+                  'guardian', 'foster_parent', 'step_parent', 'sibling', 'contact',
+                  'friend', 'close_friend', 'coworker']
+    source_id: str
+    target_id: str
+    status: Literal['active', 'closed'] = 'active'
+    since: int | None = Field(default=None, ge=0)
+    until: int | None = Field(default=None, ge=0)
+    since_date: str | None = None
+    until_date: str | None = None
+    outcome: Literal['', 'ended', 'divorced', 'widowed', 'superseded', 'revoked'] = ''
+    context: str = ''
+    evidence: str = ''
+    source_turn: int | None = Field(default=None, ge=0)
+    fact_id: str | None = None
+    closure_fact_id: str | None = None
+
+
+class Condition(StrictModel):
+    id: str = Field(min_length=1)
+    actor_id: str
+    description: str = Field(min_length=1)
+    status: Literal['active', 'resolved', 'cancelled', 'unknown_outcome'] = 'active'
+    duration: Literal['temporary', 'persistent', 'unknown'] = 'unknown'
+    effects: Capabilities = Field(default_factory=Capabilities)
+    since: int | None = Field(default=None, ge=0)
+    until: int | None = Field(default=None, ge=0)
+    evidence: str = ''
+    source_turn: int | None = Field(default=None, ge=0)
+    fact_id: str | None = None
+
+
 class Character(StrictModel):
     id: str
     location_id: str | None = None
     situation: str = ''
     birth_date: str | None = None
+    life_status: Literal['alive', 'dead', 'missing', 'unknown'] = 'unknown'
+    life_fact_id: str | None = None
+    display_name: str | None = Field(default=None, min_length=1)
+    name_history: list[NameChange] = Field(default_factory=list)
+    capabilities: Capabilities = Field(default_factory=Capabilities)
+    developmental_stage: Literal['unknown', 'infant', 'child', 'adolescent', 'adult'] = 'unknown'
+    parentage_complete_fact_id: str | None = None
     physical_state: str = ''
     emotion: str = ''
     emotion_source_sequence: int | None = None
@@ -213,6 +272,8 @@ class WorldStateV3(StrictModel):
     relationships: dict[str, Relationship] = Field(default_factory=dict)
     threads: dict[str, Thread] = Field(default_factory=dict)
     scheduled_events: dict[str, ScheduledEvent] = Field(default_factory=dict)
+    objective_relations: dict[str, ObjectiveRelation] = Field(default_factory=dict)
+    conditions: dict[str, Condition] = Field(default_factory=dict)
 
 
 def fatal(message, code='current_state_invalid', repairable=False, **path):
@@ -221,6 +282,8 @@ def fatal(message, code='current_state_invalid', repairable=False, **path):
 
 def assert_world_state_v3_invariants(state, before=None):
     state = salvage_calendar_data(state)
+    from backend.runtime_v3.life import salvage_life_data
+    state = salvage_life_data(state)
     try:
         value = WorldStateV3.model_validate(state).model_dump()
     except ValidationError as exc:
@@ -238,7 +301,7 @@ def assert_world_state_v3_invariants(state, before=None):
         fatal('неизвестные или повторные участники камеры')
     if camera['controlled_actor_id'] is not None and camera['controlled_actor_id'] not in actors:
         fatal('неизвестный controlled actor')
-    if camera['mode'] == 'actor' and camera['controlled_actor_id'] not in present:
+    if camera['mode'] == 'actor' and camera['controlled_actor_id'] not in present and actors.get(camera['controlled_actor_id'], {}).get('life_status') != 'dead':
         fatal('controlled actor отсутствует в камере')
     remote = camera['remote_interactions']
     if len({r['actor_id'] for r in remote}) != len(remote):
@@ -266,6 +329,9 @@ def assert_world_state_v3_invariants(state, before=None):
     for item in value['scheduled_events'].values():
         if item['location_id'] is not None and item['location_id'] not in locations:
             fatal('неизвестное место scheduled event', section='scheduled_events', entity=item['id'])
+    from backend.runtime_v3.life import validate_life_state
+    try: validate_life_state(value)
+    except ValueError as exc: fatal(str(exc), 'life_state_invalid')
     if before and (value['meta']['world_time'] < before['meta']['world_time'] or value['meta']['turn_id'] < before['meta']['turn_id']):
         fatal('время или номер хода движется назад')
     return value
@@ -301,9 +367,9 @@ class StatePatch:
             fatal('patch создан для другого состояния', 'stale_patch')
         result = deepcopy(before)
         for section, records in self.upserts.items():
-            if section not in ('characters', 'locations', 'facts', 'knowledge', 'relationships', 'threads', 'scheduled_events'):
+            if section not in ('characters', 'locations', 'facts', 'knowledge', 'relationships', 'threads', 'scheduled_events', 'objective_relations', 'conditions'):
                 fatal('неизвестная секция patch')
-            result[section].update(deepcopy(records))
+            result.setdefault(section, {}).update(deepcopy(records))
         result['meta'], result['camera'] = deepcopy(self.meta), deepcopy(self.camera)
         return assert_world_state_v3_invariants(result, before)
 

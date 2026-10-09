@@ -116,6 +116,16 @@ def validate(state):
         if actor.get('birth_date') is not None:
             try: date_parts(actor['birth_date'],profile)
             except (ValueError,TypeError,KeyError): errors.append('Некорректная дата рождения персонажа.')
+    try:
+        from backend.runtime_v3.models import Character, ObjectiveRelation, Condition
+        from backend.runtime_v3.life import validate_life_state
+        extension = dict(characters={cid:Character.model_validate(dict(id=cid, **{k:v for k,v in a.items() if k in Character.model_fields and k!='id'})).model_dump()
+                                      for cid,a in world['characters'].items()},
+            objective_relations={key:ObjectiveRelation.model_validate(r).model_dump() for key,r in world.get('objective_relations',{}).items()},
+            conditions={key:Condition.model_validate(r).model_dump() for key,r in world.get('conditions',{}).items()},
+            facts=world['facts'],meta=dict(calendar=configured), camera=dict(present_character_ids=[],remote_interactions=[]))
+        validate_life_state(extension)
+    except (ValueError,TypeError,KeyError): errors.append('Некорректное жизненное состояние, семейные связи или условия.')
     require(len(ids)==len(cards),'Повтор Character ID.')
     require(all(re.fullmatch(r'[\w-]{1,100}',cid) for cid in ids),'Некорректный Character ID.')
     require(len({c['name'].strip().casefold() for c in cards})==len(cards),'Повтор имени: проверь identities персонажей.')

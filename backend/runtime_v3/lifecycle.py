@@ -50,3 +50,17 @@ def apply_changes(resolver, item, cid, index):
                 if type(change.get('due_minute')) is int and change['due_minute'] >= 0: values['due_minute'] = change['due_minute']
                 if not any(r['id']==values['id'] or r['status']=='active' and normalized(r['text'])==normalized(text) for r in actor[field]):
                     actor[field].append(Motivation(**values).model_dump())
+
+
+def invalidate_dead_motivations(resolver, dead_ids):
+    """Lifecycle owner consumes canonical death idempotently; retain every record."""
+    from copy import deepcopy
+    for cid in sorted(dead_ids):
+        actor = resolver.state['characters'][cid]
+        for field in ('goals','intentions','obligations'):
+            for row in actor[field]:
+                if row['status'] != 'active': continue
+                before = deepcopy(row)
+                row.update(status='cancelled', evidence='canonical:actor_dead', source_sequence=resolver.turn_id-1)
+                resolver.history.state_changes.append(dict(kind='death_invalidation',actor_id=cid,field=field,
+                    before=before,after=deepcopy(row),turn_id=resolver.turn_id,player_observed=resolver.observed))

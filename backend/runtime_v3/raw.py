@@ -6,7 +6,8 @@ from backend.runtime_v3.models import fatal
 from backend.services.relation_dimensions import RELATION_DIMENSIONS
 
 SECTIONS = ('locations','promotions','events','facts','knowledge_gained','character_changes',
-            'relationship_changes','movements','thread_changes','scheduled_event_changes')
+            'relationship_changes','movements','thread_changes','scheduled_event_changes',
+            'life_changes','condition_changes','social_relation_changes')
 
 
 @dataclass
@@ -70,6 +71,22 @@ def extraction_schema():
         'thread_changes':record(dict(id=string,description=string,character_ids=strings,status={'enum':['active','developing','dormant','resolved','paused']},state=string,relevance={'type':'number','minimum':0,'maximum':1}), ('id','evidence')),
         'scheduled_event_changes':record(dict(id=string,description=string,character_ids=strings,due_minute={'type':'integer','minimum':0},temporal=obj(dict(date=string,weekday={'type':'integer','minimum':0,'maximum':13},day_offset={'type':'integer','minimum':-366,'maximum':366},time=string,day_period={'enum':['night','morning','afternoon','evening']})),status={'enum':['pending','resolved','cancelled']},condition=string,type=string), ('id','evidence')),
     }
+    agency = dict(assertion={'enum':['established']}, player_evidence=string,
+                  player_assertion={'enum':['explicit_choice']}, decision_actor_id=string)
+    caps = obj({key:{'type':'boolean'} for key in ('conscious','can_perceive','can_act','can_speak','can_move')})
+    definitions['life_changes'] = record(dict(id=string, **agency,
+        life_status={'enum':['alive','dead','missing','unknown']}, display_name=string,
+        developmental_stage={'enum':['unknown','infant','child','adolescent','adult']},
+        capabilities=caps, fact_id=string, parentage_complete_fact_id=string), ('id','assertion','evidence'))
+    definitions['condition_changes'] = record(dict(id=string, **agency, actor_id=string,
+        description=string, effects=caps, duration={'enum':['temporary','persistent','unknown']},
+        status={'enum':['active','resolved','cancelled','unknown_outcome']}, fact_id=string), ('id','assertion','evidence'))
+    from backend.runtime_v3.models import ObjectiveRelation
+    kinds = list(ObjectiveRelation.model_fields['kind'].annotation.__args__) + ['child']
+    definitions['social_relation_changes'] = record(dict(id=string, **agency, kind={'enum':kinds},
+        source_id=string,target_id=string,status={'enum':['active','closed']},context=string,
+        outcome={'enum':['ended','divorced','widowed','superseded','revoked']},fact_id=string,closure_fact_id=string),
+        ('id','assertion','evidence'))
     for field in ('goals', 'intentions', 'obligations'):
         definitions['character_changes']['properties'][field+'_updates'] = dict(type='array', items=record(dict(
             id=string, text=string, status={'enum':['active','completed','cancelled','failed','superseded','expired']},
