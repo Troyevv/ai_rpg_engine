@@ -1,7 +1,7 @@
 """Disposable read projections. None of these scene IDs may enter WorldStateV3."""
 from copy import deepcopy
 from backend.runtime_v3.models import identity
-from backend.runtime_v3.calendar import calendar_label, current_time, nearby_calendar, age_on, profile_of
+from backend.runtime_v3.calendar import calendar_label, current_time, nearby_calendar, age_on, profile_of, commitment_view
 from backend.runtime_v3.lifecycle import active_texts
 
 
@@ -44,7 +44,13 @@ def ui_view(snapshot, history=None):
             scene_id=sid if cid in camera['present_character_ids'] else 'view:'+c['location_id'] if c['location_id'] else None,
             minute=now,last_event_id=None,short_goal='\n'.join(active_texts(c['goals'])))
     for fid,f in state['facts'].items():world['facts'][fid]=dict(f,secret=f['visibility']=='secret',evidence=[])
-    for eid,e in state['scheduled_events'].items():world['scheduled_events'][eid]=dict(e,participants=e['character_ids'])
+    for eid,e in state['scheduled_events'].items():
+        view = commitment_view(state, e)
+        window = view['temporal_projection']
+        # Presentation labels are disposable and reuse the canonical calendar.
+        view['start_label'] = label(window['start_minute']) if window['start_minute'] is not None else None
+        view['end_label'] = label(window['end_minute']) if window['end_minute'] is not None else None
+        world['scheduled_events'][eid]=dict(view,participants=e['character_ids'])
     for e in history.get('events',[]):
         if not isinstance(e,dict) or not isinstance(e.get('id'),str) or not isinstance(e.get('text'),str):continue
         if any(not isinstance(e.get(k,[]),list) or any(not isinstance(v,str) for v in e.get(k,[])) for k in ('participants','witnesses')):continue

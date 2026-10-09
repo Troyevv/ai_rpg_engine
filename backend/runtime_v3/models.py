@@ -87,6 +87,8 @@ class TemporalValue(StrictModel):
     def one_temporal_basis(self):
         if sum(v is not None for v in (self.date,self.weekday,self.day_offset)) != 1:
             raise ValueError('temporal value requires exactly one date, weekday or day_offset')
+        if self.time is not None and self.day_period is not None:
+            raise ValueError('choose exact time or an imprecise period')
         return self
 
 
@@ -192,6 +194,13 @@ class ScheduledEvent(StrictModel):
     last_attempt_minute: int | None = Field(default=None, ge=0)
     temporal: TemporalValue | None = None
     time_reference_minute: int | None = Field(default=None, ge=0)
+    commitment: bool = False  # Legacy scheduled events keep their original semantics.
+    end_temporal: TemporalValue | None = None
+    depends_on: list[str] = Field(default_factory=list, max_length=16)
+    started_minute: int | None = Field(default=None, ge=0)
+    outcome: Literal['', 'fulfilled', 'blocked', 'missed', 'cancelled', 'dependency_cancelled'] = ''
+    evidence: str = ''
+    source_turn: int | None = Field(default=None, ge=0)
 
 
 class WorldStateV3(StrictModel):
@@ -357,13 +366,27 @@ def salvage_calendar_data(state):
     if isinstance(scheduled,dict):
         for event in scheduled.values():
             if not isinstance(event,dict): continue
-            if event.get('temporal') is not None:
-                try: event['temporal'] = TemporalValue.model_validate(event['temporal']).model_dump()
-                except (ValueError,TypeError):
-                    logging.getLogger(__name__).warning('Ignoring invalid optional scheduled temporal value for %s',event.get('id'))
-                    event['temporal']=None
+            for key in ('temporal', 'end_temporal'):
+                if event.get(key) is not None:
+                    try: event[key] = TemporalValue.model_validate(event[key]).model_dump()
+                    except (ValueError,TypeError):
+                        logging.getLogger(__name__).warning('Ignoring invalid optional scheduled %s for %s',key,event.get('id'))
+                        event[key]=None
+            for key in ('commitment', 'depends_on', 'started_minute', 'outcome', 'evidence', 'source_turn'):
+                if key not in event: continue
+                try:
+                    ScheduledEvent.model_validate(dict(id='check', description='', **{key:event[key]}))
+                except (ValueError, TypeError):
+                    logging.getLogger(__name__).warning('Ignoring invalid optional commitment %s for %s',key,event.get('id'))
+                    event.pop(key)
+
             reference = event.get('time_reference_minute')
             if reference is not None and (type(reference) is not int or reference < 0):
                 logging.getLogger(__name__).warning('Ignoring invalid temporal reference for %s',event.get('id'))
                 event['time_reference_minute']=None
+    if isinstance(scheduled, dict) and all(isinstance(e, dict) for e in scheduled.values()):
+        from backend.runtime_v3.commitments import invalid_dependencies
+        for eid in sorted(invalid_dependencies(scheduled)):
+            logging.getLogger(__name__).warning('Ignoring invalid optional commitment dependencies for %s',eid)
+            scheduled[eid]['depends_on']=[]
     return state

@@ -1,7 +1,7 @@
 """Shared deterministic time domain. Calendar labels never modify monotonic time."""
 from dataclasses import dataclass, asdict
 import re
-from backend.runtime_v3.calendar import calendar_label, scheduled_due
+from backend.runtime_v3.calendar import calendar_label, scheduled_boundary
 
 
 @dataclass(frozen=True)
@@ -66,15 +66,15 @@ def parse_skip(text, now, cards=()):
 
 
 def plan_skip(state, request):
-    candidates = [dict(e, due_minute=scheduled_due(state, e)) for e in state['scheduled_events'].values() if e['status']=='pending' and scheduled_due(state, e) is not None
-                  and request.start_minute < scheduled_due(state, e) <= request.target_minute]
+    candidates = [dict(e, due_minute=scheduled_boundary(state, e)) for e in state['scheduled_events'].values() if e['status']=='pending' and scheduled_boundary(state, e) is not None
+                  and scheduled_boundary(state, e) <= request.target_minute]
     controlled = state['camera']['controlled_actor_id']
     def interrupts_actor(e):
         arrival=(request.wait_for_actor_id is not None and request.wait_for_actor_id in e['character_ids'] and e.get('type')=='arrival' and e.get('location_id') is not None and e['location_id']==state['camera']['location_id'])
-        return bool(e.get('interrupts') and controlled in e['character_ids'] or arrival)
+        return bool(controlled is not None and controlled in e['character_ids'] or arrival)
     interrupts = sorted((e for e in candidates if interrupts_actor(e)), key=lambda e:(e['due_minute'],e['id']))
     event = interrupts[0] if interrupts else None
-    target = event['due_minute'] if event else request.target_minute
+    target = max(request.start_minute, event['due_minute']) if event else request.target_minute
     return dict(requested_target=request.target_minute, actual_target=target, elapsed_minutes=target-request.start_minute,
                 requested_duration=request.target_minute-request.start_minute, interrupted=bool(event),
                 interruption_event_id=event['id'] if event else None, source=request.source,
