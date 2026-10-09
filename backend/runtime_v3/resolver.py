@@ -5,6 +5,7 @@ from hashlib import sha256
 import json
 import math
 import unicodedata
+from typing import Literal
 from pydantic import ValidationError
 from backend.runtime_v3.models import (Character, Location, Fact, Knowledge, Relationship,
     Thread, ScheduledEvent, StatePatch, WorldHistoryV3, identity, fatal, assert_world_state_v3_invariants)
@@ -31,7 +32,10 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, mode: Literal["turn", "background"] = "turn"):
+        if mode not in ("turn", "background"):
+            raise ValueError("Неизвестный режим StateResolver.")
+        self.mode = mode
         self.actor_names=actor_names or {}
         self.before = assert_world_state_v3_invariants(before)
         self.state = deepcopy(self.before)
@@ -118,6 +122,13 @@ class StateResolver:
         elapsed = scene.get('elapsed_minutes',0)
         if type(elapsed) is not int or not 0 <= elapsed <= 10080:
             fatal('некорректная длительность хода', 'invalid_time', repairable=True)
+        if self.mode == 'background' and elapsed:
+            # The enclosing turn/Time Skip already owns the clock. Ignore the
+            # proposal before deriving event/history timestamps or StatePatch.
+            self.warn('final_scene', 0, 'Длительность фоновой симуляции проигнорирована: время задано Runtime.',
+                      'elapsed_minutes', code='background_elapsed_ignored')
+            self.warnings[-1].update(proposed_minutes=elapsed, applied_minutes=0)
+            elapsed = 0
         situation = scene.get('situation',camera['situation'])
         if not isinstance(situation,str):
             fatal('некорректное описание камеры', 'camera_invalid', repairable=True)
