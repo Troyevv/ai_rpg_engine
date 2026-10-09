@@ -174,3 +174,55 @@ requires the normal witnessed event path. No disclosure or voluntary feeling fab
 Dead actors get no ordinary updates. Blocked can_act yields choices=[]. Developmental
 stage needs explicit setting-aware evidence, never invented biography.
 """
+
+RESIDENCE_CONTRACT = '''
+Current physical location, residence (home/base), and ongoing social role are independent.
+Travel/visit or a role at a workplace NEVER imply relocation, presence or teleportation.
+Hierarchy parent_id/kind includes room/building/district/settlement/region/realm/country
+when established, with unknown geography left unknown. It implies neither nationality,
+culture, language, calendar changes nor Character Knowledge. Reuse canonical IDs and
+known aliases; a spelling variant is not a new location or organization. Use locations
+only for new places and location_changes for established parent/kind/alias updates.
+residence_changes/role_changes/organization_changes require assertion=established and
+verbatim evidence of a completed outcome, not a plan, offer, wish or age threshold.
+Create a residence ONLY when evidence establishes a home/base. New residence/role
+IDs add concurrent phases by default. Explicit replaces=[old IDs] closes only those
+phases; omit replaces unless evidence establishes replacement. Closing uses the old ID
+and status=closed. Old phases are immutable: new employer/institution/program/title
+requires a new phase, optionally replacing the old. Education, apprenticeship, guild
+training, jobs, membership and office all use generic roles; no mandatory age stages,
+shifts, commute, salary or daily schedule. Optional field records a known program/field.
+Persistent organizations use stable IDs. They may be created/renamed/closed explicitly;
+closure closes linked active affiliations without choosing anyone's next role. Residence
+and physical presence remain unchanged. Organization rename retains identity/history.
+Controlled voluntary transitions require player_assertion=explicit_choice and an exact
+player_evidence quote. An external outcome such as dismissal/expulsion/displacement uses
+transition=external and decision_actor_id of its established other actor; do not label a
+voluntary choice external. Background cannot change protected actor affiliations.
+Use fact_id for creation and closure_fact_id for closure, plus facts and witnessed
+informational events/knowledge_gained as usual. Replacement uses its new fact for closure.
+World truth is GM-only; residence_role_knowledge is separately authorized per character.
+Knowing an old role/residence does not reveal a later move, closure, or organization rename.
+social_status lists authoritative active phase IDs, including empty lists after closure.
+An empty list does not imply unemployed/homeless. Old card roles are historical when closed.
+Active canonical roles/residences override stale biography/card prose; closed phases are
+historical. Never infer current physical presence, new friends, knowledge or emotions.
+'''
+NARRATIVE_CONTRACT += '\n' + RESIDENCE_CONTRACT
+EXTRACTION_CONTRACT += """
+Residence/role/organization changes need established completed evidence, not plans or age.
+Physical location != home/base != role. Travel/visits, marriage, roles and hierarchy never
+imply relocation/presence/Knowledge. Keep unknowns unknown; reuse known IDs/aliases.
+locations creates; location_changes updates parent/kind/aliases. New scene entrants need
+movement or situation_evidence, never residence/workplace inference. Geography is generic;
+no nationality/culture/calendar inference. Organization name variants reuse canonical IDs.
+New residence/role IDs coexist. Only explicit replaces=[old IDs] closes named phases;
+otherwise close the existing ID via status=closed. Preserve old employer/institution/program;
+changed identity needs new phase. Roles cover jobs, education/training, membership and office.
+No daily schedules/economy or automatic age stages. Organization rename keeps its ID;
+closure ends linked roles without choosing replacements. Controlled voluntary changes need
+player_assertion=explicit_choice + player_evidence. External outcome: transition=external
+and responsible other decision_actor_id; never disguise voluntary choice as external.
+Creation fact_id, closure_fact_id and witnessed Knowledge follow normal rules; replacement
+uses new fact_id for closure. Known opening never reveals hidden closure/rename. No broadcast.
+"""

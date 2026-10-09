@@ -108,6 +108,8 @@ def ui_view(snapshot, history=None):
     result['genealogy'] = genealogy(dict(snapshot,world_state=state))
     result['objective_relations'] = visible_relations(state,camera['controlled_actor_id'])
     result['actor_capabilities'] = capabilities(state,camera['controlled_actor_id']) if camera['controlled_actor_id'] else None
+    from backend.runtime_v3.residence import visible_social_state
+    result['residence_roles'] = visible_social_state(state,camera['controlled_actor_id'])
     result['runtime_version']=3
     result['last_time_skip']=deepcopy(snapshot.get('last_time_skip'))
     from backend.runtime_v3.notifications import notifications

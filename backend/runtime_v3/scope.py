@@ -35,7 +35,7 @@ def actor_aliases(card):
 def location_aliases(location):
     # Canonical names may be lowercase. Reuse the same surface inflections for
     # location nouns so "на кухне" resolves existing "Кухня" before extraction.
-    return actor_aliases(dict(id=location['id'], name=location['name'].capitalize(), aliases=[location['name']]))
+    return actor_aliases(dict(id=location['id'], name=location['name'].capitalize(), aliases=[location['name'], *location.get('aliases',[])]))
 
 
 def string_ids(value):
@@ -61,6 +61,9 @@ class ContextScope:
     referenced_actor_ids: set = field(default_factory=set)
     relevant_actor_ids: set = field(default_factory=set)
     location_ids: list = field(default_factory=list)
+    residence_ids: list = field(default_factory=list)
+    role_ids: list = field(default_factory=list)
+    organization_ids: list = field(default_factory=list)
     fact_ids: list = field(default_factory=list)
     thread_ids: list = field(default_factory=list)
     event_ids: list = field(default_factory=list)
@@ -234,6 +237,17 @@ class RelevanceResolver:
         core |= scope.active_actor_ids
         scope.referenced_actor_ids -= core
         scope.relevant_actor_ids = core | scope.referenced_actor_ids
+        from backend.runtime_v3.residence import select_social_ids
+        social = select_social_ids(state, scope.relevant_actor_ids, query)
+        scope.residence_ids, scope.role_ids, scope.organization_ids = (
+            social['residences'], social['roles'], social['organizations'])
+        locations.update(state['residences'][rid]['location_id'] for rid in scope.residence_ids)
+        locations.update(lid for oid in scope.organization_ids for lid in state['organizations'][oid]['location_ids'])
+        # Structural ancestors do not change participant/actor relevance or Knowledge.
+        for lid in list(locations):
+            parent = state['locations'][lid].get('parent_id')
+            while parent and parent not in locations:
+                locations.add(parent); parent = state['locations'][parent].get('parent_id')
         scope.location_ids = sorted(locations)
         location_words = set().union(*(words(state['locations'][lid]['name']) for lid in locations)) if locations else set()
         event_facts = set().union(*(string_ids(e.get('fact_ids')) for e in recent))

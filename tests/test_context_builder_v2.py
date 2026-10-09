@@ -99,7 +99,11 @@ def test_continuity_is_protected_when_target_exceeded_and_extraction_is_isolated
     assert 'BIO_a' not in str(extraction) and 'VOICE_b' not in str(extraction) and 'APPEARANCE_' not in str(extraction)
     assert 'Художественная сцена' not in str(extraction) and 'Драмеди' not in str(extraction)
     assert len(section(extraction,'Entity IDs')) < len(snapshot['character_cards'])
-    assert estimate(extraction) < estimate(messages)
+    # #39 adds optional transition schemas, not extra scene/biography context.
+    # Compare selected context independently of the growing fixed wire schema.
+    extraction_context=[m for m in extraction if not m['content'].startswith('JSON Schema\n')]
+    assert estimate(extraction_context) < estimate(messages)
+    assert estimate(extraction) < 18000  # Still fits the default soft target.
     with pytest.raises(ValueError, match='Критические данные'):
         build_context(snapshot, turns, 'Ввод остаётся целым', 'turn', 3000, 2500)
 

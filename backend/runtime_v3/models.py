@@ -209,6 +209,47 @@ class Location(StrictModel):
     id: str
     name: str
     description: str = ''
+    parent_id: str | None = None
+    kind: str = Field(default='unknown', min_length=1)
+    aliases: list[str] = Field(default_factory=list)
+
+
+class SocialPhase(StrictModel):
+    """One immutable identity/phase; closing never replaces earlier chronology."""
+    id: str = Field(min_length=1)
+    status: Literal['active', 'closed'] = 'active'
+    since: int | None = Field(default=None, ge=0)
+    until: int | None = Field(default=None, ge=0)
+    since_date: str | None = None
+    until_date: str | None = None
+    context: str = ''
+    evidence: str = ''
+    source_turn: int | None = Field(default=None, ge=0)
+    fact_id: str | None = None
+    closure_fact_id: str | None = None
+    outcome: str = ''
+
+
+class Residence(SocialPhase):
+    actor_id: str
+    location_id: str
+
+
+class NarrativeRole(SocialPhase):
+    actor_id: str
+    kind: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    organization_id: str | None = None
+    field: str | None = None
+
+
+class Organization(SocialPhase):
+    name: str = Field(min_length=1)
+    kind: str = Field(default='unknown', min_length=1)
+    status: Literal['active', 'closed', 'unknown'] = 'unknown'
+    aliases: list[str] = Field(default_factory=list)
+    location_ids: list[str] = Field(default_factory=list)
+    name_history: list[NameChange] = Field(default_factory=list)
 
 
 class Fact(StrictModel):
@@ -274,6 +315,9 @@ class WorldStateV3(StrictModel):
     scheduled_events: dict[str, ScheduledEvent] = Field(default_factory=dict)
     objective_relations: dict[str, ObjectiveRelation] = Field(default_factory=dict)
     conditions: dict[str, Condition] = Field(default_factory=dict)
+    residences: dict[str, Residence] = Field(default_factory=dict)
+    roles: dict[str, NarrativeRole] = Field(default_factory=dict)
+    organizations: dict[str, Organization] = Field(default_factory=dict)
 
 
 def fatal(message, code='current_state_invalid', repairable=False, **path):
@@ -332,6 +376,9 @@ def assert_world_state_v3_invariants(state, before=None):
     from backend.runtime_v3.life import validate_life_state
     try: validate_life_state(value)
     except ValueError as exc: fatal(str(exc), 'life_state_invalid')
+    from backend.runtime_v3.residence import validate_residence_state
+    try: validate_residence_state(value)
+    except ValueError as exc: fatal(str(exc), 'residence_state_invalid')
     if before and (value['meta']['world_time'] < before['meta']['world_time'] or value['meta']['turn_id'] < before['meta']['turn_id']):
         fatal('время или номер хода движется назад')
     return value
@@ -367,7 +414,7 @@ class StatePatch:
             fatal('patch создан для другого состояния', 'stale_patch')
         result = deepcopy(before)
         for section, records in self.upserts.items():
-            if section not in ('characters', 'locations', 'facts', 'knowledge', 'relationships', 'threads', 'scheduled_events', 'objective_relations', 'conditions'):
+            if section not in ('characters', 'locations', 'facts', 'knowledge', 'relationships', 'threads', 'scheduled_events', 'objective_relations', 'conditions', 'residences', 'roles', 'organizations'):
                 fatal('неизвестная секция patch')
             result.setdefault(section, {}).update(deepcopy(records))
         result['meta'], result['camera'] = deepcopy(self.meta), deepcopy(self.camera)

@@ -29,7 +29,7 @@ def visible_views(snapshot, turns, kind):
             if kind == 'background' or visible(t, actor, main)]
 
 
-def canonical_slice(state, scope, extraction=False):
+def canonical_slice(state, scope, extraction=False, query=""):
     current = dict(meta={k:v for k,v in state['meta'].items() if k != 'calendar'},
         current_time=current_time(state), calendar_context=nearby_calendar(state, scope.relevant_actor_ids), camera=state['camera'],
         locations={lid: state['locations'][lid] for lid in scope.location_ids},
@@ -81,6 +81,31 @@ def canonical_slice(state, scope, extraction=False):
     for cid in current['social_knowledge']:
         current['social_knowledge'][cid] = [r for r in current['social_knowledge'][cid]
             if {r['source_id'],r['target_id']} & relevant][:64]
+    from backend.runtime_v3.residence import visible_social_state
+    social = {section:[{k:v for k,v in state[section][rid].items()
+        if k not in ('evidence','source_turn','closure_fact_id','name_history')} for rid in ids]
+        for section,ids in (('residences',scope.residence_ids),('roles',scope.role_ids),
+                            ('organizations',scope.organization_ids))}
+    # Do not spend tokens on empty defaults in existing saves.
+    current.update({key:rows for key,rows in social.items() if rows})
+    established = {r['actor_id'] for section in ('residences','roles')
+        for r in state.get(section,{}).values() if r['actor_id'] in relevant}
+    if established:
+        current['social_status'] = {cid:{section:[r['id'] for r in social[section] if r['actor_id']==cid]
+            for section in ('residences','roles')} for cid in sorted(established)}
+        current['residence_role_knowledge'] = {cid:visible_social_state(state,cid,relevant)
+            for cid in sorted(scope.present_actor_ids | scope.remote_actor_ids | scope.active_actor_ids)}
+        for projection in current['residence_role_knowledge'].values():
+            for section, rows in projection.items():
+                active = [r for r in rows if r['status']=='active']
+                closed = sorted((r for r in rows if r['status']=='closed'),key=lambda r:r['until'] or 0,reverse=True)
+                projection[section] = active + closed[:8]
+    # Targeted old phases remain lower priority than current truth.
+    from backend.runtime_v3.scope import words
+    old_phases = [dict(r, section=section) for section in ('residences','roles')
+        for r in state.get(section,{}).values() if r['actor_id'] in relevant and r['status']=='closed'
+        and words(query) & words(' '.join(str(r.get(k,'')) for k in ('title','context','outcome','id')))]
+    if old_phases: current['social_history'] = sorted(old_phases,key=lambda r:r['until'] or 0,reverse=True)[:8]
     return current
 
 
@@ -201,7 +226,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     # Respect an explicit smaller user setting, but never exceed six narrative turns.
     views = all_views[-min(6, max(0, recent_turns)):] if recent_turns else []
     scope = RelevanceResolver().resolve(snapshot, user_text, all_views[-3:], world_history, extraction_text)
-    current = canonical_slice(state, scope, extraction_text is not None)
+    current = canonical_slice(state, scope, extraction_text is not None, user_text+'\n'+(extraction_text or ''))
     if snapshot.get('_time_skip'):
         current['time_skip_target'] = current_time(state,snapshot['_time_skip']['actual_target'])
     builder = ExtractionContextBuilder() if extraction_text is not None else NarrativeContextBuilder()
@@ -228,6 +253,14 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
             replace_block('Знания POV', pov_knowledge(state, scope.controlled_actor_id, current))
             replace_block('Знания действующих персонажей / GM-only', actor_knowledge(state, scope, current))
 
+    if estimate(messages) > target and 'social_history' in current:
+        current.pop('social_history')
+        refresh_current()
+    if estimate(messages) > target and current.get('residence_role_knowledge'):
+        for projection in current['residence_role_knowledge'].values():
+            for section, rows in projection.items():
+                projection[section] = [r for r in rows if r['status']=='active']
+        refresh_current()
     # Weak semantic-only actor candidates go before facts or behavioral identity.
     if not builder.extraction and estimate(messages) > target:
         title = 'Карточки присутствующих / GM-only'

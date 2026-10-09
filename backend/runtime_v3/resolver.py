@@ -89,16 +89,11 @@ class StateResolver:
             return None
 
     def resolve(self, payload):
-        raw = payload if isinstance(payload, RawTurnResult) else RawTurnResult.parse(payload)
+        raw = deepcopy(payload) if isinstance(payload, RawTurnResult) else RawTurnResult.parse(payload)
         self.warnings.extend(raw.warnings)
         s = self.state
-        for i, item in self.records(raw,'locations'):
-            fields = {key:item[key] for key in ('id','name','description') if key in item}
-            entry = self.typed(Location,fields,'locations',i)
-            if entry:
-                if entry['id'] in s['locations'] and entry != s['locations'][entry['id']]:
-                    fatal('конфликт canonical location ID', 'canonical_id_conflict', repairable=True)
-                s['locations'][entry['id']] = entry
+        from backend.runtime_v3.residence import apply_locations
+        apply_locations(self, raw)
         for i, item in self.records(raw,'promotions'):
             cid = item.get('id')
             fields = item.get('fields')
@@ -190,6 +185,14 @@ class StateResolver:
             s['characters'][cid]['location_id'] = origin
         for cid in present:
             origin = s['characters'][cid]['location_id']
+            # #64 final_scene still owns the endpoint. For an off-camera actor
+            # in a structured geography require evidence of joining this scene;
+            # residence/affiliation alone cannot supply that movement evidence.
+            geography = any(s['locations'].get(p,{}).get('parent_id') for p in (origin,lid))
+            if (cid not in self.before['camera']['present_character_ids'] and origin != lid and geography
+                    and cid not in moves and not self.supported({'evidence':scene.get('situation_evidence')})):
+                fatal('появление персонажа требует основания перемещения', 'scene_arrival_unsupported', repairable=True, entity=cid)
+
             if origin != lid:
                 self.history.movements.append(dict(actor_id=cid,from_location_id=origin,to_location_id=lid,
                     derived_from='final_scene',turn_id=self.turn_id))
@@ -253,6 +256,8 @@ class StateResolver:
                 self.history.knowledge_acquisitions.append(dict(entry,source_event_id=event['id'],evidence=item['evidence'],turn_id=self.turn_id))
         from backend.runtime_v3.life import apply_life
         apply_life(self,raw)
+        from backend.runtime_v3.residence import apply_residence
+        apply_residence(self,raw)
         for i, item in self.records(raw,'character_changes',evidence=False):
             cid = self.actor(item.get('id'),'character_changes',i)
             actor = s['characters'][cid]
@@ -322,7 +327,7 @@ class StateResolver:
         from backend.runtime_v3.commitments import invalidate_dead_commitments
         invalidate_dead_commitments(self,{cid for cid,c in s['characters'].items() if c['life_status']=='dead'})
         upserts = {section:{key:deepcopy(value) for key,value in s[section].items() if value != self.before[section].get(key)}
-            for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions')}
+            for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions','residences','roles','organizations')}
         digest = sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
         patch = StatePatch(digest,deepcopy(s['meta']),deepcopy(s['camera']),upserts)
         state = patch.apply(self.before)

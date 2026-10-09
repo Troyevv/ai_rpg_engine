@@ -21,8 +21,8 @@ GARDEN = 'Речной Посад — сад'
 CAFE = 'Речной Посад — кафе'
 PRESENT = (ACTOR_ID, 'qa_vera', 'qa_timur')
 
-# Ages, kinship and occupations are current static card prose. Do not introduce
-# persisted family graphs, residence or organization models here.
+# The stable base keeps ages, kinship and occupations as card prose. Owning
+# issue checkpoints add explicit canonical records without rewriting the base.
 PEOPLE = (
     ('qa_kirill', 'Кирилл Ларин', '34 года', 'Реставратор, основной герой', HOME,
      'Супруг Веры, отец Аси, сын Нины и Павла. Работает вместе с Олегом.'),
@@ -228,7 +228,40 @@ def _family_care(state):
     return state
 
 
-CHECKPOINTS = {'family':_family,'family-care':_family_care,'family-incapacitated':_family_incapacitated,'calendar-evening' :_calendar_evening,'calendar-leap':_calendar_leap,'commitments':_commitments}
+def _residence_roles(state):
+    """#39 extends the same world; base and earlier checkpoints remain unchanged."""
+    from backend.runtime_v3.models import Residence, NarrativeRole, Organization
+    world=state['world']
+    for loc in state['locations']:
+        loc.update(kind='building',parent_id='qa_south_city' if loc['id'] in ('qa_garden','qa_cafe') else 'qa_north_city')
+    state['locations'] += [dict(id=key,name=name,text='',kind=kind,parent_id=parent) for key,name,kind,parent in (
+        ('qa_realm','Два берега','realm',None),('qa_north','Северный край','region','qa_realm'),
+        ('qa_south','Южная долина','region','qa_realm'),('qa_north_city','Озёрск','settlement','qa_north'),
+        ('qa_south_city','Речной Посад','settlement','qa_south'),
+        ('qa_room','Комната у окна','room','qa_home'))]
+    def proof(fid,text,actors,observers):
+        eid=fid+'_event'
+        world['facts'][fid]=dict(id=fid,text=text,secret=True,character_ids=actors,evidence=[text])
+        world['events'][eid]=dict(id=eid,text=text,participants=observers,witnesses=observers,fact_ids=[fid],
+            minute=0,medium='conversation',evidence=text,player_observed=ACTOR_ID in observers)
+        for cid in observers: world['knowledge'][cid+':'+fid]=dict(actor_id=cid,fact_id=fid,status='known',source_event_id=eid)
+    world['organizations']={key:Organization(id=key,name=name,kind=kind,status='active',location_ids=[loc],since=0).model_dump()
+        for key,name,kind,loc in [('qa_restorers','Мастерская карт','workshop','qa_workshop'),
+            ('qa_school','Школа Озёрска','school','qa_library'),('qa_academy','Академия двух берегов','academy','qa_cafe')]}
+    proof('qa_home_fact','Кирилл постоянно живёт в доме Лариных.',[ACTOR_ID],list(PRESENT))
+    proof('qa_elena_home','Дом Елены — в Речном Посаде.',['qa_elena'],['qa_elena'])
+    proof('qa_work_fact','Кирилл работает реставратором в Мастерской карт.',[ACTOR_ID],list(PRESENT))
+    proof('qa_school_fact','Ася учится в Школе Озёрска.',['qa_asya'],[ACTOR_ID,'qa_vera','qa_asya'])
+    world['residences']={r.id:r.model_dump() for r in (
+        Residence(id='qa_home_residence',actor_id=ACTOR_ID,location_id='qa_home',since=0,fact_id='qa_home_fact'),
+        Residence(id='qa_elena_residence',actor_id='qa_elena',location_id='qa_garden',since=0,fact_id='qa_elena_home'))}
+    world['roles']={r.id:r.model_dump() for r in (
+        NarrativeRole(id='qa_job',actor_id=ACTOR_ID,kind='employment',title='Реставратор',organization_id='qa_restorers',since=0,fact_id='qa_work_fact'),
+        NarrativeRole(id='qa_pupil',actor_id='qa_asya',kind='education',title='Ученица',organization_id='qa_school',since=0,fact_id='qa_school_fact'))}
+    return state
+
+
+CHECKPOINTS = {'residence-roles':_residence_roles,'family':_family,'family-care':_family_care,'family-incapacitated':_family_incapacitated,'calendar-evening' :_calendar_evening,'calendar-leap':_calendar_leap,'commitments':_commitments}
 
 
 def build_fixture(checkpoint='base'):
