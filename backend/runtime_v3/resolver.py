@@ -32,11 +32,13 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn"):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", milestone_query=None, development_query=None):
         if mode not in ("turn", "background"):
             raise ValueError("Неизвестный режим StateResolver.")
         self.protected_actor_id = protected_actor_id or before['camera']['controlled_actor_id']
         self.mode = mode
+        self.milestone_query = milestone_query
+        self.development_query = development_query
         self.actor_names=actor_names or {}
         self.before = assert_world_state_v3_invariants(before)
         self.state = deepcopy(self.before)
@@ -104,6 +106,8 @@ class StateResolver:
                 fatal('конфликт canonical character ID', 'canonical_id_conflict', repairable=True)
             s['characters'][cid] = Character(id=cid).model_dump()
             self.cards.append(dict(id=cid,name=item['name'],fields=deepcopy(fields),aliases=[],is_player=False))
+            from backend.runtime_v3.personality import initialize_profiles
+            initialize_profiles(dict(world_state=s, character_cards=[self.cards[-1]]))
         scene = raw.final_scene
         lid, present = scene.get('location_id'), scene.get('present_character_ids')
         if lid is not None and (not isinstance(lid,str) or lid not in s['locations']):
@@ -261,6 +265,9 @@ class StateResolver:
         for i, item in self.records(raw,'character_changes',evidence=False):
             cid = self.actor(item.get('id'),'character_changes',i)
             actor = s['characters'][cid]
+            for protected in ('personality','fields'):
+                if protected in item:
+                    self.warn('character_changes',i,'Личность изменяется только частичной evidence-bound дельтой.',protected,cid,'personality_full_replace_rejected')
             if actor['life_status'] == 'dead':
                 self.warn('character_changes',i,'Мёртвый персонаж не получает обычные изменения состояния.',entity=cid); continue
             if 'birth_date' in item:
@@ -330,6 +337,8 @@ class StateResolver:
         apply_commitments(self, raw)
         from backend.runtime_v3.commitments import invalidate_dead_commitments
         invalidate_dead_commitments(self,{cid for cid,c in s['characters'].items() if c['life_status']=='dead'})
+        from backend.runtime_v3.personality import apply_personality
+        apply_personality(self, raw, events)
         upserts = {section:{key:deepcopy(value) for key,value in s[section].items() if value != self.before[section].get(key)}
             for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions','residences','roles','organizations')}
         digest = sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest()

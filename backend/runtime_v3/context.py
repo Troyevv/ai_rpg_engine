@@ -39,8 +39,16 @@ def canonical_slice(state, scope, extraction=False, query=""):
         relationships=[state['relationships'][key] for key in scope.relationship_pairs],
         threads=[state['threads'][tid] for tid in scope.thread_ids],
         scheduled_events=[commitment_view(state,state['scheduled_events'][eid]) for eid in scope.scheduled_event_ids])
+    development_ids = sorted(scope.relevant_actor_ids, key=lambda cid:(
+        cid != scope.controlled_actor_id, cid not in scope.present_actor_ids,
+        cid not in scope.remote_actor_ids, -scope.actor_scores.get(cid,0), cid))[:8]
     for character in current['characters'].values():
         character['age'] = age_on(character.get('birth_date'), current['current_time']['date'], profile_of(state))
+        from backend.runtime_v3.personality import context_profile
+        profile = context_profile(character, evaluation=extraction)
+        character.pop('personality', None)
+        if extraction and profile and character['id'] in development_ids:
+            character['personality'] = profile
         for key in ('goals', 'intentions', 'obligations'):
             character[key] = [r for r in character[key] if isinstance(r, str) or r['status'] == 'active']
         if not extraction:
@@ -135,6 +143,8 @@ class NarrativeContextBuilder:
 
     def build(self, snapshot, scope, current, views, user_text, kind, prompts, extraction_text):
         snapshot = deepcopy(snapshot)
+        from backend.runtime_v3.personality import project_card
+        snapshot['character_cards'] = [project_card(c, snapshot['world_state']['characters'][c['id']]) for c in snapshot['character_cards']]
         for card in snapshot['character_cards']:
             card['name'] = snapshot['world_state']['characters'][card['id']].get('display_name') or card['name']
         from backend.runtime_v3.director import plan
@@ -193,6 +203,8 @@ class ExtractionContextBuilder:
 
     def build(self, snapshot, scope, current, views, user_text, kind, prompts, extraction_text):
         snapshot = deepcopy(snapshot)
+        from backend.runtime_v3.personality import project_card
+        snapshot['character_cards'] = [project_card(c, snapshot['world_state']['characters'][c['id']]) for c in snapshot['character_cards']]
         for card in snapshot['character_cards']:
             card['name'] = snapshot['world_state']['characters'][card['id']].get('display_name') or card['name']
         default = (PROMPTS/'state_update_prompt.md').read_text(encoding='utf-8')
@@ -232,6 +244,17 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     from backend.runtime_v3.milestones import select_context
     milestones = select_context(state, scope, (world_history or {}).get('_milestone_query'))
     if milestones: current['milestones'] = list(milestones)
+    from backend.runtime_v3.personality import historical_context, visible_item
+    development = historical_context(state,scope,world_history)
+    if development: current['personality_history'] = development
+    access = {}
+    for cid in sorted(scope.relevant_actor_ids)[:8]:
+        profile = state['characters'][cid].get('personality')
+        if profile:
+            rows = {key:[other for other in scope.relevant_actor_ids if visible_item(state,cid,item,other)]
+                    for key,item in profile['items'].items() if item.get('source_ids')}
+            if rows: access[cid]=rows
+    if access: current['personality_known_by'] = access
     if snapshot.get('_time_skip'):
         current['time_skip_target'] = current_time(state,snapshot['_time_skip']['actual_target'])
     builder = ExtractionContextBuilder() if extraction_text is not None else NarrativeContextBuilder()
@@ -264,6 +287,9 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
 
     if estimate(messages) > target and 'social_history' in current:
         current.pop('social_history')
+        refresh_current()
+    while estimate(messages) > target and current.get('personality_history'):
+        current['personality_history'].pop()
         refresh_current()
     while estimate(messages) > target and current.get('milestones'):
         current['milestones'].pop()

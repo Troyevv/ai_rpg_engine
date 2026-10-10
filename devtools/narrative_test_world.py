@@ -262,6 +262,7 @@ def _residence_roles(state):
 
 
 CHECKPOINTS = {'residence-roles':_residence_roles,'family':_family,'family-care':_family_care,'family-incapacitated':_family_incapacitated,'calendar-evening' :_calendar_evening,'calendar-leap':_calendar_leap,'commitments':_commitments}
+CHECKPOINTS['personality'] = lambda state: _family(state)
 CHECKPOINTS['milestones'] = lambda state: _residence_roles(_family(state))
 
 
@@ -342,4 +343,42 @@ def load_fixture(repository, checkpoint='base'):
     draft = repository.draft(workspace['id'], author=True)
     result = repository.confirm_draft(workspace['id'], draft['revision'], draft['version_id'])
     if checkpoint == 'milestones': _seed_milestones(repository,result['save'])
+    if checkpoint == 'personality': _seed_personality(repository,result['save'])
     return dict(result, workspace=workspace['id'], fixture_version=FIXTURE_VERSION, checkpoint=checkpoint)
+
+
+def _seed_personality(repository, save_id):
+    """Replay three accepted developmental scenes, no paid model calls."""
+    from backend.runtime_v3.models import PersonalityProfile
+    from backend.runtime_v3.resolver import StateResolver
+    from backend.runtime_v3.context import build_context
+    from backend.repositories.living_world import project
+    snapshot=repository.get_snapshot(save_id)
+    snapshot['world_state']['characters']['qa_asya']['personality']=PersonalityProfile().model_dump()
+    with repository.connect() as conn:
+        conn.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(snapshot,ensure_ascii=False),save_id))
+    texts=['Ася выбрала рисование и закончила рисунок.',
+           'На следующем занятии Ася снова выбрала рисовать и закончила пейзаж.',
+           'На третьем занятии Ася закончила рисунок и сказала, что любит рисовать.']
+    for index,text in enumerate(texts):
+        camera=snapshot['world_state']['camera']
+        raw=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids']),
+            events=[dict(id='drawing',text=text,evidence=text,participants=['qa_asya'],witnesses=['qa_vera'],fact_ids=[])],
+            development_evidence=[dict(id='drawing_evidence',actor_id='qa_asya',source_event_id='drawing',
+                meaning='Самостоятельно выбирает и завершает рисование.',kind='behavior',assertion='completed',evidence=text)])
+        if index==2:
+            refs=list(snapshot['world_state']['characters']['qa_asya']['personality']['evidence'])+['drawing_evidence']
+            raw['personality_deltas']=[dict(actor_id='qa_asya',evidence_ids=refs,
+                rationale='Повторяющийся выбор и явное самоописание подтверждают предпочтение.',
+                developmental_fit='established_capability',evidence=text,
+                operations=[dict(item_id='drawing',field='preferences',operation='establish',text='Любит рисовать.',expected_text=None,expected_revision=0)])]
+        r=StateResolver(snapshot['world_state'],text,'').resolve(raw)
+        if r.warnings: raise ValueError('Personality QA replay: '+str(r.warnings))
+        config=dict(model='deterministic-fixture',context_length=32768,max_tokens=2000,update_tokens=4096)
+        jid=repository.begin_job(save_id,'Рассматриваю карту.', 'start' if index==0 else 'turn',config)
+        repository.save_context(jid,build_context(snapshot,[],text,'turn',32768,2000),snapshot)
+        repository.job_progress(jid,'validating',narrative=text,complete=True)
+        snapshot['world_state']=r.state
+        repository.commit_job(jid,snapshot,[],{},history_batch=r.history)
+        snapshot=repository.get_snapshot(save_id)
+    with repository.connect() as conn: project(conn,save_id,snapshot)
