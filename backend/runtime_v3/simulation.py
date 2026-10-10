@@ -10,7 +10,7 @@ from backend.runtime_v3.models import assert_world_state_v3_invariants,fatal
 from backend.services.world_delta_errors import StructuralDeltaError
 
 
-def simulate(before_snapshot, snapshot, history_batch, context_length, config, generate,cancelled,warnings,on_repair):
+def simulate(before_snapshot, snapshot, history_batch, context_length, config, generate,cancelled,warnings,on_repair,world_history=None):
     before,state=before_snapshot['world_state'],snapshot['world_state']
     batch=[]
     if snapshot.get('last_time_skip') and state['meta']['world_time']-before['meta']['world_time']>=45:
@@ -27,17 +27,18 @@ def simulate(before_snapshot, snapshot, history_batch, context_length, config, g
         'elapsed_minutes=0. Не действуй за управляемого персонажа '+str(protected)+'. Не добавляй его в сцену. '
         'Намерение может остаться незавершённым. Не выдумывай события без причины.')
     if batch: instruction+=' Обработай одной группой только причинно обусловленные изменения интервала: '+json.dumps(batch,ensure_ascii=False)+'. Не обязаны завершиться все намерения.'
-    messages=build_context(camera,[],instruction,'background',context_length,config['max_tokens'],prompts=config.get('_prompts'))
+    messages=build_context(camera,[],instruction,'background',context_length,config['max_tokens'],prompts=config.get('_prompts'),world_history=world_history)
     narrative=''.join(generate('world_simulation',messages,config['max_tokens'],config.get('temperature',0.8)))
     if cancelled.is_set():return snapshot,history_batch
     if not narrative.strip():raise ValueError('Фоновая симуляция вернула пустой текст.')
     feedback=None
     for attempt in range(2):
-        messages=build_context(camera,[],instruction,'background',context_length,config['update_tokens'],extraction_text=narrative,validation_feedback=feedback,prompts=config.get('_prompts'))
+        messages=build_context(camera,[],instruction,'background',context_length,config['update_tokens'],extraction_text=narrative,validation_feedback=feedback,prompts=config.get('_prompts'),world_history=world_history)
         payload=''.join(generate('world_simulation_delta' if attempt==0 else 'world_simulation_repair',messages,config['update_tokens'],0.1,response_format={'type':'json_object'}))
         if cancelled.is_set():return snapshot,history_batch
         try:
-            resolved=StateResolver(camera['world_state'],narrative,'',turn_id=state['meta']['turn_id'],observed=False,mode='background',protected_actor_id=protected).resolve(payload)
+            resolved=StateResolver(camera['world_state'],narrative,'',turn_id=state['meta']['turn_id'],observed=False,mode='background',protected_actor_id=protected,
+                actor_names={c['id']:c['name'] for c in snapshot['character_cards']}).resolve(payload)
             if resolved.state['meta']['world_time']!=state['meta']['world_time']:
                 fatal('background не должен продвигать часы','background_time_invalid',repairable=True)
             if protected is not None and (protected in resolved.state['camera']['present_character_ids'] or

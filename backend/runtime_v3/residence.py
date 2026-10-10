@@ -185,6 +185,11 @@ def apply_residence(resolver, raw):
                 if old and old['status']=='closed': raise ValueError('closed phase is immutable; use new ID')
                 allowed = set(model.model_fields) - {'since','until','since_date','until_date','source_turn','name_history'}
                 controls = {'assertion'} if target=='organizations' else {'assertion','player_assertion','player_evidence','decision_actor_id','transition','replaces'}
+                controls |= {'source_event_id','source_process_id'}
+                if target == 'roles':
+                    controls.add('significance')
+                    if 'significance' in item and item['significance'] not in ('major','routine'):
+                        raise ValueError('invalid role significance')
                 if set(item)-allowed-controls: raise ValueError('arbitrary state or chronology rewrite forbidden')
                 if target == 'organizations':
                     if not old:

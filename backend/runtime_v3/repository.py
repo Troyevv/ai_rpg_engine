@@ -14,6 +14,8 @@ def initialize(db):
     db.execute('''CREATE TABLE IF NOT EXISTS world_migrations_v3 (
         source_hash TEXT PRIMARY KEY, snapshot_json TEXT NOT NULL, report_json TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)''')
+    from backend.runtime_v3.milestones import initialize as initialize_milestones
+    initialize_milestones(db)
 
 
 def append_history(db, parent_id, batch):
@@ -22,6 +24,8 @@ def append_history(db, parent_id, batch):
     hid = uuid.uuid4().hex
     db.execute('INSERT INTO world_history_v3(id,parent_id,payload_json) VALUES(?,?,?)',
         (hid,parent_id,json.dumps(batch,ensure_ascii=False)))
+    from backend.runtime_v3.milestones import index_batch
+    index_batch(db, hid, batch)
     return hid
 
 

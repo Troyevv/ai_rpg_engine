@@ -475,7 +475,10 @@ test("wizard creator and spellbook keep casting pending across reload", async ({
   await press(page, "Перейти: Хранилище");
   await press(page, "Начать бой: Страж архива");
   await press(page, "Бросить кубик");
-  await press(page, "Заклинания");
+  await page
+    .getByRole("navigation", { name: "Разделы кампании" })
+    .getByRole("button", { name: "Заклинания", exact: true })
+    .click();
   await page
     .getByLabel("Цель заклинания", { exact: true })
     .selectOption("sentinel");
