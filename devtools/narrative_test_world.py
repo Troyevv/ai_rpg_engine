@@ -262,6 +262,58 @@ def _residence_roles(state):
 
 
 CHECKPOINTS = {'residence-roles':_residence_roles,'family':_family,'family-care':_family_care,'family-incapacitated':_family_incapacitated,'calendar-evening' :_calendar_evening,'calendar-leap':_calendar_leap,'commitments':_commitments}
+CHECKPOINTS['milestones'] = lambda state: _residence_roles(_family(state))
+
+
+def _seed_milestones(repository, save_id):
+    """Replay accepted transitions in the same QA world, through normal commit code.
+
+    Initial imported biography is deliberately NOT treated as transition History.
+    Routine batches age the index beyond the recent-history window without inventing
+    protagonist changes or implementing future pregnancy/advance mechanics.
+    """
+    from backend.runtime_v3.repository import committed_snapshot, append_history
+    from backend.runtime_v3.resolver import StateResolver
+    from backend.repositories.living_world import project
+    snapshot = repository.get_snapshot(save_id)
+    steps = [
+        ('qa_engagement_fact','Тимур и Марина объявили о помолвке.',['qa_timur','qa_marina'],
+         {'social_relation_changes':[dict(id='qa_new_engagement',kind='engaged',source_id='qa_timur',target_id='qa_marina')]}),
+        ('qa_wedding_fact','Тимур и Марина заключили брак.',['qa_timur','qa_marina'],
+         {'social_relation_changes':[dict(id='qa_new_engagement',status='closed',outcome='superseded'),
+            dict(id='qa_new_marriage',kind='spouse',source_id='qa_timur',target_id='qa_marina')]}),
+        ('qa_divorce_fact','Тимур и Марина развелись.',['qa_timur','qa_marina'],
+         {'social_relation_changes':[dict(id='qa_new_marriage',status='closed',outcome='divorced')]}),
+        ('qa_move_fact','Кирилл решил постоянно жить в Речном Посаде.',[ACTOR_ID],
+         {'residence_changes':[dict(id='qa_new_home',actor_id=ACTOR_ID,location_id='qa_garden',replaces=['qa_home_residence'])]}),
+        ('qa_graduation_fact','Ася закончила обучение в Школе Озёрска.',['qa_asya'],
+         {'role_changes':[dict(id='qa_pupil',status='closed',outcome='graduated')]}),
+        ('qa_death_fact','Павел умер.',['qa_pavel'],
+         {'life_changes':[dict(id='qa_pavel',life_status='dead')]}),
+    ]
+    with repository.connect() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        for fid,text,actors,changes in steps:
+            camera=snapshot['world_state']['camera']
+            event=fid+'_event'; witnesses=[ACTOR_ID,'qa_vera']
+            raw=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=1),
+                facts=[dict(id=fid,text=text,character_ids=actors,evidence=text)],
+                events=[dict(id=event,text=text,participants=list(dict.fromkeys(actors+witnesses)),witnesses=witnesses,
+                    fact_ids=[fid],medium='testimony',evidence=text)],
+                knowledge_gained=[dict(actor_id=cid,fact_id=fid,source_event_id=event,evidence=text) for cid in witnesses])
+            for section,rows in changes.items():
+                raw[section]=[dict(row,evidence=text,assertion='established',source_event_id=event,
+                    **({'closure_fact_id':fid} if row.get('status')=='closed' else {'fact_id':fid}),
+                    **({'player_assertion':'explicit_choice','player_evidence':text} if section=='residence_changes' else {})) for row in rows]
+            resolved=StateResolver(snapshot['world_state'],text,text,turn_id=0,
+                actor_names={c['id']:c['name'] for c in snapshot['character_cards']}).resolve(raw)
+            if resolved.warnings: raise ValueError('Milestone QA replay: '+str(resolved.warnings))
+            snapshot=committed_snapshot(conn,snapshot,resolved)
+        for n in range(80):
+            snapshot['history_head']=append_history(conn,snapshot['history_head'],
+                {'events':[dict(id=f'qa_routine_{n}',text='Обычный разговор.',participants=[ACTOR_ID]) ]})
+        conn.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(snapshot,ensure_ascii=False),save_id))
+        project(conn,save_id,snapshot)
 
 
 def build_fixture(checkpoint='base'):
@@ -289,4 +341,5 @@ def load_fixture(repository, checkpoint='base'):
                             workspace['revision'], format='json')
     draft = repository.draft(workspace['id'], author=True)
     result = repository.confirm_draft(workspace['id'], draft['revision'], draft['version_id'])
+    if checkpoint == 'milestones': _seed_milestones(repository,result['save'])
     return dict(result, workspace=workspace['id'], fixture_version=FIXTURE_VERSION, checkpoint=checkpoint)

@@ -132,6 +132,8 @@ def run_job(path, job_id, handle):
             from backend.runtime_v3.repository import read_history
             with storage.connect() as db:
                 world_history,history_audit=read_history(db,before.get('history_head'))
+            from backend.runtime_v3.milestones import reader as milestone_reader
+            world_history['_milestone_query'] = milestone_reader(storage, before.get('history_head'))
             history = storage.list_turns(job['save_id'])
             if job['replaces_id'] is not None:
                 target = next(t for t in history if t['id'] == job['replaces_id'])
@@ -244,7 +246,8 @@ def run_job(path, job_id, handle):
             stage_started=time.perf_counter()
             background_warnings=[]
             state,history_batch=simulate(before,state,history_batch,context,config,generate,handle.cancelled,
-                warnings=background_warnings,on_repair=lambda detail: storage.record_repair(job_id,detail))
+                warnings=background_warnings,on_repair=lambda detail: storage.record_repair(job_id,detail),
+                world_history={'_milestone_query':world_history['_milestone_query']})
             if background_warnings:
                 with storage.connect() as db:
                     previous=json.loads(db.execute('SELECT warnings_json FROM game_jobs WHERE id=?',(job_id,)).fetchone()[0] or '[]')

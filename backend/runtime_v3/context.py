@@ -58,8 +58,10 @@ def canonical_slice(state, scope, extraction=False, query=""):
                     character[key] = [r for r in character[key] if words(r if isinstance(r, str) else r['text']) & scope.query_words][:3]
     from backend.runtime_v3.life import capabilities
     relevant = scope.relevant_actor_ids
-    current['objective_relations'] = [deepcopy(r) for r in state.get('objective_relations',{}).values()
-        if {r['source_id'],r['target_id']} & relevant][:64]
+    relations = [r for r in state.get('objective_relations',{}).values()
+        if {r['source_id'],r['target_id']} & relevant]
+    current['objective_relations'] = deepcopy(sorted(relations,
+        key=lambda r:(r['status'] != 'active', -(r.get('source_turn') or 0), r['id']))[:64])
     current['conditions'] = [deepcopy(c) for c in state.get('conditions',{}).values()
         if c['actor_id'] in relevant and c['status'] in ('active','unknown_outcome')]
     for cid, actor in current['characters'].items():
@@ -227,11 +229,18 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     views = all_views[-min(6, max(0, recent_turns)):] if recent_turns else []
     scope = RelevanceResolver().resolve(snapshot, user_text, all_views[-3:], world_history, extraction_text)
     current = canonical_slice(state, scope, extraction_text is not None, user_text+'\n'+(extraction_text or ''))
+    from backend.runtime_v3.milestones import select_context
+    milestones = select_context(state, scope, (world_history or {}).get('_milestone_query'))
+    if milestones: current['milestones'] = list(milestones)
     if snapshot.get('_time_skip'):
         current['time_skip_target'] = current_time(state,snapshot['_time_skip']['actual_target'])
     builder = ExtractionContextBuilder() if extraction_text is not None else NarrativeContextBuilder()
     rules, messages = builder.build(snapshot, scope, current, views, user_text, kind, prompts, extraction_text)
     rules += '\n' + TIME_CONTRACT
+    rules += ('\nMilestones — исторический GM-only индекс принятых переходов, не текущее состояние и не знание персонажей. '
+              'Текущий canonical WorldState имеет приоритет над Milestones, History и старой биографией. '
+              'known_by ограничивает доступ действующих персонажей к milestone; остальные не знают его автоматически. '
+              'Исторический брак/роль/дом не означает, что они активны сейчас; исторические имена не заменяют текущие.')
     rules += f'\nRuntime v3. controlled_actor_id={camera["controlled_actor_id"]}; mode={camera["mode"]}; world_time={state["meta"]["world_time"]} минут.'
     if snapshot.get('_time_skip'): rules += '\nДетерминированный Time Skip: ' + json.dumps(snapshot['_time_skip'], ensure_ascii=False) + '. Описывай только до actual_target, не позже. Hidden не становится знанием игрока.'
     if validation_feedback: rules += '\nИсправь структурную ошибку, верни полный JSON:\n' + validation_feedback
@@ -255,6 +264,9 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
 
     if estimate(messages) > target and 'social_history' in current:
         current.pop('social_history')
+        refresh_current()
+    while estimate(messages) > target and current.get('milestones'):
+        current['milestones'].pop()
         refresh_current()
     if estimate(messages) > target and current.get('residence_role_knowledge'):
         for projection in current['residence_role_knowledge'].values():
@@ -305,6 +317,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     sections = {key: dict(selected=selected[key], included=len(current[key]), total=len(state[key]))
                 for key in ('locations', 'facts', 'knowledge', 'relationships', 'threads', 'scheduled_events')}
     sections['history_events'] = dict(selected=0 if builder.extraction else len(selected_history), included=0 if builder.extraction else len(scope.history_events), total=len((world_history or {}).get('events', [])))
+    sections['milestones'] = dict(selected=len(milestones), included=len(current.get('milestones', [])))
     def contents(title):
         return next((json.loads(m['content'].split('\n', 1)[1]) for m in messages if m['content'].startswith(title+'\n')), [])
     included_actors = (set(current['characters']) if builder.extraction else

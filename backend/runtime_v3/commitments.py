@@ -126,6 +126,10 @@ def apply_commitments(resolver, raw):
             else: events[eid] = old
             resolver.warn('scheduled_event_changes', index, 'Неизвестная или циклическая зависимость.',
                           entity=eid, code='commitment_dependency_invalid')
+    from backend.runtime_v3.life import _transition
+    for eid, (index, old) in accepted.items():
+        item = raw.records['scheduled_event_changes'][index]
+        _transition(resolver,'scheduled_events',eid,old,events[eid],item)
     # Cancellation invalidates only explicit dependencies, never merely related plans.
     changed = True
     while changed:

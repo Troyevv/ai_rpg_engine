@@ -100,9 +100,19 @@ def _proof(resolver, item):
 
 def _transition(resolver, section, key, before, after, item):
     """Append structured provenance; bounded History reads never own current truth."""
-    resolver.history.state_changes.append(dict(kind=section, entity=key, before=deepcopy(before), after=deepcopy(after),
+    from backend.runtime_v3.milestones import stable_id, transition_provenance
+    actors = ([key] if section in ('life_changes','birth_date_established') else
+              [after[k] for k in ('actor_id','source_id','target_id') if after.get(k)])
+    actors = list(dict.fromkeys([*actors, *after.get('character_ids', [])]))
+    record = dict(kind=section, entity=key, before=deepcopy(before), after=deepcopy(after),
         turn_id=resolver.turn_id, minute=resolver.state['meta']['world_time'],
-        date=current_time(resolver.state)['date'], evidence=item['evidence'], player_observed=resolver.observed))
+        date=current_time(resolver.state)['date'], evidence=item['evidence'], player_observed=resolver.observed,
+        names={cid:resolver.state['characters'][cid].get('display_name') or resolver.actor_names.get(cid,cid) for cid in actors},
+        **transition_provenance(resolver,item,actors))
+    record['id'] = stable_id('transition', {k:v for k,v in record.items() if k not in ('evidence','names','player_observed')})
+    if section == 'roles' and item.get('significance') in ('major','routine'):
+        record['significance'] = item['significance']
+    resolver.history.state_changes.append(record)
 
 
 def _records(resolver, raw, section):

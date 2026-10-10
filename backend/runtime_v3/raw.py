@@ -81,6 +81,7 @@ def extraction_schema():
         transition={'enum':['voluntary','external']}, replaces=strings)
     definitions['residence_changes'] = record(dict(phase, location_id=string), ('id','assertion','evidence'))
     definitions['role_changes'] = record(dict(phase, kind=string, title=string, organization_id=string, field=string), ('id','assertion','evidence'))
+    definitions['role_changes']['properties']['significance'] = {'enum':['major','routine']}
     definitions['organization_changes'] = record(dict(id=string, assertion={'enum':['established']},
         name=string, kind=string, aliases=strings, location_ids=strings, status={'enum':['active','closed','unknown']},
         context=string, fact_id=string, closure_fact_id=string), ('id','assertion','evidence'))
@@ -111,6 +112,8 @@ def extraction_schema():
         end_temporal=deepcopy(scheduled['properties']['temporal']))
     definitions['scheduled_event_changes']['properties']['location_id'] = string
     definitions['scheduled_event_changes']['properties']['interrupts'] = {'type':'boolean', 'description':'Только установленное событие, требующее восприятия или участия controlled actor.'}
+    for section in ('life_changes','condition_changes','social_relation_changes','residence_changes','role_changes','organization_changes','character_changes','scheduled_event_changes'):
+        definitions[section]['properties'].update(source_event_id=string, source_process_id=string)
     from backend.services.world import CARD_FIELDS
     definitions['promotions']['properties']['fields']=obj({key:string for key in CARD_FIELDS},CARD_FIELDS)
     from backend.services.player_agency import PLAYER_SOURCE_DESCRIPTION

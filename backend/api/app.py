@@ -317,6 +317,19 @@ def create_app(db_path=None, recover=True):
         from backend.runtime_v3.kinship import genealogy
         return genealogy(repo.get_snapshot(sid),root_id,depth=depth,limit=limit)
 
+    @app.get('/api/saves/{sid}/milestones')
+    def milestones_projection(sid: int, actor_id: str | None = None, category: str | None = None,
+            start_minute: int | None = None, end_minute: int | None = None,
+            start_date: str | None = None, end_date: str | None = None, limit: int = 32, offset: int = 0):
+        from backend.runtime_v3.milestones import visible_query
+        snapshot = repo.get_snapshot(sid)
+        from backend.runtime_v3.calendar import date_parts, profile_of
+        for date in (start_date,end_date):
+            if date is not None: date_parts(date,profile_of(snapshot['world_state']))
+        return visible_query(repo,snapshot,actor_ids=[actor_id] if actor_id else None,category=category,
+            start_minute=start_minute,end_minute=end_minute,start_date=start_date,end_date=end_date,
+            limit=limit,offset=offset)
+
     @app.get('/api/saves/{sid}/calendar')
     def calendar_projection(sid: int, start_date: str | None = None, end_date: str | None = None, minute: int | None = None):
         from backend.runtime_v3.calendar import calendar_range, current_time, calendar_label

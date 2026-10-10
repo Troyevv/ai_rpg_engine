@@ -273,7 +273,11 @@ class StateResolver:
                     today = current_time(s)['date']
                     if today and birth > today: raise ValueError('birth date is in the future')
                     if actor.get('birth_date') not in (None,birth): raise ValueError('cannot overwrite an established birthday')
-                    actor['birth_date'] = birth
+                    if actor.get('birth_date') != birth:
+                        prior = deepcopy(actor)
+                        actor['birth_date'] = birth
+                        from backend.runtime_v3.life import _transition
+                        _transition(self,'birth_date_established',cid,prior,actor,item)
                 except (ValueError,TypeError):
                     self.warn('character_changes',i,'дата рождения не подтверждена или некорректна','birth_date',cid)
             for key in ('situation','physical_state','emotion','goals','intentions','obligations'):
@@ -337,6 +341,9 @@ class StateResolver:
         record_id=identity('record',self.turn_id,self.narrative,self.observed)
         for event in self.history.events:
             event.update(source_record_id=record_id,source_sequence=self.turn_id-1)
+        for change in self.history.state_changes:
+            if change.get('id'):
+                change['source_record_id'] = record_id
         self.history.turns.append(dict(id=record_id,turn_id=self.turn_id,sequence=self.turn_id-1,
             narrative=self.narrative,player_input=self.player_input,
             camera_before=deepcopy(self.before['camera']),camera=deepcopy(state['camera']),

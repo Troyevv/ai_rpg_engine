@@ -209,6 +209,17 @@ Active canonical roles/residences override stale biography/card prose; closed ph
 historical. Never infer current physical presence, new friends, knowledge or emotions.
 '''
 NARRATIVE_CONTRACT += '\n' + RESIDENCE_CONTRACT
+EXTRACTION_CONTRACT += '''
+Optional source_event_id on life/condition/social/residence/role/organization/character/
+scheduled_event changes references an accepted event of THIS extraction involving an
+affected actor. source_process_id references a known condition or commitment involving
+that actor. Use these only for established causal links; do not invent a cause.
+Several consequences may share one source event/process. Milestones are derived by
+Runtime from accepted transitions; never output arbitrary milestone claims.
+For role_changes only, significance=major may mark a significant setting-specific
+role phase; routine suppresses biography indexing. This never establishes a role
+without the usual evidence/lifecycle checks. Omit when standard phase semantics fit.
+'''
 EXTRACTION_CONTRACT += """
 Residence/role/organization changes need established completed evidence, not plans or age.
 Physical location != home/base != role. Travel/visits, marriage, roles and hierarchy never
