@@ -116,6 +116,7 @@ def validate(state):
         if actor.get('birth_date') is not None:
             try: date_parts(actor['birth_date'],profile)
             except (ValueError,TypeError,KeyError): errors.append('Некорректная дата рождения персонажа.')
+    extension = None
     try:
         from backend.runtime_v3.models import Character, ObjectiveRelation, Condition
         from backend.runtime_v3.life import validate_life_state
@@ -126,6 +127,19 @@ def validate(state):
             facts=world['facts'],meta=dict(calendar=configured), camera=dict(present_character_ids=[],remote_interactions=[]))
         validate_life_state(extension)
     except (ValueError,TypeError,KeyError): errors.append('Некорректное жизненное состояние, семейные связи или условия.')
+    if extension is not None:
+        try:
+            from backend.runtime_v3.models import Location
+            from backend.runtime_v3.residence import MODELS, validate_residence_state
+            spatial = dict(extension, locations={loc['id']:Location.model_validate(dict(
+                id=loc['id'],name=loc['name'],description=loc.get('description',loc.get('text','')),
+                **{k:loc[k] for k in ('parent_id','kind','aliases') if k in loc})).model_dump() for loc in state['locations']})
+            for section, model in MODELS.items():
+                records = world.get(section,{})
+                if not isinstance(records,dict): raise ValueError('expected a canonical record map')
+                spatial[section] = {key:model.model_validate(row).model_dump() for key,row in records.items()}
+            validate_residence_state(spatial)
+        except (ValueError,TypeError,KeyError): errors.append('Некорректные места, организации, проживание или роли.')
     require(len(ids)==len(cards),'Повтор Character ID.')
     require(all(re.fullmatch(r'[\w-]{1,100}',cid) for cid in ids),'Некорректный Character ID.')
     require(len({c['name'].strip().casefold() for c in cards})==len(cards),'Повтор имени: проверь identities персонажей.')

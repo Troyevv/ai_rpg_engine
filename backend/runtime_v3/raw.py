@@ -7,7 +7,8 @@ from backend.services.relation_dimensions import RELATION_DIMENSIONS
 
 SECTIONS = ('locations','promotions','events','facts','knowledge_gained','character_changes',
             'relationship_changes','movements','thread_changes','scheduled_event_changes',
-            'life_changes','condition_changes','social_relation_changes')
+            'life_changes','condition_changes','social_relation_changes',
+            'location_changes','organization_changes','residence_changes','role_changes')
 
 
 @dataclass
@@ -52,7 +53,7 @@ def extraction_schema():
     def record(props, required=()):
         return obj(dict(props, evidence=evidence), required)
     definitions = {
-        'locations':record(dict(id=string,name=string,description=string), ('id','name','evidence')),
+        'locations':record(dict(id=string,name=string,description=string,parent_id=string,kind=string,aliases=strings), ('id','name','evidence')),
         'promotions':record(dict(id=string,name=string,fields={'type':'object','additionalProperties':string}), ('id','name','fields','evidence')),
         'facts':record(dict(id=string,text=string,visibility={'enum':['public','secret']},character_ids=strings), ('id','text','evidence')),
         'events':record(dict(id=string,text=string,participants=strings,witnesses=strings,fact_ids=strings,
@@ -73,6 +74,16 @@ def extraction_schema():
     }
     agency = dict(assertion={'enum':['established']}, player_evidence=string,
                   player_assertion={'enum':['explicit_choice']}, decision_actor_id=string)
+    definitions['location_changes'] = record(dict(id=string, assertion={'enum':['established']},
+        parent_id={'type':['string','null']}, kind=string, aliases=strings), ('id','assertion','evidence'))
+    phase = dict(id=string, **agency, actor_id=string, fact_id=string, closure_fact_id=string,
+        status={'enum':['active','closed']}, outcome=string, context=string,
+        transition={'enum':['voluntary','external']}, replaces=strings)
+    definitions['residence_changes'] = record(dict(phase, location_id=string), ('id','assertion','evidence'))
+    definitions['role_changes'] = record(dict(phase, kind=string, title=string, organization_id=string, field=string), ('id','assertion','evidence'))
+    definitions['organization_changes'] = record(dict(id=string, assertion={'enum':['established']},
+        name=string, kind=string, aliases=strings, location_ids=strings, status={'enum':['active','closed','unknown']},
+        context=string, fact_id=string, closure_fact_id=string), ('id','assertion','evidence'))
     caps = obj({key:{'type':'boolean'} for key in ('conscious','can_perceive','can_act','can_speak','can_move')})
     definitions['life_changes'] = record(dict(id=string, **agency,
         life_status={'enum':['alive','dead','missing','unknown']}, display_name=string,

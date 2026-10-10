@@ -34,10 +34,25 @@ def migrate_v2(original):
             return MigrationResult(dict(schema_version=3,world_state=state,character_cards=[],campaign={'incomplete_import':True},memory={},history_head=None),history.to_dict(),[dict(section='migration',reason='неполное древнее сохранение: текст сохранён, требуется подготовка персонажей')])
         fatal('невозможно мигрировать неполное сохранение', 'migration_invalid')
     report, locations = [], {}
+    # Explicit #39 imports own stable location IDs. Legacy name-only saves keep
+    # their historical deterministic identity mapping, without residence inference.
+    declared = old.get('locations', [])
+    structured_places = (any(k in world for k in ('residences','roles','organizations')) or
+        any(isinstance(loc,dict) and any(k in loc for k in ('parent_id','kind','aliases')) for loc in declared))
+    if structured_places:
+        for loc in declared:
+            record = dict(id=loc['id'],name=loc['name'],description=loc.get('description',loc.get('text','')),
+                          **{k:deepcopy(loc[k]) for k in ('parent_id','kind','aliases') if k in loc})
+            locations[loc['id']] = Location.model_validate(record).model_dump()
+
 
     def location(name):
         if not isinstance(name, str) or not name.strip() or name == 'Не указано':
             return None
+        matches = [lid for lid, loc in locations.items() if name == lid or name.strip().casefold() in
+                   [n.strip().casefold() for n in [loc['name'],*loc.get('aliases',[])]]]
+        if len(matches) > 1: fatal('неоднозначное место при миграции: нужен canonical ID', 'migration_invalid')
+        if matches: return matches[0]
         lid = identity('location', name.strip().casefold())
         locations.setdefault(lid, Location(id=lid, name=name.strip()).model_dump())
         return lid
@@ -47,7 +62,7 @@ def migrate_v2(original):
         if isinstance(item, str):
             location(item)
         elif isinstance(item, dict):
-            lid = location(item.get('name') or item.get('text'))
+            lid = item.get('id') if structured_places else location(item.get('name') or item.get('text'))
             if lid:
                 locations[lid]['description'] = item.get('description', item.get('text', ''))
     raw_scenes = world.get('scenes', {})
@@ -137,6 +152,8 @@ def migrate_v2(original):
         state['scheduled_events'][eid].update({k:deepcopy(e[k]) for k in ('commitment','end_temporal','depends_on','started_minute','outcome','evidence','source_turn','interrupts') if k in e})
     state['objective_relations'] = deepcopy(world.get('objective_relations',{}))
     state['conditions'] = deepcopy(world.get('conditions',{}))
+    for section in ('residences','roles','organizations'):
+        state[section] = deepcopy(world.get(section,{}))
     configured = old.get('world_clock', {}).get('calendar')
     if configured:
         from backend.runtime_v3.models import Calendar

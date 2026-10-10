@@ -59,7 +59,13 @@ export interface Genealogy {
   kinship:{source_id:string;target_id:string;kind:string;lineage:string;generations?:number}[];
   truncated:boolean;
 }
+export interface ResidenceRoleView {
+  id:string;actor_id:string;label:string;status:'active'|'closed';certainty:'known'|'suspected';
+  organization?:string;kind?:string;field?:string|null;outcome:string;
+  since:number|null;until:number|null;since_date:string|null;until_date:string|null;
+}
 export interface State {
+  residence_roles?:{residences:ResidenceRoleView[];roles:ResidenceRoleView[]};
   life_state?:{life_status:string;conditions:{id:string;description:string;status:string;duration:string}[];names:{previous:string;current:string;date:string|null;minute:number}[]}|null;
   genealogy?:Genealogy;
   objective_relations?:SocialRelation[];
