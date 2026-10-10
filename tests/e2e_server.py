@@ -193,6 +193,14 @@ if __name__ == '__main__':
         hold_next_preparation=True
         return {'held':True}
 
+    @app.post('/test/personality-seed')
+    def personality_seed():
+        from devtools.narrative_test_world import load_fixture
+        repo=app.state.repository
+        result=load_fixture(repo,'personality')
+        repo.switch_actor(result['save'],'qa_asya',repo.get_save(result['save'])['revision'])
+        return {'world':result['world'],'save':result['save']}
+
     @app.post('/test/residence-seed')
     def residence_seed():
         from devtools.narrative_test_world import load_fixture

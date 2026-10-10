@@ -134,6 +134,8 @@ def run_job(path, job_id, handle):
                 world_history,history_audit=read_history(db,before.get('history_head'))
             from backend.runtime_v3.milestones import reader as milestone_reader
             world_history['_milestone_query'] = milestone_reader(storage, before.get('history_head'))
+            from backend.runtime_v3.personality import history_reader
+            world_history['_development_query'] = history_reader(storage,before.get('history_head'))
             history = storage.list_turns(job['save_id'])
             if job['replaces_id'] is not None:
                 target = next(t for t in history if t['id'] == job['replaces_id'])
@@ -216,7 +218,7 @@ def run_job(path, job_id, handle):
                     if skip_result: raw.final_scene['elapsed_minutes'] = skip_result['elapsed_minutes']
                     elif job['kind']=='turn' and __import__('re').match(r'^(?:я )?(?:ложусь спать|сплю)\b',job['user_text'].strip(),__import__('re').I):
                         raw.final_scene['elapsed_minutes']=0
-                    resolved=StateResolver(before['world_state'],narrative,job['user_text'],turn_id=sequence+1,actor_names={c['id']:c['name'] for c in before['character_cards']}).resolve(raw)
+                    resolved=StateResolver(before['world_state'],narrative,job['user_text'],turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),actor_names={c['id']:c['name'] for c in before['character_cards']}).resolve(raw)
                     state=deepcopy(before)
                     state.pop('_time_skip', None)
                     state.pop('last_time_skip', None)
@@ -247,7 +249,7 @@ def run_job(path, job_id, handle):
             background_warnings=[]
             state,history_batch=simulate(before,state,history_batch,context,config,generate,handle.cancelled,
                 warnings=background_warnings,on_repair=lambda detail: storage.record_repair(job_id,detail),
-                world_history={'_milestone_query':world_history['_milestone_query']})
+                world_history={'_milestone_query':world_history['_milestone_query'],'_development_query':world_history['_development_query']})
             if background_warnings:
                 with storage.connect() as db:
                     previous=json.loads(db.execute('SELECT warnings_json FROM game_jobs WHERE id=?',(job_id,)).fetchone()[0] or '[]')

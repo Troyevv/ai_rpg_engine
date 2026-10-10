@@ -37,7 +37,7 @@ def simulate(before_snapshot, snapshot, history_batch, context_length, config, g
         payload=''.join(generate('world_simulation_delta' if attempt==0 else 'world_simulation_repair',messages,config['update_tokens'],0.1,response_format={'type':'json_object'}))
         if cancelled.is_set():return snapshot,history_batch
         try:
-            resolved=StateResolver(camera['world_state'],narrative,'',turn_id=state['meta']['turn_id'],observed=False,mode='background',protected_actor_id=protected,
+            resolved=StateResolver(camera['world_state'],narrative,'',turn_id=state['meta']['turn_id'],observed=False,mode='background',protected_actor_id=protected,milestone_query=(world_history or {}).get('_milestone_query'),development_query=(world_history or {}).get('_development_query'),
                 actor_names={c['id']:c['name'] for c in snapshot['character_cards']}).resolve(payload)
             if resolved.state['meta']['world_time']!=state['meta']['world_time']:
                 fatal('background не должен продвигать часы','background_time_invalid',repairable=True)

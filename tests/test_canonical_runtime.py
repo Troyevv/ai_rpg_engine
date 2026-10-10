@@ -64,7 +64,9 @@ def test_context_separates_current_knowledge_from_provenance_and_keeps_static_st
     state['facts']['known']=Fact(id='known',text='Игрок знает пароль',visibility='secret').model_dump()
     state['knowledge'][actor+':known']=Knowledge(actor_id=actor,fact_id='known').model_dump()
     card=next(c for c in snapshot['character_cards'] if c['id']==actor)
-    card['fields']['Стиль общения']='Короткие фразы, сухой юмор'
+    # #67 current canonical profile owns evolved card text.
+    state['characters'][actor]['personality']['items']['communication'] = dict(
+        field='communication',text='Короткие фразы, сухой юмор',revision=0,source_ids=[])
     messages=build_context(snapshot,[],'Вспоминаю пароль','turn',32768,2000,world_history={'events':[]})
     knowledge=json.loads(next(m['content'] for m in messages if m['content'].startswith('Знания POV')).split('\n',1)[1])
     assert knowledge[0]==dict(actor_id=actor,fact_id='known',status='known')

@@ -237,3 +237,25 @@ and responsible other decision_actor_id; never disguise voluntary choice as exte
 Creation fact_id, closure_fact_id and witnessed Knowledge follow normal rules; replacement
 uses new fact_id for closure. Known opening never reveals hidden closure/rename. No broadcast.
 """
+
+PERSONALITY_CONTRACT = '''
+Current canonical personality overrides initial card/history. Emotion, goals, identity,
+appearance and relations are separate. Personality never grants Knowledge: profiles
+are GM-only; remembering former traits requires witnessed behavior or known facts.
+An empty child profile is valid and forming; temperament is not adult personality.
+No inherited traits, hidden future/adult card, fixed-birthday generation or changes
+from age/time alone. No deterministic psychology from marriage, loss, divorce or birth.
+The same Character/profile persists across control switches. Personality can suggest
+behavior but NEVER restricts EXTERNAL input. All prose uses the game's language.
+'''
+NARRATIVE_CONTRACT += '\n' + PERSONALITY_CONTRACT
+EXTRACTION_CONTRACT += """
+Personality != emotion/goals. Evidence: completed canonical events; reuse old IDs.
+EXTERNAL: completed_voluntary_behavior + exact player quote + narrated completion;
+never infer identity from events happening TO them. Choices/free text are equivalent.
+Require a meaningful repeated pattern (3 source turns), or exceptional explicit durable
+turning_point (player-authored for EXTERNAL). Milestones give NPC context, not psychology.
+No age-only, inherited or random traits; infants: temperament only. Check capabilities.
+Deltas: <=3 partial CAS operations; omitted items unchanged. Contradictions refine/retire
+existing items; retirement needs evidence. Preserve unrelated legacy prose. No meters.
+"""
