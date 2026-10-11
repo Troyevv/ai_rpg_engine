@@ -375,5 +375,5 @@ class StateResolver:
             camera_before=deepcopy(self.before['camera']),camera=deepcopy(state['camera']),
             game_time_before=self.before['meta']['world_time'],world_time=state['meta']['world_time'],
             player_observed=self.observed))
-        choices = raw.choices if controlled and capabilities(state,controlled)['can_act'] else []
+        choices = raw.choices if self.mode != 'background' and camera['mode'] == 'actor' and controlled and capabilities(state,controlled)['can_act'] else []
         return ResolvedTurn(state,patch,self.history.to_dict(),self.warnings,choices,self.cards)

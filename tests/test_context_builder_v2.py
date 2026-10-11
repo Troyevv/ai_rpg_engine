@@ -103,7 +103,11 @@ def test_continuity_is_protected_when_target_exceeded_and_extraction_is_isolated
     # Compare selected context independently of the growing fixed wire schema.
     extraction_context=[m for m in extraction if not m['content'].startswith('JSON Schema\n')]
     assert estimate(extraction_context) < estimate(messages)
-    assert estimate(extraction) < 18000  # Still fits the default soft target.
+    # #73 adds mandatory choice policy + bounded current-actor expression. The
+    # soft target may be exceeded; the unchanged model hard limit still applies.
+    assert estimate(extraction) < 21000
+    assert estimate(extraction) < 32768 - 4096 - 256
+    assert extraction.selection['target_exceeded'] == (estimate(extraction) > 18000)
     with pytest.raises(ValueError, match='Критические данные'):
         build_context(snapshot, turns, 'Ввод остаётся целым', 'turn', 3000, 2500)
 

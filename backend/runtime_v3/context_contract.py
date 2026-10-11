@@ -48,8 +48,7 @@ revival requires expected_revision. Same-slot changes need distinct Event.order.
 Completed-narrative evidence only; no intentions, time decay, gossip or truth refresh.
 Message Event author_id is its established author in
 participants; recipient/reader is witness. Do not guess authors from scene presence.
-Unknown minute/order may be omitted; no microscopic chronology. Six action/speech choices
-for controlled_actor, choices=[] for observer. Later capability restrictions still apply.
+Unknown minute/order may be omitted; no microscopic chronology.
 '''
 
 NARRATIVE_CONTRACT = '''
@@ -67,8 +66,53 @@ COMPACT_REFERENCED — обсуждаемый человек, а не участ
 При написании диалогов используй «Стиль общения» каждого персонажа: лексику, длину фраз, юмор и реакцию на конфликт. Сохраняй характер и подтекст последних сцен.
 Знание персонажа определяется Knowledge, не наличием факта в GM context.
 Не превращай засыпание в произвольный скачок времени.
-Предложи 6 choices action/speech для controlled_actor; для observer choices=[].
+Варианты следующего действия создаёт Extraction; не разыгрывай их как уже выбранные.
 '''
+
+
+CHOICE_CONTRACT = '''
+CHOICE GENERATION POLICY (existing Extraction stage; no extra call):
+Return up to six choices, each exactly {action, speech} strings, for the actor_id in
+Choice context / controlled actor. enabled=false means choices=[] (observer, background,
+or unable to act). Never personalize for the original protagonist or another POV.
+Use this actor's CURRENT canonical personality items, communication style, habits,
+active goals/intentions/obligations, values, directed relationships, capabilities and
+scene context. Canonical #67 personality overrides static cards and historical wording;
+missing traits are unknown, not permission to invent a profile. Lifecycle blocked or
+review_required entries are constraints, not actionable goals; resolved entries are history.
+recent_player_expression contains only submitted inputs from visible turns under this
+actor's control: adapt wording to actual recent expression, not suggested buttons.
+These inputs are not proof that an attempted action succeeded and never new-turn evidence.
+Use current player_input and the observable END of completed_narrative/final_scene to
+avoid repeating just-completed actions or addressing departed actors. Prior scene is
+orientation, not the final scene. Respect time_skip_target and final capability changes.
+
+Aim for SIX materially different decisions when the scene allows: most characteristic;
+another characteristic approach; pragmatic/neutral; emotionally/socially expressive if
+appropriate; atypical or riskier but plausible; redirect/refuse/wait or another distinct
+direction. These are flexible aids, not mandatory slots. Do not manufacture absurd filler
+or six paraphrases. Vary intent and consequences, not just verbs. Speech must fit this
+actor's vocabulary, brevity, humor, relationship and situation; not one generic tone.
+Use the active game's language as in completed_narrative, never the language of this policy.
+
+Knowledge boundary: use only this actor's known/suspected assertions in Choice context
+and information actually perceived/communicated to this actor in completed_narrative.
+known is a belief, possibly wrong; suspected permits inquiry, never confident assertions.
+Unknown, outdated, refuted and superseded claims do not authorize assertions. Never
+silently correct an old known belief with GM truth. Other actors' beliefs, hidden goals,
+inbound undisclosed relationship state, GM-only Facts/cards/history/roles/commitments and
+their mere presence in Extraction are NOT choice knowledge. No secret-dependent action,
+dialogue or revealing presupposition. If acquisition is unclear, propose an open inquiry.
+
+Personality is preference, NEVER permission: plausible atypical choices are welcome and
+manual input remains unrestricted under existing Runtime agency rules. Never reject a
+player action because it is out of character. Choices are optional FUTURE proposals:
+do not perform them or infer feelings, goals, intentions, commitments, personality or
+Knowledge from them. Neither current nor previous suggestions are evidence for any
+Event/Fact/WorldDelta/development_evidence; only actual current input/completed events
+can support changes. Keep state extraction independent of the proposed choices.
+'''
+EXTRACTION_CONTRACT += CHOICE_CONTRACT
 
 
 TIME_CONTRACT = """
