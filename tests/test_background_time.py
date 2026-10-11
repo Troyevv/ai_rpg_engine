@@ -77,6 +77,8 @@ def test_simulation_fixed_time_preserves_npc_history_knowledge_and_agency(elapse
     assert all(row['actor_id']!=ACTOR_ID for row in history['knowledge_acquisitions'])
     assert history['events'][0]['recorded_minute']==now
     assert history['turns'][0]['world_time']==history['turns'][0]['game_time_before']==now
+    assert any(w['section']=='knowledge' and w['code']=='knowledge_path_invalid' for w in warnings)
+    warnings=[w for w in warnings if w['section']!='knowledge']
     if elapsed:
         assert len(warnings)==1
         assert warnings[0]['code']=='background_elapsed_ignored'

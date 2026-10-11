@@ -8,7 +8,8 @@ from backend.runtime_v3.life import FAMILY, PARENTAGE
 
 
 def knowledge_status(state, observer, fact_id):
-    return state['knowledge'].get(f'{observer}:{fact_id}', {}).get('status','unknown') if fact_id else 'unknown'
+    status = state['knowledge'].get(f'{observer}:{fact_id}', {}).get('status','unknown') if fact_id else 'unknown'
+    return status if status in ('known', 'suspected') else 'unknown'
 
 
 def visible_relations(state, observer):

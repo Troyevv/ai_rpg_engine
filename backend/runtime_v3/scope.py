@@ -269,8 +269,27 @@ class RelevanceResolver:
         scope.referenced_actor_ids.update(neighbors)
         scope.relevant_actor_ids |= set(neighbors)
         facts = set(scope.fact_ids)
-        scope.knowledge_ids = [key for key, row in state['knowledge'].items()
-                               if row['actor_id'] in (scope.relevant_actor_ids if completed_narrative is not None else core) and row['fact_id'] in facts]
+        from backend.runtime_v3.knowledge import slot, CURRENT
+        selected_slots = {slot(state['facts'][fid]) for fid in facts} - {None}
+        knowledge_actors = scope.relevant_actor_ids if completed_narrative is not None else core
+        replacements = {row.get('replaced_by') for row in state['knowledge'].values()
+                        if row['actor_id'] in knowledge_actors and row['fact_id'] in facts}
+        replacements.discard(None)
+        candidates = [(key, row) for key, row in state['knowledge'].items()
+                      if row['actor_id'] in knowledge_actors
+                      and (row['status'] in CURRENT | {'unknown'} or completed_narrative is not None)
+                      and (row['fact_id'] in facts or row['fact_id'] in replacements or slot(state['facts'][row['fact_id']]) in selected_slots)]
+        candidates.sort(key=lambda pair: (pair[1]['status'] not in CURRENT,
+            pair[1]['actor_id'] != scope.controlled_actor_id,
+            -scope.fact_scores.get(pair[1]['fact_id'], 0), pair[0]))
+        scope.knowledge_ids = [key for key, _ in candidates[:48]]
+        # Include the immutable content of an old belief even when retrieval
+        # primarily selected the newer world assertion in the same slot.
+        for _, row in candidates[:48]:
+            if row['fact_id'] not in facts:
+                scope.fact_ids.append(row['fact_id']); facts.add(row['fact_id'])
+                scope.fact_scores.setdefault(row['fact_id'], 100)
+                scope.reason('facts', row['fact_id'], 'KNOWLEDGE_BOUNDARY')
         scope.relationship_pairs = [key for key, r in state['relationships'].items()
                                     if r['source_id'] in scope.relevant_actor_ids and r['target_id'] in scope.relevant_actor_ids
                                     and (r['source_id'] in core or r['target_id'] in core)]

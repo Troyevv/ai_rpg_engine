@@ -28,7 +28,9 @@ def test_final_camera_and_offcamera_preservation():
     assert result.state['characters']['a']['location_id']=='hall'
     assert result.state['characters']['b']['location_id']=='room'
     assert result.history['movements'][0]['from_location_id']=='room'
-    assert result.state['knowledge']['a:f']==dict(actor_id='a',fact_id='f',status='known')
+    row = result.state['knowledge']['a:f']
+    assert {k:row[k] for k in ('actor_id','fact_id','status')}==dict(actor_id='a',fact_id='f',status='known')
+    assert row['revision']==1 and row['source_event_id']==result.history['events'][0]['id']
     assert not audit_world_history(result.history)
 
 

@@ -1,4 +1,5 @@
 """Scene-first Narrative and Extraction projections of one canonical world."""
+from backend.runtime_v3.knowledge import context_rows
 from copy import deepcopy
 from pathlib import Path
 import json
@@ -35,7 +36,7 @@ def canonical_slice(state, scope, extraction=False, query=""):
         locations={lid: state['locations'][lid] for lid in scope.location_ids},
         characters={cid: deepcopy(state['characters'][cid]) for cid in sorted(scope.relevant_actor_ids)},
         facts={fid: state['facts'][fid] for fid in scope.fact_ids},
-        knowledge=[state['knowledge'][key] for key in scope.knowledge_ids],
+        knowledge=context_rows(state, scope.knowledge_ids, extraction=extraction),
         relationships=[state['relationships'][key] for key in scope.relationship_pairs],
         threads=[state['threads'][tid] for tid in scope.thread_ids],
         scheduled_events=[commitment_view(state,state['scheduled_events'][eid]) for eid in scope.scheduled_event_ids])

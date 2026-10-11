@@ -283,6 +283,7 @@ def _goals(state):
 
 CHECKPOINTS = {'residence-roles':_residence_roles,'family':_family,'family-care':_family_care,'family-incapacitated':_family_incapacitated,'calendar-evening' :_calendar_evening,'calendar-leap':_calendar_leap,'commitments':_commitments}
 CHECKPOINTS['goals'] = _goals
+CHECKPOINTS['knowledge'] = _residence_roles
 CHECKPOINTS['personality'] = lambda state: _family(state)
 CHECKPOINTS['milestones'] = lambda state: _residence_roles(_family(state))
 
@@ -366,6 +367,7 @@ def load_fixture(repository, checkpoint='base'):
     if checkpoint == 'milestones': _seed_milestones(repository,result['save'])
     if checkpoint == 'personality': _seed_personality(repository,result['save'])
     if checkpoint == 'goals': _seed_goals(repository,result['save'])
+    if checkpoint == 'knowledge': _seed_knowledge(repository,result['save'])
     return dict(result, workspace=workspace['id'], fixture_version=FIXTURE_VERSION, checkpoint=checkpoint)
 
 
@@ -427,3 +429,45 @@ def _seed_goals(repository, save_id):
     snapshot['world_state']=r.state
     repository.commit_job(jid,snapshot,[],{},history_batch=r.history)
     with repository.connect() as conn: project(conn,save_id,repository.get_snapshot(save_id))
+
+
+def knowledge_correction(snapshot, actor=ACTOR_ID):
+    """Deterministic semantic output for manual/browser/ordinary-job regression."""
+    camera=snapshot['world_state']['camera']
+    text='Олег сообщил Кириллу: «Теперь я работаю в Академии двух берегов, из Мастерской карт я ушёл».'
+    return text, dict(final_scene={k:camera[k] for k in ('location_id','present_character_ids')},
+        events=[dict(id='qa_job_message',text=text,evidence=text,participants=['qa_oleg',actor],
+            witnesses=[actor],fact_ids=['qa_oleg_academy'],medium='message',author_id='qa_oleg')],
+        knowledge_gained=[dict(actor_id=actor,fact_id='qa_oleg_academy',source_event_id='qa_job_message',evidence=text)])
+
+
+def _seed_knowledge(repository, save_id):
+    """Existing checkpoint loader, ordinary start commit; no extra fixture format."""
+    from backend.runtime_v3.models import Fact, Knowledge, NarrativeRole
+    from backend.runtime_v3.resolver import StateResolver
+    from backend.runtime_v3.context import build_context
+    from backend.repositories.living_world import project
+    snapshot=repository.get_snapshot(save_id);s=snapshot['world_state']
+    for fid,oid,text in (
+        ('qa_oleg_workshop','qa_restorers','Олег работает в Мастерской карт.'),
+        ('qa_oleg_academy','qa_academy','Олег теперь работает в Академии двух берегов.')):
+        s['facts'][fid]=Fact(id=fid,text=text,character_ids=['qa_oleg'],visibility='secret',
+            claim=dict(subject_id='qa_oleg',predicate='primary_employment',value=oid)).model_dump()
+    # Explicit authored baseline, not an inferred migration or simulated broadcast.
+    for cid in (ACTOR_ID,'qa_vera','qa_timur'):
+        s['knowledge'][cid+':qa_oleg_workshop']=Knowledge(actor_id=cid,fact_id='qa_oleg_workshop').model_dump()
+    s['knowledge']['qa_oleg:qa_oleg_academy']=Knowledge(actor_id='qa_oleg',fact_id='qa_oleg_academy').model_dump()
+    s['roles']['qa_oleg_job']=NarrativeRole(id='qa_oleg_job',actor_id='qa_oleg',kind='employment',
+        title='Реставратор',organization_id='qa_academy',fact_id='qa_oleg_academy').model_dump()
+    with repository.connect() as conn:
+        conn.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(snapshot,ensure_ascii=False),save_id))
+    text='Кирилл дома с Верой и Тимуром. Новостей о работе Олега они ещё не получали.'
+    camera=s['camera'];raw=dict(final_scene={k:camera[k] for k in ('location_id','present_character_ids')})
+    r=StateResolver(s,text,'').resolve(raw)
+    config=dict(model='deterministic-fixture',context_length=32768,max_tokens=2000,update_tokens=4096)
+    jid=repository.begin_job(save_id,'','start',config)
+    repository.save_context(jid,build_context(snapshot,[],'','start',32768,2000),snapshot)
+    repository.job_progress(jid,'validating',narrative=text,complete=True)
+    snapshot['world_state']=r.state
+    repository.commit_job(jid,snapshot,[],{},history_batch=r.history)
+    with repository.connect() as conn:project(conn,save_id,repository.get_snapshot(save_id))
