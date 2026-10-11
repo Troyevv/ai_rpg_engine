@@ -95,10 +95,27 @@ class TemporalValue(StrictModel):
 class Motivation(StrictModel):
     id: str
     text: str
-    status: Literal['active', 'completed', 'cancelled', 'failed', 'superseded', 'expired'] = 'active'
+    status: Literal['active', 'completed', 'cancelled', 'failed', 'superseded', 'expired', 'blocked'] = 'active'
     source_sequence: int | None = None
     evidence: str = ''
     due_minute: int | None = Field(default=None, ge=0)
+
+    revision: int = Field(default=0, ge=0)
+    source_event_id: str | None = None
+    # Explicit semantic links, never guessed from the motivation's wording.
+    dependencies: dict[str, list[str]] = Field(default_factory=dict)
+    review_required: list[str] = Field(default_factory=list)
+    reviewed_signature: str = ''
+
+
+class DurableValue(StrictModel):
+    id: str
+    text: str = Field(min_length=1, max_length=2000)
+    status: Literal['active', 'retired'] = 'active'
+    revision: int = Field(default=0, ge=0)
+    source_ids: list[str] = Field(default_factory=list)
+    witnesses: list[str] = Field(default_factory=list)
+    fact_ids: list[str] = Field(default_factory=list)
 
 
 class Meta(StrictModel):
@@ -217,6 +234,7 @@ class Character(StrictModel):
     developmental_stage: Literal['unknown', 'infant', 'child', 'adolescent', 'adult'] = 'unknown'
     parentage_complete_fact_id: str | None = None
     personality: PersonalityProfile | None = None
+    values: dict[str, DurableValue] | None = None
     physical_state: str = ''
     emotion: str = ''
     emotion_source_sequence: int | None = None
@@ -356,6 +374,10 @@ def fatal(message, code='current_state_invalid', repairable=False, **path):
 
 def assert_world_state_v3_invariants(state, before=None):
     state = salvage_calendar_data(state)
+    from backend.runtime_v3.values import salvage_values
+    from backend.runtime_v3.lifecycle import salvage_metadata
+    salvage_values(state)
+    salvage_metadata(state)
     from backend.runtime_v3.life import salvage_life_data
     state = salvage_life_data(state)
     try:
@@ -367,6 +389,11 @@ def assert_world_state_v3_invariants(state, before=None):
         for key, record in value[section].items():
             if not key or record['id'] != key:
                 fatal('конфликт canonical ID', section=section, entity=key)
+    for cid,actor in actors.items():
+        for field in ('goals','intentions','obligations'):
+            ids=[r['id'] for r in actor[field]]
+            if len(ids)!=len(set(ids)):
+                fatal('повторный motivation ID', section=field, entity=cid)
     camera = value['camera']
     if camera['location_id'] is not None and camera['location_id'] not in locations:
         fatal('неизвестное место камеры')

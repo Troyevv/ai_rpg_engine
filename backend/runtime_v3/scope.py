@@ -1,3 +1,4 @@
+from backend.runtime_v3.lifecycle import actionable
 """One disposable deterministic relevance scope per request, never canonical state."""
 from backend.runtime_v3.calendar import scheduled_boundary as scheduled_due
 
@@ -132,7 +133,7 @@ class RelevanceResolver:
         motivations = '\n'.join(r if isinstance(r, str) else r['text']
                                 for cid in core for key in ('goals', 'intentions', 'obligations')
                                 for r in state['characters'][cid][key]
-                                if isinstance(r, str) or r['status'] == 'active')
+                                if actionable(r))
         for cid, aliases in names.items():
             if mentions(motivations, aliases): scores[cid] += 30
         structural_scores = dict(scores)

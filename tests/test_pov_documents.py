@@ -98,7 +98,8 @@ def test_switch_actor_roles_and_stale_revision(db):
     payload['characters'][0]['id']='character_1'
     resolved=StateResolver(snapshot['world_state'],NARRATIVE,'').resolve(wire(payload,NARRATIVE,snapshot))
     from backend.runtime_v3.lifecycle import active_texts
-    assert active_texts(resolved.state['characters']['character_1']['goals'])==['Новая цель']
+    # Partial legacy NPC list must not silently cancel the prior goal (#75).
+    assert active_texts(resolved.state['characters']['character_1']['goals'])==active_texts(snapshot['world_state']['characters']['character_1']['goals'])+['Новая цель']
     storage.switch_actor(sid,'character_1',switched['revision'])
     assert storage.get_snapshot(sid)['world_state']['characters']['character_1']['location_id']==storage.get_snapshot(sid)['world_state']['camera']['location_id']
 

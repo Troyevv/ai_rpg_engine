@@ -98,8 +98,24 @@ def ui_view(snapshot, history=None):
     from backend.runtime_v3.kinship import genealogy, visible_relations
     from backend.runtime_v3.life import capabilities
     for cid, actor in world['characters'].items():
-        for field in ('life_fact_id','name_history','parentage_complete_fact_id','personality'):
+        for field in ('life_fact_id','name_history','parentage_complete_fact_id','personality','values'):
             actor.pop(field,None)
+    from backend.runtime_v3.personality import visible_item
+    # One bounded-per-actor projection pass, not NPC-count × History scans.
+    value_rows={}
+    for change in reversed(history.get('state_changes',[])):
+        if not isinstance(change,dict) or change.get('kind')!='value_delta': continue
+        cid=change.get('entity')
+        if cid not in world['characters']: continue
+        rows=value_rows.setdefault(cid,[])
+        if len(rows)>=32: continue
+        item=change.get('after') or {}
+        if not visible_item(state,cid,item,camera['controlled_actor_id']): continue
+        prior=change.get('before') or {}
+        before_text=prior.get('text') if visible_item(state,cid,prior,camera['controlled_actor_id']) else None
+        rows.append(dict(id=change['id'],before=before_text,text=item['text'],status=item['status'],minute=change['minute']))
+    for cid,rows in value_rows.items():
+        if rows: world['characters'][cid]['value_history']=rows
     result['life_state'] = ({'life_status':state['characters'][camera['controlled_actor_id']]['life_status'],
         'conditions':[dict(id=c['id'],description=c['description'],status=c['status'],duration=c['duration'])
                       for c in state['conditions'].values() if c['actor_id']==camera['controlled_actor_id']],

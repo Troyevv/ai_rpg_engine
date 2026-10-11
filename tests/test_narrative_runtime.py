@@ -196,7 +196,9 @@ def test_lifecycle_rollback_and_regeneration(db):
     before['world_state']['characters'][actor]['intentions']=[Motivation(id='reply',text='Ответить собеседнику').model_dump()]
     with repo.connect() as conn:conn.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(before),sid))
     text='Я ответил собеседнику.';raw=raw_for(before);raw['character_changes']=[dict(id=actor,intentions_updates=[dict(id='reply',status='completed',evidence=text)])]
-    job=repo.begin_job(sid,text,'turn',CONFIG);run(repo,job,raw)
+    job=repo.begin_job(sid,text,'turn',CONFIG)
+    from runtime_v3_fixture import execute
+    execute(repo,job,raw,text)
     assert repo.get_snapshot(sid)['world_state']['characters'][actor]['intentions'][0]['status']=='completed'
     job=repo.begin_job(sid,'','regenerate',CONFIG);run(repo,job,raw_for(before))
     assert repo.get_snapshot(sid)['world_state']['characters'][actor]['intentions'][0]['status']=='active'
@@ -208,7 +210,7 @@ def test_answering_is_complete_but_promised_trip_is_still_active():
     state=initial();state['characters']['a']['intentions']=[Motivation(id='answer',text='Ответить Юре про стоматолога').model_dump()]
     quote='Хорошо, завтра отвезу тебя.'
     raw=dict(final_scene=dict(location_id='room',present_character_ids=['a','b']),character_changes=[dict(id='a',
-        intentions_updates=[dict(id='answer',status='completed',evidence=quote)],
+        intentions_updates=[dict(id='answer',status='completed',evidence='Юра кивнул.')],
         obligations_updates=[dict(text='Отвезти тебя завтра',status='active',evidence=quote)])])
     result=StateResolver(state,'Юра кивнул.',quote,actor_names={'b':'Юра'}).resolve(raw)
     assert result.state['characters']['a']['intentions'][0]['status']=='completed'

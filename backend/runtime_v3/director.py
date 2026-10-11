@@ -1,5 +1,6 @@
 """Deterministic director based on present locations, obligations and due items."""
 from backend.runtime_v3.life import capabilities
+from backend.runtime_v3.lifecycle import actionable
 from backend.runtime_v3.calendar import scheduled_boundary as scheduled_due
 
 
@@ -40,7 +41,7 @@ def background_candidate(before, after):
                 if eligible(cid):return dict(actor_id=cid,reason='relevant_off_camera_thread',scheduled_id=None)
     if elapsed>=60:
         for cid,point in sorted(after['characters'].items()):
-            if eligible(cid) and any(isinstance(r,str) or r.get('status')=='active' for field in ('intentions','obligations') for r in point[field]):
+            if eligible(cid) and any(actionable(r) for field in ('intentions','obligations') for r in point[field]):
                 return dict(actor_id=cid,reason='established_intention_and_time_gap',scheduled_id=None)
     return None
 
@@ -61,7 +62,7 @@ def interval_candidates(before, after, budget=6):
         if not eligible(cid):continue
         for field in ('obligations','intentions'):
             for r in c[field]:
-                if not isinstance(r,dict) or r['status']!='active':continue
+                if not isinstance(r,dict) or not actionable(r):continue
                 if r.get('due_minute') is not None and r['due_minute']>now:continue
                 candidates.append(dict(actor_id=cid,actor_ids=[cid],reason=r['text'],scheduled_id=None,score=80 if field=='obligations' else 40))
     for t in after['threads'].values():

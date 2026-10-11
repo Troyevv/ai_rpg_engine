@@ -261,7 +261,28 @@ def _residence_roles(state):
     return state
 
 
+def _goals(state):
+    """#75 regression actors in the same #78 world, immediately before meeting."""
+    from copy import deepcopy
+    for cid,name in (('qa_ilya','Илья'),('qa_sonya','Соня')):
+        card=dict(id=cid,name=name,aliases=[],fields={'Роль':'Друг Лариных',
+            'Характер':'Внимательный, с чувством юмора.', 'Ценности':'Ценит честность в близких отношениях.'})
+        state['characters'].append(card)
+        actor=deepcopy(state['world']['characters'][ACTOR_ID]);actor.update(id=cid,goals=[],intentions=[],obligations=[])
+        state['world']['characters'][cid]=actor
+    state['world']['characters']['qa_ilya'].update(goals=['Развивать отношения с Соней.'],
+        intentions=['После «Критического успеха» встретиться с Соней'])
+    state['world']['characters']['qa_sonya'].update(goals=['Провести выходные вместе.'],
+        intentions=['Предложить Илье поездку в коттедж'])
+    state['protagonist_id']=state['controlled_actor_id']='qa_ilya'
+    state['world']['scenes'][SCENE_ID].update(participants=['qa_ilya'],
+        text='Илья ждёт Соню после «Критического успеха». Встреча и предложение поездки ещё впереди.')
+    for cid,actor in state['world']['characters'].items(): actor['scene_id']=SCENE_ID if cid=='qa_ilya' else None
+    return state
+
+
 CHECKPOINTS = {'residence-roles':_residence_roles,'family':_family,'family-care':_family_care,'family-incapacitated':_family_incapacitated,'calendar-evening' :_calendar_evening,'calendar-leap':_calendar_leap,'commitments':_commitments}
+CHECKPOINTS['goals'] = _goals
 CHECKPOINTS['personality'] = lambda state: _family(state)
 CHECKPOINTS['milestones'] = lambda state: _residence_roles(_family(state))
 
@@ -344,6 +365,7 @@ def load_fixture(repository, checkpoint='base'):
     result = repository.confirm_draft(workspace['id'], draft['revision'], draft['version_id'])
     if checkpoint == 'milestones': _seed_milestones(repository,result['save'])
     if checkpoint == 'personality': _seed_personality(repository,result['save'])
+    if checkpoint == 'goals': _seed_goals(repository,result['save'])
     return dict(result, workspace=workspace['id'], fixture_version=FIXTURE_VERSION, checkpoint=checkpoint)
 
 
@@ -382,3 +404,26 @@ def _seed_personality(repository, save_id):
         repository.commit_job(jid,snapshot,[],{},history_batch=r.history)
         snapshot=repository.get_snapshot(save_id)
     with repository.connect() as conn: project(conn,save_id,snapshot)
+
+
+def _seed_goals(repository, save_id):
+    from backend.runtime_v3.resolver import StateResolver
+    from backend.runtime_v3.context import build_context
+    from backend.repositories.living_world import project
+    snapshot=repository.get_snapshot(save_id)
+    for cid,rid in (('qa_ilya','intentions_4d05e847cba4c0a38a98'),('qa_sonya','intentions_ef4ffaa2b77eac28626d')):
+        row=snapshot['world_state']['characters'][cid]['intentions'][0]
+        row.update(id=rid,source_sequence=50)
+    with repository.connect() as conn:
+        conn.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(snapshot,ensure_ascii=False),save_id))
+    text='Илья ждёт у входа. Соня ещё не пришла.'
+    camera=snapshot['world_state']['camera']
+    raw=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids']))
+    r=StateResolver(snapshot['world_state'],text,'').resolve(raw)
+    config=dict(model='deterministic-fixture',context_length=32768,max_tokens=2000,update_tokens=4096)
+    jid=repository.begin_job(save_id,'','start',config)
+    repository.save_context(jid,build_context(snapshot,[],'','start',32768,2000),snapshot)
+    repository.job_progress(jid,'validating',narrative=text,complete=True)
+    snapshot['world_state']=r.state
+    repository.commit_job(jid,snapshot,[],{},history_batch=r.history)
+    with repository.connect() as conn: project(conn,save_id,repository.get_snapshot(save_id))

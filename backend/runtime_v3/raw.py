@@ -9,7 +9,7 @@ SECTIONS = ('locations','promotions','events','facts','knowledge_gained','charac
             'relationship_changes','movements','thread_changes','scheduled_event_changes',
             'life_changes','condition_changes','social_relation_changes',
             'location_changes','organization_changes','residence_changes','role_changes',
-            'development_evidence','personality_deltas')
+            'development_evidence','personality_deltas','value_deltas')
 
 
 @dataclass
@@ -37,7 +37,7 @@ class RawTurnResult:
             if not isinstance(values, list):
                 warnings.append(dict(section=section, code='optional_section_invalid', action='drop_section', reason='ожидался список'))
                 values = []
-            if section in ('development_evidence','personality_deltas') and len(values) > 24:
+            if section in ('development_evidence','personality_deltas','value_deltas') and len(values) > 24:
                 warnings.append(dict(section=section,code='development_budget',action='truncate',reason='Превышен лимит 24 записей.'))
                 values = values[:24]
             records[section] = deepcopy(values)
@@ -88,6 +88,12 @@ def extraction_schema():
             expected_text={'type':['string','null']}, expected_revision={'type':'integer','minimum':0}),
             ('item_id','field','operation','expected_text','expected_revision'))}),
         ('actor_id','evidence_ids','rationale','developmental_fit','operations','evidence'))
+    definitions['value_deltas'] = record(dict(actor_id=string,item_id=string,
+        operation={'enum':['establish','refine','retire']},text=string,
+        expected_revision={'type':'integer','minimum':0},expected_text={'type':['string','null']},
+        basis={'enum':['explicit_statement','sustained_behavior']},evidence_ids=strings,source_event_id=string,
+        player_evidence=string,player_assertion={'enum':['explicit_value']},rationale=string),
+        ('actor_id','item_id','operation','expected_revision','expected_text','basis','evidence','rationale'))
     agency = dict(assertion={'enum':['established']}, player_evidence=string,
                   player_assertion={'enum':['explicit_choice']}, decision_actor_id=string)
     definitions['location_changes'] = record(dict(id=string, assertion={'enum':['established']},
@@ -117,7 +123,11 @@ def extraction_schema():
         ('id','assertion','evidence'))
     for field in ('goals', 'intentions', 'obligations'):
         definitions['character_changes']['properties'][field+'_updates'] = dict(type='array', items=record(dict(
-            id=string, text=string, status={'enum':['active','completed','cancelled','failed','superseded','expired']},
+            id=string, text=string, status={'enum':['active','completed','cancelled','failed','superseded','expired','blocked']},
+            expected_revision={'type':'integer','minimum':0}, source_event_id=string,
+            player_evidence=string, player_assertion={'enum':['explicit_choice']},
+            assertion={'enum':['completed','abandoned','superseded','impossible','unblocked','still_active','established']},
+            dependencies=obj({key:dict(type='array',items=string,maxItems=8) for key in ('characters','roles','organizations')}),
             due_minute={'type':'integer','minimum':0}), ('status','evidence')))
     scheduled = definitions['scheduled_event_changes']
     from backend.runtime_v3.commitments import ASSERTIONS

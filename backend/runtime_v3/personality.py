@@ -67,7 +67,8 @@ def initialize_profiles(snapshot):
         items = {field: PersonalityItem(field=field, text=card.get('fields', {}).get(label, '')).model_dump()
                  for field, label in CARD_FIELDS.items() if card.get('fields', {}).get(label, '').strip()}
         actor['personality'] = PersonalityProfile(items=items).model_dump()
-    return snapshot
+    from backend.runtime_v3.values import initialize_values
+    return initialize_values(snapshot)
 
 
 def visible_item(state, cid, item, observer):
@@ -89,7 +90,11 @@ def project_card(card, actor, *, state=None, observer=None):
                       and (state is None or visible_item(state, actor['id'], item, observer))]
             if values or label in fields:
                 fields[label] = '\n'.join(values)
-    return result
+    from backend.runtime_v3.lifecycle import active_texts
+    for field,label in (('goals','Чего хочет'),('intentions','Намерения'),('obligations','Обязательства')):
+        if label in result.get('fields',{}): result['fields'][label]='\n'.join(active_texts(actor.get(field,[])))
+    from backend.runtime_v3.values import project_values
+    return project_values(result, actor, state=state, observer=observer)
 
 
 def _player_owned(resolver, claim, event):
