@@ -180,7 +180,7 @@ def index_batch(db, history_id, batch):
 
 def query(db, head, *, actor_ids=None, category=None, start_minute=None, end_minute=None,
           start_date=None, end_date=None, source_event_id=None, source_process_id=None,
-          known_fact_ids=None, latest_per_category=False, limit=32, offset=0):
+          known_fact_ids=None, latest_per_category=False, limit=32, offset=0, milestone_id=None):
     """Bounded paginated results, unbounded ancestry; UNION terminates damaged cycles.
 
     known_fact_ids=None is an internal GM query. Public callers MUST pass an
@@ -191,7 +191,7 @@ def query(db, head, *, actor_ids=None, category=None, start_minute=None, end_min
     if start_minute is not None and end_minute is not None and start_minute > end_minute or start_date and end_date and start_date > end_date:
         raise ValueError('Начало диапазона позже конца.')
     where, args = [], [head]
-    for column, op, value in (('category','=',category), ('minute','>=',start_minute), ('minute','<=',end_minute),
+    for column, op, value in (('id','=',milestone_id), ('category','=',category), ('minute','>=',start_minute), ('minute','<=',end_minute),
             ('date','>=',start_date), ('date','<=',end_date), ('source_event_id','=',source_event_id),
             ('source_process_id','=',source_process_id)):
         if value is not None: where.append(f'm.{column}{op}?'); args.append(value)

@@ -175,6 +175,35 @@ class Condition(StrictModel):
     fact_id: str | None = None
 
 
+class PersonalityItem(StrictModel):
+    field: Literal['traits', 'communication', 'habits', 'strengths', 'weaknesses', 'fears', 'preferences', 'temperament']
+    text: str = Field(min_length=1)
+    revision: int = Field(default=0, ge=0)
+    source_ids: list[str] = Field(default_factory=list)
+    witnesses: list[str] = Field(default_factory=list)
+    fact_ids: list[str] = Field(default_factory=list)
+
+
+class DevelopmentEvidence(StrictModel):
+    id: str
+    source_event_id: str
+    source_turn: int = Field(ge=0)
+    minute: int = Field(ge=0)
+    meaning: str = Field(min_length=1, max_length=300)
+    kind: Literal['behavior', 'experience', 'turning_point']
+    player_owned: bool = False
+    evidence: str = Field(min_length=1, max_length=1000)
+    witnesses: list[str] = Field(default_factory=list)
+    fact_ids: list[str] = Field(default_factory=list)
+
+
+class PersonalityProfile(StrictModel):
+    items: dict[str, PersonalityItem] = Field(default_factory=dict)
+    evidence: dict[str, DevelopmentEvidence] = Field(default_factory=dict)
+    applied: list[str] = Field(default_factory=list)
+    seen_sources: list[str] = Field(default_factory=list)
+
+
 class Character(StrictModel):
     id: str
     location_id: str | None = None
@@ -187,6 +216,7 @@ class Character(StrictModel):
     capabilities: Capabilities = Field(default_factory=Capabilities)
     developmental_stage: Literal['unknown', 'infant', 'child', 'adolescent', 'adult'] = 'unknown'
     parentage_complete_fact_id: str | None = None
+    personality: PersonalityProfile | None = None
     physical_state: str = ''
     emotion: str = ''
     emotion_source_sequence: int | None = None

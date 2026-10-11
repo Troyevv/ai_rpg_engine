@@ -8,7 +8,8 @@ from backend.services.relation_dimensions import RELATION_DIMENSIONS
 SECTIONS = ('locations','promotions','events','facts','knowledge_gained','character_changes',
             'relationship_changes','movements','thread_changes','scheduled_event_changes',
             'life_changes','condition_changes','social_relation_changes',
-            'location_changes','organization_changes','residence_changes','role_changes')
+            'location_changes','organization_changes','residence_changes','role_changes',
+            'development_evidence','personality_deltas')
 
 
 @dataclass
@@ -36,6 +37,9 @@ class RawTurnResult:
             if not isinstance(values, list):
                 warnings.append(dict(section=section, code='optional_section_invalid', action='drop_section', reason='ожидался список'))
                 values = []
+            if section in ('development_evidence','personality_deltas') and len(values) > 24:
+                warnings.append(dict(section=section,code='development_budget',action='truncate',reason='Превышен лимит 24 записей.'))
+                values = values[:24]
             records[section] = deepcopy(values)
         choices = payload.get('choices', [])
         if not isinstance(choices, list):
@@ -72,6 +76,18 @@ def extraction_schema():
         'thread_changes':record(dict(id=string,description=string,character_ids=strings,status={'enum':['active','developing','dormant','resolved','paused']},state=string,relevance={'type':'number','minimum':0,'maximum':1}), ('id','evidence')),
         'scheduled_event_changes':record(dict(id=string,description=string,character_ids=strings,due_minute={'type':'integer','minimum':0},temporal=obj(dict(date=string,weekday={'type':'integer','minimum':0,'maximum':13},day_offset={'type':'integer','minimum':-366,'maximum':366},time=string,day_period={'enum':['night','morning','afternoon','evening']})),status={'enum':['pending','resolved','cancelled']},condition=string,type=string), ('id','evidence')),
     }
+    definitions['development_evidence'] = record(dict(id=string, actor_id=string, source_event_id=string,
+        source_kind={'enum':['event','milestone']}, meaning=string, kind={'enum':['behavior','experience','turning_point']},
+        player_evidence=string, player_assertion={'enum':['completed_voluntary_behavior']},
+        assertion={'enum':['completed']}), ('id','actor_id','source_event_id','meaning','kind','assertion','evidence'))
+    definitions['personality_deltas'] = record(dict(actor_id=string,
+        evidence_ids=strings, rationale=string, developmental_fit={'enum':['established_capability']},
+        operations={'type':'array','maxItems':3,'items':obj(dict(
+            item_id=string, field={'enum':['traits','communication','habits','strengths','weaknesses','fears','preferences','temperament']},
+            operation={'enum':['establish','refine','retire']}, text=string,
+            expected_text={'type':['string','null']}, expected_revision={'type':'integer','minimum':0}),
+            ('item_id','field','operation','expected_text','expected_revision'))}),
+        ('actor_id','evidence_ids','rationale','developmental_fit','operations','evidence'))
     agency = dict(assertion={'enum':['established']}, player_evidence=string,
                   player_assertion={'enum':['explicit_choice']}, decision_actor_id=string)
     definitions['location_changes'] = record(dict(id=string, assertion={'enum':['established']},

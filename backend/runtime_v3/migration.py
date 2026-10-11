@@ -16,10 +16,14 @@ class MigrationResult:
 def migrate_v2(original):
     if original.get('schema_version') == 3:
         original = deepcopy(original)
+        from backend.runtime_v3.personality import salvage_profiles
+        salvage_profiles(original['world_state'])
         original['world_state'] = assert_world_state_v3_invariants(original['world_state'])
         for card in original.get('character_cards',[]):
             actor = original['world_state']['characters'].get(card['id'])
             if actor is not None and actor['display_name'] is None: actor['display_name'] = card['name']
+        from backend.runtime_v3.personality import initialize_profiles
+        initialize_profiles(original)
         initialize_calendar(original['world_state'])
         return MigrationResult(original, WorldHistoryV3().to_dict(), [])
     # The only legacy normalization boundary. No runtime code imports v2 apply.
@@ -172,6 +176,8 @@ def migrate_v2(original):
     snapshot = dict(schema_version=3, world_state=state, character_cards=cards,
         campaign={key:deepcopy(old[key]) for key in retained if key in old},
         memory=deepcopy(old.get('memory', {})), history_head=None)
+    from backend.runtime_v3.personality import initialize_profiles
+    initialize_profiles(snapshot)
     return MigrationResult(snapshot, history.to_dict(), report)
 
 

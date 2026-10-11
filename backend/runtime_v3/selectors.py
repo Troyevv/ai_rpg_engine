@@ -10,7 +10,8 @@ def ui_view(snapshot, history=None):
     state=assert_world_state_v3_invariants(snapshot['world_state']);history=history or {}
     camera=state['camera'];now=state['meta']['world_time']
     label=lambda minute: calendar_label(state, minute)
-    cards=deepcopy(snapshot['character_cards'])
+    from backend.runtime_v3.personality import project_card
+    cards=[project_card(c, state['characters'][c['id']], observer=camera['controlled_actor_id'], state=state) for c in snapshot['character_cards']]
     from backend.runtime_v3.kinship import visible_name
     for card in cards:
         card['name'] = visible_name(state,card['id'],camera['controlled_actor_id'],card['name'])
@@ -97,7 +98,7 @@ def ui_view(snapshot, history=None):
     from backend.runtime_v3.kinship import genealogy, visible_relations
     from backend.runtime_v3.life import capabilities
     for cid, actor in world['characters'].items():
-        for field in ('life_fact_id','name_history','parentage_complete_fact_id'):
+        for field in ('life_fact_id','name_history','parentage_complete_fact_id','personality'):
             actor.pop(field,None)
     result['life_state'] = ({'life_status':state['characters'][camera['controlled_actor_id']]['life_status'],
         'conditions':[dict(id=c['id'],description=c['description'],status=c['status'],duration=c['duration'])

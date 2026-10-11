@@ -38,6 +38,8 @@ def documents(snapshot, history=None):
         for eid, row in sorted(state[kind].items()):
             yield Document(kind, eid, '\n'.join(str(row.get(k, '')) for k in fields))
     for card in sorted(snapshot['character_cards'], key=lambda c: c['id']):
+        from backend.runtime_v3.personality import project_card
+        card = project_card(card, state['characters'][card['id']])
         fields = card.get('fields', {})
         text = '\n'.join([card['name'], *card.get('aliases', []),
                           *(fields.get(k, '') for k in ('Роль', 'Характер', 'Стиль общения'))])
