@@ -288,6 +288,30 @@ CHECKPOINTS['personality'] = lambda state: _family(state)
 CHECKPOINTS['milestones'] = lambda state: _residence_roles(_family(state))
 
 
+def _choices(state):
+    cards = {c['id']:c for c in state['characters']}
+    cards[ACTOR_ID]['fields']['Привычки'] = 'Прежде чем решать, рассматривает детали.'
+    cards['qa_vera']['fields'].update({'Характер':'Решительна, любит пробовать новые подходы.',
+        'Стиль общения':'Развёрнутые фразы с мягкой иронией.', 'Привычки':'Предлагает сравнить несколько версий.'})
+    state['world']['characters'][ACTOR_ID].update(goals=['Разобраться в происхождении карты.'],
+        intentions=['Сравнить снимки Тимура.'], obligations=['Вернуть Вере библиотечный альбом.'])
+    state['world']['characters']['qa_vera']['goals'] = ['Подготовить выставку карт в библиотеке.']
+    return state
+
+
+CHECKPOINTS['choices'] = _choices
+
+# Demonstration output only, never production generation or a personality score.
+CHOICE_EXAMPLES = [
+    dict(action='Рассмотреть пометки на снимках.', speech='Тимур, покажи этот угол крупнее.'),
+    dict(action='Сравнить два снимка.', speech='Давайте сначала проверим различия.'),
+    dict(action='Вернуть Вере библиотечный альбом.', speech='Спасибо, он помог разобраться.'),
+    dict(action='Поблагодарить Тимура за помощь.', speech='Рад, что мы взялись за это вместе.'),
+    dict(action='Предложить смелую версию происхождения карты.', speech='А если мы смотрим на неё не с той стороны?'),
+    dict(action='Отложить обсуждение и сделать перерыв.', speech='Вернёмся к этому позже.'),
+]
+
+
 def _seed_milestones(repository, save_id):
     """Replay accepted transitions in the same QA world, through normal commit code.
 
@@ -368,7 +392,46 @@ def load_fixture(repository, checkpoint='base'):
     if checkpoint == 'personality': _seed_personality(repository,result['save'])
     if checkpoint == 'goals': _seed_goals(repository,result['save'])
     if checkpoint == 'knowledge': _seed_knowledge(repository,result['save'])
+    if checkpoint == 'choices': _seed_choices(repository,result['save'])
     return dict(result, workspace=workspace['id'], fixture_version=FIXTURE_VERSION, checkpoint=checkpoint)
+
+
+def _seed_choices(repository, save_id):
+    """Three player-owned sources refine canonical voice; the card stays old."""
+    from backend.runtime_v3.resolver import StateResolver
+    from backend.runtime_v3.context import build_context
+    snapshot = repository.get_snapshot(save_id)
+    texts = ['Сначала проверим детали. Кирилл спокойно попросил показать снимки крупнее.',
+             'Давайте проверим различия. Кирилл спокойно сравнил два снимка.',
+             'Я объясню прямо. Кирилл спокойно и прямо объяснил свою позицию.']
+    config = dict(model='deterministic-fixture',context_length=32768,max_tokens=2000,update_tokens=4096)
+    for index, text in enumerate(texts):
+        s = snapshot['world_state']; camera = s['camera']
+        raw = dict(final_scene={k:camera[k] for k in ('location_id','present_character_ids')},
+            choices=CHOICE_EXAMPLES,
+            events=[dict(id='qa_expression',text=text,evidence=text,participants=[ACTOR_ID],
+                         witnesses=list(PRESENT),fact_ids=[])],
+            development_evidence=[dict(id='qa_expression_proof',actor_id=ACTOR_ID,source_event_id='qa_expression',
+                meaning='Выражает позицию прямо и спокойно.',kind='behavior',assertion='completed',
+                evidence=text,player_evidence=text,player_assertion='completed_voluntary_behavior')])
+        if index == 2:
+            profile = s['characters'][ACTOR_ID]['personality']
+            raw['personality_deltas'] = [dict(actor_id=ACTOR_ID,
+                evidence_ids=list(profile['evidence'])+['qa_expression_proof'],
+                rationale='Три завершённых действия игрока подтверждают более прямую манеру речи.',
+                developmental_fit='established_capability',evidence=text,
+                operations=[dict(item_id='communication',field='communication',operation='refine',
+                    expected_text=profile['items']['communication']['text'],expected_revision=0,
+                    text='Говорит прямо и спокойно, короткими утверждениями; уточняет детали.')])]
+        r = StateResolver(s,text,text).resolve(raw)
+        if r.warnings: raise ValueError('Choices QA replay: '+str(r.warnings))
+        kind = 'start' if index == 0 else 'turn'
+        jid = repository.begin_job(save_id,text,kind,config)
+        repository.save_context(jid,build_context(snapshot,repository.list_turns(save_id),text,kind,32768,2000),snapshot)
+        repository.job_progress(jid,'validating',narrative=text,complete=True)
+        snapshot['world_state'] = r.state
+        repository.commit_job(jid,snapshot,r.choices,{},history_batch=r.history)
+        snapshot = repository.get_snapshot(save_id)
 
 
 def _seed_personality(repository, save_id):

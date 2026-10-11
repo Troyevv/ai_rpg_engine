@@ -220,15 +220,62 @@ class ExtractionContextBuilder:
         saved = (prompts or {}).get('state_update_prompt.md', {}).get('content')
         # Preserve user overrides, but do not send the bundled generic contract twice.
         rules = (saved + '\n' if saved and saved.strip() != default.strip() else '') + EXTRACTION_CONTRACT
-        # Only affected IDs and canonical runtime: no card prose, tone, or old narratives.
+        # Affected IDs and canonical runtime, plus a bounded actor-owned choice
+        # projection. No other actors' card prose or old narratives are needed.
         # Include physical/emotion baseline also for referenced actors affected in completed text.
         for cid in current['characters']:
             for key in ('physical_state', 'emotion'):
                 current['characters'][cid][key] = snapshot['world_state']['characters'][cid][key]
         return rules, [block('Текущее состояние / GM-only', current),
+                       block('Choice context / controlled actor', choice_context(snapshot, scope, current, views, kind)),
                        block('Entity IDs', [dict(id=c['id'], name=c['name'], aliases=c.get('aliases', []))
                             for c in snapshot['character_cards'] if c['id'] in scope.relevant_actor_ids]),
                        block('JSON Schema', prompt_schema())]
+
+
+def choice_context(snapshot, scope, current, views, kind):
+    """Read-only projection inside the existing builder, never a personality store.
+
+    Extraction also needs GM truth to resolve this turn. This separately labelled
+    block is the permitted *personalization* source, not a grant of that GM knowledge.
+    Reuse ContextScope's retrieval/budget and #67/#75 projections; do not retrieve
+    another history or infer personality from clicks/unselected suggestions.
+    """
+    from backend.runtime_v3.life import capabilities
+    from backend.runtime_v3.personality import context_profile, CARD_FIELDS
+    from backend.runtime_v3.lifecycle import context_records
+    from backend.runtime_v3.values import context_values
+    state = snapshot['world_state']; cid = scope.controlled_actor_id
+    if kind == 'background' or state['camera']['mode'] == 'observer' or not cid:
+        return dict(enabled=False)
+    actor = state['characters'][cid]; ability = capabilities(state, cid)
+    if not ability['can_act']:
+        return dict(enabled=False, actor_id=cid)
+    profile = context_profile(actor)
+    # Legacy absence only: an intentionally empty/retired canonical profile must
+    # never be repopulated from the original card.
+    if profile is None:
+        card = next((c for c in snapshot['character_cards'] if c['id'] == cid), {})
+        profile = dict(items={field:dict(field=field, text=card.get('fields', {}).get(label, '')[:600])
+            for field, label in CARD_FIELDS.items() if card.get('fields', {}).get(label, '').strip()})
+    main = snapshot.get('campaign', {}).get('protagonist_id')
+    recent = []
+    for view in views:
+        if (view.get('kind', 'turn') == 'turn' and (view.get('pov_actor_id') or main) == cid
+                and view.get('user_text', '').strip()):
+            text = view['user_text']
+            recent.append(dict(sequence=view.get('sequence'), player_input=text[:800], truncated=len(text)>800))
+    participants = scope.present_actor_ids | scope.remote_actor_ids
+    return deepcopy(dict(enabled=True, actor_id=cid, personality=profile,
+        values=context_values(actor), capabilities=ability,
+        **{key:context_records(actor[key]) for key in ('goals','intentions','obligations')},
+        relationships=[r for r in current['relationships'] if r['source_id']==cid and r['target_id'] in participants],
+        knowledge=[dict(fact_id=k['fact_id'], status=k['status'], text=current['facts'][k['fact_id']]['text'])
+            for k in current['knowledge'] if k['actor_id']==cid and k['status'] in ('known','suspected')
+            and k['fact_id'] in current['facts']],
+        scene=dict(location_id=state['camera']['location_id'], present_actor_ids=sorted(scope.present_actor_ids),
+                   remote_actor_ids=sorted(scope.remote_actor_ids), situation=state['camera']['situation']),
+        recent_player_expression=recent))
 
 
 def pov_knowledge(state, actor, current):
@@ -298,7 +345,9 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     selected_history = list(scope.history_events)
     def refresh_current():
         replace_block('Текущее состояние / GM-only', current if builder.extraction else dict(current, knowledge=[]))
-        if not builder.extraction:
+        if builder.extraction:
+            replace_block('Choice context / controlled actor', choice_context(snapshot, scope, current, views, kind))
+        else:
             replace_block('Знания POV', pov_knowledge(state, scope.controlled_actor_id, current))
             replace_block('Знания действующих персонажей / GM-only', actor_knowledge(state, scope, current))
 
@@ -392,4 +441,8 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         semantic=scope.semantic_diagnostics, entities=entities, character_total=len(state['characters']), sections=sections,
         narrative_continuity=0 if builder.extraction else len(views), previous_player_inputs=0 if builder.extraction else len(views),
         target_context_budget=target, hard_context_limit=hard_context_limit, target_exceeded=estimate(messages)>target)
+    if builder.extraction:
+        choices = contents('Choice context / controlled actor')
+        diagnostics['choice_context'] = dict(enabled=choices['enabled'], actor_id=choices.get('actor_id'),
+            recent_inputs=len(choices.get('recent_player_expression', [])), knowledge=len(choices.get('knowledge', [])))
     return ContextMessages(messages, diagnostics)
