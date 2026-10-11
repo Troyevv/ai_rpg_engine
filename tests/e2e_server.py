@@ -193,6 +193,19 @@ if __name__ == '__main__':
         hold_next_preparation=True
         return {'held':True}
 
+    @app.post('/test/goals-seed')
+    def goals_seed():
+        from devtools.narrative_test_world import load_fixture
+        from test_goals_values import completion, MEET
+        from test_narrative_test_world import CONFIG
+        from runtime_v3_fixture import execute
+        repo=app.state.repository;result=load_fixture(repo,'goals')
+        sid=result['save'];state=repo.get_snapshot(sid)['world_state']
+        jid=repo.begin_job(sid,'Иду навстречу.','turn',CONFIG)
+        execute(repo,jid,completion(state,'qa_ilya'),MEET)
+        assert repo.get_job(jid)['status']=='saved'
+        return {'world':result['world'],'save':sid}
+
     @app.post('/test/personality-seed')
     def personality_seed():
         from devtools.narrative_test_world import load_fixture

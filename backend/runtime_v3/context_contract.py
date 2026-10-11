@@ -1,64 +1,49 @@
 """Semantic work stays in the existing extraction call; code verifies provenance."""
 EXTRACTION_CONTRACT = '''
-АКТУАЛЬНЫЙ КОНТРАКТ RUNTIME V3 имеет приоритет над сохранёнными инструкциями.
-Верни RawTurnResult только для player_input и completed_narrative ЭТОГО хода.
-Не продолжай рассказ. Существующие ID копируй. Evidence — точная цитата текущего хода.
-Final_scene — фактическое состояние В КОНЦЕ completed_narrative, не исходная камера.
-Не копируй прежние camera.location_id и present_character_ids механически.
-Narrative может вводить новые места вне исходного мира. Если ход закончился в новом
-конкретном месте, одновременно создай locations[] со стабильным canonical ID, name,
-evidence из completed_narrative/player_input и укажи этот ID в final_scene.location_id.
-При нескольких переходах выбери конечное место, не промежуточное.
-Если место уже известно, используй существующий ID: «Гвоздь», «кофейня Гвоздь»,
-«кафе Гвоздь» могут быть одним местом, не создавай дубль из-за формы названия.
-Простое упоминание, обсуждение или план посетить место не меняют камеру.
-Present_character_ids — только физически присутствующие в конце: ушедших исключи,
-пришедших и оставшихся включи; сообщения/воспоминания не означают присутствия.
-Для ушедших передай movements с конечным местом, только если оно установлено.
-Movements описывают конечные перемещения остальных персонажей; если всё же передаёшь
-маршрут участника final_scene, его последняя точка должна совпадать с final_scene.location_id.
-Situation описывает конечную объективную ситуацию с situation_evidence, не старое место;
-индивидуальные situation затронутых NPC обнови через character_changes с evidence.
-Новый значимый NPC требует promotions с полной карточкой и evidence; если он остаётся
-в сцене, тот же ID включи в present_character_ids. Упоминание NPC не означает приход.
-Проверь все active goals / intentions / obligations затронутых персонажей:
-завершено → completed; сорвано → failed; потеряло контекст (обед закончился) → expired;
-отменено → cancelled; заменено → superseded. Передай *_updates со стабильным id и evidence.
-«Поддеть Юру» завершается после язвительной шутки; «Поговорить с Соней» после разговора.
-Семантику определяешь ты, словаря разрешённых глаголов нет. Намерение/обещание ещё не выполнение.
-Создавать новые внутренние цели, намерения, обязательства controlled_actor можно только
-из явного player_input. Завершать уже существующие можно по фактам completed_narrative.
-Emotion controlled_actor: только явно выраженное внутреннее состояние из player_input;
-никаких выводов из жестов, мимики, отношений, narrative или карточки. Свободный язык:
-«Внутри привычная горечь», «На душе тревожно», «Меня это бесит», «Настроение в ноль»,
-«Чувствую себя опустошённым» — явные состояния. «Сжимаю кулак», «Улыбаюсь»,
-«Отвожу взгляд», «Вздыхаю» сами по себе — НЕ emotion. Вопрос, условие, речь другого — не источник.
-Для emotion передай player_evidence.emotion (полное утверждение игрока) и
-emotion_assertion="explicit_internal_state". Это твоя семантическая классификация, не угадывание Runtime.
-Physical_state — текущая физика (боль, усталость, голод, холод и т.п.). Обновляй и очищай
-physical_state="", если причина устранена: поел, согрелся, поспал. Сохраняй неустранённые симптомы.
-Подтверждай evidence текущего хода, не выводи неизбежное выздоровление из одного упоминания сна.
-Relationship и emotion различны. Автоматические relationship_changes разрешены одинаково
-NPC → NPC, NPC → controlled_actor, controlled_actor → NPC. Player evidence для отношений НЕ нужен.
-Отношения directed, не зеркаль A → B в B → A. Dimensions — новые абсолютные значения, не дельты.
-Нейтральный разговор обычно означает отсутствие relationship_changes. Маленькое значимое событие
-даёт небольшую динамику; накопление событий и серьёзное предательство/спасение допускают большую.
-Сохраняй инерцию. Ручная правка — текущий baseline, а не запрет дальнейших изменений.
-Final_scene.remote_interactions перечисляет только активные В КОНЦЕ хода переписку/звонок/рацию
-с actor_id, channel и evidence. Перечитывание старого сообщения — не активное общение.
-Подтверди текущую связь заново, завершившуюся опусти. При физическом приходе включи NPC в present.
-Knowledge только через Fact → Event этого ответа → Witness → Knowledge: actor_id входит в event.witnesses, fact_id — в event.fact_ids;
-medium observation/conversation/message/testimony/discovery. Нет цепочки — нет acquisition.
-GM-only факты и карточки не становятся знаниями игрока/NPC. Учитывай ownership и visibility.
-Final_scene задаёт конечное место/участников, situation — объективное положение, не emotion;
-situation_evidence подтверждает общую ситуацию. Movements нужны только для остальных персонажей.
-Elapsed_minutes — целая длительность показанных действий; не делай произвольных таймскипов.
-Для Event сообщения передай author_id только установленного автора (он входит в participants).
-Получатель/читатель — witnesses; не угадывай автора по присутствию в сцене.
-Events не требуют микроскопической хронологии; неизвестные minute/order опусти.
-Promotions только значимые постоянные роли с полной карточкой, не случайные прохожие.
-Для controlled_actor choices — 6 объектов action/speech, для observer — [].
-Не создавай scene_id, last_event_id, from_location или StatePatch.
+CURRENT RUNTIME V3 contract overrides saved instructions. Return RawTurnResult only
+for THIS player_input and completed_narrative; never continue the story. Copy existing
+IDs. Evidence is a verbatim current quote. Output prose in the active game language.
+Final_scene is the ACTUAL END, not a copy of the initial camera. New concrete location:
+create locations[] with canonical ID/name/evidence and use that ID in final_scene.
+Choose the final stop, not intermediate travel. Reuse known places/aliases (Гвоздь,
+кофейня Гвоздь, кафе Гвоздь); mention/plan alone never moves the camera.
+Present_character_ids: only physically present at the end; remove departures, include
+arrivals who stayed. Messages/memories are not presence. Supply departed actors'
+movements only when their destination is established. A redundant movement for a
+final_scene participant must end at final_scene.location_id. Situation is current
+objective state, not emotion; situation_evidence grounds it. Update affected NPC
+situations via evidenced character_changes. Promote only significant recurring NPCs
+with full card/evidence, not incidental passers-by; a promoted present NPC uses the
+same ID in final_scene. Mention does not mean arrival. No scene_id/last_event_id/
+from_location/StatePatch. Elapsed_minutes is actual narrated duration, no arbitrary skip.
+Lifecycle semantics belong to Extraction, not a verb dictionary: completed result ->
+completed; failure -> failed; lost context -> expired; explicit cancellation -> cancelled;
+replacement -> superseded. Use *_updates, stable IDs and current evidence. A joke may
+complete 'tease Yuri'; conversation may complete 'talk to Sonya'. Intent/promise is not
+performance. New EXTERNAL desires require explicit player input, not narrative inference.
+EXTERNAL Emotion only from explicit internal player_input statements, never gestures,
+face, relationships, narrative or card. 'Внутри привычная горечь', 'На душе тревожно',
+'Меня это бесит', 'Настроение в ноль', 'Чувствую себя опустошённым' qualify; 'Сжимаю кулак',
+'Улыбаюсь', 'Отвожу взгляд', 'Вздыхаю' alone do not. Questions, conditions, negations or
+someone else's speech are not declarations. Return full player_evidence.emotion quote
+and emotion_assertion=explicit_internal_state; Runtime validates source, you classify.
+Physical_state is current bodily state; clear it with physical_state="" only on evidenced
+resolution (ate/warmed/rested). Preserve unresolved symptoms; sleep alone is not a cure.
+Relationships != Emotion. Directed relationship_changes apply equally NPC->NPC,
+NPC->EXTERNAL and EXTERNAL->NPC; no player evidence needed. Never mirror A->B into B->A.
+Dimensions — новые абсолютные значения, not increments. Нейтральный разговор ordinarily
+has no relationship_changes. Small meaningful events: small changes; accumulated or major
+betrayal/rescue may support larger changes. Preserve inertia and manually edited baseline.
+Remote_interactions: only ongoing END-of-turn message/phone/radio exchanges with actor_id,
+channel, evidence. Reconfirm each turn; rereading old messages is not active contact.
+Omit ended contact; physically arriving actors belong in present instead.
+Knowledge: Fact -> accepted Event of THIS response -> Witness -> Knowledge. actor_id in
+event.witnesses, fact_id in event.fact_ids, medium observation/conversation/message/
+testimony/discovery. No grounded path, no acquisition. GM cards/facts never grant knowledge;
+respect ownership and visibility. Message Event author_id is its established author in
+participants; recipient/reader is witness. Do not guess authors from scene presence.
+Unknown minute/order may be omitted; no microscopic chronology. Six action/speech choices
+for controlled_actor, choices=[] for observer. Later capability restrictions still apply.
 '''
 
 NARRATIVE_CONTRACT = '''
@@ -258,4 +243,34 @@ turning_point (player-authored for EXTERNAL). Milestones give NPC context, not p
 No age-only, inherited or random traits; infants: temperament only. Check capabilities.
 Deltas: <=3 partial CAS operations; omitted items unchanged. Contradictions refine/retire
 existing items; retirement needs evidence. Preserve unrelated legacy prose. No meters.
+"""
+
+
+MOTIVATION_CONTRACT = """
+Goal=desired outcome; intention=near-term action; value=durable principle/priority.
+Separate from Emotion, personality and temporal commitments. Only active current
+entries drive choices; blocked/review_required are constraints, resolved are history.
+Values are GM-only: respect values_known_by; never broadcast Knowledge or derive
+unrelated values from marriage/birth/death/job/time. EXTERNAL choices belong to input.
+"""
+NARRATIVE_CONTRACT += MOTIVATION_CONTRACT
+EXTRACTION_CONTRACT += MOTIVATION_CONTRACT + """
+LIFECYCLE: use *_updates IDs/revisions + current evidence; include accepted
+source_event_id when available. completed needs actual narrated result, NOT future
+input or due time. EXTERNAL cancelled/superseded/new desire: player_assertion=
+explicit_choice + full player_evidence. New record: omit id; existing text immutable.
+Live regression: Ilya meets Sonya -> complete meeting intention; Sonya offers cottage
+trip + fact_cottage_agreed -> complete offering intention, NOT relationship/weekend
+goals. A known fact can ground narrated retrospective completion, never a fake quote.
+Omitted entries persist. Add explicit necessary dependencies (characters/roles/
+organizations), never infer by wording. Review dead/closed targets semantically:
+completed/blocked/failed/expired or agency-backed cancelled/superseded. Graduation
+may resolve graduation goal, not all student goals. unblocked assertion resumes;
+still_active acknowledges review. Never auto-close by time; never invent evidence.
+value_deltas: partial establish/refine/retire with expected_text/revision. Explicit
+DURABLE statement needs accepted source_event_id; EXTERNAL requires explicit_value
+player_assertion + player_evidence. Otherwise sustained_behavior requires >=3 source
+turns in existing development_evidence IDs (EXTERNAL: completed player-owned choices).
+Reuse that evidence pipeline; one mood/turning_point/event is insufficient. Retain
+unrelated values and personality. No numeric morality. All prose uses game language.
 """

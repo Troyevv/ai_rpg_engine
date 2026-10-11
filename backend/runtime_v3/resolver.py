@@ -265,7 +265,7 @@ class StateResolver:
         for i, item in self.records(raw,'character_changes',evidence=False):
             cid = self.actor(item.get('id'),'character_changes',i)
             actor = s['characters'][cid]
-            for protected in ('personality','fields'):
+            for protected in ('personality','values','fields'):
                 if protected in item:
                     self.warn('character_changes',i,'Личность изменяется только частичной evidence-bound дельтой.',protected,cid,'personality_full_replace_rejected')
             if actor['life_status'] == 'dead':
@@ -293,7 +293,9 @@ class StateResolver:
                 valid_type = isinstance(value,str) if key in ('situation','physical_state','emotion') else isinstance(value,list) and all(isinstance(v,str) for v in value)
                 if not valid_type:
                     self.warn('character_changes',i,'неправильный тип поля',key,cid); continue
-                if cid == camera['controlled_actor_id'] and key in PLAYER_FIELDS:
+                if cid == self.protected_actor_id and key in PLAYER_FIELDS:
+                    if self.mode == 'background':
+                        self.warn('character_changes',i,'Фон не меняет EXTERNAL мотивацию.',key,cid,'controlled_actor_unsupported'); continue
                     evidence = item.get('player_evidence')
                     proof=evidence.get(key) if isinstance(evidence,dict) else None
                     if proof is None and isinstance(item.get('evidence'),str):
@@ -302,9 +304,22 @@ class StateResolver:
                         self.warn('character_changes',i,'состояние controlled actor не задано игроком',key,cid,'controlled_actor_unsupported'); continue
                 elif not self.supported(item):
                     self.warn('character_changes',i,'нет подтверждённого источника',key,cid,'evidence_unsupported'); continue
-                actor[key] = replace_active(actor[key], value, cid, key, self.turn_id-1) if key in ('goals','intentions','obligations') else deepcopy(value)
+                if key in ('goals','intentions','obligations'):
+                    # Legacy NPC lists are additions only. A validated explicit
+                    # player declaration retains its replacement semantics.
+                    prior = deepcopy(actor[key])
+                    texts = value if cid == self.protected_actor_id else list(dict.fromkeys([r['text'] for r in actor[key] if r['status']=='active']+value))
+                    actor[key] = replace_active(actor[key], texts, cid, key, self.turn_id-1)
+                    from backend.runtime_v3.lifecycle import record_change
+                    for row in actor[key]:
+                        old=next((r for r in prior if r['id']==row['id']),None)
+                        if row != old:
+                            row['evidence']=item.get('evidence','')
+                            record_change(self,cid,key,old,row)
+                else:
+                    actor[key] = deepcopy(value)
                 if key == 'emotion' and cid == camera['controlled_actor_id']: actor['emotion_source_sequence'] = self.turn_id-1
-            apply_changes(self, item, cid, i)
+            apply_changes(self, item, cid, i, events)
         for i, item in self.records(raw,'relationship_changes'):
             source = self.actor(item.get('source_id'),'relationship_changes',i)
             target = self.actor(item.get('target_id'),'relationship_changes',i)
@@ -339,6 +354,10 @@ class StateResolver:
         invalidate_dead_commitments(self,{cid for cid,c in s['characters'].items() if c['life_status']=='dead'})
         from backend.runtime_v3.personality import apply_personality
         apply_personality(self, raw, events)
+        from backend.runtime_v3.values import apply_values
+        apply_values(self, raw, events)
+        from backend.runtime_v3.lifecycle import queue_invalidations
+        queue_invalidations(self)
         upserts = {section:{key:deepcopy(value) for key,value in s[section].items() if value != self.before[section].get(key)}
             for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions','residences','roles','organizations')}
         digest = sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest()

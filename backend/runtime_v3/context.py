@@ -49,8 +49,13 @@ def canonical_slice(state, scope, extraction=False, query=""):
         character.pop('personality', None)
         if extraction and profile and character['id'] in development_ids:
             character['personality'] = profile
+        from backend.runtime_v3.lifecycle import context_records
+        from backend.runtime_v3.values import context_values
+        values = context_values(character, evaluation=extraction)
+        character.pop('values', None)
+        if values and (not extraction or character['id'] in development_ids): character['values'] = values
         for key in ('goals', 'intentions', 'obligations'):
-            character[key] = [r for r in character[key] if isinstance(r, str) or r['status'] == 'active']
+            character[key] = context_records(character[key], evaluation=extraction, turn=state['meta']['turn_id'])
         if not extraction:
             cid = character['id']
             if cid in scope.referenced_actor_ids:
@@ -161,6 +166,9 @@ class NarrativeContextBuilder:
                 actor = state['characters'][card['id']]
                 age = age_on(actor.get('birth_date'),current_time(state)['date'],profile_of(state))
                 if age is not None: card['fields']['Возраст'] = str(age)
+                # These fields are supplied once by the bounded canonical slice.
+                for field in ('Чего хочет','Намерения','Обязательства','Ценности','Приоритеты'):
+                    card['fields'].pop(field,None)
                 cards.append(dict(card, context_mode=mode))
             elif mode == ACTIVE_REFERENCED:
                 fields = card.get('fields', {})
@@ -247,6 +255,14 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     from backend.runtime_v3.personality import historical_context, visible_item
     development = historical_context(state,scope,world_history)
     if development: current['personality_history'] = development
+    from backend.runtime_v3.lifecycle import historical_context as motivation_history
+    lifecycle_history=motivation_history(scope,world_history)
+    if lifecycle_history: current['motivation_history']=lifecycle_history
+    value_access={cid:{key:[observer for observer in scope.relevant_actor_ids
+        if visible_item(state,cid,item,observer)] for key,item in (state['characters'][cid].get('values') or {}).items()
+        if item['status']=='active' and key in current['characters'].get(cid,{}).get('values',{})}
+        for cid in current['characters'] if current['characters'][cid].get('values')}
+    if value_access: current['values_known_by']=value_access
     access = {}
     for cid in sorted(scope.relevant_actor_ids)[:8]:
         profile = state['characters'][cid].get('personality')
@@ -288,6 +304,8 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     if estimate(messages) > target and 'social_history' in current:
         current.pop('social_history')
         refresh_current()
+    if estimate(messages) > target and current.get('motivation_history'):
+        current.pop('motivation_history'); refresh_current()
     while estimate(messages) > target and current.get('personality_history'):
         current['personality_history'].pop()
         refresh_current()

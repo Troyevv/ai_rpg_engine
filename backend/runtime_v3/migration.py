@@ -18,6 +18,8 @@ def migrate_v2(original):
         original = deepcopy(original)
         from backend.runtime_v3.personality import salvage_profiles
         salvage_profiles(original['world_state'])
+        from backend.runtime_v3.values import salvage_values
+        salvage_values(original['world_state'])
         original['world_state'] = assert_world_state_v3_invariants(original['world_state'])
         for card in original.get('character_cards',[]):
             actor = original['world_state']['characters'].get(card['id'])
