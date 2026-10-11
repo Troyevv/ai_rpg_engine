@@ -300,17 +300,31 @@ class Organization(SocialPhase):
     name_history: list[NameChange] = Field(default_factory=list)
 
 
+class Claim(StrictModel):
+    """Explicit single-valued slot. Never inferred by comparing prose."""
+    subject_id: str = Field(min_length=1, max_length=200)
+    predicate: str = Field(min_length=1, max_length=100)
+    value: str = Field(min_length=1, max_length=500)
+    scope: str = Field(default='', max_length=200)
+
+
 class Fact(StrictModel):
     id: str
     text: str
     visibility: Literal['public', 'secret'] = 'public'
     character_ids: list[str] = Field(default_factory=list)
+    claim: Claim | None = None
 
 
 class Knowledge(StrictModel):
     actor_id: str
     fact_id: str
-    status: Literal['known', 'suspected', 'unknown'] = 'known'
+    status: Literal['known', 'suspected', 'unknown', 'outdated', 'refuted', 'superseded'] = 'known'
+    revision: int = Field(default=0, ge=0)
+    source_event_id: str | None = None
+    evidence: str = ''
+    source_turn: int | None = Field(default=None, ge=0)
+    replaced_by: str | None = None
 
 
 class Relationship(StrictModel):
@@ -373,6 +387,8 @@ def fatal(message, code='current_state_invalid', repairable=False, **path):
 
 
 def assert_world_state_v3_invariants(state, before=None):
+    from backend.runtime_v3.knowledge import salvage, slot
+    state = salvage(state)
     state = salvage_calendar_data(state)
     from backend.runtime_v3.values import salvage_values
     from backend.runtime_v3.lifecycle import salvage_metadata
@@ -415,9 +431,19 @@ def assert_world_state_v3_invariants(state, before=None):
             fatal('неизвестное место персонажа', entity=cid)
         if cid in present and actor['location_id'] != camera['location_id']:
             fatal('позиция участника не совпадает с камерой', entity=cid)
+    claim_values = {}
     for key, item in value['knowledge'].items():
         if item['actor_id'] not in actors or item['fact_id'] not in value['facts'] or key != item['actor_id'] + ':' + item['fact_id']:
             fatal('повреждена ссылка текущего Knowledge', entity=key)
+        if item['replaced_by'] is not None and item['replaced_by'] not in value['facts']:
+            fatal('повреждена ссылка исправления Knowledge', entity=key)
+        claim_slot = slot(value['facts'][item['fact_id']])
+        if item['status'] == 'known' and claim_slot:
+            slot_key = (item['actor_id'], claim_slot)
+            claim_value = value['facts'][item['fact_id']]['claim']['value']
+            if slot_key in claim_values and claim_values[slot_key] != claim_value:
+                fatal('противоречащие текущие Knowledge одного слота', entity=key)
+            claim_values[slot_key] = claim_value
     for key, item in value['relationships'].items():
         if item['source_id'] not in actors or item['target_id'] not in actors or key != item['source_id'] + ':' + item['target_id']:
             fatal('повреждена ссылка отношения', entity=key)

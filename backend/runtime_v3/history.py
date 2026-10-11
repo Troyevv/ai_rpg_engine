@@ -23,6 +23,6 @@ def audit_world_history(history):
         event=events.get(source) if isinstance(source,str) else None
         medium=event.get('medium') if event else None
         if (not event or not isinstance(acquisition,dict) or not isinstance(medium,str) or
-            acquisition.get('actor_id') not in event.get('witnesses',[]) or acquisition.get('fact_id') not in event.get('fact_ids',[]) or medium not in INFORMATION_MEDIA):
+            acquisition.get('actor_id') not in event.get('witnesses',[]) or acquisition.get('trigger_fact_id', acquisition.get('fact_id')) not in event.get('fact_ids',[]) or medium not in INFORMATION_MEDIA):
             warning('knowledge_acquisitions',i,'history_provenance_incomplete','неполное историческое происхождение; текущее знание сохранено')
     return warnings

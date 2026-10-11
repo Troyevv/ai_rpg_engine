@@ -193,6 +193,18 @@ if __name__ == '__main__':
         hold_next_preparation=True
         return {'held':True}
 
+    @app.post('/test/knowledge-seed')
+    def knowledge_seed():
+        from devtools.narrative_test_world import load_fixture, knowledge_correction
+        from test_narrative_test_world import CONFIG
+        from runtime_v3_fixture import execute
+        repo=app.state.repository;result=load_fixture(repo,'knowledge');sid=result['save']
+        text,payload=knowledge_correction(repo.get_snapshot(sid))
+        jid=repo.begin_job(sid,'Читаю сообщение Олега.','turn',CONFIG)
+        execute(repo,jid,payload,text)
+        assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
+        return {'world':result['world'],'save':sid}
+
     @app.post('/test/goals-seed')
     def goals_seed():
         from devtools.narrative_test_world import load_fixture

@@ -7,7 +7,7 @@ import math
 import unicodedata
 from typing import Literal
 from pydantic import ValidationError
-from backend.runtime_v3.models import (Character, Location, Fact, Knowledge, Relationship,
+from backend.runtime_v3.models import (Character, Location, Fact, Relationship,
     Thread, ScheduledEvent, StatePatch, WorldHistoryV3, identity, fatal, assert_world_state_v3_invariants)
 from backend.runtime_v3.lifecycle import active_texts, replace_active, apply_changes
 from backend.runtime_v3.raw import RawTurnResult
@@ -32,11 +32,12 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", milestone_query=None, development_query=None):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None):
         if mode not in ("turn", "background"):
             raise ValueError("Неизвестный режим StateResolver.")
         self.protected_actor_id = protected_actor_id or before['camera']['controlled_actor_id']
         self.mode = mode
+        self.protected_knowledge_actor_ids = set(protected_knowledge_actor_ids or [self.protected_actor_id])
         self.milestone_query = milestone_query
         self.development_query = development_query
         self.actor_names=actor_names or {}
@@ -205,7 +206,15 @@ class StateResolver:
         if controlled is not None and self.supported({'evidence':scene.get('situation_evidence')}):
             s['characters'][controlled]['situation']=situation
         for i, item in self.records(raw,'facts'):
-            fields = {key:item[key] for key in ('id','text','visibility','character_ids') if key in item}
+            fields = {key:item[key] for key in ('id','text','visibility','character_ids','claim') if key in item}
+            if 'claim' in fields and fields['claim'] is not None:
+                from backend.runtime_v3.models import Claim
+                try: fields['claim'] = Claim.model_validate(fields['claim']).model_dump()
+                except ValidationError:
+                    fields.pop('claim')
+                    self.warn('facts', i, 'Некорректная идентичность утверждения.', field='claim', code='optional_schema_invalid')
+            if 'claim' not in fields and isinstance(fields.get('id'), str) and fields['id'] in s['facts']:
+                fields['claim'] = s['facts'][fields['id']].get('claim')
             entry = self.typed(Fact,fields,'facts',i)
             if entry:
                 for cid in entry['character_ids']: self.actor(cid,'facts',i)
@@ -245,19 +254,8 @@ class StateResolver:
             if 'minute' in event: event['calendar_date'] = current_time(s,event['minute'])['date']
             events[eid] = event
             self.history.events.append(event)
-        for i, item in self.records(raw,'knowledge_gained'):
-            source=item.get('source_event_id')
-            event=events.get(source) if isinstance(source,str) else None
-            actor, fact = item.get('actor_id'), item.get('fact_id')
-            if not isinstance(actor,str) or not isinstance(fact,str):
-                self.warn('knowledge_gained',i,'неправильный тип ссылки',code='knowledge_path_invalid');continue
-            if (actor not in s['characters'] or fact not in s['facts'] or not event or
-                actor not in event['witnesses'] or fact not in event['fact_ids'] or event['medium'] not in INFORMATION_MEDIA):
-                self.warn('knowledge_gained',i,'нет подтверждённого пути передачи знания',code='knowledge_path_invalid'); continue
-            entry = self.typed(Knowledge,dict(actor_id=actor,fact_id=fact,status=item.get('status','known')),'knowledge_gained',i)
-            if entry and not (not self.observed and actor == self.before['camera']['controlled_actor_id']):
-                s['knowledge'][actor+':'+fact] = entry
-                self.history.knowledge_acquisitions.append(dict(entry,source_event_id=event['id'],evidence=item['evidence'],turn_id=self.turn_id))
+        from backend.runtime_v3.knowledge import apply_knowledge
+        apply_knowledge(self, raw, events)
         from backend.runtime_v3.life import apply_life
         apply_life(self,raw)
         from backend.runtime_v3.residence import apply_residence

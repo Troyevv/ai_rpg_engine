@@ -37,6 +37,9 @@ class RawTurnResult:
             if not isinstance(values, list):
                 warnings.append(dict(section=section, code='optional_section_invalid', action='drop_section', reason='ожидался список'))
                 values = []
+            if section == 'knowledge_gained' and len(values) > 64:
+                warnings.append(dict(section=section,code='knowledge_budget',action='truncate',reason='Превышен лимит 64 изменений знаний.'))
+                values = values[:64]
             if section in ('development_evidence','personality_deltas','value_deltas') and len(values) > 24:
                 warnings.append(dict(section=section,code='development_budget',action='truncate',reason='Превышен лимит 24 записей.'))
                 values = values[:24]
@@ -59,12 +62,13 @@ def extraction_schema():
     definitions = {
         'locations':record(dict(id=string,name=string,description=string,parent_id=string,kind=string,aliases=strings), ('id','name','evidence')),
         'promotions':record(dict(id=string,name=string,fields={'type':'object','additionalProperties':string}), ('id','name','fields','evidence')),
-        'facts':record(dict(id=string,text=string,visibility={'enum':['public','secret']},character_ids=strings), ('id','text','evidence')),
+        'facts':record(dict(id=string,text=string,claim=obj(dict(subject_id=string,predicate=string,value=string,scope=string),('subject_id','predicate','value')),visibility={'enum':['public','secret']},character_ids=strings), ('id','text','evidence')),
         'events':record(dict(id=string,text=string,participants=strings,witnesses=strings,fact_ids=strings,
             author_id=string,
             medium={'enum':['observation','conversation','message','testimony','discovery','action']},
             location_id=string,minute={'type':'integer','minimum':0},order={'type':'integer','minimum':0}), ('id','text','evidence')),
-        'knowledge_gained':record(dict(actor_id=string,fact_id=string,status={'enum':['known','suspected','unknown']},
+        'knowledge_gained':record(dict(actor_id=string,fact_id=string,status={'enum':['known','suspected','unknown','outdated','refuted','superseded']},
+            expected_revision={'type':'integer','minimum':0},supersedes=dict(type='array',items=string,maxItems=16),
             source_event_id=dict(type='string',description='Event ЭТОГО extraction: actor_id входит в witnesses, fact_id входит в fact_ids, medium observation/conversation/message/testimony/discovery. Иначе запись опустить.')),
             ('actor_id','fact_id','source_event_id','evidence')),
         'character_changes':record(dict(id=string,birth_date=string,situation=string,physical_state=string,emotion=string,goals=strings,intentions=strings,obligations=strings,
