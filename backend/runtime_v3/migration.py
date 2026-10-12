@@ -20,6 +20,8 @@ def migrate_v2(original):
         salvage_profiles(original['world_state'])
         from backend.runtime_v3.values import salvage_values
         salvage_values(original['world_state'])
+        from backend.runtime_v3.appearance import salvage_profiles as salvage_appearance
+        salvage_appearance(original['world_state'])
         original['world_state'] = assert_world_state_v3_invariants(original['world_state'])
         for card in original.get('character_cards',[]):
             actor = original['world_state']['characters'].get(card['id'])
@@ -91,7 +93,7 @@ def migrate_v2(original):
         actors[cid] = Character(id=cid, location_id=lid,
             **{key:deepcopy(entry[key]) for key in ('situation','emotion','goals','intentions','obligations') if key in entry}).model_dump()
         actors[cid]['birth_date'] = deepcopy(entry.get('birth_date'))
-        for field in ('life_status','life_fact_id','capabilities','developmental_stage','name_history','display_name','parentage_complete_fact_id','reproductive_capability','identity_components'):
+        for field in ('life_status','life_fact_id','capabilities','developmental_stage','name_history','display_name','parentage_complete_fact_id','reproductive_capability','identity_components','biological_sex','appearance'):
             if field in entry: actors[cid][field] = deepcopy(entry[field])
         actors[cid]['display_name'] = actors[cid].get('display_name') or next((c['name'] for c in old['characters'] if c['id']==cid), None)
     actor = old.get('controlled_actor_id')
@@ -169,6 +171,8 @@ def migrate_v2(original):
             report.append(dict(section='calendar', reason='invalid optional calendar preserved in legacy history; relative time retained'))
             history.legacy.append(dict(calendar=deepcopy(configured)))
     initialize_calendar(state)
+    from backend.runtime_v3.appearance import salvage_profiles as salvage_appearance
+    salvage_appearance(state)
     state = assert_world_state_v3_invariants(state)
     # Presentation metadata is deliberately not a second mutable world.
     retained = ('world_summary','summary','title','setting','genre','tone','protagonist_id','world_id','sections','story_notes','campaign')

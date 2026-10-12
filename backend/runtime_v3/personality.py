@@ -67,6 +67,8 @@ def initialize_profiles(snapshot):
         items = {field: PersonalityItem(field=field, text=card.get('fields', {}).get(label, '')).model_dump()
                  for field, label in CARD_FIELDS.items() if card.get('fields', {}).get(label, '').strip()}
         actor['personality'] = PersonalityProfile(items=items).model_dump()
+    from backend.runtime_v3.appearance import initialize_profiles as initialize_appearance
+    initialize_appearance(snapshot)
     from backend.runtime_v3.values import initialize_values
     return initialize_values(snapshot)
 

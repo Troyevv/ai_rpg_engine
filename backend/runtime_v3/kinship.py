@@ -75,7 +75,8 @@ def genealogy(snapshot, root_id=None, *, depth=3, limit=100):
     nodes=[]
     for cid in sorted(visited):
         c=s['characters'][cid]
-        nodes.append(dict(id=cid,name=visible_name(s,cid,observer,cards.get(cid,cid)),
+        from backend.runtime_v3.portraits import projection
+        nodes.append(dict(**projection(s,cid),id=cid,name=visible_name(s,cid,observer,cards.get(cid,cid)),
             life_status=c.get('life_status','unknown') if cid==observer or knowledge_status(s,observer,c.get('life_fact_id'))=='known' else 'unknown'))
     # Derive only from authorized, known parentage; suspected links stay uncertain.
     parents={}

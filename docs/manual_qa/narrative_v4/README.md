@@ -180,3 +180,5 @@ reload/rollback: [relations.md](relations.md).
 Проверки #40: checkpoint `milestones` — [значимые переходы за пределом recent History](milestones.md).
 
 Проверки #76: checkpoint `knowledge` — [устаревшие знания и исправления](knowledge.md).
+
+Проверки #74: checkpoint `appearance` — [canonical внешность и портреты](appearance.md).

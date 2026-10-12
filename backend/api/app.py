@@ -52,6 +52,8 @@ def create_app(db_path=None, recover=True):
             preparation.stop(jid)
 
     app = FastAPI(title='AI RPG Engine', version='2.0.0', lifespan=lifespan)
+    from backend.api.portraits import register as register_portraits
+    register_portraits(app,repo)
     app.state.repository = repo
     app.state.preparation = preparation
 

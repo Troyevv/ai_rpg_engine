@@ -1,8 +1,9 @@
+import {CharacterAvatar} from "./Portrait";
 import type {State} from './types';
 import {socialLabel, lifeLabel, phaseLabel} from './lib/social';
 
 /** Uses only the server-authorized projection, never reconstructs hidden links. */
-export function SocialStateView({state,actor}:{state:State;actor?:string}) {
+export function SocialStateView({state,actor,saveId}:{state:State;actor?:string;saveId?:number}) {
  const graph=state.genealogy;
  const names=new Map(graph?.nodes.map(n=>[n.id,n.name])||[]);
  const links=(state.objective_relations||[]).filter(r=>!actor||r.source_id===actor||r.target_id===actor);
@@ -23,6 +24,7 @@ export function SocialStateView({state,actor}:{state:State;actor?:string}) {
     {rows.map(r=><p key={r.id}>{!actor&&<>{state.characters.find(c=>c.id===r.actor_id)?.name}: </>}{r.label}{r.organization?` · ${r.organization}`:''}{r.field?` · ${r.field}`:''} · {phaseLabel(r.status==='closed'?r.outcome:r.status)}{r.certainty==='suspected'?' · подозрение':''}{r.since_date?` · с ${r.since_date}`:''}{r.until_date?` до ${r.until_date}`:''}</p>)}
    </div>;
   })}
+  {graph&&<div className="genealogy-avatars">{graph.nodes.map(n=><span key={n.id}><CharacterAvatar subject={n} saveId={saveId}/>{n.name}</span>)}</div>}
   {links.map(r=><p key={r.id}>{names.get(r.source_id)||state.characters.find(c=>c.id===r.source_id)?.name} → {names.get(r.target_id)||state.characters.find(c=>c.id===r.target_id)?.name}: {socialLabel(r.kind)}{r.certainty==='suspected'?' · подозрение':''}{r.status==='closed'?` · ${socialLabel(r.outcome)}`:''}{r.since_date?` · с ${r.since_date}`:''}{r.until_date?` до ${r.until_date}`:''}</p>)}
   {!!derived.length&&<details><summary>Родословная</summary>{derived.map((r,i)=><p key={i}>{names.get(r.source_id)} → {names.get(r.target_id)}: {socialLabel(r.kind)}{r.lineage==='adoptive_parent'?' · усыновление':''}{r.generations?` · поколений: ${r.generations}`:''}</p>)}</details>}
   {graph?.nodes.filter(n=>n.life_status==='dead'&&(!actor||actor===n.id)).map(n=><p key={n.id}>{n.name}: {lifeLabel(n.life_status)}</p>)}

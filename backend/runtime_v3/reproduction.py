@@ -253,6 +253,8 @@ def birth(r,c,event):
         # Empty name is intentional presentation metadata; never a canonical name.
         fields={}
         if c['appearance'].get(cid): fields['Внешность']=c['appearance'][cid]
+        from backend.runtime_v3.models import AppearanceProfile
+        actor['appearance']=AppearanceProfile(legacy_text=fields.get('Внешность','')).model_dump()
         r.cards.append(dict(id=cid,name='',fields=fields,aliases=[],is_player=False))
         bf=identity('fact',cid,'birth');actor['life_fact_id']=bf
         fact(s,bf,[cid,mother],'birth',date or now,c['evidence']);fids.append(bf)

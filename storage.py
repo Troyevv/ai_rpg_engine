@@ -124,6 +124,8 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             snapshot=json.loads(result.pop('state_json'))
             from backend.runtime_v3.models import assert_world_state_v3_invariants
             snapshot['world_state'] = assert_world_state_v3_invariants(snapshot['world_state'])
+            from backend.runtime_v3.appearance import initialize_profiles as initialize_appearance
+            initialize_appearance(snapshot)
             history,warnings=read_history(db,snapshot.get('history_head'))
             result['state']=ui_view(snapshot,history)
             result['history_warnings']=warnings
@@ -168,4 +170,6 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             snapshot=json.loads(row[0])
             from backend.runtime_v3.models import assert_world_state_v3_invariants
             snapshot['world_state'] = assert_world_state_v3_invariants(snapshot['world_state'])
+            from backend.runtime_v3.appearance import initialize_profiles as initialize_appearance
+            initialize_appearance(snapshot)
             return snapshot

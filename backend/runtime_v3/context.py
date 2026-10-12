@@ -44,6 +44,10 @@ def canonical_slice(state, scope, extraction=False, query=""):
         cid != scope.controlled_actor_id, cid not in scope.present_actor_ids,
         cid not in scope.remote_actor_ids, -scope.actor_scores.get(cid,0), cid))[:8]
     for character in current['characters'].values():
+        character.pop('portraits', None)
+        from backend.runtime_v3.appearance import context_profile as appearance_context
+        character['appearance']=appearance_context(state,character['id'],observer=scope.controlled_actor_id,omniscient=extraction,known_actor_ids=scope.relevant_actor_ids)
+        if character['appearance'] is None: character.pop('appearance')
         character['age'] = age_on(character.get('birth_date'), current['current_time']['date'], profile_of(state))
         from backend.runtime_v3.personality import context_profile
         profile = context_profile(character, evaluation=extraction)
@@ -198,6 +202,8 @@ class NarrativeContextBuilder:
         snapshot = deepcopy(snapshot)
         from backend.runtime_v3.personality import project_card
         snapshot['character_cards'] = [project_card(c, snapshot['world_state']['characters'][c['id']]) for c in snapshot['character_cards']]
+        from backend.runtime_v3.appearance import project_card as appearance_card
+        snapshot['character_cards'] = [appearance_card(c, snapshot['world_state'], scope.controlled_actor_id, omniscient=self.extraction, bounded=True,known_actor_ids=scope.relevant_actor_ids) for c in snapshot['character_cards']]
         for card in snapshot['character_cards']:
             card['name'] = snapshot['world_state']['characters'][card['id']].get('display_name') or card['name']
         from backend.runtime_v3.reproduction import known_birth, birth_name
@@ -268,6 +274,8 @@ class ExtractionContextBuilder:
         snapshot = deepcopy(snapshot)
         from backend.runtime_v3.personality import project_card
         snapshot['character_cards'] = [project_card(c, snapshot['world_state']['characters'][c['id']]) for c in snapshot['character_cards']]
+        from backend.runtime_v3.appearance import project_card as appearance_card
+        snapshot['character_cards'] = [appearance_card(c, snapshot['world_state'], scope.controlled_actor_id, omniscient=self.extraction, bounded=True,known_actor_ids=scope.relevant_actor_ids) for c in snapshot['character_cards']]
         for card in snapshot['character_cards']:
             card['name'] = snapshot['world_state']['characters'][card['id']].get('display_name') or card['name']
         default = (PROMPTS/'state_update_prompt.md').read_text(encoding='utf-8')
@@ -416,6 +424,24 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
             replace_block('Знания POV', pov_knowledge(state, scope.controlled_actor_id, current))
             replace_block('Знания действующих персонажей / GM-only', actor_knowledge(state, scope, current))
 
+    if builder.extraction and estimate(messages) > target:
+        # Unclassified import prose is optional; never trim current structured traits.
+        for actor in current['characters'].values():
+            appearance=actor.get('appearance')
+            if appearance and appearance.get('legacy_text'):
+                appearance.pop('legacy_text')
+                appearance['unclassified_legacy_omitted']=True
+        refresh_current()
+    if builder.extraction and estimate(messages) > target:
+        # Development evaluation is optional and already limited to eight actors.
+        # Under pressure reduce that set; current appearance/scene are never dropped.
+        candidates=sorted(current['characters'],key=lambda cid:(cid in scope.present_actor_ids,cid==scope.controlled_actor_id,cid))
+        for cid in candidates:
+            if estimate(messages) <= hard_context_limit: break
+            actor=current['characters'][cid]
+            if actor.get('personality') and not actor['personality'].get('evidence'):
+                actor.pop('personality')
+                refresh_current()
     if estimate(messages) > target and 'social_history' in current:
         current.pop('social_history')
         refresh_current()

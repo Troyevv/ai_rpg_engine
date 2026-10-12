@@ -31,6 +31,9 @@ export interface Preferences {
   link_names: boolean;
 }
 export interface Character {
+  appearance_history?:{before?:string|null;after?:string|null;minute:number}[];
+  portrait?:import("./Portrait").PortraitRef|null;
+  silhouette?:string;
   id: string;
   name: string;
   aliases?: string[];
@@ -54,7 +57,7 @@ export interface SocialRelation {
   certainty:'known'|'suspected';outcome:string;since?:number|null;since_date?:string|null;until?:number|null;until_date?:string|null;
 }
 export interface Genealogy {
-  nodes:{id:string;name:string;life_status:string}[];
+  nodes:{id:string;name:string;life_status:string;portrait?:import("./Portrait").PortraitRef|null;silhouette?:string}[];
   edges:SocialRelation[];
   kinship:{source_id:string;target_id:string;kind:string;lineage:string;generations?:number}[];
   truncated:boolean;

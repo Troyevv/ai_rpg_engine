@@ -267,7 +267,7 @@ class StateResolver:
         for i, item in self.records(raw,'character_changes',evidence=False):
             cid = self.actor(item.get('id'),'character_changes',i)
             actor = s['characters'][cid]
-            for protected in ('personality','values','fields'):
+            for protected in ('personality','values','fields','appearance','portraits'):
                 if protected in item:
                     self.warn('character_changes',i,'Личность изменяется только частичной evidence-bound дельтой.',protected,cid,'personality_full_replace_rejected')
             if actor['life_status'] == 'dead':
@@ -357,6 +357,8 @@ class StateResolver:
                 s['threads'][entry['id']] = entry
         from backend.runtime_v3.reproduction import apply_reproduction
         apply_reproduction(self, raw, events)
+        from backend.runtime_v3.appearance import apply_appearance
+        apply_appearance(self, raw, events)
         from backend.runtime_v3.commitments import apply_commitments
         owned = set(s['pregnancies'])
         claims = raw.records['scheduled_event_changes']
