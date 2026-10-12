@@ -193,6 +193,12 @@ if __name__ == '__main__':
         hold_next_preparation=True
         return {'held':True}
 
+    @app.post('/test/newborn-seed')
+    def newborn_seed():
+        from devtools.narrative_test_world import load_fixture
+        result=load_fixture(app.state.repository,'newborn-twins')
+        return {'world':result['world'],'save':result['save']}
+
     @app.post('/test/choices-seed')
     def choices_seed():
         from devtools.narrative_test_world import load_fixture

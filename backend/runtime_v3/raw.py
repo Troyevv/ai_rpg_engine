@@ -9,7 +9,8 @@ SECTIONS = ('locations','promotions','events','facts','knowledge_gained','charac
             'relationship_changes','movements','thread_changes','scheduled_event_changes',
             'life_changes','condition_changes','social_relation_changes',
             'location_changes','organization_changes','residence_changes','role_changes',
-            'development_evidence','personality_deltas','value_deltas')
+            'development_evidence','personality_deltas','value_deltas',
+            'reproductive_events','naming_decisions','births')
 
 
 @dataclass
@@ -144,6 +145,16 @@ def extraction_schema():
     definitions['scheduled_event_changes']['properties']['interrupts'] = {'type':'boolean', 'description':'Только установленное событие, требующее восприятия или участия controlled actor.'}
     for section in ('life_changes','condition_changes','social_relation_changes','residence_changes','role_changes','organization_changes','character_changes','scheduled_event_changes'):
         definitions[section]['properties'].update(source_event_id=string, source_process_id=string)
+    from backend.runtime_v3.reproduction import ServiceClaim, NameClaim, BirthClaim
+    for section, model in (('reproductive_events', ServiceClaim), ('naming_decisions', NameClaim), ('births', BirthClaim)):
+        def wire_schema(node):
+            if isinstance(node,dict): return {k:wire_schema(v) for k,v in node.items() if k not in ('title','default')}
+            if isinstance(node,list): return [wire_schema(v) for v in node]
+            return node
+        definitions[section] = wire_schema(model.model_json_schema())
+    definitions['life_changes']['properties'].update(
+        reproductive_capability={'enum':['can_become_pregnant','can_impregnate','neither','unknown']},
+        identity_components={'type':'object','additionalProperties':string})
     from backend.services.world import CARD_FIELDS
     definitions['promotions']['properties']['fields']=obj({key:string for key in CARD_FIELDS},CARD_FIELDS)
     from backend.services.player_agency import PLAYER_SOURCE_DESCRIPTION
@@ -163,7 +174,7 @@ def extraction_schema():
     return schema
 
 
-def prompt_schema():
+def prompt_schema(*, reproduction=True, births=True):
     """Validation-equivalent schema; prose lives once in the extraction contract."""
     from collections import Counter
     def structural(node):
@@ -172,6 +183,10 @@ def prompt_schema():
         return node
     # Keep properties named "description"; remove only JSON Schema annotations.
     schema = structural(extraction_schema())
+    if not reproduction:
+        for field in ('reproductive_events','naming_decisions','births'):
+            schema['properties'].pop(field)
+    if not births: schema['properties'].pop('births',None)
     counts = Counter()
 
     def key(node):

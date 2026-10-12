@@ -221,6 +221,81 @@ class PersonalityProfile(StrictModel):
     seen_sources: list[str] = Field(default_factory=list)
 
 
+class ReproductionPolicy(StrictModel):
+    # Narrative game rules, not medical estimates. Persist with the world.
+    protected: float = Field(default=0.01, ge=0, le=1)
+    unprotected: float = Field(default=0.2, ge=0, le=1)
+    unknown: float = Field(default=0, ge=0, le=1)
+    child_weights: list[float] = Field(default_factory=lambda: [0.98, 0.019, 0.001], min_length=1, max_length=8)
+    gestation_days: int = Field(default=280, ge=1, le=1000)
+    adult_age: int = Field(default=18, ge=18)
+    shared_family_name: bool = True
+
+    @model_validator(mode='after')
+    def valid_weights(self):
+        if any(x < 0 for x in self.child_weights) or sum(self.child_weights) <= 0:
+            raise ValueError('invalid child count weights')
+        return self
+
+
+class ReproductiveEvent(StrictModel):
+    id: str
+    participants: list[str]
+    gestational_actor_id: str
+    impregnating_actor_id: str
+    protection: Literal['protected', 'unprotected', 'unknown']
+    source_event_id: str
+    evidence: str
+    turn_id: int
+    earliest_minute: int = Field(ge=0)
+    latest_minute: int = Field(ge=0)
+    exact_minute: int | None = Field(default=None, ge=0)
+    conceived: bool
+    pregnancy_id: str | None = None
+    closed: bool = False
+    policy: ReproductionPolicy
+
+
+class ChildOutcome(StrictModel):
+    id: str
+    sex: Literal['female', 'male']
+
+
+class Pregnancy(StrictModel):
+    id: str
+    event_id: str
+    gestational_actor_id: str
+    parent_ids: list[str]
+    status: Literal['active', 'due', 'born'] = 'active'
+    earliest_minute: int = Field(ge=0)
+    latest_minute: int = Field(ge=0)
+    conception_minute: int | None = Field(default=None, ge=0)
+    due_minute: int = Field(ge=0)
+    children: list[ChildOutcome] = Field(min_length=1, max_length=8)
+    birth_event_id: str | None = None
+    birth_minute: int | None = None
+    fact_id: str
+    count_fact_id: str
+    sex_fact_ids: dict[str, str]
+
+
+class NamingDecision(StrictModel):
+    id: str
+    pregnancy_id: str
+    child_id: str
+    components: dict[str, str]
+    display_name: str | None = None
+    status: Literal['proposed', 'agreed', 'cancelled', 'replaced']
+    decision_actor_ids: list[str]
+    delegated_to: str | None = None
+    established: bool = False
+    source_event_id: str
+    evidence: str
+    fact_id: str
+    replaces: str | None = None
+
+
+
 class Character(StrictModel):
     id: str
     location_id: str | None = None
@@ -233,6 +308,10 @@ class Character(StrictModel):
     capabilities: Capabilities = Field(default_factory=Capabilities)
     developmental_stage: Literal['unknown', 'infant', 'child', 'adolescent', 'adult'] = 'unknown'
     parentage_complete_fact_id: str | None = None
+    reproductive_capability: Literal['can_become_pregnant', 'can_impregnate', 'neither', 'unknown'] = 'unknown'
+    biological_sex: Literal['female', 'male'] | None = None
+    identity_components: dict[str, str] = Field(default_factory=dict)
+    birth_provenance: dict[str, str | int | None] = Field(default_factory=dict)
     personality: PersonalityProfile | None = None
     values: dict[str, DurableValue] | None = None
     physical_state: str = ''
@@ -380,6 +459,10 @@ class WorldStateV3(StrictModel):
     residences: dict[str, Residence] = Field(default_factory=dict)
     roles: dict[str, NarrativeRole] = Field(default_factory=dict)
     organizations: dict[str, Organization] = Field(default_factory=dict)
+    reproduction_policy: ReproductionPolicy = Field(default_factory=ReproductionPolicy)
+    reproductive_events: dict[str, ReproductiveEvent] = Field(default_factory=dict)
+    pregnancies: dict[str, Pregnancy] = Field(default_factory=dict)
+    naming_decisions: dict[str, NamingDecision] = Field(default_factory=dict)
 
 
 def fatal(message, code='current_state_invalid', repairable=False, **path):
@@ -462,6 +545,9 @@ def assert_world_state_v3_invariants(state, before=None):
     from backend.runtime_v3.residence import validate_residence_state
     try: validate_residence_state(value)
     except ValueError as exc: fatal(str(exc), 'residence_state_invalid')
+    from backend.runtime_v3.reproduction import validate_reproduction
+    try: validate_reproduction(value)
+    except ValueError as exc: fatal(str(exc), 'reproduction_state_invalid')
     if before and (value['meta']['world_time'] < before['meta']['world_time'] or value['meta']['turn_id'] < before['meta']['turn_id']):
         fatal('время или номер хода движется назад')
     return value
@@ -492,12 +578,13 @@ class StatePatch:
 
     def apply(self, before):
         import json
+        before = assert_world_state_v3_invariants(before)
         digest = sha256(json.dumps(before, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
         if digest != self.before_hash:
             fatal('patch создан для другого состояния', 'stale_patch')
         result = deepcopy(before)
         for section, records in self.upserts.items():
-            if section not in ('characters', 'locations', 'facts', 'knowledge', 'relationships', 'threads', 'scheduled_events', 'objective_relations', 'conditions', 'residences', 'roles', 'organizations'):
+            if section not in ('characters', 'locations', 'facts', 'knowledge', 'relationships', 'threads', 'scheduled_events', 'objective_relations', 'conditions', 'residences', 'roles', 'organizations', 'reproductive_events', 'pregnancies', 'naming_decisions'):
                 fatal('неизвестная секция patch')
             result.setdefault(section, {}).update(deepcopy(records))
         result['meta'], result['camera'] = deepcopy(self.meta), deepcopy(self.camera)

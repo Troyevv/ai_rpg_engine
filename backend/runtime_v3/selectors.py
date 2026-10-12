@@ -11,7 +11,8 @@ def ui_view(snapshot, history=None):
     camera=state['camera'];now=state['meta']['world_time']
     label=lambda minute: calendar_label(state, minute)
     from backend.runtime_v3.personality import project_card
-    cards=[project_card(c, state['characters'][c['id']], observer=camera['controlled_actor_id'], state=state) for c in snapshot['character_cards']]
+    from backend.runtime_v3.reproduction import known_birth, context_projection, private_fact_ids
+    cards=[project_card(c, state['characters'][c['id']], observer=camera['controlled_actor_id'], state=state) for c in snapshot['character_cards'] if known_birth(state,c['id'],camera['controlled_actor_id'])]
     from backend.runtime_v3.kinship import visible_name
     for card in cards:
         card['name'] = visible_name(state,card['id'],camera['controlled_actor_id'],card['name'])
@@ -84,7 +85,7 @@ def ui_view(snapshot, history=None):
         camera=dict(scene_id=sid,mode=camera['mode'],scope='scene'),scene=camera['situation'],scene_meta=metadata,
         world_clock=dict(minute=now,last_event_time=label(now),calendar=state['meta'].get('calendar'),projection=current_time(state),nearby=nearby_calendar(state,set(camera['present_character_ids']))),memory=deepcopy(snapshot.get('memory',{})),
         sections=dict(campaign.get('sections',{}),scene=camera['situation']),
-        relationships=[dict(r,text=r['context'],target_name=names[r['target_id']]) for r in world['relationships'].values()],
+        relationships=[dict(r,text=r['context'],target_name=names.get(r['target_id'],'')) for r in world['relationships'].values()],
         facts=[dict(f,known_by=[k['actor_id'] for k in state['knowledge'].values() if k['fact_id']==f['id'] and k['status']=='known']) for f in state['facts'].values()],
         plans=[dict(t,text=t['state'] or t['description'],status='done' if t['status']=='resolved' else 'open') for t in state['threads'].values()],
         events=[dict(e,text=e['text'],character_ids=e['participants'],turn=e['source_sequence']) for e in world['events'].values() if e['player_observed']],
@@ -127,6 +128,35 @@ def ui_view(snapshot, history=None):
     result['actor_capabilities'] = capabilities(state,camera['controlled_actor_id']) if camera['controlled_actor_id'] else None
     from backend.runtime_v3.residence import visible_social_state
     result['residence_roles'] = visible_social_state(state,camera['controlled_actor_id'])
+    observer=camera['controlled_actor_id']
+    reproductive = context_projection(state,set(state['characters']),observer)
+    if reproductive: result['reproduction']=reproductive
+    hidden={cid for cid in state['characters'] if not known_birth(state,cid,observer)}
+    for cid in hidden: world['characters'].pop(cid,None)
+    for actor in world['characters'].values():
+        if state['characters'][actor['id']].get('birth_provenance'):
+            actor['display_name']=names.get(actor['id'])
+        for key in ('birth_provenance','biological_sex','identity_components','reproductive_capability'):
+            actor.pop(key,None)
+    protected=private_fact_ids(state)
+    hidden_facts={fid for fid in protected if state['knowledge'].get(str(observer)+':'+fid,{}).get('status')!='known'}
+    world['facts']={k:v for k,v in world['facts'].items() if k not in hidden_facts}
+    result['facts']=[f for f in result['facts'] if f['id'] not in hidden_facts]
+    world['knowledge']={k:v for k,v in world['knowledge'].items() if v['fact_id'] not in hidden_facts}
+    for scene in world['scenes'].values():
+        scene['participants']=[cid for cid in scene['participants'] if cid not in hidden]
+    for pid,p in state['pregnancies'].items():
+        if p['fact_id'] in hidden_facts: world['scheduled_events'].pop(pid,None)
+        elif pid in world['scheduled_events']:
+            world['scheduled_events'][pid]['description']='Ожидаемые роды'
+    # Localized disposable labels; canonical claims retain typed predicates.
+    for rows in (world['facts'].values(),result['facts']):
+        for f in rows:
+            if f['id'] not in protected: continue
+            claim=f.get('claim') or {};predicate=claim.get('predicate')
+            if predicate=='pregnancy': f['text']='Беременность установлена'
+            elif predicate=='child_count': f['text']='Количество детей: '+claim['value']
+            elif predicate=='child_sex': f['text']='Пол ребёнка: '+{'female':'женский','male':'мужской'}.get(claim['value'],claim['value'])
     result['runtime_version']=3
     result['last_time_skip']=deepcopy(snapshot.get('last_time_skip'))
     from backend.runtime_v3.notifications import notifications

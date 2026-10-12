@@ -13,6 +13,8 @@ def plan(state, kind, history=None, scope=None):
     due = [eid for eid in scope.scheduled_event_ids if eid in scope.acting_scheduled_event_ids
            and scheduled_due(state, state['scheduled_events'][eid]) is not None
            and scheduled_due(state, state['scheduled_events'][eid]) <= now]
+    if kind != 'background':
+        due=[eid for eid in due if eid not in state.get('pregnancies',{}) or state['knowledge'].get(str(scope.controlled_actor_id)+':'+state['pregnancies'][eid]['fact_id'],{}).get('status')=='known']
     return dict(recent_event_ids=scope.event_ids, actors=sorted(scope.relevant_actor_ids),
         location_ids=scope.location_ids,
         acting_actor_ids=sorted(cid for cid in scope.present_actor_ids | scope.remote_actor_ids | scope.active_actor_ids if capabilities(state,cid)['can_act']),

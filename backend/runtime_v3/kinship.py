@@ -35,6 +35,9 @@ def visible_relations(state, observer):
 
 def visible_name(state, cid, observer, fallback):
     c = state['characters'][cid]
+    if c.get('birth_provenance'):
+        from backend.runtime_v3.reproduction import birth_name
+        return birth_name(state,cid,observer) or 'Без имени'
     history = c.get('name_history', [])
     if not history: return c.get('display_name') or fallback
     name = history[0]['previous']

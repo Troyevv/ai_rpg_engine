@@ -4,6 +4,7 @@ This is the supported draft aggregate, not another Runtime schema. All loads go
 through JSON import, draft validation/confirmation and the normal migration.
 """
 import json
+from copy import deepcopy
 
 from backend.services import draft_world
 from backend.services.world import KINDS
@@ -393,6 +394,7 @@ def load_fixture(repository, checkpoint='base'):
     if checkpoint == 'goals': _seed_goals(repository,result['save'])
     if checkpoint == 'knowledge': _seed_knowledge(repository,result['save'])
     if checkpoint == 'choices': _seed_choices(repository,result['save'])
+    if checkpoint.startswith(('pregnancy','newborn')): _seed_reproduction(repository,result['save'],checkpoint)
     return dict(result, workspace=workspace['id'], fixture_version=FIXTURE_VERSION, checkpoint=checkpoint)
 
 
@@ -534,3 +536,54 @@ def _seed_knowledge(repository, save_id):
     snapshot['world_state']=r.state
     repository.commit_job(jid,snapshot,[],{},history_batch=r.history)
     with repository.connect() as conn:project(conn,save_id,repository.get_snapshot(save_id))
+
+
+# #41 uses the same world/loader. One-day gestation is ONLY a compressed QA rule.
+def _pregnancy(state, count=1):
+    state=deepcopy(state)
+    world=state['world']
+    world['reproduction_policy']=dict(unprotected=1.0,protected=0.0,unknown=0.0,
+        child_weights=[0.0]*(count-1)+[1.0],gestation_days=1)
+    for cid,cap in ((ACTOR_ID,'can_impregnate'),('qa_vera','can_become_pregnant')):
+        world['characters'][cid].update(life_status='alive',developmental_stage='adult',
+            birth_date='1990-01-01',reproductive_capability=cap,identity_components={'family_name':'Ларин'})
+    return state
+
+
+CHECKPOINTS.update({'pregnancy':_pregnancy,'newborn':_pregnancy,
+    'pregnancy-twins':lambda s:_pregnancy(s,2),'pregnancy-triplets':lambda s:_pregnancy(s,3),
+    'newborn-twins':lambda s:_pregnancy(s,2),'newborn-triplets':lambda s:_pregnancy(s,3)})
+
+
+def _seed_reproduction(repository,save_id,checkpoint):
+    """Run structured accepted events through normal save jobs; never an LLM call."""
+    from backend.runtime_v3.resolver import StateResolver
+    from backend.runtime_v3.context import build_context
+    snapshot=repository.get_snapshot(save_id)
+    config=dict(model='deterministic-fixture',context_length=32768,max_tokens=2000,update_tokens=4096)
+    text='Кирилл и Вера подтвердили взаимное согласие; интимная встреча взрослых состоялась.'
+    def commit(text,raw,kind):
+        nonlocal snapshot
+        r=StateResolver(snapshot['world_state'],text,text).resolve(raw)
+        if r.warnings: raise ValueError('Reproduction QA replay: '+str(r.warnings))
+        jid=repository.begin_job(save_id,text,kind,config)
+        repository.save_context(jid,build_context(snapshot,repository.list_turns(save_id),text,kind,32768,2000),snapshot)
+        repository.job_progress(jid,'validating',narrative=text,complete=True)
+        snapshot['world_state']=r.state;snapshot['character_cards'].extend(r.cards)
+        repository.commit_job(jid,snapshot,[],{},history_batch=r.history)
+        snapshot=repository.get_snapshot(save_id)
+    def raw(text,elapsed=0):
+        camera=snapshot['world_state']['camera']
+        return dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=elapsed),
+            events=[dict(id='qa_reproduction_event',text=text,evidence=text,participants=[ACTOR_ID,'qa_vera'],
+                witnesses=[ACTOR_ID,'qa_vera'],fact_ids=[],medium='observation')])
+    claim=dict(id='qa_encounter',kind='sexual_intercourse',source_event_id='qa_reproduction_event',
+        gestational_actor_id='qa_vera',impregnating_actor_id=ACTOR_ID,protection='unprotected',
+        consent_actor_ids=[ACTOR_ID,'qa_vera'],parent_ids=[ACTOR_ID,'qa_vera'],
+        assertion='completed_consensual_adult_event',evidence=text,player_evidence=text,player_assertion='explicit_choice')
+    commit(text,dict(raw(text),reproductive_events=[claim]),'start')
+    if checkpoint.startswith('newborn'):
+        p=next(iter(snapshot['world_state']['pregnancies'].values()))
+        text='Роды Веры завершились в доме. Кирилл присутствовал при рождении детей. Вера и Кирилл подтвердили, что они родители.'
+        commit(text,dict(raw(text,1440),births=[dict(pregnancy_id=p['id'],source_event_id='qa_reproduction_event',
+            assertion='birth_completed',disclosed_parent_ids=p['parent_ids'],location_id=snapshot['world_state']['camera']['location_id'],evidence=text)]),'turn')

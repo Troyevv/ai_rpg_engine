@@ -99,6 +99,8 @@ class StateResolver:
         apply_locations(self, raw)
         for i, item in self.records(raw,'promotions'):
             cid = item.get('id')
+            if any(cid==ch['id'] for p in s['pregnancies'].values() for ch in p['children']):
+                self.warn('promotions',i,'Reserved birth identity is created only by Runtime.',code='birth_identity_reserved'); continue
             fields = item.get('fields')
             from backend.services.world import CARD_FIELDS
             if not isinstance(cid,str) or not cid or not isinstance(item.get('name'),str) or not isinstance(fields,dict) or any(not isinstance(fields.get(k),str) or not fields[k].strip() for k in CARD_FIELDS):
@@ -115,7 +117,9 @@ class StateResolver:
             fatal('неизвестное конечное место камеры', 'camera_location_invalid', repairable=True)
         if not isinstance(present,list) or any(not isinstance(cid,str) for cid in present):
             fatal('повреждены участники final_scene', 'camera_invalid', repairable=True)
-        present = list(dict.fromkeys(present))
+        reserved = {ch['id'] for p in s['pregnancies'].values() if p['status']!='born' for ch in p['children']}
+        if reserved & set(present): self.warn('final_scene',0,'Runtime adds children only after accepted birth.',code='birth_presence_deferred')
+        present = list(dict.fromkeys(cid for cid in present if cid not in reserved))
         from backend.runtime_v3.life import capabilities
         dead_present = [cid for cid in present if s['characters'].get(cid, {}).get('life_status') == 'dead']
         for cid in dead_present:
@@ -285,6 +289,11 @@ class StateResolver:
                         _transition(self,'birth_date_established',cid,prior,actor,item)
                 except (ValueError,TypeError):
                     self.warn('character_changes',i,'дата рождения не подтверждена или некорректна','birth_date',cid)
+            if actor['developmental_stage']=='infant':
+                for field in ('goals','intentions','obligations'):
+                    if field in item or field+'_updates' in item:
+                        self.warn('character_changes',i,'Infant motivation requires later development.',entity=cid,code='infant_motivation_invalid')
+                        item.pop(field,None); item.pop(field+'_updates',None)
             for key in ('situation','physical_state','emotion','goals','intentions','obligations'):
                 if key not in item: continue
                 value = item[key]
@@ -346,7 +355,16 @@ class StateResolver:
             if entry:
                 for cid in entry['character_ids']: self.actor(cid, 'thread_changes', i)
                 s['threads'][entry['id']] = entry
+        from backend.runtime_v3.reproduction import apply_reproduction
+        apply_reproduction(self, raw, events)
         from backend.runtime_v3.commitments import apply_commitments
+        owned = set(s['pregnancies'])
+        claims = raw.records['scheduled_event_changes']
+        for i, item in enumerate(claims):
+            if isinstance(item,dict) and isinstance(item.get('id'),str) and item['id'] in owned:
+                self.warn('scheduled_event_changes',i,'Pregnancy schedule is Runtime-owned.',code='reproduction_schedule_owned')
+        raw.records['scheduled_event_changes'] = [item for item in claims
+            if not isinstance(item,dict) or not isinstance(item.get('id'),str) or item['id'] not in owned]
         apply_commitments(self, raw)
         from backend.runtime_v3.commitments import invalidate_dead_commitments
         invalidate_dead_commitments(self,{cid for cid,c in s['characters'].items() if c['life_status']=='dead'})
@@ -357,7 +375,7 @@ class StateResolver:
         from backend.runtime_v3.lifecycle import queue_invalidations
         queue_invalidations(self)
         upserts = {section:{key:deepcopy(value) for key,value in s[section].items() if value != self.before[section].get(key)}
-            for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions','residences','roles','organizations')}
+            for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions','residences','roles','organizations','reproductive_events','pregnancies','naming_decisions')}
         digest = sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
         patch = StatePatch(digest,deepcopy(s['meta']),deepcopy(s['camera']),upserts)
         state = patch.apply(self.before)
