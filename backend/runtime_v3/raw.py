@@ -10,7 +10,7 @@ SECTIONS = ('locations','promotions','events','facts','knowledge_gained','charac
             'life_changes','condition_changes','social_relation_changes',
             'location_changes','organization_changes','residence_changes','role_changes',
             'development_evidence','personality_deltas','value_deltas',
-            'reproductive_events','naming_decisions','births','appearance_deltas')
+            'reproductive_events','naming_decisions','births','appearance_deltas','possession_deltas')
 
 
 @dataclass
@@ -41,7 +41,7 @@ class RawTurnResult:
             if section == 'knowledge_gained' and len(values) > 64:
                 warnings.append(dict(section=section,code='knowledge_budget',action='truncate',reason='Превышен лимит 64 изменений знаний.'))
                 values = values[:64]
-            if section in ('development_evidence','personality_deltas','value_deltas','appearance_deltas') and len(values) > 24:
+            if section in ('development_evidence','personality_deltas','value_deltas','appearance_deltas','possession_deltas') and len(values) > 24:
                 warnings.append(dict(section=section,code='development_budget',action='truncate',reason='Превышен лимит 24 записей.'))
                 values = values[:24]
             records[section] = deepcopy(values)
@@ -157,6 +157,8 @@ def extraction_schema():
         identity_components={'type':'object','additionalProperties':string})
     from backend.runtime_v3.appearance import AppearanceDelta
     definitions['appearance_deltas'] = wire_schema(AppearanceDelta.model_json_schema())
+    from backend.runtime_v3.possessions import PossessionDelta
+    definitions['possession_deltas'] = wire_schema(PossessionDelta.model_json_schema())
     from backend.services.world import CARD_FIELDS
     definitions['promotions']['properties']['fields']=obj({key:string for key in CARD_FIELDS},CARD_FIELDS)
     from backend.services.player_agency import PLAYER_SOURCE_DESCRIPTION
@@ -180,7 +182,19 @@ def prompt_schema(*, reproduction=True, births=True):
     """Validation-equivalent schema; prose lives once in the extraction contract."""
     from collections import Counter
     def structural(node):
-        if isinstance(node, dict): return {k:structural(v) for k,v in node.items() if k != 'description' or not isinstance(v, str)}
+        if isinstance(node, dict):
+            result = {k:structural(v) for k,v in node.items() if k != 'description' or not isinstance(v, str)}
+            # Lossless JSON Schema reductions keep new optional domains inside
+            # existing model limits; runtime validation is unchanged.
+            if result.get('type') == 'string' and (isinstance(result.get('const'), str) or
+                    isinstance(result.get('enum'), list) and all(isinstance(v, str) for v in result['enum'])):
+                result.pop('type')
+            choices = result.get('anyOf')
+            if isinstance(choices, list) and choices and all(isinstance(c, dict) and set(c) == {'type'} and isinstance(c['type'], str) for c in choices):
+                result.pop('anyOf')
+                result['type'] = list(dict.fromkeys(c['type'] for c in choices))
+            if result.get('required') == []: result.pop('required')
+            return result
         if isinstance(node, list): return [structural(v) for v in node]
         return node
     # Keep properties named "description"; remove only JSON Schema annotations.
@@ -196,13 +210,13 @@ def prompt_schema(*, reproduction=True, births=True):
 
     def count(node):
         if isinstance(node, dict):
-            if 'type' in node and len(key(node)) > 50:
+            if set(node) & {'type', 'enum', 'const', 'anyOf'} and len(key(node)) > 23:
                 counts[key(node)] += 1
             for value in node.values(): count(value)
         elif isinstance(node, list):
             for value in node: count(value)
     count(schema)
-    shared = {value: 'shared_'+str(index) for index, value in enumerate(sorted(k for k, n in counts.items() if n > 1 and n*(len(k)-35)>len(k)+25))}
+    shared = {value: str(index) for index, value in enumerate(sorted(k for k, n in counts.items() if n > 1 and n*(len(k)-23)>len(k)+10))}
 
     def compact(node, root=False):
         if isinstance(node, dict):

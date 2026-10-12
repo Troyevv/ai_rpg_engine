@@ -500,6 +500,23 @@ class ScheduledEvent(StrictModel):
     source_turn: int | None = Field(default=None, ge=0)
 
 
+class SignificantPossession(StrictModel):
+    """Continuity identity, never equipment or a general inventory entry."""
+    id: str = Field(min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=160)
+    kind: str = Field(min_length=1, max_length=80)
+    owner_id: str | None = None
+    holder_id: str | None = None
+    location_id: str | None = None
+    status: Literal['unknown', 'available', 'lost', 'destroyed'] = 'unknown'
+    revision: int = Field(default=0, ge=0)
+    fact_id: str | None = None
+    field_facts: dict[Literal['owner_id', 'holder_id', 'location_id', 'status'], str] = Field(default_factory=dict)
+    source_event_id: str | None = None
+    source_turn: int | None = None
+    applied: dict[str, str] = Field(default_factory=dict)
+
+
 class WorldStateV3(StrictModel):
     meta: Meta = Field(default_factory=Meta)
     camera: Camera
@@ -519,6 +536,7 @@ class WorldStateV3(StrictModel):
     reproductive_events: dict[str, ReproductiveEvent] = Field(default_factory=dict)
     pregnancies: dict[str, Pregnancy] = Field(default_factory=dict)
     naming_decisions: dict[str, NamingDecision] = Field(default_factory=dict)
+    possessions: dict[str, SignificantPossession] = Field(default_factory=dict)
 
 
 def fatal(message, code='current_state_invalid', repairable=False, **path):
@@ -534,6 +552,8 @@ def assert_world_state_v3_invariants(state, before=None):
     salvage_values(state)
     from backend.runtime_v3.appearance import salvage_profiles as salvage_appearance
     salvage_appearance(state)
+    from backend.runtime_v3.possessions import salvage_possessions
+    salvage_possessions(state)
     salvage_metadata(state)
     from backend.runtime_v3.life import salvage_life_data
     state = salvage_life_data(state)
@@ -642,7 +662,7 @@ class StatePatch:
             fatal('patch создан для другого состояния', 'stale_patch')
         result = deepcopy(before)
         for section, records in self.upserts.items():
-            if section not in ('characters', 'locations', 'facts', 'knowledge', 'relationships', 'threads', 'scheduled_events', 'objective_relations', 'conditions', 'residences', 'roles', 'organizations', 'reproductive_events', 'pregnancies', 'naming_decisions'):
+            if section not in ('characters', 'locations', 'facts', 'knowledge', 'relationships', 'threads', 'scheduled_events', 'objective_relations', 'conditions', 'residences', 'roles', 'organizations', 'reproductive_events', 'pregnancies', 'naming_decisions', 'possessions'):
                 fatal('неизвестная секция patch')
             result.setdefault(section, {}).update(deepcopy(records))
         result['meta'], result['camera'] = deepcopy(self.meta), deepcopy(self.camera)

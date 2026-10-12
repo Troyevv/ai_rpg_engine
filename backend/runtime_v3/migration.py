@@ -161,7 +161,7 @@ def migrate_v2(original):
     if 'reproduction_policy' in world: state['reproduction_policy'] = deepcopy(world['reproduction_policy'])
     state['objective_relations'] = deepcopy(world.get('objective_relations',{}))
     state['conditions'] = deepcopy(world.get('conditions',{}))
-    for section in ('residences','roles','organizations'):
+    for section in ('residences','roles','organizations','possessions'):
         state[section] = deepcopy(world.get(section,{}))
     configured = old.get('world_clock', {}).get('calendar')
     if configured:

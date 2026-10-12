@@ -359,6 +359,8 @@ class StateResolver:
         apply_reproduction(self, raw, events)
         from backend.runtime_v3.appearance import apply_appearance
         apply_appearance(self, raw, events)
+        from backend.runtime_v3.possessions import apply_possessions
+        apply_possessions(self, raw, events)
         from backend.runtime_v3.commitments import apply_commitments
         owned = set(s['pregnancies'])
         claims = raw.records['scheduled_event_changes']
@@ -377,7 +379,7 @@ class StateResolver:
         from backend.runtime_v3.lifecycle import queue_invalidations
         queue_invalidations(self)
         upserts = {section:{key:deepcopy(value) for key,value in s[section].items() if value != self.before[section].get(key)}
-            for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions','residences','roles','organizations','reproductive_events','pregnancies','naming_decisions')}
+            for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions','residences','roles','organizations','reproductive_events','pregnancies','naming_decisions','possessions')}
         digest = sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
         patch = StatePatch(digest,deepcopy(s['meta']),deepcopy(s['camera']),upserts)
         state = patch.apply(self.before)

@@ -377,3 +377,23 @@ initial description, not current clothing. Do not invent cosmetic changes, inher
 parent traits or age appearances by formula. Appearance facts unknown to a
 Character remain unknown; never broadcast off-camera changes between NPCs.
 """
+
+
+POSSESSION_CONTRACT = """
+Significant possessions only, never inventory. Introduce established unique identities;
+reuse item IDs. Require completed Event/Fact evidence + revision, never plans.
+owner/holder/location differ; null=unknown. Changed owner needs explicit holder/place;
+changed holder needs place. Loss keeps title, clears holder; recovery needs holder/place;
+destroyed stays destroyed. Order successive Events. EXTERNAL voluntary choices require
+player evidence; never relabel as involuntary. NPCs may dispose of their own items.
+Involuntary loss needs accepted consequences. No knowledge broadcast: field_facts bind
+exact fields/audiences; use #76 exclusive claims for corrections.
+"""
+EXTRACTION_CONTRACT += POSSESSION_CONTRACT
+NARRATIVE_CONTRACT += """
+Significant possessions: title, custody and place differ. Preserve IDs and canonical
+availability; never reuse sold/lost/destroyed objects without a confirmed new event.
+Do not invent EXTERNAL voluntary disposal or turn plans into ownership. Missing fields
+mean unknown, not access. known_by is field-specific; old beliefs cannot undo World Truth.
+NPCs may causally use/dispose of their own things. No inventory/economy simulation.
+"""
