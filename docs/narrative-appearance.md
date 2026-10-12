@@ -71,10 +71,20 @@ All consumers use `runtime_v3.portraits` for applicability/selection and the sha
 - GET `/assets/{asset_id}`: authorized full, orientation-normalized PNG original.
 
 Upload checks MIME against actual decoded format, complete image decoding,
-10 MiB source limit, both dimensions in 256–4096 and at most 4096² pixels. Animated
+10 MiB source limit and a separate 32,000,000-pixel decoded source budget before
+resizing. Pillow decompression-bomb warnings/errors are also rejected. Output
+dimensions are 256–4096 on each side. Animated
 images and corrupt content are rejected. Pillow is the project-owned adapter's
 only added dependency (`>=11.3,<13`); metadata is removed and full oriented pixels
-are safely re-encoded without crop or resizing. Pixel decoding follows Pillow's
+are safely re-encoded without crop or aspect-ratio distortion. Sources with a
+side above 4096 are proportionally reduced; sources with a side below 256 are
+proportionally enlarged only if the result fits within 4096. Both use Pillow
+LANCZOS (with nearest integer pixel rounding). Aspect ratios beyond 16:1 cannot
+satisfy both limits and are rejected with HTTP 422; corrupt/unsafe sources also
+return 422, oversized request bodies return 413. The editor warns before saving
+that enlargement can blur an image or reduce quality. The stored original is
+the full normalized frame, never the circular crop; source pixel dimensions may
+therefore change. Existing assets are untouched. Pixel decoding follows Pillow's
 [security guidance](https://pillow.readthedocs.io/en/stable/handbook/security.html).
 
 Immutable images are managed BLOB assets in `portrait_assets`, outside WorldState

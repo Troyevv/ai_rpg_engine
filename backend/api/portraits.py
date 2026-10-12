@@ -38,7 +38,10 @@ def register(app,repo):
             if len(data)+len(chunk)>MAX_BYTES: raise HTTPException(413,'Изображение больше 10 MiB.')
             data.extend(chunk)
         from starlette.concurrency import run_in_threadpool
-        image=await run_in_threadpool(decode_image,bytes(data),request.headers.get('content-type',''))
+        try:
+            image=await run_in_threadpool(decode_image,bytes(data),request.headers.get('content-type',''))
+        except ValueError as exc:
+            raise HTTPException(422,str(exc)) from exc
         return await run_in_threadpool(portraits.edit,repo,sid,cid,revision,image=image,portrait_id=replace_id,changes=changes)
 
     @app.patch(base+'/{pid}')

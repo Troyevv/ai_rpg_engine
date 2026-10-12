@@ -11,9 +11,10 @@ test('portrait upload crop history original and deletion remain usable',async({p
  await expect(fallback.locator('svg')).toBeVisible();
  await pencil.click();
  const input=page.getByLabel('Файл портрета');
- const png=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=320;c.height=480;const ctx=c.getContext('2d')!;ctx.fillStyle='#916744';ctx.fillRect(0,0,320,480);ctx.fillStyle='#ecd2ae';ctx.fillRect(80,60,160,200);return c.toDataURL('image/png').split(',')[1]});
+ const png=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=160;c.height=240;const ctx=c.getContext('2d')!;ctx.fillStyle='#916744';ctx.fillRect(0,0,320,480);ctx.fillStyle='#ecd2ae';ctx.fillRect(80,60,160,200);return c.toDataURL('image/png').split(',')[1]});
  await input.setInputFiles({name:'portrait.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});
  await expect(page.getByAltText('Предпросмотр кадрирования')).toBeVisible();
+ await expect(page.getByRole('status').filter({hasText:'Маленькое изображение будет увеличено'})).toBeVisible();
  await page.getByLabel('Возраст от',{exact:true}).fill('30');await page.getByLabel('Возраст до',{exact:true}).fill('50');
  await page.getByLabel('Масштаб кадрирования').fill('2');await page.getByLabel('По вертикали').fill('0.25');
  await page.getByRole('button',{name:'Сохранить',exact:true}).click();await expect(page.getByRole('heading',{name:'Портрет персонажа',exact:true})).toHaveCount(0);
@@ -21,7 +22,7 @@ test('portrait upload crop history original and deletion remain usable',async({p
  await page.screenshot({animations:'disabled',path:test.info().outputPath('portrait-uploaded.png')});
  await fallback.click();await expect(page.getByRole('heading',{name:'Портрет в полном размере'})).toBeVisible();
  const full=page.getByAltText('Полный портрет');await expect(full).toBeVisible();
- expect(await full.evaluate((e:HTMLImageElement)=>[e.naturalWidth,e.naturalHeight])).toEqual([320,480]);
+ expect(await full.evaluate((e:HTMLImageElement)=>[e.naturalWidth,e.naturalHeight])).toEqual([256,384]);
  await page.getByLabel('Масштаб просмотра').fill('3');
  const pane=page.getByLabel('Оригинал портрета',{exact:true});const box=(await pane.boundingBox())!;await page.mouse.move(box.x+box.width*.7,box.y+box.height*.7);await page.mouse.down();await page.mouse.move(box.x+box.width*.3,box.y+box.height*.3);await page.mouse.up();expect(await pane.evaluate(e=>e.scrollTop)).toBeGreaterThan(0);
  await page.getByRole('dialog').last().getByRole('button',{name:'Закрыть',exact:true}).click();

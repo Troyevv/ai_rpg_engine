@@ -27,9 +27,44 @@ def test_formats_content_full_pixels_and_metadata(fmt,mime):
     full=Image.open(BytesIO(content));assert full.size==(320,480) and not full.getexif()
 
 
-@pytest.mark.parametrize('size',[(255,256),(256,255),(4097,256),(256,4097)])
-def test_dimension_rejection(size):
-    with pytest.raises(ValueError):decode_image(image(size=size),'image/png')
+@pytest.mark.parametrize('size,expected',[
+    ((255,256),(256,257)),((256,255),(257,256)),((64,128),(256,512)),
+    ((128,64),(512,256)),((5000,2500),(4096,2048)),((2500,5000),(2048,4096)),
+    ((256,4096),(256,4096)),((16,256),(256,4096)),((256,256),(256,256)),
+])
+def test_dimension_normalization(size,expected):
+    content,w,h=decode_image(image(size=size),'image/png')
+    assert (w,h)==expected and Image.open(BytesIO(content)).size==expected
+    assert abs(w/h-size[0]/size[1]) < .01
+
+
+@pytest.mark.parametrize('size',[(4097,256),(256,4097),(1,17),(17,1)])
+def test_impossible_aspect_ratio(size):
+    with pytest.raises(ValueError,match='вытянутое'):decode_image(image(size=size),'image/png')
+
+
+def test_source_budget_and_bomb_checked_before_resize(monkeypatch):
+    from backend.services import portrait_assets
+    def forbidden(*args,**kwargs):raise AssertionError('Unsafe source reached resizing')
+    monkeypatch.setattr(Image.Image,'resize',forbidden)
+    monkeypatch.setattr(portrait_assets,'MAX_SOURCE_PIXELS',1000)
+    with pytest.raises(ValueError,match='пикселей'):decode_image(image(),'image/png')
+    monkeypatch.setattr(portrait_assets,'MAX_SOURCE_PIXELS',32_000_000)
+    monkeypatch.setattr(Image,'MAX_IMAGE_PIXELS',1000)
+    with pytest.raises(ValueError,match='небезопасное'):decode_image(image(),'image/png')
+
+
+def test_lanczos_full_frame_alpha_and_orientation():
+    original=Image.new('RGBA',(128,64),(0,0,0,0))
+    original.paste((255,0,0,255),(0,0,64,64))
+    source=BytesIO();original.save(source,format='PNG')
+    data,w,h=decode_image(source.getvalue(),'image/png')
+    actual=Image.open(BytesIO(data))
+    assert (w,h)==(512,256)
+    assert actual.tobytes()==original.resize((512,256),Image.Resampling.LANCZOS).tobytes()
+    exif=Image.Exif();exif[274]=6
+    data,w,h=decode_image(image('JPEG',size=(64,128),exif=exif),'image/jpeg')
+    assert (w,h)==(512,256) and not Image.open(BytesIO(data)).getexif()
 
 
 @pytest.mark.parametrize('content,mime',[(b'<svg/>','image/png'),(b'bad','image/webp'),(b'bad','text/html'),(b'x'*(MAX_BYTES+1),'image/png')])
@@ -149,3 +184,25 @@ def test_separate_user_database_does_not_grant_access_from_foreign_reference(set
     snap['world_state']['characters'][ACTOR_ID]['portraits']=foreign['world_state']['characters'][ACTOR_ID]['portraits']
     with other.connect() as db:db.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(snap),other_sid))
     with pytest.raises(ValueError): portraits.asset(other,other_sid,ACTOR_ID,p['asset_id'])
+
+
+@pytest.mark.parametrize('fmt,mime',[('PNG','image/png'),('JPEG','image/jpeg'),('WEBP','image/webp')])
+def test_upload_normalizes_dimensions_and_preserves_crop(setup,fmt,mime):
+    repo,sid,client=setup;path=f'/api/saves/{sid}/characters/{ACTOR_ID}/portraits'
+    crop=dict(x=.2,y=.7,zoom=2)
+    res=client.post(path,params={'revision':repo.get_save(sid)['revision'],'settings':json.dumps({'crop':crop})},content=image(fmt,size=(64,128)),headers={'content-type':mime})
+    assert res.status_code==200,res.text
+    p=res.json()['portrait'];assert (p['width'],p['height'])==(256,512) and p['crop']==crop
+    assert Image.open(BytesIO(client.get(path+'/assets/'+p['asset_id']).content)).size==(256,512)
+
+
+def test_unsafe_upload_is_clear_4xx_without_asset(setup,monkeypatch):
+    from backend.services import portrait_assets
+    repo,sid,client=setup;path=f'/api/saves/{sid}/characters/{ACTOR_ID}/portraits'
+    for source in (image(size=(17,1)),b'broken'):
+        res=client.post(path,params={'revision':repo.get_save(sid)['revision']},content=source,headers={'content-type':'image/png'})
+        assert res.status_code==422 and res.json()['detail']
+    monkeypatch.setattr(portrait_assets,'MAX_SOURCE_PIXELS',1000)
+    res=client.post(path,params={'revision':repo.get_save(sid)['revision']},content=image(),headers={'content-type':'image/png'})
+    assert res.status_code==422 and 'пикселей' in res.json()['detail']
+    with repo.connect() as db:assert db.execute('SELECT COUNT(*) FROM portrait_assets').fetchone()[0]==0

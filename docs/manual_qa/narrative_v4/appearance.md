@@ -47,8 +47,12 @@ CI uses deterministic source records and never depends on a paid model.
    landscape images. Preview, adjust horizontal/vertical position and zoom, then
    Cancel: neither revision nor attachments change. Repeat and Save.
 3. Test invalid contents disguised as PNG, GIF/SVG, files >10 MiB, dimensions
-   255×256 and 4097×256: reject without creating an attachment. Valid edge sizes
-   256×256 and 4096×256 are accepted. EXIF orientation is normalized.
+   4097×256: reject without creating an attachment (impossible aspect ratio).
+   Upload 255×256 → 256×257, 64×128 → 256×512, 5000×2500 → 4096×2048;
+   verify full frame and proportions, LANCZOS output and the small-image quality
+   warning before Save. Valid edges 256×256 and 4096×256 stay unchanged.
+   Sources over 32 million pixels and decompression bombs are rejected before
+   resizing; errors are HTTP 4xx. EXIF orientation is normalized before resizing.
 4. Confirm the saved avatar is circular, not stretched, and the crop matches in
    the Character picker and genealogy. Reload: crop survives. Appearance text and
    Character Knowledge do not change on upload or edit.
