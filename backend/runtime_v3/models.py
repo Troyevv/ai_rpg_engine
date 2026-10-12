@@ -296,6 +296,60 @@ class NamingDecision(StrictModel):
 
 
 
+class AppearanceFeature(StrictModel):
+    category: Literal['intrinsic', 'body', 'modification', 'presentation', 'condition']
+    kind: Literal['eye_color', 'natural_hair_color', 'skin', 'face', 'build', 'height', 'scar', 'tattoo', 'piercing', 'hairstyle', 'facial_hair', 'cosmetic', 'condition']
+    text: str = Field(default='', max_length=600)
+    revision: int = Field(default=1, ge=1)
+    condition_id: str | None = None
+    source_event_id: str | None = None
+    fact_id: str | None = None
+    evidence: str = ''
+
+
+    @model_validator(mode='after')
+    def valid_visual_feature(self):
+        from backend.runtime_v3.appearance import KINDS
+        if self.kind not in KINDS[self.category]: raise ValueError('appearance category/kind mismatch')
+        if self.category=='condition':
+            if not self.condition_id or self.text: raise ValueError('condition visual must reference #38, without a copied description')
+        elif self.condition_id or not self.text.strip(): raise ValueError('cosmetic trait must have text, not a condition link')
+        return self
+
+
+class AppearanceProfile(StrictModel):
+    items: dict[str, AppearanceFeature] = Field(default_factory=dict, max_length=48)
+    # Verbatim unclassified import. Never infer structured traits from old prose.
+    legacy_text: str = ''
+    applied: list[str] = Field(default_factory=list)
+
+
+class PortraitCrop(StrictModel):
+    x: float = Field(default=0.5, ge=0, le=1)
+    y: float = Field(default=0.5, ge=0, le=1)
+    zoom: float = Field(default=1.0, ge=1, le=4)
+
+
+class PortraitReference(StrictModel):
+    id: str = Field(pattern=r'^[a-f0-9]{32}$')
+    asset_id: str = Field(pattern=r'^[a-f0-9]{32}$')
+    width: int = Field(ge=256, le=4096)
+    height: int = Field(ge=256, le=4096)
+    crop: PortraitCrop = Field(default_factory=PortraitCrop)
+    stage: Literal['unknown', 'infant', 'child', 'adolescent', 'adult'] = 'unknown'
+    min_age: int | None = Field(default=None, ge=0, le=10000)
+    max_age: int | None = Field(default=None, ge=0, le=10000)
+    label: str = Field(default='', max_length=120)
+    order: int = Field(default=0, ge=0)
+    deleted: bool = False
+
+    @model_validator(mode='after')
+    def valid_period(self):
+        if self.min_age is not None and self.max_age is not None and self.min_age > self.max_age:
+            raise ValueError('invalid portrait period')
+        return self
+
+
 class Character(StrictModel):
     id: str
     location_id: str | None = None
@@ -312,6 +366,8 @@ class Character(StrictModel):
     biological_sex: Literal['female', 'male'] | None = None
     identity_components: dict[str, str] = Field(default_factory=dict)
     birth_provenance: dict[str, str | int | None] = Field(default_factory=dict)
+    appearance: AppearanceProfile = Field(default_factory=AppearanceProfile)
+    portraits: list[PortraitReference] = Field(default_factory=list, max_length=128)
     personality: PersonalityProfile | None = None
     values: dict[str, DurableValue] | None = None
     physical_state: str = ''
@@ -476,6 +532,8 @@ def assert_world_state_v3_invariants(state, before=None):
     from backend.runtime_v3.values import salvage_values
     from backend.runtime_v3.lifecycle import salvage_metadata
     salvage_values(state)
+    from backend.runtime_v3.appearance import salvage_profiles as salvage_appearance
+    salvage_appearance(state)
     salvage_metadata(state)
     from backend.runtime_v3.life import salvage_life_data
     state = salvage_life_data(state)

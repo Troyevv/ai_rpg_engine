@@ -13,9 +13,23 @@ def ui_view(snapshot, history=None):
     from backend.runtime_v3.personality import project_card
     from backend.runtime_v3.reproduction import known_birth, context_projection, private_fact_ids
     cards=[project_card(c, state['characters'][c['id']], observer=camera['controlled_actor_id'], state=state) for c in snapshot['character_cards'] if known_birth(state,c['id'],camera['controlled_actor_id'])]
+    from backend.runtime_v3.appearance import project_card as appearance_card
+    from backend.runtime_v3.portraits import projection as portrait_projection
+    cards=[dict(appearance_card(c,state,camera['controlled_actor_id']),**portrait_projection(state,c['id'])) for c in cards]
     from backend.runtime_v3.kinship import visible_name
     for card in cards:
         card['name'] = visible_name(state,card['id'],camera['controlled_actor_id'],card['name'])
+    from backend.runtime_v3.appearance import visible as visible_appearance
+    appearance_history={card['id']:[] for card in cards}
+    for change in reversed(history.get('state_changes',[])):
+        cid=change.get('entity')
+        if change.get('kind')!='appearance_delta' or cid not in appearance_history: continue
+        rows=appearance_history[cid]
+        if len(rows)>=24 or not visible_appearance(state,cid,dict(source_event_id=True,fact_id=change.get('fact_id')),camera['controlled_actor_id']): continue
+        old=change.get('before') or {};new=change.get('after') or {}
+        rows.append(dict(before=old.get('text') if visible_appearance(state,cid,old,camera['controlled_actor_id']) else None,after=new.get('text'),minute=change['minute']))
+    for card in cards:
+        card['appearance_history']=appearance_history[card['id']]
     names={c['id']:c['name'] for c in cards}
     locations=state['locations']
     def place(lid):return locations.get(lid,{}).get('name','Не указано') if isinstance(lid,str) else 'Не указано'
@@ -99,7 +113,7 @@ def ui_view(snapshot, history=None):
     from backend.runtime_v3.kinship import genealogy, visible_relations
     from backend.runtime_v3.life import capabilities
     for cid, actor in world['characters'].items():
-        for field in ('life_fact_id','name_history','parentage_complete_fact_id','personality','values'):
+        for field in ('life_fact_id','name_history','parentage_complete_fact_id','personality','values','appearance','portraits'):
             actor.pop(field,None)
     from backend.runtime_v3.personality import visible_item
     # One bounded-per-actor projection pass, not NPC-count × History scans.

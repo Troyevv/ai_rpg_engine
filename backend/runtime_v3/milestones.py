@@ -85,6 +85,8 @@ def derive(batch):
                     categories.append('death'); fact = after.get('life_fact_id')
                 if after.get('display_name') and old.get('display_name') != after['display_name'] and after.get('name_history'):
                     categories.append('name_change'); fact = after['name_history'][-1].get('fact_id')
+            elif kind == 'appearance_delta' and after.get('category')=='modification':
+                actors=[entity];categories.append('appearance_change')
             elif kind == 'birth':
                 actors = [entity]; categories.append('birth'); fact = after.get('life_fact_id')
             elif kind == 'birth_date_established':

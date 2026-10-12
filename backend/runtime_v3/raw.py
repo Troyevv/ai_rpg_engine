@@ -10,7 +10,7 @@ SECTIONS = ('locations','promotions','events','facts','knowledge_gained','charac
             'life_changes','condition_changes','social_relation_changes',
             'location_changes','organization_changes','residence_changes','role_changes',
             'development_evidence','personality_deltas','value_deltas',
-            'reproductive_events','naming_decisions','births')
+            'reproductive_events','naming_decisions','births','appearance_deltas')
 
 
 @dataclass
@@ -41,7 +41,7 @@ class RawTurnResult:
             if section == 'knowledge_gained' and len(values) > 64:
                 warnings.append(dict(section=section,code='knowledge_budget',action='truncate',reason='Превышен лимит 64 изменений знаний.'))
                 values = values[:64]
-            if section in ('development_evidence','personality_deltas','value_deltas') and len(values) > 24:
+            if section in ('development_evidence','personality_deltas','value_deltas','appearance_deltas') and len(values) > 24:
                 warnings.append(dict(section=section,code='development_budget',action='truncate',reason='Превышен лимит 24 записей.'))
                 values = values[:24]
             records[section] = deepcopy(values)
@@ -155,6 +155,8 @@ def extraction_schema():
     definitions['life_changes']['properties'].update(
         reproductive_capability={'enum':['can_become_pregnant','can_impregnate','neither','unknown']},
         identity_components={'type':'object','additionalProperties':string})
+    from backend.runtime_v3.appearance import AppearanceDelta
+    definitions['appearance_deltas'] = wire_schema(AppearanceDelta.model_json_schema())
     from backend.services.world import CARD_FIELDS
     definitions['promotions']['properties']['fields']=obj({key:string for key in CARD_FIELDS},CARD_FIELDS)
     from backend.services.player_agency import PLAYER_SOURCE_DESCRIPTION
@@ -194,13 +196,13 @@ def prompt_schema(*, reproduction=True, births=True):
 
     def count(node):
         if isinstance(node, dict):
-            if 'type' in node and len(key(node)) > 100:
+            if 'type' in node and len(key(node)) > 50:
                 counts[key(node)] += 1
             for value in node.values(): count(value)
         elif isinstance(node, list):
             for value in node: count(value)
     count(schema)
-    shared = {value: 'shared_'+str(index) for index, value in enumerate(sorted(k for k, n in counts.items() if n > 1))}
+    shared = {value: 'shared_'+str(index) for index, value in enumerate(sorted(k for k, n in counts.items() if n > 1 and n*(len(k)-35)>len(k)+25))}
 
     def compact(node, root=False):
         if isinstance(node, dict):

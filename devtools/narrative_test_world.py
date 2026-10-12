@@ -285,6 +285,17 @@ def _goals(state):
 CHECKPOINTS = {'residence-roles':_residence_roles,'family':_family,'family-care':_family_care,'family-incapacitated':_family_incapacitated,'calendar-evening' :_calendar_evening,'calendar-leap':_calendar_leap,'commitments':_commitments}
 CHECKPOINTS['goals'] = _goals
 CHECKPOINTS['knowledge'] = _residence_roles
+def _appearance(state):
+    from backend.runtime_v3.models import AppearanceFeature, AppearanceProfile
+    state = _family(state)
+    state['world']['characters']['qa_vera']['appearance'] = AppearanceProfile(items={
+        'eye_color': AppearanceFeature(category='intrinsic',kind='eye_color',text='Серые глаза'),
+        'hairstyle': AppearanceFeature(category='presentation',kind='hairstyle',text='Волосы до плеч'),
+    }).model_dump()
+    return state
+
+
+CHECKPOINTS['appearance'] = _appearance
 CHECKPOINTS['personality'] = lambda state: _family(state)
 CHECKPOINTS['milestones'] = lambda state: _residence_roles(_family(state))
 

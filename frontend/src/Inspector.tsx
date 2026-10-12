@@ -1,3 +1,4 @@
+import {CharacterAvatar} from "./Portrait";
 import {SectionTabs} from "./components/ui/section-tabs";
 import {ThemeSelector} from "./ThemeProvider";
 import { useEffect, useState } from "react";
@@ -101,7 +102,7 @@ export function Inspector({
           </Button>
         </details>
         <SectionTabs className="panel-tabs" label="Разделы справочника" value={panel} onChange={setPanel} items={(["Мир","Сцена","Персонажи","Отношения","Тайны","Сюжет","Память"] as Panel[]).map(id=>({id,label:id}))}/>
-        {panel === "Мир" && <WorldView state={state} meta={meta}/>}
+        {panel === "Мир" && <WorldView saveId={save?.id} state={state} meta={meta}/>}
         {panel === "Сцена" && (
           <>
             <SceneOverview state={state} meta={meta}/>
@@ -203,6 +204,7 @@ export function Inspector({
                   >
                     <ChevronLeft />
                   </Button>
+                  <CharacterAvatar subject={selected} saveId={save?.id} size={32}/>
                   <select
                     aria-label="Персонаж"
                     value={selected.id}

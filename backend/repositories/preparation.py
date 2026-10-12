@@ -12,6 +12,8 @@ class Repository(PresentationStorage, DraftStorage, Storage):
     def __init__(self, path=None):
         super().__init__(path)
         self.init_presentation()
+        from backend.repositories.portraits import initialize as initialize_portraits
+        with self.connect() as db: initialize_portraits(db)
         with self.connect() as db:
             db.executescript('''
             CREATE TABLE IF NOT EXISTS preparation_workspaces (

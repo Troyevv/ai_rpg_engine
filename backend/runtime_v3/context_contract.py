@@ -359,3 +359,21 @@ child count, sex and birth identities. Never invent these outcomes. If unknown, 
 birth without asserting count/sex. Names proposed != agreed; ask/accept/defer/delegate
 through ordinary dialogue. No invented newborn adult traits or inherited Knowledge.
 """
+
+
+EXTRACTION_CONTRACT += """
+Appearance: appearance_deltas require established_visual_outcome, accepted Event +
+fact_id, item_id and expected_revision. No intention-as-result, injury-as-scar,
+clothing, age tables, genetics or parent copying. Preserve stable/unknown traits.
+Voluntary EXTERNAL changes require explicit_choice and quoted player_evidence;
+AUTONOMOUS changes require a completed event. Functional consequences belong to
+#38: category=condition references condition_id/fact_id, never a mutable copy.
+Newborns use the same profile. Portraits establish no facts. Omitted legacy prose
+is unknown, never permission to invent traits. Respect appearance known_by.
+"""
+NARRATIVE_CONTRACT += """
+Respect current canonical appearance. Legacy appearance prose is an unclassified
+initial description, not current clothing. Do not invent cosmetic changes, inherit
+parent traits or age appearances by formula. Appearance facts unknown to a
+Character remain unknown; never broadcast off-camera changes between NPCs.
+"""
