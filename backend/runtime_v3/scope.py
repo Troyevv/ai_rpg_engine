@@ -62,6 +62,8 @@ class ContextScope:
     referenced_actor_ids: set = field(default_factory=set)
     relevant_actor_ids: set = field(default_factory=set)
     location_ids: list = field(default_factory=list)
+    possession_ids: list = field(default_factory=list)
+    required_possession_ids: set = field(default_factory=set)
     residence_ids: list = field(default_factory=list)
     role_ids: list = field(default_factory=list)
     organization_ids: list = field(default_factory=list)

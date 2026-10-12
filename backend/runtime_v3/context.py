@@ -40,6 +40,9 @@ def canonical_slice(state, scope, extraction=False, query=""):
         relationships=[state['relationships'][key] for key in scope.relationship_pairs],
         threads=[state['threads'][tid] for tid in scope.thread_ids],
         scheduled_events=[commitment_view(state,state['scheduled_events'][eid]) for eid in scope.scheduled_event_ids])
+    from backend.runtime_v3.possessions import context_possessions
+    possessions = context_possessions(state, scope, extraction=extraction, query=query)
+    if possessions: current['possessions'] = possessions
     development_ids = sorted(scope.relevant_actor_ids, key=lambda cid:(
         cid != scope.controlled_actor_id, cid not in scope.present_actor_ids,
         cid not in scope.remote_actor_ids, -scope.actor_scores.get(cid,0), cid))[:8]
@@ -128,12 +131,14 @@ def canonical_slice(state, scope, extraction=False, query=""):
     if old_phases: current['social_history'] = sorted(old_phases,key=lambda r:r['until'] or 0,reverse=True)[:8]
     from backend.runtime_v3.reproduction import context_projection, private_fact_ids, known_birth
     current.update(context_projection(state, relevant, scope.controlled_actor_id, extraction))
-    if current.get('pregnancies'):
+    if current.get('social_knowledge'):
         # Reuse canonical relation IDs instead of repeating every full edge for
         # each parent. Current objective edges stay authoritative; certainty and
         # perceived phase remain observer-specific (including outdated beliefs).
+        relation_ids = {row['id'] for row in current['objective_relations']}
         current['social_knowledge']={cid:[{k:row[k] for k in ('id','certainty','status','outcome')}
-            for row in rows] for cid,rows in current['social_knowledge'].items()}
+            if row['id'] in relation_ids else row for row in rows]
+            for cid,rows in current['social_knowledge'].items()}
         current['objective_relations']=[{k:v for k,v in row.items()
             if k not in ('evidence','source_turn') and v not in (None,'')} for row in current['objective_relations']]
     # Even GM-labelled Narrative blocks cannot reveal these hidden outcomes.
@@ -153,11 +158,14 @@ def canonical_slice(state, scope, extraction=False, query=""):
         hidden_births={cid for cid in current['characters'] if not known_birth(state,cid,scope.controlled_actor_id)}
         current['characters']={cid:c for cid,c in current['characters'].items() if cid not in hidden_births}
         current['objective_relations']=[r for r in current['objective_relations'] if not {r['source_id'],r['target_id']}&hidden_births]
-        protected = private_fact_ids(state)
+        from backend.runtime_v3.possessions import private_fact_ids as possession_facts
+        protected = private_fact_ids(state) | possession_facts(state)
         allowed = {k['fact_id'] for k in state['knowledge'].values()
             if k['actor_id']==scope.controlled_actor_id and k['status']=='known'}
         current['scheduled_events'] = [e for e in current['scheduled_events'] if e['id'] not in state.get('pregnancies',{}) or state['pregnancies'][e['id']]['fact_id'] in allowed]
-        current['facts'] = {k:v for k,v in current['facts'].items() if k not in protected or k in allowed}
+        possession_beliefs = {k['fact_id'] for k in state['knowledge'].values()
+            if k['actor_id']==scope.controlled_actor_id and k['status']!='unknown'} & possession_facts(state)
+        current['facts'] = {k:v for k,v in current['facts'].items() if k not in protected or k in allowed | possession_beliefs}
         current['knowledge'] = [k for k in current['knowledge'] if k['fact_id'] in current['facts']]
     for actor in current['characters'].values():
         if not extraction and actor.get('birth_provenance'):
@@ -366,12 +374,25 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     # Respect an explicit smaller user setting, but never exceed six narrative turns.
     views = all_views[-min(6, max(0, recent_turns)):] if recent_turns else []
     scope = RelevanceResolver().resolve(snapshot, user_text, all_views[-3:], world_history, extraction_text)
+    if extraction_text is None:
+        from backend.runtime_v3.possessions import private_fact_ids as possession_facts, known
+        from backend.runtime_v3.scope import string_ids
+        protected = possession_facts(state)
+        hidden = protected - {fid for fid in protected if known(state, scope.controlled_actor_id, fid)}
+        scope.history_events = [e for e in scope.history_events if not
+            (string_ids(e.get('fact_ids', [])) & hidden)]
     current = canonical_slice(state, scope, extraction_text is not None, user_text+'\n'+(extraction_text or ''))
     if kind == 'background':
         from backend.runtime_v3.reproduction import context_projection
         current.update(context_projection(state,scope.relevant_actor_ids,None,extraction=True))
+        from backend.runtime_v3.possessions import context_possessions
+        possessions = context_possessions(state,scope,extraction=True,query=user_text)
+        if possessions: current['possessions'] = possessions
     from backend.runtime_v3.milestones import select_context
     milestones = select_context(state, scope, (world_history or {}).get('_milestone_query'))
+    if extraction_text is None:
+        from backend.runtime_v3.possessions import known
+        milestones = [m for m in milestones if not m['category'].startswith('possession_') or known(state, scope.controlled_actor_id, m.get('fact_id'))]
     if milestones: current['milestones'] = list(milestones)
     from backend.runtime_v3.personality import historical_context, visible_item
     development = historical_context(state,scope,world_history)
@@ -494,6 +515,13 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         # ownership boundaries and all six visible scenes remain mandatory.
         if estimate(messages) > hard_context_limit:
             replace_block('Индекс персонажей', [])
+    # Possession support is bounded by both its own cap and the request budget.
+    # Keep explicitly named objects; omit lower-ranked incidental property first.
+    for item in reversed(list(current.get('possessions', []))):
+        if estimate(messages) <= hard_context_limit: break
+        if item['id'] in scope.required_possession_ids: continue
+        current['possessions'].remove(item)
+        refresh_current()
     if estimate(messages) > hard_context_limit:
         raise ValueError('Контекст v3 не помещается в выбранную модель. Увеличь контекст или уменьши лимит ответа. Критические данные сцены и последние narrative сохранены.')
     classifier = CharacterContextClassifier()
@@ -502,6 +530,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     sections = {key: dict(selected=selected[key], included=len(current[key]), total=len(state[key]))
                 for key in ('locations', 'facts', 'knowledge', 'relationships', 'threads', 'scheduled_events')}
     sections['history_events'] = dict(selected=0 if builder.extraction else len(selected_history), included=0 if builder.extraction else len(scope.history_events), total=len((world_history or {}).get('events', [])))
+    sections['possessions'] = dict(selected=len(scope.possession_ids), included=len(current.get('possessions', [])), total=len(state.get('possessions', {})))
     sections['milestones'] = dict(selected=len(milestones), included=len(current.get('milestones', [])))
     def contents(title):
         return next((json.loads(m['content'].split('\n', 1)[1]) for m in messages if m['content'].startswith(title+'\n')), [])

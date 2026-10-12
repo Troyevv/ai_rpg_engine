@@ -87,6 +87,11 @@ def derive(batch):
                     categories.append('name_change'); fact = after['name_history'][-1].get('fact_id')
             elif kind == 'appearance_delta' and after.get('category')=='modification':
                 actors=[entity];categories.append('appearance_change')
+            elif kind == 'possession_delta':
+                actors = sorted({row[k] for row in (old, after) for k in ('owner_id','holder_id') if row.get(k)})
+                if change.get('operation') != 'relocate': categories.append('possession_' + change.get('operation', 'change'))
+                fact = change.get('fact_id')
+                locations = [after['location_id']] if after.get('location_id') else []
             elif kind == 'birth':
                 actors = [entity]; categories.append('birth'); fact = after.get('life_fact_id')
             elif kind == 'birth_date_established':

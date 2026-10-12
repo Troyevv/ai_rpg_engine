@@ -598,3 +598,30 @@ def _seed_reproduction(repository,save_id,checkpoint):
         text='Роды Веры завершились в доме. Кирилл присутствовал при рождении детей. Вера и Кирилл подтвердили, что они родители.'
         commit(text,dict(raw(text,1440),births=[dict(pregnancy_id=p['id'],source_event_id='qa_reproduction_event',
             assertion='birth_completed',disclosed_parent_ids=p['parent_ids'],location_id=snapshot['world_state']['camera']['location_id'],evidence=text)]),'turn')
+
+
+def _possessions(state):
+    from backend.runtime_v3.models import SignificantPossession, identity
+    world = state['world']
+    world['possessions'] = {}
+    for pid, name, kind, owner, holder, place, witnesses in (
+        ('qa_ring', 'Фамильное кольцо Кирилла', 'heirloom', ACTOR_ID, ACTOR_ID, HOME, list(PRESENT)),
+        ('qa_camera', 'Плёночная камера Тимура', 'camera', 'qa_timur', 'qa_vera', HOME, list(PRESENT)),
+        ('qa_letter', 'Личное письмо Олега', 'document', 'qa_oleg', 'qa_oleg', WORKSHOP, ['qa_oleg']),
+    ):
+        fid = pid + '_established'
+        world['facts'][fid] = dict(id=fid, text=name + ': владелец ' + owner + ', хранитель ' + holder + ', место — ' + place + '. Вещь доступна.',
+            secret=True, character_ids=[owner, holder] if owner != holder else [owner], evidence=['Исходное установленное состояние.'])
+        eid = pid + '_seen'
+        world['events'][eid] = dict(id=eid, text=world['facts'][fid]['text'], participants=witnesses,
+            witnesses=witnesses, fact_ids=[fid], medium='observation', minute=START_MINUTE,
+            evidence='Исходное установленное состояние.', player_observed=ACTOR_ID in witnesses)
+        for cid in witnesses:
+            world['knowledge'][cid+':'+fid] = dict(actor_id=cid, fact_id=fid, status='known', source_event_id=eid)
+        world['possessions'][pid] = SignificantPossession(id=pid, name=name, kind=kind,
+            owner_id=owner, holder_id=holder, location_id=identity('location', place.casefold()), status='available',
+            fact_id=fid, field_facts={key:fid for key in ('owner_id','holder_id','location_id','status')}).model_dump()
+    return state
+
+
+CHECKPOINTS['possessions'] = _possessions
