@@ -23,6 +23,11 @@ def capabilities(state, actor_id):
             for key, value in condition['effects'].items():
                 if value is False: result[key] = False
     stage = actor.get('developmental_stage', 'unknown')
+    from backend.runtime_v3.calendar import age_on, profile_of
+    age = age_on(actor.get('birth_date'), current_time(state)['date'], profile_of(state))
+    # Dates can restrict a contradictory stage; aging never invents life events.
+    if age is not None and age < 1: stage = 'infant'
+    elif age is not None and age < 18 and stage == 'adult': stage = 'child'
     if stage == 'infant':
         result.update(can_act=False, can_speak=False, can_move=False)
     if actor.get('life_status') == 'dead':
@@ -144,16 +149,26 @@ def apply_life(resolver, raw):
                     if key not in s['characters']: raise ValueError('unknown actor')
                     if resolver.mode == 'background' and key == controlled: raise ValueError('protected background actor')
                     old = deepcopy(s['characters'][key]); actor = s['characters'][key]
-                    for field in ('life_status','capabilities','developmental_stage','parentage_complete_fact_id'):
+                    for field in ('life_status','capabilities','developmental_stage','parentage_complete_fact_id','reproductive_capability','identity_components'):
                         if field in item:
                             if field == 'capabilities':
                                 value = Capabilities.model_validate(item[field]).model_dump(exclude_unset=True)
                                 actor[field].update(value)
                             else: actor[field] = item[field]
+                    if 'developmental_stage' in item and actor.get('birth_date'):
+                        from backend.runtime_v3.calendar import age_on, profile_of
+                        years=age_on(actor['birth_date'],date,profile_of(s))
+                        if years is not None and ((years<1 and actor['developmental_stage']!='infant') or
+                                (years<18 and actor['developmental_stage']=='adult')):
+                            raise ValueError('developmental stage contradicts established birth date')
                     if 'life_status' in item:
                         if old['life_status'] == 'dead' and item['life_status'] != 'dead':
                             raise ValueError('death cannot be undone by ordinary extraction; use rollback')
                         actor['life_fact_id'] = item.get('fact_id')
+                    if old.get('birth_provenance') and any(k in item for k in ('identity_components','display_name')):
+                        raise ValueError('birth identity changes require the structured naming lifecycle')
+                    if 'identity_components' in item and key == controlled and not _proof(resolver,item):
+                        raise ValueError('identity choice needs player evidence')
                     if 'display_name' in item:
                         name = item['display_name']
                         if not isinstance(name,str) or not name.strip(): raise ValueError('empty name')
@@ -249,7 +264,7 @@ def salvage_life_data(state):
     log=logging.getLogger(__name__)
     for cid, actor in state.get('characters',{}).items():
         if not isinstance(actor,dict): continue
-        for field in ('life_status','life_fact_id','display_name','name_history','capabilities','developmental_stage','parentage_complete_fact_id'):
+        for field in ('life_status','life_fact_id','display_name','name_history','capabilities','developmental_stage','parentage_complete_fact_id','reproductive_capability','identity_components'):
             if field not in actor: continue
             try: Character.model_validate(dict(id=cid,**{field:actor[field]}))
             except (ValueError,TypeError):

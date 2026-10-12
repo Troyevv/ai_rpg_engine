@@ -49,7 +49,8 @@ def transition_provenance(resolver, item, actors):
     if process is not None:
         row = resolver.state.get('conditions', {}).get(process) if isinstance(process, str) else None
         plan = resolver.state.get('scheduled_events', {}).get(process) if isinstance(process, str) else None
-        if row and row['actor_id'] in actors or plan and set(actors) & set(plan['character_ids']):
+        pregnancy = resolver.state.get('pregnancies', {}).get(process) if isinstance(process, str) else None
+        if row and row['actor_id'] in actors or plan and set(actors) & set(plan['character_ids']) or pregnancy and set(actors) & set([pregnancy['gestational_actor_id'], *pregnancy['parent_ids'], *[c['id'] for c in pregnancy['children']]]):
             result['source_process_id'] = process
         else:
             resolver.warn('provenance', None, 'Неизвестный или несвязанный процесс-источник.',
@@ -84,6 +85,8 @@ def derive(batch):
                     categories.append('death'); fact = after.get('life_fact_id')
                 if after.get('display_name') and old.get('display_name') != after['display_name'] and after.get('name_history'):
                     categories.append('name_change'); fact = after['name_history'][-1].get('fact_id')
+            elif kind == 'birth':
+                actors = [entity]; categories.append('birth'); fact = after.get('life_fact_id')
             elif kind == 'birth_date_established':
                 # Learning a birthday indexes the established birth, not a new birth now.
                 if old.get('birth_date') is None and after.get('birth_date'):
@@ -128,7 +131,7 @@ def derive(batch):
                 if not isinstance(summary, str): continue
                 record = Milestone(id=mid, category=category, actor_ids=actors,
                     entity_ids=list(dict.fromkeys([entity, *([after['organization_id']] if after.get('organization_id') else [])])),
-                    minute=None if category == 'birth' else minute, date=date,
+                    minute=None if category == 'birth' and kind != 'birth' else minute, date=date,
                     source_transition_id=transition_id,
                     source_record_id=change.get('source_record_id'),
                     source_event_id=change.get('source_event_id'), source_process_id=change.get('source_process_id'),

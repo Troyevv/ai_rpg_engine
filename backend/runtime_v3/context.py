@@ -122,6 +122,53 @@ def canonical_slice(state, scope, extraction=False, query=""):
         for r in state.get(section,{}).values() if r['actor_id'] in relevant and r['status']=='closed'
         and words(query) & words(' '.join(str(r.get(k,'')) for k in ('title','context','outcome','id')))]
     if old_phases: current['social_history'] = sorted(old_phases,key=lambda r:r['until'] or 0,reverse=True)[:8]
+    from backend.runtime_v3.reproduction import context_projection, private_fact_ids, known_birth
+    current.update(context_projection(state, relevant, scope.controlled_actor_id, extraction))
+    if current.get('pregnancies'):
+        # Reuse canonical relation IDs instead of repeating every full edge for
+        # each parent. Current objective edges stay authoritative; certainty and
+        # perceived phase remain observer-specific (including outdated beliefs).
+        current['social_knowledge']={cid:[{k:row[k] for k in ('id','certainty','status','outcome')}
+            for row in rows] for cid,rows in current['social_knowledge'].items()}
+        current['objective_relations']=[{k:v for k,v in row.items()
+            if k not in ('evidence','source_turn') and v not in (None,'')} for row in current['objective_relations']]
+    # Even GM-labelled Narrative blocks cannot reveal these hidden outcomes.
+    if extraction:
+        # Atomic reproduction assertions are already represented by the typed
+        # process/child/relation projections with their fact IDs. Do not repeat
+        # each assertion as prose for every newborn in a multiple birth.
+        ids=private_fact_ids(state)
+        current['facts']={fid:f for fid,f in current['facts'].items() if fid not in ids}
+        compact={}
+        for row in current['knowledge']:
+            if row['fact_id'] in ids:
+                compact.setdefault(row['actor_id'],{})[row['fact_id']]=[row['status'],row.get('revision',0)]
+        if compact: current['reproductive_knowledge']=compact
+        current['knowledge']=[row for row in current['knowledge'] if row['fact_id'] not in ids]
+    if not extraction:
+        hidden_births={cid for cid in current['characters'] if not known_birth(state,cid,scope.controlled_actor_id)}
+        current['characters']={cid:c for cid,c in current['characters'].items() if cid not in hidden_births}
+        current['objective_relations']=[r for r in current['objective_relations'] if not {r['source_id'],r['target_id']}&hidden_births]
+        protected = private_fact_ids(state)
+        allowed = {k['fact_id'] for k in state['knowledge'].values()
+            if k['actor_id']==scope.controlled_actor_id and k['status']=='known'}
+        current['scheduled_events'] = [e for e in current['scheduled_events'] if e['id'] not in state.get('pregnancies',{}) or state['pregnancies'][e['id']]['fact_id'] in allowed]
+        current['facts'] = {k:v for k,v in current['facts'].items() if k not in protected or k in allowed}
+        current['knowledge'] = [k for k in current['knowledge'] if k['fact_id'] in current['facts']]
+    for actor in current['characters'].values():
+        if not extraction and actor.get('birth_provenance'):
+            from backend.runtime_v3.reproduction import birth_name
+            actor.pop('display_name', None)
+            name = birth_name(state, actor['id'], scope.controlled_actor_id)
+            if name: actor['display_name'] = name
+        for key in ('birth_provenance','identity_components','biological_sex','reproductive_capability'):
+            if not extraction or not actor.get(key) or actor.get(key)=='unknown': actor.pop(key,None)
+        if extraction and current.get('pregnancies'):
+            # Empty defaults carry no assertions. Immutable birth provenance is
+            # already available through the pregnancy's child/event references.
+            actor.pop('birth_provenance', None)
+            for key in list(actor):
+                if actor[key] in (None, '', [], {}): actor.pop(key)
     return current
 
 
@@ -153,6 +200,13 @@ class NarrativeContextBuilder:
         snapshot['character_cards'] = [project_card(c, snapshot['world_state']['characters'][c['id']]) for c in snapshot['character_cards']]
         for card in snapshot['character_cards']:
             card['name'] = snapshot['world_state']['characters'][card['id']].get('display_name') or card['name']
+        from backend.runtime_v3.reproduction import known_birth, birth_name
+        if kind != 'background':
+            state=snapshot['world_state']; observer=state['camera']['controlled_actor_id']
+            snapshot['character_cards']=[c for c in snapshot['character_cards'] if known_birth(state,c['id'],observer)]
+            for card in snapshot['character_cards']:
+                if state['characters'][card['id']].get('birth_provenance'):
+                    card['name']=birth_name(state,card['id'],observer)
         from backend.runtime_v3.director import plan
         state = snapshot['world_state']; campaign = snapshot.get('campaign', {})
         prompt_name = 'background_prompt.md' if kind == 'background' else 'game_system_prompt.md'
@@ -220,6 +274,12 @@ class ExtractionContextBuilder:
         saved = (prompts or {}).get('state_update_prompt.md', {}).get('content')
         # Preserve user overrides, but do not send the bundled generic contract twice.
         rules = (saved + '\n' if saved and saved.strip() != default.strip() else '') + EXTRACTION_CONTRACT
+        reproductive = bool(current.get('pregnancies')) or any(
+            c.get('reproductive_capability','unknown')!='unknown' or c.get('birth_provenance')
+            for c in current['characters'].values())
+        if reproductive:
+            from backend.runtime_v3.context_contract import REPRODUCTION_CONTRACT
+            rules += REPRODUCTION_CONTRACT
         # Affected IDs and canonical runtime, plus a bounded actor-owned choice
         # projection. No other actors' card prose or old narratives are needed.
         # Include physical/emotion baseline also for referenced actors affected in completed text.
@@ -230,7 +290,7 @@ class ExtractionContextBuilder:
                        block('Choice context / controlled actor', choice_context(snapshot, scope, current, views, kind)),
                        block('Entity IDs', [dict(id=c['id'], name=c['name'], aliases=c.get('aliases', []))
                             for c in snapshot['character_cards'] if c['id'] in scope.relevant_actor_ids]),
-                       block('JSON Schema', prompt_schema())]
+                       block('JSON Schema', prompt_schema(reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[]))))]
 
 
 def choice_context(snapshot, scope, current, views, kind):
@@ -266,8 +326,10 @@ def choice_context(snapshot, scope, current, views, kind):
             text = view['user_text']
             recent.append(dict(sequence=view.get('sequence'), player_input=text[:800], truncated=len(text)>800))
     participants = scope.present_actor_ids | scope.remote_actor_ids
+    from backend.runtime_v3.reproduction import context_projection
+    reproductive=context_projection(state,scope.relevant_actor_ids,cid)
     return deepcopy(dict(enabled=True, actor_id=cid, personality=profile,
-        values=context_values(actor), capabilities=ability,
+        values=context_values(actor), capabilities=ability, **({'reproduction':reproductive} if reproductive else {}),
         **{key:context_records(actor[key]) for key in ('goals','intentions','obligations')},
         relationships=[r for r in current['relationships'] if r['source_id']==cid and r['target_id'] in participants],
         knowledge=[dict(fact_id=k['fact_id'], status=k['status'], text=current['facts'][k['fact_id']]['text'])
@@ -297,6 +359,9 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     views = all_views[-min(6, max(0, recent_turns)):] if recent_turns else []
     scope = RelevanceResolver().resolve(snapshot, user_text, all_views[-3:], world_history, extraction_text)
     current = canonical_slice(state, scope, extraction_text is not None, user_text+'\n'+(extraction_text or ''))
+    if kind == 'background':
+        from backend.runtime_v3.reproduction import context_projection
+        current.update(context_projection(state,scope.relevant_actor_ids,None,extraction=True))
     from backend.runtime_v3.milestones import select_context
     milestones = select_context(state, scope, (world_history or {}).get('_milestone_query'))
     if milestones: current['milestones'] = list(milestones)
@@ -387,7 +452,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                       key=lambda fid: (scope.fact_scores[fid], fid))
     for fid in optional:
         if estimate(messages) <= target: break
-        del current['facts'][fid]
+        current['facts'].pop(fid, None)
         current['knowledge'] = [k for k in current['knowledge'] if k['fact_id'] != fid]
         refresh_current()
     if not builder.extraction:

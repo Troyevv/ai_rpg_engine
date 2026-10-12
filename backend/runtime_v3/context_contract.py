@@ -326,3 +326,36 @@ turns in existing development_evidence IDs (EXTERNAL: completed player-owned cho
 Reuse that evidence pipeline; one mood/turning_point/event is insufficient. Retain
 unrelated values and personality. No numeric morality. All prose uses game language.
 """
+
+
+REPRODUCTION_CONTRACT = """
+#41 reproductive_knowledge is actor_id -> {fact_id: [status, revision]}, ordinary #76 ownership.
+Reproductive_events only for a completed, explicit consensual adult event in
+CURRENT narrative. Intentions/kissing/romance/cohabitation never qualify. Capabilities
+must be explicitly established via life_changes, never inferred from gender/name.
+Both consent_actor_ids required; EXTERNAL consent needs explicit_choice player quote.
+Runtime alone rolls conception/count/sex. Reuse canonical encounter ID across turns;
+encounter_ended closes it, never rerolls. Intercourse implies no feelings/relationship
+changes; those need independent evidence. No forced fade-to-black or time skip.
+Pregnancy, count, each sex and names are separate Knowledge facts: acquire only via
+actual examination/communication/birth Event with witnesses. Never disclose secrets
+through narrative or choices. Births require birth_completed at actual time/location,
+not due date alone. Runtime creates child IDs; do not promote them or invent outcomes.
+Birth disclosed_parent_ids lists only parentage explicitly disclosed in that Event;
+delivery alone reveals no other parent's identity or earlier planned name.
+Naming: exact pregnancy_id + child_id; proposed is NOT agreed. All parents agree or
+explicitly delegate. EXTERNAL approval/delegation requires player_evidence. Use new ID
+and replaces to accept/change/cancel prior decision. Ambiguous target: omit, never guess.
+Agreed name applies once at birth; proposed-only stays unresolved. Preserve setting
+identity components, no paternal-surname or universal name-order assumptions. Runtime
+handles shared established family names only when policy permits. Newborn profiles
+stay sparse: no mature goals/values/habits/speech or inherited personality/Knowledge.
+appearance accepts only explicitly quoted text by child ID, never genetic inference.
+"""
+NARRATIVE_CONTRACT += """
+Intimacy never implies pregnancy, love or relationship changes. No forced fade-to-black
+or time skip. Only consenting adults; preserve EXTERNAL choice. Runtime owns conception,
+child count, sex and birth identities. Never invent these outcomes. If unknown, describe
+birth without asserting count/sex. Names proposed != agreed; ask/accept/defer/delegate
+through ordinary dialogue. No invented newborn adult traits or inherited Knowledge.
+"""

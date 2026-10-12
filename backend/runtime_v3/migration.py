@@ -23,7 +23,7 @@ def migrate_v2(original):
         original['world_state'] = assert_world_state_v3_invariants(original['world_state'])
         for card in original.get('character_cards',[]):
             actor = original['world_state']['characters'].get(card['id'])
-            if actor is not None and actor['display_name'] is None: actor['display_name'] = card['name']
+            if actor is not None and actor['display_name'] is None and card.get('name'): actor['display_name'] = card['name']
         from backend.runtime_v3.personality import initialize_profiles
         initialize_profiles(original)
         initialize_calendar(original['world_state'])
@@ -91,7 +91,7 @@ def migrate_v2(original):
         actors[cid] = Character(id=cid, location_id=lid,
             **{key:deepcopy(entry[key]) for key in ('situation','emotion','goals','intentions','obligations') if key in entry}).model_dump()
         actors[cid]['birth_date'] = deepcopy(entry.get('birth_date'))
-        for field in ('life_status','life_fact_id','capabilities','developmental_stage','name_history','display_name','parentage_complete_fact_id'):
+        for field in ('life_status','life_fact_id','capabilities','developmental_stage','name_history','display_name','parentage_complete_fact_id','reproductive_capability','identity_components'):
             if field in entry: actors[cid][field] = deepcopy(entry[field])
         actors[cid]['display_name'] = actors[cid].get('display_name') or next((c['name'] for c in old['characters'] if c['id']==cid), None)
     actor = old.get('controlled_actor_id')
@@ -156,6 +156,7 @@ def migrate_v2(original):
             condition=e.get('condition',''), type=e.get('type','event'),
             temporal=e.get('temporal'), time_reference_minute=e.get('time_reference_minute',state['meta']['world_time'])).model_dump()
         state['scheduled_events'][eid].update({k:deepcopy(e[k]) for k in ('commitment','end_temporal','depends_on','started_minute','outcome','evidence','source_turn','interrupts') if k in e})
+    if 'reproduction_policy' in world: state['reproduction_policy'] = deepcopy(world['reproduction_policy'])
     state['objective_relations'] = deepcopy(world.get('objective_relations',{}))
     state['conditions'] = deepcopy(world.get('conditions',{}))
     for section in ('residences','roles','organizations'):
