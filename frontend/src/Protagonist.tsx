@@ -531,7 +531,7 @@ export function Protagonist({
   save: Save;
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  refresh: () => void;
+  refresh: (after: Save) => void;
   prefs: Preferences;
   apiKey: string;
 }) {
@@ -598,7 +598,7 @@ export function Protagonist({
     setBusy(true);
     setError("");
     try {
-      await api(`/saves/${save.id}/protagonist`, {
+      const after=await api<Save>(`/saves/${save.id}/protagonist`, {
         revision,
         operation_id: operationId,
         operation: "permanent",
@@ -609,7 +609,7 @@ export function Protagonist({
       if (check) setPreview(true);
       else {
         onOpenChange(false);
-        refresh();
+        refresh(after);
         toast.success("Главный герой выбран");
       }
     } catch (e) {

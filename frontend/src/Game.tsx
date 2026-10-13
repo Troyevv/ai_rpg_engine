@@ -67,7 +67,12 @@ export function Game({
   const [diagnosticJob, setDiagnosticJob] = useState<string|undefined>();
   const [draft, setDraft] = useState("");
   const draftRef=useRef(draft);draftRef.current=draft;
-  const [busy, setBusy] = useState(false);
+  const [requestBusy, setBusy] = useState(false);
+  const [controlCommit,setControlCommit]=useState<{saveId:number;revision:number}|null>(null);
+  // A committed control command is not ready for another action until its
+  // revision has reached the parent projection. refresh() itself is asynchronous.
+  const busy=requestBusy||!!(controlCommit&&save?.id===controlCommit.saveId&&save.revision<controlCommit.revision);
+  const refreshControl=(after:Save)=>{setControlCommit({saveId:after.id,revision:after.revision});refresh()};
   const [submitted, setSubmitted] = useState<Job | null>(null);
   const scroll = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
@@ -130,12 +135,12 @@ export function Game({
     });
   const switchActor=(actor:string,source?:number)=>void run(async()=>{
     if(!save)return;
-    await api(`/saves/${save.id}/protagonist`,{actor_id:actor,operation:'temporary',operation_id:crypto.randomUUID(),revision:save.revision});
-    refresh();pinned.current=true;setAway(false);
+    const after=await api<Save>(`/saves/${save.id}/protagonist`,{actor_id:actor,operation:'temporary',operation_id:crypto.randomUUID(),revision:save.revision});
+    refreshControl(after);pinned.current=true;setAway(false);
   });
   const observe=(actor?:string,scene?:string)=>void run(async()=>{
     if(!save)return;
-    if(actor){await api(`/saves/${save.id}/protagonist`,{actor_id:actor,operation:'observe',operation_id:crypto.randomUUID(),revision:save.revision});refresh();return;}
+    if(actor){const after=await api<Save>(`/saves/${save.id}/protagonist`,{actor_id:actor,operation:'observe',operation_id:crypto.randomUUID(),revision:save.revision});refreshControl(after);return;}
     const j=await api<Job>(`/saves/${save.id}/camera`,{actor_id:actor,scene_id:scene,revision:save.revision,config:prefs.game,api_key:apiKey});
     setSubmitted(j);pinned.current=true;setAway(false);
   });
@@ -169,7 +174,7 @@ export function Game({
   return (
     <main className="game">
       <RuntimeNotifications save={save} job={submitted?job:null} enabled={notices}/>
-      {save&&<><Button variant="outline" disabled={busy||pending} onClick={()=>setProtagonistOpen(true)}>Сменить главного героя</Button>{save.state.protagonist_required&&<p role="alert">Главный герой умер. История продолжается: выбери или создай нового героя.</p>}<Protagonist save={save} open={protagonistOpen} onOpenChange={setProtagonistOpen} refresh={refresh} prefs={prefs} apiKey={apiKey}/></>}
+      {save&&<><Button variant="outline" disabled={busy||pending} onClick={()=>setProtagonistOpen(true)}>Сменить главного героя</Button>{save.state.protagonist_required&&<p role="alert">Главный герой умер. История продолжается: выбери или создай нового героя.</p>}<Protagonist save={save} open={protagonistOpen} onOpenChange={setProtagonistOpen} refresh={refreshControl} prefs={prefs} apiKey={apiKey}/></>}
       {save&&<WorldCamera save={save} open={cameraOpen} onOpenChange={setCameraOpen} busy={busy||pending} observe={observe} control={switchActor}/>}
       {save&&<Diagnostics saveId={save.id} jobId={diagnosticJob} open={diagnostics} onOpenChange={setDiagnostics}/>}
       {mobile&&save?<MobileScene save={save} meta={meta} busy={busy||pending} switchActor={switchActor} background={()=>void turn("background","")} openCharacter={openCharacter} openCamera={()=>setCameraOpen(true)}/>:<>{save&&<div className="pov-controls">

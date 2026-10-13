@@ -84,15 +84,17 @@ test('legacy world defaults, auto selection, keyboard tabs and reduced motion re
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.turn')).toHaveCount(1);
  const save=await(await request.get(`/api/saves/${selection.save}`)).json();
  const target=save.state.characters.find((c:any)=>c.id==='character_2');
- await actor(page,target.id,target.name);await expect(page.locator('.turn')).toHaveCount(2);
- await expect(page.locator('.pov-divider')).toContainText(target.name);
- await expect(page.locator('.pov-divider')).toHaveCSS('transform','none');
+ await actor(page,target.id,target.name);await expect(page.locator('.turn')).toHaveCount(1);
+ await expect(page.locator('.pov-divider')).toHaveCount(0);
+ await expect(page.locator('.turn').first()).toHaveCSS('transform','none');
  if((page.viewportSize()?.width||1440)<768){await page.locator('.mobile-pov button').last().click();}
  else await page.getByRole('button',{name:'Камера · Журнал'}).click();
  await expect(page.getByRole('heading',{name:'Камера мира'})).toBeVisible();
  await page.locator('.camera-tabs button').first().focus();await page.keyboard.press('End');
  await expect(page.locator('.camera-tabs button').last()).toHaveAttribute('aria-pressed','true');
  await page.keyboard.press('Home');await page.locator('.camera-cast').getByRole('button',{name:'Наблюдать',exact:true}).first().click();
+ await expect(page.locator('.background-turn')).toHaveCount(0);
+ await page.getByRole('button',{name:'Продолжить наблюдать',exact:true}).click();
  await expect(page.locator('.background-turn')).toHaveCount(1);
  await expect(page.locator('.narrative-divider')).toHaveText('Тем временем');
  await noOverflow(page);
