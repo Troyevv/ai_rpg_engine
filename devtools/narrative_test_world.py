@@ -406,6 +406,12 @@ def load_fixture(repository, checkpoint='base'):
     if checkpoint == 'knowledge': _seed_knowledge(repository,result['save'])
     if checkpoint == 'choices': _seed_choices(repository,result['save'])
     if checkpoint.startswith(('pregnancy','newborn')): _seed_reproduction(repository,result['save'],checkpoint)
+    if checkpoint=='protagonist-infant':
+        _seed_reproduction(repository,result['save'],'newborn')
+        snapshot=repository.get_snapshot(result['save'])
+        child=next(cid for cid,c in snapshot['world_state']['characters'].items() if c.get('birth_provenance'))
+        repository.transition_protagonist(result['save'],repository.get_save(result['save'])['revision'],
+            'qa-infant-protagonist','permanent',actor_id=child)
     return dict(result, workspace=workspace['id'], fixture_version=FIXTURE_VERSION, checkpoint=checkpoint)
 
 
@@ -625,3 +631,15 @@ def _possessions(state):
 
 
 CHECKPOINTS['possessions'] = _possessions
+
+
+def _protagonist(state):
+    state=_family(state)
+    actor=state['world']['characters']['qa_asya']
+    actor.update(birth_date='2016-10-05',developmental_stage='child',life_status='alive')
+    next(c for c in state['characters'] if c['id']=='qa_asya')['fields']['Возраст']='10 лет'
+    return state
+
+
+CHECKPOINTS['protagonist'] = _protagonist
+CHECKPOINTS['protagonist-infant'] = _pregnancy

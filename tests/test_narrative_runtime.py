@@ -153,7 +153,8 @@ def test_long_skip_batch_hidden_state_and_knowledge(db):
     import engine
     repo,_,sid=db
     start=repo.begin_job(sid,'','start',CONFIG);run(repo,start,raw_for(repo.get_snapshot(sid)))
-    snapshot=snapshot_fixture();s=snapshot['world_state'];s['camera']['present_character_ids']=['a']
+    from backend.runtime_v3.protagonist import initialize
+    snapshot=initialize(snapshot_fixture());s=snapshot['world_state'];s['camera']['present_character_ids']=['a']
     s['characters']['b']['location_id']='hall';s['characters']['c']['location_id']='hall'
     s['scheduled_events']['due']=ScheduledEvent(id='due',description='Тайный разговор',character_ids=['b','c'],due_minute=60).model_dump()
     with repo.connect() as conn:conn.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(snapshot),sid))

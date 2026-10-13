@@ -8,9 +8,9 @@ test('POV, backstage and prompt versions',async({page,request})=>{
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();
  await expect(page.locator('.turn')).toHaveCount(1);
  await actor(page,'character_2','Персонаж 1');
- await expect(page.locator('.turn')).toHaveCount(2);
+ await expect(page.locator('.turn')).toHaveCount(1);
  await page.getByRole('button',{name:'Мир без ГГ',exact:true}).click();
- await expect(page.locator('.turn')).toHaveCount(3);
+ await expect(page.locator('.turn')).toHaveCount(2);
  await expect(page.locator('.turn').last()).toContainText('За кулисами');
  await expect(page.locator('.choices button')).toHaveCount(0);
  let save=await (await request.get(`/api/saves/${selected.save}`)).json();
@@ -18,8 +18,9 @@ test('POV, backstage and prompt versions',async({page,request})=>{
  expect(save.state.camera.mode).toBe('observer');
  expect(save.state.facts.at(-1).known_by).toEqual(['character_3','character_4']);
  await page.locator('.background-exit').getByRole('button',{name:'Вернуться к Персонаж 0'}).click();
- await expect(page.locator('.turn')).toHaveCount(4);
- await expect(page.locator('.choices button')).toHaveCount(6);
+ await expect(page.locator('.turn')).toHaveCount(2);
+ await expect.poll(async()=>(await(await request.get(`/api/saves/${selected.save}`)).json()).state.controlled_actor_id).toBe('character_1');
+ await expect(page.locator('.choices button')).toHaveCount(0);
  await page.reload();
  await nav(page,'Настройки');
  await page.getByText('Основные промпты и версии',{exact:true}).click();

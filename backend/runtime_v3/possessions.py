@@ -197,7 +197,7 @@ def context_possessions(state, scope, *, extraction=False, query=''):
     """Bounded addition to ContextScope, with field-specific Knowledge gates."""
     from backend.runtime_v3.scope import words, mentions
     rows = []
-    observer = scope.controlled_actor_id
+    observer = scope.pov_actor_id or scope.controlled_actor_id
     for item in state.get('possessions', {}).values():
         if not extraction and not any(known(state, observer, fid) for fid in [item['fact_id'], *item['field_facts'].values()]):
             continue

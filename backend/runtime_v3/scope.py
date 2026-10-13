@@ -51,6 +51,7 @@ def mentions(text, names):
 @dataclass
 class ContextScope:
     controlled_actor_id: str | None
+    pov_actor_id: str | None = None
     present_actor_ids: set = field(default_factory=set)
     remote_actor_ids: set = field(default_factory=set)
     active_actor_ids: set = field(default_factory=set)
@@ -107,7 +108,7 @@ class RelevanceResolver:
         camera = state['camera']
         cards = {c['id']: dict(c,name=state['characters'].get(c['id'],{}).get('display_name') or c['name']) for c in snapshot['character_cards']}
         names = {cid: actor_aliases(c) for cid, c in cards.items()}
-        scope = ContextScope(camera['controlled_actor_id'])
+        scope = ContextScope(camera['controlled_actor_id'],pov_actor_id=camera.get('pov_actor_id') or camera['controlled_actor_id'])
         scope.present_actor_ids = set(camera['present_character_ids'])
         # A remote flag is a renewed current-scene interaction, not a relevance score.
         scope.remote_actor_ids = {r['actor_id'] for r in camera.get('remote_interactions', [])

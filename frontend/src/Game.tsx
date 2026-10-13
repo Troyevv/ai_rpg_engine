@@ -30,6 +30,7 @@ import { Diagnostics } from "./Diagnostics";
 import { JobView } from "./JobView";
 import { Button } from "./components/ui/button";
 import { Textarea } from "./components/ui/textarea";
+import {Protagonist} from './Protagonist';
 import {WorldCamera} from "./WorldCamera";
 import {useMobile,MobileScene} from './mobile';
 export function Game({
@@ -59,6 +60,7 @@ export function Game({
   const input=useRef<HTMLTextAreaElement>(null);
   const mainActor=save?.state.protagonist_id||save?.state.characters.find(c=>c.is_player)?.id;
   const actorId=save?.state.controlled_actor_id===undefined?mainActor:save.state.controlled_actor_id;
+  const [protagonistOpen,setProtagonistOpen]=useState(false);
   const [cameraOpen,setCameraOpen]=useState(false);
   const draftKey=`draft-${save?.id}-${actorId}`;
   const [diagnostics, setDiagnostics] = useState(false);
@@ -128,11 +130,12 @@ export function Game({
     });
   const switchActor=(actor:string,source?:number)=>void run(async()=>{
     if(!save)return;
-    const j=await api<Job>(`/saves/${save.id}/actor`,{actor_id:actor,source_turn_id:source,revision:save.revision,config:prefs.game,api_key:apiKey});
-    setSubmitted(j);pinned.current=true;setAway(false);
+    await api(`/saves/${save.id}/protagonist`,{actor_id:actor,operation:'temporary',operation_id:crypto.randomUUID(),revision:save.revision});
+    refresh();pinned.current=true;setAway(false);
   });
   const observe=(actor?:string,scene?:string)=>void run(async()=>{
     if(!save)return;
+    if(actor){await api(`/saves/${save.id}/protagonist`,{actor_id:actor,operation:'observe',operation_id:crypto.randomUUID(),revision:save.revision});refresh();return;}
     const j=await api<Job>(`/saves/${save.id}/camera`,{actor_id:actor,scene_id:scene,revision:save.revision,config:prefs.game,api_key:apiKey});
     setSubmitted(j);pinned.current=true;setAway(false);
   });
@@ -166,6 +169,7 @@ export function Game({
   return (
     <main className="game">
       <RuntimeNotifications save={save} job={submitted?job:null} enabled={notices}/>
+      {save&&<><Button variant="outline" disabled={busy||pending} onClick={()=>setProtagonistOpen(true)}>Сменить главного героя</Button>{save.state.protagonist_required&&<p role="alert">Главный герой умер. История продолжается: выбери или создай нового героя.</p>}<Protagonist save={save} open={protagonistOpen} onOpenChange={setProtagonistOpen} refresh={refresh} prefs={prefs} apiKey={apiKey}/></>}
       {save&&<WorldCamera save={save} open={cameraOpen} onOpenChange={setCameraOpen} busy={busy||pending} observe={observe} control={switchActor}/>}
       {save&&<Diagnostics saveId={save.id} jobId={diagnosticJob} open={diagnostics} onOpenChange={setDiagnostics}/>}
       {mobile&&save?<MobileScene save={save} meta={meta} busy={busy||pending} switchActor={switchActor} background={()=>void turn("background","")} openCharacter={openCharacter} openCamera={()=>setCameraOpen(true)}/>:<>{save&&<div className="pov-controls">
@@ -376,7 +380,7 @@ export function Game({
                     ))}
                   </motion.div>
                   <div className="turn-actions">
-                    <TimeSkip save={save} disabled={busy||pending||actorId===null} submit={(duration,reason)=>void turn('turn',save.state.actor_capabilities?.can_act===false?'':`Жду ${duration} минут.${reason?' '+reason:''}`,undefined,false,{duration,reason})}/>
+                    <TimeSkip save={save} disabled={busy||pending||!!save.state.protagonist_required} submit={(duration,reason)=>void turn('turn',actorId===null||save.state.actor_capabilities?.can_act===false?'':`Жду ${duration} минут.${reason?' '+reason:''}`,undefined,false,{duration,reason})}/>
                     <label className="small"><input type="checkbox" checked={notices} onChange={e=>{setNotices(e.target.checked);localStorage.setItem('relationship-notices',e.target.checked?'on':'off')}}/> Показывать изменения отношений</label>
                     <Button
                       variant="ghost"

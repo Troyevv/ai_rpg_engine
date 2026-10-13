@@ -118,7 +118,17 @@ class DurableValue(StrictModel):
     fact_ids: list[str] = Field(default_factory=list)
 
 
+class ProtagonistPeriod(StrictModel):
+    actor_id: str
+    since: int = Field(ge=0)
+    until: int | None = Field(default=None, ge=0)
+    operation_id: str
+
+
 class Meta(StrictModel):
+    current_protagonist_id: str | None = None
+    protagonist_required: bool = False
+    protagonist_periods: list[ProtagonistPeriod] = Field(default_factory=list)
     schema_version: Literal[3] = 3
     calendar: Calendar | None = None
     turn_id: int = Field(default=0, ge=0)
@@ -132,6 +142,8 @@ class RemoteInteraction(StrictModel):
 
 
 class Camera(StrictModel):
+    subject_id: str | None = None
+    pov_actor_id: str | None = None
     location_id: str | None = None
     present_character_ids: list[str] = Field(default_factory=list)
     controlled_actor_id: str | None = None
@@ -562,6 +574,19 @@ def assert_world_state_v3_invariants(state, before=None):
     except ValidationError as exc:
         fatal(str(exc), 'current_state_schema_invalid')
     actors, locations = value['characters'], value['locations']
+    meta = value['meta']
+    if meta['current_protagonist_id'] is not None and meta['current_protagonist_id'] not in actors:
+        fatal('неизвестный главный герой')
+    open_periods = []
+    for period in meta['protagonist_periods']:
+        if period['actor_id'] not in actors or period['since'] > meta['world_time'] or period['until'] is not None and not period['since'] <= period['until'] <= meta['world_time']:
+            fatal('некорректный период управления')
+        if period['until'] is None: open_periods.append(period)
+    if len(open_periods)>1 or open_periods and open_periods[0]['actor_id']!=meta['current_protagonist_id']:
+        fatal('несогласованные периоды главного героя')
+    for field in ('subject_id','pov_actor_id'):
+        if value['camera'][field] is not None and value['camera'][field] not in actors:
+            fatal('неизвестный персонаж камеры/POV')
     for section in ('characters', 'locations', 'facts', 'threads', 'scheduled_events'):
         for key, record in value[section].items():
             if not key or record['id'] != key:

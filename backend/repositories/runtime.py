@@ -95,16 +95,16 @@ class RuntimeStorage:
             records=json.loads(db.execute('SELECT repair_diagnostics_json FROM game_jobs WHERE id=?',(job_id,)).fetchone()[0] or '[]')
             db.execute('UPDATE game_jobs SET repair_diagnostics_json=? WHERE id=?',(dump(records+[diagnostic]),job_id))
 
-    def begin_request(self, job_id, stage, config, messages, diagnostics):
+    def begin_request(self, job_id, stage, config, messages, diagnostics, save_id=None):
         from backend.services.usage import price_snapshot
         rid = uuid.uuid4().hex
         with self.connect() as db:
             job = db.execute('SELECT save_id,session_id FROM game_jobs WHERE id=?', (job_id,)).fetchone()
             workspace = None
-            if not job:
+            if not job and save_id is None:
                 workspace = db.execute('SELECT workspace_id FROM preparation_jobs WHERE id=?', (job_id,)).fetchone()[0]
             db.execute('''INSERT INTO llm_requests(id,job_id,save_id,workspace_id,session_id,stage,provider,model,thinking,context_json,diagnostics_json,config_json,pricing_json)
-              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)''', (rid, job_id, job['save_id'] if job else None, workspace,
+              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)''', (rid, job_id, job['save_id'] if job else save_id, workspace,
               job['session_id'] if job else None, stage, config.get('provider','local'), config['model'], config.get('thinking','off'),
               dump(messages), dump(diagnostics), dump(config), dump(price_snapshot(config, datetime.now(timezone.utc)))))
         return rid
@@ -260,3 +260,48 @@ class RuntimeStorage:
             project(db,save_id,state)
             db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?',
                        (dump(state),save_id))
+
+    def transition_protagonist(self, save_id, revision, operation_id, operation, actor_id=None, draft=None, pov_actor_id=None, preview=False):
+        from backend.runtime_v3.protagonist import transition
+        from backend.runtime_v3.repository import append_history, migrate_snapshot
+        from backend.runtime_v3.milestones import stable_id
+        from backend.repositories.living_world import project
+        digest=stable_id('command',[operation,actor_id,draft,pov_actor_id])
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            self._assert_idle(db,save_id)
+            row=db.execute('SELECT * FROM saves WHERE id=?',(save_id,)).fetchone()
+            if not row: raise ValueError('Прохождение не найдено.')
+            prior,_=migrate_snapshot(db,json.loads(row['state_json']))
+            # Receipts follow the History DAG, so a sibling branch cannot consume one.
+            receipt=db.execute('''WITH RECURSIVE lineage(id,parent_id,payload_json) AS (
+                SELECT id,parent_id,payload_json FROM world_history_v3 WHERE id=?
+                UNION ALL SELECT h.id,h.parent_id,h.payload_json FROM world_history_v3 h JOIN lineage l ON h.id=l.parent_id)
+                SELECT j.value FROM lineage,json_each(lineage.payload_json,'$.state_changes') j
+                WHERE json_extract(j.value,'$.operation_id')=? AND json_extract(j.value,'$.command_digest') IS NOT NULL LIMIT 1''',
+                (prior.get('history_head'),operation_id)).fetchone()
+            if receipt:
+                if json.loads(receipt[0])['command_digest']!=digest: raise ValueError('ID операции уже использован с другими данными.')
+                return prior
+            if row['revision']!=revision: raise ValueError('Сейв изменился. Обнови страницу и проверь черновик перед подтверждением.')
+            candidate=prior;creation={}
+            if draft is not None:
+                if operation!='permanent': raise ValueError('Создание доступно только вместе с постоянной сменой ГГ.')
+                from backend.services.protagonist_creation import prepare
+                from backend.runtime_v3.repository import read_history
+                history,_=read_history(db,prior.get('history_head'))
+                candidate,actor_id,creation=prepare(prior,draft,operation_id,history)
+            after,batch=transition(candidate,operation,actor_id,operation_id,pov_actor_id=pov_actor_id)
+            if preview:
+                db.rollback()  # Even a legacy migration/cache remains provisional.
+                return after
+            for key,records in creation.items(): batch[key].extend(records)
+            batch['state_changes'].append(dict(kind='operation_receipt',entity=actor_id,
+                operation_id=operation_id,command_digest=digest,turn_id=after['world_state']['meta']['turn_id']))
+            after['history_head']=append_history(db,prior.get('history_head'),batch)
+            parent=db.execute('SELECT active_variant_id FROM turns WHERE save_id=? ORDER BY sequence DESC LIMIT 1',(save_id,)).fetchone()
+            db.execute('INSERT INTO actor_switches(save_id,revision,before_json,after_json,parent_variant_id) VALUES(?,?,?,?,?)',
+                (save_id,revision,dump(prior),dump(after),parent[0] if parent else None))
+            project(db,save_id,after)
+            db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?',(dump(after),save_id))
+            return after

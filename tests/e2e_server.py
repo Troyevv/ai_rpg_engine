@@ -44,7 +44,15 @@ def runtime_v3_request(messages):
 def stream(**kwargs):
     full='\n'.join(m['content'] for m in kwargs['messages'])
     observer='Тип хода: background' in full or 'Режим observer:' in full or 'mode=observer' in full
-    if 'Каноническая JSON Schema WorldState' in full:
+    if 'Ты редактор черновика Character' in full:
+        task=json.loads(kwargs['messages'][-1]['content'])
+        value='Новая сцена у двери.'
+        if task['path']=='whole_draft':
+            value=task['draft'];value['card']['name']='Сгенерированная героиня'
+            value['character']['location_id']=task['context']['locations'][0]['id']
+            value['starting_scene']='У входа в дом.'
+        value=json.dumps({'value':value},ensure_ascii=False)
+    elif 'Каноническая JSON Schema WorldState' in full:
         from test_draft_world import fixture
         value=json.dumps(fixture(),ensure_ascii=False)
     elif 'Ты редактор RPG' in full:
@@ -166,6 +174,13 @@ def preparation_stream(**kwargs):
 
 preparation.chat_stream = preparation_stream
 engine.find_loaded_model = preparation.find_loaded_model = lambda _: {'config': {'context_length':32768}}
+def authoring_stream(**kwargs):
+    if any('Ты редактор черновика Character' in m['content'] for m in kwargs['messages']):
+        yield from stream(**kwargs)
+    else:
+        yield from tabletop_stream(**kwargs)
+
+llm.chat_stream = authoring_stream
 llm.get_available_models = lambda: ['local-model']
 llm.get_loaded_models = lambda: [{'model_key':'local-model','display_name':'Test local model'}]
 llm.get_deepseek_models = lambda _: ['deepseek-flash','deepseek-v4-pro']
@@ -209,6 +224,12 @@ if __name__ == '__main__':
     def choices_seed():
         from devtools.narrative_test_world import load_fixture
         result=load_fixture(app.state.repository,'choices')
+        return {'world':result['world'],'save':result['save']}
+
+    @app.post('/test/protagonist-seed')
+    def protagonist_seed():
+        from devtools.narrative_test_world import load_fixture
+        result=load_fixture(app.state.repository,'protagonist')
         return {'world':result['world'],'save':result['save']}
 
     @app.post('/test/knowledge-seed')

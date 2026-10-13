@@ -29,6 +29,8 @@ def migrate_v2(original):
         from backend.runtime_v3.personality import initialize_profiles
         initialize_profiles(original)
         initialize_calendar(original['world_state'])
+        from backend.runtime_v3.protagonist import initialize
+        initialize(original)
         return MigrationResult(original, WorldHistoryV3().to_dict(), [])
     # The only legacy normalization boundary. No runtime code imports v2 apply.
     from backend.services.world import normalize
@@ -185,6 +187,8 @@ def migrate_v2(original):
         memory=deepcopy(old.get('memory', {})), history_head=None)
     from backend.runtime_v3.personality import initialize_profiles
     initialize_profiles(snapshot)
+    from backend.runtime_v3.protagonist import initialize
+    initialize(snapshot)
     return MigrationResult(snapshot, history.to_dict(), report)
 
 

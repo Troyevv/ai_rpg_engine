@@ -43,6 +43,8 @@ def setup_scenario(repo,sid,present=None,observer=False):
         lid=identity('location',place)
         state['locations'][lid]=Location(id=lid,name=place).model_dump()
     state['meta'].update(world_time=540,turn_id=0)
+    for period in state['meta'].get('protagonist_periods',[]):
+        if period['operation_id']=='legacy': period['since']=540
     state['camera']=dict(location_id=identity('location','кабинет'),present_character_ids=present,
         controlled_actor_id=None if observer else 'character_1',mode='observer' if observer else 'actor',situation='Начало')
     for cid,actor in state['characters'].items():actor['location_id']=identity('location','кабинет' if cid in present else 'коридор')

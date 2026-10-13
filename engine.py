@@ -122,7 +122,9 @@ def run_job(path, job_id, handle):
                 context = min(int(actual_context), config['context_length'])
             before = json.loads(job['memory_before_json'] or job['before_json'])
             from backend.runtime_v3.models import assert_world_state_v3_invariants
-            assert_world_state_v3_invariants(before['world_state'])
+            before['world_state']=assert_world_state_v3_invariants(before['world_state'])
+            from backend.runtime_v3.protagonist import initialize
+            initialize(before)
             if job['kind']=='pov' and not job['memory_before_json']:
                 from backend.runtime_v3.camera import transition
                 before=transition(before,config['actor_id'],config.get('source_node_id'))

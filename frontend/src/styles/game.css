@@ -434,3 +434,12 @@
 .story .job .prose { line-height:inherit; }
 
 .story-diagnostics { margin-left:auto; display:flex; color:var(--text-subtle); font-size:11px; font-weight:400; }
+
+.protagonist-dialog{width:min(860px,96vw);max-height:90dvh;overflow:auto}
+.protagonist-dialog details{border:1px solid var(--border);border-radius:var(--radius);padding:.7rem;margin:.6rem 0}
+.protagonist-dialog summary{cursor:pointer;font-weight:600}
+.protagonist-dialog label{display:grid;gap:.4rem;min-width:0}
+.protagonist-dialog select{max-width:100%;padding:.6rem;background:var(--background);color:var(--foreground);border:1px solid var(--border);border-radius:var(--radius)}
+.protagonist-field{margin:.6rem 0;padding:.4rem;min-width:0}
+.protagonist-paths,.protagonist-actions{display:flex;gap:.6rem;flex-wrap:wrap}
+.protagonist-actions{position:sticky;bottom:0;background:var(--background);padding:.8rem 0}
