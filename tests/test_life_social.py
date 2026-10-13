@@ -150,8 +150,8 @@ def test_death_is_not_missing_and_death_blocks_scene_emotions_movement_and_backg
 
 def test_dead_controlled_identity_retained_without_ordinary_choices():
     r=run(state(),'life_changes',[dict(id='a',life_status='dead')])
-    assert r.state['camera']['controlled_actor_id']=='a'
-    assert r.state['camera']['mode']=='actor' and 'a' in r.state['characters']
+    assert r.state['camera']['controlled_actor_id'] is None
+    assert r.state['camera']['mode']=='observer' and 'a' in r.state['characters']
     assert r.choices==[]
     assert run(r.state).state['characters']['a']['life_status']=='dead'
 

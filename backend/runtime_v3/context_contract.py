@@ -397,3 +397,13 @@ Do not invent EXTERNAL voluntary disposal or turn plans into ownership. Missing 
 mean unknown, not access. known_by is field-specific; old beliefs cannot undo World Truth.
 NPCs may causally use/dispose of their own things. No inventory/economy simulation.
 """
+
+
+CONTROL_CONTRACT = """EXTERNAL=controlled_actor_id; others AUTONOMOUS. Never invent EXTERNAL voluntary
+speech, actions, thoughts, decisions, intentions, consent or responses. NPCs can initiate
+contextually valid interactions, affection or conflict. Leave meaningful EXTERNAL responses
+unresolved; accepted Runtime involuntary consequences can be narrated. Camera, POV and
+control are independent; observation may have no EXTERNAL. Each character uses only their
+own knowledge. Never propose autonomous death for death_protected_actor_ids. Follow actual
+capabilities, including children's abilities, without inventing adult activities.
+"""

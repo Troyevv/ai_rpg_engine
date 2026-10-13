@@ -172,4 +172,6 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             snapshot['world_state'] = assert_world_state_v3_invariants(snapshot['world_state'])
             from backend.runtime_v3.appearance import initialize_profiles as initialize_appearance
             initialize_appearance(snapshot)
+            from backend.runtime_v3.protagonist import initialize
+            initialize(snapshot)
             return snapshot

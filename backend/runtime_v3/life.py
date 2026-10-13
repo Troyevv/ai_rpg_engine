@@ -148,6 +148,10 @@ def apply_life(resolver, raw):
                 if section == 'life_changes':
                     if key not in s['characters']: raise ValueError('unknown actor')
                     if resolver.mode == 'background' and key == controlled: raise ValueError('protected background actor')
+                    if item.get('life_status') == 'dead' and not resolver.death_policy.permits_autonomous_death(s,key):
+                        # Only explicit input evidence can authorize a newly extracted death.
+                        # Already accepted system truth bypasses extraction, never this check.
+                        if not _proof(resolver,item): raise ValueError('Autonomous protagonist death is disabled by risk policy')
                     old = deepcopy(s['characters'][key]); actor = s['characters'][key]
                     for field in ('life_status','capabilities','developmental_stage','parentage_complete_fact_id','reproductive_capability','identity_components'):
                         if field in item:

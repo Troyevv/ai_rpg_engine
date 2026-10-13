@@ -90,11 +90,18 @@ class EngineStorage:
                     raise ValueError('У старого хода нет снимка исходного контекста. Точная перегенерация недоступна.')
                 before, replaces, user_text, kind = last['before_json'], last['id'], last['user_text'], last['kind']
             from backend.runtime_v3.models import assert_world_state_v3_invariants
-            validated_state = assert_world_state_v3_invariants(json.loads(before)['world_state'])
+            before_snapshot=json.loads(before)
+            before_snapshot['world_state']=assert_world_state_v3_invariants(before_snapshot['world_state'])
+            from backend.runtime_v3.protagonist import initialize
+            initialize(before_snapshot)
+            before=json.dumps(before_snapshot,ensure_ascii=False)
+            validated_state = before_snapshot['world_state']
+            if validated_state['meta'].get('protagonist_required') and replaces is None:
+                raise ValueError('Главный герой умер. Выбери нового главного героя, чтобы продолжить.')
             if not json.loads(before)['world_state']['characters']:
                 raise ValueError('В старом сохранении нет персонажей. Сначала подготовь мир для игры.')
             from backend.runtime_v3.camera import controlled
-            if kind == 'turn' and controlled(json.loads(before)) is None:
+            if kind == 'turn' and controlled(json.loads(before)) is None and not config.get('time_skip'):
                 raise ValueError('Камера наблюдает мир. Выбери персонажа для управления или продолжи наблюдение.')
             if kind == 'turn' and user_text.strip():
                 from backend.runtime_v3.life import capabilities
@@ -103,7 +110,7 @@ class EngineStorage:
             if kind == 'background':
                 from backend.runtime_v3.camera import observe
                 observe(json.loads(before),config.get('camera_actor_id'),config.get('camera_scene_id'),config.get('camera_direct',False))
-            if kind == 'turn' and not user_text.strip():
+            if kind == 'turn' and not user_text.strip() and not config.get('time_skip'):
                 from backend.runtime_v3.life import capabilities
                 if capabilities(validated_state,controlled(json.loads(before)))['can_act']:
                     raise ValueError('Напиши действие.')

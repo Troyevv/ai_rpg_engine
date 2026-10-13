@@ -22,13 +22,13 @@ test('camera, observer continuation, timeline and immutable playback',async({pag
  await dialog.getByRole('button',{name:'← К журналу'}).click();
  await dialog.getByRole('button',{name:'Персонажи и сцены'}).click();
  await dialog.locator('.camera-cast article').nth(2).getByRole('button',{name:'Наблюдать',exact:true}).click();
- await expect(page.locator('.turn')).toHaveCount(2);
+ await expect(page.locator('.turn')).toHaveCount(1);
  await expect(page.getByLabel('Своё действие или реплика')).toBeDisabled();
  await page.getByRole('button',{name:'Продолжить наблюдать',exact:true}).click();
- await expect(page.locator('.turn')).toHaveCount(3);
+ await expect(page.locator('.turn')).toHaveCount(2);
  await page.getByLabel('Участник фоновой сцены').selectOption('character_3');
- await expect(page.locator('.turn')).toHaveCount(4);
- await expect(page.locator('.choices button')).toHaveCount(6);
+ await expect(page.locator('.turn')).toHaveCount(2);
+ await expect(page.locator('.choices button')).toHaveCount(0);
  await expect(page.getByLabel('Своё действие или реплика')).toBeEnabled();
  const state=(await (await request.get(`/api/saves/${selected.save}`)).json()).state;
  expect(state.controlled_actor_id).toBe('character_3');

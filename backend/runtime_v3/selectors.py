@@ -7,6 +7,8 @@ from backend.runtime_v3.lifecycle import active_texts
 
 def ui_view(snapshot, history=None):
     from backend.runtime_v3.models import assert_world_state_v3_invariants
+    from backend.runtime_v3.protagonist import initialize
+    snapshot = initialize(deepcopy(snapshot))
     state=assert_world_state_v3_invariants(snapshot['world_state']);history=history or {}
     camera=state['camera'];now=state['meta']['world_time']
     label=lambda minute: calendar_label(state, minute)
@@ -30,6 +32,7 @@ def ui_view(snapshot, history=None):
         rows.append(dict(before=old.get('text') if visible_appearance(state,cid,old,camera['controlled_actor_id']) else None,after=new.get('text'),minute=change['minute']))
     for card in cards:
         card['appearance_history']=appearance_history[card['id']]
+    for card in cards: card['is_player'] = card['id'] == state['meta']['current_protagonist_id']
     names={c['id']:c['name'] for c in cards}
     locations=state['locations']
     def place(lid):return locations.get(lid,{}).get('name','Не указано') if isinstance(lid,str) else 'Не указано'
@@ -95,8 +98,9 @@ def ui_view(snapshot, history=None):
     metadata=dict(time=label(now),location=place(camera['location_id']),present_ids=list(camera['present_character_ids']))
     campaign=deepcopy(snapshot.get('campaign',{}))
     result=dict(campaign,characters=cards,world=world,controlled_actor_id=camera['controlled_actor_id'],
-        protagonist_id=campaign.get('protagonist_id') or next((c['id'] for c in cards if c.get('is_player')),None),
-        camera=dict(scene_id=sid,mode=camera['mode'],scope='scene'),scene=camera['situation'],scene_meta=metadata,
+        protagonist_required=state['meta']['protagonist_required'], protagonist_periods=state['meta']['protagonist_periods'],
+        protagonist_id=state['meta']['current_protagonist_id'] or campaign.get('protagonist_id') or next((c['id'] for c in cards if c.get('is_player')),None),
+        camera=dict(scene_id=sid,mode=camera['mode'],scope='scene',subject_id=camera.get('subject_id'),pov_actor_id=camera.get('pov_actor_id')),scene=camera['situation'],scene_meta=metadata,
         world_clock=dict(minute=now,last_event_time=label(now),calendar=state['meta'].get('calendar'),projection=current_time(state),nearby=nearby_calendar(state,set(camera['present_character_ids']))),memory=deepcopy(snapshot.get('memory',{})),
         sections=dict(campaign.get('sections',{}),scene=camera['situation']),
         relationships=[dict(r,text=r['context'],target_name=names.get(r['target_id'],'')) for r in world['relationships'].values()],

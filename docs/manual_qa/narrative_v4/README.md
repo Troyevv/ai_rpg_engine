@@ -184,3 +184,5 @@ reload/rollback: [relations.md](relations.md).
 Проверки #74: checkpoint `appearance` — [canonical внешность и портреты](appearance.md).
 
 Проверки #77: checkpoint `possessions` — [значимые вещи, владение и скрытые передачи](possessions.md).
+
+Проверки #42: checkpoints `protagonist` и `protagonist-infant` — [смена ГГ, смерть без Game Over и создание персонажа](protagonist.md).

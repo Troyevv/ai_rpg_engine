@@ -31,12 +31,12 @@ test('general relationships support CRUD and follow POV without LLM for edits',a
  await editor.getByRole('button',{name:'Сохранить',exact:true}).click();await expect(editor).toHaveCount(0);
  await panel.getByRole('button',{name:'Закрыть',exact:true}).click();
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.turn')).toHaveCount(1);
- await actor(page,'character_2',targetName);await expect(page.locator('.turn')).toHaveCount(2);
+ await actor(page,'character_2',targetName);await expect(page.locator('.turn')).toHaveCount(1);
  await open();
  await expect(panel.locator('.motivation-editor')).not.toContainText('Теперь сомневается');
  await expect(panel).toContainText('Теперь сомневается');
  await panel.getByRole('button',{name:'Закрыть',exact:true}).click();
- await actor(page,'character_1',actorName);await expect(page.locator('.turn')).toHaveCount(3);
+ await actor(page,'character_1',actorName);await expect(page.locator('.turn')).toHaveCount(1);
  await open();await expect(panel.locator('.motivation-editor')).toContainText('Теперь сомневается');
  await panel.getByLabel(`Действия с отношением к ${targetName}`).click();await panel.getByRole('button',{name:'Удалить',exact:true}).click();
  const confirm=page.getByRole('dialog').filter({has:page.getByRole('heading',{name:'Удалить отношение?',exact:true})});
