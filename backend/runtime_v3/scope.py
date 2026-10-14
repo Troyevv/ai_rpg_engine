@@ -53,6 +53,7 @@ class ContextScope:
     controlled_actor_id: str | None
     development_sources: list = field(default_factory=list)
     pacing_decision: dict = field(default_factory=dict)
+    initiative_decision: dict | None = None
     pov_actor_id: str | None = None
     present_actor_ids: set = field(default_factory=set)
     remote_actor_ids: set = field(default_factory=set)

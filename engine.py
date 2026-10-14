@@ -201,6 +201,8 @@ def run_job(path, job_id, handle):
             recorded_messages = json.loads(storage.get_job(job_id).get('context_json') or '[]')
             from backend.runtime_v3.pacing import recorded_policy
             narrative_policy = recorded_policy(recorded_messages, before['world_state'])
+            from backend.runtime_v3.initiative import recorded_plan
+            initiative_plan = recorded_plan(recorded_messages)
             feedback = None
             for attempt in range(2):
                 if handle.cancelled.is_set() or storage.get_job(job_id)['status'] not in ('extracting', 'validating'):
@@ -208,7 +210,7 @@ def run_job(path, job_id, handle):
                 storage.job_progress(job_id, 'extracting')
                 messages = build_context(before, history, job['user_text'], job['kind'], context,
                                          config['update_tokens'], extraction_text=narrative,
-                                         validation_feedback=feedback, pacing_decision=narrative_policy, recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
+                                         validation_feedback=feedback, pacing_decision=narrative_policy, initiative_decision=initiative_plan, recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
                 stage_started=time.perf_counter()
                 result = ''.join(generate('extraction' if attempt==0 else 'extraction_repair',messages,config['update_tokens'],0.1,
                                           response_format={'type':'json_object'}))
@@ -225,7 +227,7 @@ def run_job(path, job_id, handle):
                     if skip_result: raw.final_scene['elapsed_minutes'] = skip_result['elapsed_minutes']
                     elif job['kind']=='turn' and __import__('re').match(r'^(?:я )?(?:ложусь спать|сплю)\b',job['user_text'].strip(),__import__('re').I):
                         raw.final_scene['elapsed_minutes']=0
-                    resolved=StateResolver(before['world_state'],narrative,job['user_text'],pacing_decision=getattr(messages,'selection',{}).get('pacing'),turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),actor_names={c['id']:c['name'] for c in before['character_cards']}).resolve(raw)
+                    resolved=StateResolver(before['world_state'],narrative,job['user_text'],pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_plan,turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),actor_names={c['id']:c['name'] for c in before['character_cards']}).resolve(raw)
                     state=deepcopy(before)
                     state.pop('_time_skip', None)
                     state.pop('last_time_skip', None)

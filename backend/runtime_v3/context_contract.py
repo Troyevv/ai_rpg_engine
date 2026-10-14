@@ -430,3 +430,32 @@ Knowledge or actions. If time_skip_target exists, end narration and choices ther
 Scheduled future/unresolved is not due; even due is not happened. Supply temporal only for
 explicit deadlines; Runtime anchors relative dates. Prose/choices use the active game language.
 """
+
+NARRATIVE_CONTRACT += """
+SCENE AGENCY: Director.scene_agency grants optional initiative to its actors, up to
+budget meaningful beats. Do not wait for EXTERNAL to make every first move. Start,
+continue, redirect or end conversations; ask/offer help, share news, invite, refuse,
+apologize, set boundaries, leave or act in one's interests when grounded. Silence is
+also valid. No initiative quota, turn timer, uniform assertiveness or manufactured drama.
+Use CURRENT canonical personality/style, active intentions/goals, emotion, directed
+relationships, own Knowledge, capabilities and relevant scene/history/milestones/plans
+already supplied. Reserved characters can act and impulsive ones can reconsider;
+traits influence expression and motivation, never deterministic permission thresholds.
+Ordinary scene initiative needs no narrative_policy development candidate. Significant
+changes and harm still obey that policy. A proposal is not a commitment or completed act.
+Adult contextual romance may be initiated by either character: flirt, reach for a hand,
+embrace, attempt a kiss, confess feelings, propose a date/cohabitation/marriage or sexual
+intimacy. Only established adults; no romance ladder, numeric gates or assumed reciprocity.
+When EXTERNAL can meaningfully respond before completion, stop at the attempt/proposal.
+Do not complete a kiss, mutual touch, agreement or reconciliation by inventing a response.
+An actual submitted refusal is valid; AUTONOMOUS characters may also refuse or withdraw.
+Never infer consent from silence, affection scores, earlier intimacy or relationship status.
+Only available scene/established remote channels; referenced authors do not become present.
+Keep existing literary style and active game language. Do not narrate runtime labels.
+"""
+EXTRACTION_CONTRACT += """
+scene_actions: permitted NPC initiative; source_event_id=THIS Event, attempt != outcome.
+adult=true for romance. Interruptible EXTERNAL response=open unless player_supplied with
+CURRENT player_evidence. Silence != consent; involuntary needs consequences.
+knowledge_ids=actor:fact, own beliefs only; suspected requires inquiry. Offers != agreement/reciprocity.
+"""

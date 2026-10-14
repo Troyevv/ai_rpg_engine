@@ -646,3 +646,21 @@ CHECKPOINTS['protagonist-infant'] = _pregnancy
 
 # #68 reuses established residence/roles and significant transition provenance.
 CHECKPOINTS["pacing"] = lambda state: _residence_roles(_family(state))
+
+
+def _initiative(state):
+    """#69 uses the same people, location, secrets and family provenance."""
+    state = _family(state)
+    for card in state['characters']:
+        if card['id'] == 'qa_vera':
+            card['fields']['Характер'] = 'Сдержанная, внимательная; умеет первой предложить близость, когда доверяет.'
+            card['fields']['Стиль общения'] = 'Короткие тихие фразы, точные вопросы, тёплая ирония.'
+        elif card['id'] == 'qa_timur':
+            card['fields']['Характер'] = 'Прямой и импульсивный, но способен отступить и уважает отказ.'
+            card['fields']['Стиль общения'] = 'Живой разговор, шутки; может прямо сказать, что пора уходить.'
+    state['world']['characters']['qa_vera']['intentions'] = ['Предложить Кириллу провести вечер вдвоём.']
+    state['world']['characters']['qa_timur']['intentions'] = ['Показать фотографии, затем отправиться в мастерскую.']
+    return state
+
+
+CHECKPOINTS['initiative'] = _initiative

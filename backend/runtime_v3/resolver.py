@@ -32,13 +32,14 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None):
         if mode not in ("turn", "background"):
             raise ValueError("Неизвестный режим StateResolver.")
         self.protected_actor_id = protected_actor_id or before['camera']['controlled_actor_id']
         from backend.runtime_v3.pacing import NarrativeDeathPolicy
         self.death_policy = death_policy or NarrativeDeathPolicy()
         self.pacing_decision = pacing_decision
+        self.initiative_decision = initiative_decision
         self.mode = mode
         self.protected_knowledge_actor_ids = set(protected_knowledge_actor_ids or [self.protected_actor_id])
         self.milestone_query = milestone_query
@@ -263,6 +264,8 @@ class StateResolver:
             if 'minute' in event: event['calendar_date'] = current_time(s,event['minute'])['date']
             events[eid] = event
             self.history.events.append(event)
+        from backend.runtime_v3.initiative import validate_actions
+        validate_actions(self, raw, events)
         from backend.runtime_v3.knowledge import apply_knowledge
         apply_knowledge(self, raw, events)
         from backend.runtime_v3.life import apply_life
