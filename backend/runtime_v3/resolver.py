@@ -32,12 +32,13 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None):
         if mode not in ("turn", "background"):
             raise ValueError("Неизвестный режим StateResolver.")
         self.protected_actor_id = protected_actor_id or before['camera']['controlled_actor_id']
-        from backend.runtime_v3.protagonist import ConservativeDeathPolicy
-        self.death_policy = death_policy or ConservativeDeathPolicy()
+        from backend.runtime_v3.pacing import NarrativeDeathPolicy
+        self.death_policy = death_policy or NarrativeDeathPolicy()
+        self.pacing_decision = pacing_decision
         self.mode = mode
         self.protected_knowledge_actor_ids = set(protected_knowledge_actor_ids or [self.protected_actor_id])
         self.milestone_query = milestone_query
@@ -97,6 +98,8 @@ class StateResolver:
         raw = deepcopy(payload) if isinstance(payload, RawTurnResult) else RawTurnResult.parse(payload)
         self.warnings.extend(raw.warnings)
         s = self.state
+        from backend.runtime_v3.pacing import validate_risk
+        validate_risk(self, raw)
         from backend.runtime_v3.residence import apply_locations
         apply_locations(self, raw)
         for i, item in self.records(raw,'promotions'):
@@ -382,6 +385,13 @@ class StateResolver:
         queue_invalidations(self)
         from backend.runtime_v3.protagonist import reconcile
         reconcile(s)
+        from backend.runtime_v3.pacing import validate_developments, validate_threads, validate_resolved_consequences
+        validate_resolved_consequences(self, raw)
+        validate_threads(self, raw)
+        accepted = validate_developments(self, raw)
+        if accepted:
+            s['meta']['pacing_recent'] = (s['meta']['pacing_recent'] + accepted)[-12:]
+            self.history.state_changes.append(dict(kind='narrative_developments',accepted=accepted,turn_id=self.turn_id))
         upserts = {section:{key:deepcopy(value) for key,value in s[section].items() if value != self.before[section].get(key)}
             for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions','residences','roles','organizations','reproductive_events','pregnancies','naming_decisions','possessions')}
         digest = sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest()

@@ -54,6 +54,8 @@ def create_app(db_path=None, recover=True):
     app = FastAPI(title='AI RPG Engine', version='2.0.0', lifespan=lifespan)
     from backend.api.protagonist import install as install_protagonist
     install_protagonist(app,repo,credentials)
+    from backend.api.narrative_policy import install as install_narrative_policy
+    install_narrative_policy(app,repo)
     from backend.api.portraits import register as register_portraits
     register_portraits(app,repo)
     app.state.repository = repo

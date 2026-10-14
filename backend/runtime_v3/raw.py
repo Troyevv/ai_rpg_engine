@@ -5,7 +5,7 @@ import json
 from backend.runtime_v3.models import fatal
 from backend.services.relation_dimensions import RELATION_DIMENSIONS
 
-SECTIONS = ('locations','promotions','events','facts','knowledge_gained','character_changes',
+SECTIONS = ('narrative_developments','consequences','locations','promotions','events','facts','knowledge_gained','character_changes',
             'relationship_changes','movements','thread_changes','scheduled_event_changes',
             'life_changes','condition_changes','social_relation_changes',
             'location_changes','organization_changes','residence_changes','role_changes',
@@ -36,6 +36,8 @@ class RawTurnResult:
         for section in SECTIONS:
             values = payload.get(section, [])
             if not isinstance(values, list):
+                if section in ('consequences','narrative_developments'):
+                    fatal('некорректная секция политики истории', 'narrative_policy_section_invalid', repairable=False, section=section)
                 warnings.append(dict(section=section, code='optional_section_invalid', action='drop_section', reason='ожидался список'))
                 values = []
             if section == 'knowledge_gained' and len(values) > 64:
@@ -81,6 +83,10 @@ def extraction_schema():
         'thread_changes':record(dict(id=string,description=string,character_ids=strings,status={'enum':['active','developing','dormant','resolved','paused']},state=string,relevance={'type':'number','minimum':0,'maximum':1}), ('id','evidence')),
         'scheduled_event_changes':record(dict(id=string,description=string,character_ids=strings,due_minute={'type':'integer','minimum':0},temporal=obj(dict(date=string,weekday={'type':'integer','minimum':0,'maximum':13},day_offset={'type':'integer','minimum':-366,'maximum':366},time=string,day_period={'enum':['night','morning','afternoon','evening']})),status={'enum':['pending','resolved','cancelled']},condition=string,type=string), ('id','evidence')),
     }
+    from backend.runtime_v3.narrative_policy_models import NarrativeDevelopment, ConsequenceClaim, FavorablePath
+    definitions['narrative_developments'] = NarrativeDevelopment.model_json_schema()
+    definitions['consequences'] = ConsequenceClaim.model_json_schema()
+    definitions['thread_changes']['properties'].update(resolution={'enum':['favorable','negative','open']}, stakes_for=strings, favorable_path=FavorablePath.model_json_schema(), player_evidence=string, player_assertion={'enum':['explicit_choice']})
     definitions['development_evidence'] = record(dict(id=string, actor_id=string, source_event_id=string,
         source_kind={'enum':['event','milestone']}, meaning=string, kind={'enum':['behavior','experience','turning_point']},
         player_evidence=string, player_assertion={'enum':['completed_voluntary_behavior']},
@@ -159,6 +165,8 @@ def extraction_schema():
     definitions['appearance_deltas'] = wire_schema(AppearanceDelta.model_json_schema())
     from backend.runtime_v3.possessions import PossessionDelta
     definitions['possession_deltas'] = wire_schema(PossessionDelta.model_json_schema())
+    for section in ('social_relation_changes','role_changes','residence_changes'):
+        definitions[section]['properties']['consequence_outcome'] = {'enum':['loss','constructive']}
     from backend.services.world import CARD_FIELDS
     definitions['promotions']['properties']['fields']=obj({key:string for key in CARD_FIELDS},CARD_FIELDS)
     from backend.services.player_agency import PLAYER_SOURCE_DESCRIPTION
@@ -178,12 +186,12 @@ def extraction_schema():
     return schema
 
 
-def prompt_schema(*, reproduction=True, births=True):
+def prompt_schema(*, reproduction=True, births=True, favorable_paths=True):
     """Validation-equivalent schema; prose lives once in the extraction contract."""
     from collections import Counter
     def structural(node):
         if isinstance(node, dict):
-            result = {k:structural(v) for k,v in node.items() if k != 'description' or not isinstance(v, str)}
+            result = {k:structural(v) for k,v in node.items() if (k != 'title' or not isinstance(v,str)) and k != 'default' and (k != 'description' or not isinstance(v, str))}
             # Lossless JSON Schema reductions keep new optional domains inside
             # existing model limits; runtime validation is unchanged.
             if result.get('type') == 'string' and (isinstance(result.get('const'), str) or
@@ -199,6 +207,9 @@ def prompt_schema(*, reproduction=True, births=True):
         return node
     # Keep properties named "description"; remove only JSON Schema annotations.
     schema = structural(extraction_schema())
+    if not favorable_paths:
+        for key in ('favorable_path','resolution','stakes_for'):
+            schema['properties']['thread_changes']['items']['properties'].pop(key,None)
     if not reproduction:
         for field in ('reproductive_events','naming_decisions','births'):
             schema['properties'].pop(field)

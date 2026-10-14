@@ -15,7 +15,9 @@ def plan(state, kind, history=None, scope=None):
            and scheduled_due(state, state['scheduled_events'][eid]) <= now]
     if kind != 'background':
         due=[eid for eid in due if eid not in state.get('pregnancies',{}) or state['knowledge'].get(str(scope.controlled_actor_id)+':'+state['pregnancies'][eid]['fact_id'],{}).get('status')=='known']
-    return dict(recent_event_ids=scope.event_ids, actors=sorted(scope.relevant_actor_ids),
+    from backend.runtime_v3.pacing import evaluate, prompt_policy
+    scope.pacing_decision = scope.pacing_decision or evaluate(state, scope)
+    return dict(narrative_policy=prompt_policy(scope.pacing_decision),recent_event_ids=scope.event_ids, actors=sorted(scope.relevant_actor_ids),
         location_ids=scope.location_ids,
         acting_actor_ids=sorted(cid for cid in scope.present_actor_ids | scope.remote_actor_ids | scope.active_actor_ids if capabilities(state,cid)['can_act']),
         referenced_actor_ids=sorted(scope.referenced_actor_ids),

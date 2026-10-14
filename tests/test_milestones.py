@@ -137,11 +137,14 @@ def test_conservative_backfill_never_rewrites_snapshots_or_history(tmp_path):
 
 def test_shared_causal_event_process_and_bad_reference_local_diagnostic():
     s=state(); quote=TEXT
+    from backend.runtime_v3.models import Condition
+    s['conditions']['prior']=Condition(id='prior',actor_id='b',description='Established dangerous injury').model_dump()
     raw=dict(final_scene=dict(location_id='home',present_character_ids=['a']),
         events=[dict(id='accident',text=quote,evidence=quote,participants=['b'],witnesses=[],fact_ids=[])],
         condition_changes=[dict(id='injury',actor_id='b',description='Injury',effects={'can_act':False},
             assertion='established',evidence=quote,source_event_id='accident')],
         life_changes=[dict(id='b',life_status='dead',assertion='established',evidence=quote,source_event_id='accident')])
+    raw['consequences']=[dict(kind=k,actor_id='b',source_event_id='accident',basis_ids=['prior'],evidence=quote) for k in ('injury','npc_death')]
     r=StateResolver(s,quote,'').resolve(raw)
     changes=[c for c in r.history['state_changes'] if c.get('source_event_id')]
     assert len(changes)==2 and len({c['source_event_id'] for c in changes})==1
@@ -286,6 +289,7 @@ def test_causal_chain_condition_missed_commitment_and_role_milestone():
             source_event_id='accident',source_process_id='injury')],
         scheduled_event_changes=[dict(id='meeting',assertion='missed',evidence=TEXT,
             source_event_id='accident',source_process_id='injury')])
+    raw['consequences']=[dict(kind='injury',actor_id='b',source_event_id='accident',basis_ids=['job'],evidence=TEXT)]
     r=StateResolver(s,TEXT,'').resolve(raw)
     assert not r.warnings
     changes=[c for c in r.history['state_changes'] if c.get('source_event_id')]

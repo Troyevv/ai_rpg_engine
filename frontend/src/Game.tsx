@@ -30,6 +30,7 @@ import { Diagnostics } from "./Diagnostics";
 import { JobView } from "./JobView";
 import { Button } from "./components/ui/button";
 import { Textarea } from "./components/ui/textarea";
+import {NarrativePolicy} from './NarrativePolicy';
 import {Protagonist} from './Protagonist';
 import {WorldCamera} from "./WorldCamera";
 import {useMobile,MobileScene} from './mobile';
@@ -60,6 +61,7 @@ export function Game({
   const input=useRef<HTMLTextAreaElement>(null);
   const mainActor=save?.state.protagonist_id||save?.state.characters.find(c=>c.is_player)?.id;
   const actorId=save?.state.controlled_actor_id===undefined?mainActor:save.state.controlled_actor_id;
+  const [policyOpen,setPolicyOpen]=useState(false);
   const [protagonistOpen,setProtagonistOpen]=useState(false);
   const [cameraOpen,setCameraOpen]=useState(false);
   const draftKey=`draft-${save?.id}-${actorId}`;
@@ -175,6 +177,7 @@ export function Game({
     <main className="game">
       <RuntimeNotifications save={save} job={submitted?job:null} enabled={notices}/>
       {save&&<><Button variant="outline" disabled={busy||pending} onClick={()=>setProtagonistOpen(true)}>Сменить главного героя</Button>{save.state.protagonist_required&&<p role="alert">Главный герой умер. История продолжается: выбери или создай нового героя.</p>}<Protagonist save={save} open={protagonistOpen} onOpenChange={setProtagonistOpen} refresh={refreshControl} prefs={prefs} apiKey={apiKey}/></>}
+      {save&&<><Button variant="outline" disabled={busy||pending} onClick={()=>setPolicyOpen(true)}>Политика истории</Button><NarrativePolicy save={save} open={policyOpen} onOpenChange={setPolicyOpen} refresh={refreshControl}/></>}
       {save&&<WorldCamera save={save} open={cameraOpen} onOpenChange={setCameraOpen} busy={busy||pending} observe={observe} control={switchActor}/>}
       {save&&<Diagnostics saveId={save.id} jobId={diagnosticJob} open={diagnostics} onOpenChange={setDiagnostics}/>}
       {mobile&&save?<MobileScene save={save} meta={meta} busy={busy||pending} switchActor={switchActor} background={()=>void turn("background","")} openCharacter={openCharacter} openCamera={()=>setCameraOpen(true)}/>:<>{save&&<div className="pov-controls">

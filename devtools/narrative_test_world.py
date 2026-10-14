@@ -363,7 +363,7 @@ def _seed_milestones(repository, save_id):
             for section,rows in changes.items():
                 raw[section]=[dict(row,evidence=text,assertion='established',source_event_id=event,
                     **({'closure_fact_id':fid} if row.get('status')=='closed' else {'fact_id':fid}),
-                    **({'player_assertion':'explicit_choice','player_evidence':text} if section=='residence_changes' else {})) for row in rows]
+                    **({'player_assertion':'explicit_choice','player_evidence':text} if section in ('residence_changes','life_changes') else {})) for row in rows]
             resolved=StateResolver(snapshot['world_state'],text,text,turn_id=0,
                 actor_names={c['id']:c['name'] for c in snapshot['character_cards']}).resolve(raw)
             if resolved.warnings: raise ValueError('Milestone QA replay: '+str(resolved.warnings))
@@ -400,7 +400,7 @@ def load_fixture(repository, checkpoint='base'):
                             workspace['revision'], format='json')
     draft = repository.draft(workspace['id'], author=True)
     result = repository.confirm_draft(workspace['id'], draft['revision'], draft['version_id'])
-    if checkpoint == 'milestones': _seed_milestones(repository,result['save'])
+    if checkpoint in ('milestones','pacing'): _seed_milestones(repository,result['save'])
     if checkpoint == 'personality': _seed_personality(repository,result['save'])
     if checkpoint == 'goals': _seed_goals(repository,result['save'])
     if checkpoint == 'knowledge': _seed_knowledge(repository,result['save'])
@@ -643,3 +643,6 @@ def _protagonist(state):
 
 CHECKPOINTS['protagonist'] = _protagonist
 CHECKPOINTS['protagonist-infant'] = _pregnancy
+
+# #68 reuses established residence/roles and significant transition provenance.
+CHECKPOINTS["pacing"] = lambda state: _residence_roles(_family(state))

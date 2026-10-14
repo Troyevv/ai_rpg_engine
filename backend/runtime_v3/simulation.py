@@ -28,16 +28,17 @@ def simulate(before_snapshot, snapshot, history_batch, context_length, config, g
         'Намерение может остаться незавершённым. Не выдумывай события без причины.')
     if batch: instruction+=' Обработай одной группой только причинно обусловленные изменения интервала: '+json.dumps(batch,ensure_ascii=False)+'. Не обязаны завершиться все намерения.'
     messages=build_context(camera,[],instruction,'background',context_length,config['max_tokens'],prompts=config.get('_prompts'),world_history=world_history)
+    pacing_decision=messages.selection['pacing']
     narrative=''.join(generate('world_simulation',messages,config['max_tokens'],config.get('temperature',0.8)))
     if cancelled.is_set():return snapshot,history_batch
     if not narrative.strip():raise ValueError('Фоновая симуляция вернула пустой текст.')
     feedback=None
     for attempt in range(2):
-        messages=build_context(camera,[],instruction,'background',context_length,config['update_tokens'],extraction_text=narrative,validation_feedback=feedback,prompts=config.get('_prompts'),world_history=world_history)
+        messages=build_context(camera,[],instruction,'background',context_length,config['update_tokens'],extraction_text=narrative,validation_feedback=feedback,pacing_decision=pacing_decision,prompts=config.get('_prompts'),world_history=world_history)
         payload=''.join(generate('world_simulation_delta' if attempt==0 else 'world_simulation_repair',messages,config['update_tokens'],0.1,response_format={'type':'json_object'}))
         if cancelled.is_set():return snapshot,history_batch
         try:
-            resolved=StateResolver(camera['world_state'],narrative,'',turn_id=state['meta']['turn_id'],observed=False,mode='background',protected_actor_id=protected,protected_knowledge_actor_ids=state['camera']['present_character_ids'],milestone_query=(world_history or {}).get('_milestone_query'),development_query=(world_history or {}).get('_development_query'),
+            resolved=StateResolver(camera['world_state'],narrative,'',pacing_decision=getattr(messages,'selection',{}).get('pacing'),turn_id=state['meta']['turn_id'],observed=False,mode='background',protected_actor_id=protected,protected_knowledge_actor_ids=state['camera']['present_character_ids'],milestone_query=(world_history or {}).get('_milestone_query'),development_query=(world_history or {}).get('_development_query'),
                 actor_names={c['id']:c['name'] for c in snapshot['character_cards']}).resolve(payload)
             if resolved.state['meta']['world_time']!=state['meta']['world_time']:
                 fatal('background не должен продвигать часы','background_time_invalid',repairable=True)
