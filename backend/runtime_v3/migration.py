@@ -16,6 +16,8 @@ class MigrationResult:
 def migrate_v2(original):
     if original.get('schema_version') == 3:
         original = deepcopy(original)
+        from backend.runtime_v3.pacing import salvage_policy
+        salvage_policy(original['world_state'])
         from backend.runtime_v3.personality import salvage_profiles
         salvage_profiles(original['world_state'])
         from backend.runtime_v3.values import salvage_values

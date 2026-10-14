@@ -128,7 +128,7 @@ def test_compact_schema_has_identical_validation_rules():
     def expand(node):
         if isinstance(node,dict):
             if '$ref' in node: return expand(schema['$defs'][node['$ref'].split('/')[-1]])
-            result = {key:expand(value) for key,value in node.items() if key!='$defs' and not (key=='description' and isinstance(value,str))}
+            result = {key:expand(value) for key,value in node.items() if key not in ('$defs','default') and not (key in ('description','title') and isinstance(value,str))}
             # Normalize validation-equivalent shorthand independently on both sides.
             if result.get('type') == 'string' and ('const' in result or 'enum' in result): result.pop('type')
             if isinstance(result.get('type'), list): result['anyOf'] = [{'type':t} for t in result.pop('type')]

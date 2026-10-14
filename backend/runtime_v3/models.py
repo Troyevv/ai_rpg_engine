@@ -125,7 +125,14 @@ class ProtagonistPeriod(StrictModel):
     operation_id: str
 
 
+from backend.runtime_v3.narrative_policy_models import (NarrativePacingProfile, NarrativeRiskProfile, OutcomePreference, PacingRecord, FavorablePath)
+
+
 class Meta(StrictModel):
+    narrative_pacing: NarrativePacingProfile = Field(default_factory=NarrativePacingProfile)
+    narrative_risk: NarrativeRiskProfile = Field(default_factory=NarrativeRiskProfile)
+    outcome_preference: OutcomePreference = "natural"
+    pacing_recent: list[PacingRecord] = Field(default_factory=list, max_length=12)
     current_protagonist_id: str | None = None
     protagonist_required: bool = False
     protagonist_periods: list[ProtagonistPeriod] = Field(default_factory=list)
@@ -482,6 +489,8 @@ class Relationship(StrictModel):
 
 
 class Thread(StrictModel):
+    stakes_for: list[str] = Field(default_factory=list, max_length=8)
+    favorable_path: FavorablePath | None = None
     id: str
     description: str
     character_ids: list[str] = Field(default_factory=list)
@@ -639,6 +648,9 @@ def assert_world_state_v3_invariants(state, before=None):
         for key, item in value[section].items():
             if set(item['character_ids']) - actors.keys():
                 fatal('неизвестный связанный персонаж', section=section, entity=key)
+    for item in value['threads'].values():
+        if set(item['stakes_for']) - actors.keys():
+            fatal('неизвестный участник последствий линии', section='threads', entity=item['id'])
     for item in value['scheduled_events'].values():
         if item['location_id'] is not None and item['location_id'] not in locations:
             fatal('неизвестное место scheduled event', section='scheduled_events', entity=item['id'])

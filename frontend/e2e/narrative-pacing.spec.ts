@@ -1,0 +1,26 @@
+import {test,expect} from '@playwright/test';
+test('story policy presets custom risk and outcome persist without creating a turn',async({page,request})=>{
+  const selected=await(await request.post('/test/protagonist-seed')).json();
+  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selected);
+  await page.goto('/');
+  const before=await(await request.get(`/api/saves/${selected.save}`)).json();
+  await page.getByRole('button',{name:'Политика истории',exact:true}).click();
+  const dialog=page.getByRole('dialog');
+  await dialog.getByLabel('Профиль интенсивности').selectOption('intense');
+  await dialog.getByLabel('Профиль риска').selectOption('safe');
+  await dialog.getByLabel('Предпочтение исходов').selectOption('guaranteed_happy_path');
+  await dialog.getByRole('button',{name:'Сохранить настройки истории'}).click();
+  await expect(dialog).toBeHidden();await page.reload();
+  const after=await(await request.get(`/api/saves/${selected.save}`)).json();
+  expect(after.turns.length).toBe(before.turns.length);
+  expect(after.state.narrative_policy.narrative_pacing.preset).toBe('intense');
+  expect(after.state.narrative_policy.narrative_risk.protagonist_death).toBe(false);
+  await page.getByRole('button',{name:'Политика истории',exact:true}).click();
+  await expect(dialog.getByLabel('Предпочтение исходов')).toHaveValue('guaranteed_happy_path');
+  await dialog.getByLabel('Профиль риска').selectOption('custom');
+  await dialog.getByLabel('Травмы',{exact:true}).check();
+  await expect(dialog.getByLabel('Необратимые травмы',{exact:true})).not.toBeChecked();
+  await dialog.getByRole('button',{name:'Сохранить настройки истории'}).click();
+  await expect(dialog).toBeHidden();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+});

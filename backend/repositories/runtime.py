@@ -305,3 +305,32 @@ class RuntimeStorage:
             project(db,save_id,after)
             db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?',(dump(after),save_id))
             return after
+
+    def update_narrative_policy(self, save_id, revision, policy):
+        from copy import deepcopy
+        from backend.services.narrative_policy import PolicyUpdate
+        from backend.runtime_v3.repository import append_history, migrate_snapshot
+        from backend.repositories.living_world import project
+        validated=PolicyUpdate.model_validate(dict(policy,revision=revision)).model_dump(exclude={'revision'})
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            self._assert_idle(db,save_id)
+            row=db.execute('SELECT * FROM saves WHERE id=?',(save_id,)).fetchone()
+            if not row: raise ValueError('Прохождение не найдено.')
+            if row['revision']!=revision: raise ValueError('Сейв изменился. Обнови страницу.')
+            source=json.loads(row['state_json'])
+            if source.get('mode')=='tabletop' or source.get('runtime')=='tabletop':
+                raise ValueError('Настройки доступны только в Narrative.')
+            prior,_=migrate_snapshot(db,source)
+            after=deepcopy(prior);meta=after['world_state']['meta']
+            previous={k:meta[k] for k in validated}
+            if previous==validated:return
+            meta.update(validated)
+            batch=dict(state_changes=[dict(kind='narrative_policy_changed',before=previous,after=validated,
+                turn_id=meta['turn_id'],minute=meta['world_time'])])
+            after['history_head']=append_history(db,prior.get('history_head'),batch)
+            parent=db.execute('SELECT active_variant_id FROM turns WHERE save_id=? ORDER BY sequence DESC LIMIT 1',(save_id,)).fetchone()
+            db.execute('INSERT INTO actor_switches(save_id,revision,before_json,after_json,parent_variant_id) VALUES(?,?,?,?,?)',
+                (save_id,revision,dump(prior),dump(after),parent[0] if parent else None))
+            project(db,save_id,after)
+            db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?',(dump(after),save_id))

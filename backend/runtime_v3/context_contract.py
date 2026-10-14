@@ -145,27 +145,19 @@ condition «после работы» остаётся условием. Не в
 """
 NARRATIVE_CONTRACT += COMMITMENT_CONTRACT
 EXTRACTION_CONTRACT += """
-PLAN/OVERDUE PLAN — не факт выполнения. FACT/CANCELLED PLAN повторно не активировать.
-Для scheduled_event_changes обязательно assertion и evidence текущего хода:
-agreed — явная принятая договорённость с временной привязкой; rescheduled — перенос того же ID;
-cancelled — явно отменён/неактуален; occurred — действие фактически состоялось;
-blocked — препятствие без установленного исхода; missed — подтверждено невыполнение (не успех).
-Для личного интервала temporal/end_temporal: started — установлен фактический старт/текущее
-состояние («я в отпуске до ...»), ended — подтверждено окончание уже начатого интервала.
-Может быть/мечта/непринятое предложение/обсуждение прошлого не создают agreed.
-Не создавай план задним числом из старого факта. Завершай именно совпавший canonical ID:
-встреча в кафе не закрывает отдельную поездку на дачу. Не создавай новый ID при переносе.
-Для agreed/rescheduled/cancelled с controlled_actor нужны player_assertion=explicit_choice
-и player_evidence — точная цитата явного решения из player_input, не из narrative.
-При отмене другим участником укажи decision_actor_id этого NPC: его отказ не требует согласия игрока.
-Проверяй добровольное участие, не приписывай согласие из чужого предложения или вопроса.
-Времена извлекай как temporal: date ИЛИ weekday ИЛИ day_offset + time ИЛИ day_period.
-Не вычисляй due_minute для human commitments. Условие после работы сохраняй в condition.
-Для интервала end_temporal — отдельная привязка к времени этого хода, не к началу интервала.
-Возвращение и выезд — разные ID; depends_on содержит только явные необходимые зависимости.
-Отмена родителя делает зависимый план неактуальным, не отменяет прочие события группы.
-Отпуск не перемещает персонажа; каникулы не убирают образование. Само время не начинает
-и не завершает интервал. Не назначай штраф отношениям за срок/срыв автоматически.
+Scheduled changes require an assertion: agreed=accepted dated commitment; rescheduled=same ID/new time;
+cancelled=explicitly cancelled/irrelevant; occurred=actually performed; blocked=obstacle without outcome;
+missed=established nonperformance, never success. For personal temporal/end_temporal intervals,
+started means established/current ("on leave until ..."); ended means an already-started interval ended.
+Possibilities, dreams, unaccepted offers and past discussions are not agreed. Do not create retrospective
+plans from old facts; close only the matching ID (a cafe meeting cannot close a country trip).
+Reuse IDs on reschedule. EXTERNAL agreed/rescheduled/cancelled requires explicit_choice/player_evidence
+quoting an actual decision in player_input, never narrative. NPC cancellation uses decision_actor_id
+and needs no player consent. An offer/question is not voluntary agreement.
+Extract times structurally; unknown deadlines stay unknown. Keep series/group associations distinct
+from depends_on, which lists only explicit necessary dependencies. Cancelling a parent invalidates
+dependent plans, not unrelated group events. Leave never moves an actor; vacation never removes
+education. Time alone never starts/ends an interval. No automatic relationship penalties for deadlines/failure.
 """
 
 LIFE_CONTRACT = '''
@@ -406,4 +398,35 @@ unresolved; accepted Runtime involuntary consequences can be narrated. Camera, P
 control are independent; observation may have no EXTERNAL. Each character uses only their
 own knowledge. Never propose autonomous death for death_protected_actor_ids. Follow actual
 capabilities, including children's abilities, without inventing adult activities.
+"""
+
+
+PACING_CONTRACT = """
+Runtime narrative_policy is permission, never an event quota. Optional developments use only selected candidates,
+respect quiet/pressure/escalation/budgets and supplied world/Knowledge; ordinary scenes remain valid in every preset.
+Candidates create no facts, Threads, penalties or decisions. EXTERNAL responses require user choice; NPC status grants no immunity.
+Risk independently limits ALL autonomous consequences (including prose/facts); illness/injury/death need canonical Condition/Life State.
+Outcome preference applies only to protagonist-linked stakes. prefer_happy biases constructive resolutions;
+guaranteed_happy_path preserves a credible achievable favorable option, NOT a forced ending, immediate closure,
+universal survival, romance or reconciliation. Loss/acceptance/separate fulfillment remain possible. Never retcon,
+leak secrets or override explicit negative choices. Unrelated NPC threads are unaffected.
+"""
+NARRATIVE_CONTRACT += PACING_CONTRACT
+EXTRACTION_CONTRACT += """
+Honor narrative_policy. Accepted candidates need narrative_developments/source_event_id. All harm needs consequences,
+causal preexisting basis_ids and matching Condition/Life changes. New severe harm requires selected candidate_id;
+active Conditions may ground progression. Closures classify consequence_outcome=loss/constructive (e.g. graduation). Explicit user harm needs explicit_choice + player_evidence on claim/change.
+Guaranteed connected threads need achievable favorable_path; autonomous closure needs resolution=favorable.
+Never force EXTERNAL choices/romance, retcon, or auto-correct user-chosen negative outcomes. Empty omitted context fields use defaults.
+"""
+
+# Same calendar constraints in a compact Extraction wire form; no state omitted.
+EXTRACTION_TIME_CONTRACT = """
+current_time alone supplies Day/date/weekday/time/day_period; never derive weekday from world_time.
+Anchor relative dates to it; respect current day_period (20:42 is already evening).
+Unknown dates/birthdays stay unknown. Runtime age overrides static card age when birth_date exists.
+calendar_context establishes dates only, not holidays off work, celebrations, gifts, presence,
+Knowledge or actions. If time_skip_target exists, end narration and choices there.
+Scheduled future/unresolved is not due; even due is not happened. Supply temporal only for
+explicit deadlines; Runtime anchors relative dates. Prose/choices use the active game language.
 """

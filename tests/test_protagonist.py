@@ -63,8 +63,13 @@ def test_risk_seam_blocks_autonomous_death_but_allows_explicit_death_and_success
     s=snapshot();text='Персонаж погиб.'
     raw=dict(final_scene=dict(location_id='home',present_character_ids=['a','b']),
         life_changes=[dict(id='a',life_status='dead',assertion='established',evidence=text)])
-    denied=StateResolver(s['world_state'],text,'').resolve(raw)
-    assert denied.state['characters']['a']['life_status']=='alive'
+    from backend.services.world_delta_errors import StructuralDeltaError
+    with pytest.raises(StructuralDeltaError): StateResolver(s['world_state'],text,'').resolve(raw)
+    from backend.runtime_v3.models import Condition
+    s['world_state']['conditions']['illness']=Condition(id='illness',actor_id='a',description='Established illness').model_dump()
+    raw['events']=[dict(id='death',text=text,participants=['a'],evidence=text)]
+    raw['consequences']=[dict(kind='protagonist_death',actor_id='a',source_event_id='death',basis_ids=['illness'],evidence=text)]
+    raw['life_changes'][0]['source_event_id']='death'
     class Permitted:
         def permits_autonomous_death(self,state,actor): return True
     allowed=StateResolver(s['world_state'],text,'',death_policy=Permitted()).resolve(raw)
@@ -78,6 +83,7 @@ def test_risk_seam_blocks_autonomous_death_but_allows_explicit_death_and_success
     assert continued['world_state']['characters']['a']['life_status']=='dead'
     assert 'b:secret' not in continued['world_state']['knowledge']
     raw['life_changes'][0].update(player_assertion='explicit_choice',player_evidence=text)
+    raw['consequences'][0].update(player_assertion='explicit_choice',player_evidence=text)
     explicit=StateResolver(snapshot()['world_state'],text,text).resolve(raw)
     assert explicit.state['meta']['protagonist_required']
 

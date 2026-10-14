@@ -31,7 +31,7 @@ def visible_views(snapshot, turns, kind):
 
 
 def canonical_slice(state, scope, extraction=False, query=""):
-    current = dict(meta={k:v for k,v in state['meta'].items() if k not in ('calendar','current_protagonist_id','protagonist_required','protagonist_periods')},
+    current = dict(meta={k:v for k,v in state['meta'].items() if k not in ('calendar','current_protagonist_id','protagonist_required','protagonist_periods','narrative_pacing','narrative_risk','outcome_preference','pacing_recent')},
         current_time=current_time(state), calendar_context=nearby_calendar(state, scope.relevant_actor_ids), camera=deepcopy(state['camera']),
         locations={lid: state['locations'][lid] for lid in scope.location_ids},
         characters={cid: deepcopy(state['characters'][cid]) for cid in sorted(scope.relevant_actor_ids)},
@@ -42,8 +42,8 @@ def canonical_slice(state, scope, extraction=False, query=""):
         scheduled_events=[commitment_view(state,state['scheduled_events'][eid]) for eid in scope.scheduled_event_ids])
     for field in ('subject_id','pov_actor_id'):
         if current['camera'].get(field) in (None,scope.controlled_actor_id): current['camera'].pop(field,None)
-    from backend.runtime_v3.protagonist import ConservativeDeathPolicy
-    protected = [cid for cid in current['characters'] if not ConservativeDeathPolicy().permits_autonomous_death(state,cid)]
+    from backend.runtime_v3.pacing import NarrativeDeathPolicy
+    protected = [cid for cid in current['characters'] if not NarrativeDeathPolicy().permits_autonomous_death(state,cid)]
     if protected: current['death_protected_actor_ids'] = protected
     from backend.runtime_v3.possessions import context_possessions
     possessions = context_possessions(state, scope, extraction=extraction, query=query)
@@ -281,6 +281,10 @@ class NarrativeContextBuilder:
         return rules, messages
 
 
+def state_outcome(snapshot):
+    return snapshot['world_state']['meta'].get('outcome_preference','natural')
+
+
 class ExtractionContextBuilder:
     extraction = True
 
@@ -312,7 +316,7 @@ class ExtractionContextBuilder:
                        block('Choice context / controlled actor', choice_context(snapshot, scope, current, views, kind)),
                        block('Entity IDs', [dict(id=c['id'], name=c['name'], aliases=c.get('aliases', []))
                             for c in snapshot['character_cards'] if c['id'] in scope.relevant_actor_ids]),
-                       block('JSON Schema', prompt_schema(reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[]))))]
+                       block('JSON Schema', prompt_schema(reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
 
 
 def choice_context(snapshot, scope, current, views, kind):
@@ -373,7 +377,7 @@ def actor_knowledge(state, scope, current):
 
 def build_context(snapshot, turns, user_text, kind, context_length, reserve, extraction_text=None,
                   validation_feedback=None, recent_turns=6, prompts=None, world_history=None,
-                  target_context_budget=18000):
+                  target_context_budget=18000, pacing_decision=None):
     from context_builder import estimate
     state = snapshot['world_state']; camera = state['camera']
     all_views = visible_views(snapshot, turns, kind)
@@ -388,6 +392,9 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         observer=scope.pov_actor_id or scope.controlled_actor_id
         scope.history_events = [e for e in scope.history_events if not
             (string_ids(e.get('fact_ids', [])) & hidden) and (observer is None or observer in e.get('witnesses',[]) or all(known(state,observer,fid) for fid in string_ids(e.get('fact_ids',[]))) and bool(string_ids(e.get('fact_ids',[]))))]
+    from backend.runtime_v3.pacing import development_sources, evaluate, extraction_policy
+    scope.development_sources = development_sources(state, scope, (world_history or {}).get('_milestone_query'))
+    scope.pacing_decision = deepcopy(pacing_decision) if pacing_decision is not None else evaluate(state, scope)
     current = canonical_slice(state, scope, extraction_text is not None, user_text+'\n'+(extraction_text or ''))
     if kind == 'background' and not camera.get('pov_actor_id'):
         from backend.runtime_v3.reproduction import context_projection
@@ -401,6 +408,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         from backend.runtime_v3.possessions import known
         milestones = [m for m in milestones if not m['category'].startswith('possession_') or known(state, scope.pov_actor_id or scope.controlled_actor_id, m.get('fact_id'))]
     if milestones: current['milestones'] = list(milestones)
+    if extraction_text is not None: current['narrative_policy'] = extraction_policy(scope.pacing_decision)
     from backend.runtime_v3.personality import historical_context, visible_item
     development = historical_context(state,scope,world_history)
     if development: current['personality_history'] = development
@@ -425,12 +433,12 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     builder = ExtractionContextBuilder() if extraction_text is not None else NarrativeContextBuilder()
     rules, messages = builder.build(snapshot, scope, current, views, user_text, kind, prompts, extraction_text)
     from backend.runtime_v3.context_contract import CONTROL_CONTRACT
-    rules += '\n' + TIME_CONTRACT
+    from backend.runtime_v3.context_contract import EXTRACTION_TIME_CONTRACT
+    rules += '\n' + (EXTRACTION_TIME_CONTRACT if builder.extraction else TIME_CONTRACT)
     rules += '\n' + (CONTROL_CONTRACT if extraction_text is None else 'death_protected_actor_ids: reject autonomous death.')
-    rules += ('\nMilestones — исторический GM-only индекс принятых переходов, не текущее состояние и не знание персонажей. '
-              'Текущий canonical WorldState имеет приоритет над Milestones, History и старой биографией. '
-              'known_by ограничивает доступ действующих персонажей к milestone; остальные не знают его автоматически. '
-              'Исторический брак/роль/дом не означает, что они активны сейчас; исторические имена не заменяют текущие.')
+    rules += ('\nMilestones are historical accepted transitions, not current state or actor knowledge. '
+              'Canonical WorldState overrides Milestones/History/biography. known_by limits each actor’s access; '
+              'historical roles, relations, homes and names cannot replace current truth.')
     rules += f'\nRuntime v3. controlled_actor_id={camera["controlled_actor_id"]}; mode={camera["mode"]}; world_time={state["meta"]["world_time"]} минут.'
     if snapshot.get('_time_skip'): rules += '\nДетерминированный Time Skip: ' + json.dumps(snapshot['_time_skip'], ensure_ascii=False) + '. Описывай только до actual_target, не позже. Hidden не становится знанием игрока.'
     if validation_feedback: rules += '\nИсправь структурную ошибку, верни полный JSON:\n' + validation_feedback
@@ -454,6 +462,18 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
             replace_block('Знания POV', pov_knowledge(state, state['camera'].get('pov_actor_id') or scope.controlled_actor_id, current))
             replace_block('Знания действующих персонажей / GM-only', actor_knowledge(state, scope, current))
 
+    if builder.extraction and estimate(messages) > target:
+        def compact_empty_metadata(value):
+            if isinstance(value, dict):
+                return {k:compact_empty_metadata(v) for k,v in value.items()
+                        if (v is not None or k in ('parent_id','location_id','controlled_actor_id','pov_actor_id')) and not (k in ('evidence','source_ids','witnesses','fact_ids',
+                            'identity_components','appearance_history','stakes_for','applied','history',
+                            'name_history','legacy_text') and v in ('',[],{}))}
+            if isinstance(value,list): return [compact_empty_metadata(v) for v in value]
+            return value
+        current = {k:(v if k in ('meta','camera','current_time','time_skip_target','locations')
+                      else compact_empty_metadata(v)) for k,v in current.items()}
+        refresh_current()
     if builder.extraction and estimate(messages) > target:
         # Unclassified import prose is optional; never trim current structured traits.
         for actor in current['characters'].values():
@@ -531,6 +551,19 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         for occasion in current.get('calendar_context',[]):
             if occasion.get('kind')=='birthday': occasion.pop('id',None)
         refresh_current()
+    if builder.extraction and estimate(messages)>hard_context_limit:
+        # Wire-only default elision: empty collections/nulls carry no additional
+        # truth. Keep section containers and location topology; the canonical
+        # state, source IDs, nonempty evidence and Knowledge remain untouched.
+        def nonempty(value):
+            if isinstance(value,dict):
+                return {k:nonempty(v) for k,v in value.items() if v not in (None,'',[],{}) or k in ('parent_id','location_id','controlled_actor_id','pov_actor_id')}
+            if isinstance(value,list): return [nonempty(v) for v in value]
+            return value
+        for key in current:
+            if key not in ('meta','camera','current_time','time_skip_target','locations','narrative_policy'):
+                current[key]=nonempty(current[key])
+        refresh_current()
     # Possession support is bounded by both its own cap and the request budget.
     # Keep explicitly named objects; omit lower-ranked incidental property first.
     for item in reversed(list(current.get('possessions', []))):
@@ -573,7 +606,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     for mode in (FULL_PRESENT, FULL_REMOTE, ACTIVE_REFERENCED):
         knowledge_counts[mode] = sum(k['actor_id'] != scope.controlled_actor_id and classifier.classify(k['actor_id'], scope) == mode for k in current['knowledge'])
     diagnostics = dict(mode=('World Simulation ' if kind == 'background' else '') + ('Extraction' if builder.extraction else 'Narrative'),
-        characters=counts, character_included=included_counts, knowledge=knowledge_counts,
+        pacing=scope.pacing_decision, characters=counts, character_included=included_counts, knowledge=knowledge_counts,
         semantic=scope.semantic_diagnostics, entities=entities, character_total=len(state['characters']), sections=sections,
         narrative_continuity=0 if builder.extraction else len(views), previous_player_inputs=0 if builder.extraction else len(views),
         target_context_budget=target, hard_context_limit=hard_context_limit, target_exceeded=estimate(messages)>target)
