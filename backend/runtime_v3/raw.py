@@ -5,7 +5,7 @@ import json
 from backend.runtime_v3.models import fatal
 from backend.services.relation_dimensions import RELATION_DIMENSIONS
 
-SECTIONS = ('narrative_developments','consequences','locations','promotions','events','facts','knowledge_gained','character_changes',
+SECTIONS = ('scene_actions','narrative_developments','consequences','locations','promotions','events','facts','knowledge_gained','character_changes',
             'relationship_changes','movements','thread_changes','scheduled_event_changes',
             'life_changes','condition_changes','social_relation_changes',
             'location_changes','organization_changes','residence_changes','role_changes',
@@ -36,7 +36,7 @@ class RawTurnResult:
         for section in SECTIONS:
             values = payload.get(section, [])
             if not isinstance(values, list):
-                if section in ('consequences','narrative_developments'):
+                if section in ('scene_actions','consequences','narrative_developments'):
                     fatal('некорректная секция политики истории', 'narrative_policy_section_invalid', repairable=False, section=section)
                 warnings.append(dict(section=section, code='optional_section_invalid', action='drop_section', reason='ожидался список'))
                 values = []
@@ -84,6 +84,8 @@ def extraction_schema():
         'scheduled_event_changes':record(dict(id=string,description=string,character_ids=strings,due_minute={'type':'integer','minimum':0},temporal=obj(dict(date=string,weekday={'type':'integer','minimum':0,'maximum':13},day_offset={'type':'integer','minimum':-366,'maximum':366},time=string,day_period={'enum':['night','morning','afternoon','evening']})),status={'enum':['pending','resolved','cancelled']},condition=string,type=string), ('id','evidence')),
     }
     from backend.runtime_v3.narrative_policy_models import NarrativeDevelopment, ConsequenceClaim, FavorablePath
+    from backend.runtime_v3.initiative import SceneAction
+    definitions['scene_actions'] = SceneAction.model_json_schema()
     definitions['narrative_developments'] = NarrativeDevelopment.model_json_schema()
     definitions['consequences'] = ConsequenceClaim.model_json_schema()
     definitions['thread_changes']['properties'].update(resolution={'enum':['favorable','negative','open']}, stakes_for=strings, favorable_path=FavorablePath.model_json_schema(), player_evidence=string, player_assertion={'enum':['explicit_choice']})

@@ -44,7 +44,20 @@ def runtime_v3_request(messages):
 def stream(**kwargs):
     full='\n'.join(m['content'] for m in kwargs['messages'])
     observer='Тип хода: background' in full or 'Режим observer:' in full or 'mode=observer' in full
-    if 'Ты редактор черновика Character' in full:
+    if 'провести вечер вдвоём' in full and 'qa_vera' in full:
+        current=json.loads(next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only\n')).split('\n',1)[1])
+        task=json.loads(next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')).split('\n',1)[1])
+        refused='Нет, сегодня не хочу.' in task['player_input']
+        text='Вера кивает и заканчивает разговор: «Хорошо, тогда в другой раз».' if refused else 'Вера протягивает ладонь: «Побудем вечером вдвоём?» — и ждёт ответа.'
+        if kwargs.get('response_format'):
+            camera=current['camera'];external=camera['controlled_actor_id']
+            payload=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=1),
+                events=[dict(id='initiative',text=text,evidence=text,participants=['qa_vera','qa_kirill'],witnesses=camera['present_character_ids'],medium='conversation')],
+                scene_actions=[dict(actor_id='qa_vera',target_ids=['qa_kirill'],source_event_id='initiative',phase='end' if refused else 'offer',modality='speech',adult=True,interruptible=not refused,response='player_supplied' if refused else 'open',player_evidence=task['player_input'] if refused else '',evidence=text)],
+                choices=[dict(action='Отказаться',speech='Нет, сегодня не хочу.')])
+            value=json.dumps(payload,ensure_ascii=False)
+        else: value=text
+    elif 'Ты редактор черновика Character' in full:
         task=json.loads(kwargs['messages'][-1]['content'])
         value='Новая сцена у двери.'
         if task['path']=='whole_draft':
@@ -224,6 +237,16 @@ if __name__ == '__main__':
     def choices_seed():
         from devtools.narrative_test_world import load_fixture
         result=load_fixture(app.state.repository,'choices')
+        return {'world':result['world'],'save':result['save']}
+
+    @app.post('/test/initiative-seed')
+    def initiative_seed():
+        from devtools.narrative_test_world import load_fixture
+        from test_narrative_test_world import CONFIG
+        result=load_fixture(app.state.repository,'initiative')
+        job=app.state.repository.begin_job(result['save'],'','start',CONFIG)
+        engine.run_job(app.state.repository.path,job,engine.Worker())
+        assert app.state.repository.get_job(job)['status']=='saved'
         return {'world':result['world'],'save':result['save']}
 
     @app.post('/test/protagonist-seed')

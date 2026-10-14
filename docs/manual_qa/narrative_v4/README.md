@@ -188,3 +188,9 @@ reload/rollback: [relations.md](relations.md).
 Проверки #77: checkpoint `possessions` — [значимые вещи, владение и скрытые передачи](possessions.md).
 
 Проверки #42: checkpoints `protagonist` и `protagonist-infant` — [смена ГГ, смерть без Game Over и создание персонажа](protagonist.md).
+
+### Инициатива NPC (#69)
+
+Checkpoint `initiative` и [протокол инициативы](initiative.md) проверяют самостоятельное
+начало/изменение/завершение общения, взрослые предложения, отказ, EXTERNAL, смену
+управления, наблюдение и совместимость с pacing без отдельного LLM-вызова.

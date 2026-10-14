@@ -377,7 +377,7 @@ def actor_knowledge(state, scope, current):
 
 def build_context(snapshot, turns, user_text, kind, context_length, reserve, extraction_text=None,
                   validation_feedback=None, recent_turns=6, prompts=None, world_history=None,
-                  target_context_budget=18000, pacing_decision=None):
+                  target_context_budget=18000, pacing_decision=None, initiative_decision=None):
     from context_builder import estimate
     state = snapshot['world_state']; camera = state['camera']
     all_views = visible_views(snapshot, turns, kind)
@@ -395,6 +395,8 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     from backend.runtime_v3.pacing import development_sources, evaluate, extraction_policy
     scope.development_sources = development_sources(state, scope, (world_history or {}).get('_milestone_query'))
     scope.pacing_decision = deepcopy(pacing_decision) if pacing_decision is not None else evaluate(state, scope)
+    from backend.runtime_v3.initiative import scene_plan
+    scope.initiative_decision = deepcopy(initiative_decision) if initiative_decision is not None else scene_plan(state, scope)
     current = canonical_slice(state, scope, extraction_text is not None, user_text+'\n'+(extraction_text or ''))
     if kind == 'background' and not camera.get('pov_actor_id'):
         from backend.runtime_v3.reproduction import context_projection
@@ -408,7 +410,11 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         from backend.runtime_v3.possessions import known
         milestones = [m for m in milestones if not m['category'].startswith('possession_') or known(state, scope.pov_actor_id or scope.controlled_actor_id, m.get('fact_id'))]
     if milestones: current['milestones'] = list(milestones)
-    if extraction_text is not None: current['narrative_policy'] = extraction_policy(scope.pacing_decision)
+    if extraction_text is not None:
+        current['narrative_policy'] = extraction_policy(scope.pacing_decision)
+        current['scene_agency'] = {k:v for k,v in scope.initiative_decision.items() if k not in ('optional','extra_llm_calls')}
+        if 'actors' in current['scene_agency']:
+            current['scene_agency']['actors'] = [{k:v for k,v in actor.items() if k != 'capabilities'} for actor in scope.initiative_decision['actors']]
     from backend.runtime_v3.personality import historical_context, visible_item
     development = historical_context(state,scope,world_history)
     if development: current['personality_history'] = development
@@ -561,9 +567,17 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
             if isinstance(value,list): return [nonempty(v) for v in value]
             return value
         for key in current:
-            if key not in ('meta','camera','current_time','time_skip_target','locations','narrative_policy'):
+            if key not in ('meta','camera','current_time','time_skip_target','locations','narrative_policy','scene_agency'):
                 current[key]=nonempty(current[key])
         refresh_current()
+        # Wire-only compaction of repeated empty defaults also applies to choice
+        # personalization and the ID index. Keep enabled=false and all real
+        # aliases/knowledge; omission is not permission or new canonical truth.
+        replace_block('Choice context / controlled actor', nonempty(choice_context(snapshot, scope, current, views, kind)))
+        for message in messages:
+            if message['content'].startswith('Entity IDs\n'):
+                replace_block('Entity IDs', nonempty(json.loads(message['content'].split('\n', 1)[1])))
+                break
     # Possession support is bounded by both its own cap and the request budget.
     # Keep explicitly named objects; omit lower-ranked incidental property first.
     for item in reversed(list(current.get('possessions', []))):
@@ -606,7 +620,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     for mode in (FULL_PRESENT, FULL_REMOTE, ACTIVE_REFERENCED):
         knowledge_counts[mode] = sum(k['actor_id'] != scope.controlled_actor_id and classifier.classify(k['actor_id'], scope) == mode for k in current['knowledge'])
     diagnostics = dict(mode=('World Simulation ' if kind == 'background' else '') + ('Extraction' if builder.extraction else 'Narrative'),
-        pacing=scope.pacing_decision, characters=counts, character_included=included_counts, knowledge=knowledge_counts,
+        initiative=scope.initiative_decision, pacing=scope.pacing_decision, characters=counts, character_included=included_counts, knowledge=knowledge_counts,
         semantic=scope.semantic_diagnostics, entities=entities, character_total=len(state['characters']), sections=sections,
         narrative_continuity=0 if builder.extraction else len(views), previous_player_inputs=0 if builder.extraction else len(views),
         target_context_budget=target, hard_context_limit=hard_context_limit, target_exceeded=estimate(messages)>target)
