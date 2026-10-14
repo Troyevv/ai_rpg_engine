@@ -459,3 +459,29 @@ adult=true for romance. Interruptible EXTERNAL response=open unless player_suppl
 CURRENT player_evidence. Silence != consent; involuntary needs consequences.
 knowledge_ids=actor:fact, own beliefs only; suspected requires inquiry. Offers != agreement/reciprocity.
 """
+
+NARRATIVE_CONTRACT += """
+CONTINUITY: Director.continuity is optional pressure, never an event quota.
+Quiet conversation and atmosphere remain valid. Prefer grounded #68/#69 opportunities
+when pressure rises; never manufacture progress. Recent beats identify answered questions,
+rejected/resolved proposals and established information: do not offer them again without
+new canonical basis. Closed threads stay closed. Vary choices by purpose, not wording.
+Current canonical scene and accepted events outrank old thread.state/character.situation:
+finished meetings are not future appointments; a relationship may continue afterwards.
+Shared History belongs only to witnesses/known information, never global NPC knowledge.
+Recent Milestones permit consequences, not compulsory scenes or automatic disclosure.
+Routine waiting/travel/work may be summarized up to continuity.compression.max_minutes.
+Stop at its boundary, any interruption or meaningful EXTERNAL response/decision. Never
+invent that response or silently skip hours/days. Detailed Time Skip remains separate.
+"""
+EXTRACTION_CONTRACT += """
+scene_transitions: accepted interaction started/advanced/ended, THIS source_event_id,
+actors/threads. Refresh affected situation/state; unchanged summaries are invalidated.
+Meeting ended != relationship resolved. Complete plans via #75/#66. No invented travel.
+Reopening resolved thread requires NEW source_event_id. continuity_beats: reuse canonical
+basis_ids for equivalent question/proposal/information/decision/opportunity, status and
+THIS event evidence. EXTERNAL decisions need decision_actor_id + current player_evidence.
+Choices share kind/basis_ids for equivalent purposes. Omit resolved/rejected proposals.
+compression: evidenced routine, explicit elapsed_minutes within supplied bound; pending
+response needs response_event_id + actual player_evidence. Ordinary dialogue needs no beat.
+"""

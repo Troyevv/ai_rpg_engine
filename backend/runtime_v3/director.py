@@ -19,7 +19,7 @@ def plan(state, kind, history=None, scope=None):
     scope.pacing_decision = scope.pacing_decision or evaluate(state, scope)
     from backend.runtime_v3.initiative import scene_plan
     if scope.initiative_decision is None: scope.initiative_decision = scene_plan(state, scope)
-    return dict(scene_agency=scope.initiative_decision, narrative_policy=prompt_policy(scope.pacing_decision),recent_event_ids=scope.event_ids, actors=sorted(scope.relevant_actor_ids),
+    return dict(continuity=scope.continuity_decision, scene_agency=scope.initiative_decision, narrative_policy=prompt_policy(scope.pacing_decision),recent_event_ids=scope.event_ids, actors=sorted(scope.relevant_actor_ids),
         location_ids=scope.location_ids,
         acting_actor_ids=sorted(cid for cid in scope.present_actor_ids | scope.remote_actor_ids | scope.active_actor_ids if capabilities(state,cid)['can_act']),
         referenced_actor_ids=sorted(scope.referenced_actor_ids),

@@ -44,7 +44,21 @@ def runtime_v3_request(messages):
 def stream(**kwargs):
     full='\n'.join(m['content'] for m in kwargs['messages'])
     observer='Тип хода: background' in full or 'Режим observer:' in full or 'mode=observer' in full
-    if 'провести вечер вдвоём' in full and 'qa_vera' in full:
+    if 'qa_meeting' in full:
+        current=json.loads(next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only\n')).split('\n',1)[1])
+        task=json.loads(next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')).split('\n',1)[1])
+        depart=task['player_input']=='Разойтись.'
+        alone='qa_vera' not in current['camera']['present_character_ids']
+        text='Илья и Соня попрощались и разошлись.' if depart else 'Илья смотрит на улицу.' if alone else 'Илья и Соня встретились в «Гвозде» и поговорили.'
+        if kwargs.get('response_format'):
+            camera=current['camera']
+            payload=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=['qa_kirill'] if depart else camera['present_character_ids'],elapsed_minutes=1),
+                events=[dict(id='meeting',text=text,evidence=text,participants=['qa_kirill','qa_vera'] if not alone else ['qa_kirill'],witnesses=['qa_kirill','qa_vera'] if not alone else ['qa_kirill'],medium='conversation')],
+                choices=[dict(action='Посмотреть вокруг',speech='',kind='decision',basis_ids=['qa_meeting']),dict(action='Осмотреться',speech='',kind='decision',basis_ids=['qa_meeting'])])
+            if not alone:payload['scene_transitions']=[dict(source_event_id='meeting',phase='ended' if depart else 'started',actor_ids=['qa_kirill','qa_vera'],thread_ids=['qa_meeting'],evidence=text)]
+            value=json.dumps(payload,ensure_ascii=False)
+        else:value=text
+    elif 'провести вечер вдвоём' in full and 'qa_vera' in full:
         current=json.loads(next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only\n')).split('\n',1)[1])
         task=json.loads(next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')).split('\n',1)[1])
         refused='Нет, сегодня не хочу.' in task['player_input']
@@ -237,6 +251,16 @@ if __name__ == '__main__':
     def choices_seed():
         from devtools.narrative_test_world import load_fixture
         result=load_fixture(app.state.repository,'choices')
+        return {'world':result['world'],'save':result['save']}
+
+    @app.post('/test/continuity-seed')
+    def continuity_seed():
+        from devtools.narrative_test_world import load_fixture
+        from test_narrative_test_world import CONFIG
+        result=load_fixture(app.state.repository,'continuity')
+        job=app.state.repository.begin_job(result['save'],'','start',CONFIG)
+        engine.run_job(app.state.repository.path,job,engine.Worker())
+        assert app.state.repository.get_job(job)['status']=='saved'
         return {'world':result['world'],'save':result['save']}
 
     @app.post('/test/initiative-seed')

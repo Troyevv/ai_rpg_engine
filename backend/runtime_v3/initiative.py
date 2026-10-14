@@ -45,8 +45,11 @@ def scene_plan(state, scope):
         actors.append(dict(actor_id=cid,
             channel='scene' if cid in scope.present_actor_ids else 'established_remote',
             capabilities={k: caps[k] for k in ('can_speak', 'can_move', 'adult_eligible')}))
-    return dict(external_actor_id=external, actors=actors[:8],
+    result = dict(external_actor_id=external, actors=actors[:8],
                 budget=3, optional=True, extra_llm_calls=0)
+    pressure = getattr(scope, 'continuity_decision', {}).get('pressure',0)
+    if pressure: result['grounded_development_priority'] = pressure
+    return result
 
 
 def recorded_plan(messages):

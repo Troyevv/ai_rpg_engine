@@ -33,6 +33,9 @@ class HistorySelector:
             score += 60*bool(string_ids(event.get('fact_ids')) & selected_facts)
             score += 40*bool(ids & (scope.structural_actor_ids - core))
             score += 50*bool(event.get('thread_id') in scope.thread_ids)
+            from backend.runtime_v3.continuity import visible_event
+            if len(ids & core) >= 2 and visible_event(self.state, scope.pov_actor_id or scope.controlled_actor_id, event):
+                score += 45*max(0, 1-age/32)
             if age < 3:
                 score += (60, 30, 10)[age]*bool(ids & core)
                 score += (40, 20, 5)[age]*bool(event.get('location_id') in scope.location_ids)

@@ -664,3 +664,23 @@ def _initiative(state):
 
 
 CHECKPOINTS['initiative'] = _initiative
+
+
+def _continuity(state):
+    """Same #78 world, focused Ilya/Sonya meeting regression with stable QA IDs."""
+    for card in state['characters']:
+        if card['id'] == ACTOR_ID: card['name'] = 'Илья'
+        if card['id'] == 'qa_vera': card['name'] = 'Соня'
+    state['campaign']['title'] += ' · Continuity'
+    state['world']['characters'][ACTOR_ID]['situation'] = 'Ждёт Соню в «Гвозде».'
+    state['world']['characters']['qa_vera']['situation'] = 'Идёт в «Гвоздь» к Илье.'
+    state['world']['characters'][ACTOR_ID]['intentions'] = ['Встретиться с Соней.']
+    state['world']['threads']['qa_meeting'] = dict(id='qa_meeting',
+        description='Развивающиеся отношения Ильи и Сони.',
+        state='Илья ждёт Соню в «Гвозде»; она обещала быть через пять минут.',
+        public_state='Договорились встретиться.', status='developing',
+        character_ids=[ACTOR_ID,'qa_vera'], visible_to_ids=[ACTOR_ID,'qa_vera'], relevance=.8)
+    return json.loads(json.dumps(state, ensure_ascii=False).replace(HOME, '«Гвоздь»'))
+
+
+CHECKPOINTS['continuity'] = _continuity
