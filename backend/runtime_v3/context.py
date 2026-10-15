@@ -366,6 +366,42 @@ def choice_context(snapshot, scope, current, views, kind):
         recent_player_expression=recent))
 
 
+
+def compact_choice_context(current, choice):
+    """Lossless wire references to identical, already selected values only.
+
+    Never replace an actor-owned projection with a broader GM object. In
+    particular, a partial Knowledge/reproduction view must stay partial.
+    """
+    def encoded(value):
+        return json.dumps(value, ensure_ascii=False, separators=(',', ':'))
+    candidates = {}
+    def index(value, path):
+        if isinstance(value, (dict, list, str)) and value:
+            key = encoded(value)
+            ref = {'state_ref': path}
+            if len(encoded(ref).encode('utf-8')) < len(key.encode('utf-8')):
+                candidates.setdefault(key, ref)
+        if isinstance(value, dict):
+            for key, child in value.items():
+                index(child, path + '/' + key.replace('~', '~0').replace('/', '~1'))
+        elif isinstance(value, list):
+            for i, child in enumerate(value):
+                index(child, path + '/' + str(i))
+    index(current, '')
+    def compact(value):
+        if isinstance(value, (dict, list, str)):
+            ref = candidates.get(encoded(value))
+            if ref is not None:
+                return deepcopy(ref)
+        if isinstance(value, dict):
+            return {key: compact(child) for key, child in value.items()}
+        if isinstance(value, list):
+            return [compact(child) for child in value]
+        return value
+    return compact(choice)
+
+
 def pov_knowledge(state, actor, current):
     return [k for k in current['knowledge'] if k['actor_id'] == actor]
 
@@ -618,6 +654,23 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         if item['id'] in scope.required_possession_ids: continue
         current['possessions'].remove(item)
         refresh_current()
+    if builder.extraction and estimate(messages) > hard_context_limit:
+        # Run after every current-state mutation so pointers address the final
+        # wire block, including default elision. No additional context is selected.
+        for message in messages:
+            if message['content'].startswith('Choice context / controlled actor\n'):
+                choice = json.loads(message['content'].split('\n', 1)[1])
+                compacted = compact_choice_context(current, choice)
+                instruction = ('\nChoice context state_ref is a JSON Pointer to exactly that value '
+                    'in Текущее состояние / GM-only; it grants no other GM knowledge.')
+                candidate = block('Choice context / controlled actor', compacted)
+                # Account for the reference instruction too: compaction must
+                # never make a small context larger.
+                if len(candidate['content'].encode('utf-8')) + len(instruction.encode('utf-8')) < len(message['content'].encode('utf-8')):
+                    replace_block('Choice context / controlled actor', compacted)
+                    messages[0]['content'] = messages[0]['content'].replace(
+                        'Постоянные правила\n', 'Постоянные правила' + instruction + '\n', 1)
+                break
     if estimate(messages) > hard_context_limit:
         raise ValueError('Контекст v3 не помещается в выбранную модель. Увеличь контекст или уменьши лимит ответа. Критические данные сцены и последние narrative сохранены.')
     classifier = CharacterContextClassifier()

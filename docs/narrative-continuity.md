@@ -94,3 +94,6 @@ questions; use the smallest relevant canonical basis. No live-provider evaluatio
 paid DeepSeek requests are required in CI.
 
 Player responses resolve only explicitly linked pending Events: scene_actions.response_event_id must belong to the recorded continuity permit and requires player_supplied with evidence from the current player input. An unlinked legacy action resolves no pending question. Validated compression records its single answered Event in History. Regeneration reuses the original permit; rollback and branches read their own immutable History lineage.
+
+
+Under Extraction budget pressure, the existing Context Builder can represent exact duplicate values in Choice context as `state_ref` JSON Pointers into the final “Текущее состояние / GM-only” block. Only already-selected, byte-equivalent values are referenced; an actor's partial Knowledge or reproduction projection is never widened to a GM projection. The reference instruction is included in the budget calculation, and the optimization is used only when total wire size decreases. This changes neither canonical state nor recorded context replay.
