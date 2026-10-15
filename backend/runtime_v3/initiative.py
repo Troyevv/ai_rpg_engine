@@ -19,6 +19,7 @@ class SceneAction(StrictModel):
     adult: bool = False
     interruptible: bool = False
     response: Literal['none', 'open', 'player_supplied', 'involuntary'] = 'none'
+    response_event_id: str | None = None
     player_evidence: str = ''
     knowledge_ids: list[str] = Field(default_factory=list, max_length=8)
     knowledge_use: Literal['assertion', 'inquiry'] = 'assertion'
@@ -119,6 +120,10 @@ def validate_actions(resolver, raw, events):
                     reject('initiative_consequence_required')
         elif claim.response in ('player_supplied', 'involuntary'):
             reject('initiative_response_target_invalid')
+        if claim.response_event_id is not None:
+            pending = (resolver.continuity_decision or {}).get('pending_response_ids', [])
+            if claim.response != 'player_supplied' or claim.response_event_id not in pending:
+                reject('initiative_response_reference_invalid')
         for key in claim.knowledge_ids:
             knowledge = resolver.before['knowledge'].get(key)
             if (not knowledge or knowledge['actor_id'] != cid

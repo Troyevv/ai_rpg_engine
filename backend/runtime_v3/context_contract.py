@@ -456,7 +456,8 @@ Keep existing literary style and active game language. Do not narrate runtime la
 EXTRACTION_CONTRACT += """
 scene_actions: permitted NPC initiative; source_event_id=THIS Event, attempt != outcome.
 adult=true for romance. Interruptible EXTERNAL response=open unless player_supplied with
-CURRENT player_evidence. Silence != consent; involuntary needs consequences.
+CURRENT player_evidence. response_event_id=only the answered pending_response_ids Event.
+Silence != consent; involuntary needs consequences.
 knowledge_ids=actor:fact, own beliefs only; suspected requires inquiry. Offers != agreement/reciprocity.
 """
 

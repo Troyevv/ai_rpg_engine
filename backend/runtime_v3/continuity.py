@@ -156,7 +156,8 @@ def validate_compression(resolver, scene, elapsed):
         if len(pending) != 1 or claim.response_event_id not in pending or not normalized(claim.player_evidence) or normalized(claim.player_evidence) not in normalized(resolver.player_input):
             reject('compression_response_required')
     resolver.history.state_changes.append(dict(kind='natural_compression', minutes=elapsed,
-        routine=claim.kind, evidence=claim.evidence, turn_id=resolver.turn_id))
+        routine=claim.kind, evidence=claim.evidence, turn_id=resolver.turn_id,
+        response_event_id=claim.response_event_id if pending else None))
 
 
 def apply(resolver, raw, events):
@@ -266,7 +267,11 @@ def turn_signal(resolver):
         progress.append('interaction')
     if scene_signature(before) != scene_signature(after): progress.append('scene')
     pending = (resolver.continuity_decision or {}).get('pending_response_ids', [])
-    supplied = any(e.get('scene_action', {}).get('response') == 'player_supplied' for e in resolver.history.events)
-    compressed = any(r.get('kind') == 'natural_compression' for r in resolver.history.state_changes)
+    # Only accepted, explicitly linked responses count. Legacy unlinked actions
+    # cannot identify which question was answered, even when input was supplied.
+    answered = {e['scene_action'].get('response_event_id') for e in resolver.history.events
+                if e.get('scene_action', {}).get('response') == 'player_supplied'}
+    answered.update(r.get('response_event_id') for r in resolver.history.state_changes
+                    if r.get('kind') == 'natural_compression')
     return dict(scene=scene_signature(after), progress=progress,
-                answered_response_ids=pending if supplied or compressed else [])
+                answered_response_ids=[eid for eid in pending if eid in answered])

@@ -123,7 +123,12 @@ def test_compression_does_not_consume_external_response():
     raw=payload(s);raw['final_scene']['compression']=dict(kind='routine',evidence='Разговор завершён.')
     with pytest.raises(StructuralDeltaError):StateResolver(s,'Разговор завершён.','',continuity_decision=p).resolve(raw)
     raw['final_scene']['compression'].update(response_event_id='question',player_evidence='Нет.')
-    assert StateResolver(s,'Разговор завершён.','Нет.',continuity_decision=p).resolve(raw).state
+    out=StateResolver(s,'Разговор завершён.','Нет.',continuity_decision=p).resolve(raw)
+    assert out.history['turns'][0]['continuity']['answered_response_ids']==['question']
+    assert out.history['state_changes'][0]['response_event_id']=='question'
+    p['pending_response_ids'].append('other')
+    with pytest.raises(StructuralDeltaError):
+        StateResolver(s,'Разговор завершён.','Нет.',continuity_decision=p).resolve(raw)
 
 
 def test_shared_history_is_relevant_but_not_disclosed_to_other_actors():
@@ -231,3 +236,73 @@ def test_external_decision_cannot_be_fabricated_in_continuity():
     with pytest.raises(StructuralDeltaError):StateResolver(s,'Разговор завершён.','').resolve(raw)
     row['player_evidence']='Я решил.'
     assert StateResolver(s,'Разговор завершён.','Я решил.').resolve(raw).state
+
+
+def test_unlinked_player_response_does_not_answer_all_pending_questions():
+    from test_npc_initiative import payload as action_payload, permit as action_permit
+    snap=setup(); player='Нет, на первый вопрос отвечаю отказом.'
+    raw=action_payload(snap,response='player_supplied',player_evidence=player)
+    out=StateResolver(snap['world_state'],raw['events'][0]['text'],player,
+        initiative_decision=action_permit(snap),
+        continuity_decision={'pending_response_ids':['first','second']}).resolve(raw)
+    assert out.history['turns'][0]['continuity']['answered_response_ids']==[]
+
+
+@pytest.mark.parametrize('reference,response,evidence',[
+    ('missing','player_supplied','Нет.'), ('first','open','Нет.'),
+    ('first','player_supplied','Да.')])
+def test_response_reference_requires_pending_id_and_current_player_evidence(reference,response,evidence):
+    from test_npc_initiative import payload as action_payload, permit as action_permit
+    snap=setup();before=deepcopy(snap)
+    raw=action_payload(snap,response=response,player_evidence=evidence,response_event_id=reference)
+    with pytest.raises(StructuralDeltaError):
+        StateResolver(snap['world_state'],raw['events'][0]['text'],'Нет.',
+            initiative_decision=action_permit(snap),
+            continuity_decision={'pending_response_ids':['first','second']}).resolve(raw)
+    assert snap==before
+
+
+def test_multiple_pending_responses_real_jobs_reload_regenerate_and_branch(tmp_path):
+    from backend.repositories.preparation import Repository
+    from backend.runtime_v3.repository import read_history
+    from devtools.narrative_test_world import load_fixture,ACTOR_ID
+    from test_narrative_test_world import CONFIG
+    from runtime_v3_fixture import execute
+    repo=Repository(tmp_path/'responses.sqlite');sid=load_fixture(repo,'continuity')['save']
+    a,b=ACTOR_ID,'qa_vera'
+    def run(kind,answer=None):
+        s=repo.get_snapshot(sid)['world_state']
+        text='Соня спрашивает о работе. Соня спрашивает о поездке.' if answer is None else 'Соня принимает ответ о работе.'
+        raw=dict(final_scene=dict(location_id=s['camera']['location_id'],present_character_ids=s['camera']['present_character_ids']),
+                 events=[],scene_actions=[])
+        for key in (['work','travel'] if answer is None else ['answer']):
+            raw['events'].append(dict(id=key,text=text,evidence=text,participants=[a,b],witnesses=[a,b],medium='conversation'))
+            claim=dict(actor_id=b,target_ids=[a],source_event_id=key,phase='continue',modality='speech',
+                       interruptible=True,response='open' if answer is None else 'player_supplied',evidence=text)
+            if answer is not None:claim.update(response_event_id=answer,player_evidence='На этот вопрос отвечаю: нет.')
+            raw['scene_actions'].append(claim)
+        job=repo.begin_job(sid,'' if kind=='start' else 'На этот вопрос отвечаю: нет.',kind,CONFIG)
+        execute(repo,job,raw,text)
+        job=repo.get_job(job);assert job['status']=='saved',job['error']
+        snap=repo.get_snapshot(sid)
+        with repo.connect() as db:history,_=read_history(db,snap['history_head'])
+        return snap,history,job
+    opened,history,_=run('start')
+    pending=permit(opened,history)['pending_response_ids']
+    assert len(pending)==2
+    answered,history,job=run('turn',pending[0])
+    assert history['turns'][-1]['continuity']['answered_response_ids']==[pending[0]]
+    assert permit(answered,history)['pending_response_ids']==[pending[1]]
+    repo=Repository(repo.path)
+    assert repo.get_snapshot(sid)==answered
+    turn=repo.list_turns(sid)[-1]
+    regenerated,history,regen=run('regenerate',pending[0])
+    assert recorded(json.loads(regen['context_json']))==recorded(json.loads(job['context_json']))
+    assert permit(regenerated,history)['pending_response_ids']==[pending[1]]
+    repo.select_variant(sid,turn['id'],turn['active_variant_id'],repo.get_save(sid)['revision'])
+    assert repo.get_snapshot(sid)==answered
+    repo.rollback_last(sid)
+    assert repo.get_snapshot(sid)==opened
+    branched,history,_=run('turn',pending[1])
+    assert history['turns'][-1]['continuity']['answered_response_ids']==[pending[1]]
+    assert permit(branched,history)['pending_response_ids']==[pending[0]]

@@ -92,3 +92,5 @@ correctly. Untagged semantic paraphrases are governed by the prompt; tests do no
 to establish literary quality. Coarse basis IDs should not be reused for unrelated
 questions; use the smallest relevant canonical basis. No live-provider evaluation or
 paid DeepSeek requests are required in CI.
+
+Player responses resolve only explicitly linked pending Events: scene_actions.response_event_id must belong to the recorded continuity permit and requires player_supplied with evidence from the current player input. An unlinked legacy action resolves no pending question. Validated compression records its single answered Event in History. Regeneration reuses the original permit; rollback and branches read their own immutable History lineage.
