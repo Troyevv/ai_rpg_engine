@@ -57,6 +57,35 @@ def read_history(db, head, *, limit=64):
     return result,warnings+audit_world_history(result)
 
 
+def continuity_reader(storage, head):
+    """Targeted receipts from the same History DAG, not a second memory store.
+
+    A rejection must not disappear just because ordinary turns push its Event
+    out of read_history's tail. Scope supplies IDs; SQL returns at most 64 Events.
+    Cache only within this request bound to its immutable before-head.
+    """
+    cache = {}
+    def read(basis_ids):
+        ids = tuple(sorted(set(basis_ids))[:48])
+        if not ids or not head: return []
+        if ids not in cache:
+            with storage.connect() as db:
+                values = db.execute('''WITH RECURSIVE lineage(id) AS (
+                    SELECT ? UNION SELECT h.parent_id FROM world_history_v3 h
+                    JOIN lineage l ON h.id=l.id WHERE h.parent_id IS NOT NULL
+                ) SELECT e.value FROM lineage l JOIN world_history_v3 h ON h.id=l.id,
+                    json_each(CASE WHEN json_valid(h.payload_json) THEN h.payload_json ELSE '{}' END,'$.events') e
+                WHERE e.type='object' AND json_type(e.value,'$.continuity')='array' AND EXISTS (
+                    SELECT 1 FROM json_each(e.value,'$.continuity') b,
+                    json_each(b.value,'$.basis_ids') basis
+                    WHERE basis.value IN (SELECT value FROM json_each(?)))
+                ORDER BY json_extract(e.value,'$.turn_id') DESC, json_extract(e.value,'$.id') DESC LIMIT 64''',
+                    (head, json.dumps(ids))).fetchall()
+            cache[ids] = [json.loads(value[0]) for value in reversed(values)]
+        return deepcopy(cache[ids])
+    return read
+
+
 def migrate_snapshot(db, source):
     """Idempotent even when the same before snapshot occurs in many variants."""
     from hashlib import sha256

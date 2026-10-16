@@ -51,6 +51,7 @@ def mentions(text, names):
 @dataclass
 class ContextScope:
     controlled_actor_id: str | None
+    continuity_decision: dict = field(default_factory=dict)
     development_sources: list = field(default_factory=list)
     pacing_decision: dict = field(default_factory=dict)
     initiative_decision: dict | None = None

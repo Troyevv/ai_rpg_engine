@@ -366,6 +366,42 @@ def choice_context(snapshot, scope, current, views, kind):
         recent_player_expression=recent))
 
 
+
+def compact_choice_context(current, choice):
+    """Lossless wire references to identical, already selected values only.
+
+    Never replace an actor-owned projection with a broader GM object. In
+    particular, a partial Knowledge/reproduction view must stay partial.
+    """
+    def encoded(value):
+        return json.dumps(value, ensure_ascii=False, separators=(',', ':'))
+    candidates = {}
+    def index(value, path):
+        if isinstance(value, (dict, list, str)) and value:
+            key = encoded(value)
+            ref = {'state_ref': path}
+            if len(encoded(ref).encode('utf-8')) < len(key.encode('utf-8')):
+                candidates.setdefault(key, ref)
+        if isinstance(value, dict):
+            for key, child in value.items():
+                index(child, path + '/' + key.replace('~', '~0').replace('/', '~1'))
+        elif isinstance(value, list):
+            for i, child in enumerate(value):
+                index(child, path + '/' + str(i))
+    index(current, '')
+    def compact(value):
+        if isinstance(value, (dict, list, str)):
+            ref = candidates.get(encoded(value))
+            if ref is not None:
+                return deepcopy(ref)
+        if isinstance(value, dict):
+            return {key: compact(child) for key, child in value.items()}
+        if isinstance(value, list):
+            return [compact(child) for child in value]
+        return value
+    return compact(choice)
+
+
 def pov_knowledge(state, actor, current):
     return [k for k in current['knowledge'] if k['actor_id'] == actor]
 
@@ -377,7 +413,7 @@ def actor_knowledge(state, scope, current):
 
 def build_context(snapshot, turns, user_text, kind, context_length, reserve, extraction_text=None,
                   validation_feedback=None, recent_turns=6, prompts=None, world_history=None,
-                  target_context_budget=18000, pacing_decision=None, initiative_decision=None):
+                  target_context_budget=18000, pacing_decision=None, initiative_decision=None, continuity_decision=None):
     from context_builder import estimate
     state = snapshot['world_state']; camera = state['camera']
     all_views = visible_views(snapshot, turns, kind)
@@ -393,7 +429,10 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         scope.history_events = [e for e in scope.history_events if not
             (string_ids(e.get('fact_ids', [])) & hidden) and (observer is None or observer in e.get('witnesses',[]) or all(known(state,observer,fid) for fid in string_ids(e.get('fact_ids',[]))) and bool(string_ids(e.get('fact_ids',[]))))]
     from backend.runtime_v3.pacing import development_sources, evaluate, extraction_policy
-    scope.development_sources = development_sources(state, scope, (world_history or {}).get('_milestone_query'))
+    scope.development_sources = development_sources(state, scope, (world_history or {}).get('_milestone_query'), world_history)
+    from backend.runtime_v3.continuity import project as continuity_project
+    scope.continuity_decision = deepcopy(continuity_decision) if continuity_decision is not None else continuity_project(state, scope, world_history)
+    if snapshot.get('_time_skip') or kind == 'background': scope.continuity_decision['compression'] = {'max_minutes':0,'boundary_ids':[]}
     scope.pacing_decision = deepcopy(pacing_decision) if pacing_decision is not None else evaluate(state, scope)
     from backend.runtime_v3.initiative import scene_plan
     scope.initiative_decision = deepcopy(initiative_decision) if initiative_decision is not None else scene_plan(state, scope)
@@ -411,6 +450,8 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         milestones = [m for m in milestones if not m['category'].startswith('possession_') or known(state, scope.pov_actor_id or scope.controlled_actor_id, m.get('fact_id'))]
     if milestones: current['milestones'] = list(milestones)
     if extraction_text is not None:
+        current['continuity'] = {key: value for key, value in scope.continuity_decision.items()
+                                 if key not in ('pressure', 'ordinary_scene_valid', 'extra_llm_calls')}
         current['narrative_policy'] = extraction_policy(scope.pacing_decision)
         current['scene_agency'] = {k:v for k,v in scope.initiative_decision.items() if k not in ('optional','extra_llm_calls')}
         if 'actors' in current['scene_agency']:
@@ -578,6 +619,34 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
             if message['content'].startswith('Entity IDs\n'):
                 replace_block('Entity IDs', nonempty(json.loads(message['content'].split('\n', 1)[1])))
                 break
+    if builder.extraction and estimate(messages) > hard_context_limit and not any(
+            actor.get('personality') for actor in current['characters'].values()):
+        # Optional personality evaluation was already elided above. Its output
+        # schema must not crowd out mandatory scene/continuity validation when
+        # there is no supplied baseline to evaluate. No canonical data is lost.
+        for message in messages:
+            if message['content'].startswith('JSON Schema\n'):
+                schema = json.loads(message['content'].split('\n', 1)[1])
+                for section in ('development_evidence', 'personality_deltas'):
+                    schema['properties'].pop(section, None)
+                if not any(actor.get('values') for actor in current['characters'].values()):
+                    schema['properties'].pop('value_deltas', None)
+                # Shared definitions belonging only to omitted evaluations do
+                # not need to remain in the wire schema.
+                used = set()
+                def references(node):
+                    if isinstance(node, dict):
+                        ref = node.get('$ref', '').removeprefix('#/$defs/')
+                        if ref and ref not in used:
+                            used.add(ref)
+                            references(schema.get('$defs', {}).get(ref, {}))
+                        for value in node.values(): references(value)
+                    elif isinstance(node, list):
+                        for value in node: references(value)
+                references(schema['properties'])
+                schema['$defs'] = {key:value for key,value in schema.get('$defs', {}).items() if key in used}
+                replace_block('JSON Schema', schema)
+                break
     # Possession support is bounded by both its own cap and the request budget.
     # Keep explicitly named objects; omit lower-ranked incidental property first.
     for item in reversed(list(current.get('possessions', []))):
@@ -585,6 +654,23 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         if item['id'] in scope.required_possession_ids: continue
         current['possessions'].remove(item)
         refresh_current()
+    if builder.extraction and estimate(messages) > hard_context_limit:
+        # Run after every current-state mutation so pointers address the final
+        # wire block, including default elision. No additional context is selected.
+        for message in messages:
+            if message['content'].startswith('Choice context / controlled actor\n'):
+                choice = json.loads(message['content'].split('\n', 1)[1])
+                compacted = compact_choice_context(current, choice)
+                instruction = ('\nChoice context state_ref is a JSON Pointer to exactly that value '
+                    'in Текущее состояние / GM-only; it grants no other GM knowledge.')
+                candidate = block('Choice context / controlled actor', compacted)
+                # Account for the reference instruction too: compaction must
+                # never make a small context larger.
+                if len(candidate['content'].encode('utf-8')) + len(instruction.encode('utf-8')) < len(message['content'].encode('utf-8')):
+                    replace_block('Choice context / controlled actor', compacted)
+                    messages[0]['content'] = messages[0]['content'].replace(
+                        'Постоянные правила\n', 'Постоянные правила' + instruction + '\n', 1)
+                break
     if estimate(messages) > hard_context_limit:
         raise ValueError('Контекст v3 не помещается в выбранную модель. Увеличь контекст или уменьши лимит ответа. Критические данные сцены и последние narrative сохранены.')
     classifier = CharacterContextClassifier()
@@ -620,7 +706,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     for mode in (FULL_PRESENT, FULL_REMOTE, ACTIVE_REFERENCED):
         knowledge_counts[mode] = sum(k['actor_id'] != scope.controlled_actor_id and classifier.classify(k['actor_id'], scope) == mode for k in current['knowledge'])
     diagnostics = dict(mode=('World Simulation ' if kind == 'background' else '') + ('Extraction' if builder.extraction else 'Narrative'),
-        initiative=scope.initiative_decision, pacing=scope.pacing_decision, characters=counts, character_included=included_counts, knowledge=knowledge_counts,
+        continuity=scope.continuity_decision, initiative=scope.initiative_decision, pacing=scope.pacing_decision, characters=counts, character_included=included_counts, knowledge=knowledge_counts,
         semantic=scope.semantic_diagnostics, entities=entities, character_total=len(state['characters']), sections=sections,
         narrative_continuity=0 if builder.extraction else len(views), previous_player_inputs=0 if builder.extraction else len(views),
         target_context_budget=target, hard_context_limit=hard_context_limit, target_exceeded=estimate(messages)>target)

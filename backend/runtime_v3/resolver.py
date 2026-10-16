@@ -32,7 +32,7 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None):
         if mode not in ("turn", "background"):
             raise ValueError("Неизвестный режим StateResolver.")
         self.protected_actor_id = protected_actor_id or before['camera']['controlled_actor_id']
@@ -40,6 +40,7 @@ class StateResolver:
         self.death_policy = death_policy or NarrativeDeathPolicy()
         self.pacing_decision = pacing_decision
         self.initiative_decision = initiative_decision
+        self.continuity_decision = continuity_decision
         self.mode = mode
         self.protected_knowledge_actor_ids = set(protected_knowledge_actor_ids or [self.protected_actor_id])
         self.milestone_query = milestone_query
@@ -145,6 +146,8 @@ class StateResolver:
                       'elapsed_minutes', code='background_elapsed_ignored')
             self.warnings[-1].update(proposed_minutes=elapsed, applied_minutes=0)
             elapsed = 0
+        from backend.runtime_v3.continuity import validate_compression
+        validate_compression(self, scene, elapsed)
         situation = scene.get('situation',camera['situation'])
         if not isinstance(situation,str):
             fatal('некорректное описание камеры', 'camera_invalid', repairable=True)
@@ -358,7 +361,7 @@ class StateResolver:
             if not isinstance(item.get('id'), str) or not item['id']:
                 self.warn('thread_changes', i, 'отсутствует ID'); continue
             fields = deepcopy(s['threads'].get(item.get('id'), {}))
-            fields.update({key:item[key] for key in Thread.model_fields if key in item})
+            fields.update({key:item[key] for key in Thread.model_fields if key in item and key != 'source_event_id'})
             entry = self.typed(Thread, fields, 'thread_changes', i)
             if entry:
                 for cid in entry['character_ids']: self.actor(cid, 'thread_changes', i)
@@ -395,6 +398,8 @@ class StateResolver:
         if accepted:
             s['meta']['pacing_recent'] = (s['meta']['pacing_recent'] + accepted)[-12:]
             self.history.state_changes.append(dict(kind='narrative_developments',accepted=accepted,turn_id=self.turn_id))
+        from backend.runtime_v3.continuity import apply as apply_continuity, turn_signal, filter_choices
+        apply_continuity(self, raw, events)
         upserts = {section:{key:deepcopy(value) for key,value in s[section].items() if value != self.before[section].get(key)}
             for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions','residences','roles','organizations','reproductive_events','pregnancies','naming_decisions','possessions')}
         digest = sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
@@ -411,8 +416,9 @@ class StateResolver:
                 change['source_record_id'] = record_id
         self.history.turns.append(dict(id=record_id,turn_id=self.turn_id,sequence=self.turn_id-1,
             narrative=self.narrative,player_input=self.player_input,
-            camera_before=deepcopy(self.before['camera']),camera=deepcopy(state['camera']),
+            continuity=turn_signal(self), camera_before=deepcopy(self.before['camera']),camera=deepcopy(state['camera']),
             game_time_before=self.before['meta']['world_time'],world_time=state['meta']['world_time'],
             player_observed=self.observed))
         choices = raw.choices if self.mode != 'background' and camera['mode'] == 'actor' and controlled and capabilities(state,controlled)['can_act'] else []
+        choices = filter_choices(self, choices)
         return ResolvedTurn(state,patch,self.history.to_dict(),self.warnings,choices,self.cards)

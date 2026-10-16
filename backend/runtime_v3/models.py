@@ -489,6 +489,7 @@ class Relationship(StrictModel):
 
 
 class Thread(StrictModel):
+    source_event_id: str | None = None
     stakes_for: list[str] = Field(default_factory=list, max_length=8)
     favorable_path: FavorablePath | None = None
     id: str

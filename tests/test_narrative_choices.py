@@ -143,7 +143,8 @@ def test_arbitrary_suggestions_never_change_state_patch_or_history(choices):
     baseline=StateResolver(s,'Тишина.','Наблюдаю.').resolve(raw(s))
     offered=StateResolver(s,'Тишина.','Наблюдаю.').resolve(raw(s,choices=choices))
     assert offered.state==baseline.state and offered.patch==baseline.patch and offered.history==baseline.history
-    assert offered.choices==choices[:6] and s==before
+    assert all(choice in choices[:6] for choice in offered.choices) and s==before
+    assert len({(c['action'].strip(),c['speech'].strip()) for c in offered.choices})==len(offered.choices)
 
 
 def test_proposal_is_not_evidence_and_atypical_manual_input_is_allowed():
@@ -165,7 +166,7 @@ def test_proposal_is_not_evidence_and_atypical_manual_input_is_allowed():
 
 def test_schema_compatibility_and_context_pressure_no_hidden_copy():
     schema=extraction_schema()['properties']['choices']
-    assert set(schema['items']['properties'])=={'action','speech'}
+    assert set(schema['items']['properties'])=={'action','speech','basis_ids','kind'}
     assert prompt_schema()['properties']['choices']['items']['required']==['action','speech']
     s=initial(); state=s['world_state']
     for i in range(40):

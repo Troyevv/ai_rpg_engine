@@ -26,7 +26,7 @@ class NarrativeDeathPolicy:
         return risk[key]
 
 
-def development_sources(state, scope, read):
+def development_sources(state, scope, read, history=None):
     """Newest visible canonical transitions; no archive-to-actor expansion."""
     if read is None: return []
     now = state['meta']['world_time']
@@ -41,9 +41,12 @@ def development_sources(state, scope, read):
         # A source is not a new disclosure to the camera or any NPC.
         if observer and state['knowledge'].get(observer+':'+str(row.get('fact_id')),{}).get('status') != 'known':
             if row['category'] != 'protagonist_transition' or observer not in row['actor_ids']: continue
-        result.append(dict(id=row['id'],category=row['category'],actor_ids=row['actor_ids'],
+        later = sum(turn.get('world_time', -1) > minute and bool(turn.get('continuity', {}).get('progress'))
+                    for turn in (history or {}).get('turns', [])[-32:])
+        known_by = [cid for cid in actors if state['knowledge'].get(cid+':'+str(row.get('fact_id')), {}).get('status') == 'known']
+        result.append(dict(known_by=known_by,id=row['id'],category=row['category'],actor_ids=row['actor_ids'],
             minute=minute,summary=row['summary'][:240],fact_id=row.get('fact_id'),
-            freshness=round(1-(now-minute)/43200,4)))
+            freshness=round((1-(now-minute)/43200)/(1+later/4),4)))
     return sorted(result,key=lambda row:(-row['minute'],row['id']))[:6]
 
 
@@ -76,11 +79,16 @@ def evaluate(state, scope):
         if pressure >= pacing['pressure_limit']: reasons.append('recent_pressure')
         if family != 'existing_thread' and active >= pacing['thread_cap']: reasons.append('thread_cap')
         if family=='external_disruption' and pacing['disruption']==0: reasons.append('disruption_disabled')
-        score = round(min(1.,score+elapsed_signal),4)
+        continuity = getattr(scope, 'continuity_decision', {})
+        if any((row.get('fact_id') or row['id']) in beat['basis_ids'] and beat['status'] in ('resolved','rejected')
+               for beat in continuity.get('recent_beats', []) if beat['kind']=='opportunity'):
+            reasons.append('continuity_resolved')
+        score = round(min(1.,score+elapsed_signal+continuity.get('pressure',0)),4)
         if score < pacing['relevance_floor']: reasons.append('low_relevance')
         candidates.append(dict(id=cid,family=family,source_kind=collection,source_id=row['id'],
             actor_ids=sorted(actors)[:8],basis_ids=[row.get('fact_id') or row['id']],relevance=score,context=text[:240],eligible=not reasons,
             reasons=reasons,selected=False))
+        if 'known_by' in row: candidates[-1]['known_by'] = row['known_by']
     for tid in scope.thread_ids[:6]:
         t=state['threads'][tid]
         add('existing_thread','threads',t,.45+.35*t['relevance']+.2*pacing['intensity'],t['description'],t['character_ids'])

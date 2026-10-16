@@ -5,7 +5,7 @@ import json
 from backend.runtime_v3.models import fatal
 from backend.services.relation_dimensions import RELATION_DIMENSIONS
 
-SECTIONS = ('scene_actions','narrative_developments','consequences','locations','promotions','events','facts','knowledge_gained','character_changes',
+SECTIONS = ('scene_transitions','continuity_beats','scene_actions','narrative_developments','consequences','locations','promotions','events','facts','knowledge_gained','character_changes',
             'relationship_changes','movements','thread_changes','scheduled_event_changes',
             'life_changes','condition_changes','social_relation_changes',
             'location_changes','organization_changes','residence_changes','role_changes',
@@ -36,7 +36,7 @@ class RawTurnResult:
         for section in SECTIONS:
             values = payload.get(section, [])
             if not isinstance(values, list):
-                if section in ('scene_actions','consequences','narrative_developments'):
+                if section in ('scene_transitions','continuity_beats','scene_actions','consequences','narrative_developments'):
                     fatal('некорректная секция политики истории', 'narrative_policy_section_invalid', repairable=False, section=section)
                 warnings.append(dict(section=section, code='optional_section_invalid', action='drop_section', reason='ожидался список'))
                 values = []
@@ -85,6 +85,10 @@ def extraction_schema():
     }
     from backend.runtime_v3.narrative_policy_models import NarrativeDevelopment, ConsequenceClaim, FavorablePath
     from backend.runtime_v3.initiative import SceneAction
+    from backend.runtime_v3.continuity import ContinuityBeat, SceneTransition, Compression
+    definitions['continuity_beats'] = ContinuityBeat.model_json_schema()
+    definitions['scene_transitions'] = SceneTransition.model_json_schema()
+    definitions['thread_changes']['properties']['source_event_id'] = string
     definitions['scene_actions'] = SceneAction.model_json_schema()
     definitions['narrative_developments'] = NarrativeDevelopment.model_json_schema()
     definitions['consequences'] = ConsequenceClaim.model_json_schema()
@@ -179,8 +183,8 @@ def extraction_schema():
         remote_interactions={'type':'array','items':record(dict(actor_id=string,
             channel={'enum':['message','phone','video','radio','other']}), ('actor_id','channel','evidence')),
             'description':'Только продолжающееся в конце хода активное удалённое взаимодействие. Старое сообщение, план позвонить и упоминание не подходят. Повторно подтверди каждый ход; отсутствие/[] завершает взаимодействие.'},
-        situation=string,situation_evidence=evidence,elapsed_minutes={'type':'integer','minimum':0,'maximum':10080}), ('location_id','present_character_ids')),
-        choices={'type':'array','items':obj(dict(action=string,speech=string),('action','speech'))}, **{key:{'type':'array','items':value} for key,value in definitions.items()}), ('final_scene',))
+        compression=Compression.model_json_schema(),situation=string,situation_evidence=evidence,elapsed_minutes={'type':'integer','minimum':0,'maximum':10080}), ('location_id','present_character_ids')),
+        choices={'type':'array','items':obj(dict(action=string,speech=string,basis_ids=strings,kind={'enum':['question','proposal','information','decision','opportunity']}),('action','speech'))}, **{key:{'type':'array','items':value} for key,value in definitions.items()}), ('final_scene',))
     schema['description'] = ('RawTurnResult: только наблюдения и подтверждённые изменения. Не создавай StatePatch. '
         'Final scene задаёт конечное положение участников; movements нужны только для остальных. '
         'Не копируй from_location, scene_id, last_event_id. Не придумывай время Event. '
