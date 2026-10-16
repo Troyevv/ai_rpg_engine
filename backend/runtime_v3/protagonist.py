@@ -71,6 +71,7 @@ def transition(snapshot, operation, actor_id, operation_id, *, pov_actor_id=None
     lid = actor['location_id']
     present = [cid for cid,c in state['characters'].items() if c['location_id']==lid and c['life_status']!='dead'] if lid else [actor_id]
     controlled = actor_id if operation != 'observe' and capabilities(state,actor_id)['can_act'] else None
+    state['meta']['interaction_focus'] = 'physical'
     before_camera=deepcopy(state['camera'])
     state['camera'].update(location_id=lid,present_character_ids=present,controlled_actor_id=controlled,
         subject_id=actor_id,pov_actor_id=pov,mode='actor' if controlled else 'observer',

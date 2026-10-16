@@ -44,6 +44,17 @@ def runtime_v3_request(messages):
 def stream(**kwargs):
     full='\n'.join(m['content'] for m in kwargs['messages'])
     observer='Тип хода: background' in full or 'Режим observer:' in full or 'mode=observer' in full
+    if kwargs['messages'][0]['content'].startswith('Select at most ONE optional grounded autonomous remote action.'):
+        yield '{"action":null}'
+        return
+    current_message=next((m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only\n')),None)
+    current_phone=json.loads(current_message.split('\n',1)[1]) if current_message else {}
+    if current_phone.get('communication'):
+        camera=current_phone['camera']
+        if kwargs.get('response_format'):
+            yield json.dumps(dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),choices=[dict(action='Посмотреть в окно',speech='')]),ensure_ascii=False)
+        else: yield 'В комнате тихо. За окном шелестят листья.'
+        return
     if 'qa_meeting' in full:
         current=json.loads(next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only\n')).split('\n',1)[1])
         task=json.loads(next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')).split('\n',1)[1])
@@ -262,6 +273,24 @@ if __name__ == '__main__':
         engine.run_job(app.state.repository.path,job,engine.Worker())
         assert app.state.repository.get_job(job)['status']=='saved'
         return {'world':result['world'],'save':result['save']}
+
+    @app.post('/test/phone-seed')
+    def phone_seed():
+        from devtools.narrative_test_world import load_fixture
+        from test_narrative_test_world import CONFIG
+        from backend.runtime_v3.remote import apply
+        from backend.runtime_v3.repository import append_history
+        result=load_fixture(app.state.repository,'phone')
+        repo=app.state.repository;sid=result['save']
+        job=repo.begin_job(sid,'','start',CONFIG)
+        engine.run_job(repo.path,job,engine.Worker())
+        assert repo.get_job(job)['status']=='saved', repo.get_job(job)['error']
+        snap=repo.get_snapshot(sid)
+        snap,batch=apply(snap,dict(action='call',operation_id='qa-incoming-call',contact_id='phone-qa_vera-qa-kirill'),actor_id='qa_vera',autonomous=True)
+        with repo.connect() as db:
+            snap['history_head']=append_history(db,snap.get('history_head'),batch)
+            db.execute('UPDATE saves SET state_json=?,revision=revision+1 WHERE id=?',(json.dumps(snap,ensure_ascii=False),sid))
+        return {'world':result['world'],'save':sid}
 
     @app.post('/test/initiative-seed')
     def initiative_seed():

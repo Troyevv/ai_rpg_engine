@@ -58,6 +58,8 @@ def create_app(db_path=None, recover=True):
     install_narrative_policy(app,repo)
     from backend.api.portraits import register as register_portraits
     register_portraits(app,repo)
+    from backend.api.remote import install as install_remote
+    install_remote(app,repo)
     app.state.repository = repo
     app.state.preparation = preparation
 

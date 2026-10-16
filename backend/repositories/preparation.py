@@ -65,6 +65,9 @@ class Repository(PresentationStorage, DraftStorage, Storage):
 
     @staticmethod
     def public_job(job):
+        staged = json.loads(job.get('memory_before_json') or '{}').get('_remote_batch')
+        if staged and job.get('status') != 'saved':
+            job = {**job, 'narrative': ''}
         if job.get('kind','').startswith('draft_'):
             job={**job,'narrative':'','progress_chars':len(job.get('narrative',''))}
         return {k: v for k, v in job.items() if k not in ('config_json', 'before_json', 'context_json', 'memory_before_json', 'warnings_json')}

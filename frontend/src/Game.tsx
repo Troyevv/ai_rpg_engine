@@ -1,5 +1,6 @@
 import {SkinHeader} from './ThemeDecorationLayer';
 import {useTheme,themes} from './ThemeProvider';
+import {Phone} from './Phone';
 import {TimeSkip} from './TimeSkip';
 import {RuntimeNotifications} from './RuntimeNotifications';
 import {useMotionPreset} from "./motion";
@@ -430,6 +431,7 @@ export function Game({
       </div>
       {save && (
         <div className="composer">
+          <Phone save={save} disabled={busy||pending} onCommit={refreshControl}/>
           <div className="composer-inner">
             <Textarea
               ref={input}

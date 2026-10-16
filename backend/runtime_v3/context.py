@@ -1,3 +1,4 @@
+from backend.runtime_v3.models import identity
 """Scene-first Narrative and Extraction projections of one canonical world."""
 from backend.runtime_v3.knowledge import context_rows
 from copy import deepcopy
@@ -420,6 +421,13 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     # Respect an explicit smaller user setting, but never exceed six narrative turns.
     views = all_views[-min(6, max(0, recent_turns)):] if recent_turns else []
     scope = RelevanceResolver().resolve(snapshot, user_text, all_views[-3:], world_history, extraction_text)
+    observer = scope.pov_actor_id or scope.controlled_actor_id
+    remote_private = {identity('communicated_text', e['id']) for e in state.get('remote_events', {}).values()
+                      if e['channel']=='TEXT_MESSAGE' and observer not in e['read_by'] and observer != e['sender_id']}
+    scope.fact_ids = [fid for fid in scope.fact_ids if fid not in remote_private]
+    scope.knowledge_ids = [key for key in scope.knowledge_ids if state['knowledge'][key]['fact_id'] not in remote_private]
+    from backend.runtime_v3.scope import string_ids
+    scope.history_events = [e for e in scope.history_events if not string_ids(e.get('fact_ids', [])) & remote_private]
     if extraction_text is None:
         from backend.runtime_v3.possessions import private_fact_ids as possession_facts, known
         from backend.runtime_v3.scope import string_ids
@@ -437,6 +445,9 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     from backend.runtime_v3.initiative import scene_plan
     scope.initiative_decision = deepcopy(initiative_decision) if initiative_decision is not None else scene_plan(state, scope)
     current = canonical_slice(state, scope, extraction_text is not None, user_text+'\n'+(extraction_text or ''))
+    from backend.runtime_v3.remote import context_projection as remote_context
+    remote = remote_context(state)
+    if remote: current['communication'] = remote
     if kind == 'background' and not camera.get('pov_actor_id'):
         from backend.runtime_v3.reproduction import context_projection
         current.update(context_projection(state,scope.relevant_actor_ids,None,extraction=True))

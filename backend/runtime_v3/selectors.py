@@ -158,6 +158,7 @@ def ui_view(snapshot, history=None):
         for key in ('birth_provenance','biological_sex','identity_components','reproductive_capability'):
             actor.pop(key,None)
     protected=private_fact_ids(state)
+    protected |= {identity('communicated_text',e['id']) for e in state.get('remote_events',{}).values() if e['channel']=='TEXT_MESSAGE' and observer != e['sender_id']}
     hidden_facts={fid for fid in protected if state['knowledge'].get(str(observer)+':'+fid,{}).get('status')!='known'}
     world['facts']={k:v for k,v in world['facts'].items() if k not in hidden_facts}
     result['facts']=[f for f in result['facts'] if f['id'] not in hidden_facts]
@@ -176,6 +177,8 @@ def ui_view(snapshot, history=None):
             if predicate=='pregnancy': f['text']='Беременность установлена'
             elif predicate=='child_count': f['text']='Количество детей: '+claim['value']
             elif predicate=='child_sex': f['text']='Пол ребёнка: '+{'female':'женский','male':'мужской'}.get(claim['value'],claim['value'])
+    from backend.runtime_v3.remote import projection as phone_projection
+    result['phone'] = phone_projection(dict(snapshot,world_state=state))
     result['runtime_version']=3
     result['last_time_skip']=deepcopy(snapshot.get('last_time_skip'))
     from backend.runtime_v3.notifications import notifications

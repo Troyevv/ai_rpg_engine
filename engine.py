@@ -181,6 +181,9 @@ def run_job(path, job_id, handle):
                     timings['memory_compaction']=0.0
                     if handle.cancelled.is_set():
                         return
+                    if job['kind'] not in ('background', 'pov') and not skip_result:
+                        from backend.runtime_v3.remote_initiative import stage as stage_remote
+                        before = stage_remote(before, generate, 'job-' + job_id)
                     messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
                     storage.save_context(job_id,messages,before)
                 last_write = 0.0
@@ -245,6 +248,8 @@ def run_job(path, job_id, handle):
                     audience=list(resolved.state['camera']['present_character_ids'])
                     warnings=resolved.warnings
                     history_batch=resolved.history
+                    for section, records in state.pop('_remote_batch', {}).items():
+                        history_batch.setdefault(section, [])[:0] = records
                     if warnings:
                         with storage.connect() as db:
                             previous=json.loads(db.execute('SELECT warnings_json FROM game_jobs WHERE id=?',(job_id,)).fetchone()[0] or '[]')

@@ -165,8 +165,11 @@ def migrate_v2(original):
     if 'reproduction_policy' in world: state['reproduction_policy'] = deepcopy(world['reproduction_policy'])
     state['objective_relations'] = deepcopy(world.get('objective_relations',{}))
     state['conditions'] = deepcopy(world.get('conditions',{}))
-    for section in ('residences','roles','organizations','possessions'):
+    for section in ('residences','roles','organizations','possessions','contacts','conversations','remote_events'):
         state[section] = deepcopy(world.get(section,{}))
+    if world.get('communication'):
+        from backend.runtime_v3.remote_models import CommunicationCapabilities
+        state['meta']['communication'] = CommunicationCapabilities.model_validate(world['communication']).model_dump()
     configured = old.get('world_clock', {}).get('calendar')
     if configured:
         from backend.runtime_v3.models import Calendar

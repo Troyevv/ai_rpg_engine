@@ -128,7 +128,12 @@ class ProtagonistPeriod(StrictModel):
 from backend.runtime_v3.narrative_policy_models import (NarrativePacingProfile, NarrativeRiskProfile, OutcomePreference, PacingRecord, FavorablePath)
 
 
+from backend.runtime_v3.remote_models import CommunicationCapabilities, Contact, Conversation, RemoteEvent
+
+
 class Meta(StrictModel):
+    communication: CommunicationCapabilities = Field(default_factory=CommunicationCapabilities)
+    interaction_focus: Literal["physical", "call"] = "physical"
     narrative_pacing: NarrativePacingProfile = Field(default_factory=NarrativePacingProfile)
     narrative_risk: NarrativeRiskProfile = Field(default_factory=NarrativeRiskProfile)
     outcome_preference: OutcomePreference = "natural"
@@ -540,6 +545,9 @@ class SignificantPossession(StrictModel):
 
 
 class WorldStateV3(StrictModel):
+    contacts: dict[str, Contact] = Field(default_factory=dict)
+    conversations: dict[str, Conversation] = Field(default_factory=dict)
+    remote_events: dict[str, RemoteEvent] = Field(default_factory=dict)
     meta: Meta = Field(default_factory=Meta)
     camera: Camera
     characters: dict[str, Character]
@@ -664,6 +672,8 @@ def assert_world_state_v3_invariants(state, before=None):
     from backend.runtime_v3.reproduction import validate_reproduction
     try: validate_reproduction(value)
     except ValueError as exc: fatal(str(exc), 'reproduction_state_invalid')
+    from backend.runtime_v3.remote import validate_state as validate_remote
+    validate_remote(value)
     if before and (value['meta']['world_time'] < before['meta']['world_time'] or value['meta']['turn_id'] < before['meta']['turn_id']):
         fatal('время или номер хода движется назад')
     return value
@@ -700,7 +710,7 @@ class StatePatch:
             fatal('patch создан для другого состояния', 'stale_patch')
         result = deepcopy(before)
         for section, records in self.upserts.items():
-            if section not in ('characters', 'locations', 'facts', 'knowledge', 'relationships', 'threads', 'scheduled_events', 'objective_relations', 'conditions', 'residences', 'roles', 'organizations', 'reproductive_events', 'pregnancies', 'naming_decisions', 'possessions'):
+            if section not in ('characters', 'locations', 'facts', 'knowledge', 'relationships', 'threads', 'scheduled_events', 'objective_relations', 'conditions', 'residences', 'roles', 'organizations', 'reproductive_events', 'pregnancies', 'naming_decisions', 'possessions', 'contacts', 'conversations', 'remote_events'):
                 fatal('неизвестная секция patch')
             result.setdefault(section, {}).update(deepcopy(records))
         result['meta'], result['camera'] = deepcopy(self.meta), deepcopy(self.camera)

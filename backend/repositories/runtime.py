@@ -334,3 +334,40 @@ class RuntimeStorage:
                 (save_id,revision,dump(prior),dump(after),parent[0] if parent else None))
             project(db,save_id,after)
             db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?',(dump(after),save_id))
+
+    def remote_action(self, save_id, revision, command):
+        from backend.runtime_v3.remote import apply
+        from backend.runtime_v3.remote_models import RemoteCommand
+        from backend.runtime_v3.repository import append_history, migrate_snapshot
+        from backend.runtime_v3.milestones import stable_id
+        from backend.repositories.living_world import project
+        command = RemoteCommand.model_validate(command).model_dump()
+        digest = stable_id('remote_command', command)
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            self._assert_idle(db, save_id)
+            row = db.execute('SELECT * FROM saves WHERE id=?', (save_id,)).fetchone()
+            if not row: raise ValueError('Прохождение не найдено.')
+            source = json.loads(row['state_json'])
+            if source.get('mode')=='tabletop' or source.get('runtime')=='tabletop':
+                raise ValueError('Телефон доступен только в Narrative.')
+            prior, _ = migrate_snapshot(db, source)
+            receipt = db.execute("""WITH RECURSIVE lineage(id,parent_id,payload_json) AS (
+                SELECT id,parent_id,payload_json FROM world_history_v3 WHERE id=?
+                UNION ALL SELECT h.id,h.parent_id,h.payload_json FROM world_history_v3 h JOIN lineage l ON h.id=l.parent_id)
+                SELECT j.value FROM lineage,json_each(lineage.payload_json,'$.state_changes') j
+                WHERE json_extract(j.value,'$.operation_id')=? AND json_extract(j.value,'$.kind')='remote_receipt' LIMIT 1""",
+                (prior.get('history_head'), command['operation_id'])).fetchone()
+            if receipt:
+                if json.loads(receipt[0])['command_digest'] != digest: raise ValueError('ID операции уже использован с другими данными.')
+                return prior
+            if row['revision'] != revision: raise ValueError('Сейв изменился. Обнови телефон.')
+            after, batch = apply(prior, command)
+            batch['state_changes'].append(dict(kind='remote_receipt', operation_id=command['operation_id'],command_digest=digest))
+            after['history_head'] = append_history(db, prior.get('history_head'), batch)
+            parent = db.execute('SELECT active_variant_id FROM turns WHERE save_id=? ORDER BY sequence DESC LIMIT 1',(save_id,)).fetchone()
+            db.execute('INSERT INTO actor_switches(save_id,revision,before_json,after_json,parent_variant_id) VALUES(?,?,?,?,?)',
+                (save_id, revision, dump(prior), dump(after), parent[0] if parent else None))
+            project(db, save_id, after)
+            db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?', (dump(after),save_id))
+            return after

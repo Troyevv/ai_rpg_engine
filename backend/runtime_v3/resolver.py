@@ -168,6 +168,11 @@ class StateResolver:
             record = self.typed(RemoteInteraction, dict(actor_id=cid, channel=interaction.get('channel'),
                                 last_active_turn=self.turn_id), 'final_scene', index)
             if record: remote.append(record)
+        from backend.runtime_v3.remote import active_call, participants
+        call = active_call(s, camera['controlled_actor_id'])
+        if s['meta']['communication']['presentation'] == 'phone':
+            remote = [dict(actor_id=cid, channel='phone', last_active_turn=self.turn_id)
+                      for cid in sorted(participants(call) - set(present))] if call and call['status']=='answered' else []
         camera['remote_interactions'] = remote
         camera.update(location_id=lid,present_character_ids=present,situation=situation)
         s['camera'] = camera
@@ -400,8 +405,10 @@ class StateResolver:
             self.history.state_changes.append(dict(kind='narrative_developments',accepted=accepted,turn_id=self.turn_id))
         from backend.runtime_v3.continuity import apply as apply_continuity, turn_signal, filter_choices
         apply_continuity(self, raw, events)
+        from backend.runtime_v3.remote import advance as advance_remote
+        advance_remote(s, self.history)
         upserts = {section:{key:deepcopy(value) for key,value in s[section].items() if value != self.before[section].get(key)}
-            for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions','residences','roles','organizations','reproductive_events','pregnancies','naming_decisions','possessions')}
+            for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions','residences','roles','organizations','reproductive_events','pregnancies','naming_decisions','possessions','contacts','conversations','remote_events')}
         digest = sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
         patch = StatePatch(digest,deepcopy(s['meta']),deepcopy(s['camera']),upserts)
         state = patch.apply(self.before)
@@ -421,4 +428,11 @@ class StateResolver:
             player_observed=self.observed))
         choices = raw.choices if self.mode != 'background' and camera['mode'] == 'actor' and controlled and capabilities(state,controlled)['can_act'] else []
         choices = filter_choices(self, choices)
+        if s['meta']['communication']['presentation']=='phone':
+            choices = [dict(c, interaction_channel=s['meta']['interaction_focus']) for c in choices if c.get('device_control') is None]
+            remote_call = active_call(self.before, controlled)
+            if remote_call:
+                remote_ids = participants(remote_call) - set(self.before['camera']['present_character_ids'])
+                if remote_ids & set(state['camera']['present_character_ids']):
+                    fatal('Звонок не переносит собеседника в физическую сцену.', 'remote_false_colocation')
         return ResolvedTurn(state,patch,self.history.to_dict(),self.warnings,choices,self.cards)

@@ -14,6 +14,33 @@ CURRENT = frozenset(('known', 'suspected'))
 RETIRED = frozenset(('outdated', 'refuted', 'superseded'))
 
 
+def acquire_communication(state, actor_id, fact_id, interaction, batch):
+    """Runtime-proven perception, sharing Knowledge/History with extraction.
+
+    Only a message's exact communicated testimony is admitted here. Arbitrary
+    World Truth fact IDs cannot ride along with a delivery or a read command.
+    """
+    if actor_id not in interaction['read_by'] or actor_id not in interaction['delivered_to']:
+        raise ValueError('Communication was not perceived.')
+    expected = identity('communicated_text', interaction['id'])
+    fact = state['facts'].get(fact_id)
+    if fact_id != expected or not fact or fact['text'] != 'Сообщение: «'+interaction['content']+'»':
+        raise ValueError('Communication provenance mismatch.')
+    key = actor_id + ':' + fact_id
+    if key in state['knowledge']: return
+    eid = identity('remote_read', interaction['id'], actor_id)
+    entry = Knowledge(actor_id=actor_id, fact_id=fact_id, source_event_id=eid,
+        source_turn=state['meta']['turn_id'], revision=1, evidence=interaction['content']).model_dump()
+    state['knowledge'][key] = entry
+    batch.events.append(dict(id=eid, remote_interaction_id=interaction['id'],
+        text=interaction['content'], evidence=interaction['content'], medium='message',
+        author_id=interaction['sender_id'], participants=sorted({interaction['sender_id'],actor_id}),
+        witnesses=[actor_id], fact_ids=[fact_id], turn_id=state['meta']['turn_id'],
+        minute=state['meta']['world_time'], player_observed=actor_id==state['camera']['controlled_actor_id']))
+    batch.knowledge_acquisitions.append(dict(entry, turn_id=state['meta']['turn_id'],
+        trigger_fact_id=fact_id, before=None, after=deepcopy(entry)))
+
+
 def slot(fact):
     claim = fact.get('claim')
     return (claim['subject_id'], claim['predicate'], claim.get('scope', '')) if claim else None
