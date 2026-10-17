@@ -1,0 +1,124 @@
+.phone-affordance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+  padding: 0.6rem 1rem;
+  border-top: 1px solid var(--border);
+}
+.phone-affordance > span,
+.phone-affordance > button {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.phone-dialog {
+  width: min(640px, calc(100vw - 24px));
+  max-height: 90dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.phone-dialog nav,
+.phone-call > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.phone-body {
+  overflow-y: auto;
+  min-height: 0;
+  padding: 0.25rem;
+}
+.phone-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--border);
+  width: 100%;
+  flex-wrap: wrap;
+  text-align: left;
+}
+.phone-row > div {
+  flex: 1;
+  min-width: 110px;
+}
+.phone-row small {
+  display: block;
+}
+.phone-row button {
+  margin: 0.15rem;
+}
+.phone-call {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.phone-avatars {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.phone-avatars > span {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.phone-dialog form {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+.phone-dialog label {
+  display: grid;
+  gap: 0.25rem;
+}
+.phone-dialog textarea {
+  min-height: 80px;
+  resize: vertical;
+  width: 100%;
+}
+.phone-messages {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0.6rem 0;
+}
+.phone-message {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  max-width: 95%;
+  overflow-wrap: anywhere;
+}
+.phone-message.outgoing {
+  margin-left: auto;
+}
+.phone-message p {
+  white-space: pre-wrap;
+  margin: 0.3rem 0;
+}
+.phone-dialog button {
+  min-height: 36px;
+}
+.phone-dialog button[aria-pressed="true"] {
+  font-weight: bold;
+  text-decoration: underline;
+}
+@media (max-width: 600px) {
+  .phone-dialog {
+    max-height: 94dvh;
+  }
+  .phone-dialog button {
+    min-height: 44px;
+  }
+  .phone-affordance {
+    font-size: 0.85rem;
+  }
+}

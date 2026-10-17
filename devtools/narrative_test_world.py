@@ -684,3 +684,24 @@ def _continuity(state):
 
 
 CHECKPOINTS['continuity'] = _continuity
+
+
+def _phone(state):
+    from backend.runtime_v3.remote_models import CommunicationCapabilities, Contact, Conversation
+    world=state['world'];now=state['world_clock']['minute']
+    world['communication']=CommunicationCapabilities(text_message=True,voice_call=True,presentation='phone',
+        region='QA-fiction',emergency_numbers={'medical':'qa-medical','police':'qa-police','fire':'qa-fire'}).model_dump()
+    world['contacts']={}
+    for owner,target,label,address in [(ACTOR_ID,'qa_vera','Вера работа','qa-vera'),('qa_vera',ACTOR_ID,'Кирилл','qa-kirill'),
+        (ACTOR_ID,None,'Мастерская','qa-workshop'),(ACTOR_ID,None,'Новый знакомый','qa-unknown')]:
+        cid='phone-'+owner+'-'+address
+        world['contacts'][cid]=Contact(id=cid,owner_id=owner,character_id=target,label=label,address=address,
+            kind='shared' if address=='qa-workshop' else 'person',identity_visible=target is not None,
+            provenance='QA explicit import',created_at=now).model_dump()
+    world['conversations']={'qa-group':Conversation(id='qa-group',title='Общая переписка',group=True,
+        members=[dict(actor_id=a,joined_at=now,provenance='QA explicit membership') for a in (ACTOR_ID,'qa_vera')],
+        provenance='QA explicit group').model_dump()}
+    return state
+
+
+CHECKPOINTS['phone'] = _phone

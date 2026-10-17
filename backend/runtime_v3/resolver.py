@@ -73,7 +73,7 @@ class StateResolver:
         for i, item in enumerate(raw.records[section]):
             if not isinstance(item, dict):
                 self.warn(section,i,'ожидался объект')
-            elif evidence and not self.supported(item):
+            elif evidence and not self.supported(item) and not (section=='scheduled_event_changes' and self.remote_commitment_supported(item)):
                 self.warn(section,i,'нет подтверждённого источника', code='evidence_unsupported')
             else:
                 key=item.get('id')
@@ -83,6 +83,12 @@ class StateResolver:
                     if key in seen:fatal('повторный canonical ID записи','canonical_id_conflict',repairable=True,section=section,index=i)
                     seen.add(key)
                 yield i, item
+
+    def remote_commitment_supported(self, record):
+        from backend.runtime_v3.remote import commitment_sources
+        quote=record.get('evidence')
+        return isinstance(quote,str) and bool(normalized(quote)) and any(
+            normalized(quote) in normalized(e['content']) for e in commitment_sources(self.before,record))
 
     def actor(self, value, section, index):
         if not isinstance(value,str) or value not in self.state['characters']:
@@ -168,6 +174,11 @@ class StateResolver:
             record = self.typed(RemoteInteraction, dict(actor_id=cid, channel=interaction.get('channel'),
                                 last_active_turn=self.turn_id), 'final_scene', index)
             if record: remote.append(record)
+        from backend.runtime_v3.remote import active_call, participants
+        call = active_call(s, camera['controlled_actor_id'])
+        if any(s['meta']['communication'][channel] for channel in ('text_message','voice_call')):
+            remote = [dict(actor_id=cid, channel='phone', last_active_turn=self.turn_id)
+                      for cid in sorted(participants(call) - set(present))] if call and call['status']=='answered' else []
         camera['remote_interactions'] = remote
         camera.update(location_id=lid,present_character_ids=present,situation=situation)
         s['camera'] = camera
@@ -252,9 +263,14 @@ class StateResolver:
             medium=item.get('medium','action')
             if not isinstance(medium,str) or medium not in INFORMATION_MEDIA | {'action'}:
                 self.warn('events',i,'неизвестный канал Event');continue
+            from backend.runtime_v3.remote import validate_event_channel
+            if not validate_event_channel(self.before,item):
+                self.warn('events',i,'Свидетели или участники недоступны в этом канале.',code='remote_channel_boundary');continue
             event = dict(id=identity('event',self.turn_id,eid,self.narrative),local_id=eid,text=item['text'],
                 **lists,medium=medium,evidence=item['evidence'],turn_id=self.turn_id,
                 player_observed=self.observed,recorded_minute=s['meta']['world_time'])
+            if item.get('interaction_channel')=='call':
+                event['interaction_channel']='call'
             for key in ('minute','order'):
                 if type(item.get(key)) is int and item[key] >= 0: event[key]=item[key]
             if isinstance(item.get('location_id'),str) and item['location_id'] in s['locations']: event['location_id']=item['location_id']
@@ -400,8 +416,10 @@ class StateResolver:
             self.history.state_changes.append(dict(kind='narrative_developments',accepted=accepted,turn_id=self.turn_id))
         from backend.runtime_v3.continuity import apply as apply_continuity, turn_signal, filter_choices
         apply_continuity(self, raw, events)
+        from backend.runtime_v3.remote import advance as advance_remote
+        advance_remote(s, self.history)
         upserts = {section:{key:deepcopy(value) for key,value in s[section].items() if value != self.before[section].get(key)}
-            for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions','residences','roles','organizations','reproductive_events','pregnancies','naming_decisions','possessions')}
+            for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions','residences','roles','organizations','reproductive_events','pregnancies','naming_decisions','possessions','contacts','conversations','remote_events')}
         digest = sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
         patch = StatePatch(digest,deepcopy(s['meta']),deepcopy(s['camera']),upserts)
         state = patch.apply(self.before)
@@ -420,5 +438,14 @@ class StateResolver:
             game_time_before=self.before['meta']['world_time'],world_time=state['meta']['world_time'],
             player_observed=self.observed))
         choices = raw.choices if self.mode != 'background' and camera['mode'] == 'actor' and controlled and capabilities(state,controlled)['can_act'] else []
+        if any(s['meta']['communication'][channel] for channel in ('text_message','voice_call')):
+            choices = [c for c in choices if c.get('device_control') is None]
         choices = filter_choices(self, choices)
+        if any(s['meta']['communication'][channel] for channel in ('text_message','voice_call')):
+            choices = [dict(c, interaction_channel=s['meta']['interaction_focus']) for c in choices]
+            remote_call = active_call(self.before, controlled)
+            if remote_call:
+                remote_ids = participants(remote_call) - set(self.before['camera']['present_character_ids'])
+                if remote_ids & set(state['camera']['present_character_ids']):
+                    fatal('Звонок не переносит собеседника в физическую сцену.', 'remote_false_colocation')
         return ResolvedTurn(state,patch,self.history.to_dict(),self.warnings,choices,self.cards)

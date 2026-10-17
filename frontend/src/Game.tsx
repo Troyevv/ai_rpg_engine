@@ -1,5 +1,6 @@
 import {SkinHeader} from './ThemeDecorationLayer';
 import {useTheme,themes} from './ThemeProvider';
+import {Phone} from './Phone';
 import {TimeSkip} from './TimeSkip';
 import {RuntimeNotifications} from './RuntimeNotifications';
 import {useMotionPreset} from "./motion";
@@ -366,7 +367,7 @@ export function Game({
                   </div>}
                   {save.state.actor_capabilities?.can_act===false&&<p role="status">Персонаж сейчас не может действовать. Можно продолжить течение времени или наблюдать за миром.</p>}
                   <motion.div className="choices" key={save.turns.at(-1)?.active_variant_id} variants={choicesMotion} initial={initialChoice.current===save.turns.at(-1)?.active_variant_id?false:"hidden"} animate="visible">
-                    {(save.state.actor_capabilities?.can_act!==false&&save.turns.at(-1)?.kind!=="background"&&(save.turns.at(-1)?.pov_actor_id||mainActor)===actorId?save.turns.at(-1)?.choices:[])?.map((c, i) => (
+                    {(save.state.actor_capabilities?.can_act!==false&&save.turns.at(-1)?.kind!=="background"&&(save.turns.at(-1)?.pov_actor_id||mainActor)===actorId?save.turns.at(-1)?.choices:[])?.filter(c=>!save.state.phone||(c.interaction_channel||"physical")===save.state.phone.focus).map((c, i) => (
                       <motion.button
                         variants={choiceMotion}
                         className={selectedChoice===i?"choice-selected":""}
@@ -430,6 +431,7 @@ export function Game({
       </div>
       {save && (
         <div className="composer">
+          <Phone save={save} disabled={busy||pending} onCommit={refreshControl}/>
           <div className="composer-inner">
             <Textarea
               ref={input}

@@ -48,6 +48,13 @@ def scene_plan(state, scope):
             capabilities={k: caps[k] for k in ('can_speak', 'can_move', 'adult_eligible')}))
     result = dict(external_actor_id=external, actors=actors[:8],
                 budget=3, optional=True, extra_llm_calls=0)
+    from backend.runtime_v3.remote_initiative import opportunities
+    remote = opportunities(state)
+    if remote:
+        result['remote_opportunities'] = remote
+    accepted_remote = sum(e['provenance'].startswith('npc_initiative:') and
+        e['turn_id']==state['meta']['turn_id'] for e in state.get('remote_events',{}).values())
+    if accepted_remote: result['budget']=max(0,result['budget']-accepted_remote)
     pressure = getattr(scope, 'continuity_decision', {}).get('pressure',0)
     if pressure: result['grounded_development_priority'] = pressure
     return result

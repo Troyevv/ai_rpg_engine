@@ -23,6 +23,9 @@ class HistorySelector:
         selected_facts = set(scope.fact_ids)
         for index, event in enumerate(events):
             if not isinstance(event, dict) or not isinstance(event.get('text'), str): continue
+            # Phone lifecycle payloads are projected through the bounded,
+            # perception-filtered communication block, never as raw audit rows.
+            if event.get('remote_interaction_id'): continue
             participants = event.get('participants', [])
             if not isinstance(participants, list) or any(not isinstance(cid, str) for cid in participants): continue
             ids = set(participants)
