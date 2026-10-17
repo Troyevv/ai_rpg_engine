@@ -60,6 +60,7 @@ class RemoteEvent(RemoteModel):
     recipient_ids: list[str] = Field(default_factory=list, max_length=16)
     contact_id: str | None = None
     destination: str
+    service: Literal["medical", "police", "fire"] | None = None
     conversation_id: str | None = None
     content: str = Field(default="", max_length=4000)
     world_time: int = Field(ge=0)

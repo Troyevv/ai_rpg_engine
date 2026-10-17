@@ -75,6 +75,9 @@ def ui_view(snapshot, history=None):
         world['scheduled_events'][eid]=dict(view,participants=e['character_ids'])
     for e in history.get('events',[]):
         if not isinstance(e,dict) or not isinstance(e.get('id'),str) or not isinstance(e.get('text'),str):continue
+        # Phone payloads use the actor-owned projection below. Raw audit rows
+        # may contain unread text or another character's private read receipt.
+        if e.get('remote_interaction_id'): continue
         if any(not isinstance(e.get(k,[]),list) or any(not isinstance(v,str) for v in e.get(k,[])) for k in ('participants','witnesses')):continue
         world['events'][e['id']]=dict(e,participants=e.get('participants',[]),witnesses=e.get('witnesses',[]),
             calendar_date=current_time(state,e['minute'])['date'] if type(e.get('minute')) is int else e.get('calendar_date'),

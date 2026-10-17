@@ -835,3 +835,73 @@ def test_lazy_identity_reply_reuses_original_direct_conversation():
         list(snap["world_state"]["remote_events"].values())[-1]["conversation_id"]
         == gid
     )
+
+
+def test_ui_world_history_does_not_bypass_phone_read_or_actor_scope():
+    from backend.runtime_v3.selectors import ui_view
+
+    snap, batch = apply(
+        phone(),
+        dict(
+            action="send",
+            operation_id="private-ui-message",
+            contact_id="b-a",
+            content="SECRET_PHONE_PAYLOAD",
+        ),
+        actor_id="b",
+        autonomous=True,
+    )
+    assert "SECRET_PHONE_PAYLOAD" not in json.dumps(ui_view(snap, batch))
+    eid = next(iter(snap["world_state"]["remote_events"]))
+    snap, read = apply(
+        snap, dict(action="read", operation_id="private-ui-read", event_id=eid)
+    )
+    for section, rows in read.items():
+        batch.setdefault(section, []).extend(rows)
+    assert "SECRET_PHONE_PAYLOAD" in json.dumps(ui_view(snap, batch))
+    other, _ = transition(snap, "temporary", "child", "other-reader")
+    assert "SECRET_PHONE_PAYLOAD" not in json.dumps(ui_view(other, batch))
+
+
+@pytest.mark.parametrize("restricted", ["unavailable", "blocked"])
+def test_endpoint_identity_does_not_bypass_known_actor_restrictions(restricted):
+    snap = command(phone(), "add_contact", label="Другой контакт", address="address-b")
+    cid = list(snap["world_state"]["contacts"])[-1]
+    snap = command(snap, "call", contact_id=cid)
+    eid = next(iter(snap["world_state"]["remote_events"]))
+    if restricted == "unavailable":
+        snap["world_state"]["characters"]["b"]["life_status"] = "dead"
+    else:
+        snap["world_state"]["contacts"]["b-a"]["blocked"] = True
+    with pytest.raises(ValueError):
+        accept(
+            snap,
+            dict(
+                actor_id="endpoint",
+                action="identify",
+                event_id=eid,
+                basis_ids=[eid],
+                speaker_name="Борис",
+                existing_character_id="b",
+            ),
+            opportunities(snap["world_state"]),
+            "restricted-endpoint",
+        )
+    assert snap["world_state"]["remote_events"][eid]["status"] == "ringing"
+    assert snap["world_state"]["contacts"][cid]["character_id"] is None
+
+
+def test_shared_emergency_number_preserves_selected_service_in_call_log():
+    snap = phone()
+    snap["world_state"]["meta"]["communication"].update(
+        region="fiction",
+        emergency_numbers={
+            "medical": "qa-shared",
+            "police": "qa-shared",
+            "fire": "qa-shared",
+        },
+    )
+    snap = command(snap, "call", service="police")
+    event = next(iter(snap["world_state"]["remote_events"].values()))
+    assert event["destination"] == "qa-shared" and event["service"] == "police"
+    assert projection(snap)["events"][0]["label"] == "Полиция"

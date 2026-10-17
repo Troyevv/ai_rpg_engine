@@ -310,6 +310,20 @@ def _identify_endpoint(snapshot, proposal, operation_id):
         batch.state_changes.append(
             dict(kind="remote_person_established", entity=cid, source_event_id=e["id"])
         )
+    caps = capabilities(s, cid)
+    if (
+        not caps["can_act"]
+        or not caps["can_perceive"]
+        or (e["channel"] == "VOICE_CALL" and not caps["can_speak"])
+    ):
+        raise ValueError("remote_endpoint_unavailable")
+    if contact and (contact["blocked"] or not contact["available"]):
+        raise ValueError("remote_endpoint_unavailable")
+    if any(
+        c["owner_id"] == cid and c["character_id"] == e["sender_id"] and c["blocked"]
+        for c in s["contacts"].values()
+    ):
+        raise ValueError("remote_endpoint_blocked")
     if contact and contact["kind"] == "person":
         result = resolve_identity(
             result,

@@ -74,3 +74,24 @@ the PR leaves draft. Message-derived #66 agreements use the existing
 agreement participants, player consent must quote actual authored input, and
 relative dates anchor to the proposal message's canonical timestamp. The
 `remote_source_ids` field preserves that provenance on the ordinary commitment.
+
+## Acceptance coverage
+
+| Issue #70 criteria | Runtime / UI coverage | Deterministic evidence |
+| --- | --- | --- |
+| 1–5 | Capability-gated UI, owned contacts, independent labels, control switch, exact player text | contacts/switch, ordinary cycle, persisted idempotency; phone E2E |
+| 6–8, 24–27, 30 | One optional typed initiative before prose; no autonomous player response; explicit read provenance | event-first failure/retry/regenerate, rejected proposal, raw History/UI privacy, delivery/read tests |
+| 9 | Ordinary #66 handler, mutually perceived source IDs, authored player consent, canonical proposal time | message agreement test with unread and forged-proof rejection |
+| 10–11 | Physical scene retained; explicit call focus; restricted audible witnesses; canonical timeout | call controls, extraction audibility, setting-neutral channel, device-choice tests |
+| 12, 14 | Bounded relevant context, no contact polling, no #43 implementation | saturated newborn-triplets world with 200 unread messages; existing context-compaction regressions |
+| 13, 29 | Existing save snapshots, History DAG receipts, original generation context | persisted replay, outage/retry, variant selection, rollback and ordinary save/reload cycle |
+| 15–17 | Existing Dialog/theme/avatar system; ordinary Narrative and Tabletop remain independent | desktop/mobile phone E2E plus complete existing Python/Playwright suites |
+| 18–23 | Explicit direct/group containers and membership, frozen delivery recipients, no social-graph inference | late join/removal/former-member reading tests; group membership E2E |
+| 28 | Phone chat and call log derive from canonical records after reload | phone E2E and repository reload checks |
+| Later identity additions | Unresolved contacts, exact-address linking, minimal individuals, shared/service destinations | lazy identity, reply-container continuity and unavailable/blocked endpoint tests |
+| Later emergency additions | Configured services only, selected service retained even with a shared number, canonical call history | emergency configuration/shared-number tests and emergency E2E |
+| Later portrait additions | Shared current portrait/crop and silhouette/initials; unknown identities have no asset URL | portrait authorization test, shared portrait E2E, existing #74 tests |
+
+A provider can still violate literary instructions; deterministic fixtures establish
+Runtime boundaries, not universal compliance of arbitrary model prose. Manual QA
+in `docs/manual_qa/narrative_v4/phone.md` covers the live-provider visual/semantic review.

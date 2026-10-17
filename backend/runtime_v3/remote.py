@@ -80,6 +80,24 @@ def validate_state(state):
             or not e["world_time"] <= e["updated_at"] <= now
         ):
             raise ValueError("Некорректное событие связи.")
+        if (
+            e["conversation_id"] is not None
+            and e["conversation_id"] not in state["conversations"]
+        ):
+            raise ValueError("Переписка события не существует.")
+        if e["contact_id"] is not None and e["contact_id"] not in state["contacts"]:
+            raise ValueError("Контакт события не существует.")
+        if any(
+            len(e[field]) != len(set(e[field]))
+            for field in ("recipient_ids", "delivered_to", "read_by")
+        ):
+            raise ValueError("Повторные получатели события.")
+        if e["channel"] == "VOICE_CALL" and e["status"] not in OPEN_CALL | {
+            "declined",
+            "missed",
+            "ended",
+        }:
+            raise ValueError("Некорректное состояние звонка.")
         if not set(e["read_by"]) <= set(e["delivered_to"]) <= set(e["recipient_ids"]):
             raise ValueError("Чтение требует доставки конкретному получателю.")
         if e["channel"] == "TEXT_MESSAGE" and e["status"] not in {"sent", "delivered"}:
@@ -395,6 +413,7 @@ def apply(snapshot, command, *, actor_id=None, autonomous=False):
             sender_id=actor,
             recipient_ids=recipients,
             destination=destination,
+            service=cmd.service,
             contact_id=cid,
             conversation_id=conversation["id"] if conversation else None,
             content=cmd.content if cmd.action == "send" else "",
@@ -593,13 +612,8 @@ def projection(snapshot):
         from backend.runtime_v3.calendar import calendar_label
 
         row["time_label"] = calendar_label(state, e["world_time"])
-        if (
-            not e["contact_id"]
-            and e["destination"] in cfg["emergency_numbers"].values()
-        ):
-            service = next(
-                k for k, v in cfg["emergency_numbers"].items() if v == e["destination"]
-            )
+        if e.get("service"):
+            service = e["service"]
             row["label"] = {
                 "medical": "Скорая помощь",
                 "police": "Полиция",

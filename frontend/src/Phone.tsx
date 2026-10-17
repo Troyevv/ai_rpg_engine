@@ -100,6 +100,13 @@ export function Phone({
     setError("");
     setEditContact(null);
     setAdding(false);
+    setTab("contacts");
+    setLabel("");
+    setAddress("");
+    setContactKind("person");
+    setGrouping(false);
+    setGroupMembers([]);
+    setGroupName("");
   }, [save.id, phone?.actor_id]);
   if (!phone) return null;
   const locked = busy || disabled;
