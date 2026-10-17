@@ -37,6 +37,12 @@ def apply_commitments(resolver, raw):
         if not isinstance(eid, str) or not eid.strip() or assertion not in ASSERTIONS:
             reject('Нужны canonical ID и подтверждённая семантика изменения.'); continue
         old = events.get(eid)
+        from backend.runtime_v3.remote import commitment_sources
+        sources=commitment_sources(resolver.before,item) if item.get('remote_source_ids') else []
+        if item.get('remote_source_ids') and not sources:
+            reject('Сообщения не прочитаны участниками договорённости.', 'commitment_remote_unperceived'); continue
+        if sources and old and assertion!='agreed' and set(item['remote_source_ids'])<=set(old.get('remote_source_ids',[])):
+            reject('Старое сообщение не является новым решением.', 'commitment_remote_replay'); continue
         if old and old['status'] != 'pending':
             reject('Завершённый план нельзя повторно активировать.', 'commitment_terminal'); continue
         if old is None and assertion not in ('agreed', 'started'):
@@ -53,8 +59,14 @@ def apply_commitments(resolver, raw):
         fields = deepcopy(old or {})
         fields.update({k:item[k] for k in EDITABLE if k in item})
         fields.update(commitment=True, evidence=item['evidence'], source_turn=resolver.turn_id)
+        if sources: fields['remote_source_ids']=item['remote_source_ids']
         if old is None or assertion == 'rescheduled':
             fields['time_reference_minute'] = resolver.before['meta']['world_time']
+            if sources:
+                anchor=next((e for e in sources if e['id']==item.get('remote_time_source_id')),None)
+                if anchor is None:
+                    reject('Относительное время сообщения требует его canonical ID.', 'commitment_remote_time'); continue
+                fields['time_reference_minute']=anchor['world_time']
             fields['last_attempt_minute'] = None
             if 'temporal' in item: fields['due_minute'] = None
         status = {'occurred':'resolved', 'ended':'resolved', 'cancelled':'cancelled', 'missed':'cancelled'}.get(assertion, 'pending')
@@ -82,8 +94,9 @@ def apply_commitments(resolver, raw):
         if controlled in set(entry['character_ids'] + (old or {}).get('character_ids', [])) and assertion in ('agreed', 'rescheduled', 'cancelled') and not npc_cancellation:
             proof = item.get('player_evidence')
             from backend.runtime_v3.resolver import normalized
+            player_sources=[resolver.player_input]+[e['content'] for e in sources if e['sender_id']==controlled]
             if (item.get('player_assertion') != 'explicit_choice' or not isinstance(proof, str)
-                or not normalized(proof) or normalized(proof) not in normalized(resolver.player_input)):
+                or not normalized(proof) or not any(normalized(proof) in normalized(text) for text in player_sources)):
                 reject('Решение controlled actor требует явного player_input.', 'controlled_actor_unsupported'); continue
         window = scheduled_window(state, entry)
         if (old is None or assertion == 'rescheduled') and (window['start_minute'] is None or window['start_minute'] < 0):

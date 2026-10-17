@@ -192,7 +192,7 @@ def extraction_schema():
     return schema
 
 
-def prompt_schema(*, reproduction=True, births=True, favorable_paths=True):
+def prompt_schema(*, reproduction=True, births=True, favorable_paths=True, communication=False):
     """Validation-equivalent schema; prose lives once in the extraction contract."""
     from collections import Counter
     def structural(node):
@@ -213,6 +213,12 @@ def prompt_schema(*, reproduction=True, births=True, favorable_paths=True):
         return node
     # Keep properties named "description"; remove only JSON Schema annotations.
     schema = structural(extraction_schema())
+    if communication:
+        schema['properties']['events']['items']['properties']['interaction_channel']={'enum':['physical','call']}
+        props=schema['properties']['scheduled_event_changes']['items']['properties']
+        props['remote_source_ids']={'type':'array','items':{'type':'string'},'maxItems':8}
+        props['remote_time_source_id']={'type':'string'}
+        schema['properties']['choices']['items']['properties']['device_control']={'enum':['answer','decline','ignore','end']}
     if not favorable_paths:
         for key in ('favorable_path','resolution','stakes_for'):
             schema['properties']['thread_changes']['items']['properties'].pop(key,None)

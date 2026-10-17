@@ -525,6 +525,7 @@ class ScheduledEvent(StrictModel):
     outcome: Literal['', 'fulfilled', 'blocked', 'missed', 'cancelled', 'dependency_cancelled'] = ''
     evidence: str = ''
     source_turn: int | None = Field(default=None, ge=0)
+    remote_source_ids: list[str] = Field(default_factory=list, max_length=8)
 
 
 class SignificantPossession(StrictModel):

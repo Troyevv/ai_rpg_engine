@@ -32,7 +32,7 @@ def visible_views(snapshot, turns, kind):
 
 
 def canonical_slice(state, scope, extraction=False, query=""):
-    current = dict(meta={k:v for k,v in state['meta'].items() if k not in ('calendar','current_protagonist_id','protagonist_required','protagonist_periods','narrative_pacing','narrative_risk','outcome_preference','pacing_recent')},
+    current = dict(meta={k:v for k,v in state['meta'].items() if k not in ('calendar','current_protagonist_id','protagonist_required','protagonist_periods','narrative_pacing','narrative_risk','outcome_preference','pacing_recent','communication','interaction_focus')},
         current_time=current_time(state), calendar_context=nearby_calendar(state, scope.relevant_actor_ids), camera=deepcopy(state['camera']),
         locations={lid: state['locations'][lid] for lid in scope.location_ids},
         characters={cid: deepcopy(state['characters'][cid]) for cid in sorted(scope.relevant_actor_ids)},
@@ -317,7 +317,7 @@ class ExtractionContextBuilder:
                        block('Choice context / controlled actor', choice_context(snapshot, scope, current, views, kind)),
                        block('Entity IDs', [dict(id=c['id'], name=c['name'], aliases=c.get('aliases', []))
                             for c in snapshot['character_cards'] if c['id'] in scope.relevant_actor_ids]),
-                       block('JSON Schema', prompt_schema(reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
+                       block('JSON Schema', prompt_schema(communication=bool(current.get('communication')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
 
 
 def choice_context(snapshot, scope, current, views, kind):
@@ -447,7 +447,9 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     current = canonical_slice(state, scope, extraction_text is not None, user_text+'\n'+(extraction_text or ''))
     from backend.runtime_v3.remote import context_projection as remote_context
     remote = remote_context(state)
-    if remote: current['communication'] = remote
+    if remote:
+        remote['input_channel'] = snapshot.get('_interaction_input_channel', state['meta']['interaction_focus'])
+        current['communication'] = remote
     if kind == 'background' and not camera.get('pov_actor_id'):
         from backend.runtime_v3.reproduction import context_projection
         current.update(context_projection(state,scope.relevant_actor_ids,None,extraction=True))
@@ -579,6 +581,17 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
             current['characters'].pop(cid, None)
             current['relationships'] = [r for r in current['relationships'] if cid not in (r['source_id'], r['target_id'])]
             replace_block(title, cards)
+            refresh_current()
+
+    # Recent phone rows are supporting retrieval, not the active call contract.
+    # Keep the newest cue and any active call; old text stays in canonical History.
+    communication=current.get('communication')
+    if communication:
+        recent=communication['recent']
+        while estimate(messages)>target and len(recent)>1:
+            removable=next((row for row in reversed(recent[1:]) if row['id']!=communication.get('active_call')),None)
+            if removable is None: break
+            recent.remove(removable)
             refresh_current()
 
     # Soft pressure removes supporting content, never the cheap identity index.

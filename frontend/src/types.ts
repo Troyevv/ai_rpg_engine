@@ -116,6 +116,7 @@ export interface SaveItem {
   updated_at: string;
 }
 export interface Choice {
+  interaction_channel?: "physical" | "call";
   action: string;
   speech: string;
 }

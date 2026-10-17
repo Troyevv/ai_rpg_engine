@@ -183,6 +183,7 @@ def run_job(path, job_id, handle):
                         return
                     if job['kind'] not in ('background', 'pov') and not skip_result:
                         from backend.runtime_v3.remote_initiative import stage as stage_remote
+                        before['_interaction_input_channel'] = before['world_state']['meta']['interaction_focus']
                         before = stage_remote(before, generate, 'job-' + job_id)
                     messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
                     storage.save_context(job_id,messages,before)
@@ -238,6 +239,7 @@ def run_job(path, job_id, handle):
                     state=deepcopy(before)
                     state.pop('_time_skip', None)
                     state.pop('last_time_skip', None)
+                    state.pop('_interaction_input_channel', None)
                     state['world_state']=resolved.state
                     if skip_result:
                         changes_skip=deepcopy(skip_result)

@@ -275,7 +275,7 @@ if __name__ == '__main__':
         return {'world':result['world'],'save':result['save']}
 
     @app.post('/test/phone-seed')
-    def phone_seed():
+    def phone_seed(unread: bool = False):
         from devtools.narrative_test_world import load_fixture
         from test_narrative_test_world import CONFIG
         from backend.runtime_v3.remote import apply
@@ -287,6 +287,10 @@ if __name__ == '__main__':
         assert repo.get_job(job)['status']=='saved', repo.get_job(job)['error']
         snap=repo.get_snapshot(sid)
         snap,batch=apply(snap,dict(action='call',operation_id='qa-incoming-call',contact_id='phone-qa_vera-qa-kirill'),actor_id='qa_vera',autonomous=True)
+        if unread:
+            snap, message_batch = apply(snap, dict(action='send', operation_id='qa-incoming-message', contact_id='phone-qa_vera-qa-kirill', content='Прочти, когда будет удобно.'), actor_id='qa_vera', autonomous=True)
+            for section, rows in message_batch.items():
+                batch.setdefault(section, []).extend(rows)
         with repo.connect() as db:
             snap['history_head']=append_history(db,snap.get('history_head'),batch)
             db.execute('UPDATE saves SET state_json=?,revision=revision+1 WHERE id=?',(json.dumps(snap,ensure_ascii=False),sid))

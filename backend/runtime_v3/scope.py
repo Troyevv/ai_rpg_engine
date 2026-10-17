@@ -130,7 +130,7 @@ class RelevanceResolver:
         from backend.runtime_v3.remote import active_call, participants, context_projection
         scope.communication = context_projection(state) or {}
         call = active_call(state, camera['controlled_actor_id'])
-        if state['meta'].get('communication', {}).get('presentation') == 'phone':
+        if any(state['meta']['communication'][channel] for channel in ('text_message','voice_call')):
             # Canonical calls, never a keyword in player prose, own phone channels.
             scope.remote_actor_ids = participants(call) - {camera['controlled_actor_id']} if call and call['status']=='answered' else set()
         scope.remote_actor_ids -= scope.present_actor_ids
@@ -177,7 +177,7 @@ class RelevanceResolver:
         for lid, location in state['locations'].items():
             if mentions(query + '\n' + motivations, location_aliases(location)): locations.add(lid)
         events = [e for e in (world_history or {}).get('events', [])
-                  if isinstance(e, dict) and isinstance(e.get('text'), str)
+                  if isinstance(e, dict) and isinstance(e.get('text'), str) and not e.get('remote_interaction_id')
                   and isinstance(e.get('participants'), list)
                   and all(isinstance(cid, str) for cid in e['participants'])]
         structural_locations = set(locations)

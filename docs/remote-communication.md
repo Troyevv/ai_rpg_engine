@@ -50,7 +50,9 @@ staging. Failed/cancelled generation publishes neither provisional event nor cue
 
 The existing ContextScope/Context Builder includes at most six recent accessible
 communications, bounded message text and explicit call constraints. Unread message
-content is excluded. Phone-disabled worlds receive no phone instruction payload.
+content is excluded. Phone-disabled worlds receive no phone instruction payload. Under budget pressure,
+older communication rows are omitted while the latest cue and active call remain.
+Raw remote lifecycle audit payloads never bypass the perception-filtered projection.
 Existing extraction is not permitted to create phone lifecycle transitions.
 
 ## UI and portraits
@@ -67,5 +69,8 @@ Deterministic tests cover the protocol and branch/variant behavior. They do not
 prove arbitrary provider prose obeys semantic instructions. No paid DeepSeek calls
 are part of this change. #43/#44/#45/#46 remain separate; final phone visual polish
 belongs to #45. Browser checks and the complete acceptance audit must pass before
-the PR leaves draft. Message-derived #66 agreements need explicit end-to-end
-verification through the existing extraction/resolution pipeline.
+the PR leaves draft. Message-derived #66 agreements use the existing
+`scheduled_event_changes` handler: referenced messages must be perceived by the
+agreement participants, player consent must quote actual authored input, and
+relative dates anchor to the proposal message's canonical timestamp. The
+`remote_source_ids` field preserves that provenance on the ordinary commitment.

@@ -2,21 +2,24 @@
 
 History records their transitions; it is not an independent messenger database.
 """
+
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class RemoteModel(BaseModel):
-    model_config = ConfigDict(extra='forbid', strict=True)
+    model_config = ConfigDict(extra="forbid", strict=True)
 
 
 class CommunicationCapabilities(RemoteModel):
     text_message: bool = False
     voice_call: bool = False
-    presentation: Literal['none', 'phone'] = 'none'
-    region: str = ''
+    presentation: Literal["none", "phone"] = "none"
+    region: str = ""
     ring_timeout_minutes: int = Field(default=2, ge=1, le=60)
-    emergency_numbers: dict[Literal['medical', 'police', 'fire'], str] = Field(default_factory=dict)
+    emergency_numbers: dict[Literal["medical", "police", "fire"], str] = Field(
+        default_factory=dict
+    )
 
 
 class Contact(RemoteModel):
@@ -25,7 +28,7 @@ class Contact(RemoteModel):
     character_id: str | None = None
     label: str = Field(min_length=1, max_length=160)
     address: str = Field(min_length=1, max_length=160)
-    kind: Literal['person', 'service', 'shared'] = 'person'
+    kind: Literal["person", "service", "shared"] = "person"
     blocked: bool = False
     available: bool = True
     identity_visible: bool = False
@@ -42,7 +45,7 @@ class Membership(RemoteModel):
 
 class Conversation(RemoteModel):
     id: str
-    title: str = Field(default='', max_length=160)
+    title: str = Field(default="", max_length=160)
     group: bool = False
     members: list[Membership] = Field(default_factory=list, max_length=128)
     contact_id: str | None = None
@@ -52,17 +55,19 @@ class Conversation(RemoteModel):
 class RemoteEvent(RemoteModel):
     id: str
     ordinal: int = Field(default=0, ge=0)
-    channel: Literal['TEXT_MESSAGE', 'VOICE_CALL']
+    channel: Literal["TEXT_MESSAGE", "VOICE_CALL"]
     sender_id: str
     recipient_ids: list[str] = Field(default_factory=list, max_length=16)
     contact_id: str | None = None
     destination: str
     conversation_id: str | None = None
-    content: str = Field(default='', max_length=4000)
+    content: str = Field(default="", max_length=4000)
     world_time: int = Field(ge=0)
     updated_at: int = Field(ge=0)
     turn_id: int = Field(ge=0)
-    status: Literal['sent', 'delivered', 'ringing', 'answered', 'declined', 'missed', 'ended']
+    status: Literal[
+        "sent", "delivered", "ringing", "answered", "declined", "missed", "ended"
+    ]
     delivered_to: list[str] = Field(default_factory=list, max_length=16)
     read_by: list[str] = Field(default_factory=list, max_length=16)
     fact_ids: list[str] = Field(default_factory=list, max_length=8)
@@ -72,31 +77,46 @@ class RemoteEvent(RemoteModel):
 
 class RemoteCommand(RemoteModel):
     operation_id: str = Field(min_length=8, max_length=100)
-    action: Literal['send', 'call', 'read', 'answer', 'decline', 'ignore', 'end', 'focus',
-                    'add_contact', 'edit_contact', 'create_group', 'join', 'leave', 'remove', 'resolve_contact']
+    action: Literal[
+        "send",
+        "call",
+        "read",
+        "answer",
+        "decline",
+        "ignore",
+        "end",
+        "focus",
+        "add_contact",
+        "edit_contact",
+        "create_group",
+        "join",
+        "leave",
+        "remove",
+        "resolve_contact",
+    ]
     contact_id: str | None = None
     conversation_id: str | None = None
     event_id: str | None = None
-    service: Literal['medical', 'police', 'fire'] | None = None
-    content: str = Field(default='', max_length=4000)
-    label: str = Field(default='', max_length=160)
-    address: str = Field(default='', max_length=160)
-    kind: Literal['person', 'service', 'shared'] = 'person'
+    service: Literal["medical", "police", "fire"] | None = None
+    content: str = Field(default="", max_length=4000)
+    label: str = Field(default="", max_length=160)
+    address: str = Field(default="", max_length=160)
+    kind: Literal["person", "service", "shared"] = "person"
     member_ids: list[str] = Field(default_factory=list, max_length=16)
     blocked: bool = False
-    focus: Literal['physical', 'call'] = 'physical'
+    focus: Literal["physical", "call"] = "physical"
     character_id: str | None = None
-    evidence: str = Field(default='', max_length=1000)
+    evidence: str = Field(default="", max_length=1000)
 
 
 class RemoteProposal(RemoteModel):
     actor_id: str
-    action: Literal['send', 'call', 'answer', 'decline', 'read', 'end', 'identify']
+    action: Literal["send", "call", "answer", "decline", "read", "end", "identify"]
     contact_id: str | None = None
     conversation_id: str | None = None
     event_id: str | None = None
-    content: str = Field(default='', max_length=4000)
+    content: str = Field(default="", max_length=4000)
     basis_ids: list[str] = Field(default_factory=list, max_length=8)
     knowledge_ids: list[str] = Field(default_factory=list, max_length=8)
-    speaker_name: str = Field(default='', max_length=160)
+    speaker_name: str = Field(default="", max_length=160)
     existing_character_id: str | None = None
