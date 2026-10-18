@@ -32,9 +32,10 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None):
         if mode not in ("turn", "background"):
             raise ValueError("Неизвестный режим StateResolver.")
+        self.minimal_promotion_ids = set(minimal_promotion_ids or ())
         self.protected_actor_id = protected_actor_id or before['camera']['controlled_actor_id']
         from backend.runtime_v3.pacing import NarrativeDeathPolicy
         self.death_policy = death_policy or NarrativeDeathPolicy()
@@ -116,7 +117,7 @@ class StateResolver:
                 self.warn('promotions',i,'Reserved birth identity is created only by Runtime.',code='birth_identity_reserved'); continue
             fields = item.get('fields')
             from backend.services.world import CARD_FIELDS
-            if not isinstance(cid,str) or not cid or not isinstance(item.get('name'),str) or not isinstance(fields,dict) or any(not isinstance(fields.get(k),str) or not fields[k].strip() for k in CARD_FIELDS):
+            if not isinstance(cid,str) or not cid or not isinstance(item.get('name'),str) or not isinstance(fields,dict) or (cid not in self.minimal_promotion_ids and any(not isinstance(fields.get(k),str) or not fields[k].strip() for k in CARD_FIELDS)):
                 self.warn('promotions',i,'значимая роль требует полную карточку'); continue
             if cid in s['characters']:
                 fatal('конфликт canonical character ID', 'canonical_id_conflict', repairable=True)

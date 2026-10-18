@@ -277,10 +277,19 @@ def birth(r,c,event):
     reveal(r,event,[p['fact_id'],p['count_fact_id'],*p['sex_fact_ids'].values(),*fids])
 
 
+def advance_due(state):
+    """Certain process transition shared by ordinary and long-term progression."""
+    changed = []
+    for process in state['pregnancies'].values():
+        if process['status'] == 'active' and state['meta']['world_time'] >= process['due_minute']:
+            process['status'] = 'due'
+            changed.append(process)
+    return changed
+
+
 def apply_reproduction(r,raw,events):
     accepted_rows(r,raw,'reproductive_events',ServiceClaim,events,intercourse)
-    for p in r.state['pregnancies'].values():
-        if p['status']=='active' and r.state['meta']['world_time']>=p['due_minute']: p['status']='due'
+    advance_due(r.state)
     accepted_rows(r,raw,'naming_decisions',NameClaim,events,naming)
     accepted_rows(r,raw,'births',BirthClaim,events,birth)
 

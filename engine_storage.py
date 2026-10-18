@@ -43,7 +43,7 @@ class EngineStorage:
             return dict(row)
 
     def begin_job(self, save_id, user_text, kind, config):
-        if kind not in ('start', 'turn', 'regenerate','background','pov'):
+        if kind not in ('start', 'turn', 'regenerate','background','pov','long_term'):
             raise ValueError('Неизвестный тип хода.')
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -84,13 +84,15 @@ class EngineStorage:
                     original=db.execute('SELECT config_json FROM game_jobs WHERE id=?',(v['job_id'],)).fetchone()
                     if original and '_prompts' in json.loads(original[0]):
                         config=dict(config,_prompts=json.loads(original[0])['_prompts'])
-                        for key in ('_context_selection','time_skip','actor_id','source_turn_id','source_node_id','camera_actor_id','camera_scene_id','camera_direct'):
+                        for key in ('_context_selection','long_term_advance','time_skip','actor_id','source_turn_id','source_node_id','camera_actor_id','camera_scene_id','camera_direct'):
                             if key in json.loads(original[0]):config[key]=json.loads(original[0])[key]
                 if context_json is None:
                     raise ValueError('У старого хода нет снимка исходного контекста. Точная перегенерация недоступна.')
                 before, replaces, user_text, kind = last['before_json'], last['id'], last['user_text'], last['kind']
             from backend.runtime_v3.models import assert_world_state_v3_invariants
             before_snapshot=json.loads(before)
+            if kind == 'long_term' and (before_snapshot.get('mode') == 'tabletop' or before_snapshot.get('runtime') == 'tabletop'):
+                raise ValueError('Длительный переход доступен только в Narrative.')
             before_snapshot['world_state']=assert_world_state_v3_invariants(before_snapshot['world_state'])
             from backend.runtime_v3.protagonist import initialize
             initialize(before_snapshot)
@@ -100,6 +102,9 @@ class EngineStorage:
                 raise ValueError('Главный герой умер. Выбери нового главного героя, чтобы продолжить.')
             if not json.loads(before)['world_state']['characters']:
                 raise ValueError('В старом сохранении нет персонажей. Сначала подготовь мир для игры.')
+            if kind == 'long_term':
+                from backend.runtime_v3.long_term import plan
+                plan(before_snapshot, config.get('long_term_advance', {}))
             from backend.runtime_v3.camera import controlled
             if kind == 'turn' and controlled(json.loads(before)) is None and not config.get('time_skip'):
                 raise ValueError('Камера наблюдает мир. Выбери персонажа для управления или продолжи наблюдение.')

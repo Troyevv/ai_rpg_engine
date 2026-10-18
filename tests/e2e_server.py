@@ -252,6 +252,12 @@ if __name__ == '__main__':
         result=load_fixture(app.state.repository,'appearance')
         return {'world':result['world'],'save':result['save']}
 
+    @app.post('/test/long-term-seed')
+    def long_term_seed():
+        from devtools.narrative_test_world import load_fixture
+        result=load_fixture(app.state.repository,'long-term')
+        return {'world':result['world'],'save':result['save']}
+
     @app.post('/test/newborn-seed')
     def newborn_seed():
         from devtools.narrative_test_world import load_fixture

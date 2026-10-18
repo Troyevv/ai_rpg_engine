@@ -50,7 +50,7 @@ def development_sources(state, scope, read, history=None):
     return sorted(result,key=lambda row:(-row['minute'],row['id']))[:6]
 
 
-def evaluate(state, scope):
+def evaluate(state, scope, *, long_term=False):
     pacing, risk = profiles(state)
     now = state['meta']['world_time']
     recent = state['meta'].get('pacing_recent', [])
@@ -105,6 +105,11 @@ def evaluate(state, scope):
         from backend.runtime_v3.lifecycle import actionable
         for goal in [g for g in state['characters'][cid]['goals'] if actionable(g)][:2]:
             add('life_opportunity','goals',goal,.5+.3*pacing['intensity'],goal['text'],[cid])
+    if long_term:
+        actors = scope.present_actor_ids | scope.remote_actor_ids | scope.active_actor_ids
+        relations = [r for r in state['objective_relations'].values() if r['status']=='active' and {r['source_id'],r['target_id']} & actors]
+        for row in sorted(relations,key=lambda r:r['id'])[:4]:
+            add('life_opportunity','objective_relations',row,.45+.3*pacing['intensity'],row.get('context',''),[row['source_id'],row['target_id']])
     for eid in scope.scheduled_event_ids[:4]:
         row=state['scheduled_events'][eid]
         if row['status']=='pending':

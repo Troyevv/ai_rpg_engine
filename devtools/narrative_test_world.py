@@ -405,6 +405,7 @@ def load_fixture(repository, checkpoint='base'):
     if checkpoint == 'goals': _seed_goals(repository,result['save'])
     if checkpoint == 'knowledge': _seed_knowledge(repository,result['save'])
     if checkpoint == 'choices': _seed_choices(repository,result['save'])
+    if checkpoint == 'long-term': _seed_long_term(repository, result['save'])
     if checkpoint.startswith(('pregnancy','newborn')): _seed_reproduction(repository,result['save'],checkpoint)
     if checkpoint=='protagonist-infant':
         _seed_reproduction(repository,result['save'],'newborn')
@@ -705,3 +706,21 @@ def _phone(state):
 
 
 CHECKPOINTS['phone'] = _phone
+
+
+# #43 extends the same #78 fixture; original checkpoints stay unchanged.
+CHECKPOINTS['long-term'] = _pregnancy
+
+def _seed_long_term(repository, save_id):
+    from backend.runtime_v3.models import Character, Thread
+    snapshot = repository.get_snapshot(save_id)
+    state = snapshot['world_state']
+    for n in range(120):
+        cid = f'qa_background_{n:03}'
+        state['characters'][cid] = Character(id=cid, life_status='alive').model_dump()
+        snapshot['character_cards'].append(dict(id=cid, name=f'Фоновый персонаж {n}', fields={}, aliases=[], is_player=False))
+        if n < 12:
+            state['threads'][cid] = Thread(id=cid, description='Незавершённое обучение', character_ids=[cid], relevance=.6).model_dump()
+    with repository.connect() as db:
+        db.execute('UPDATE saves SET state_json=? WHERE id=?', (json.dumps(snapshot, ensure_ascii=False), save_id))
+    _seed_reproduction(repository, save_id, 'newborn')
