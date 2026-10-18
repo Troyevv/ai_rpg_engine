@@ -929,3 +929,32 @@ def test_canonical_milestone_experience_is_bounded_and_not_time_generated():
         c.kind == "personality"
         for c in plan(before, request, {"_milestone_query": read}).candidates
     )
+
+
+def test_promotion_preserves_existing_id_and_canonical_renamed_identity():
+    from backend.runtime_v3.raw import RawTurnResult
+    from backend.runtime_v3.long_term_promotions import prepare
+
+    before = fixture()
+
+    def proposal(cid, name):
+        return RawTurnResult.parse(
+            dict(
+                final_scene={},
+                promotions=[dict(id=cid, name=name, fields={}, evidence="встреча")],
+                events=[dict(id="e", participants=["b", cid], evidence="встреча")],
+                social_relation_changes=[
+                    dict(id="friend", source_id="b", target_id=cid)
+                ],
+            )
+        )
+
+    with pytest.raises(ValueError, match="canonical ID"):
+        prepare(proposal("c", "Другое имя"), before, ["cause"])
+    before["world_state"]["characters"]["c"]["display_name"] = "Новое имя"
+    with pytest.raises(ValueError, match="дубликат"):
+        prepare(proposal("new", "Новое имя"), before, ["cause"])
+    existing = proposal("c", "Новое имя")
+    assert not prepare(existing, before, ["cause"])
+    assert existing.records["promotions"] == []
+    assert existing.records["events"][0]["participants"] == ["b", "c"]

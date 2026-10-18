@@ -16,7 +16,11 @@ def prepare(raw, snapshot, candidate_ids):
     allowed = set()
     names = {}
     for card in snapshot["character_cards"]:
-        for name in [card["name"], *card.get("aliases", [])]:
+        actor = snapshot["world_state"]["characters"].get(card["id"], {})
+        aliases = [actor.get("display_name") or ""]
+        for rename in actor.get("name_history", []):
+            aliases.extend([rename["previous"], rename["current"]])
+        for name in [card["name"], *card.get("aliases", []), *aliases]:
             if name.strip():
                 names.setdefault(normalized(name).casefold(), set()).add(card["id"])
     retained = []
@@ -32,6 +36,10 @@ def prepare(raw, snapshot, candidate_ids):
         if not name:
             raise ValueError("Не указана личность нового персонажа.")
         existing = names.get(name, set())
+        if cid in snapshot["world_state"]["characters"] and cid not in existing:
+            raise ValueError(
+                "Promotion не может заменить существующий canonical ID новой личностью или переименовать его."
+            )
         if len(existing) > 1:
             raise ValueError("Неоднозначная существующая личность.")
         if existing:
