@@ -22,6 +22,7 @@ def install(app, repo, credentials, public_job):
         if snapshot.get("mode") == "tabletop" or snapshot.get("runtime") == "tabletop":
             raise ValueError("Длительный переход доступен только в Narrative.")
         from backend.runtime_v3.repository import advance_receipt_reader
+        from backend.runtime_v3.milestones import reader
 
         p = plan(
             snapshot,
@@ -29,7 +30,8 @@ def install(app, repo, credentials, public_job):
             {
                 "_advance_receipts": advance_receipt_reader(
                     repo, snapshot.get("history_head")
-                )
+                ),
+                "_milestone_query": reader(repo, snapshot.get("history_head")),
             },
         )
         return dict(

@@ -229,7 +229,7 @@ def plan(snapshot, request, history=None):
                 "Значимое прочитанное сообщение; использовать только сведения получателя.",
             )
     # Pacing remains the single owner of contextual emergence eligibility.
-    from backend.runtime_v3.pacing import evaluate
+    from backend.runtime_v3.pacing import evaluate, development_sources
 
     eligible = sorted(
         (cid for cid, level in levels.items() if level in ("active", "background")),
@@ -247,6 +247,8 @@ def plan(snapshot, request, history=None):
         for rid, r in s["residences"].items()
         if r["actor_id"] in eligible and r["status"] == "active"
     )[:16]
+    milestone_query = (history or {}).get("_milestone_query")
+    scope.development_sources = development_sources(s, scope, milestone_query, history)
     future = deepcopy(s)
     future["meta"]["world_time"] = actual
     policy = evaluate(future, scope, long_term=True)
@@ -272,6 +274,20 @@ def plan(snapshot, request, history=None):
                 domains,
             )
     # Existing #67 evidence, never time alone, makes formation/evolution eligible.
+    if milestone_query and eligible:
+        # One bounded History-index query, not an archive scan for every actor.
+        experiences = milestone_query(actor_ids=eligible, end_minute=start, limit=16)
+        for row in sorted(experiences, key=lambda r: (r.get("minute", 0), r["id"])):
+            actors = [
+                cid
+                for cid in row["actor_ids"]
+                if cid in eligible
+                and identity("development", cid, row["id"])
+                not in (s["characters"][cid].get("personality") or {}).get(
+                    "seen_sources", []
+                )
+            ]
+            add("personality", row["id"], actors, actual, 35, row.get("summary", ""))
     for cid in sorted(scope.relevant_actor_ids)[:16]:
         profile = s["characters"][cid].get("personality") or {}
         evidence = profile.get("evidence", {})

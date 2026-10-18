@@ -878,3 +878,54 @@ def test_identical_event_local_ids_in_distinct_groups_do_not_collide():
     assert len({e["id"] for e in batch["events"]}) == 2
     again, rebatch, _ = run(before, request, generate=generate)
     assert [e["id"] for e in rebatch["events"]] == [e["id"] for e in batch["events"]]
+
+
+def test_canonical_milestone_experience_is_bounded_and_not_time_generated():
+    from backend.runtime_v3.models import identity
+
+    before = fixture()
+    before["world_state"]["threads"]["recovery"] = Thread(
+        id="recovery", description="После важного опыта", character_ids=["c"]
+    ).model_dump()
+    rows = [
+        dict(
+            id=f"experience-{n}",
+            category="occupation",
+            actor_ids=["c"],
+            minute=0,
+            summary="Завершено обучение",
+            fact_id=None,
+        )
+        for n in range(16)
+    ]
+    queries = []
+
+    def read(**kw):
+        queries.append(kw)
+        return rows[: kw["limit"]]
+
+    request = dict(amount=15, unit="years", max_llm_calls=0)
+    p = plan(before, request, {"_milestone_query": read})
+    experiences = [c for c in p.candidates if c.kind == "personality"]
+    assert len(experiences) == 16
+    assert len(queries) <= 2 and all(
+        q["limit"] <= 24 and len(q["actor_ids"]) <= 16 for q in queries
+    )
+    assert not any(c.kind == "personality" for c in plan(before, request).candidates)
+    assert [c.id for c in experiences] == [
+        c.id
+        for c in plan(
+            before,
+            request,
+            {"_milestone_query": lambda **kw: list(reversed(rows))[: kw["limit"]]},
+        ).candidates
+        if c.kind == "personality"
+    ]
+    # Already registered source experiences do not create duplicate acquisition.
+    before["world_state"]["characters"]["c"]["personality"]["seen_sources"] = [
+        identity("development", "c", r["id"]) for r in rows
+    ]
+    assert not any(
+        c.kind == "personality"
+        for c in plan(before, request, {"_milestone_query": read}).candidates
+    )

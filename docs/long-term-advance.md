@@ -59,7 +59,7 @@ to validate their resolver contracts.
 | Pregnancy and birth use #41 | Accepted birth regression and existing reproduction suite |
 | Invalid protagonist / incapacity | Accepted illness/death at a scheduled boundary enters #42; denied-risk, existing-death and incapacity regressions |
 | Dormant identity/history retained | Derived relevance/reactivation regression |
-| Personality needs canonical experience | Accepted course/turning-point regression; zero-budget no-trait regression |
+| Personality needs canonical experience | Accepted course/turning-point regression; bounded Milestone source query/deduplication; zero-budget no-trait regression |
 | Child growth without adult personality generation | Born child → 15-year advance regression |
 | Education/work chronology | Accepted role and course completion regressions; existing residence/role suite |
 | Contextual opportunities; no silent player acceptance | Role opportunity regression, bounded #68 selection and branch-specific receipt deduplication |
