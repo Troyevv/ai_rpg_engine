@@ -113,6 +113,10 @@ def run_job(path, job_id, handle):
             if job['status'] not in ('generating', 'extracting'):
                 return
             config = json.loads(job['config_json'])
+            if job['kind'] == 'long_term':
+                from backend.services.long_term_advance import execute
+                execute(storage, job, handle, chat_stream)
+                return
             context = config['context_length']
             if config.get('provider', 'local') == 'local':
                 model = find_loaded_model(config['model'])

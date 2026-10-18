@@ -66,7 +66,7 @@ def extraction_schema():
         'locations':record(dict(id=string,name=string,description=string,parent_id=string,kind=string,aliases=strings), ('id','name','evidence')),
         'promotions':record(dict(id=string,name=string,fields={'type':'object','additionalProperties':string}), ('id','name','fields','evidence')),
         'facts':record(dict(id=string,text=string,claim=obj(dict(subject_id=string,predicate=string,value=string,scope=string),('subject_id','predicate','value')),visibility={'enum':['public','secret']},character_ids=strings), ('id','text','evidence')),
-        'events':record(dict(id=string,text=string,participants=strings,witnesses=strings,fact_ids=strings,
+        'events':record(dict(id=string,text=string,advance_candidate_ids=dict(type='array',items=string,maxItems=3,description='Only for Long-term Advance: selected cause IDs whose outcome this event establishes.'),participants=strings,witnesses=strings,fact_ids=strings,
             author_id=string,
             medium={'enum':['observation','conversation','message','testimony','discovery','action']},
             location_id=string,minute={'type':'integer','minimum':0},order={'type':'integer','minimum':0}), ('id','text','evidence')),

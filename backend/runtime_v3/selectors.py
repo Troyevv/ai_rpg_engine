@@ -183,6 +183,8 @@ def ui_view(snapshot, history=None):
     from backend.runtime_v3.remote import projection as phone_projection
     result['phone'] = phone_projection(dict(snapshot,world_state=state))
     result['runtime_version']=3
+    report = snapshot.get('last_long_term_advance')
+    result['last_long_term_advance'] = ({k: deepcopy(report[k]) for k in ('start','requested_target','actual_target','interruption','llm_calls','max_llm_calls','decisions','accepted','unresolved') if k in report} if report else None)
     result['last_time_skip']=deepcopy(snapshot.get('last_time_skip'))
     from backend.runtime_v3.notifications import notifications
     result['notifications']=notifications(state, history)

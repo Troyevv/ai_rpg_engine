@@ -193,6 +193,9 @@ def create_app(db_path=None, recover=True):
         jid = engine.submit(repo, sid, body.text, body.kind, settings, api_key=credentials.resolve(body.config.provider, body.key()))
         return job(jid)
 
+    from backend.api.long_term import install as install_long_term
+    install_long_term(app, repo, credentials, job)
+
     @app.post('/api/saves/{sid}/rollback')
     def rollback(sid: int, body: Revision):
         repo.rollback_last(sid, body.revision)

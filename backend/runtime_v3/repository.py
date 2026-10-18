@@ -157,3 +157,23 @@ def migrate_database(storage):
             project(db,row['id'],json.loads(row['state_json']))
         db.execute("INSERT OR IGNORE INTO schema_migrations(name) VALUES('runtime_v3')")
         db.execute("INSERT OR IGNORE INTO schema_migrations(name) VALUES('runtime_v3_lifecycle_calendar')")
+
+
+def advance_receipt_reader(storage, head):
+    """Bounded opportunity receipts in the existing branch History DAG."""
+    def read(candidate_ids):
+        ids = sorted(set(candidate_ids))[:64]
+        if not head or not ids: return set()
+        with storage.connect() as db:
+            rows = db.execute('''WITH RECURSIVE lineage(id) AS (
+                SELECT ? UNION SELECT h.parent_id FROM world_history_v3 h
+                JOIN lineage l ON h.id=l.id WHERE h.parent_id IS NOT NULL)
+                SELECT DISTINCT c.value FROM lineage l JOIN world_history_v3 h ON h.id=l.id,
+                json_each(h.payload_json,'$.state_changes') change,
+                json_each(change.value,'$.report.accepted') accepted,
+                json_each(accepted.value,'$.candidate_ids') c
+                WHERE json_extract(change.value,'$.kind')='long_term_advance'
+                  AND c.value IN (SELECT value FROM json_each(?)) LIMIT 64''',
+                (head,json.dumps(ids))).fetchall()
+        return {row[0] for row in rows}
+    return read
