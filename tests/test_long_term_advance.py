@@ -835,3 +835,46 @@ def test_extraction_cannot_override_interval_clock_or_consume_repair_calls():
         before["world_state"], 5, "years"
     )
     assert after["world_state"]["threads"]["cause"]["status"] == "active"
+
+
+def test_identical_event_local_ids_in_distinct_groups_do_not_collide():
+    before = fixture()
+    for cid in ("b", "c"):
+        before["world_state"]["threads"][cid] = Thread(
+            id=cid, description="Завершение курса", character_ids=[cid], relevance=1
+        ).model_dump()
+    request = dict(amount=5, unit="years", max_llm_calls=4)
+    causes = {
+        c.actor_ids[0]: c.id
+        for c in plan(before, request).candidates
+        if c.kind == "thread"
+    }
+    calls = []
+
+    def generate(stage, messages, *args, **kwargs):
+        if "extraction" not in stage:
+            calls.append(kwargs["context_key"])
+            return iter(["Курс завершён."])
+        cid = next(cid for cid, cause in causes.items() if cause in calls[-1])
+        raw = dict(
+            final_scene=dict(location_id="home", present_character_ids=[cid]),
+            events=[
+                dict(
+                    id="event",
+                    text="Курс завершён.",
+                    evidence="Курс завершён.",
+                    participants=[cid],
+                    witnesses=[cid],
+                    medium="observation",
+                    advance_candidate_ids=[causes[cid]],
+                )
+            ],
+        )
+        return iter([json.dumps(raw)])
+
+    after, batch, report = run(before, request, generate=generate)
+    assert len(report["accepted"]) == 2, report["diagnostics"]
+    assert len(batch["events"]) == 2
+    assert len({e["id"] for e in batch["events"]}) == 2
+    again, rebatch, _ = run(before, request, generate=generate)
+    assert [e["id"] for e in rebatch["events"]] == [e["id"] for e in batch["events"]]

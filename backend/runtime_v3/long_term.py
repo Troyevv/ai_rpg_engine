@@ -616,6 +616,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 development_query=(history or {}).get("_development_query"),
                 actor_names={c["id"]: c["name"] for c in result["character_cards"]},
                 minimal_promotion_ids=promotions,
+                event_namespace=identity("advance-group", sorted(c.id for c in group)),
             ).resolve(raw)
             if resolved.state["meta"]["world_time"] != minute:
                 raise ValueError("Исход изменяет установленную временную границу.")

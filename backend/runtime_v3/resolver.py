@@ -32,10 +32,11 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None):
         if mode not in ("turn", "background"):
             raise ValueError("Неизвестный режим StateResolver.")
         self.minimal_promotion_ids = set(minimal_promotion_ids or ())
+        self.event_namespace = event_namespace
         self.protected_actor_id = protected_actor_id or before['camera']['controlled_actor_id']
         from backend.runtime_v3.pacing import NarrativeDeathPolicy
         self.death_policy = death_policy or NarrativeDeathPolicy()
@@ -267,7 +268,8 @@ class StateResolver:
             from backend.runtime_v3.remote import validate_event_channel
             if not validate_event_channel(self.before,item):
                 self.warn('events',i,'Свидетели или участники недоступны в этом канале.',code='remote_channel_boundary');continue
-            event = dict(id=identity('event',self.turn_id,eid,self.narrative),local_id=eid,text=item['text'],
+            event_id = identity('event',self.turn_id,eid,self.narrative,self.event_namespace) if self.event_namespace else identity('event',self.turn_id,eid,self.narrative)
+            event = dict(id=event_id,local_id=eid,text=item['text'],
                 **lists,medium=medium,evidence=item['evidence'],turn_id=self.turn_id,
                 player_observed=self.observed,recorded_minute=s['meta']['world_time'])
             if item.get('interaction_channel')=='call':
