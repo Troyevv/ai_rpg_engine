@@ -25,6 +25,20 @@ FIELDS={
 }
 
 
+def motivation_text(values):
+    return '\n\n'.join(value if isinstance(value,str) else value['text'] for value in values)
+
+
+def valid_motivations(values):
+    from backend.runtime_v3.models import Motivation
+    if not isinstance(values,list):return False
+    try:
+        for value in values:
+            if not isinstance(value,str):Motivation.model_validate(value)
+        return True
+    except (ValueError,TypeError):return False
+
+
 def prepare(original):
     if not isinstance(original,dict) or not isinstance(original.get('characters'),list):
         raise ValueError('Мир должен содержать список Characters.')
@@ -63,8 +77,8 @@ def prepare(original):
         raise ValueError('Поля кампании должны быть текстом.')
     for c in state['world']['characters'].values():
         for field in ('goals','intentions','obligations'):
-            if not isinstance(c.get(field,[]),list) or any(not isinstance(v,str) for v in c.get(field,[])):
-                raise ValueError(f'{field}: нужен список строк.')
+            if not valid_motivations(c.get(field,[])):
+                raise ValueError(f'{field}: нужен список строк или canonical Motivation.')
     for kind in KINDS:
         for key,item in state['world'][kind].items():
             if kind not in ('relationships','knowledge'):item.setdefault('id',key)
@@ -83,10 +97,10 @@ def sync(state):
     for c in state['characters']:
         c['is_player']=c['id']==state.get('protagonist_id')
         a=world['characters'].get(c['id'],{})
-        if 'goals' in a:a['short_goal']='\n\n'.join(a['goals'])
+        if 'goals' in a:a['short_goal']=motivation_text(a['goals'])
         for key,field in [('short_goal','Чего хочет'),('situation','Сейчас')]:
             if key in a:c['fields'][field]=a[key]
-        if 'intentions' in a:c['fields']['Намерения']='\n\n'.join(a['intentions'])
+        if 'intentions' in a:c['fields']['Намерения']=motivation_text(a['intentions'])
     state['relationships']=[dict(source_id=r.get('source_id',''),target_id=r.get('target_id',''),text=r.get('context','')) for r in world['relationships'].values()]
     scene=world['scenes'].get(state.get('camera',{}).get('scene_id'))
     if scene:
@@ -168,7 +182,7 @@ def validate(state):
         if f.get('owner_id') is not None:require(isinstance(f['owner_id'],str) and f['owner_id'] in ids,f'Факт {fid}: неизвестный владелец тайны.')
     for kid,k in world['knowledge'].items():
         require(k.get('actor_id') in ids and k.get('fact_id') in world['facts'],f'Знание {kid}: ссылка не существует.')
-        require(k.get('status') in ('known','suspected','unknown'),f'Знание {kid}: некорректный статус.')
+        require(k.get('status') in ('known','suspected','unknown','outdated','refuted','superseded'),f'Знание {kid}: некорректный статус.')
         require(not k.get('source_event_id') or k['source_event_id'] in world['events'],f'Знание {kid}: неизвестный источник.')
     for sid,s in world['scenes'].items():
         refs(s.get('participants',[]),ids,f'scene {sid}')
@@ -187,7 +201,7 @@ def validate(state):
     for cid,c in world['characters'].items():
         require(not c.get('scene_id') or c['scene_id'] in world['scenes'],f'Персонаж {cid}: неизвестная сцена.')
         for field in ('goals','intentions','obligations'):
-            require(isinstance(c.get(field,[]),list) and all(isinstance(x,str) for x in c.get(field,[])),f'{cid}/{field}: нужен список строк.')
+            require(valid_motivations(c.get(field,[])),f'{cid}/{field}: нужен список Motivation.')
     for rid,r in world['relationships'].items():
         require(isinstance(r.get('dimensions',{}),dict) and all(isinstance(v,(int,float)) and not isinstance(v,bool) and -100<=v<=100 for v in r.get('dimensions',{}).values()),f'Отношение {rid}: показатели должны быть числами от -100 до 100.')
     for tid,t in world['threads'].items():
@@ -204,7 +218,7 @@ def validate(state):
         except ValueError:
             require(False,f'Отложенное событие {eid}: некорректные поля договорённости.')
 
-        require(type(e.get('due_minute')) is int and e['due_minute']>=0,f'Отложенное событие {eid}: нужен срок.')
+        require(e.get('due_minute') is None or type(e['due_minute']) is int and e['due_minute']>=0,f'Отложенное событие {eid}: некорректный срок.')
         require(e.get('status') in ('pending','resolved','cancelled'),f'Отложенное событие {eid}: некорректный статус.')
         require(isinstance(e.get('description'),str),f'Отложенное событие {eid}: нужно описание.')
         require(not e.get('resolved_event_id') or e['resolved_event_id'] in world['events'],f'Отложенное событие {eid}: неизвестное событие завершения.')
@@ -233,6 +247,11 @@ def validate(state):
         age=re.search(r'\b(\d{1,3})\s*(?:лет|год)',c['fields'].get('Возраст','')+' '+c['fields'].get('Статус',''))
         if age and int(age[1])<18 and re.search(r'врач|университет|женат|замуж',json.dumps(c,ensure_ascii=False),re.I):
             warnings.append(f"{c['id']}: возраст может противоречить профессии или биографии. Проверь связанные факты и события.")
+    if not errors:
+        from backend.services.initial_world_v2 import readiness
+        canonical = readiness(state)
+        errors.extend(canonical['errors'])
+        warnings.extend(canonical['warnings'])
     return {'errors':errors,'warnings':warnings}
 
 
@@ -245,7 +264,7 @@ def review_initial(state,source=''):
         warnings.append('Между значимыми персонажами не описано ни одного отношения. Проверь, достаточно ли связей для начала игры.')
     if len(cards)>2 and not world['threads']:
         warnings.append('Не создано открытых сюжетных линий. Проверь, есть ли у мира естественный потенциал для развития.')
-    connected=set(scene.get('participants',[]));secrets=secret_holders(state)
+    connected=set(scene.get('participants',[]))
     connected.update(cid for r in world['relationships'].values() for cid in (r.get('source_id'),r.get('target_id')))
     connected.update(cid for t in world['threads'].values() for cid in t.get('character_ids',[]))
     for card in cards:
@@ -258,8 +277,6 @@ def review_initial(state,source=''):
             warnings.append(f"{card['name']}: мало информации о личности важного персонажа.")
         if cid!=actor and not (character.get('goals') or character.get('intentions')):
             warnings.append(f"{card['name']}: не задана цель или намерение для самостоятельных действий.")
-        if cid not in secrets:
-            warnings.append(f"{card['name']}: не задана личная тайна с указанием того, кто о ней знает.")
     for r in world['relationships'].values():
         if r.get('source_id') in ids and r.get('target_id') in ids and len(r.get('context','').strip())<25:
             warnings.append('Связь между персонажами описана слишком кратко: добавь мотив и динамику.')
@@ -477,7 +494,7 @@ def export_markdown(state):
         actor=state['world']['characters'][c['id']]
         for key,title in [('location','Место'),('emotion','Эмоциональное состояние'),('goals','Цели'),('intentions','Намерения'),('obligations','Обязательства')]:
             value=actor.get(key)
-            if value:lines += ['### '+title,'\n'.join('- '+v for v in value) if isinstance(value,list) else str(value)]
+            if value:lines += ['### '+title,'\n'.join('- '+(v if isinstance(v,str) else v['text']) for v in value) if isinstance(value,list) else str(value)]
     lines+=['## Направленные отношения']
     for r in state['world']['relationships'].values():
         lines += ['### '+person(r['source_id'])+' → '+person(r['target_id']),r.get('context','')]
@@ -486,7 +503,7 @@ def export_markdown(state):
     for fid,f in state['world']['facts'].items():
         lines += ['### '+('Тайна: ' if f.get('secret') else '')+f['text']]
         for k in state['world']['knowledge'].values():
-            if k['fact_id']==fid:lines += ['- '+person(k['actor_id'])+': '+{'known':'знает','suspected':'подозревает','unknown':'не знает'}[k['status']]]
+            if k['fact_id']==fid:lines += ['- '+person(k['actor_id'])+': '+{'known':'знает','suspected':'подозревает','unknown':'не знает','outdated':'устарело','refuted':'опровергнуто','superseded':'заменено'}[k['status']]]
         if f.get('evidence'):lines += ['Основания: '+'; '.join(f['evidence'])]
     for kind,title in [('threads','Сюжетные линии'),('scenes','Сцены'),('events','События'),('scheduled_events','Отложенные события')]:
         lines+=['## '+title]

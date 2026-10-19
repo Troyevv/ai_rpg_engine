@@ -96,8 +96,10 @@ def migrate_v2(original):
             lid = camera_location
         actors[cid] = Character(id=cid, location_id=lid,
             **{key:deepcopy(entry[key]) for key in ('situation','emotion','goals','intentions','obligations') if key in entry}).model_dump()
-        actors[cid]['birth_date'] = deepcopy(entry.get('birth_date'))
-        for field in ('life_status','life_fact_id','capabilities','developmental_stage','name_history','display_name','parentage_complete_fact_id','reproductive_capability','identity_components','biological_sex','appearance'):
+        # Copy every explicitly supplied canonical Character field. The v2
+        # authoring envelope still uses name-based location; all other fields
+        # have the same owner and semantics as the runtime model.
+        for field in Character.model_fields.keys() - {'id', 'location_id'}:
             if field in entry: actors[cid][field] = deepcopy(entry[field])
         actors[cid]['display_name'] = actors[cid].get('display_name') or next((c['name'] for c in old['characters'] if c['id']==cid), None)
     actor = old.get('controlled_actor_id')
@@ -115,8 +117,16 @@ def migrate_v2(original):
             report.append(dict(section='characters', entity=cid, field='location_id', reason='позиция согласована с текущей камерой'))
         actors[cid]['location_id'] = camera_location
     state = WorldStateV3(camera=dict(location_id=camera_location, present_character_ids=present,
-        controlled_actor_id=actor, mode=mode, situation=old.get('scene', '')), characters=actors,
+        controlled_actor_id=actor, mode=mode, situation=old.get('scene', '')), characters={},
         locations=locations, meta=dict(schema_version=3, turn_id=0, world_time=current_time(old))).model_dump()
+    # Validate once at the complete aggregate boundary, after conservative
+    # optional-field salvage. New authoring validates these fields beforehand.
+    state['characters'] = actors
+    from backend.runtime_v3.models import Meta, Camera
+    for field in Meta.model_fields.keys() - {'schema_version', 'turn_id', 'world_time', 'calendar'}:
+        if field in world: state['meta'][field] = deepcopy(world[field])
+    for field in Camera.model_fields.keys() - {'location_id', 'present_character_ids', 'controlled_actor_id', 'mode', 'situation'}:
+        if field in old.get('camera', {}): state['camera'][field] = deepcopy(old['camera'][field])
     history = WorldHistoryV3()
     # Keep the complete legacy payload, including malformed provenance, for audit.
     history.legacy.append(dict(schema_version=2, world=deepcopy(world)))
@@ -125,11 +135,14 @@ def migrate_v2(original):
     for fid, f in world.get('facts', {}).items():
         state['facts'][fid] = Fact(id=fid, text=f['text'], visibility='secret' if f.get('secret') else 'public',
             character_ids=[cid for cid in f.get('character_ids', []) if cid in actors]).model_dump()
+        state['facts'][fid].update({key:deepcopy(f[key]) for key in
+            Fact.model_fields.keys()-{'id','text','visibility','character_ids'} if key in f})
     for key, k in world.get('knowledge', {}).items():
         if k.get('actor_id') not in actors or k.get('fact_id') not in state['facts']:
             report.append(dict(section='knowledge', entity=key, reason='отсутствует actor или fact', action='drop_record'))
             continue
         current = Knowledge(**{field:k[field] for field in ('actor_id','fact_id','status')}).model_dump()
+        current.update({field:deepcopy(k[field]) for field in Knowledge.model_fields if field in k})
         state['knowledge'][current['actor_id'] + ':' + current['fact_id']] = current
         acquisition = dict(current, source_event_id=k.get('source_event_id'), migrated=True)
         source = world.get('events', {}).get(k.get('source_event_id'), {})
@@ -153,7 +166,7 @@ def migrate_v2(original):
         record = Relationship(source_id=r['source_id'], target_id=r['target_id'], dimensions=dimensions, context=r.get('context','')).model_dump()
         state['relationships'][r['source_id']+':'+r['target_id']] = record
     for tid, t in world.get('threads', {}).items():
-        fields = {key:deepcopy(t[key]) for key in ('description','character_ids','status','state','relevance') if key in t}
+        fields = {key:deepcopy(t[key]) for key in Thread.model_fields.keys()-{'id'} if key in t}
         fields['character_ids']=[cid for cid in fields.get('character_ids',[]) if cid in actors]
         state['threads'][tid] = Thread(id=tid, **fields).model_dump()
     for eid, e in world.get('scheduled_events', {}).items():
@@ -161,11 +174,12 @@ def migrate_v2(original):
             character_ids=[cid for cid in e.get('participants',[]) if cid in actors], due_minute=e.get('due_minute'), status=e.get('status','pending'),
             condition=e.get('condition',''), type=e.get('type','event'),
             temporal=e.get('temporal'), time_reference_minute=e.get('time_reference_minute',state['meta']['world_time'])).model_dump()
-        state['scheduled_events'][eid].update({k:deepcopy(e[k]) for k in ('commitment','end_temporal','depends_on','started_minute','outcome','evidence','source_turn','interrupts') if k in e})
+        state['scheduled_events'][eid].update({k:deepcopy(e[k]) for k in ScheduledEvent.model_fields.keys()-{'id','character_ids'} if k in e})
     if 'reproduction_policy' in world: state['reproduction_policy'] = deepcopy(world['reproduction_policy'])
     state['objective_relations'] = deepcopy(world.get('objective_relations',{}))
     state['conditions'] = deepcopy(world.get('conditions',{}))
-    for section in ('residences','roles','organizations','possessions','contacts','conversations','remote_events'):
+    for section in ('residences','roles','organizations','possessions','contacts','conversations','remote_events',
+                    'reproductive_events','pregnancies','naming_decisions'):
         state[section] = deepcopy(world.get(section,{}))
     if world.get('communication'):
         from backend.runtime_v3.remote_models import CommunicationCapabilities
@@ -178,6 +192,8 @@ def migrate_v2(original):
             report.append(dict(section='calendar', reason='invalid optional calendar preserved in legacy history; relative time retained'))
             history.legacy.append(dict(calendar=deepcopy(configured)))
     initialize_calendar(state)
+    from backend.runtime_v3.personality import salvage_profiles
+    salvage_profiles(state)
     from backend.runtime_v3.appearance import salvage_profiles as salvage_appearance
     salvage_appearance(state)
     state = assert_world_state_v3_invariants(state)
