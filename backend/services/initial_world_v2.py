@@ -17,6 +17,67 @@ from backend.services.world_delta_errors import StructuralDeltaError
 Operation = Literal['creative_generate', 'normalize_existing']
 
 
+def authoring_from_runtime(source):
+    """Project a canonical snapshot into the existing editable document.
+
+    The canonical snapshot is not retained as a second mutable state. Canonical
+    fields live in the corresponding authoring records; only presentation and
+    portable History metadata are kept separately from those records.
+    """
+    snapshot = normalize(source).snapshot
+    state = snapshot['world_state']; meta = state['meta']; camera = state['camera']
+    cards = {row['id']: deepcopy(row) for row in snapshot.get('character_cards', [])}
+    world = deepcopy(state)
+    for section in ('meta', 'camera', 'locations'):
+        world.pop(section)
+    world.update({key: deepcopy(value) for key, value in meta.items()
+                  if key not in ('schema_version', 'world_time', 'calendar')})
+    world['version'] = 2
+    world.update(scenes={}, events={}, scene_records={})
+    def place(lid):
+        return state['locations'][lid]['name'] if lid is not None else 'Не указано'
+    for cid, actor in world['characters'].items():
+        cards.setdefault(cid, dict(id=cid, name=actor['display_name'] or cid, fields={}))
+        actor['location'] = place(actor['location_id']) if actor['location_id'] is not None else None
+    for fact in world['facts'].values():
+        fact['secret'] = fact.pop('visibility') == 'secret'
+    for event in world['scheduled_events'].values():
+        event['participants'] = event.pop('character_ids')
+    sid = models.identity('initial_scene', camera['location_id'], camera['present_character_ids'])
+    world['scenes'][sid] = dict(id=sid, location=place(camera['location_id']), location_id=camera['location_id'],
+        participants=deepcopy(camera['present_character_ids']), text=camera['situation'],
+        start_minute=meta['world_time'], end_minute=meta['world_time'], status='active', event_ids=[])
+    presentation = snapshot.get('campaign', {})
+    campaign = presentation.get('campaign', presentation)
+    campaign = {key: value for key, value in campaign.items()
+                if key in ('title','setting','era','genre','tone','description','public_description','rules')
+                and isinstance(value, str)}
+    campaign.setdefault('title', '')
+    history = deepcopy(source.get('initial_history', {}))
+    return dict(initial_state_version=2, characters=list(cards.values()), world=world,
+        locations=[dict(row, text=row['description']) for row in state['locations'].values()],
+        protagonist_id=meta['current_protagonist_id'], controlled_actor_id=camera['controlled_actor_id'],
+        camera=dict(deepcopy(camera), scene_id=sid),
+        world_clock=dict(minute=meta['world_time'], calendar=deepcopy(meta['calendar'])),
+        campaign=campaign, runtime_campaign=deepcopy(presentation),
+        memory=deepcopy(snapshot.get('memory', {})), initial_history=history,
+        initial_history_missing=bool(source.get('history_head')) and not bool(history))
+
+
+def validate_initial_history(source):
+    """Portable existing History batches, never a second Milestone collection."""
+    history = source.get('initial_history', {})
+    if not isinstance(history, dict):
+        raise ValueError('initial_history: expected a History object')
+    unknown = set(history) - set(models.WorldHistoryV3.__dataclass_fields__)
+    if unknown:
+        raise ValueError('initial_history: unknown section')
+    for section, rows in history.items():
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            raise ValueError(f'initial_history/{section}: expected a list of records')
+    return history
+
+
 def _check(model, value, path):
     try:
         return model.model_validate(value)
@@ -79,6 +140,7 @@ def normalize(source, *, operation: Operation = 'normalize_existing'):
     if operation not in ('creative_generate', 'normalize_existing'):
         raise ValueError('operation: unknown initial-world operation')
     value = deepcopy(source)
+    validate_initial_history(value)
     if value.get('schema_version') == 3:
         _check(models.WorldStateV3, value['world_state'], 'world_state')
     else:
@@ -86,7 +148,24 @@ def normalize(source, *, operation: Operation = 'normalize_existing'):
         value = prepare(value)
         _check_explicit_fields(value)
     try:
-        return migrate_v2(value)
+        result = migrate_v2(value)
+        if value.get('schema_version') == 3:
+            for section, rows in value.get('initial_history', {}).items():
+                result.history[section].extend(deepcopy(rows))
+        raw = value['world_state'] if value.get('schema_version') == 3 else value['world']
+        canonical = result.snapshot['world_state']
+        for key, knowledge in raw.get('knowledge', {}).items():
+            if knowledge.get('replaced_by') is not None and knowledge['replaced_by'] not in canonical['facts']:
+                raise ValueError(f'knowledge/{key}/replaced_by: unknown Fact ID')
+        from backend.runtime_v3.possessions import validate_record
+        for key, item in raw.get('possessions', {}).items():
+            row = _check(models.SignificantPossession, item, f'possessions/{key}').model_dump()
+            try:
+                if row['id'] != key: raise ValueError('conflicting canonical ID')
+                validate_record(row, canonical)
+            except ValueError as exc:
+                raise ValueError(f'possessions/{key}: {exc}') from exc
+        return result
     except StructuralDeltaError as exc:
         path = '/'.join(str(exc.path[key]) for key in ('section', 'entity', 'field') if key in exc.path)
         raise ValueError((path + ': ' if path else '') + str(exc)) from exc

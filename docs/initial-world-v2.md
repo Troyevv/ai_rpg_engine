@@ -40,8 +40,10 @@ The first implementation increment adds `services/initial_world_v2.py`:
 
 ## Compatibility
 
-No database migration, historical-snapshot rewrite, dependency addition, or
-Tabletop change. The existing migration cache and immutable History DAG remain
+The checkpoint foundation adds four SQLite tables (`preparation_runs`,
+`preparation_units`, `preparation_resources`, `preparation_attempts`) through an
+idempotent additive migration. No historical-snapshot rewrite, dependency
+addition, or Tabletop change. The existing migration cache and immutable History DAG remain
 the owners of saved migrations/history. Old saves continue to use the existing
 conservative load path, not the stricter new-authoring boundary.
 
@@ -56,11 +58,11 @@ their stable location/organization IDs explicitly; do not rewrite old IDs.
 The following is **not implemented by this increment** and is required before
 this PR can be marked ready or Issue #44 closed:
 
-1. Finish the lossless canonical/authoring coverage and entry-path matrix,
-   including canonical snapshot imports and initial History/Milestones.
-2. Typed free-form interpretation with source spans, numbered constraint
-   revisions, explicit/inferred/generated/prohibited/ambiguous claims, stable
-   identities, business hierarchy and adoption/knowledge chronology.
+1. Extend the canonical/authoring equivalence matrix as each generation stage
+   is integrated; canonical snapshot imports and portable History are implemented.
+2. Integrate the typed interpretation into automatic generation, editable
+   preview and structured-setting reconciliation. Backend extraction/provenance
+   and numbered journal revisions are implemented.
 3. Replace `draft_generation.run()`'s monolithic request with bounded typed
    stages and NPC batches; curated stage contexts and stage-local accounting.
 4. Persist stage checkpoints, dependencies, attempts, leases and CAS revisions
@@ -90,3 +92,41 @@ ordinary turns, serialization/reload and sibling History branches.
 
 All provider-related tests use mocks/fixtures; no paid provider calls were made.
 Exact final suite/browser results are recorded in the PR description.
+
+## Second implementation increment
+
+- Canonical snapshots import into the existing editable envelope, without a
+  retained second world state. IDs (including identically named places), observer
+  camera, calendars, canonical metadata, portable History and structured
+  Milestones survive author/confirm/save. Missing external History produces an
+  author warning rather than invented history. Empty observer worlds stay empty.
+- `world_interpretation.py` validates typed entity/claim extraction, exact source
+  quotes (uniquely recoverable offset errors are repaired deterministically),
+  references, knowledge holders, explicit/inferred/open/prohibited/ambiguous
+  classification and source time scope. Identity reuse is exact, never fuzzy.
+  The existing generation API accepts `task=interpret`; immutable revisions use
+  `document_versions`. Public reads expose no claim/entity/source text.
+- A reserved existing Fact/Claim predicate `organization.parent` represents a
+  direct parent company: subject_id is the subsidiary, value is the parent ID.
+  The canonical residence/organization invariant validates references, conflicting
+  current parents and cycles. Nonempty scope denotes a historical/qualified claim,
+  not a current edge. No claim means unknown. Fact visibility/Knowledge remains
+  responsible for disclosure; no new economy or organization graph store.
+- `initial_world_stages.py` provides independently typed request payloads,
+  application-owned roster identities, bounded character batches, deterministic
+  canonical composition and input fingerprints/selective invalidation. It does
+  not yet replace the live monolithic generator. Canonical source facts still
+  need complete semantic protection in the integrated orchestration path.
+- `generation_checkpoints.py` adds a tested persistence foundation using existing
+  Preparation IDs and the version journal: immutable payloads, input hashes,
+  output references, attempts, expiring worker leases, transactional commit CAS,
+  pause boundaries, cancellation and interrupted-request uncertainty. These
+  methods are not yet wired into the application worker/startup/UI. Existing
+  legacy jobs continue to run via their previous lifecycle. Do not describe this
+  foundation as completed automatic recovery or complete hybrid generation.
+
+Additional deterministic tests cover canonical snapshot API import/confirm,
+empty observer worlds, five subsidiaries, broken/cyclic organization references,
+interpretation failure/cancel/revision/privacy, bounded batch composition,
+selective input invalidation, durable journal reload, lease replacement, late
+commits, pause/resume, cancellation, retry budget and uncertain billing outcomes.

@@ -21,7 +21,7 @@ class Change(Revision):
     warnings_ack: bool = False
 
 class Generate(Revision,Credential):
-    task: Literal['world','field','character'] = 'world'
+    task: Literal['world','field','character','interpret'] = 'world'
     text: str = Field(default='',max_length=100000)
     use_idea: bool = False
     kind: str = ''
@@ -37,6 +37,9 @@ class Confirm(Revision):
 def install(app,repo,preparation,credentials,job):
     @app.get('/api/workspaces/{wid}/draft')
     def draft(wid:str,author:bool=False):return repo.draft(wid,author)
+
+    @app.get('/api/workspaces/{wid}/draft/interpretation')
+    def interpretation(wid:str,author:bool=False):return repo.interpretation(wid,author)
 
     @app.post('/api/workspaces/{wid}/draft/import')
     def import_world(wid:str,body:Import):
@@ -55,8 +58,8 @@ def install(app,repo,preparation,credentials,job):
 
     @app.post('/api/workspaces/{wid}/draft/generate')
     def generate(wid:str,body:Generate):
-        if body.task=='world' and not body.text.strip() and not body.use_idea:raise ValueError('Опиши желаемый мир.')
-        if body.task!='world':
+        if body.task in ('world','interpret') and not body.text.strip() and not body.use_idea:raise ValueError('Опиши желаемый мир.')
+        if body.task not in ('world','interpret'):
             state=repo.draft(wid,True)['state']
             domain.entity(state,body.kind,body.entity_id)
             if body.task=='character' and body.kind!='character':raise ValueError('Нужна карточка персонажа.')

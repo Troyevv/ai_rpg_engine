@@ -39,6 +39,7 @@ def migrate_v2(original):
     from backend.services.timeline import current_time
     old = normalize(original)
     world = old.get('world') or {}
+    canonical_authoring = old.get('initial_state_version') == 2
     if world.get('version') != 2:
         if isinstance(original.get('scene'),str) and not original.get('world') and not original.get('characters'):
             state=WorldStateV3(camera=dict(mode='observer',situation=original['scene']),characters={}).model_dump()
@@ -83,16 +84,17 @@ def migrate_v2(original):
         report.append(dict(section='scenes',reason='повреждённые исторические сцены сохранены только в legacy history'))
     camera_scene = scenes.get(old.get('camera', {}).get('scene_id'), {})
     camera_meta = old.get('scene_meta') or {}
-    camera_location = location(camera_scene.get('location') or camera_meta.get('location'))
+    camera_location = camera_scene['location_id'] if canonical_authoring and 'location_id' in camera_scene else location(camera_scene.get('location') or camera_meta.get('location'))
     actors = {}
     for cid, entry in world.get('characters', {}).items():
-        live = {location(s.get('location')) for s in scenes.values()
+        live = {s['location_id'] if canonical_authoring and 'location_id' in s else location(s.get('location')) for s in scenes.values()
                 if s.get('status') == 'active' and cid in s.get('participants', [])}
         live.discard(None)
-        lid = location(entry.get('location'))
-        if lid is None and len(live) == 1:
+        explicit_position = canonical_authoring and 'location_id' in entry
+        lid = entry['location_id'] if explicit_position else location(entry.get('location'))
+        if lid is None and len(live) == 1 and not explicit_position:
             lid = next(iter(live))
-        if lid is None and cid in camera_scene.get('participants', camera_meta.get('present_ids', [])):
+        if lid is None and not explicit_position and cid in camera_scene.get('participants', camera_meta.get('present_ids', [])):
             lid = camera_location
         actors[cid] = Character(id=cid, location_id=lid,
             **{key:deepcopy(entry[key]) for key in ('situation','emotion','goals','intentions','obligations') if key in entry}).model_dump()
@@ -101,7 +103,8 @@ def migrate_v2(original):
         # have the same owner and semantics as the runtime model.
         for field in Character.model_fields.keys() - {'id', 'location_id'}:
             if field in entry: actors[cid][field] = deepcopy(entry[field])
-        actors[cid]['display_name'] = actors[cid].get('display_name') or next((c['name'] for c in old['characters'] if c['id']==cid), None)
+        if not canonical_authoring or 'display_name' not in entry:
+            actors[cid]['display_name'] = actors[cid].get('display_name') or next((c['name'] for c in old['characters'] if c['id']==cid), None)
     actor = old.get('controlled_actor_id')
     present = camera_scene.get('participants', camera_meta.get('present_ids', []))
     present = list(dict.fromkeys(cid for cid in present if cid in actors))
@@ -113,6 +116,8 @@ def migrate_v2(original):
         present.append(actor)
         report.append(dict(section='camera', entity=actor, reason='controlled actor восстановлен в камере'))
     for cid in present:
+        if canonical_authoring and 'location_id' in world['characters'][cid]:
+            continue  # Explicit canonical positions are validated, never repaired.
         if actors[cid]['location_id'] != camera_location:
             report.append(dict(section='characters', entity=cid, field='location_id', reason='позиция согласована с текущей камерой'))
         actors[cid]['location_id'] = camera_location
@@ -122,6 +127,8 @@ def migrate_v2(original):
     # Validate once at the complete aggregate boundary, after conservative
     # optional-field salvage. New authoring validates these fields beforehand.
     state['characters'] = actors
+    if canonical_authoring:
+        state['meta']['turn_id'] = world.get('turn_id', 0)
     from backend.runtime_v3.models import Meta, Camera
     for field in Meta.model_fields.keys() - {'schema_version', 'turn_id', 'world_time', 'calendar'}:
         if field in world: state['meta'][field] = deepcopy(world[field])
@@ -132,6 +139,10 @@ def migrate_v2(original):
     history.legacy.append(dict(schema_version=2, world=deepcopy(world)))
     history.events.extend(deepcopy(list(world.get('events', {}).values()) if isinstance(world.get('events',{}),dict) else [world.get('events')]))
     history.turns.extend(deepcopy(list(world.get('scene_records', {}).values()) if isinstance(world.get('scene_records',{}),dict) else [world.get('scene_records')]))
+    if 'initial_history' in old:
+        from backend.services.initial_world_v2 import validate_initial_history
+        for section, rows in validate_initial_history(old).items():
+            getattr(history,section).extend(deepcopy(rows))
     for fid, f in world.get('facts', {}).items():
         state['facts'][fid] = Fact(id=fid, text=f['text'], visibility='secret' if f.get('secret') else 'public',
             character_ids=[cid for cid in f.get('character_ids', []) if cid in actors]).model_dump()
@@ -206,6 +217,13 @@ def migrate_v2(original):
     snapshot = dict(schema_version=3, world_state=state, character_cards=cards,
         campaign={key:deepcopy(old[key]) for key in retained if key in old},
         memory=deepcopy(old.get('memory', {})), history_head=None)
+    if canonical_authoring:
+        presentation=deepcopy(old.get('runtime_campaign', {}))
+        if isinstance(presentation.get('campaign'),dict):
+            presentation['campaign'].update(deepcopy(old.get('campaign',{})))
+        else:
+            presentation.update(deepcopy(old.get('campaign',{})))
+        snapshot['campaign']=presentation
     from backend.runtime_v3.personality import initialize_profiles
     initialize_profiles(snapshot)
     from backend.runtime_v3.protagonist import initialize

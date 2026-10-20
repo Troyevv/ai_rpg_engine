@@ -40,6 +40,9 @@ def valid_motivations(values):
 
 
 def prepare(original):
+    if isinstance(original,dict) and original.get('schema_version')==3:
+        from backend.services.initial_world_v2 import authoring_from_runtime
+        original=authoring_from_runtime(original)
     if not isinstance(original,dict) or not isinstance(original.get('characters'),list):
         raise ValueError('Мир должен содержать список Characters.')
     for card in original['characters']:
@@ -112,6 +115,7 @@ def sync(state):
 
 def validate(state):
     errors=[];warnings=[];world=state['world']
+    canonical_import = state.get('initial_state_version') == 2
     cards=state['characters'];ids={c['id'] for c in cards}
     def require(ok,message):
         if not ok:errors.append(message)
@@ -156,10 +160,10 @@ def validate(state):
         except (ValueError,TypeError,KeyError): errors.append('Некорректные места, организации, проживание или роли.')
     require(len(ids)==len(cards),'Повтор Character ID.')
     require(all(re.fullmatch(r'[\w-]{1,100}',cid) for cid in ids),'Некорректный Character ID.')
-    require(len({c['name'].strip().casefold() for c in cards})==len(cards),'Повтор имени: проверь identities персонажей.')
-    require(bool(cards) and all(c['name'].strip() for c in cards),'Нужны персонажи с именами.')
-    require(state.get('protagonist_id') in ids,'Не выбран protagonist.')
-    require(state.get('controlled_actor_id') in ids,'Не выбран controlled actor для старта.')
+    require(canonical_import or len({c['name'].strip().casefold() for c in cards})==len(cards),'Повтор имени: проверь identities персонажей.')
+    require((bool(cards) or canonical_import) and all(c['name'].strip() for c in cards),'Нужны персонажи с именами.')
+    require(state.get('protagonist_id') in ids or canonical_import and state.get('protagonist_id') is None,'Не выбран protagonist.')
+    require(state.get('controlled_actor_id') in ids or canonical_import and state.get('controlled_actor_id') is None and state.get('camera',{}).get('mode')=='observer','Не выбран controlled actor для старта.')
     require(set(world['characters'])==ids,'Character cards и character state не совпадают.')
     minute=state.get('world_clock',{}).get('minute')
     require(type(minute) is int and minute>=0,'Нужно игровое время (минута от начала недели).')
@@ -183,7 +187,8 @@ def validate(state):
     for kid,k in world['knowledge'].items():
         require(k.get('actor_id') in ids and k.get('fact_id') in world['facts'],f'Знание {kid}: ссылка не существует.')
         require(k.get('status') in ('known','suspected','unknown','outdated','refuted','superseded'),f'Знание {kid}: некорректный статус.')
-        require(not k.get('source_event_id') or k['source_event_id'] in world['events'],f'Знание {kid}: неизвестный источник.')
+        history_events={row.get('id') for row in state.get('initial_history',{}).get('events',[]) if isinstance(row,dict)} if isinstance(state.get('initial_history'),dict) else set()
+        require(not k.get('source_event_id') or k['source_event_id'] in world['events'] or k['source_event_id'] in history_events or canonical_import,f'Знание {kid}: неизвестный источник.')
     for sid,s in world['scenes'].items():
         refs(s.get('participants',[]),ids,f'scene {sid}')
         require(isinstance(s.get('location'),str) and bool(s['location'].strip()),f'Сцена {sid}: нужно место.')
@@ -193,7 +198,7 @@ def validate(state):
     for tid,t in world['threads'].items():
         refs(t.get('character_ids',[]),ids,f'thread {tid}')
         if 'visible_to_ids' in t:refs(t['visible_to_ids'],ids,f'thread visibility {tid}')
-        require(t.get('status') in ('active','developing','dormant','resolved'),f'Линия {tid}: некорректный статус.')
+        require(t.get('status') in ('active','developing','dormant','resolved','paused'),f'Линия {tid}: некорректный статус.')
     for eid,e in world['events'].items():
         refs(e.get('participants',[]),ids,f'event {eid}')
         refs(e.get('witnesses',[]),ids,f'witnesses {eid}')
@@ -240,7 +245,7 @@ def validate(state):
         require(c.get('minute') is None or type(c['minute']) is int and c['minute']>=0,f'Персонаж {cid}: некорректное время.')
         require(not c.get('last_event_id') or c['last_event_id'] in world['events'],f'Персонаж {cid}: неизвестное последнее событие.')
     start=world['scenes'].get(state.get('camera',{}).get('scene_id'),{})
-    require(state.get('controlled_actor_id') in start.get('participants',[]),'Управляемый персонаж должен присутствовать в стартовой сцене.')
+    require(state.get('controlled_actor_id') in start.get('participants',[]) or canonical_import and state.get('controlled_actor_id') is None,'Управляемый персонаж должен присутствовать в стартовой сцене.')
     require(type(start.get('end_minute')) is int and type(minute) is int and start['end_minute']<=minute,'Стартовая сцена находится позже часов мира.')
     if not isinstance(start.get('text'),str) or not start['text'].strip():warnings.append('Стартовая ситуация пока не описана.')
     for c in cards:
@@ -374,11 +379,13 @@ def patch(state,kind,eid,field,value):
         if old is not None and type(value) is not type(old):raise ValueError('Тип поля менять нельзя.')
         if len(json.dumps(value,ensure_ascii=False))>30000:raise ValueError('Поле слишком длинное.')
         target[field]=value
+        if field=='location' and kind in ('actor','scene'):
+            target.pop('location_id',None)
     else:raise ValueError('Поле недоступно для изменения.')
     if kind=='start':
         state.update(protagonist_id=target['protagonist_id'],controlled_actor_id=target['controlled_actor_id'])
-        state['camera']={'scene_id':target['scene_id'],'mode':'actor'}
-        state['world_clock']={'minute':target['minute'],'last_event_time':label(target['minute'])}
+        state['camera']={**state.get('camera',{}),'scene_id':target['scene_id'],'mode':'actor' if target['controlled_actor_id'] else 'observer'}
+        state['world_clock']={**state.get('world_clock',{}),'minute':target['minute'],'last_event_time':label(target['minute'])}
     return sync(state)
 
 

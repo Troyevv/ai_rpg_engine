@@ -12,6 +12,30 @@ def _invalid_json_constant(value):
 
 
 class DraftStorage:
+    def interpretation(self,wid,author=False):
+        from backend.services.world_interpretation import public_summary
+        with self.connect() as db:
+            self._draft_workspace(db,wid,idle=False)
+            row=db.execute("SELECT v.* FROM document_heads h JOIN document_versions v ON v.id=h.version_id WHERE h.kind='world_interpretation' AND h.owner=?",(wid,)).fetchone()
+            if not row:return None
+            plan=json.loads(row['content'])
+            return {'version_id':row['id'],'plan':plan if author else public_summary(plan)}
+
+    def finish_interpretation_job(self,jid,raw,brief):
+        from backend.services.world_interpretation import accept
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            job=db.execute('SELECT * FROM preparation_jobs WHERE id=?',(jid,)).fetchone()
+            if not job or job['status']!='generating':return
+            wid=job['workspace_id'];self._draft_workspace(db,wid,job['revision'],idle=False)
+            prior=db.execute("SELECT v.* FROM document_heads h JOIN document_versions v ON v.id=h.version_id WHERE h.kind='world_interpretation' AND h.owner=?",(wid,)).fetchone()
+            previous=json.loads(prior['content']) if prior else None
+            revision=previous['constraint_revision']+1 if previous else 1
+            plan=accept(raw,brief,wid,revision,previous)
+            self._record_document(db,'world_interpretation',wid,dump(plan),True,'interpretation',prior['id'] if prior else None)
+            db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))
+            db.execute("UPDATE preparation_jobs SET status='saved',phase='interpreted',narrative='' WHERE id=?",(jid,))
+
     def draft_phase(self,jid,phase,reset_progress=False):
         with self.connect() as db:
             db.execute("UPDATE preparation_jobs SET phase=?,narrative=CASE WHEN ? THEN '' ELSE narrative END WHERE id=? AND status='generating'",(phase,int(reset_progress),jid))
@@ -58,7 +82,7 @@ class DraftStorage:
             if 'state' in state:state=state['state']
             # Only the existing canonical aggregate is accepted, never legacy
             # data that normalize() would migrate and seed from prose.
-            if not isinstance(state,dict) or not isinstance(state.get('world'),dict) or state['world'].get('version')!=2:
+            if not isinstance(state,dict) or not (state.get('schema_version')==3 and isinstance(state.get('world_state'),dict) or isinstance(state.get('world'),dict) and state['world'].get('version')==2):
                 raise ValueError('JSON не содержит корректный World State.')
             report=None
             try:
@@ -73,7 +97,8 @@ class DraftStorage:
                 raise ValueError('JSON не содержит корректный World State.'+(' '+details if details else '')) from exc
             with self.connect() as db:
                 db.execute('BEGIN IMMEDIATE');self._draft_workspace(db,wid,revision)
-                self._write_draft(db,wid,state,'import')
+                warnings=['Импорт содержит текущее состояние без исторической цепочки; неизвестная история не восстановлена.'] if state.get('initial_history_missing') else []
+                self._write_draft(db,wid,state,'import',warnings=warnings)
             return
         if format!='text':raise ValueError('Неизвестный формат импорта.')
         from world_parser import parse_summary

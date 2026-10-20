@@ -23,7 +23,37 @@ def validate_hierarchy(locations):
         raise ValueError('cyclic location hierarchy') from exc
 
 
+def validate_organization_hierarchy(state):
+    """A reserved canonical Fact claim encodes a direct parent organization.
+
+    No ownership/economy simulation: the existing Fact owns the assertion and
+    Knowledge owns who knows it. An absent claim means unknown, not independent.
+    """
+    parents = {}
+    organizations = state.get('organizations', {})
+    for fid, fact in state.get('facts', {}).items():
+        claim = fact.get('claim')
+        if not claim or claim['predicate'] != 'organization.parent':
+            continue
+        child, parent = claim['subject_id'], claim['value']
+        path = f'facts/{fid}/claim'
+        if child not in organizations or parent not in organizations:
+            raise ValueError(f'{path}: unknown organization reference')
+        if claim.get('scope'):
+            # A historical/qualified claim is not a current hierarchy edge.
+            continue
+        if child in parents and parents[child] != parent:
+            raise ValueError(f'{path}: conflicting parent organization')
+        parents[child] = parent
+    try:
+        tuple(TopologicalSorter({key: [parents[key]] if key in parents else []
+                                 for key in organizations}).static_order())
+    except CycleError as exc:
+        raise ValueError('facts/organization.parent: cyclic organization hierarchy') from exc
+
+
 def validate_residence_state(state):
+    validate_organization_hierarchy(state)
     validate_hierarchy(state['locations'])
     active = set()
     organization_names = set()

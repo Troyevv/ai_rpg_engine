@@ -63,6 +63,9 @@ def decode_result(text,state,config):
 
 
 def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
+    if config['_draft_task']=='interpret':
+        from backend.services.world_interpretation import run as interpret
+        return interpret(preparation,jid,config,api_key,handle,loaded,stream_fn)
     repo=preparation.repo;job=repo.preparation_job(jid)
     original=repo.draft(job['workspace_id'],author=True)['state'];stage='draft_world'
     context=config['context_length']

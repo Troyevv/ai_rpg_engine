@@ -3,12 +3,13 @@ import json
 import uuid
 from storage import Storage
 from backend.repositories.drafts import DraftStorage
+from backend.repositories.generation_checkpoints import GenerationCheckpoints
 
 
 from backend.repositories.presentation import PresentationStorage
 
 
-class Repository(PresentationStorage, DraftStorage, Storage):
+class Repository(PresentationStorage, DraftStorage, GenerationCheckpoints, Storage):
     def __init__(self, path=None):
         super().__init__(path)
         self.init_presentation()
@@ -39,6 +40,8 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                 for kind in ('idea','summary'):
                     if not db.execute('SELECT 1 FROM document_heads WHERE kind=? AND owner=?',(kind,w['id'])).fetchone():
                         self._record_document(db,kind,w['id'],w[kind],bool(w['summary_complete']) if kind=='summary' else bool(w[kind]),'migration')
+
+        self.init_generation_checkpoints()
 
     def list_workspaces(self, deleted=False):
         with self.connect() as db:
