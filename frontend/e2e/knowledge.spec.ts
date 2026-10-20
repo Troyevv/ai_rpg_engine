@@ -22,7 +22,8 @@ test('grounded correction shows current and old beliefs after reload without gos
   const saved=await(await request.get(`/api/saves/${selection.save}`)).json();
   expect(saved.state.world.knowledge['qa_kirill:qa_oleg_workshop'].status).toBe('superseded');
   expect(saved.state.world.knowledge['qa_kirill:qa_oleg_academy'].status).toBe('known');
-  expect(saved.state.world.knowledge['qa_vera:qa_oleg_workshop'].status).toBe('known');
+  // Other NPCs' private beliefs stay canonical, but are not player-visible.
+  expect(saved.state.world.knowledge['qa_vera:qa_oleg_workshop']).toBeUndefined();
   expect(saved.state.world.knowledge['qa_vera:qa_oleg_academy']).toBeUndefined();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width);
   await page.getByRole('button',{name:'Закрыть',exact:true}).click();

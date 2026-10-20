@@ -281,3 +281,23 @@ def test_corporate_parent_claims_preserve_structure_and_knowledge(api):
             claim=dict(subject_id=child,predicate='organization.parent',value=parent))
         report = readiness(broken)
         assert report['errors'] and 'organization' in report['errors'][0]
+
+
+def test_game_projection_never_exposes_author_provenance_or_other_npc_knowledge():
+    from backend.runtime_v3.selectors import ui_view
+    snapshot=normalize(rich_draft()).snapshot
+    state=snapshot['world_state'];actor=state['camera']['controlled_actor_id']
+    npc=next(cid for cid in state['characters'] if cid!=actor)
+    snapshot['campaign']['initial_world']={'brief':'Секретный авторский источник','claims':[{'text':'Скрытая биография'}]}
+    state['facts']['private-initial']=dict(id='private-initial',text='Скрытый банковский договор',visibility='secret',character_ids=[npc])
+    state['knowledge'][npc+':private-initial']=dict(actor_id=npc,fact_id='private-initial',status='known')
+    state['facts']['public-initial']=dict(id='public-initial',text='Станция открыта',visibility='public',character_ids=[])
+    state['knowledge'][npc+':public-initial']=dict(actor_id=npc,fact_id='public-initial',status='known')
+    visible=ui_view(snapshot)
+    text=json.dumps(visible,ensure_ascii=False)
+    assert 'Секретный авторский источник' not in text
+    assert 'Скрытый банковский договор' not in text
+    assert 'Станция открыта' in text
+    assert all(row['actor_id']==actor for row in visible['world']['knowledge'].values())
+    assert snapshot['campaign']['initial_world']['brief']=='Секретный авторский источник'
+    assert npc+':private-initial' in state['knowledge']

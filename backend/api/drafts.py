@@ -5,6 +5,7 @@ from pydantic import Field
 from fastapi.responses import PlainTextResponse
 from backend.api.schemas import DTO, Revision, Credential, ModelConfig
 from backend.services import draft_world as domain
+from backend.services.world_creation_settings import CreationSettings
 
 
 class Import(Revision):
@@ -21,14 +22,16 @@ class Change(Revision):
     warnings_ack: bool = False
 
 class Generate(Revision,Credential):
-    task: Literal['world','field','character','interpret'] = 'world'
+    task: Literal['world','world_staged','field','character','interpret'] = 'world'
     text: str = Field(default='',max_length=100000)
     use_idea: bool = False
+    request_id: str | None = Field(default=None,min_length=1,max_length=128,pattern=r'^[\w-]+$')
     kind: str = ''
     entity_id: str = ''
     field: str = ''
     warnings_ack: bool = False
     config: ModelConfig
+    creation: CreationSettings = Field(default_factory=CreationSettings)
 
 class Confirm(Revision):
     version_id: int
@@ -58,14 +61,14 @@ def install(app,repo,preparation,credentials,job):
 
     @app.post('/api/workspaces/{wid}/draft/generate')
     def generate(wid:str,body:Generate):
-        if body.task in ('world','interpret') and not body.text.strip() and not body.use_idea:raise ValueError('Опиши желаемый мир.')
-        if body.task not in ('world','interpret'):
+        if body.task in ('world','world_staged','interpret') and not body.text.strip() and not body.use_idea:raise ValueError('Опиши желаемый мир.')
+        if body.task not in ('world','world_staged','interpret'):
             state=repo.draft(wid,True)['state']
             domain.entity(state,body.kind,body.entity_id)
             if body.task=='character' and body.kind!='character':raise ValueError('Нужна карточка персонажа.')
             if body.task=='field' and body.field not in domain.FIELDS.get(body.kind,set()) and not(body.kind=='character' and body.field.startswith('fields.')):raise ValueError('Поле недоступно.')
-        config={**body.config.model_dump(),'_draft_task':body.task,'_draft_input':body.text,'_use_idea':body.use_idea,
-                '_warnings_ack':body.warnings_ack,'_draft_target':{'kind':body.kind,'id':body.entity_id,'field':body.field}}
+        config={**body.config.model_dump(),'_creation':body.creation.model_dump(),'_draft_task':body.task,'_draft_input':body.text,'_use_idea':body.use_idea,
+                '_request_id':body.request_id,'_warnings_ack':body.warnings_ack,'_draft_target':{'kind':body.kind,'id':body.entity_id,'field':body.field}}
         jid=preparation.submit(wid,'draft_'+body.task,body.text,config,body.revision,credentials.resolve(body.config.provider,body.key()))
         return job(jid)
 

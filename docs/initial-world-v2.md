@@ -40,8 +40,9 @@ The first implementation increment adds `services/initial_world_v2.py`:
 
 ## Compatibility
 
-The checkpoint foundation adds four SQLite tables (`preparation_runs`,
-`preparation_units`, `preparation_resources`, `preparation_attempts`) through an
+The checkpoint foundation adds six SQLite tables (`preparation_runs`,
+`preparation_units`, `preparation_resources`, `preparation_attempts`,
+`preparation_submissions`, `preparation_field_locks`) through an
 idempotent additive migration. No historical-snapshot rewrite, dependency
 addition, or Tabletop change. The existing migration cache and immutable History DAG remain
 the owners of saved migrations/history. Old saves continue to use the existing
@@ -60,26 +61,24 @@ this PR can be marked ready or Issue #44 closed:
 
 1. Extend the canonical/authoring equivalence matrix as each generation stage
    is integrated; canonical snapshot imports and portable History are implemented.
-2. Integrate the typed interpretation into automatic generation, editable
-   preview and structured-setting reconciliation. Backend extraction/provenance
-   and numbered journal revisions are implemented.
-3. Replace `draft_generation.run()`'s monolithic request with bounded typed
-   stages and NPC batches; curated stage contexts and stage-local accounting.
-4. Persist stage checkpoints, dependencies, attempts, leases and CAS revisions
-   in existing Preparation storage. Current `Preparation.submit()` still uses a
-   daemon thread, and application restart still stops its jobs. Durable
-   pause/edit/resume/recovery is not implemented yet.
-5. Selective invalidation and regeneration, protected accepted edits, stale
-   response rejection, interruption/billing uncertainty and credential recovery.
-6. Existing Workshop/Quick/Scenario UI integration: genre, scale, geography,
-   expressiveness, interpretation/impact previews, progress and hybrid controls.
-   Keep author-only artifacts out of public job status/Player View.
-7. Extend final readiness with checkpoint currency and unresolved semantic
-   contradictions; add deterministic integration tests and #78 manual scenarios.
+2. Complete semantic source-fact protection, editable interpretation preview and
+   conflict resolution for revised user constraints/structured settings.
+3. Switch existing Quick/Scenario UI to the staged path after hybrid editor
+   integration. The backend now executes `task=world_staged`; the previous
+   `task=world` route is temporarily retained for the existing UI during this WIP.
+4. Add paused checkpoint editing and selective regeneration with accepted-field
+   locks, dependency impact preview and fine-grained input revisions. Durable
+   execution, pause/resume, recovery and interruption uncertainty are wired.
+5. Complete Workshop genre/scale/geography controls, interpretation/impact
+   previews and full hybrid editing. Persisted stage progress, pause/resume/cancel
+   and author-only checkpoint inspection are integrated. Game expressiveness is editable through
+   the existing policy dialog; creation settings are typed/persisted server-side.
+6. Extend final confirmation to verify checkpoint currency after author edits;
+   complete #78 rich brief fixtures and all acceptance/manual QA scenarios.
 
 The partial canonical readiness check must not be described as the completed
-generation readiness gate: checkpoint currency cannot be verified until durable
-generation artifacts exist.
+generation readiness gate: the staged publisher verifies checkpoint currency, but the
+full edited-constraint readiness contract is not complete.
 
 ## Verification
 
@@ -114,19 +113,72 @@ Exact final suite/browser results are recorded in the PR description.
   responsible for disclosure; no new economy or organization graph store.
 - `initial_world_stages.py` provides independently typed request payloads,
   application-owned roster identities, bounded character batches, deterministic
-  canonical composition and input fingerprints/selective invalidation. It does
-  not yet replace the live monolithic generator. Canonical source facts still
+  canonical composition and input fingerprints/selective invalidation. It now feeds the staged worker; the default UI
+  still uses the monolithic route pending hybrid editor integration. Canonical source facts still
   need complete semantic protection in the integrated orchestration path.
 - `generation_checkpoints.py` adds a tested persistence foundation using existing
   Preparation IDs and the version journal: immutable payloads, input hashes,
   output references, attempts, expiring worker leases, transactional commit CAS,
   pause boundaries, cancellation and interrupted-request uncertainty. These
-  methods are not yet wired into the application worker/startup/UI. Existing
-  legacy jobs continue to run via their previous lifecycle. Do not describe this
-  foundation as completed automatic recovery or complete hybrid generation.
+  methods now back the staged worker and application startup recovery. Existing
+  legacy jobs continue to run via their previous lifecycle. UI editing and
+  selective regeneration remain incomplete.
 
 Additional deterministic tests cover canonical snapshot API import/confirm,
 empty observer worlds, five subsidiaries, broken/cyclic organization references,
 interpretation failure/cancel/revision/privacy, bounded batch composition,
 selective input invalidation, durable journal reload, lease replacement, late
 commits, pause/resume, cancellation, retry budget and uncertain billing outcomes.
+
+## Third implementation increment
+
+`world_generation.py` runs interpretation, setting/roster, places, bounded NPC
+batches, life, lore, opening and deterministic assembly through existing
+Preparation/model leases and tracked usage. It passes typed partial schemas,
+curated contexts and saved prompt/config revisions; final assembly makes no LLM
+call. Automatic retries are limited to malformed local stage output; provider
+failures require explicit retry and cannot echo private request text into status.
+
+Job creation and immutable brief/Scenario/settings/prompt capture now share one
+SQLite transaction, before dispatch or model-lock acquisition. A shutdown between
+submission and worker startup remains resumable. Stage execution owns an expiring
+lease with heartbeat even while waiting for a local model. Pause commits the
+in-flight validated result and schedules no next unit. Restart resumes safe
+checkpoints using existing encrypted credentials, or waits visibly for access;
+in-flight outcome uncertainty requires explicit retry. Cancellation preserves
+prior checkpoints/drafts. Idempotency keys prevent duplicate HTTP submission.
+
+The author inspection API never returns artifacts without author mode. Public
+save projections exclude source provenance/settings text, secret Facts without
+POV knowledge and other NPCs' Knowledge. Canonical data remains intact. Assembly
+publishes through existing versioned world_draft only after current completed
+checkpoints and canonical validation pass in a guarded transaction.
+
+Creation settings validate stable genre IDs, optional geography/world type, cast
+targets and expressiveness without generating life events. User-defined NPCs
+remain above cast targets. Canonical expressiveness is presentation-only;
+conservative legacy default is realistic, new generation default is expressive.
+The existing game policy editor exposes it without creating a turn.
+
+`tests/test_world_generation.py` covers the real HTTP/worker/SQLite path with free
+deterministic provider fixtures: seven bounded requests in a two-person world,
+atomic draft publication/Start Game, pause/reuse, encrypted recovery, missing
+credentials, queued Scenario capture, submission idempotency, malformed stage
+repair and private provider-error filtering. This is not yet the required full
+seven-character/corporate-group brief fixture or hybrid editing acceptance.
+
+The repository additionally supports atomic paused-checkpoint revisions and an
+impact preview, with artifact/revision CAS, immutable prior journal versions,
+transitive declared-input invalidation and accepted-field locks enforced on
+later commits. Regeneration contexts receive those locks. This internal boundary
+is tested, but is deliberately not an unrestricted HTTP editing endpoint:
+source-constraint reconciliation and existing author-editor integration remain
+required before exposing partial edits to users.
+
+The existing Workshop now renders staged job progress and cooperative controls,
+including explicit acknowledgement of uncertain provider billing and a separate
+opt-in author checkpoint inspection. No raw artifacts appear in progress. A
+browser fixture verifies paused-state reload, secret visibility and cancellation
+on desktop/mobile. Quick Creation still defaults to the legacy request until the
+required edit/constraint reconciliation path is complete; this is a WIP rollout,
+not the final architecture promised by #44.

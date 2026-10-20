@@ -154,7 +154,7 @@ def validate_character_batch(payload, expected_ids, registry):
     return value
 
 
-def compose(setting, registry, places, batches, life, lore, opening, interpretation):
+def compose(setting, registry, places, batches, life, lore, opening, interpretation, creation=None):
     """Zero-provider assembly; reject omissions, collisions and broken references."""
     setting = validate('setting', setting)
     places = validate('places', places)
@@ -189,12 +189,15 @@ def compose(setting, registry, places, batches, life, lore, opening, interpretat
     protagonists = [row['id'] for row in registry if row['tier'] == 'protagonist']
     meta = dict(world_time=opening['world_time'], calendar=opening['calendar'],
                 current_protagonist_id=protagonists[0] if protagonists else None)
-    state = m.WorldStateV3(meta=meta, camera=opening['camera'], characters=actors,
+    if creation is not None:
+        from backend.services.world_creation_settings import CreationSettings
+        meta['npc_expressiveness']=CreationSettings.model_validate(creation).npc_expressiveness
+    state = _check(m.WorldStateV3, dict(meta=meta, camera=opening['camera'], characters=actors,
         locations=places['locations'], organizations=places['organizations'],
         facts=facts, knowledge=lore['knowledge'], threads=lore['threads'],
-        scheduled_events=opening['scheduled_events'], **life).model_dump()
+        scheduled_events=opening['scheduled_events'], **life), 'assembly').model_dump()
     snapshot = dict(schema_version=3, world_state=state, character_cards=list(cards.values()),
-        campaign={'campaign':setting['campaign'], 'initial_world':deepcopy(interpretation)},
+        campaign={'campaign':setting['campaign'], 'initial_world':deepcopy(interpretation), 'creation':deepcopy(creation)},
         initial_history=lore['initial_history'])
     # Immutable provenance travels with the canonical save, not as Knowledge.
     return normalize(snapshot, operation='normalize_existing').snapshot

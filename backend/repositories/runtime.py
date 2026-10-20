@@ -311,7 +311,7 @@ class RuntimeStorage:
         from backend.services.narrative_policy import PolicyUpdate
         from backend.runtime_v3.repository import append_history, migrate_snapshot
         from backend.repositories.living_world import project
-        validated=PolicyUpdate.model_validate(dict(policy,revision=revision)).model_dump(exclude={'revision'})
+        validated=PolicyUpdate.model_validate(dict(policy,revision=revision)).model_dump(exclude={'revision'},exclude_none=True)
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             self._assert_idle(db,save_id)

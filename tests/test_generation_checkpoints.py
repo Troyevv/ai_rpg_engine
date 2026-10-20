@@ -120,3 +120,44 @@ def test_cancel_still_available_after_external_workspace_revision_changes(tmp_pa
     repo,jid,token=new_run(tmp_path)
     with repo.connect() as db: db.execute('UPDATE preparation_workspaces SET revision=revision+1')
     assert repo.generation_control(jid,'cancel')=='cancelled'
+
+
+def test_paused_edit_preview_selective_invalidation_locks_and_revision_cas(tmp_path):
+    repo,jid,token=new_run(tmp_path)
+    repo.begin_generation_unit(jid,token,'interpret')
+    repo.commit_generation_unit(jid,token,'interpret',{})
+    repo.begin_generation_unit(jid,token,'setting')
+    original=repo.commit_generation_unit(jid,token,'setting',{'personality':'quiet','place':'home'})
+    repo.plan_generation_units(jid,token,[
+        dict(id='dependent',stage='life',inputs=['setting'],outputs={'life':''}),
+        dict(id='independent',stage='places',inputs=['plan'],outputs={'places':''}),
+        dict(id='transitive',stage='opening',inputs=['life'],outputs={'opening':''})])
+    for uid in ('dependent','independent','transitive'):
+        repo.begin_generation_unit(jid,token,uid)
+        repo.commit_generation_unit(jid,token,uid,{'accepted':uid})
+    repo.generation_control(jid,'pause');repo.generation_boundary(jid,token)
+    revision=repo.generation_status(jid)['revision']
+    edited={'personality':'assertive','place':'home'}
+    kwargs=dict(revision=revision,artifact_version=original,locked_paths=['/personality'])
+    impact=repo.revise_generation_checkpoint(jid,'setting',edited,**kwargs)
+    assert impact['stale_units']==['dependent','transitive']
+    assert repo.generation_resources(jid,['setting'])['setting']['personality']=='quiet'
+    changed=repo.revise_generation_checkpoint(jid,'setting',edited,**kwargs,preview=False)
+    assert changed['revision']==revision+1 and changed['artifact_version']!=original
+    assert repo.generation_resources(jid,['places'])=={'places':{'accepted':'independent'}}
+    with pytest.raises(ValueError,match='stale'): repo.generation_resources(jid,['opening'])
+    with pytest.raises(ValueError,match='revision'):
+        repo.revise_generation_checkpoint(jid,'setting',edited,**kwargs,preview=False)
+    with repo.connect() as db:
+        assert db.execute('SELECT content FROM document_versions WHERE id=?',(original,)).fetchone()[0].find('quiet')>=0
+        assert db.execute("SELECT count(*) FROM document_versions WHERE reason='author_edit'").fetchone()[0]==1
+        # Selected regeneration must not erase an accepted field, even with a
+        # valid lease and otherwise current upstream inputs.
+        db.execute("UPDATE preparation_units SET status='stale' WHERE job_id=? AND unit_id='setting'",(jid,))
+    repo.generation_control(jid,'resume',changed['revision']);fresh=repo.claim_generation(jid)
+    repo.begin_generation_unit(jid,fresh,'setting')
+    with pytest.raises(ValueError,match='accepted edit'):
+        repo.commit_generation_unit(jid,fresh,'setting',{'personality':'quiet','place':'home'})
+    repo.commit_generation_unit(jid,fresh,'setting',edited)
+    with pytest.raises(ValueError):
+        repo.revise_generation_checkpoint(jid,'setting',edited,changed['revision'],changed['artifact_version'],[],preview=False)

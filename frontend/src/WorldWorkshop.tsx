@@ -6,6 +6,7 @@ import { detectWorldImport } from './worldImport';
 import { initialWorkshopIdentity, workshopIdentityReducer } from './workshopIdentity';
 import { useJob } from './hooks';
 import { active, type Job, type Preferences, type Workspace } from './types';
+import { WorldGenerationProgress } from "./WorldGenerationProgress";
 import { Preparation } from './Preparation';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
@@ -151,7 +152,8 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
         return () => loadController.current?.abort();
     }, [id, author]);
     const { job, reconnecting } = useJob(draft?.job, refresh);
-    const locked = busy || loading || active(job);
+    const staged=job?.kind==='draft_world_staged';
+    const locked = busy || loading || active(job) || staged&&!!job&&!['saved','cancelled'].includes(job.status);
     const phaseStatus: Record<string, [string,string]> = {
         world: ['Собираем игровой мир…', 'Модель развивает идею и сразу создаёт готовый World State.'],
         retrying: ['Исправляем формат ответа…', 'Модель исправляет только ошибки JSON и ссылок.'],
@@ -274,7 +276,8 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
           {state && <Button variant="ghost" onClick={() => setEditingIdea(false)}>Вернуться к миру</Button>}
         </div>
       </section>}
-      {active(job) && <section className="workshop-generating" role="status">
+      {staged && job && <WorldGenerationProgress job={job} apiKey={apiKey} refresh={refresh}/> }
+      {!staged && active(job) && <section className="workshop-generating" role="status">
         <span className="workshop-pulse"/><div><strong>{reconnecting ? 'Восстанавливаем соединение…' : status[0]}</strong><p>{reconnecting ? 'Ожидаем связь с сервером. Генерация продолжает выполняться.' : status[1]}</p>{!reconnecting && !!job?.progress_chars && !['validating','saving'].includes(job.phase || '') && <small>Получено {job.progress_chars.toLocaleString('ru-RU')} символов ответа</small>}</div>
         <Button variant="ghost" onClick={() => void run(async () => {await api(`/jobs/${job!.id}/stop`, {}); refresh();})}>Остановить</Button>
       </section>}

@@ -47,7 +47,7 @@ class DraftStorage:
         w=db.execute('SELECT * FROM preparation_workspaces WHERE id=? AND deleted=0',(wid,)).fetchone()
         if not w:raise ValueError('Черновик не найден.')
         if revision is not None and w['revision']!=revision:raise ValueError('Конфликт ревизий. Обнови черновик перед изменением.')
-        if idle and db.execute("SELECT 1 FROM preparation_jobs WHERE workspace_id=? AND status='generating'",(wid,)).fetchone():raise ValueError('Сначала останови генерацию.')
+        if idle and db.execute("SELECT 1 FROM preparation_jobs WHERE workspace_id=? AND (status='generating' OR kind='draft_world_staged' AND status IN ('pause_requested','paused','waiting_for_credentials','failed'))",(wid,)).fetchone():raise ValueError('Сначала останови генерацию.')
         return w
 
     def draft(self,wid,author=False):

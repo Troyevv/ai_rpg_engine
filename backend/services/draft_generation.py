@@ -63,6 +63,9 @@ def decode_result(text,state,config):
 
 
 def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
+    if config['_draft_task']=='world_staged':
+        from backend.services.world_generation import run as generate_staged
+        return generate_staged(preparation,jid,config,api_key,handle,loaded,stream_fn)
     if config['_draft_task']=='interpret':
         from backend.services.world_interpretation import run as interpret
         return interpret(preparation,jid,config,api_key,handle,loaded,stream_fn)

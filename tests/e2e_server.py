@@ -246,6 +246,23 @@ if __name__ == '__main__':
         hold_next_preparation=True
         return {'held':True}
 
+    @app.post('/test/staged-checkpoint')
+    def staged_checkpoint():
+        from test_api import REMOTE
+        from test_world_interpretation import BRIEF, interpretation
+        from backend.services.world_interpretation import accept
+        repo=app.state.repository
+        wid=repo.create_workspace('Checkpoint browser QA')['id']
+        config={**REMOTE,'_draft_task':'world_staged','_draft_input':BRIEF}
+        jid=repo.begin_preparation(wid,'draft_world_staged',BRIEF,config,0)
+        token=repo.claim_generation(jid)
+        repo.plan_generation_units(jid,token,[dict(id='interpret',stage='interpret',inputs=['brief'],outputs={'interpretation':''})])
+        repo.begin_generation_unit(jid,token,'interpret')
+        repo.commit_generation_unit(jid,token,'interpret',accept(interpretation(),BRIEF,wid,1))
+        repo.generation_control(jid,'pause')
+        repo.generation_boundary(jid,token)
+        return {'workspace':wid,'job':jid}
+
     @app.post('/test/appearance-seed')
     def appearance_seed():
         from devtools.narrative_test_world import load_fixture

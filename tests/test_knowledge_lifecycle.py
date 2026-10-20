@@ -326,3 +326,21 @@ def test_new_belief_can_be_refuted_by_later_ordered_event_in_same_turn():
     r=StateResolver(s,TEXT,'').resolve(p)
     assert not r.warnings and r.state['knowledge']['a:bank']['status']=='refuted'
     assert len(r.history['knowledge_acquisitions'])==2
+
+
+def test_player_projection_preserves_own_retired_beliefs_without_other_npc_knowledge():
+    from backend.runtime_v3.selectors import ui_view
+    from copy import deepcopy
+    snapshot=initial()
+    s=snapshot['world_state']
+    resolved=StateResolver(s,TEXT,'').resolve(acquisition(s,'hospital'))
+    snapshot['world_state']=resolved.state
+    snapshot['world_state']['facts']['bank']['visibility']='secret'
+    snapshot['world_state']['facts']['hospital']['visibility']='secret'
+    before=deepcopy(snapshot)
+    view=ui_view(snapshot,resolved.history)
+    assert view['world']['knowledge']['a:bank']['status']=='superseded'
+    assert view['world']['knowledge']['a:hospital']['status']=='known'
+    assert view['world']['facts']['bank']['text']==s['facts']['bank']['text']
+    assert all(row['actor_id']=='a' for row in view['world']['knowledge'].values())
+    assert snapshot==before

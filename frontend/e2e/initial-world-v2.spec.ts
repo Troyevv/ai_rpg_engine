@@ -33,11 +33,11 @@ test('canonical snapshot imports through Workshop without generation or secret l
   const result=await (await confirmed).json();
   await expect(page.getByRole('button',{name:'Начать игру',exact:true})).toBeVisible();
   const game=await (await request.get(`/api/saves/${result.save}`)).json();
-  expect(game.state.world_state.camera.location_id).toBe('road');
-  expect(game.state.world_state.camera.controlled_actor_id).toBe('mira');
-  expect(game.state.world_state.meta.world_time).toBe(6120);
-  expect(game.state.world_state.knowledge['anna:private'].status).toBe('known');
-  expect(game.state.world_state.knowledge['mira:private']).toBeUndefined();
+  expect(game.state.scene_meta.location).toBe('Дорога к станции');
+  expect(game.state.controlled_actor_id).toBe('mira');
+  expect(game.state.world_clock.minute).toBe(6120);
+  expect(game.state.world.knowledge['mira:private']).toBeUndefined();
+  expect(JSON.stringify(game)).not.toContain('Закрытый банковский договор');
   expect(generationRequests).toBe(0);
   const publicDraft=await (await request.get(`/api/workspaces/${wid}/draft`)).json();
   expect(JSON.stringify(publicDraft)).not.toContain('Закрытый банковский договор');

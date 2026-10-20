@@ -13,6 +13,11 @@ class GenerationCheckpoints:
     def init_generation_checkpoints(self):
         with self.connect() as db:
             db.executescript('''
+            CREATE TABLE IF NOT EXISTS preparation_submissions (
+              workspace_id TEXT NOT NULL REFERENCES preparation_workspaces(id),
+              request_key TEXT NOT NULL, digest TEXT NOT NULL,
+              job_id TEXT NOT NULL REFERENCES preparation_jobs(id),
+              PRIMARY KEY(workspace_id,request_key));
             CREATE TABLE IF NOT EXISTS preparation_runs (
               job_id TEXT PRIMARY KEY REFERENCES preparation_jobs(id),
               revision INTEGER NOT NULL DEFAULT 0,
@@ -30,6 +35,11 @@ class GenerationCheckpoints:
               digest TEXT NOT NULL, artifact_id INTEGER NOT NULL REFERENCES document_versions(id),
               pointer TEXT NOT NULL, unit_id TEXT,
               PRIMARY KEY(job_id,resource_key));
+            CREATE TABLE IF NOT EXISTS preparation_field_locks (
+              job_id TEXT NOT NULL, unit_id TEXT NOT NULL, pointer TEXT NOT NULL,
+              value_json TEXT NOT NULL, revision INTEGER NOT NULL,
+              PRIMARY KEY(job_id,unit_id,pointer),
+              FOREIGN KEY(job_id,unit_id) REFERENCES preparation_units(job_id,unit_id));
             CREATE TABLE IF NOT EXISTS preparation_attempts (
               job_id TEXT NOT NULL, unit_id TEXT NOT NULL, attempt INTEGER NOT NULL,
               lease_token TEXT NOT NULL, status TEXT NOT NULL, started REAL NOT NULL, finished REAL,
@@ -66,17 +76,20 @@ class GenerationCheckpoints:
         """Inputs contain no credentials; provider credentials stay process-local."""
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
-            job=db.execute('SELECT * FROM preparation_jobs WHERE id=?',(jid,)).fetchone()
-            if not job or job['status']!='generating': raise ValueError('generation/job: not active')
-            self._draft_workspace(db,job['workspace_id'],job['revision'],idle=False)
-            if db.execute('SELECT 1 FROM preparation_runs WHERE job_id=?',(jid,)).fetchone():
-                prior=db.execute("SELECT v.content FROM document_heads h JOIN document_versions v ON v.id=h.version_id WHERE h.kind='generation_input' AND h.owner=?",(jid,)).fetchone()
-                if not prior or fingerprint(json.loads(prior['content']))!=fingerprint(inputs):
-                    raise ValueError('generation/input: existing immutable input differs')
-                return
-            db.execute('INSERT INTO preparation_runs(job_id) VALUES(?)',(jid,))
-            vid=self._record_document(db,'generation_input',jid,dump(inputs),True,'input')
-            self._publish_resources(db,jid,vid,inputs,{key:'/'+key.replace('~','~0').replace('/','~1') for key in inputs})
+            self._create_generation_run(db,jid,inputs)
+
+    def _create_generation_run(self,db,jid,inputs):
+        job=db.execute('SELECT * FROM preparation_jobs WHERE id=?',(jid,)).fetchone()
+        if not job or job['status']!='generating': raise ValueError('generation/job: not active')
+        self._draft_workspace(db,job['workspace_id'],job['revision'],idle=False)
+        if db.execute('SELECT 1 FROM preparation_runs WHERE job_id=?',(jid,)).fetchone():
+            prior=db.execute("SELECT v.content FROM document_heads h JOIN document_versions v ON v.id=h.version_id WHERE h.kind='generation_input' AND h.owner=?",(jid,)).fetchone()
+            if not prior or fingerprint(json.loads(prior['content']))!=fingerprint(inputs):
+                raise ValueError('generation/input: existing immutable input differs')
+            return
+        db.execute('INSERT INTO preparation_runs(job_id) VALUES(?)',(jid,))
+        vid=self._record_document(db,'generation_input',jid,dump(inputs),True,'input')
+        self._publish_resources(db,jid,vid,inputs,{key:'/'+key.replace('~','~0').replace('/','~1') for key in inputs})
 
     def claim_generation(self,jid,seconds=90,now=None):
         now=time.time() if now is None else now
@@ -162,6 +175,12 @@ class GenerationCheckpoints:
                 resource=db.execute('SELECT r.digest,u.status FROM preparation_resources r LEFT JOIN preparation_units u ON u.job_id=r.job_id AND u.unit_id=r.unit_id WHERE r.job_id=? AND resource_key=?',(jid,key)).fetchone()
                 if not resource or resource['digest']!=digest or resource['status'] not in (None,'completed'):
                     raise ValueError(f'generation/inputs/{key}: changed during request')
+            for lock in db.execute('SELECT pointer,value_json FROM preparation_field_locks WHERE job_id=? AND unit_id=?',(jid,unit)):
+                try: current=self._pointer(payload,lock['pointer'])
+                except (KeyError,IndexError,TypeError,ValueError):
+                    raise ValueError('generation/locks'+lock['pointer']+': accepted edit is missing') from None
+                if dump(current)!=lock['value_json']:
+                    raise ValueError('generation/locks'+lock['pointer']+': conflicts with accepted edit')
             vid=self._record_document(db,'generation_checkpoint',jid+':'+unit,dump(payload),True,'checkpoint',row['artifact_id'])
             self._publish_resources(db,jid,vid,payload,json.loads(row['output_paths']),unit)
             db.execute("UPDATE preparation_units SET status='completed',artifact_id=?,error='' WHERE job_id=? AND unit_id=?",(vid,jid,unit))
@@ -258,3 +277,105 @@ class GenerationCheckpoints:
                     db.execute("UPDATE preparation_jobs SET status='waiting_for_credentials',error='Resume from the last validated checkpoint with provider access.' WHERE id=?",(jid,))
                     db.execute('UPDATE preparation_runs SET lease_token=NULL,lease_until=0 WHERE job_id=?',(jid,))
             return [row['job_id'] for row in rows]
+
+    def release_generation(self,jid,token,status=None,error=''):
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            run=db.execute('SELECT lease_token FROM preparation_runs WHERE job_id=?',(jid,)).fetchone()
+            if not run or run['lease_token']!=token: return
+            db.execute('UPDATE preparation_runs SET lease_token=NULL,lease_until=0 WHERE job_id=?',(jid,))
+            if status:
+                db.execute("UPDATE preparation_jobs SET status=?,error=? WHERE id=? AND status IN ('generating','pause_requested')",(status,error,jid))
+
+    def publish_generation_draft(self,jid,token,state):
+        from backend.services import draft_world
+        state=draft_world.prepare(state)
+        report=draft_world.validate(state)
+        if report['errors']: raise ValueError('; '.join(report['errors']))
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            run=self._pipeline_guard(db,jid,token,statuses=('generating',))
+            units=db.execute('SELECT * FROM preparation_units WHERE job_id=?',(jid,)).fetchall()
+            stages={row['stage'] for row in units}
+            if not {'interpret','setting','places','life','lore','opening','assembly'}<=stages or any(row['status']!='completed' for row in units):
+                raise ValueError('generation/readiness: missing or unvalidated checkpoints')
+            for unit in units:
+                for key,digest in json.loads(unit['input_manifest']).items():
+                    current=db.execute('SELECT digest FROM preparation_resources WHERE job_id=? AND resource_key=?',(jid,key)).fetchone()
+                    if not current or current['digest']!=digest:
+                        raise ValueError(f'generation/readiness/{unit["unit_id"]}: stale inputs')
+            config=json.loads(db.execute('SELECT config_json FROM preparation_jobs WHERE id=?',(jid,)).fetchone()[0])
+            self._write_draft(db,run['workspace_id'],state,'staged_generation',config.get('_draft_input',''),generated=True)
+            db.execute("UPDATE preparation_jobs SET status='saved',phase='completed',error='' WHERE id=?",(jid,))
+            db.execute('UPDATE preparation_runs SET progress_floor=1,lease_token=NULL,lease_until=0 WHERE job_id=?',(jid,))
+
+    def interrupt_generation(self,jid):
+        """Server shutdown revokes publication, without turning it into user cancel."""
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row=db.execute('SELECT j.status FROM preparation_jobs j JOIN preparation_runs r ON r.job_id=j.id WHERE j.id=?',(jid,)).fetchone()
+            if not row or row['status'] not in ('generating','pause_requested'): return
+            if db.execute("SELECT 1 FROM preparation_units WHERE job_id=? AND status='running'",(jid,)).fetchone():
+                self._interrupt_units(db,jid,time.time())
+            else:
+                db.execute("UPDATE preparation_jobs SET status='waiting_for_credentials' WHERE id=?",(jid,))
+                db.execute('UPDATE preparation_runs SET lease_token=NULL,lease_until=0 WHERE job_id=?',(jid,))
+
+    def inspect_generation_checkpoint(self,jid,unit,author=False):
+        with self.connect() as db:
+            job=db.execute('SELECT workspace_id FROM preparation_jobs WHERE id=?',(jid,)).fetchone()
+            if not job: raise ValueError('Generation job not found.')
+            self._draft_workspace(db,job['workspace_id'],idle=False)
+            row=db.execute('SELECT u.stage,u.status,u.artifact_id,v.content FROM preparation_units u LEFT JOIN document_versions v ON v.id=u.artifact_id WHERE u.job_id=? AND u.unit_id=?',(jid,unit)).fetchone()
+            if not row: raise ValueError('Generation unit not found.')
+            result=dict(stage=row['stage'],status=row['status'],artifact_version=row['artifact_id'],author=author,read_only=True)
+            if author and row['content'] is not None: result['artifact']=json.loads(row['content'])
+            return result
+
+    def revise_generation_checkpoint(self,jid,unit,payload,revision,artifact_version,locked_paths,*,preview=True):
+        """Persist a service-validated author edit, or return its dependency impact.
+
+        Callers own stage/semantic validation and constraint reconciliation. This
+        persistence boundary checks the stable pause, artifact CAS and resource
+        ownership again under one write transaction. It never edits Runtime saves.
+        """
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            run=self._pipeline_guard(db,jid,statuses=('paused',))
+            if run['lease_token'] or run['revision']!=revision:
+                raise ValueError('generation/revision: wait for a stable pause and refresh')
+            rows={row['unit_id']:row for row in db.execute('SELECT * FROM preparation_units WHERE job_id=?',(jid,))}
+            row=rows.get(unit)
+            if not row or row['status']!='completed' or row['artifact_id']!=artifact_version:
+                raise ValueError('generation/artifact: checkpoint changed or is not validated')
+            outputs=json.loads(row['output_paths'])
+            proposed={key:fingerprint(self._pointer(payload,path)) for key,path in outputs.items()}
+            digests={r['resource_key']:r['digest'] for r in db.execute('SELECT resource_key,digest FROM preparation_resources WHERE job_id=?',(jid,))}
+            changed={key for key,value in proposed.items() if digests.get(key)!=value}
+            unavailable=set(changed);affected=set()
+            while True:
+                found={uid for uid,r in rows.items() if uid!=unit and uid not in affected and
+                       set(json.loads(r['required_inputs'])) & unavailable}
+                if not found: break
+                affected.update(found)
+                for uid in found: unavailable.update(json.loads(rows[uid]['output_paths']))
+            locks={path:dump(self._pointer(payload,path)) for path in locked_paths}
+            impact=dict(revision=revision,artifact_version=artifact_version,
+                changed_resources=sorted(changed),stale_units=sorted(affected))
+            if preview or not changed: return impact
+            vid=self._record_document(db,'generation_checkpoint',jid+':'+unit,dump(payload),True,'author_edit',artifact_version)
+            self._publish_resources(db,jid,vid,payload,outputs,unit)
+            db.execute('UPDATE preparation_units SET artifact_id=? WHERE job_id=? AND unit_id=?',(vid,jid,unit))
+            for uid in affected:
+                db.execute("UPDATE preparation_units SET status='stale',error='Upstream author edit requires revalidation.' WHERE job_id=? AND unit_id=?",(jid,uid))
+            for path,value in locks.items():
+                db.execute('INSERT INTO preparation_field_locks VALUES(?,?,?,?,?) ON CONFLICT(job_id,unit_id,pointer) DO UPDATE SET value_json=excluded.value_json,revision=excluded.revision',
+                           (jid,unit,path,value,revision+1))
+            db.execute('UPDATE preparation_runs SET revision=revision+1 WHERE job_id=?',(jid,))
+            return {**impact,'revision':revision+1,'artifact_version':vid}
+
+    def generation_field_locks(self,jid,unit):
+        """Author-only input for the bounded regeneration request, never status."""
+        with self.connect() as db:
+            return {row['pointer']:json.loads(row['value_json']) for row in db.execute(
+                'SELECT pointer,value_json FROM preparation_field_locks WHERE job_id=? AND unit_id=?',(jid,unit))}
