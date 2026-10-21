@@ -124,7 +124,10 @@ class GenerationCheckpoints:
                 old=db.execute('SELECT * FROM preparation_units WHERE job_id=? AND unit_id=?',(jid,unit['id'])).fetchone()
                 definition=(unit['stage'],float(unit.get('weight',1)),dump(sorted(unit['inputs'])),dump(unit['outputs']))
                 if old:
-                    if tuple(old[key] for key in ('stage','weight','required_inputs','output_paths')) != definition:
+                    comparable=dict(old)
+                    if unit['stage']=='interpret':
+                        comparable['output_paths']=dump({k:v for k,v in json.loads(old['output_paths']).items() if not k.startswith('scope:')})
+                    if tuple(comparable[key] for key in ('stage','weight','required_inputs','output_paths')) != definition:
                         raise ValueError('generation/plan: existing unit definition changed')
                     continue
                 if db.execute("SELECT 1 FROM preparation_units WHERE job_id=? AND stage=? AND status!='pending'",(jid,unit['stage'])).fetchone():
@@ -187,7 +190,11 @@ class GenerationCheckpoints:
                 if dump(current)!=lock['value_json']:
                     raise ValueError('generation/locks'+lock['pointer']+': conflicts with accepted edit')
             vid=self._record_document(db,'generation_checkpoint',jid+':'+unit,dump(payload),True,'checkpoint',row['artifact_id'])
-            self._publish_resources(db,jid,vid,payload,json.loads(row['output_paths']),unit)
+            outputs=json.loads(row['output_paths'])
+            if row['stage']=='interpret' and 'scopes' in payload:
+                outputs.update({'scope:'+key:'/scopes/'+key for key in payload['scopes']})
+                db.execute('UPDATE preparation_units SET output_paths=? WHERE job_id=? AND unit_id=?',(dump(outputs),jid,unit))
+            self._publish_resources(db,jid,vid,payload,outputs,unit)
             db.execute("UPDATE preparation_units SET status='completed',artifact_id=?,error='' WHERE job_id=? AND unit_id=?",(vid,jid,unit))
             db.execute("UPDATE preparation_attempts SET status='completed',finished=? WHERE job_id=? AND unit_id=? AND attempt=?",(time.time(),jid,unit,row['attempts']))
             self._update_generation_progress(db,jid)
@@ -368,10 +375,12 @@ class GenerationCheckpoints:
             row=db.execute('SELECT u.stage,u.status,u.artifact_id,v.content FROM preparation_units u LEFT JOIN document_versions v ON v.id=u.artifact_id WHERE u.job_id=? AND u.unit_id=?',(jid,unit)).fetchone()
             if not row: raise ValueError('Generation unit not found.')
             result=dict(stage=row['stage'],status=row['status'],artifact_version=row['artifact_id'],author=author,read_only=True)
-            if author and row['content'] is not None: result['artifact']=json.loads(row['content'])
+            if author and row['content'] is not None:
+                result['artifact']=json.loads(row['content'])
+                result['locked_paths']=[r['pointer'] for r in db.execute('SELECT pointer FROM preparation_field_locks WHERE job_id=? AND unit_id=?',(jid,unit))]
             return result
 
-    def revise_generation_checkpoint(self,jid,unit,payload,revision,artifact_version,locked_paths,*,preview=True):
+    def revise_generation_checkpoint(self,jid,unit,payload,revision,artifact_version,locked_paths,*,preview=True,regenerate=False,unlock_paths=()):
         """Persist a service-validated author edit, or return its dependency impact.
 
         Callers own stage/semantic validation and constraint reconciliation. This
@@ -391,22 +400,30 @@ class GenerationCheckpoints:
             proposed={key:fingerprint(self._pointer(payload,path)) for key,path in outputs.items()}
             digests={r['resource_key']:r['digest'] for r in db.execute('SELECT resource_key,digest FROM preparation_resources WHERE job_id=?',(jid,))}
             changed={key for key,value in proposed.items() if digests.get(key)!=value}
-            unavailable=set(changed);affected=set()
+            unavailable=set(outputs) if regenerate else set(changed);affected={unit} if regenerate else set()
             while True:
                 found={uid for uid,r in rows.items() if uid!=unit and uid not in affected and
                        set(json.loads(r['required_inputs'])) & unavailable}
                 if not found: break
                 affected.update(found)
                 for uid in found: unavailable.update(json.loads(rows[uid]['output_paths']))
+            prior_locks={r['pointer']:r['value_json'] for r in db.execute('SELECT pointer,value_json FROM preparation_field_locks WHERE job_id=? AND unit_id=?',(jid,unit))}
             locks={path:dump(self._pointer(payload,path)) for path in locked_paths}
+            for path in prior_locks:
+                if path not in unlock_paths and any(path.startswith(p+'/') or p.startswith(path+'/') or path==p for p in locked_paths):
+                    try: locks[path]=dump(self._pointer(payload,path))
+                    except (KeyError,IndexError,TypeError): raise ValueError('generation/locks: unlock the removed field explicitly') from None
             impact=dict(revision=revision,artifact_version=artifact_version,
-                changed_resources=sorted(changed),stale_units=sorted(affected))
-            if preview or not changed: return impact
-            vid=self._record_document(db,'generation_checkpoint',jid+':'+unit,dump(payload),True,'author_edit',artifact_version)
+                changed_resources=sorted(changed),stale_units=sorted(affected),locked_paths=sorted((set(prior_locks)|set(locks))-set(unlock_paths)))
+            lock_change=any(prior_locks.get(k)!=v for k,v in locks.items()) or bool(set(unlock_paths)&set(prior_locks))
+            if preview or not (changed or regenerate or lock_change): return impact
+            vid=self._record_document(db,'generation_checkpoint',jid+':'+unit,dump(payload),True,'regenerate' if regenerate else 'author_edit',artifact_version)
             self._publish_resources(db,jid,vid,payload,outputs,unit)
             db.execute('UPDATE preparation_units SET artifact_id=? WHERE job_id=? AND unit_id=?',(vid,jid,unit))
             for uid in affected:
                 db.execute("UPDATE preparation_units SET status='stale',error='Upstream author edit requires revalidation.' WHERE job_id=? AND unit_id=?",(jid,uid))
+            for path in unlock_paths:
+                db.execute('DELETE FROM preparation_field_locks WHERE job_id=? AND unit_id=? AND pointer=?',(jid,unit,path))
             for path,value in locks.items():
                 db.execute('INSERT INTO preparation_field_locks VALUES(?,?,?,?,?) ON CONFLICT(job_id,unit_id,pointer) DO UPDATE SET value_json=excluded.value_json,revision=excluded.revision',
                            (jid,unit,path,value,revision+1))

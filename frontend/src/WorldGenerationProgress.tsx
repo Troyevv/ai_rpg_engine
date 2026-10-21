@@ -1,6 +1,8 @@
 import {useEffect,useState} from 'react';
 import {toast} from 'sonner';
 import {api} from './api';
+import {InterpretationPreview} from './InterpretationPreview';
+import {CheckpointEditor} from './CheckpointEditor';
 import type {Job} from './types';
 import {Textarea} from './components/ui/textarea';
 import {Button} from './components/ui/button';
@@ -58,7 +60,7 @@ export function WorldGenerationProgress({job,workspaceId,apiKey,refresh}:{job:Jo
       {resumable&&<Button disabled={busy||hasUncertain&&!uncertain} onClick={()=>void act('resume')}>Продолжить генерацию</Button>}
       {!['saved','cancelled'].includes(job.status)&&<Button variant="ghost" disabled={busy} onClick={()=>{setBusy(true);void api(`/jobs/${job.id}/stop`,{}).then(refresh).catch(e=>toast.error(e.message)).finally(()=>setBusy(false))}}>Отменить генерацию</Button>}
     </div>
-    <Dialog open={author&&!!inspected} onOpenChange={open=>{if(!open)setInspected(null)}}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>{stages[inspected?.stage||'']||'Результат этапа'}</DialogTitle><DialogDescription>Авторские данные, включая секреты. Просмотр не останавливает генерацию и не изменяет checkpoint.</DialogDescription></DialogHeader>{inspected?.stage==='characters'&&job.status==='paused'&&<CharacterCheckpointEdit key={inspected.artifact_version} checkpoint={inspected} revision={data.revision} workspaceId={workspaceId} jobId={job.id} onSaved={()=>{setInspected(null);void api<Progress>(`/jobs/${job.id}/generation`).then(setData);refresh()}}/>}<CheckpointValue value={inspected?.artifact}/></DialogContent></Dialog>
+    <Dialog open={author&&!!inspected} onOpenChange={open=>{if(!open)setInspected(null)}}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>{stages[inspected?.stage||'']||'Результат этапа'}</DialogTitle><DialogDescription>Авторские данные, включая секреты. Просмотр не останавливает генерацию и не изменяет checkpoint.</DialogDescription></DialogHeader>{inspected?.stage==='characters'&&job.status==='paused'&&<CharacterCheckpointEdit key={inspected.artifact_version} checkpoint={inspected} revision={data.revision} workspaceId={workspaceId} jobId={job.id} onSaved={()=>{setInspected(null);void api<Progress>(`/jobs/${job.id}/generation`).then(setData);refresh()}}/>}{inspected&&inspected.stage!=='assembly'&&job.status==='paused'&&<CheckpointEditor key={'stage'+inspected.artifact_version} checkpoint={inspected} revision={data.revision} workspaceId={workspaceId} jobId={job.id} onSaved={()=>{setInspected(null);void api<Progress>(`/jobs/${job.id}/generation`).then(setData);refresh()}}/>}{inspected?.stage==='interpret'?<InterpretationPreview value={inspected.artifact}/>:<CheckpointValue value={inspected?.artifact}/>}</DialogContent></Dialog>
   </section>;
 }
 

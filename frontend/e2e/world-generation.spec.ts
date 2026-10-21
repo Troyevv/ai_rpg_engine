@@ -50,3 +50,30 @@ test('author edits personality on pause after dependency preview and reloads the
   expect(after.artifact_version).not.toBe(before.artifact_version);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
 });
+
+test('creation settings reach the staged generator and canonical game policy',async({page,request})=>{
+  await page.goto('/');await nav(page,'Создать');
+  await page.getByLabel('Описание мира или текст импорта').fill('Восемь соседей собрались на кухне.');
+  await page.getByText('Настройки генератора',{exact:true}).click();
+  await page.getByLabel('Основной жанр',{exact:true}).selectOption('family_saga');
+  await page.getByLabel('Выразительность NPC',{exact:true}).selectOption('hyperbolized');
+  await page.getByLabel('Масштаб состава',{exact:true}).selectOption('custom');
+  await page.getByLabel('Важные NPC',{exact:true}).fill('7');
+  await page.getByLabel('Второстепенные NPC',{exact:true}).fill('0');
+  await page.getByLabel('География',{exact:true}).fill('Вымышленный город у моря');
+  await page.getByLabel('Темп истории',{exact:true}).selectOption('calm');
+  await page.getByLabel('Риск последствий',{exact:true}).selectOption('safe');
+  const submitted=page.waitForRequest(r=>r.url().endsWith('/draft/generate')&&r.method()==='POST');
+  await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+  const body=(await submitted).postDataJSON();
+  expect(body.task).toBe('world_staged');
+  expect(body.creation).toMatchObject({primary_genre:'family_saga',core_npcs:7,secondary_npcs:0,npc_expressiveness:'hyperbolized',geography:'Вымышленный город у моря'});
+  await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
+  const wid=await page.locator('main.world-workshop').getAttribute('data-workspace-id');
+  const draft=await(await request.get(`/api/workspaces/${wid}/draft?author=true`)).json();
+  const saved=await(await request.post(`/api/workspaces/${wid}/draft/confirm`,{data:{revision:draft.revision,version_id:draft.version_id}})).json();
+  expect(saved.save).toBeTruthy();
+  expect(draft.state.world.narrative_pacing.preset).toBe('calm');
+  expect(draft.state.world.narrative_risk.preset).toBe('safe');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+});

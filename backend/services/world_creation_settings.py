@@ -1,7 +1,7 @@
 """Optional creation constraints; they never manufacture Runtime life events."""
 from typing import Literal
 from pydantic import Field, model_validator
-from backend.runtime_v3.models import StrictModel
+from backend.runtime_v3.models import StrictModel, NarrativePacingProfile, NarrativeRiskProfile
 
 Genre = Literal['slice_of_life','family_saga','romance','drama','detective','thriller',
     'science_fiction','fantasy','horror','adventure','post_apocalyptic','historical','custom']
@@ -10,6 +10,8 @@ CAST_PRESETS = {'small':(3,5),'medium':(6,12),'large':(10,25)}
 
 
 class CreationSettings(StrictModel):
+    narrative_pacing: NarrativePacingProfile = Field(default_factory=NarrativePacingProfile)
+    narrative_risk: NarrativeRiskProfile = Field(default_factory=NarrativeRiskProfile)
     primary_genre: Genre | None = None
     secondary_genres: list[Genre] = Field(default_factory=list,max_length=3)
     custom_genre: str = Field(default='',max_length=2000)

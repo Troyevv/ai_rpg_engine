@@ -161,12 +161,15 @@ def compose(setting, registry, places, batches, life, lore, opening, interpretat
     life = validate('life', life)
     lore = validate('lore', lore)
     opening = validate('opening', opening)
+    from backend.services.generation_constraints import validate_stage_facts
+    for stage,part in [('setting',setting),('places',places),('life',life),('lore',lore),('opening',opening)]:
+        validate_stage_facts(stage,part,interpretation)
     if interpretation['blocking_ids']:
         raise ValueError('interpretation: unresolved blocking ambiguities')
     actors, cards = {}, {}
     for batch in batches:
         from backend.services.generation_constraints import validate_character_facts
-        validated = validate_character_facts(validate_character_batch(batch, list(batch['characters']), registry), interpretation)
+        validated = validate_stage_facts('characters',validate_character_batch(batch, list(batch['characters']), registry), interpretation)
         if set(actors) & set(validated['characters']):
             raise ValueError('characters: repeated batch identity')
         actors.update(validated['characters']); cards.update(validated['cards'])
@@ -192,7 +195,8 @@ def compose(setting, registry, places, batches, life, lore, opening, interpretat
                 current_protagonist_id=protagonists[0] if protagonists else None)
     if creation is not None:
         from backend.services.world_creation_settings import CreationSettings
-        meta['npc_expressiveness']=CreationSettings.model_validate(creation).npc_expressiveness
+        settings=CreationSettings.model_validate(creation)
+        meta.update(npc_expressiveness=settings.npc_expressiveness,narrative_pacing=settings.narrative_pacing.model_dump(),narrative_risk=settings.narrative_risk.model_dump())
     state = _check(m.WorldStateV3, dict(meta=meta, camera=opening['camera'], characters=actors,
         locations=places['locations'], organizations=places['organizations'],
         facts=facts, knowledge=lore['knowledge'], threads=lore['threads'],

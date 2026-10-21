@@ -246,3 +246,67 @@ semantic dependencies, full free-form fact/chronology protection, creation
 settings UI, Quick/Scenario default staged routing, and the rich #78 fixture.
 The existing default creation routes remain unchanged during this incomplete
 integration; this PR is not acceptance-complete.
+
+## Current continuation — hybrid editor and default staged creation
+
+This section supersedes the historical increment notes above about default UI
+routing. Quick Creation and the existing Scenario hand-off now submit
+`world_staged`. Imports retain the conservative zero-provider path.
+
+- Workshop creation controls expose primary/secondary/custom genres, cast
+  presets/custom counts, world type/geography, NPC expressiveness and existing
+  canonical pacing/risk presets. Settings travel through immutable input capture
+  and canonical assembly. They do not manufacture historical consequences.
+- Author checkpoint inspection includes a grouped interpretation preview with
+  named entity links, source quotes, temporal scope, knowledge holders and
+  blocking ambiguities. The checkpoint editor supports typed scalar and advanced
+  JSON-record patches for setting, places, characters, life, lore and opening;
+  source revisions require explicit acknowledgement. Complex records currently
+  use the advanced JSON editor, not complete domain-specific forms.
+- Explicit source revisions preserve the original brief/spans and append numbered
+  author amendments. Whole-claim revisions allow ambiguity classification and
+  blocking status to change atomically. Creation settings can also be revised.
+- Changes use existing draft PATCH, stable-pause/artifact/run CAS, immutable
+  document history, impact preview and field locks. Unlock and targeted stage
+  regeneration are available. Overlapping accepted locks remain consistent;
+  provider lock violations enter bounded repair and cannot publish.
+- New prompt revision 2 fingerprints stage-specific and source-character-specific
+  constraints. A Knowledge revision reuses setting/places/character checkpoints;
+  a personality constraint revision reuses unrelated character batches. Existing
+  prompt revision 1 jobs retain their recorded dependency contracts. These are
+  derived authoring dependencies, not another world state or relationship graph.
+- Interpretation can bind source claims to canonical stage predicates (equals,
+  record-subset contains/absent, exact filtered holder sets). These run before
+  checkpoint commit, during assembly and again against the canonical snapshot at
+  Start Game after author edits. Explicit entity identities are also rechecked.
+  Unbound free-form claims are **not** claimed to have complete semantic coverage.
+- When all parts exist, paused patches also compose through Runtime validation
+  before publication, catching cross-stage reference/invariant errors. Earlier
+  partial stages still require final assembly validation.
+
+No new SQLite tables or destructive migration in this continuation. Reuses the
+existing preparation resources/units/locks and document_versions; old snapshots,
+Tabletop, legacy imports and prior prompt definitions are preserved.
+
+Deterministic evidence includes source amendments/acknowledgement, unchanged
+upstream artifacts, unlock/regenerate impact, family/prohibition/Knowledge/time
+binding conflicts, post-edit Start Game rejection, and a seven-character,
+five-subsidiary rich brief through the real worker/Start Game/History branches.
+The latter verifies adoption versus marriage, known holders after discovery,
+Friday 06:00 activity and unchanged player intentions. Fixtures do not establish
+real-provider semantic reliability; no paid calls are used.
+
+### Still required before acceptance
+
+1. Complete coverage/reconciliation for arbitrary unbound free-form facts and
+   changed textual constraints, including consistency between revised prose and
+   its canonical bindings. Current conservative edit guards and typed predicates
+   are not a universal semantic validator.
+2. Complete friendly domain forms for complex paused records and atomic roster
+   changes after a plan has already dispatched batches. The existing plan guard
+   intentionally rejects incompatible unit redefinitions; it must not be bypassed.
+3. Expand automated cross-stage edit/targeted-regeneration cases across every
+   supported record family; finish rich jurisdiction/settings-conflict and
+   browser-close/restart manual #78 acceptance. Existing recovery tests remain.
+4. Final verification and acceptance review must use the final published tree.
+   Keep PR #105 Draft until these requirements are actually met.

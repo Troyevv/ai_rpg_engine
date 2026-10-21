@@ -27,6 +27,15 @@ class EntitySeed(StrictModel):
     spans: list[SourceSpan] = Field(min_length=1, max_length=12)
 
 
+class ConstraintRule(StrictModel):
+    stage: Literal['setting','places','characters','life','lore','opening']
+    path: str = Field(min_length=2,max_length=500,pattern=r'^/')
+    operator: Literal['equals','contains','absent','only'] = 'equals'
+    expected: JsonValue = None
+    where: dict[str,JsonValue] = Field(default_factory=dict)
+    select: str | None = None
+
+
 class InterpretedClaim(StrictModel):
     classification: Literal['explicit', 'inferred', 'open', 'prohibition', 'ambiguity']
     subject_key: str | None = None
@@ -42,6 +51,7 @@ class InterpretedClaim(StrictModel):
     holder_keys: list[str] = Field(default_factory=list, max_length=100)
     related_keys: list[str] = Field(default_factory=list, max_length=100)
     blocking: bool = False
+    rules: list[ConstraintRule] = Field(default_factory=list,max_length=30)
 
     @model_validator(mode='after')
     def provenance_required(self):
@@ -112,6 +122,16 @@ def accept(raw, brief, namespace, revision, previous=None):
         row.update(spans=spans, subject_id=ids.get(claim.subject_key),
             holder_ids=[ids[key] for key in claim.holder_keys],
             related_ids=[ids[key] for key in claim.related_keys])
+        def resolve(value):
+            if isinstance(value,str) and value.startswith('@'):
+                if value[1:] not in ids: raise ValueError(f'claims/{index}/rules: unknown entity reference')
+                return ids[value[1:]]
+            if isinstance(value,list): return [resolve(item) for item in value]
+            if isinstance(value,dict): return {key:resolve(item) for key,item in value.items()}
+            return value
+        for rule in row['rules']:
+            rule['path']='/'.join(resolve(part) for part in rule['path'].split('/'))
+            rule['expected']=resolve(rule['expected']);rule['where']=resolve(rule['where'])
         row['id'] = identity('constraint', namespace, revision, index, json.dumps(row, sort_keys=True, ensure_ascii=False))
         claims.append(row)
     return dict(version=1, constraint_revision=revision, brief=brief,
@@ -123,6 +143,16 @@ def accept(raw, brief, namespace, revision, previous=None):
 
 def messages(brief):
     contract = '''Interpret the user's world brief; do not generate missing story details.
+For explicit facts/prohibitions attach canonical rules where representable. A rule
+addresses a stage JSON pointer; use @entity_key for stable entity references in
+path segments, expected and where. Stages: setting (/campaign), places (/locations,
+/organizations,/parent_organizations), characters (/characters/@key, /cards/@key),
+life (/objective_relations,/relationships,/residences,/roles,/possessions,/contacts),
+lore (/facts,/knowledge,/initial_history), opening (/world_time,/camera,/calendar).
+Use equals for a precise field, contains for a collection record subset, absent
+for prohibited subsets, only with where/select for an exact holder set. Preserve
+historical versus current scope. Do not derive birthdays from ages or replace
+unknowns with false precision. Rules must be grounded in the quoted source.
 Return one JSON object matching the schema. Entity keys are temporary references;
 the application allocates canonical IDs. Preserve all named people, organizations
 and places. Never merge same-name people without explicit evidence. Extract every
@@ -182,3 +212,26 @@ def run(preparation, jid, config, api_key, handle, loaded, stream_fn):
     except (ValueError,TypeError) as exc:raise ValueError('interpretation: invalid JSON; previous interpretation retained') from exc
     # The repository assigns the next constraint revision and commits by CAS.
     repo.finish_interpretation_job(jid,raw,brief)
+
+
+STAGE_SECTIONS = {
+    'setting': {'setting'}, 'places': {'setting','location','organization','residence','opening'},
+    'characters': {'character','appearance','personality','role','history','family','opening'},
+    'life': {'relationship','family','residence','role','possession','contact','commitment'},
+    'lore': {'fact','knowledge','history','family','commitment'},
+    'opening': {'opening','setting','knowledge','commitment'},
+}
+
+
+def scoped_plan(plan):
+    """Derived semantic inputs; canonical truth remains in Runtime records."""
+    scopes={stage:{'claims':[row for row in plan['claims'] if row['classification']=='prohibition' or row['section'] in sections or any(r['stage']==stage for r in row.get('rules',[]))],
+        **({'entities':plan['entities']} if stage=='setting' else {}),
+        **({'creation':plan['creation']} if 'creation' in plan else {})} for stage,sections in STAGE_SECTIONS.items()}
+    claims=scopes['characters']['claims']
+    def targets(row):return {row.get('subject_id'),*row.get('related_ids',[])}-{None}
+    scopes['character_global']={'claims':[r for r in claims if not targets(r)],'creation':plan.get('creation')}
+    for entity in plan['entities']:
+        if entity['kind']=='character':scopes['character_'+entity['id']]={'claims':[r for r in claims if entity['id'] in targets(r)]}
+    plan['scopes']=scopes
+    return plan

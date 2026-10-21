@@ -17,7 +17,7 @@ class Change(Revision):
     generation_unit: str | None = None
     artifact_version: int | None = None
     preview: bool = True
-    operation: Literal['patch','add','remove','restore']
+    operation: Literal['patch','add','remove','restore','regenerate','unlock']
     kind: str = ''
     entity_id: str = ''
     field: str = ''
@@ -56,7 +56,9 @@ def install(app,repo,preparation,credentials,job):
     @app.patch('/api/workspaces/{wid}/draft')
     def change(wid:str,body:Change):
         if body.generation_job is not None:
-            from backend.services.generation_edits import patch_character
+            from backend.services.generation_edits import patch_character,patch_checkpoint
+            if body.kind=='checkpoint' and body.generation_unit and body.artifact_version is not None:
+                return patch_checkpoint(repo,wid,body.generation_job,body.generation_unit,body.revision,body.artifact_version,body.field,body.value,preview=body.preview,operation=body.operation,ack=body.warnings_ack)
             if body.operation!='patch' or body.kind!='character' or not body.generation_unit or body.artifact_version is None:
                 raise ValueError('generation/edit: select a character field and checkpoint version')
             return patch_character(repo,wid,body.generation_job,body.generation_unit,body.revision,

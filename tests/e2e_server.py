@@ -43,6 +43,11 @@ def runtime_v3_request(messages):
 
 def stream(**kwargs):
     full='\n'.join(m['content'] for m in kwargs['messages'])
+    if '\nStage: ' in kwargs['messages'][0]['content']:
+        from staged_browser_fixture import staged_result
+        stage=kwargs['messages'][0]['content'].split('\nStage: ')[1].split('\n')[0]
+        yield json.dumps(staged_result(stage,json.loads(kwargs['messages'][-1]['content'])),ensure_ascii=False)
+        return
     observer='Тип хода: background' in full or 'Режим observer:' in full or 'mode=observer' in full
     if kwargs['messages'][0]['content'].startswith('Select at most ONE optional grounded autonomous remote action.'):
         yield '{"action":null}'
@@ -107,6 +112,8 @@ def stream(**kwargs):
             place='Подвал' if observer else 'Кухня'
             location_id=identity('location',place.casefold())
             present=['character_3','character_4'] if observer and 'character_3' in present else present if observer else ['character_1','character_2']
+            if not observer and len(camera.get('controlled_actor_id') or '')>20:
+                location_id=camera['location_id'];present=camera['present_character_ids'][:2]
             if location_id not in state['locations']:locations=[dict(id=location_id,name=place,evidence=SECRET if observer else NARRATIVE)]
         payload=dict(locations=locations,final_scene=dict(location_id=location_id,
             present_character_ids=present,situation='Тайная встреча.' if observer else 'Разговор на кухне.',elapsed_minutes=1),

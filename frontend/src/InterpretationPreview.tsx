@@ -1,0 +1,11 @@
+type Plan={entities:{id:string;name:string;kind:string;tier:string|null}[];claims:{id:string;description:string;section:string;classification:string;subject_id:string|null;related_ids:string[];holder_ids:string[];time_scope:string;blocking:boolean;spans:{quote:string}[]}[];constraint_revision:number};
+const sections:Record<string,string>={character:'Персонажи',appearance:'Внешность',personality:'Характер',location:'Места',organization:'Организации',family:'Семья',relationship:'Отношения',residence:'Жильё',role:'Занятия и роли',fact:'Факты',knowledge:'Знания',history:'Предыстория',opening:'Начальная сцена',setting:'Мир',possession:'Имущество',contact:'Контакты',commitment:'Планы'};
+const classes:Record<string,string>={explicit:'Задано пользователем',inferred:'Вывод из контекста',open:'Можно дополнить',prohibition:'Запрет',ambiguity:'Требует уточнения'};
+export function InterpretationPreview({value}:{value:unknown}){
+ const plan=value as Plan;if(!plan?.entities||!plan.claims)return null;
+ const name=(id:string|null)=>plan.entities.find(e=>e.id===id)?.name||id||'Мир';
+ return <section aria-label="Разбор замысла"><h3>Разбор замысла · версия {plan.constraint_revision}</h3><p>Авторский просмотр содержит секреты. Выводы модели не являются фактами пользователя.</p>
+ <h4>Состав мира</h4><ul>{plan.entities.map(e=><li key={e.id}>{e.name} · {e.kind==='character'?e.tier==='protagonist'?'Главный герой':'NPC':e.kind==='organization'?'Организация':'Место'}</li>)}</ul>
+ {Object.entries(sections).map(([section,label])=>{const rows=plan.claims.filter(c=>c.section===section);return rows.length>0&&<section key={section}><h4>{label}</h4>{rows.map(c=><article key={c.id} className="draft-field"><strong>{name(c.subject_id)}{c.related_ids.length>0&&' → '+c.related_ids.map(name).join(', ')}</strong><p>{c.description}</p><small>{classes[c.classification]}{c.time_scope&&' · '+c.time_scope}</small>{c.holder_ids.length>0&&<p>Кто знает: {c.holder_ids.map(name).join(', ')}</p>}{c.blocking&&<p role="alert">Нужно разрешить противоречие перед продолжением.</p>}{c.spans.length>0&&<details><summary>Источник</summary>{c.spans.map((s,i)=><blockquote key={i}>{s.quote}</blockquote>)}</details>}</article>)}</section>})}
+ </section>;
+}

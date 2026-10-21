@@ -9,9 +9,9 @@ from backend.services.usage import tracked_stream
 from backend.services.coordinator import model_lease
 from llm import find_loaded_model
 from backend.services.world_creation_settings import CreationSettings
-from backend.services.generation_constraints import validate_character_facts
+from backend.services.generation_constraints import validate_character_facts, validate_stage_facts
 
-PROMPT_VERSION = 'initial-world-stages-1'
+PROMPT_VERSION = 'initial-world-stages-2'
 RULES = '''Generate only the requested typed partial payload, never an entire world.
 Use the user's language. Explicit user facts and prohibitions outrank conventions.
 Genre tendencies never mandate romance, conflict, births or deaths. Family saga
@@ -44,9 +44,8 @@ def _unit(uid,stage,inputs,outputs):
 
 
 def _claims(plan, sections, ids=None):
-    return [row for row in plan['claims'] if row['classification']=='prohibition' or
-        (row['section'] in sections and (ids is None or row['subject_id'] is None or
-         row['subject_id'] in ids or set(row['related_ids']) & set(ids)))]
+    return [row for row in plan['claims'] if (row['classification']=='prohibition' or row['section'] in sections) and
+        (ids is None or not ({row['subject_id'],*row['related_ids']}-{None}) or row['subject_id'] in ids or set(row['related_ids']) & set(ids))]
 
 
 def _people(batches):
@@ -81,6 +80,8 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     job=repo.preparation_job(jid)
     inputs=repo.generation_resources(jid,['brief','constraint_revision','prompt','creation'])
     brief=inputs['brief']
+    scoped=inputs['prompt']['version']=='initial-world-stages-2'
+    source=lambda stage:'scope:'+stage if scoped else 'interpretation'
     token=repo.claim_generation(jid)
     if not token: return
     stopped=threading.Event()
@@ -104,6 +105,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     def request(stage,context_data,model):
         system=inputs['prompt']['interpretation'] if stage=='interpret' else inputs['prompt']['rules']+'\nJSON Schema:\n'+json.dumps(inputs['prompt']['schemas'][stage],ensure_ascii=False,separators=(',',':'))
         context_data={**context_data,'creation_settings':inputs['creation']}
+        if stage!='interpret':context_data['source_rules']=[row for row in plan['claims'] if any(rule['stage']==stage for rule in row.get('rules',[])) and (stage!='characters' or not ({row['subject_id'],*row['related_ids']}-{None}) or ({row['subject_id'],*row['related_ids']} & set(context_data['assigned_ids'])))]
         locks=repo.generation_field_locks(jid,current_unit)
         if locks: context_data['accepted_field_locks']=locks
         if last_error: context_data={**context_data,'repair_error':last_error,'repair_scope':'Only this stage; preserve all previously accepted inputs.'}
@@ -150,6 +152,9 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             repo.begin_generation_unit(jid,token,unit)
             try:
                 payload=validate(producer())
+                if unit not in ('interpret','assembly'):
+                    validate_stage_facts(status['stage'],payload['setting'] if unit=='setting' else payload,plan)
+                repo.commit_generation_unit(jid,token,unit,payload)
             except ValueError as exc:
                 last_error=str(exc)
                 repo.fail_generation_unit(jid,token,unit,last_error)
@@ -158,22 +163,22 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             except Exception:
                 repo.fail_generation_unit(jid,token,unit,'Provider request failed; inspect usage before retry.')
                 raise
-            repo.commit_generation_unit(jid,token,unit,payload)
             last_error=''
             return
     try:
         repo.plan_generation_units(jid,token,[
             _unit('interpret','interpret',['brief','constraint_revision','creation','prompt'],{'interpretation':''}),
-            _unit('setting','setting',['interpretation','prompt'],{'setting':'/setting','registry':'/registry'}),
-            _unit('places','places',['interpretation','setting','registry','prompt'],{'places':''}),
+            _unit('setting','setting',[source('setting'),'prompt'],{'setting':'/setting','registry':'/registry'}),
+            _unit('places','places',[source('places'),'setting','registry','prompt'],{'places':''}),
         ])
         execute('interpret',lambda:request('interpret',{'brief':brief},interpretation.Interpretation),
-            lambda raw:interpretation.accept(raw,brief,job['workspace_id'],inputs['constraint_revision']))
+            lambda raw:(interpretation.scoped_plan if scoped else lambda value:value)({**interpretation.accept(raw,brief,job['workspace_id'],inputs['constraint_revision']),'creation':inputs['creation']}))
         plan=repo.generation_resources(jid,['interpretation'])['interpretation']
+        if 'creation' in plan: inputs['creation']=plan['creation']
         if plan['blocking_ids']:
             repo.release_generation(jid,token,'paused','interpretation: resolve material ambiguities before continuing')
             return
-        execute('setting',lambda:request('setting',{'brief':brief,'interpretation':plan,
+        execute('setting',lambda:request('setting',{'interpretation':(plan['scopes']['setting'] if scoped else plan),
             'cast_targets':CreationSettings.model_validate(inputs['creation']).cast_targets(plan['entities'])},stages.SettingPart),
             lambda raw:dict(setting=stages.validate('setting',raw),registry=stages.allocate_entities(raw,plan,job['workspace_id'])))
         setting=repo.generation_resources(jid,['setting','registry'])
@@ -185,10 +190,10 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         batches=stages.character_batches(registry)
         batch_keys=['batch:'+batch['id'] for batch in batches]
         repo.plan_generation_units(jid,token,[
-            *[_unit(batch['id'],'characters',['interpretation','setting','registry','places','prompt'],{'batch:'+batch['id']:''}) for batch in batches],
-            _unit('life','life',['interpretation','registry','places',*batch_keys,'prompt'],{'life':''}),
-            _unit('lore','lore',['interpretation','registry','life',*batch_keys,'prompt'],{'lore':''}),
-            _unit('opening','opening',['interpretation','registry','places','life','lore',*batch_keys,'prompt'],{'opening':''}),
+            *[_unit(batch['id'],'characters',([source('character_global'),*['scope:character_'+cid for cid in batch['character_ids'] if 'character_'+cid in plan['scopes']]] if scoped else ['interpretation'])+['setting','registry','places','prompt'],{'batch:'+batch['id']:''}) for batch in batches],
+            _unit('life','life',[source('life'),'registry','places',*batch_keys,'prompt'],{'life':''}),
+            _unit('lore','lore',[source('lore'),'registry','life',*batch_keys,'prompt'],{'lore':''}),
+            _unit('opening','opening',[source('opening'),'registry','places','life','lore',*batch_keys,'prompt'],{'opening':''}),
             _unit('assembly','assembly',['interpretation','setting','registry','places','life','lore','opening',*batch_keys],{'assembled':''}),
         ])
         for batch in batches:
