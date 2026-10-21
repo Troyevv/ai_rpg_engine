@@ -247,7 +247,7 @@ if __name__ == '__main__':
         return {'held':True}
 
     @app.post('/test/staged-checkpoint')
-    def staged_checkpoint():
+    def staged_checkpoint(characters:bool=False):
         from test_api import REMOTE
         from test_world_interpretation import BRIEF, interpretation
         from backend.services.world_interpretation import accept
@@ -258,7 +258,24 @@ if __name__ == '__main__':
         token=repo.claim_generation(jid)
         repo.plan_generation_units(jid,token,[dict(id='interpret',stage='interpret',inputs=['brief'],outputs={'interpretation':''})])
         repo.begin_generation_unit(jid,token,'interpret')
-        repo.commit_generation_unit(jid,token,'interpret',accept(interpretation(),BRIEF,wid,1))
+        if characters:
+            from test_initial_world_stages import parts
+            from backend.services.initial_world_stages import validate_character_batch
+            data=parts()
+            repo.commit_generation_unit(jid,token,'interpret',data['interpretation'])
+            repo.plan_generation_units(jid,token,[
+                dict(id='setting',stage='setting',inputs=['interpretation'],outputs={'registry':''}),
+                dict(id='core_0',stage='characters',inputs=['registry'],outputs={'batch:core_0':''}),
+                dict(id='life',stage='life',inputs=['batch:core_0'],outputs={'life':''}),
+                dict(id='lore',stage='lore',inputs=['life'],outputs={'lore':''}),
+                dict(id='opening',stage='opening',inputs=['lore'],outputs={'opening':''})])
+            batch=data['batches'][0]
+            batch=validate_character_batch(batch,list(batch['characters']),data['registry'])
+            for unit,payload in [('setting',data['registry']),('core_0',batch),('life',{}),('lore',{}),('opening',{})]:
+                repo.begin_generation_unit(jid,token,unit)
+                repo.commit_generation_unit(jid,token,unit,payload)
+        else:
+            repo.commit_generation_unit(jid,token,'interpret',accept(interpretation(),BRIEF,wid,1))
         repo.generation_control(jid,'pause')
         repo.generation_boundary(jid,token)
         return {'workspace':wid,'job':jid}

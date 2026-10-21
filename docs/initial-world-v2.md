@@ -212,3 +212,37 @@ idempotency, retry exhaustion across author revisions/reload, and canonical
 personality/value/motivation context selection. Full verification results are
 recorded in PR #105. Paused semantic edits, creation UI/default routing and the
 rich-brief acceptance fixture remain required work.
+
+
+## Fifth implementation increment — paused personality edits
+
+The existing draft PATCH API now accepts a generation job/unit and artifact
+version for author-only personality text edits on a stable paused checkpoint.
+The existing Workshop checkpoint dialog exposes current canonical personality
+items and missing categories, dependency impact preview, and explicit save.
+The server validates canonical Character/Personality DTOs, workspace ownership,
+character identity, run/artifact CAS and the stable-pause boundary. It preserves
+other character fields/cards and independent batches. Accepted items are locked
+against provider replacement; revisions use the existing checkpoint journal.
+Resume rebuilds declared dependent outputs and retains the accepted character.
+
+Explicit personality source constraints are conservatively protected: the editor
+rejects conflicting-scope edits and identifies the source claim requiring a
+constraint revision. This is not the still-required source-revision editor.
+Directly represented explicit Character facts (birth date, biological sex, life
+status, display name and developmental stage, without historical time scopes)
+are checked before stage commit and again at assembly. Unsupported semantic
+claims are not claimed to be verified by these exact checks.
+
+Deterministic API tests cover preview without mutation, foreign workspace/stale
+CAS rejection, source protection, resume without repeated character generation,
+unchanged peers, Start Game and a contradictory provider output rejected before
+checkpoint commit. Browser tests exercise the edit/impact/save/reload path on
+desktop and mobile. No new DB tables or Runtime model were introduced.
+
+Still required: edits to other checkpoint types, explicit source/constraint
+revision and ambiguity resolution, targeted regeneration controls with finer
+semantic dependencies, full free-form fact/chronology protection, creation
+settings UI, Quick/Scenario default staged routing, and the rich #78 fixture.
+The existing default creation routes remain unchanged during this incomplete
+integration; this PR is not acceptance-complete.

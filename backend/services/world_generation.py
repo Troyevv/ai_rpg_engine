@@ -9,6 +9,7 @@ from backend.services.usage import tracked_stream
 from backend.services.coordinator import model_lease
 from llm import find_loaded_model
 from backend.services.world_creation_settings import CreationSettings
+from backend.services.generation_constraints import validate_character_facts
 
 PROMPT_VERSION = 'initial-world-stages-1'
 RULES = '''Generate only the requested typed partial payload, never an entire world.
@@ -195,7 +196,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             execute(batch['id'],lambda:request('characters',dict(assigned_ids=ids,
                 registry=registry,locations=places['locations'],campaign=setting['setting']['campaign'],
                 constraints=_claims(plan,{'character','appearance','personality','role','history','family','opening'},ids)),stages.CharactersPart),
-                lambda raw:stages.validate_character_batch(raw,ids,registry))
+                lambda raw:validate_character_facts(stages.validate_character_batch(raw,ids,registry),plan))
         parts=list(repo.generation_resources(jid,batch_keys).values())
         people=_people(parts)
         execute('life',lambda:request('life',dict(registry=registry,people=people,places=places,

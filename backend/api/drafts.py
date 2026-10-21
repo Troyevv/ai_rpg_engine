@@ -13,6 +13,10 @@ class Import(Revision):
     format: Literal['text','json'] = 'text'
 
 class Change(Revision):
+    generation_job: str | None = None
+    generation_unit: str | None = None
+    artifact_version: int | None = None
+    preview: bool = True
     operation: Literal['patch','add','remove','restore']
     kind: str = ''
     entity_id: str = ''
@@ -51,6 +55,12 @@ def install(app,repo,preparation,credentials,job):
 
     @app.patch('/api/workspaces/{wid}/draft')
     def change(wid:str,body:Change):
+        if body.generation_job is not None:
+            from backend.services.generation_edits import patch_character
+            if body.operation!='patch' or body.kind!='character' or not body.generation_unit or body.artifact_version is None:
+                raise ValueError('generation/edit: select a character field and checkpoint version')
+            return patch_character(repo,wid,body.generation_job,body.generation_unit,body.revision,
+                body.artifact_version,body.entity_id,body.field,body.value,preview=body.preview)
         eid=repo.edit_draft(wid,body.revision,body.operation,body.kind,body.entity_id,body.field,body.value,body.source_id,body.warnings_ack)
         return {**repo.draft(wid,True),'entity_id':eid}
 

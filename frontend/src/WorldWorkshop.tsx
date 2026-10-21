@@ -276,7 +276,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
           {state && <Button variant="ghost" onClick={() => setEditingIdea(false)}>Вернуться к миру</Button>}
         </div>
       </section>}
-      {staged && job && <WorldGenerationProgress job={job} apiKey={apiKey} refresh={refresh}/> }
+      {staged && job && <WorldGenerationProgress job={job} workspaceId={id} apiKey={apiKey} refresh={refresh}/> }
       {!staged && active(job) && <section className="workshop-generating" role="status">
         <span className="workshop-pulse"/><div><strong>{reconnecting ? 'Восстанавливаем соединение…' : status[0]}</strong><p>{reconnecting ? 'Ожидаем связь с сервером. Генерация продолжает выполняться.' : status[1]}</p>{!reconnecting && !!job?.progress_chars && !['validating','saving'].includes(job.phase || '') && <small>Получено {job.progress_chars.toLocaleString('ru-RU')} символов ответа</small>}</div>
         <Button variant="ghost" onClick={() => void run(async () => {await api(`/jobs/${job!.id}/stop`, {}); refresh();})}>Остановить</Button>

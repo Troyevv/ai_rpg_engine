@@ -165,7 +165,8 @@ def compose(setting, registry, places, batches, life, lore, opening, interpretat
         raise ValueError('interpretation: unresolved blocking ambiguities')
     actors, cards = {}, {}
     for batch in batches:
-        validated = validate_character_batch(batch, list(batch['characters']), registry)
+        from backend.services.generation_constraints import validate_character_facts
+        validated = validate_character_facts(validate_character_batch(batch, list(batch['characters']), registry), interpretation)
         if set(actors) & set(validated['characters']):
             raise ValueError('characters: repeated batch identity')
         actors.update(validated['characters']); cards.update(validated['cards'])

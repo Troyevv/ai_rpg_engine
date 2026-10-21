@@ -22,3 +22,31 @@ test('paused generation survives reload with author-only inspection and safe can
   await expect(panel.getByRole('heading',{name:'Отменено'})).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
 });
+
+
+test('author edits personality on pause after dependency preview and reloads the accepted checkpoint',async({page,request})=>{
+  const seeded=await(await request.post('/test/staged-checkpoint?characters=true')).json();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),seeded.workspace);
+  await page.goto('/');await nav(page,'Создать');
+  const panel=page.getByRole('region',{name:'Этапы генерации мира'});
+  await panel.getByLabel('Авторский просмотр:',{exact:false}).check();
+  const stage=panel.locator('details').filter({has:page.locator('summary').filter({hasText:'Персонажи'})});
+  await stage.locator('summary').click();
+  await stage.getByRole('button',{name:'Посмотреть результат'}).click();
+  const dialog=page.getByRole('dialog');
+  await dialog.getByLabel('Описание черты').fill('Спокойная, внимательная и настойчивая');
+  await dialog.getByRole('button',{name:'Проверить влияние правки'}).click();
+  await expect(dialog.getByRole('status')).toContainText('Отношения и обстоятельства');
+  const before=await(await request.get(`/api/jobs/${seeded.job}/generation/checkpoints/core_0?author=true`)).json();
+  expect(JSON.stringify(before)).not.toContain('Спокойная, внимательная');
+  await dialog.getByRole('button',{name:'Сохранить правку'}).click();
+  await expect(dialog).not.toBeVisible();
+  await page.reload();await nav(page,'Создать');
+  await panel.getByLabel('Авторский просмотр:',{exact:false}).check();
+  await stage.locator('summary').click();
+  await stage.getByRole('button',{name:'Посмотреть результат'}).click();
+  await expect(dialog.getByLabel('Описание черты')).toHaveValue('Спокойная, внимательная и настойчивая');
+  const after=await(await request.get(`/api/jobs/${seeded.job}/generation/checkpoints/core_0?author=true`)).json();
+  expect(after.artifact_version).not.toBe(before.artifact_version);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+});
