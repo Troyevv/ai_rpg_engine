@@ -161,3 +161,47 @@ def test_paused_edit_preview_selective_invalidation_locks_and_revision_cas(tmp_p
     repo.commit_generation_unit(jid,fresh,'setting',edited)
     with pytest.raises(ValueError):
         repo.revise_generation_checkpoint(jid,'setting',edited,changed['revision'],changed['artifact_version'],[],preview=False)
+
+
+def test_author_revision_gets_new_retry_budget_without_erasing_attempt_history(tmp_path):
+    repo,jid,token=new_run(tmp_path)
+    repo.begin_generation_unit(jid,token,'interpret')
+    original=repo.commit_generation_unit(jid,token,'interpret',{'text':'original'})
+    for _ in range(3):
+        repo.begin_generation_unit(jid,token,'setting')
+        repo.fail_generation_unit(jid,token,'setting','schema/invalid')
+    repo.generation_control(jid,'pause');repo.generation_boundary(jid,token)
+    revision=repo.generation_status(jid)['revision']
+    # Pause/resume alone cannot replenish an exhausted provider budget.
+    repo.generation_control(jid,'resume',revision);token=repo.claim_generation(jid)
+    with pytest.raises(ValueError,match='budget'): repo.begin_generation_unit(jid,token,'setting')
+    repo.generation_control(jid,'pause');repo.generation_boundary(jid,token)
+    repo.revise_generation_checkpoint(jid,'interpret',{'text':'revised'},
+        repo.generation_status(jid)['revision'],original,['/text'],preview=False)
+    repo.generation_control(jid,'resume');token=repo.claim_generation(jid)
+    for _ in range(3):
+        repo.begin_generation_unit(jid,token,'setting')
+        repo.fail_generation_unit(jid,token,'setting','schema/invalid')
+    with pytest.raises(ValueError,match='budget'): repo.begin_generation_unit(jid,token,'setting')
+    reloaded=Repository(tmp_path/'checkpoints.sqlite3')
+    with pytest.raises(ValueError,match='budget'): reloaded.begin_generation_unit(jid,token,'setting')
+    with repo.connect() as db:
+        assert [r[0] for r in db.execute("SELECT attempt FROM preparation_attempts WHERE unit_id='setting' ORDER BY attempt")]==list(range(1,7))
+
+
+def test_retry_migration_preserves_consumed_budget_and_is_idempotent(tmp_path):
+    repo,jid,token=new_run(tmp_path)
+    for _ in range(3):
+        repo.begin_generation_unit(jid,token,'interpret')
+        repo.fail_generation_unit(jid,token,'interpret','schema/invalid')
+    # Reconstruct the previous additive schema without rewriting job history.
+    with repo.connect() as db:
+        db.execute('ALTER TABLE preparation_units DROP COLUMN retry_attempts')
+    migrated=Repository(tmp_path/'checkpoints.sqlite3')
+    migrated=Repository(tmp_path/'checkpoints.sqlite3')
+    with pytest.raises(ValueError,match='budget'):
+        migrated.begin_generation_unit(jid,token,'interpret')
+    unit=migrated.generation_status(jid)['units'][0]
+    assert unit['retry_attempts']==unit['attempts']==3
+    with migrated.connect() as db:
+        assert db.execute('SELECT count(*) FROM preparation_attempts').fetchone()[0]==3

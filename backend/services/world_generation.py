@@ -52,8 +52,14 @@ def _people(batches):
     # Small presentation context, not all canonical fields/History for every NPC.
     return [dict(id=cid,name=part['cards'][cid]['name'],
         role=part['cards'][cid]['fields'].get('Роль',''),
-        character=part['cards'][cid]['fields'].get('Характер',''),
-        location_id=actor['location_id'])
+        character='' if (actor.get('personality') or {}).get('items') else part['cards'][cid]['fields'].get('Характер',''),
+        location_id=actor['location_id'],
+        personality={key:{'field':item['field'],'text':item['text'],'revision':item['revision']}
+            for key,item in (actor.get('personality') or {}).get('items',{}).items()},
+        values={key:{'text':item['text'],'revision':item['revision']}
+            for key,item in (actor.get('values') or {}).items() if item['status']=='active'},
+        **{field:[{'id':item['id'],'text':item['text'],'status':item['status']} for item in actor.get(field,[])
+                  if item['status'] in ('active','blocked')] for field in ('goals','intentions','obligations')})
         for part in batches for cid,actor in part['characters'].items()]
 
 

@@ -67,9 +67,9 @@ class DraftStorage:
                 'outline':record.get('outline','') if record and author else '',
                 'history':history,'job':self.public_job(dict(latest)) if latest else None,'author':author}
 
-    def _write_draft(self,db,wid,state,reason,source='',warnings=None,source_id=None,outline='',generated=False):
+    def _write_draft(self,db,wid,state,reason,source='',warnings=None,source_id=None,outline='',generated=False,generation=None):
         state=domain.prepare(state)
-        self._record_document(db,'world_draft',wid,dump({'state':state,'source':source,'warnings':warnings or [],'outline':outline,'generated':generated}),True,reason,source_id)
+        self._record_document(db,'world_draft',wid,dump({'state':state,'source':source,'warnings':warnings or [],'outline':outline,'generated':generated,**({'generation':generation} if generation is not None else {})}),True,reason,source_id)
         db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))
 
     def import_draft(self,wid,text,revision,format='text'):
@@ -127,7 +127,7 @@ class DraftStorage:
             state=domain.prepare(state);after=domain.validate(state)
             new_warnings=set(after['warnings'])-set(before['warnings'])
             if new_warnings and not ack:raise ValueError('Возможные связанные противоречия: '+'; '.join(new_warnings)+'. Подтверди «Изменить всё равно».')
-            self._write_draft(db,wid,state,operation,record.get('source',''),record.get('warnings',[]),source_id,record.get('outline',''),record.get('generated',False))
+            self._write_draft(db,wid,state,operation,record.get('source',''),record.get('warnings',[]),source_id,record.get('outline',''),record.get('generated',False),generation=record.get('generation'))
         return eid
 
     def finish_draft_job(self,jid,state,outline=''):
@@ -138,7 +138,7 @@ class DraftStorage:
             self._draft_workspace(db,job['workspace_id'],job['revision'],idle=False)
             config=json.loads(job['config_json']);old=self._draft_head(db,job['workspace_id'])
             record=json.loads(old['content']) if old else {}
-            self._write_draft(db,job['workspace_id'],state,job['kind'],config.get('_draft_input','') if config['_draft_task']=='world' else record.get('source',''),record.get('warnings',[]),outline=outline if config['_draft_task']=='world' else record.get('outline',''),generated=config['_draft_task']=='world' or record.get('generated',False))
+            self._write_draft(db,job['workspace_id'],state,job['kind'],config.get('_draft_input','') if config['_draft_task']=='world' else record.get('source',''),record.get('warnings',[]),outline=outline if config['_draft_task']=='world' else record.get('outline',''),generated=config['_draft_task']=='world' or record.get('generated',False),generation=None if config['_draft_task']=='world' else record.get('generation'))
             db.execute("UPDATE preparation_jobs SET status='saved' WHERE id=?",(jid,))
 
     def confirm_draft(self,wid,revision,version_id):
@@ -151,7 +151,10 @@ class DraftStorage:
             if done:return json.loads(done[0])
             w=self._draft_workspace(db,wid,revision);head=self._draft_head(db,wid)
             if not head or head['id']!=version_id:raise ValueError('Подтверждённая версия устарела.')
-            state=domain.prepare(json.loads(head['content'])['state']);report=domain.validate(state)
+            record=json.loads(head['content'])
+            if record.get('generation'):
+                self._generation_readiness(db,record['generation']['job_id'],workspace_id=wid,revision=record['generation']['revision'])
+            state=domain.prepare(record['state']);report=domain.validate(state)
             if report['errors']:raise ValueError('Нельзя начать игру: '+'; '.join(report['errors']))
             name=state['campaign']['title'].strip() or w['name'];source=domain.export_markdown(state)
             digest=hashlib.sha256(dump(state).encode()).hexdigest()

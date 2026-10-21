@@ -1,6 +1,7 @@
 """End-to-end staged Preparation API with deterministic, free provider fixtures."""
 import json
 import time
+import pytest
 from unittest.mock import patch
 
 from test_api import api, REMOTE
@@ -244,3 +245,58 @@ def test_malformed_stage_retries_locally_without_repeating_accepted_inputs(api):
     assert next(row for row in done['generation']['units'] if row['stage']=='life')['attempts']==2
     with app.state.repository.connect() as db:
         assert db.execute('SELECT count(*) FROM llm_requests').fetchone()[0]==8
+
+
+@pytest.mark.parametrize('mutation,path', [
+    ("UPDATE preparation_units SET status='stale' WHERE unit_id='lore'", 'lore'),
+    ("UPDATE preparation_units SET stage='characters' WHERE unit_id='opening'", 'missing required stages'),
+    ("UPDATE preparation_units SET input_manifest='{}' WHERE unit_id='life'", 'life'),
+    ("UPDATE preparation_resources SET digest='changed' WHERE resource_key='brief'", 'interpret'),
+    ("UPDATE preparation_resources SET artifact_id=(SELECT min(id) FROM document_versions) WHERE resource_key='places'", 'places'),
+    ("UPDATE preparation_runs SET revision=revision+1", 'revision'),
+])
+def test_start_rechecks_generation_currency_after_author_edit(api,mutation,path):
+    client,app=api;repo=app.state.repository;calls=[]
+    with patch('backend.services.preparation.chat_stream',side_effect=fake_stages(calls)):
+        wid,jid=submit(client)
+        assert wait(client,jid)['status']=='saved'
+    draft=repo.draft(wid,author=True)
+    repo.edit_draft(wid,draft['revision'],'patch',kind='campaign',field='title',value='Авторская версия')
+    edited=repo.draft(wid,author=True)
+    # Simulate superseded/corrupt persisted dependencies between publication
+    # and confirmation. An author patch must retain its generation provenance.
+    with repo.connect() as db:
+        db.execute(mutation)
+    with pytest.raises(ValueError,match='generation/readiness/?.*'+path):
+        repo.confirm_draft(wid,edited['revision'],edited['version_id'])
+    with repo.connect() as db:
+        assert db.execute('SELECT count(*) FROM saves').fetchone()[0]==0
+    assert repo.draft(wid,author=True)['state']['campaign']['title']=='Авторская версия'
+
+
+def test_confirmed_generation_is_idempotent_after_dependencies_change(api):
+    client,app=api;repo=app.state.repository
+    with patch('backend.services.preparation.chat_stream',side_effect=fake_stages([])):
+        wid,jid=submit(client)
+        assert wait(client,jid)['status']=='saved'
+    draft=repo.draft(wid,author=True)
+    result=repo.confirm_draft(wid,draft['revision'],draft['version_id'])
+    with repo.connect() as db:
+        db.execute("UPDATE preparation_units SET status='stale' WHERE job_id=?",(jid,))
+    assert repo.confirm_draft(wid,draft['revision'],draft['version_id'])==result
+    assert repo.get_snapshot(result['save'])['world_state']['camera']['situation']=='Мира идёт с сумками к станции.'
+
+
+def test_later_stage_context_uses_current_canonical_personality_and_active_motives():
+    from backend.runtime_v3.models import Character
+    from backend.services.world_generation import _people
+    actor=Character(id='a',personality={'items':{'voice':{'field':'communication','text':'Тихая и настойчивая','revision':2}}},
+        values={'v':{'id':'v','text':'Честность'},'retired':{'id':'retired','text':'Богатство','status':'retired'}},
+        goals=[{'id':'g','text':'Учиться'},{'id':'old','text':'Уехать','status':'completed'}]).model_dump()
+    result=_people([{'characters':{'a':actor},'cards':{'a':{'name':'Анна','fields':{'Характер':'Устаревшая карточка'}}}}])[0]
+    assert result['character']==''
+    assert result['personality']['voice']['revision']==2
+    assert result['personality']['voice']['text']=='Тихая и настойчивая'
+    assert set(result['values'])=={'v'}
+    assert [goal['id'] for goal in result['goals']]==['g']
+    assert 'evidence' not in result['personality']

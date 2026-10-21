@@ -73,12 +73,12 @@ this PR can be marked ready or Issue #44 closed:
    previews and full hybrid editing. Persisted stage progress, pause/resume/cancel
    and author-only checkpoint inspection are integrated. Game expressiveness is editable through
    the existing policy dialog; creation settings are typed/persisted server-side.
-6. Extend final confirmation to verify checkpoint currency after author edits;
-   complete #78 rich brief fixtures and all acceptance/manual QA scenarios.
+6. Complete semantic constraint validation at final confirmation and #78 rich
+   brief fixtures/manual QA. Checkpoint currency is now checked at confirmation.
 
-The partial canonical readiness check must not be described as the completed
-generation readiness gate: the staged publisher verifies checkpoint currency, but the
-full edited-constraint readiness contract is not complete.
+Publication and confirmation share a transactional checkpoint currency gate.
+The full edited-constraint semantic readiness contract is still not complete;
+the checkpoint gate must not be presented as all of #44 readiness.
 
 ## Verification
 
@@ -182,3 +182,33 @@ browser fixture verifies paused-state reload, secret visibility and cancellation
 on desktop/mobile. Quick Creation still defaults to the legacy request until the
 required edit/constraint reconciliation path is complete; this is a WIP rollout,
 not the final architecture promised by #44.
+
+
+## Fourth implementation increment
+
+The versioned draft record now carries its generation job/revision reference.
+Publication and Start Game share a transactional check of required stages,
+completed checkpoint versions, complete input manifests, current input hashes,
+resource ownership/output hashes and unresolved blocking interpretation IDs.
+Publication additionally requires the supplied draft to equal the committed
+assembly. Existing author patches/restores and targeted draft generation preserve
+this reference; fresh imports and replacement legacy generation remain independent.
+An already-confirmed immutable draft version still returns its original save,
+even if later preparation dependencies change. Historical saves are not rewritten.
+This verifies checkpoint currency, not yet full semantic source-fact protection.
+
+The additive `preparation_units.retry_attempts` migration preserves consumed
+budgets from existing jobs. Explicit upstream changes permit a fresh bounded
+budget for invalidated units; pause/resume, failure and process restart do not
+reset it. Total attempt numbers and the attempt journal remain monotonically
+increasing. Later-stage character projections now include current canonical
+personality items/revisions, active values and active/blocked motivations instead
+of relying solely on compatibility card prose. Development evidence/history is
+not copied wholesale into these contexts.
+
+Deterministic regressions exercise stale/missing stages and manifests, changed
+resource versions/hashes, changed run revisions after an author edit, confirmation
+idempotency, retry exhaustion across author revisions/reload, and canonical
+personality/value/motivation context selection. Full verification results are
+recorded in PR #105. Paused semantic edits, creation UI/default routing and the
+rich-brief acceptance fixture remain required work.
