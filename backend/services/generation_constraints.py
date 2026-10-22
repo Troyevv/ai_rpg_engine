@@ -47,7 +47,7 @@ def validate_stage_facts(stage,payload,plan):
                     valid=found and isinstance(expected,list) and sorted(map(fingerprint,selected))==sorted(map(fingerprint,expected))
                 else:
                     present=found and any(_subset(row,expected) for row in rows)
-                    valid=present if op=='contains' else not present
+                    valid=present if op=='contains' else found and isinstance(value,(dict,list)) and not present
             if not valid:raise ValueError('generation/constraints/'+claim['id']+path+': результат противоречит исходному ограничению')
     return validate_character_facts(payload,plan) if stage=='characters' else payload
 

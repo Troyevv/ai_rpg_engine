@@ -102,6 +102,12 @@ def patch_checkpoint(repo,wid,jid,unit,revision,artifact_version,path,value,*,pr
         if sum(e.get('tier')=='protagonist' for e in payload['entities'])>1:raise ValueError('generation/constraints: выбери одного главного героя')
         if any(not isinstance(e['name'],str) or not e['name'].strip() for e in payload['entities']):raise ValueError('generation/constraints: имя не должно быть пустым')
         if 'creation' in payload:payload['creation']=_check(CreationSettings,payload['creation'],'creation').model_dump()
+        # A prose/holder/time revision must not keep a now potentially obsolete
+        # executable binding silently. Require one explicit atomic claim edit.
+        for old,new in zip(cp['artifact']['claims'],payload['claims']):
+            semantic=('description','value','time_scope','holder_ids','related_ids','subject_id')
+            if old.get('rules') and any(old.get(k)!=new.get(k) for k in semantic) and old['rules']==new.get('rules'):
+                raise ValueError('generation/constraints/'+old['id']+': пересмотри запись ограничения вместе с её проверками; прежние проверки нельзя молча применять к новому смыслу')
         payload['constraint_revision']+=1
         payload['blocking_ids']=[c['id'] for c in payload['claims'] if c['blocking']]
         payload['fixed_claim_ids']=[c['id'] for c in payload['claims'] if c['classification'] in ('explicit','prohibition')]

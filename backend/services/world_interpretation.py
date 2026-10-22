@@ -35,6 +35,19 @@ class ConstraintRule(StrictModel):
     where: dict[str,JsonValue] = Field(default_factory=dict)
     select: str | None = None
 
+    @model_validator(mode='after')
+    def canonical_target(self):
+        from backend.services.initial_world_stages import STAGES
+        import re
+        root=self.path.split('/')[1].replace('~1','/').replace('~0','~')
+        if root not in STAGES[self.stage].model_fields or re.search(r'~(?![01])',self.path):
+            raise ValueError('rule path must target a canonical stage field')
+        if self.operator=='only' and not isinstance(self.expected,list):
+            raise ValueError('exact set rule requires an expected list')
+        if self.select is not None and self.operator!='only':
+            raise ValueError('select is only supported for exact set rules')
+        return self
+
 
 class InterpretedClaim(StrictModel):
     classification: Literal['explicit', 'inferred', 'open', 'prohibition', 'ambiguity']
@@ -216,7 +229,7 @@ def run(preparation, jid, config, api_key, handle, loaded, stream_fn):
 
 STAGE_SECTIONS = {
     'setting': {'setting'}, 'places': {'setting','location','organization','residence','opening'},
-    'characters': {'character','appearance','personality','role','history','family','opening'},
+    'characters': {'character','appearance','personality','role','history','family','opening','commitment'},
     'life': {'relationship','family','residence','role','possession','contact','commitment'},
     'lore': {'fact','knowledge','history','family','commitment'},
     'opening': {'opening','setting','knowledge','commitment'},

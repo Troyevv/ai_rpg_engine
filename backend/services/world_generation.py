@@ -11,7 +11,7 @@ from llm import find_loaded_model
 from backend.services.world_creation_settings import CreationSettings
 from backend.services.generation_constraints import validate_character_facts, validate_stage_facts
 
-PROMPT_VERSION = 'initial-world-stages-2'
+PROMPT_VERSION = 'initial-world-stages-3'
 RULES = '''Generate only the requested typed partial payload, never an entire world.
 Use the user's language. Explicit user facts and prohibitions outrank conventions.
 Genre tendencies never mandate romance, conflict, births or deaths. Family saga
@@ -80,7 +80,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     job=repo.preparation_job(jid)
     inputs=repo.generation_resources(jid,['brief','constraint_revision','prompt','creation'])
     brief=inputs['brief']
-    scoped=inputs['prompt']['version']=='initial-world-stages-2'
+    scoped=inputs['prompt']['version'] in ('initial-world-stages-2','initial-world-stages-3')
     source=lambda stage:'scope:'+stage if scoped else 'interpretation'
     token=repo.claim_generation(jid)
     if not token: return
@@ -200,7 +200,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             ids=batch['character_ids']
             execute(batch['id'],lambda:request('characters',dict(assigned_ids=ids,
                 registry=registry,locations=places['locations'],campaign=setting['setting']['campaign'],
-                constraints=_claims(plan,{'character','appearance','personality','role','history','family','opening'},ids)),stages.CharactersPart),
+                constraints=_claims(plan,{'character','appearance','personality','role','history','family','opening'} | ({'commitment'} if inputs['prompt']['version']=='initial-world-stages-3' else set()),ids)),stages.CharactersPart),
                 lambda raw:validate_character_facts(stages.validate_character_batch(raw,ids,registry),plan))
         parts=list(repo.generation_resources(jid,batch_keys).values())
         people=_people(parts)

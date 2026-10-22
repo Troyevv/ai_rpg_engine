@@ -56,10 +56,13 @@ test('creation settings reach the staged generator and canonical game policy',as
   await page.getByLabel('Описание мира или текст импорта').fill('Восемь соседей собрались на кухне.');
   await page.getByText('Настройки генератора',{exact:true}).click();
   await page.getByLabel('Основной жанр',{exact:true}).selectOption('family_saga');
+  await expect(page.getByLabel('Описание основного жанра',{exact:true})).toContainText('поколений');
   await page.getByLabel('Выразительность NPC',{exact:true}).selectOption('hyperbolized');
+  await expect(page.getByLabel('Пример выразительности',{exact:true})).toContainText('Театральная');
   await page.getByLabel('Масштаб состава',{exact:true}).selectOption('custom');
   await page.getByLabel('Важные NPC',{exact:true}).fill('7');
   await page.getByLabel('Второстепенные NPC',{exact:true}).fill('0');
+  await expect(page.getByLabel('Целевой состав мира',{exact:true})).toContainText('всего: 7');
   await page.getByLabel('География',{exact:true}).fill('Вымышленный город у моря');
   await page.getByLabel('Темп истории',{exact:true}).selectOption('calm');
   await page.getByLabel('Риск последствий',{exact:true}).selectOption('safe');
@@ -76,4 +79,32 @@ test('creation settings reach the staged generator and canonical game policy',as
   expect(draft.state.world.narrative_pacing.preset).toBe('calm');
   expect(draft.state.world.narrative_risk.preset).toBe('safe');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+});
+
+
+test('paused canonical record form protects accepted edits without exposing editor metadata publicly',async({page,request})=>{
+  const seeded=await(await request.post('/test/staged-checkpoint?characters=true')).json();
+  const endpoint=`/api/jobs/${seeded.job}/generation/checkpoints/core_0`;
+  const cp=await(await request.get(endpoint+'?author=true')).json();
+  const cid=Object.keys(cp.artifact.characters)[0];
+  expect(cp.editor_schema.$defs.Character).toBeTruthy();
+  const publicView=await(await request.get(endpoint)).json();
+  expect(publicView.reference_options).toBeUndefined();
+  expect(publicView.editor_schema).toBeUndefined();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),seeded.workspace);
+  await page.goto('/');await nav(page,'Создать');
+  const panel=page.getByRole('region',{name:'Этапы генерации мира'});
+  await panel.getByLabel('Авторский просмотр:',{exact:false}).check();
+  const stage=panel.locator('details').filter({has:page.locator('summary').filter({hasText:'Персонажи'})});
+  await stage.locator('summary').click();await stage.getByRole('button',{name:'Посмотреть результат'}).click();
+  const editor=page.getByRole('region',{name:'Редактирование этапа на паузе'});
+  await editor.getByLabel('Поле этапа',{exact:true}).selectOption({label:`Персонажи · ${cid} · запись целиком`});
+  await editor.getByLabel('Физическое состояние',{exact:true}).fill('Бодрствует');
+  await editor.getByRole('button',{name:'Проверить изменение этапа'}).click();
+  await expect(editor.getByRole('status')).toBeVisible();
+  await editor.getByRole('button',{name:'Применить изменение этапа'}).click();
+  await expect(page.getByRole('dialog')).not.toBeVisible();
+  const changed=await(await request.get(endpoint+'?author=true')).json();
+  expect(changed.artifact.characters[cid].physical_state).toBe('Бодрствует');
+  expect(changed.locked_paths).toContain(`/characters/${cid}`);
 });

@@ -55,7 +55,9 @@ def provider(calls):
                     if cid not in data['assigned_ids']:continue
                     actor=dict(id=cid,display_name=r['name'],location_id=road if cid==ilya else None)
                     if cid==ilya:actor['personality']={'items':{'traits':dict(field='traits',text='Сдержанный, но настойчивый')}}
-                    if r['name']=='Марина':actor['intentions']=[dict(id='plan',text='В будущем поженить Илью и Катю')]
+                    if r['name']=='Марина':
+                        assert any(c['section']=='commitment' and c['subject_id']==cid for c in data['constraints'])
+                        actor['intentions']=[dict(id='plan',text='В будущем поженить Илью и Катю')]
                     result['characters'][cid]=actor;result['cards'][cid]=dict(id=cid,name=r['name'],fields={})
             elif stage=='life':result={'objective_relations':{str(i):dict(id=str(i),kind='adoptive_parent',source_id=ids[n],target_id=ilya) for i,n in enumerate(['Марина','Виктор'])}}
             elif stage=='lore':result={'facts':{'adoption':dict(id='adoption',text='Илья усыновлён',visibility='secret',character_ids=[ilya,ids['Марина'],ids['Виктор']])},'knowledge':{ids[n]+':adoption':dict(actor_id=ids[n],fact_id='adoption',status='known',evidence='Вчера узнал' if n=='Илья' else 'Знали раньше') for n in PEOPLE[:3]}}
@@ -112,7 +114,12 @@ def test_rich_constraint_revision_reuses_unrelated_character_batches(api):
         response=client.post(f'/api/workspaces/{wid}/draft/generate',json=dict(task='world_staged',text=BRIEF,revision=0,config=REMOTE,api_key='fixture'))
         jid=response.json()['id'];assert wait(client,jid)['status']=='paused'
     plan=repo.generation_resources(jid,['interpretation'])['interpretation'];claim=deepcopy(plan['claims'][5])
-    claim['description']='Илья теперь общительный';claim['rules'][0]['expected']='Общительный'
+    claim['description']='Илья теперь общительный'
+    stale_rule=checkpoint_body(repo,jid,'interpret','/claims/5',claim,warnings_ack=True)
+    rejected=client.patch(f'/api/workspaces/{wid}/draft',json=stale_rule)
+    assert rejected.status_code==409 and 'проверками' in rejected.text
+    assert repo.generation_resources(jid,['interpretation'])['interpretation']==plan
+    claim['rules'][0]['expected']='Общительный'
     body=checkpoint_body(repo,jid,'interpret','/claims/5',claim,warnings_ack=True)
     peers={u:repo.inspect_generation_checkpoint(jid,u,True) for u in ('core_1','core_2','places')}
     response=client.patch(f'/api/workspaces/{wid}/draft',json=body)

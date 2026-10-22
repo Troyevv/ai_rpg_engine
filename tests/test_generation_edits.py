@@ -216,3 +216,29 @@ def test_source_knowledge_revision_keeps_setting_places_and_characters(api):
         assert response.status_code==200,response.text
         assert wait(client,jid)['status']=='saved'
     assert calls==['lore','opening']
+
+
+def test_canonical_editor_schema_and_named_references_are_author_only(api):
+    client,app=api;repo=app.state.repository
+    wid,jid,body,cp=paused_world(client,repo,[])
+    assert 'Character' in cp['editor_schema']['$defs']
+    assert any(row['id']==body['entity_id'] for row in cp['reference_options'])
+    public=repo.inspect_generation_checkpoint(jid,'core_0',False)
+    assert not {'artifact','editor_schema','reference_options','locked_paths'} & public.keys()
+
+
+@pytest.mark.parametrize('rule',[
+    dict(stage='life',path='/objective_relation',operator='absent',expected={'kind':'spouse'}),
+    dict(stage='lore',path='/knowledge',operator='only',expected=None),
+    dict(stage='life',path='/objective_relations/~wrong',operator='absent'),
+])
+def test_source_bindings_reject_malformed_canonical_targets(rule):
+    from backend.services.world_interpretation import ConstraintRule
+    with pytest.raises(ValueError):ConstraintRule.model_validate(rule)
+
+
+def test_absence_binding_does_not_prove_a_prohibition_when_path_is_missing():
+    from backend.services.generation_constraints import validate_stage_facts
+    plan={'claims':[dict(id='no-marriage',classification='prohibition',rules=[dict(stage='life',path='/objective_relations/missing',operator='absent',expected={'kind':'spouse'})])]}
+    with pytest.raises(ValueError,match='no-marriage'):
+        validate_stage_facts('life',{'objective_relations':{}},plan)

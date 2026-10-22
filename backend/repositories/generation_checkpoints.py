@@ -377,6 +377,13 @@ class GenerationCheckpoints:
             result=dict(stage=row['stage'],status=row['status'],artifact_version=row['artifact_id'],author=author,read_only=True)
             if author and row['content'] is not None:
                 result['artifact']=json.loads(row['content'])
+                from backend.services.initial_world_stages import STAGES
+                if row['stage'] in STAGES:
+                    schema=STAGES[row['stage']].model_json_schema()
+                    if row['stage']=='setting':schema={**schema,'properties':{'setting':{'type':'object','properties':schema['properties']}}}
+                    result['editor_schema']=schema
+                registry=db.execute("SELECT v.content,r.pointer FROM preparation_resources r JOIN document_versions v ON v.id=r.artifact_id WHERE r.job_id=? AND r.resource_key='registry'",(jid,)).fetchone()
+                result['reference_options']=[{'id':r['id'],'name':r['name']} for r in self._pointer(json.loads(registry['content']),registry['pointer'])] if registry else []
                 result['locked_paths']=[r['pointer'] for r in db.execute('SELECT pointer FROM preparation_field_locks WHERE job_id=? AND unit_id=?',(jid,unit))]
             return result
 
