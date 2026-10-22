@@ -253,6 +253,22 @@ if __name__ == '__main__':
         hold_next_preparation=True
         return {'held':True}
 
+    pause_staged_after=None
+    commit_staged=app.state.repository.commit_generation_unit
+    def checkpoint_with_pause(jid,token,unit,payload):
+        global pause_staged_after
+        result=commit_staged(jid,token,unit,payload)
+        if unit==pause_staged_after:
+            pause_staged_after=None
+            app.state.repository.generation_control(jid,'pause')
+        return result
+    app.state.repository.commit_generation_unit=checkpoint_with_pause
+    @app.post('/test/pause-next-staged')
+    def pause_next_staged():
+        global pause_staged_after
+        pause_staged_after='places'
+        return {'stage':'places'}
+
     @app.post('/test/staged-checkpoint')
     def staged_checkpoint(characters:bool=False):
         from test_api import REMOTE

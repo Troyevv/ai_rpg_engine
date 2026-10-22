@@ -384,6 +384,10 @@ class GenerationCheckpoints:
                     result['editor_schema']=schema
                 registry=db.execute("SELECT v.content,r.pointer FROM preparation_resources r JOIN document_versions v ON v.id=r.artifact_id WHERE r.job_id=? AND r.resource_key='registry'",(jid,)).fetchone()
                 result['reference_options']=[{'id':r['id'],'name':r['name']} for r in self._pointer(json.loads(registry['content']),registry['pointer'])] if registry else []
+                lore=db.execute("SELECT v.content,r.pointer FROM preparation_resources r JOIN document_versions v ON v.id=r.artifact_id WHERE r.job_id=? AND r.resource_key='lore'",(jid,)).fetchone()
+                if lore:
+                    facts=self._pointer(json.loads(lore['content']),lore['pointer']).get('facts',{})
+                    result['reference_options'] += [{'id':fid,'name':fact['text']} for fid,fact in facts.items()]
                 result['locked_paths']=[r['pointer'] for r in db.execute('SELECT pointer FROM preparation_field_locks WHERE job_id=? AND unit_id=?',(jid,unit))]
             return result
 

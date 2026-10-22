@@ -1,3 +1,4 @@
+import {useState} from 'react';
 import {Button} from './components/ui/button';
 import {Textarea} from './components/ui/textarea';
 import {socialLabel} from './lib/social';
@@ -18,7 +19,8 @@ export function schemaAt(root:Schema,path:string):Schema{
  }
  return schema;
 }
-function empty(schema:Schema,root:Schema):unknown{
+function empty(schema:Schema,root:Schema,activate=false):unknown{
+ if(!activate&&(schema.default===null||schema.anyOf?.some(part=>part.type==='null')))return null;
  const s=resolved(schema,root);
  if(s.default!==undefined&&s.default!==null)return structuredClone(s.default);
  if(s.enum)return s.enum[0];
@@ -29,19 +31,29 @@ function empty(schema:Schema,root:Schema):unknown{
  return '';
 }
 export function CheckpointRecordForm({value,onChange,schema={},root=schema,references=[],name='Запись',disabled=false}:{value:unknown;onChange:(value:unknown)=>void;schema?:Schema;root?:Schema;references?:Reference[];name?:string;disabled?:boolean}){
+ const [error,setError]=useState('');
  const s=resolved(schema,root),label=labels[name]||references.find(r=>r.id===name)?.name||name;
  const child=(item:unknown,key:string,childSchema:Schema,change:(value:unknown)=>void)=><CheckpointRecordForm key={key} name={key} value={item} schema={childSchema} root={root} references={references} onChange={change} disabled={disabled}/>;
- if(value===null)return <div><span>{label}: не указано</span> <Button type="button" variant="outline" disabled={disabled} onClick={()=>onChange(empty(schema,root))}>Задать {label.toLowerCase()}</Button></div>;
+ if(value!==null&&schema.anyOf?.some(part=>part.type==='null'))return <fieldset disabled={disabled}><legend>{label}</legend>{child(value,name,s,onChange)}<Button type="button" variant="ghost" onClick={()=>onChange(null)}>Не указывать {label.toLowerCase()}</Button></fieldset>;
+ if(value===null)return <div><span>{label}: не указано</span> <Button type="button" variant="outline" disabled={disabled} onClick={()=>onChange(empty(schema,root,true))}>Задать {label.toLowerCase()}</Button></div>;
  if(Array.isArray(value))return <fieldset disabled={disabled}><legend>{label}</legend>{value.map((v,i)=><div key={i}>{child(v,String(i+1),s.items||{},next=>onChange(value.map((old,j)=>j===i?next:old)))}<Button type="button" variant="ghost" onClick={()=>onChange(value.filter((_,j)=>j!==i))}>Удалить элемент {i+1}</Button></div>)}<Button type="button" variant="outline" onClick={()=>onChange([...value,empty(s.items||{},root)])}>Добавить элемент</Button></fieldset>;
  if(typeof value==='object'){
   const record=value as Record<string,unknown>;
-  return <fieldset disabled={disabled}><legend>{label}</legend>{Object.entries(record).map(([key,v])=>['id','existing_id','key','spans','revision'].includes(key)?null:<div key={key}>{child(v,key,s.properties?.[key]||(typeof s.additionalProperties==='object'?s.additionalProperties:{}),next=>onChange({...record,[key]:next}))}{typeof s.additionalProperties==='object'&&<Button type="button" variant="ghost" onClick={()=>onChange(Object.fromEntries(Object.entries(record).filter(([k])=>k!==key)))}>Удалить запись</Button>}</div>)}
+  const update=(key:string,next:unknown)=>{
+   const itemSchema=resolved(typeof s.additionalProperties==='object'?s.additionalProperties:undefined,root);
+   // Knowledge uses the canonical actor:fact key, not a new identity.
+   const row=next as Record<string,unknown>|null;
+   const nextKey=itemSchema.properties?.actor_id&&itemSchema.properties?.fact_id&&!itemSchema.properties?.id&&row?.actor_id&&row?.fact_id?`${row.actor_id}:${row.fact_id}`:key;
+   if(nextKey!==key&&Object.hasOwn(record,nextKey)){setError('Запись для этого персонажа и факта уже существует');return}
+   setError('');onChange({...Object.fromEntries(Object.entries(record).filter(([k])=>k!==key)),[nextKey]:next});
+  };
+  return <fieldset disabled={disabled}><legend>{label}</legend>{Object.entries(record).map(([key,v])=>['id','existing_id','key','spans','revision'].includes(key)?null:<div key={key}>{child(v,key,s.properties?.[key]||(typeof s.additionalProperties==='object'?s.additionalProperties:{}),next=>update(key,next))}{typeof s.additionalProperties==='object'&&<Button type="button" variant="ghost" onClick={()=>onChange(Object.fromEntries(Object.entries(record).filter(([k])=>k!==key)))}>Удалить запись</Button>}</div>)}
   {typeof s.additionalProperties==='object'&&<Button type="button" variant="outline" onClick={()=>{const next=empty(s.additionalProperties as Schema,root);const key=next&&typeof next==='object'&&!Array.isArray(next)&&'id' in next?String(next.id):crypto.randomUUID();onChange({...record,[key]:next})}}>Добавить запись</Button>}
-  </fieldset>;
+  {error&&<p role="alert">{error}</p>}</fieldset>;
  }
  if(typeof value==='boolean')return <label><input type="checkbox" checked={value} disabled={disabled} onChange={e=>onChange(e.target.checked)}/>{label}</label>;
  const refs=name.endsWith('_id')?references:[];
- if(s.enum||refs.length)return <label>{label}<select value={String(value)} disabled={disabled} onChange={e=>onChange(e.target.value===''&&schema.anyOf?.some(v=>v.type==='null')?null:e.target.value)}>{!s.enum&&<option value="">Не указано</option>}{s.enum?s.enum.map(v=><option key={String(v)} value={String(v)}>{socialLabel(String(v))==='Связь'?({alive:'Жив',dead:'Умер',missing:'Пропал',unknown:'Неизвестно',female:'Женский',male:'Мужской',public:'Открыто',secret:'Секрет',known:'Знает',suspected:'Предполагает',active:'Действует',blocked:'Заблокировано',completed:'Завершено'} as Record<string,string>)[String(v)]||String(v):socialLabel(String(v))}</option>):<>{!refs.some(r=>r.id===value)&&value!==''&&<option value={String(value)}>{String(value)}</option>}{refs.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</>}</select></label>;
+ if(s.enum||refs.length)return <label>{label}<select aria-label={label} value={String(value)} disabled={disabled} onChange={e=>onChange(e.target.value===''&&schema.anyOf?.some(v=>v.type==='null')?null:e.target.value)}>{!s.enum&&<option value="">Не указано</option>}{s.enum?s.enum.map(v=><option key={String(v)} value={String(v)}>{socialLabel(String(v))==='Связь'?({alive:'Жив',dead:'Умер',missing:'Пропал',unknown:'Неизвестно',female:'Женский',male:'Мужской',public:'Открыто',secret:'Секрет',known:'Знает',suspected:'Предполагает',active:'Действует',blocked:'Заблокировано',completed:'Завершено'} as Record<string,string>)[String(v)]||String(v):socialLabel(String(v))}</option>):<>{!refs.some(r=>r.id===value)&&value!==''&&<option value={String(value)}>{String(value)}</option>}{refs.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</>}</select></label>;
  if(typeof value==='number')return <label>{label}<input type="number" value={value} disabled={disabled} min={s.minimum} max={s.maximum} onChange={e=>onChange(Number(e.target.value))}/></label>;
  return <label>{label}<Textarea value={String(value)} disabled={disabled} maxLength={s.maxLength} onChange={e=>onChange(e.target.value)}/></label>;
 }

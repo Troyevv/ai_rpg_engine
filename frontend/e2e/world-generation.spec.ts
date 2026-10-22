@@ -52,9 +52,11 @@ test('author edits personality on pause after dependency preview and reloads the
 });
 
 test('creation settings reach the staged generator and canonical game policy',async({page,request})=>{
+  const workspace=await(await request.post('/api/workspaces',{data:{name:'Настройки генератора'}})).json();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),workspace.id);
   await page.goto('/');await nav(page,'Создать');
   await page.getByLabel('Описание мира или текст импорта').fill('Восемь соседей собрались на кухне.');
-  await page.getByText('Настройки генератора',{exact:true}).click();
+  await page.locator('summary').filter({hasText:/^Настройки генератора$/}).click();
   await page.getByLabel('Основной жанр',{exact:true}).selectOption('family_saga');
   await expect(page.getByLabel('Описание основного жанра',{exact:true})).toContainText('поколений');
   await page.getByLabel('Выразительность NPC',{exact:true}).selectOption('hyperbolized');
@@ -107,4 +109,29 @@ test('paused canonical record form protects accepted edits without exposing edit
   const changed=await(await request.get(endpoint+'?author=true')).json();
   expect(changed.artifact.characters[cid].physical_state).toBe('Бодрствует');
   expect(changed.locked_paths).toContain(`/characters/${cid}`);
+});
+
+test('Scenario handoff uses the same staged generator with captured source and creation settings',async({page,request})=>{
+ await page.goto('/');await nav(page,'Создать');
+ await page.getByRole('button',{name:'Со Сценаристом',exact:true}).click();
+ await page.getByLabel('Название сценария').fill('Сценарий по этапам');
+ await page.getByRole('button',{name:'Новый сценарий',exact:true}).click();
+ await page.getByLabel('Идея или правки сценария').fill('Восемь соседей собрались на кухне.');
+ await page.getByRole('button',{name:'Написать сценарий',exact:true}).click();
+ await expect(page.getByText('Сценарий готов',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Продолжить в редакторе мира',exact:true}).click();
+ await expect(page.getByLabel('Взять за основу сценарий этого черновика')).toBeChecked();
+ await page.locator('summary').filter({hasText:/^Настройки генератора$/}).click();
+ await page.getByLabel('Основной жанр',{exact:true}).selectOption('slice_of_life');
+ const submitted=page.waitForResponse(r=>r.url().endsWith('/draft/generate')&&r.request().method()==='POST');
+ await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+ const response=await submitted;expect(response.request().postDataJSON()).toMatchObject({task:'world_staged',use_idea:true,creation:{primary_genre:'slice_of_life'}});
+ const job=await response.json();
+ await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
+ const cp=await(await request.get(`/api/jobs/${job.id}/generation/checkpoints/interpret?author=true`)).json();
+ const wid=await page.locator('main.world-workshop').getAttribute('data-workspace-id');
+ const workspace=await(await request.get(`/api/workspaces/${wid}`)).json();
+ expect(workspace.idea.trim().length).toBeGreaterThan(0);
+ expect(cp.artifact.brief).toContain(workspace.idea.trim());
+ expect(cp.artifact.creation.primary_genre).toBe('slice_of_life');
 });
