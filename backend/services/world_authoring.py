@@ -63,6 +63,21 @@ class Motive(Record):
     text: str = Field(min_length=1)
 
 
+class Abilities(Model):
+    conscious: bool | None = None
+    can_perceive: bool | None = None
+    can_act: bool | None = None
+    can_speak: bool | None = None
+    can_move: bool | None = None
+
+
+class IdentityChange(Model):
+    previous: str = Field(min_length=1)
+    current: str = Field(min_length=1)
+    date: str | None = None
+    description: str = Field(min_length=1)
+
+
 class Person(Record):
     name: str = Field(min_length=1)
     aliases: list[str] = Field(default_factory=list)
@@ -81,6 +96,12 @@ class Person(Record):
     physical_state: str = ''
     birth_date: str | None = None
     life_status: Literal['alive', 'dead', 'missing', 'unknown'] = 'unknown'
+    capabilities: Abilities = Field(default_factory=Abilities)
+    developmental_stage: Literal['unknown', 'infant', 'child', 'adolescent', 'adult'] = 'unknown'
+    reproductive_capability: Literal['can_become_pregnant', 'can_impregnate', 'neither', 'unknown'] = 'unknown'
+    biological_sex: Literal['female', 'male'] | None = None
+    identity_components: dict[str, str] = Field(default_factory=dict)
+    name_changes: list[IdentityChange] = Field(default_factory=list)
     goals: list[Motive] = Field(default_factory=list)
     intentions: list[Motive] = Field(default_factory=list)
     obligations: list[Motive] = Field(default_factory=list)
@@ -110,6 +131,9 @@ class Tie(Record):
     status: Literal['active', 'closed'] = 'active'
     context: str = ''
     time_description: str = ''
+    since_date: str | None = None
+    until_date: str | None = None
+    outcome: Literal['', 'ended', 'divorced', 'widowed', 'superseded', 'revoked'] = ''
 
 
 class Feelings(Record):
@@ -145,13 +169,20 @@ class Knowing(Record):
     time_description: str = ''
 
 
-class Residence(Record):
+class Phase(Record):
+    status: Literal['active', 'closed'] = 'active'
+    since_date: str | None = None
+    until_date: str | None = None
+    outcome: str = ''
+
+
+class Residence(Phase):
     actor: str
     location: str
     context: str = ''
 
 
-class Occupation(Record):
+class Occupation(Phase):
     actor: str
     title: str
     kind: str
@@ -169,9 +200,25 @@ class Possession(Record):
     status: Literal['unknown', 'available', 'lost', 'destroyed'] = 'unknown'
 
 
+class Contact(Record):
+    owner: str
+    character: str | None = None
+    label: str = Field(min_length=1, max_length=160)
+    address: str = Field(min_length=1, max_length=160)
+    kind: Literal['person', 'service', 'shared'] = 'person'
+    blocked: bool = False
+    available: bool = True
+    identity_visible: bool = False
+    provenance: str = Field(min_length=1, max_length=1000)
+
+
 class Condition(Record):
     actor: str
     description: str
+    status: Literal['active', 'resolved', 'cancelled', 'unknown_outcome'] = 'active'
+    duration: Literal['temporary', 'persistent', 'unknown'] = 'unknown'
+    effects: Abilities = Field(default_factory=Abilities)
+    evidence: str = ''
 
 
 class Time(Model):
@@ -188,6 +235,24 @@ class Commitment(Record):
     participants: list[str] = Field(default_factory=list)
     location: str | None = None
     time: Time = Field(default_factory=Time)
+
+
+class UnbornChild(Record):
+    sex_fact: str | None = None
+    sex: Literal['female', 'male'] | None = None
+
+
+class Pregnancy(Record):
+    fact: str | None = None
+    count_fact: str | None = None
+    gestational_actor: str
+    impregnating_actor: str
+    parents: list[str] = Field(default_factory=list)
+    conception_earliest_date: str
+    conception_latest_date: str
+    due: Time
+    children: list[UnbornChild] = Field(min_length=1, max_length=8)
+    description: str = Field(min_length=1)
 
 
 class Calendar(Model):
@@ -221,6 +286,8 @@ class Sections(Model):
     roles: list[Occupation] = Field(default_factory=list)
     possessions: list[Possession] = Field(default_factory=list)
     conditions: list[Condition] = Field(default_factory=list)
+    pregnancies: list[Pregnancy] = Field(default_factory=list)
+    contacts: list[Contact] = Field(default_factory=list)
     commitments: list[Commitment] = Field(default_factory=list)
 
 
@@ -233,7 +300,7 @@ class Document(Sections):
 
 class PlannedRecord(Model):
     section: Literal['characters', 'locations', 'organizations', 'objective_relations',
-        'feelings', 'facts', 'events', 'knowledge', 'residences', 'roles', 'possessions', 'conditions', 'commitments']
+        'feelings', 'facts', 'events', 'knowledge', 'residences', 'roles', 'possessions', 'conditions', 'commitments', 'contacts', 'pregnancies']
     key: str = Field(min_length=1, max_length=100, pattern=r'^[\w-]+$')
     summary: str = Field(min_length=1, max_length=3000)
     references: list[str] = Field(default_factory=list)
@@ -277,3 +344,22 @@ Only author-explicit goals/intentions/obligations/commitments may bind the contr
 actor. Never choose that actor's next action or consent. Optional circumstances need
 not exist. Build starting circumstances, never a predetermined future plot.
 Return only the requested structured JSON in the user's language.'''
+
+
+class PageRecord(PlannedRecord):
+    summary: str = Field(min_length=1, max_length=200)
+
+
+class PlanPage(Model):
+    """One bounded response; references may point to a later registered page."""
+    world: World | None = None
+    opening: Opening | None = None
+    records: list[PageRecord] = Field(default_factory=list, max_length=32)
+    complete: bool
+    uncertainties: list[str] = Field(default_factory=list, max_length=8)
+
+
+class CombinedBrief(AuthorBrief):
+    entities: list[Seed] = Field(default_factory=list)
+    observations: list[Observation] = Field(default_factory=list)
+    ambiguities: list[str] = Field(default_factory=list)

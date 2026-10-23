@@ -62,34 +62,87 @@ Live-проверка не выполнена.
   Publication still uses the existing versioned draft and confirmation transaction.
 
 Small world: analysis + document (two paid requests if eventually authorized),
-then zero-provider compilation. Larger world: analysis + record plan + bounded
+then zero-provider compilation. Larger world: analysis + bounded record-plan pages + bounded
 assigned-record batches, then zero-provider aggregation/compilation. Relations
 are explicit planned records, never a generated Cartesian product of actors.
 The request estimator is conservative UTF-8 accounting, not tokenizer telemetry.
 
-## Explicit remaining limitations — not acceptance-complete
+## Planning revision 2 and explicit limits
 
-1. Source admission is at most 120,000 UTF-8 bytes and must fit the selected
-   planning context with schema, answer and analysis reserves. The analysis helper
-   supports lossless sections, but **creative planning across source sections that
-   exceed context is not implemented**. Admission rejects this before paid work.
-2. The registry plan is currently one response, with at most 3,000 planned records.
-   Output-bounded expansion is implemented; output-bounded *planning* of a dense
-   graph is not. A truncated plan requires explicit recovery, never a blind retry.
-3. Existing plan/batch definitions remain immutable. Content edits and dependent
-   recompilation work; changing a plan's batch topology needs reconciliation work.
-   Do not claim arbitrary selective replanning is implemented.
-4. The compact source format covers the fields in the matrix. It does not yet
-   express every optional prior Runtime lifecycle feature (e.g. full pregnancy,
-   contacts and name-change lifecycle records). Import/legacy generation still
-   support their existing canonical representations. Do not claim complete parity.
-5. Transformation entries identify every top-level record field and its canonical
-   destination section. Fine-grained nested transformation locations still need
-   expansion. Analysis accuracy and creative preservation of arbitrary prose
-   remain author-review concerns; deterministic tests are not semantic proof.
-6. No paid provider was called. Literary quality, real response-size planning and
-   provider schema adherence are unverified. Browser execution requires a working
-   Chromium installation; build success alone does not verify browser behavior.
+New jobs capture `prompt.planning_version=2`; captured revision-1 author jobs keep
+one-plan execution and numeric batch identities. This is a scheduler revision of
+the approved source/compiler architecture, not a replacement Runtime contract.
+
+- Input: at most 100,000 characters at the API boundary and 120,000 UTF-8 bytes.
+  Admission checks schema/context/answer reserves before provider work. Ordinary
+  ideas stay whole. Larger inputs use lossless saved source sections.
+- Planning responses: at most `min(32, max(1, (max_tokens-1200)//400))`
+  records, summaries at most 200 characters. The source schema has a hard ceiling
+  of 32 records; the executor validates the smaller assigned response bound.
+  References can cross pages; the combined Plan checks the entire registry.
+  Aggregate limit: 3,000 records. No pair enumeration or dropped mandatory edges.
+  Each source section has at most 3,001 page attempts, with ordinary job usage and
+  failure accounting; duplicate/no-progress records fail instead of looping.
+- Every original section is passed to analysis and creative expansion. Each
+  creative batch processes the sections in order, receiving its accepted partial
+  and only its related accepted batches. It must preserve earlier substantive
+  details. All intermediate versions are checkpointed. A later section can refine
+  the world/opening; this produces a visible interpretation warning.
+- All requests retain the conservative input + schema + full answer preflight.
+  Oversized registry, related context or a single substantive record produces an
+  actionable error before that request, never silent truncation. The 3,000-record
+  bound is an aggregate ceiling, **not a guarantee that every density/profile fits
+  every selected context**. Provider adherence remains a live-test question.
+- Batch identities derive from their assigned records. Upstream edits reconcile
+  the leased unit graph, preserve retired versions and attempts, and revalidate
+  unchanged batches only if header and other dependency hashes still match.
+  A changed batch with index-based field locks blocks with an explicit conflict;
+  the author must restore the plan or explicitly unlock it. Locks never move to
+  another entity merely because its array index happens to match.
+
+Small world: analysis + one document request. Large world: section analyses +
+bounded plan pages + expansion batches × source sections. Compilation and
+aggregation make no provider calls. This strategy favors source coverage and
+recoverability; long densely connected inputs can require many paid requests if
+later authorized. It does not claim a fixed price or literary-quality guarantee.
+
+## Additional lifecycle conversion matrix
+
+| Source | Target / conversion | Absent, ambiguous or unsupported | Regression |
+|---|---|---|---|
+| character capabilities | Character/capabilities, nullable booleans | unknown stays null | lifecycle fields |
+| developmental stage, reproductive capability, biological sex, identity components | corresponding Character fields | no inference from name, age prose or relationships | lifecycle fields |
+| historical name changes | portable History/legacy identity_change, actor reference + exact original date/description | no invented minute or turn; not executable past transitions | lifecycle fields |
+| relation since/until dates and outcome | ObjectiveRelation date/outcome fields | existing canonical chronological validation | compiler gate |
+| residence/role status, dates, outcome | existing social phase fields | empty remains absent | source/compiler models |
+| condition status, duration, effects, evidence | Condition + Capabilities | effects may restrict, not grant abilities | lifecycle fields |
+| contact owner/character, label/address, kind, flags, provenance | Contact with stable ID and reference resolution; created_at is initialization registration | no contact inferred from acquaintance; no historical acquisition date invented | lifecycle fields |
+| pregnancy gestational/impregnating actors, parents | Pregnancy and linked ReproductiveEvent | only explicitly present records; no random conception | pregnancy regression |
+| conception earliest/latest dates | inclusive calendar-day interval; shift initial minute anchor to retain nonnegative historical minutes | no exact conception minute invented | pregnancy regression |
+| due date/clock/description | ScheduledEvent pregnancy_due + existing boundary | missing exact executable boundary requires clarification | pregnancy regression |
+| unborn child local key and sex | stable child slot; no Character before birth | unknown Runtime-required outcome diagnosed, never rolled | pregnancy regression |
+| pregnancy fact/count_fact and child sex_fact references; description / count / sex | reuse explicitly named author Facts, or create linked secret Facts when absent | explicit Knowledge can reference the same Fact; no automatic Knowledge | pregnancy regression |
+
+`author_transformations.py` now expands records, lists, dictionaries, capabilities,
+qualitative dimensions, motives, calendar and temporal structures to leaf-level
+source and target paths. Provenance points to retained source metadata; unknown
+levels have an explicit omitted disposition. Paths identify source local keys and
+canonical record IDs; they are an audit map, not executable LLM-generated rules.
+
+## Remaining acceptance gaps
+
+- Lifecycle coverage is expanded, but not complete parity: author-side pending
+  naming decisions, communication conversations/in-flight messages and all
+  optional historical lifecycle transitions are not yet modeled. Historical name
+  changes are preserved as supported history, not fabricated executable events.
+- Replanning protects changed-batch locks by stopping for explicit conflict
+  resolution; it does not automatically migrate arbitrary array locks between
+  reshuffled batches. Source coverage in requests does not prove that a real model
+  will retain every supplied trait: author review and live evaluation remain needed.
+- No paid provider was called. **Live-проверка не выполнена.** Literary quality,
+  actual DeepSeek response-size behavior and schema adherence remain unverified.
+- Chromium is unavailable in this environment. The browser suite was attempted,
+  but browser checks have not passed; frontend build is not browser evidence.
 
 ## Reproducible checks
 

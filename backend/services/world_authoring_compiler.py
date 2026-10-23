@@ -96,7 +96,8 @@ def compile_document(document, id_map=None, creation=None):
                            'Уточните стартовую точку; приблизительное историческое время менять не нужно.')
     if opening.time.period is not None or opening.time.day_offset is not None:
         raise CompileError('opening/time', 'Начальная точка должна иметь собственную дату или день недели и точное время.')
-    minute = int(clock[:2]) * 60 + int(clock[3:])
+    from backend.services.author_lifecycle import anchor_offset, compile_pregnancies
+    minute = anchor_offset(doc) + int(clock[:2]) * 60 + int(clock[3:])
     calendar = _check(m.Calendar, dict(start_minute=minute, start_weekday=opening.time.weekday or 0,
         start_date=opening.time.date, profile=opening.calendar.model_dump()), 'opening/calendar').model_dump()
     if opening.time.date and opening.time.weekday is not None and calendar['start_weekday'] != opening.time.weekday:
@@ -116,7 +117,8 @@ def compile_document(document, id_map=None, creation=None):
     cards = []
     history = {'events': [], 'legacy': []}
     for row, rid, path in records('characters'):
-        values = {key: getattr(row, key) for key in ('situation', 'physical_state', 'birth_date', 'life_status')}
+        values = {key: getattr(row, key) for key in ('situation', 'physical_state', 'birth_date', 'life_status', 'developmental_stage', 'reproductive_capability', 'biological_sex', 'identity_components')}
+        values['capabilities'] = row.capabilities.model_dump()
         personality = {('traits' if f == 'personality' else f): dict(field='traits' if f == 'personality' else f, text=getattr(row, f))
             for f in ('personality', 'communication', 'habits', 'strengths', 'weaknesses', 'fears') if getattr(row, f)}
         for field in ('goals', 'intentions', 'obligations'):
@@ -130,6 +132,14 @@ def compile_document(document, id_map=None, creation=None):
             location_id=ref('locations', row.location, path + '/location', True),
             appearance=m.AppearanceProfile(legacy_text=row.appearance),
             personality=m.PersonalityProfile(items=personality), **values).model_dump()
+        # Runtime name transitions require an exact nonnegative minute. Historical
+        # author dates have no such precision: retain them in portable history,
+        # instead of fabricating midnight or a turn that never happened.
+        for change in row.name_changes:
+            if change.date:
+                from backend.runtime_v3.calendar import date_parts
+                date_parts(change.date, calendar['profile'])
+            history['legacy'].append(dict(kind='identity_change', actor_id=rid, **change.model_dump()))
         cards.append(dict(id=rid, name=row.name, aliases=row.aliases,
                           fields={label: getattr(row, field) for field, label in CARD_FIELDS.items() if getattr(row, field)}))
         track(row, path, 'world_state/characters/' + rid, {'age': 'card_text_no_birthdate', 'biography': 'card_text', 'appearance': 'legacy_text'})
@@ -149,7 +159,8 @@ def compile_document(document, id_map=None, creation=None):
     for row, rid, path in records('objective_relations'):
         state['objective_relations'][rid] = m.ObjectiveRelation(id=rid, kind=row.kind,
             source_id=actor(row.source, path + '/source'), target_id=actor(row.target, path + '/target'),
-            status=row.status, context=row.context, evidence=row.time_description).model_dump()
+            status=row.status, context=row.context, evidence=row.time_description,
+            since_date=row.since_date, until_date=row.until_date, outcome=row.outcome).model_dump()
         track(row, path, 'world_state/objective_relations/' + rid)
     for row, _, path in records('feelings'):
         source, target = actor(row.source, path + '/source'), actor(row.target, path + '/target')
@@ -192,9 +203,12 @@ def compile_document(document, id_map=None, creation=None):
         ('residences', m.Residence, {'actor': 'characters', 'location': 'locations'}),
         ('roles', m.NarrativeRole, {'actor': 'characters', 'organization': 'organizations'}),
         ('conditions', m.Condition, {'actor': 'characters'}),
+        ('contacts', m.Contact, {'owner': 'characters', 'character': 'characters'}),
         ('possessions', m.SignificantPossession, {'owner': 'characters', 'holder': 'characters', 'location': 'locations'})):
         for row, rid, path in records(section):
             values = row.model_dump(exclude={'key', 'origin', 'field_origins', *fields})
+            if section == 'contacts':
+                values['created_at'] = minute  # Registration at world initialization, not an invented acquisition date.
             if section == 'possessions':
                 description = values.pop('description')
                 if description:
@@ -202,7 +216,7 @@ def compile_document(document, id_map=None, creation=None):
                     state['facts'][fid] = m.Fact(id=fid, text=description, visibility='secret').model_dump()
                     values['fact_id'] = fid
             for field, target in fields.items():
-                values[field + '_id'] = ref(target, getattr(row, field), path + '/' + field, field in ('organization', 'owner', 'holder', 'location') and section != 'residences')
+                values[field + '_id'] = ref(target, getattr(row, field), path + '/' + field, field in ('organization', 'owner', 'holder', 'location', 'character') and section != 'residences')
             state[section][rid] = _check(model, dict(id=rid, **values), path).model_dump()
             track(row, path, 'world_state/' + section + '/' + rid)
     for row, rid, path in records('commitments'):
@@ -220,6 +234,7 @@ def compile_document(document, id_map=None, creation=None):
             temporal=temporal, time_reference_minute=minute if temporal else None,
             commitment=True, evidence=time.description).model_dump()
         track(row, path, 'world_state/scheduled_events/' + rid)
+    compile_pregnancies(doc, state, ids, actor, history, track)
     for field in a.World.model_fields:
         mapping.append(dict(source='world/' + field, target='campaign/campaign/' + field, method='copy', origin='unknown'))
     for field in a.Opening.model_fields:
@@ -232,4 +247,5 @@ def compile_document(document, id_map=None, creation=None):
     dropped = [r for r in result.report if r.get('action') == 'drop_record']
     if dropped:
         raise CompileError('compiled', 'Каноническая нормализация отбросила данные: ' + str(dropped))
-    return Compilation(result.snapshot, ids, diagnostics, mapping)
+    from backend.services.author_transformations import expand
+    return Compilation(result.snapshot, ids, diagnostics, expand(doc, ids, mapping, result.snapshot))

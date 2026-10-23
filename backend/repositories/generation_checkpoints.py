@@ -178,6 +178,92 @@ class GenerationCheckpoints:
                         raise ValueError('generation/plan: duplicate resource producer')
                 db.execute('INSERT INTO preparation_units(job_id,unit_id,stage,weight,required_inputs,output_paths) VALUES(?,?,?,?,?,?)',(jid,unit['id'],*definition))
 
+    def append_author_plan_unit(self, jid, token, unit):
+        """Append a bounded planning page without resetting earlier attempts."""
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE'); self._pipeline_guard(db, jid, token)
+            if unit['stage'] != 'author_plan' or not unit['id'].startswith('author_plan'):
+                raise ValueError('author/plan: only planning pages may be appended')
+            definition=(unit['stage'], float(unit.get('weight', 1)), dump(sorted(unit['inputs'])), dump(unit['outputs']))
+            old=db.execute('SELECT * FROM preparation_units WHERE job_id=? AND unit_id=?', (jid,unit['id'])).fetchone()
+            if old:
+                if tuple(old[k] for k in ('stage','weight','required_inputs','output_paths')) != definition:
+                    if unit['id']!='author_plan' or old['status'] not in ('pending','stale'):
+                        raise ValueError('author/plan: page dependencies changed; explicit replan required')
+                    removed=set(json.loads(old['required_inputs']))-set(unit['inputs'])
+                    for key in removed:
+                        if not key.startswith('author_plan_page_'):
+                            raise ValueError('author/plan: source ownership cannot change')
+                        previous=db.execute('SELECT status FROM preparation_units WHERE job_id=? AND unit_id=?',(jid,key)).fetchone()
+                        if previous and previous['status'] not in ('pending','stale','retired'):
+                            raise ValueError('author/plan: invalidate obsolete pages first')
+                        if db.execute('SELECT 1 FROM preparation_field_locks WHERE job_id=? AND unit_id=?',(jid,key)).fetchone():
+                            raise ValueError('author/plan: explicitly unlock protected obsolete page')
+                        db.execute("UPDATE preparation_units SET status='retired' WHERE job_id=? AND unit_id=?",(jid,key))
+                    db.execute('UPDATE preparation_units SET required_inputs=? WHERE job_id=? AND unit_id=?',(definition[2],jid,unit['id']))
+                    self._record_document(db,'generation_plan',jid,dump({'unit':unit,'retired_pages':sorted(removed)}),True,'author_pages_reconcile')
+                return
+            for row in db.execute('SELECT output_paths FROM preparation_units WHERE job_id=?', (jid,)):
+                if set(json.loads(row['output_paths'])) & set(unit['outputs']):
+                    raise ValueError('author/plan: duplicate producer')
+            db.execute('INSERT INTO preparation_units(job_id,unit_id,stage,weight,required_inputs,output_paths) VALUES(?,?,?,?,?,?)',
+                (jid,unit['id'],*definition))
+
+    def reconcile_author_batches(self, jid, token, units):
+        """Reconcile invalidated source batches, retaining versions and accounting.
+
+        Changed protected batches require explicit unlocking. Never silently
+        remap an index-based author lock to a different entity after a reorder.
+        """
+        expected={u['id']:u for u in units}
+        if len(expected)!=len(units):raise ValueError('author/replan: duplicate unit')
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE'); self._pipeline_guard(db,jid,token)
+            old={r['unit_id']:r for r in db.execute("SELECT * FROM preparation_units WHERE job_id=? AND stage IN ('author_batch','author_document')",(jid,))}
+            for uid,row in old.items():
+                item=expected.get(uid)
+                changed=item is None or (row['required_inputs'],row['output_paths']) != (dump(sorted(item['inputs'])),dump(item['outputs']))
+                if changed:
+                    if row['status'] not in ('pending','stale','retired'):
+                        raise ValueError('author/replan/'+uid+': invalidate upstream plan before changing batches')
+                    if db.execute('SELECT 1 FROM preparation_field_locks WHERE job_id=? AND unit_id=?',(jid,uid)).fetchone():
+                        raise ValueError('author/replan/'+uid+': protected edits conflict with the new roster; explicitly unlock or restore the plan')
+                    db.execute("UPDATE preparation_units SET status='retired' WHERE job_id=? AND unit_id=?",(jid,uid))
+            for item in units:
+                if item['stage'] not in ('author_batch','author_document'):
+                    raise ValueError('author/replan: source stage ownership cannot change')
+                uid=item['id']
+                definition=(item['stage'],float(item.get('weight',1)),dump(sorted(item['inputs'])),dump(item['outputs']))
+                if uid in old:
+                    db.execute("UPDATE preparation_units SET stage=?,weight=?,required_inputs=?,output_paths=?,status=CASE WHEN status='retired' THEN 'stale' ELSE status END WHERE job_id=? AND unit_id=?",(*definition,jid,uid))
+                else:
+                    if db.execute('SELECT 1 FROM preparation_units WHERE job_id=? AND unit_id=?',(jid,uid)).fetchone():
+                        raise ValueError('author/replan: existing foreign unit')
+                    db.execute('INSERT INTO preparation_units(job_id,unit_id,stage,weight,required_inputs,output_paths) VALUES(?,?,?,?,?,?)',(jid,uid,*definition))
+            # A content-addressed batch whose records and related artifacts did
+            # not change can keep its accepted artifact. Refresh only the plan
+            # manifest after proving that world/opening and every other input
+            # still match. No attempt counters or locks are reset.
+            reused=[]
+            for item in units:
+                row=old.get(item['id'])
+                if not row or row['stage']!='author_batch' or row['status']!='stale' or not row['artifact_id']:
+                    continue
+                if row['required_inputs']!=dump(sorted(item['inputs'])):continue
+                manifest=json.loads(row['input_manifest'])
+                resources={r['resource_key']:r for r in db.execute('SELECT r.*,u.status AS producer_status,v.content FROM preparation_resources r JOIN document_versions v ON v.id=r.artifact_id LEFT JOIN preparation_units u ON u.job_id=r.job_id AND u.unit_id=r.unit_id WHERE r.job_id=?',(jid,))}
+                if any(k not in resources or resources[k]['producer_status'] not in (None,'completed') or (k!='author_plan' and resources[k]['digest']!=v) for k,v in manifest.items()):continue
+                prior=None
+                for version in db.execute("SELECT content FROM document_versions WHERE kind='generation_checkpoint' AND owner=?",(jid+':author_plan',)):
+                    candidate=json.loads(version['content'])
+                    if fingerprint(candidate)==manifest.get('author_plan'):prior=candidate;break
+                current=json.loads(resources['author_plan']['content'])
+                if prior is None or any(prior[k]!=current[k] for k in ('world','opening','uncertainties')):continue
+                manifest['author_plan']=resources['author_plan']['digest']
+                db.execute("UPDATE preparation_units SET status='completed',input_manifest=? WHERE job_id=? AND unit_id=?",(dump(manifest),jid,item['id']))
+                reused.append(item['id'])
+            self._record_document(db,'generation_plan',jid,dump({'units':units,'reused':reused}),True,'author_reconcile')
+
     def generation_resources(self,jid,keys):
         with self.connect() as db:
             result={}
@@ -544,7 +630,7 @@ class GenerationCheckpoints:
                 result['artifact']=json.loads(row['content'])
                 if row['stage'].startswith('author_') or row['stage']=='compile':
                     from backend.services.world_authoring_pipeline import SCHEMAS
-                    if row['stage'] in SCHEMAS:result['editor_schema']=SCHEMAS[row['stage']].model_json_schema()
+                    if row['stage'] in SCHEMAS:result['editor_schema']=SCHEMAS['author_plan_page' if unit.startswith('author_plan_page_') else row['stage']].model_json_schema()
                     result['locked_paths']=[r['pointer'] for r in db.execute('SELECT pointer FROM preparation_field_locks WHERE job_id=? AND unit_id=?',(jid,unit))]
                     result['contract']='world-authoring-1'
                     return result

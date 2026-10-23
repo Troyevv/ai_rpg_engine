@@ -10,21 +10,17 @@ from backend.services.world_creation_settings import CreationSettings
 MAX_SOURCE_BYTES = 120_000
 MAX_RECORDS = 3000
 SCHEMAS = {'author_brief': a.AuthorBrief, 'author_plan': a.Plan,
-           'author_document': a.Document, 'author_batch': a.Sections}
+           'author_plan_page': a.PlanPage, 'author_document': a.Document, 'author_batch': a.Sections}
 
 
 def capture(brief, config):
     if len(brief.encode('utf-8')) > MAX_SOURCE_BYTES:
         raise ValueError('author/brief: максимум 120000 байт UTF-8; сократите замысел до запроса провайдера.')
-    # Do not spend an analysis request on an input that cannot reach the planner.
-    # The live tokenizer remains provider-owned; this conservative admission
-    # bound explicitly includes source, schemas, response and analysis reserve.
-    schema_bytes=len(json.dumps(a.Plan.model_json_schema(),ensure_ascii=False).encode('utf-8'))
-    required=(len(brief.encode('utf-8'))+schema_bytes)//2+config['max_tokens']+8192
-    if required>config['context_length']:
-        raise ValueError('author/brief: замысел не помещается в поддерживаемый контекст планирования с резервом ответа; увеличьте контекст или сократите вход. Платные запросы не отправлены.')
+    # Validate the minimum viable request before any provider work. Long sources
+    # are retained in full and processed as independently checkpointed sections.
+    source_sections(brief, config['context_length'], config['max_tokens'], a.AuthorBrief.model_json_schema())
     return dict(brief=brief, constraint_revision=1, creation=config.get('_creation', {}),
-        prompt=dict(version=a.VERSION, rules=a.AUTHOR_RULES, interpretation=a.ANALYSIS_RULES,
+        prompt=dict(version=a.VERSION, planning_version=2, rules=a.AUTHOR_RULES, interpretation=a.ANALYSIS_RULES,
                     schemas={k: model.model_json_schema() for k, model in SCHEMAS.items()}))
 
 
@@ -71,7 +67,7 @@ def combine_briefs(parts):
         result['observations'].extend(part['observations'])
         result['ambiguities'].extend(part['ambiguities'])
     result['entities'] = list(known.values())
-    return _check(a.AuthorBrief, result, 'author_brief').model_dump()
+    return _check(a.CombinedBrief, result, 'author_brief').model_dump()
 
 
 def run(repo, jid, token, inputs, config, context, request, execute):
@@ -80,7 +76,9 @@ def run(repo, jid, token, inputs, config, context, request, execute):
     def get(key):
         return repo.generation_resources(jid, [key])[key]
     brief = inputs['brief']
-    parts = source_sections(brief, context, config['max_tokens'], inputs['prompt']['schemas']['author_brief'])
+    schemas = inputs['prompt']['schemas']
+    split_schema = max(schemas.values(), key=lambda s: len(json.dumps(s))) if inputs['prompt'].get('planning_version') == 2 else schemas['author_brief']
+    parts = source_sections(brief, context, config['max_tokens'], split_schema)
     part_keys = ['author_source_' + str(i) for i in range(len(parts))]
     repo.plan_generation_units(jid, token, [
         *[unit(key, 'author_brief', ['brief', 'prompt', *part_keys[:i]], {key: ''}) for i, key in enumerate(part_keys)],
@@ -114,11 +112,60 @@ def run(repo, jid, token, inputs, config, context, request, execute):
         execute('author_document', lambda: request('author_document', data, a.Document),
             validate_document)
     else:
-        repo.plan_generation_units(jid, token, [unit('author_plan', 'author_plan',
-            ['brief', 'author_brief', 'creation', 'prompt'], {'author_plan': ''})])
-        execute('author_plan', lambda: request('author_plan', {**data,
-            'instruction': 'Plan the entire registry and only meaningful relations/events/circumstances. Each record has a section/key and explicit references. Do not write full biographies. Preserve all author entities and mandatory ties.'}, a.Plan),
-            lambda raw: _check(a.Plan, raw, 'author_plan').model_dump())
+        if inputs['prompt'].get('planning_version', 1) == 1:
+            repo.plan_generation_units(jid, token, [unit('author_plan', 'author_plan',
+                ['brief', 'author_brief', 'creation', 'prompt'], {'author_plan': ''})])
+            execute('author_plan', lambda: request('author_plan', {**data,
+                'instruction': 'Plan the entire registry and only meaningful relations/events/circumstances. Each record has a section/key and explicit references. Do not write full biographies. Preserve all author entities and mandatory ties.'}, a.Plan),
+                lambda raw: _check(a.Plan, raw, 'author_plan').model_dump())
+        else:
+            page_keys, pages = [], []
+            registry = {}
+            for source_index, source in enumerate(parts):
+                for page_index in range(MAX_RECORDS + 1):
+                    key = f'author_plan_page_{source_index}_{page_index}'
+                    definition = unit(key, 'author_plan', ['brief', 'author_brief', 'creation', 'prompt', *page_keys], {key: ''})
+                    repo.append_author_plan_unit(jid, token, definition)
+                    def validate_page(raw):
+                        value = _check(a.PlanPage, raw, key).model_dump()
+                        if len(value['records']) > min(32, max(1, (config['max_tokens']-1200)//400)):
+                            raise ValueError(key + ': превышен назначенный размер страницы')
+                        if not value['records'] and not value['complete']:
+                            raise CompileError(key, 'Пустая незавершённая страница плана.')
+                        for r in value['records']:
+                            slot = r['section'] + '/' + r['key']
+                            if slot in registry:
+                                raise CompileError(key + '/' + slot, 'Повторная регистрация меняет принятый план; исправьте исходный план явно.')
+                        return value
+                    execute(key, lambda: request('author_plan_page', dict(
+                        source=source, source_index=source_index,
+                        author_brief=accepted[source_index],
+                        registered_records=[dict(section=r['section'], key=r['key']) for r in registry.values()],
+                        accepted_world=next((p['world'] for p in reversed(pages) if p['world']), None),
+                        accepted_opening=next((p['opening'] for p in reversed(pages) if p['opening']), None),
+                        max_records=min(32, max(1, (config['max_tokens']-1200)//400)),
+                        instruction='Continue the registry for this source section. Return at most max_records short records (summary <= 200 characters). Never repeat accepted records. Set complete only when every supplied entity, relation and circumstance in this section is registered. Supply world/opening on the first page. On later pages use null unless this source explicitly corrects or supplements the accepted world/opening; then return its complete revised value, preserving all other accepted details and report the correction in uncertainties. References may name records on later pages; final compilation checks them. Do not enumerate unrelated pairs.'), a.PlanPage), validate_page)
+                    page = get(key)
+                    if len(page['records']) > min(32, max(1, (config['max_tokens']-1200)//400)):
+                        raise CompileError(key, 'Страница превысила назначенный размер; исправьте checkpoint.')
+                    page_keys.append(key); pages.append(page)
+                    registry.update({r['section']+'/'+r['key']:r for r in page['records']})
+                    if len(registry) > MAX_RECORDS:
+                        raise CompileError(key, 'Поддерживается не более 3000 записей плана; принятые страницы сохранены.')
+                    if page['complete']:
+                        break
+                else:
+                    raise CompileError('author_plan', 'Достигнут предел страниц раздела (3001); принятые страницы сохранены.')
+            definition = unit('author_plan', 'author_plan', page_keys, {'author_plan': ''})
+            repo.append_author_plan_unit(jid, token, definition)
+            def combine_plan():
+                worlds = [p['world'] for p in pages if p['world']]
+                openings = [p['opening'] for p in pages if p['opening']]
+                if not worlds or not openings:
+                    raise CompileError('author_plan', 'Нужны согласованные мир и начальная сцена; исправьте страницы плана.')
+                return _check(a.Plan, dict(world=worlds[-1], opening=openings[-1], records=list(registry.values()),
+                    uncertainties=[u for p in pages for u in p['uncertainties']] + (['Мир или начальная сцена уточнены по последующим разделам исходника; проверьте принятую интерпретацию.'] if any(w != worlds[0] for w in worlds) or any(o != openings[0] for o in openings) else [])), 'author_plan').model_dump()
+            execute('author_plan', combine_plan, lambda value: value)
         plan = get('author_plan')
         batches = []
         current, budget = [], 0
@@ -131,12 +178,22 @@ def run(repo, jid, token, inputs, config, context, request, execute):
             current.append(record); budget += cost
         if current:
             batches.append(current)
-        keys = ['author_batch_' + str(i) for i in range(len(batches))]
+        from backend.services.initial_world_stages import fingerprint
+        keys = [('author_batch_' + fingerprint(batch)[:20]) if inputs['prompt'].get('planning_version') == 2
+                else 'author_batch_' + str(i) for i, batch in enumerate(batches)]
         owner={r['section']+'/'+r['key']:i for i,batch in enumerate(batches) for r in batch}
         dependencies={i:sorted({owner[ref] for r in batch for ref in r['references'] if owner[ref]<i}) for i,batch in enumerate(batches)}
-        definitions = [unit(key, 'author_batch', ['brief', 'author_brief', 'author_plan', 'prompt', 'creation',*[keys[j] for j in dependencies[i]]], {key: ''}) for i,key in enumerate(keys)]
+        passes = [[key + '_source_' + str(j) for j in range(len(parts)-1)] + [key] for key in keys]
+        definitions = []
+        for i, key in enumerate(keys):
+            for j, pass_key in enumerate(passes[i]):
+                definitions.append(unit(pass_key, 'author_batch', ['brief', part_keys[j], 'author_plan', 'prompt', 'creation',
+                    *[keys[k] for k in dependencies[i]], *([passes[i][j-1]] if j else [])], {pass_key: ''}))
         definitions += [unit('author_document', 'author_document', ['author_plan', *keys], {'author_document': ''})]
-        repo.plan_generation_units(jid, token, definitions)
+        if inputs['prompt'].get('planning_version') == 2:
+            repo.reconcile_author_batches(jid, token, definitions)
+        else:
+            repo.plan_generation_units(jid, token, definitions)
         for i, key in enumerate(keys):
             assigned = batches[i]
             def validate(raw):
@@ -146,10 +203,15 @@ def run(repo, jid, token, inputs, config, context, request, execute):
                 if actual != wanted:
                     raise CompileError(key, 'Ответ должен содержать только назначенные записи, без пропусков.')
                 return value
-            execute(key, lambda: request('author_batch', {**data, 'world': plan['world'],
-                'opening': plan['opening'], 'registry': plan['records'], 'assigned_records': assigned,
-                'accepted_related_sections':{keys[j]:get(keys[j]) for j in dependencies[i]},
-                'instruction': 'Expand only assigned records. The plan registry, relations and identities are accepted and cannot change.'}, a.Sections), validate)
+            for j, pass_key in enumerate(passes[i]):
+                execute(pass_key, lambda: request('author_batch', dict(
+                    original_source=parts[j], source_index=j, source_count=len(parts),
+                    author_brief=accepted[j], world=plan['world'], opening=plan['opening'],
+                    registry=[dict(section=r['section'], key=r['key']) for r in plan['records']],
+                    assigned_records=assigned,
+                    accepted_partial=get(passes[i][j-1]) if j else None,
+                    accepted_related_sections={keys[k]:get(keys[k]) for k in dependencies[i]},
+                    instruction='Expand only assigned records. Preserve the accepted partial in full, incorporating every relevant detail from this source section. Do not erase earlier characteristics. The plan registry, relations and identities are accepted and cannot change. Return the complete assigned records, not a patch.'), a.Sections), validate)
         def assemble():
             value = {k: deepcopy(plan[k]) for k in ('world', 'opening', 'uncertainties')}
             value.update({k: [] for k in a.Sections.model_fields})
@@ -227,7 +289,7 @@ def patch_author_checkpoint(repo, jid, unit, cp, revision, artifact_version, pat
             raise ValueError('author/edit: поле не найдено.') from exc
     if operation=='patch' and cp['stage'] in ('author_document','author_batch'):
         payload=mark_author_changes(cp['artifact'],payload)
-    payload = _check(SCHEMAS[cp['stage']], payload, unit).model_dump()
+    payload = _check(a.PlanPage if unit.startswith('author_plan_page_') else SCHEMAS[cp['stage']], payload, unit).model_dump()
     # A paused author document may need several local corrections. Schema-valid
     # edits are journaled; only the compile/publication gate can make it playable.
     return repo.revise_generation_checkpoint(jid, unit, payload, revision, artifact_version,

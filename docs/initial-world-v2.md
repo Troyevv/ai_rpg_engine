@@ -15,6 +15,11 @@ The revision-6 sections below describe captured legacy jobs, not new provider
 contracts. They remain readable/resumable and their regression tests explicitly
 select the captured version; no existing assertion was weakened.
 
+Scheduler revision 2 adds bounded plan pages, source-section expansion and
+content-addressed batch reconciliation. Lifecycle author fields and the nested
+transformation map are expanded; remaining parity and browser/live limitations
+are listed in the author contract. Captured scheduler revision 1 stays readable.
+
 The original idea is retained in immutable generation inputs. Analysis extracts
 supplied entities/circumstances and ambiguities without spans or executable rules.
 Creative responses contain prose, local references and qualitative feelings, not
