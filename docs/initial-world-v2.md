@@ -118,8 +118,24 @@ contract tests explicitly select revision 5; they are retained as compatibility
 coverage rather than weakened to accept the new behavior.
 
 Browser coverage includes Quick/Scenario, pause/restart recovery, full author
-forms and exhausted-budget UX on desktop/mobile. Full suite results for this
-revision are recorded below after execution.
+forms and exhausted-budget UX on desktop/mobile. Final verification on implementation commit
+`0984bcb4cb0b4505f8b6bb8be74011576145c1ae`, tree
+`bfa16c087e2fb290f310b2e2f3397b76e8b3ec73`:
+
+- `python -m pytest tests -q`: **1589 passed**, 203.94 seconds.
+- `npm --prefix frontend run build`: passed; existing Vite bundle-size advisory.
+- `npm run test:e2e` from frontend: **204 passed, 10 skipped**, 11.5 minutes.
+  All skips are existing mobile-project exclusions for inspector-width,
+  mobile-layout-width and PWA tests; no new skips or relaxed timeouts.
+- `git diff --check`: passed.
+
+The final sequence ran Python, build and the complete browser matrix against the
+same implementation. Only this verification documentation changes afterwards.
+Python 3.12 / Node 24 / external Chromium 153 via
+`PLAYWRIGHT_EXECUTABLE_PATH`; no environment-specific binaries are committed.
+These are local results, not a claim that GitHub Actions has finished.
+Earlier full runs exposed the dispatcher recovery race and symmetric-relation
+ordering case described above; both were fixed before this final successful run.
 
 **Live DeepSeek quality remains unverified.** No real API credential is available
 in this working environment; only deterministic test credentials are used.
