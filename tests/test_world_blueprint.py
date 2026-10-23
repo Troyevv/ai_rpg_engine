@@ -32,6 +32,11 @@ def creative_provider(calls, old=None, provider=None, conflict=False):
             from backend.services.initial_world_stages import CREATIVE_PARTS
             forwarded={**kw,'messages':deepcopy(kw['messages'])};forwarded['messages'][0]['content']=forwarded['messages'][0]['content'].replace('Stage: '+stage,'Stage: '+('life' if stage in ('ties','circumstances') else 'lore'))
             raw=json.loads(''.join(provider(**forwarded)))
+            if stage=='ties' and data.get('assigned_pairs'):
+                pairs={tuple(p) for p in data['assigned_pairs']}
+                raw={k:{key:row for key,row in rows.items()
+                    if tuple(sorted((row['source_id'],row['target_id']))) in pairs}
+                    for k,rows in raw.items() if k in CREATIVE_PARTS[stage].model_fields}
             yield json.dumps({k:v for k,v in raw.items() if k in CREATIVE_PARTS[stage].model_fields})
         else:yield from provider(**kw)
     return stream

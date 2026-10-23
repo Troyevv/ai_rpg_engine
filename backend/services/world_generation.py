@@ -3,6 +3,7 @@ import json
 import threading
 
 from backend.services import initial_world_stages as stages
+from backend.services import generation_ties
 from backend.services.generation_contracts import request_schema, HINTS
 from backend.services.generated_characters import normalize_cards
 from backend.services import world_interpretation as interpretation
@@ -180,6 +181,16 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         except Exception as exc:
             # Provider exceptions may echo prompt material or request headers.
             # Keep public job diagnostics bounded; usage owns request outcomes.
+            from llm import OutputLimitReached
+            if isinstance(exc, OutputLimitReached):
+                logs=repo.request_log(job_id=jid)
+                measured=next((r for r in logs if r['stage']=='initial_'+stage),{})
+                repo.record_generation_diagnostic(jid,token,current_unit,dict(
+                    category='output_limit',max_tokens=measured.get('max_tokens'),
+                    input_tokens=measured.get('input_tokens'),output_tokens=measured.get('output_tokens'),
+                    finish_reason=measured.get('finish_reason'),
+                    partial_json_bytes=len(''.join(pieces).encode('utf-8')),
+                    expected_json_bytes=None,assigned_pair_count=len(context_data.get('assigned_pairs',[]))))
             status=getattr(getattr(exc,'response',None),'status_code',None)
             if status in (429,503) and not pieces:
                 raise TransientProviderFailure('stage/'+stage+': provider temporarily rejected request') from exc
@@ -288,9 +299,25 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         batches=stages.character_batches(registry)
         batch_keys=['batch:'+batch['id'] for batch in batches]
         review_inputs={'setting':['setting'],'places':['places','lore'],'characters':batch_keys,'life':['life','lore'],'lore':['life','lore'],'opening':['life','lore','opening',*batch_keys]}
+        tie_batches = generation_ties.batches(registry) if creative else []
+        existing_units = repo.generation_status(jid)['units']
+        old_ties = next((u for u in existing_units if u['unit_id']=='life_ties'), None)
+        # Published/author-edited aggregates keep their captured contract. Failed
+        # units with no accepted artifact can be subdivided after explicit resume.
+        if len(tie_batches) <= 1 or (old_ties and not any(u['unit_id'].startswith('life_ties_') for u in existing_units)
+                and repo.inspect_generation_checkpoint(jid,'life_ties',True).get('artifact') is not None):
+            tie_batches = []
+        tie_inputs = [source('life'),'registry','places',*batch_keys,'prompt']
+        tie_keys = ['ties:'+b['id'] for b in tie_batches]
+        if tie_batches and old_ties:
+            repo.prepare_ties_subdivision(jid, token)
         planned_units=[
             *[_unit(batch['id'],'characters',([source('character_global'),*['scope:character_'+cid for cid in batch['character_ids'] if 'character_'+cid in plan['scopes']]] if scoped else ['interpretation'])+['setting','registry','places','prompt'],{'batch:'+batch['id']:''}) for batch in batches],
-            *([_unit('life_ties','life',[source('life'),'registry','places',*batch_keys,'prompt'],{'ties':''})] if creative else []),
+            *[_unit(b['id'],'life',[source('life'),'registry','prompt',
+                *['batch:'+actors['id'] for actors in batches
+                  if set(actors['character_ids']) & {cid for pair in b['pairs'] for cid in pair}]],
+                {'ties:'+b['id']:''}) for b in tie_batches],
+            *([_unit('life_ties','life',tie_inputs+tie_keys,{'ties':''})] if creative else []),
             _unit('life','life',[source('life'),'registry','places',*batch_keys,'prompt',*(['ties'] if creative else [])],{'life':''}),
             *([_unit('lore_background','lore',[source('lore'),'registry','life',*batch_keys,'prompt'],{'background':''})] if creative else []),
             _unit('lore','lore',[source('lore'),'registry','life',*batch_keys,'prompt',*(['background'] if creative else [])],{'lore':''}),
@@ -311,7 +338,14 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         life_context=dict(registry=registry,people=people,places=places,
             constraints=_claims(plan,{'relationship','family','residence','role','possession','contact','commitment'}))
         if creative:
-            execute('life_ties',lambda:request('ties',life_context,stages.TiesPart),lambda raw:stages.validate_ties(raw,registry))
+            for tie_batch in tie_batches:
+                execute(tie_batch['id'],
+                    lambda:request('ties',generation_ties.context(life_context,tie_batch),stages.TiesPart),
+                    lambda raw:generation_ties.validate(raw,registry,tie_batch))
+            execute('life_ties',
+                (lambda:generation_ties.combine(repo.generation_resources(jid,tie_keys).values(),registry)) if tie_batches
+                else (lambda:request('ties',life_context,stages.TiesPart)),
+                lambda raw:stages.validate_ties(raw,registry))
             ties=repo.generation_resources(jid,['ties'])['ties']
             execute('life',lambda:{**ties,**_check(stages.CircumstancesPart,request('circumstances',{**life_context,'accepted_ties':ties},stages.CircumstancesPart),'circumstances').model_dump()},lambda raw:stages.validate('life',raw))
         else:

@@ -188,6 +188,22 @@ class GenerationCheckpoints:
                 result[key]=self._pointer(json.loads(row['content']),row['pointer'])
             return result
 
+    def prepare_ties_subdivision(self, jid, token):
+        """Allow one failed, unpublished monolithic unit to gain dependencies.
+
+        Called only by the leased worker after normal resume/retry authorization.
+        No accepted artifact, lock, attempt counter or uncertain outcome is reset.
+        """
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE'); self._pipeline_guard(db,jid,token)
+            row=db.execute("SELECT * FROM preparation_units WHERE job_id=? AND unit_id='life_ties'",(jid,)).fetchone()
+            if not row or row['artifact_id'] is not None or row['status'] != 'failed':return
+            if row['retry_attempts']>=3:raise ValueError('generation/budget: explicit retry required')
+            if db.execute("SELECT 1 FROM preparation_field_locks WHERE job_id=? AND unit_id='life_ties'",(jid,)).fetchone():
+                raise ValueError('generation/plan: locked ties cannot be subdivided')
+            db.execute("UPDATE preparation_units SET status='pending' WHERE job_id=? AND unit_id='life_ties'",(jid,))
+            self._record_document(db,'generation_plan',jid,dump({'unit':'life_ties','operation':'subdivide_unpublished','attempts':row['attempts']}),True,'subdivide')
+
     def reconcile_generation_plan(self,jid,token,units,batches):
         """Replan invalidated batches atomically, retaining artifacts and attempts.
 
@@ -526,7 +542,7 @@ class GenerationCheckpoints:
                 from backend.services.initial_world_stages import STAGES
                 if row['stage'] in STAGES:
                     from backend.services.initial_world_stages import TiesPart, BackgroundPart
-                    schema={'life_ties':TiesPart,'lore_background':BackgroundPart}.get(unit,STAGES[row['stage']]).model_json_schema()
+                    schema=(TiesPart if unit.startswith('life_ties_') else {'life_ties':TiesPart,'lore_background':BackgroundPart}.get(unit,STAGES[row['stage']])).model_json_schema()
                     if row['stage']=='setting':schema={**schema,'properties':{'setting':{'type':'object','properties':schema['properties']}}}
                     result['editor_schema']=schema
                 if row['stage']=='interpret' and unit=='interpret':

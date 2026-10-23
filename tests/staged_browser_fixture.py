@@ -25,7 +25,13 @@ def staged_result(stage,data):
     if stage=='characters':return dict(characters={cid:state['characters'][cid] for cid in data['assigned_ids']},cards={c['id']:{k:c[k] for k in ('id','name','fields')} for c in cards if c['id'] in data['assigned_ids']})
     if stage in ('ties','circumstances','background','knowledge'):
         from backend.services.initial_world_stages import CREATIVE_PARTS
-        return {k:state.get(k,{}) for k in CREATIVE_PARTS[stage].model_fields}
+        result={k:state.get(k,{}) for k in CREATIVE_PARTS[stage].model_fields}
+        if stage=='ties' and data.get('assigned_pairs'):
+            pairs={tuple(p) for p in data['assigned_pairs']}
+            result={k:{key:row for key,row in rows.items()
+                if tuple(sorted((row['source_id'],row['target_id']))) in pairs}
+                for k,rows in result.items()}
+        return result
     if stage=='life':return {k:state[k] for k in LifePart.model_fields}
     if stage=='lore':return {k:state[k] for k in ('facts','knowledge','threads')}
     if stage=='opening':return dict(world_time=state['meta']['world_time'],calendar=state['meta']['calendar'],camera=state['camera'],scheduled_events=state['scheduled_events'])

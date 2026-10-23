@@ -20,7 +20,15 @@ close_friend etc.) has ONE record per pair, not both directions. Parent/adoptive
 parent/guardian remain directed. Emotional relationship dictionary keys are
 source_id + ':' + target_id; numeric dimensions use -100..100, NOT a 0..1
 scale. Only trust, affection, attraction, irritation, fear, jealousy, respect; other
-descriptions belong to context. Do not generate the controlled actor's feelings.''',
+descriptions belong to context. Do not generate the controlled actor's feelings.
+When assigned_pairs is present, output ONLY those unordered pairs: each may have
+both directed emotional records, and any established objective phases. Parent and
+adoptive_parent orientation must remain parent -> child, regardless of pair order.
+An assigned pair is permission to consider a tie, NOT evidence it exists: leave
+unrelated pairs absent. Preserve explicit family circumstances and chronology.
+Do not infer Knowledge, consent or reciprocal feelings. Use concise context, omit
+optional null/default fields and do not repeat biographies or source prose.
+Never output a complete all-to-all graph or fill all dimensions just for coverage.''',
     'background': '''Preserve the precision of source chronology: "in childhood" does not
 mean "in infancy" and "yesterday" does not imply an invented date or age.
 Use accepted places/organizations and their business areas; do not reinvent them.
@@ -80,7 +88,14 @@ def request_schema(stage, captured, context):
         for name in ('ObjectiveRelation','Relationship'):
             for field in ('source_id','target_id'):
                 schema['$defs'][name]['properties'][field]={'type':'string','enum':actors}
+        if context.get('assigned_pairs'):
+            schema['properties']['relationships']['maxProperties']=2*len(context['assigned_pairs'])
+            for name in ('ObjectiveRelation','Relationship'):
+                schema['$defs'][name]['anyOf'] = [
+                    {'properties':{'source_id':{'const':a},'target_id':{'const':b}}}
+                    for pair in context['assigned_pairs'] for a,b in (pair, pair[::-1])]
     if stage in ('background','lore'):
+
         from backend.runtime_v3.models import WorldHistoryV3
         schema['properties']['initial_history']['propertyNames']={'enum':list(WorldHistoryV3.__dataclass_fields__)}
     if stage=='opening':

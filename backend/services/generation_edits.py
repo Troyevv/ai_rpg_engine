@@ -146,10 +146,15 @@ def patch_checkpoint(repo,wid,jid,unit,revision,artifact_version,path,value,*,pr
             protected=[r for r in cp['artifact']['registry'] if r['id'] in retained]
             if stages.allocate_entities(payload['setting'],plan,wid,protected)!=payload['registry']:raise ValueError('generation/edit: состав изменён')
         elif stage=='characters':payload=validate_character_batch(payload,list(cp['artifact']['characters']),registry)
-        elif unit in ('life_ties','lore_background'):
-            model={'life_ties':stages.TiesPart,'lore_background':stages.BackgroundPart}[unit]
+        elif unit in ('life_ties','lore_background') or unit.startswith('life_ties_'):
+            model=stages.BackgroundPart if unit=='lore_background' else stages.TiesPart
             payload=_check(model,payload,unit).model_dump()
             if unit=='lore_background':stages.validate('lore',payload)
+            else:
+                payload=stages.validate_ties(payload,registry)
+                if unit.startswith('life_ties_'):
+                    from backend.services.generation_ties import batches, check_pairs
+                    check_pairs(payload,next(b for b in batches(registry) if b['id']==unit))
         else:payload=stages.validate(stage,payload)
         validate_stage_facts(stage,payload['setting'] if stage=='setting' else payload,plan)
         if plan.get('version')==2 and unit in ('life','lore') and parts and parts[0] in ({'objective_relations','relationships'} if unit=='life' else {'facts','initial_history'}):
@@ -169,7 +174,7 @@ def patch_checkpoint(repo,wid,jid,unit,revision,artifact_version,path,value,*,pr
             for claim in ([] if plan.get('version')==2 else plan['claims']):
                 if not any(rule['stage']==stage for rule in claim.get('rules',[])) and claim['classification'] in ('explicit','prohibition') and claim['section'] in sections and (stage not in ('characters','places') or claim['subject_id'] in (None,subject)):
                     raise ValueError('generation/constraints/'+claim['id']+': сначала явно пересмотри исходное ограничение')
-        if operation=='patch' and unit not in ('life_ties','lore_background'):
+        if operation=='patch' and unit not in ('life_ties','lore_background') and not unit.startswith('life_ties_'):
             # Once all parts exist, also check the edit against Runtime's own
             # cross-reference/invariant layer before writing a checkpoint.
             units=repo.generation_status(jid)['units']
@@ -177,6 +182,7 @@ def patch_checkpoint(repo,wid,jid,unit,revision,artifact_version,path,value,*,pr
             batches=[]
             for row in units:
                 if row['stage'] in ('interpret','assembly'):continue
+                if row['stage'] in ('life','lore') and row['unit_id']!=row['stage']:continue
                 stored=payload if row['unit_id']==unit else repo.inspect_generation_checkpoint(jid,row['unit_id'],True).get('artifact')
                 if stored is None:continue
                 if row['stage']=='characters':batches.append(stored)

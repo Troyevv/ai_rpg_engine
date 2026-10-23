@@ -45,12 +45,59 @@ Knowledge receives accepted Fact IDs. `life_ties` and `lore_background` are dura
 editable units; the existing `life` and `lore` checkpoints combine accepted
 subsets. Edit an inherited field at its owning subunit. Changing ties invalidates
 downstream life/lore/opening/reviews while retaining character/place checkpoints.
-The number of provider calls grows by two, not one call per individual field.
+Ties can additionally use bounded pair batches as described below; no call is made merely to fill an optional field.
 
 Prompts explicitly invite creative surroundings, distinct personalities, motives
 and biographies appropriate to significance. Optional records stay optional.
 Genres/scale/expressiveness/pacing/risk shape possibilities, never obligatory future
 events, the player's decisions, automatic romance, childbirth or trauma.
+
+### Bounded ties follow-up
+
+`life_ties` previously requested the entire cast in one `TiesPart` (up to 200
+objective phases and 200 directed emotional records). Output volume could grow
+quadratically with cast size; full biographies, places and optional/default fields
+also encouraged verbose answers. A large input context is not itself proof of
+output exhaustion: the actual response cap comes from `request_context` and is
+persisted in `llm_requests.config_json`, alongside actual usage and finish reason.
+
+Creative jobs with more than six unordered character pairs now use stable,
+disjoint `life_ties_0000`, etc. checkpoints, each considering at most six pairs.
+Both emotional directions and all objective phases for one pair stay together;
+parent/adoption orientation is independent of sorted batch ownership. Every pair
+is considered once, but unrelated pairs should produce no records. Request schemas
+restrict endpoint combinations and allow at most two emotional records per pair.
+Prompts request concise prose and omitted defaults, not invented relationships.
+
+Each request receives only participant biographies, the registry and source
+circumstances, without the full places payload. Dependencies reference only the
+character batches actually read. Source notes are retained without truncation or
+mandatory quotes. Objective record IDs are namespaced once by batch before any
+later stage sees them. `life_ties` then combines accepted checkpoints without an
+LLM call; the same strict TiesPart/LifePart and Runtime validators remain in force.
+Knowledge is still generated separately from accepted facts; batching creates no
+Knowledge holders, inverse emotions or family facts.
+
+Normal resume can subdivide an old failed, unpublished monolithic ties unit.
+The leased repository operation retains attempt history and accepted upstream
+artifacts; exhausted attempts still require explicit retry, and uncertain requests
+still require acknowledgement. Completed/author-edited legacy ties retain their
+captured contract. Paused batch edits invalidate the aggregate and descendants,
+not other tie batches. Existing locks and compare-and-swap publication apply.
+No schema migration, global output-limit increase or Runtime change is involved.
+
+Output exhaustion is not automatically retried. Author-only checkpoint diagnostics
+record the actual cap, input/output tokens, finish reason, received UTF-8 bytes and
+pair count. Missing telemetry stays null; the size of a never-completed JSON is
+unknown. The failed checkpoint can be inspected through the existing author UI.
+
+Tradeoff: exhaustive pair coverage requires `ceil(N*(N-1)/12)` requests for N
+characters when batching is needed (7 characters: 4 requests). This bounds each
+answer without guessing away an explicit relationship, but very large casts cost
+more requests; it does not promise a constant total budget or guaranteed provider
+completion for arbitrarily long historical phases. Canonical collection limits
+are unchanged, and failures retain completed work. See
+[the measured follow-up](manual_qa/narrative_v4/initial-world-ties-followup.md).
 
 ### Appearance generation boundary (PR #105 follow-up)
 

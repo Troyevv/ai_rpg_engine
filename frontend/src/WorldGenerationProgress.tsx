@@ -45,11 +45,11 @@ export function WorldGenerationProgress({job,workspaceId,apiKey,refresh}:{job:Jo
       return <details key={stage} open={units.some(unit=>['running','failed','uncertain'].includes(unit.status))}>
         <summary>{label} · {total?Math.floor(done/total*100):0}%</summary>
         {units.length?units.map(unit=><div key={unit.unit_id} className="draft-field">
-          <span>{{life_ties:'Семейные и социальные связи',life:'Условия жизни и занятия',lore_background:'Факты и предыстория',lore:'Знания и предпосылки'}[unit.unit_id as 'life']||label}{stage==='characters'?` · пакет ${Number(unit.unit_id.split('_').at(-1))+1}`:''} · {statuses[unit.status]||unit.status}</span>
+          <span>{{life_ties:'Семейные и социальные связи',life:'Условия жизни и занятия',lore_background:'Факты и предыстория',lore:'Знания и предпосылки'}[unit.unit_id as 'life']||(unit.unit_id.startsWith('life_ties_')?'Связи · пакет '+(Number(unit.unit_id.split('_').at(-1))+1):label)}{stage==='characters'?` · пакет ${Number(unit.unit_id.split('_').at(-1))+1}`:''} · {statuses[unit.status]||unit.status}</span>
           {unit.status==='running'&&<progress aria-label={`${label}: запрос выполняется`}/>}
           <small>Попыток: {unit.attempts}</small>
           {unit.error&&<p role="alert">{unit.error}</p>}
-          {author&&(unit.status==='completed'||unit.status==='stale'||unit.status==='failed'&&unit.unit_id.startsWith('review_'))&&<Button variant="ghost" disabled={busy} onClick={()=>void api<Omit<Checkpoint,'unit'>>(`/jobs/${job.id}/generation/checkpoints/${unit.unit_id}?author=true`).then(value=>setInspected({...value,unit:unit.unit_id})).catch(e=>toast.error(e.message))}>Посмотреть результат</Button>}
+          {author&&(unit.status==='completed'||unit.status==='stale'||unit.status==='failed')&&<Button variant="ghost" disabled={busy} onClick={()=>void api<Omit<Checkpoint,'unit'>>(`/jobs/${job.id}/generation/checkpoints/${unit.unit_id}?author=true`).then(value=>setInspected({...value,unit:unit.unit_id})).catch(e=>toast.error(e.message))}>Посмотреть результат</Button>}
         </div>):<p>Планируется после проверки входных данных.</p>}
       </details>;
     })}
