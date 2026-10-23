@@ -3,7 +3,7 @@
 import json
 from backend.runtime_v3.long_term import run
 from backend.runtime_v3.calendar import calendar_label
-from backend.runtime_v3.repository import read_history
+from backend.runtime_v3.repository import read_history, relationship_reader
 from backend.runtime_v3.milestones import reader
 from backend.runtime_v3.personality import history_reader
 from backend.services.usage import tracked_stream
@@ -15,6 +15,7 @@ def execute(storage, job, handle, chat_stream):
     before = json.loads(job["memory_before_json"] or job["before_json"])
     with storage.connect() as db:
         history, _ = read_history(db, before.get("history_head"))
+    history["_relationship_query"] = relationship_reader(storage, before.get("history_head"))
     history["_milestone_query"] = reader(storage, before.get("history_head"))
     history["_development_query"] = history_reader(storage, before.get("history_head"))
     from backend.runtime_v3.repository import advance_receipt_reader

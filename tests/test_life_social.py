@@ -246,9 +246,9 @@ def test_event_without_relation_delta_and_asymmetric_feelings_are_independent():
         events=[dict(id='shared',text=TEXT,evidence=TEXT,participants=['a','b'])])
     r=StateResolver(s,TEXT,'').resolve(raw)
     assert not r.state['relationships'] and not r.state['objective_relations']
-    raw['relationship_changes']=[dict(source_id='b',target_id='a',dimensions={'affection':20},evidence=TEXT)]
-    r=StateResolver(s,TEXT,'').resolve(raw)
-    assert r.state['relationships']['b:a']['dimensions']['affection']==20
+    raw['relationship_changes']=[dict(source_id='b',target_id='a',dimensions={'affection':5},evidence=TEXT,source_event_ids=['prior'],assertion='grounded_feelings',rationale='Помощь укрепила привязанность.')]
+    r=StateResolver(s,TEXT,'',relationship_query=lambda pair,ids:[dict(id='prior',participants=['a','b'],player_interaction=True)]).resolve(raw)
+    assert r.state['relationships']['b:a']['dimensions']['affection']==5
     assert 'a:b' not in r.state['relationships'] and not r.state['knowledge']
 
 

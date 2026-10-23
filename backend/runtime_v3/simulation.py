@@ -40,6 +40,7 @@ def simulate(before_snapshot, snapshot, history_batch, context_length, config, g
         if cancelled.is_set():return snapshot,history_batch
         try:
             resolved=StateResolver(camera['world_state'],narrative,'',pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_decision,turn_id=state['meta']['turn_id'],observed=False,mode='background',protected_actor_id=protected,protected_knowledge_actor_ids=state['camera']['present_character_ids'],milestone_query=(world_history or {}).get('_milestone_query'),development_query=(world_history or {}).get('_development_query'),
+                relationship_query=(world_history or {}).get('_relationship_query'),relationship_receipts=history_batch.get('relationship_changes',[]),
                 actor_names={c['id']:c['name'] for c in snapshot['character_cards']}).resolve(payload)
             if resolved.state['meta']['world_time']!=state['meta']['world_time']:
                 fatal('background не должен продвигать часы','background_time_invalid',repairable=True)

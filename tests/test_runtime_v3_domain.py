@@ -58,8 +58,8 @@ def test_old_knowledge_survives_deleted_history_and_next_turn():
 def test_mixed_local_drops_do_not_lose_other_changes():
     p=payload();p['knowledge_gained'][0]['source_event_id']='missing'
     p['character_changes']=[dict(id='a',situation='У двери',emotion='ревнует',intentions=['заставить'],evidence=QUOTE),dict(id='b',situation='У окна',evidence=QUOTE)]
-    p['relationship_changes']=[dict(source_id='a',target_id='b',context='Недоверие',dimensions=dict(trust=55,sympathy=20),evidence=QUOTE)]
-    result=StateResolver(initial(),QUOTE,'Я подхожу к окну.').resolve(p)
+    p['relationship_changes']=[dict(source_id='a',target_id='b',context='Недоверие',dimensions=dict(trust=55,sympathy=20),evidence=QUOTE,player_assertion='explicit_directed_feelings',player_evidence='Я доверяю ей.')]
+    result=StateResolver(initial(),QUOTE,'Я подхожу к окну. Я доверяю ей.').resolve(p)
     assert result.state['characters']['a']['situation']=='У двери'
     assert result.state['characters']['a']['emotion']==''
     assert active_texts(result.state['characters']['a']['goals'])==['найти сестру']

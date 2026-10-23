@@ -142,7 +142,8 @@ def run_job(path, job_id, handle):
             world_history['_milestone_query'] = milestone_reader(storage, before.get('history_head'))
             from backend.runtime_v3.personality import history_reader
             world_history['_development_query'] = history_reader(storage,before.get('history_head'))
-            from backend.runtime_v3.repository import continuity_reader
+            from backend.runtime_v3.repository import continuity_reader, relationship_reader
+            world_history['_relationship_query'] = relationship_reader(storage, before.get('history_head'))
             world_history['_continuity_query'] = continuity_reader(storage, before.get('history_head'))
             history = storage.list_turns(job['save_id'])
             if job['replaces_id'] is not None:
@@ -239,7 +240,7 @@ def run_job(path, job_id, handle):
                     if skip_result: raw.final_scene['elapsed_minutes'] = skip_result['elapsed_minutes']
                     elif job['kind']=='turn' and __import__('re').match(r'^(?:я )?(?:ложусь спать|сплю)\b',job['user_text'].strip(),__import__('re').I):
                         raw.final_scene['elapsed_minutes']=0
-                    resolved=StateResolver(before['world_state'],narrative,job['user_text'],pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_plan,continuity_decision=continuity_plan,runtime_time_skip=bool(skip_result),turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),actor_names={c['id']:c['name'] for c in before['character_cards']}).resolve(raw)
+                    resolved=StateResolver(before['world_state'],narrative,job['user_text'],pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_plan,continuity_decision=continuity_plan,runtime_time_skip=bool(skip_result),turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),relationship_query=world_history.get('_relationship_query'),actor_names={c['id']:c['name'] for c in before['character_cards']}).resolve(raw)
                     state=deepcopy(before)
                     state.pop('_time_skip', None)
                     state.pop('last_time_skip', None)
@@ -273,7 +274,7 @@ def run_job(path, job_id, handle):
             background_warnings=[]
             state,history_batch=simulate(before,state,history_batch,context,config,generate,handle.cancelled,
                 warnings=background_warnings,on_repair=lambda detail: storage.record_repair(job_id,detail),
-                world_history={'_milestone_query':world_history['_milestone_query'],'_development_query':world_history['_development_query']})
+                world_history={'events':world_history.get('events',[]),'_relationship_query':world_history['_relationship_query'],'_milestone_query':world_history['_milestone_query'],'_development_query':world_history['_development_query']})
             if background_warnings:
                 with storage.connect() as db:
                     previous=json.loads(db.execute('SELECT warnings_json FROM game_jobs WHERE id=?',(job_id,)).fetchone()[0] or '[]')

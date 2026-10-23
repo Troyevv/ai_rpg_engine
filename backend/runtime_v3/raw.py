@@ -67,7 +67,7 @@ def extraction_schema():
         'promotions':record(dict(id=string,name=string,fields={'type':'object','additionalProperties':string}), ('id','name','fields','evidence')),
         'facts':record(dict(id=string,text=string,claim=obj(dict(subject_id=string,predicate=string,value=string,scope=string),('subject_id','predicate','value')),visibility={'enum':['public','secret']},character_ids=strings), ('id','text','evidence')),
         'events':record(dict(id=string,text=string,advance_candidate_ids=dict(type='array',items=string,maxItems=3,description='Only for Long-term Advance: selected cause IDs whose outcome this event establishes.'),participants=strings,witnesses=strings,fact_ids=strings,
-            author_id=string,
+            author_id=string, player_evidence=string, player_assertion={'enum':['completed_interaction']},
             medium={'enum':['observation','conversation','message','testimony','discovery','action']},
             location_id=string,minute={'type':'integer','minimum':0},order={'type':'integer','minimum':0}), ('id','text','evidence')),
         'knowledge_gained':record(dict(actor_id=string,fact_id=string,status={'enum':['known','suspected','unknown','outdated','refuted','superseded']},
@@ -78,6 +78,9 @@ def extraction_schema():
             emotion_assertion={'enum':['explicit_internal_state'], 'description':'Только явно выраженное внутреннее состояние controlled actor из player_input, не жест/поведение. Runtime проверяет источник, LLM — семантику.'},
             player_evidence=obj(dict(emotion=string,goals=strings,intentions=strings,obligations=strings))), ('id',)),
         'relationship_changes':record(dict(source_id=string,target_id=string,context=string,
+            source_event_ids=dict(type='array',items=string,minItems=1,maxItems=8,uniqueItems=True),
+            assertion={'enum':['grounded_feelings']},rationale=string,
+            player_evidence=string,player_assertion={'enum':['explicit_directed_feelings']},
             dimensions=obj({d:{'type':'number','minimum':-100,'maximum':100} for d in RELATION_DIMENSIONS})), ('source_id','target_id','evidence')),
         'movements':record(dict(actor_id=string,to_location_id=string,order={'type':'integer','minimum':0}), ('actor_id','to_location_id','evidence')),
         'thread_changes':record(dict(id=string,description=string,character_ids=strings,status={'enum':['active','developing','dormant','resolved','paused']},state=string,relevance={'type':'number','minimum':0,'maximum':1}), ('id','evidence')),
@@ -192,7 +195,7 @@ def extraction_schema():
     return schema
 
 
-def prompt_schema(*, reproduction=True, births=True, favorable_paths=True, communication=False):
+def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=False):
     """Validation-equivalent schema; prose lives once in the extraction contract."""
     from collections import Counter
     def structural(node):
@@ -213,6 +216,9 @@ def prompt_schema(*, reproduction=True, births=True, favorable_paths=True, commu
         return node
     # Keep properties named "description"; remove only JSON Schema annotations.
     schema = structural(extraction_schema())
+    if not relationship_evidence:
+        for field in ('source_event_ids', 'assertion', 'rationale'):
+            schema['properties']['relationship_changes']['items']['properties'].pop(field)
     if communication:
         schema['properties']['events']['items']['properties']['interaction_channel']={'enum':['physical','call']}
         props=schema['properties']['scheduled_event_changes']['items']['properties']

@@ -29,11 +29,10 @@ someone else's speech are not declarations. Return full player_evidence.emotion 
 and emotion_assertion=explicit_internal_state; Runtime validates source, you classify.
 Physical_state is current bodily state; clear it with physical_state="" only on evidenced
 resolution (ate/warmed/rested). Preserve unresolved symptoms; sleep alone is not a cure.
-Relationships != Emotion. Directed relationship_changes apply equally NPC->NPC,
-NPC->EXTERNAL and EXTERNAL->NPC; no player evidence needed. Never mirror A->B into B->A.
-Dimensions — новые абсолютные значения, not increments. Нейтральный разговор ordinarily
-has no relationship_changes. Small meaningful events: small changes; accumulated or major
-betrayal/rescue may support larger changes. Preserve inertia and manually edited baseline.
+Directed feelings: prior relationship_evidence only, never Narrative; else only explicit
+current-actor override (player_assertion=explicit_directed_feelings, exact player_evidence).
+Events: completed_interaction only for completed player-input interactions, not wishes/feelings.
+Never mirror directions or invent consent/actions. Respect negations; questions are not overrides.
 Remote_interactions: only ongoing END-of-turn message/phone/radio exchanges with actor_id,
 channel, evidence. Reconfirm each turn; rereading old messages is not active contact.
 Omit ended contact; physically arriving actors belong in present instead.
@@ -166,7 +165,7 @@ life_changes, condition_changes and social_relation_changes require assertion=es
 and a verbatim source proving completed/established truth, never a wish, proposal or future plan.
 No spouse from attraction, no parent from age/surname, no friendship from scene count.
 Intimacy does not imply affection, love, exclusivity, partnership or a promise: each
-emotional delta needs its own evidence. Never assign voluntary feelings to EXTERNAL actor.
+emotional delta needs independent canonical interaction evidence; feelings never imply EXTERNAL consent.
 Family status changes do not alter names, residence, emotions, Knowledge or unrelated ties.
 A name change needs explicit evidence; controlled actor voluntary choices also need
 player_assertion=explicit_choice and player_evidence quoting player_input. NPC-initiated
@@ -485,4 +484,22 @@ THIS event evidence. EXTERNAL decisions need decision_actor_id + current player_
 Choices share kind/basis_ids for equivalent purposes. Omit resolved/rejected proposals.
 compression: evidenced routine, explicit elapsed_minutes within supplied bound; pending
 response needs response_event_id + actual player_evidence. Ordinary dialogue needs no beat.
+"""
+
+RELATIONSHIP_EVIDENCE_CONTRACT = """
+Relationships != Emotion. Directed relationship_changes apply equally NPC->NPC,
+NPC->EXTERNAL and EXTERNAL->NPC. Never mirror A->B into B->A.
+Autonomous: source_event_ids (1..8 PRIOR canonical relationship_evidence IDs, not local
+IDs), assertion=grounded_feelings, rationale. Only accepted completed scene_actions or
+player_interaction qualify; feelings prose, thoughts, wishes, objective ties and choices
+are not interactions. No automatic points. Absolute dimensions: max 5-point change from
+current (unknown=0). Context must also be gradual and grounded, never fabricated consent,
+actions, commitments or extreme feelings. Neutral talk ordinarily changes nothing.
+Explicit player override: player_assertion=explicit_directed_feelings + exact
+player_evidence. Negations matter; gestures, questions, hypotheticals and others' speech
+are not declarations. Override wins. Used/pre-override evidence cannot apply again;
+new significant events can. Events: player_assertion=completed_interaction + exact
+player_evidence only for completed interactions explicitly supplied by EXTERNAL input.
+Never fabricate EXTERNAL actions, speech, consent or decisions. No reliable evidence:
+omit change. Preserve directed independence and inertia.
 """

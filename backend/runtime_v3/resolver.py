@@ -3,16 +3,14 @@ from copy import deepcopy
 from dataclasses import dataclass
 from hashlib import sha256
 import json
-import math
 import unicodedata
 from typing import Literal
 from pydantic import ValidationError
-from backend.runtime_v3.models import (Character, Location, Fact, Relationship,
+from backend.runtime_v3.models import (Character, Location, Fact,
     Thread, ScheduledEvent, StatePatch, WorldHistoryV3, identity, fatal, assert_world_state_v3_invariants)
 from backend.runtime_v3.lifecycle import active_texts, replace_active, apply_changes
 from backend.runtime_v3.raw import RawTurnResult
 from backend.runtime_v3.history import INFORMATION_MEDIA
-from backend.services.relation_dimensions import RELATION_DIMENSIONS
 from backend.services.player_agency import PLAYER_FIELDS, supported_player_field
 
 
@@ -32,10 +30,12 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, relationship_query=None, relationship_receipts=None):
         if mode not in ("turn", "background"):
             raise ValueError("Неизвестный режим StateResolver.")
         self.minimal_promotion_ids = set(minimal_promotion_ids or ())
+        self.relationship_query = relationship_query
+        self.relationship_receipts = relationship_receipts or []
         self.event_namespace = event_namespace
         self.protected_actor_id = protected_actor_id or before['camera']['controlled_actor_id']
         from backend.runtime_v3.pacing import NarrativeDeathPolicy
@@ -285,6 +285,15 @@ class StateResolver:
                 else: self.warn('events', i, 'неподтверждённый автор сообщения', 'author_id')
             from backend.runtime_v3.calendar import current_time
             if 'minute' in event: event['calendar_date'] = current_time(s,event['minute'])['date']
+            # Explicit semantic classification plus independently owned input;
+            # never turn a Narrative feelings assertion into interaction evidence.
+            player_quote = item.get('player_evidence')
+            if (self.mode == 'turn' and self.protected_actor_id in lists['participants']
+                    and item.get('player_assertion') == 'completed_interaction'
+                    and isinstance(player_quote, str) and normalized(player_quote)
+                    and normalized(player_quote) in normalized(self.player_input)):
+                event['player_interaction'] = True
+                event['player_evidence'] = player_quote
             events[eid] = event
             self.history.events.append(event)
         from backend.runtime_v3.initiative import validate_actions
@@ -358,25 +367,8 @@ class StateResolver:
                     actor[key] = deepcopy(value)
                 if key == 'emotion' and cid == camera['controlled_actor_id']: actor['emotion_source_sequence'] = self.turn_id-1
             apply_changes(self, item, cid, i, events)
-        for i, item in self.records(raw,'relationship_changes'):
-            source = self.actor(item.get('source_id'),'relationship_changes',i)
-            target = self.actor(item.get('target_id'),'relationship_changes',i)
-            if s['characters'][source]['life_status'] == 'dead':
-                self.warn('relationship_changes',i,'Мёртвый персонаж не меняет чувства.',entity=source); continue
-            key = source+':'+target
-            entry = deepcopy(s['relationships'].get(key,Relationship(source_id=source,target_id=target).model_dump()))
-            if 'context' in item:
-                if isinstance(item['context'],str): entry['context']=item['context']
-                else: self.warn('relationship_changes',i,'неправильный тип context','context',key)
-            dimensions = item.get('dimensions',{})
-            if not isinstance(dimensions,dict):
-                self.warn('relationship_changes',i,'неправильный тип dimensions','dimensions',key); dimensions={}
-            for dim,value in dimensions.items():
-                if dim not in RELATION_DIMENSIONS or type(value) not in (int,float) or not math.isfinite(value) or not -100<=value<=100:
-                    self.warn('relationship_changes',i,'неизвестное или некорректное измерение отношений','dimensions.'+dim,key,'relationship_dimension_invalid')
-                else: entry['dimensions'][dim]=value
-            s['relationships'][key]=entry
-            self.history.relationship_changes.append(dict(entity=key,before=deepcopy(self.before['relationships'].get(key)),after=deepcopy(entry),turn_id=self.turn_id,player_observed=self.observed))
+        from backend.runtime_v3.relationships import apply_relationships
+        apply_relationships(self, raw)
         for i, item in self.records(raw, 'thread_changes'):
             if not isinstance(item.get('id'), str) or not item['id']:
                 self.warn('thread_changes', i, 'отсутствует ID'); continue
