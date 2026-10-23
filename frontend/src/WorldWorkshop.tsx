@@ -251,9 +251,9 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
         {mode === 'import' && <p role="status">Распознано: {detectedImport.format === 'json' ? detectedImport.error ? 'JSON (ошибка)' : 'JSON World State' : 'текстовая выжимка'}{importFile && ` · ${importFile}`}{importFile && importFormat === 'json' && <> · Будет импортирован готовый World State. <Button variant="ghost" disabled={locked} onClick={() => {setText(''); setImportFormat('text'); setImportFile('');}}>Вставить текст выжимки</Button></>}</p>}
         {mode === 'import' && detectedImport.error && <p className="workshop-error" role="alert">{detectedImport.error}</p>}
         {!id && <Input aria-label="Название черновика" value={name} onChange={e => setName(e.target.value)} placeholder="Название истории (можно изменить позже)" />}
+        {mode === 'quick' && <WorldCreationSettings value={creation} onChange={setCreation} disabled={locked}/>}
         {!(mode === 'import' && importFile && importFormat === 'json') && <Textarea className="workshop-idea-input" value={text} onChange={e => {setText(e.target.value); setImportFile(''); setImportFormat('text');}} aria-label="Описание мира или текст импорта" placeholder={mode === 'import' ? 'Вставь здесь текст выжимки или JSON мира…' : 'Например: современная клиника. Я играю за врача. Придумай важных коллег и напряжённые, но живые отношения. Сейчас четверг, 14:00…'} />}
         {mode === 'quick' && draft && <label className="workshop-scenario-option"><input type="checkbox" checked={useIdea} onChange={e => setUseIdea(e.target.checked)}/> Взять за основу сценарий этого черновика</label>}
-        {mode === 'quick' && <WorldCreationSettings value={creation} onChange={setCreation} disabled={locked}/>}
         <div className="workshop-create-actions">
           <Button disabled={locked || (!text.trim() && !useIdea) || (mode === 'import' && !!detectedImport.error)} onClick={() => void run(async () => {
             if (mode === 'import' && detectedImport.error) throw new Error(detectedImport.error);

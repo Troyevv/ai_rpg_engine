@@ -54,31 +54,14 @@ changes its migration identity mapping and breaks legacy QA references. This
 was caught by the full suite and removed. New structured plans must declare
 their stable location/organization IDs explicitly; do not rewrite old IDs.
 
-## Remaining required work
+## Current acceptance status
 
-The following is **not implemented by this increment** and is required before
-this PR can be marked ready or Issue #44 closed:
-
-1. Extend the canonical/authoring equivalence matrix as each generation stage
-   is integrated; canonical snapshot imports and portable History are implemented.
-2. Complete semantic source-fact protection, editable interpretation preview and
-   conflict resolution for revised user constraints/structured settings.
-3. Switch existing Quick/Scenario UI to the staged path after hybrid editor
-   integration. The backend now executes `task=world_staged`; the previous
-   `task=world` route is temporarily retained for the existing UI during this WIP.
-4. Add paused checkpoint editing and selective regeneration with accepted-field
-   locks, dependency impact preview and fine-grained input revisions. Durable
-   execution, pause/resume, recovery and interruption uncertainty are wired.
-5. Complete Workshop genre/scale/geography controls, interpretation/impact
-   previews and full hybrid editing. Persisted stage progress, pause/resume/cancel
-   and author-only checkpoint inspection are integrated. Game expressiveness is editable through
-   the existing policy dialog; creation settings are typed/persisted server-side.
-6. Complete semantic constraint validation at final confirmation and #78 rich
-   brief fixtures/manual QA. Checkpoint currency is now checked at confirmation.
-
-Publication and confirmation share a transactional checkpoint currency gate.
-The full edited-constraint semantic readiness contract is still not complete;
-the checkpoint gate must not be presented as all of #44 readiness.
+The implementation below supersedes the initial incremental TODO lists. Quick
+and Scenario hand-off now use the staged worker, canonical record forms support
+paused editing, and prompt revision 5 reviews unbound/revised source semantics.
+Final suite evidence and any remaining acceptance limitations are recorded at the
+end of this document and in PR #105. Earlier increment notes describe historical
+milestones, not the current feature inventory.
 
 ## Verification
 
@@ -350,15 +333,38 @@ It warns when explicit NPCs exceed target counts. Canonical record forms now
 include source-claim revisions, named references and editable dynamic map keys;
 advanced JSON remains available for unusual predicate values.
 
-### Acceptance still requiring verification
+### Paused record revisions and stale locks
 
-- Semantic review is model-assisted and depends on the extracted source claims.
-  It is not proof that arbitrary prose was exhaustively extracted or that a
-  reviewer cannot make a semantic mistake. Complete the extraction-coverage and
-  structured-conflict regression matrix before claiming full acceptance.
-- Complete cross-stage edit/regenerate cases across all supported record
-  families, plus the #78 manual/live-provider quality record in
-  `docs/manual_qa/narrative_v4/initial-world.md`.
-- Final full Python, build and Playwright results must correspond to the final
-  published tree. PR #105 remains Draft until those gates and the remaining
-  acceptance review are complete.
+Paused record tests now exercise relationships, residences, roles, possessions,
+contacts, Facts, Threads and scheduled commitments through edit, invalidation,
+resume and canonical confirmation. Existing cases cover characters, places,
+Knowledge/source revisions and roster changes. Unbound family constraints do not
+block unrelated possession/role edits; canonical bindings still validate the
+entire stage and dependent semantic reviews must run before publication.
+
+When an explicit source revision invalidates a locked checkpoint, the author may
+inspect the stale artifact and explicitly unlock its fields before regenerating.
+Unlock changes only the lock journal/run revision, never validates stale data or
+changes artifact version/status. Stable pause, workspace ownership, lease and CAS
+checks still apply. The next generation must pass current source/canonical checks.
+Genre/settings controls precede the premise field in the shared creation form.
+
+Structured geography conflicts and material jurisdiction uncertainty have
+real-worker deterministic tests: negative semantic findings pause with the source
+brief/quotes intact, preserve accepted work and cannot publish a playable draft.
+Nonmaterial missing jurisdiction remains a warning in the rich-brief fixture.
+
+### Verification and limits
+
+Final full-suite results for this increment are pending; see PR #105 for the
+published tree and observed results. The preceding published tree passed 1528
+Python tests and 198 Playwright tests (10 existing project-matrix skips).
+
+All automated provider responses are deterministic fixtures, with no paid
+DeepSeek calls. Semantic review is model-assisted; it cannot guarantee exhaustive
+extraction of arbitrary prose or infallible judgment. Canonical bindings, cited
+review evidence, revision hashes and author inspection complement that review.
+Real-provider narrative-quality evaluation has not been executed. The #78 manual
+recipe is `docs/manual_qa/narrative_v4/initial-world.md`; automation covers its
+creation/recovery/ordinary-turn/save/branch/legacy/Tabletop paths. Do not represent
+the recipe itself as a completed manual evaluation.

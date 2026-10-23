@@ -91,3 +91,39 @@ def test_definite_transient_rejection_retries_but_streamed_failure_does_not(api)
     with patch('backend.services.preparation.chat_stream',side_effect=partial):
         _,jid=submit(client);assert wait(client,jid)['status']=='failed'
     assert len(attempts)==1
+
+
+@pytest.mark.parametrize('section,field,source,creation,verdict',[
+    ('setting','country','История происходит в Японии.',{'geography':'Франция'},'conflict'),
+    ('role','jurisdiction','Анна работает адвокатом, юрисдикция не указана.',{},'unresolved'),
+])
+def test_structured_conflict_and_material_jurisdiction_uncertainty_pause_with_source_intact(api,section,field,source,creation,verdict):
+    from test_api import REMOTE
+    from test_world_interpretation import BRIEF
+    client,app=api;calls=[];fixture=fake_stages(calls);seen=[]
+    brief=BRIEF+' '+source
+    def provider(**kwargs):
+        data=json.loads(kwargs['messages'][-1]['content'])
+        for chunk in fixture(**kwargs):
+            result=json.loads(chunk)
+            if calls[-1]=='interpret':
+                result['claims'].append(dict(classification='explicit',section=section,field=field,
+                    description=source,spans=[dict(start=len(BRIEF)+1,end=len(brief),quote=source)]))
+            if calls[-1]=='review':
+                for claim,finding in zip(data['claims'],result['findings']):
+                    if claim['field']==field:
+                        seen.append(data)
+                        finding.update(verdict=verdict,explanation='Нужно явно согласовать географию или юрисдикцию.')
+            yield json.dumps(result,ensure_ascii=False)
+    wid=client.post('/api/workspaces',json={'name':'Conflict'}).json()['id']
+    with patch('backend.services.preparation.chat_stream',side_effect=provider):
+        response=client.post(f'/api/workspaces/{wid}/draft/generate',json={
+            'task':'world_staged','text':brief,'revision':0,'creation':creation,'config':REMOTE,'api_key':'test'})
+        assert response.status_code==200,response.text
+        jid=response.json()['id'];assert wait(client,jid)['status']=='paused'
+    assert len(seen)==1
+    if creation:assert seen[0]['creation_settings']['geography']=='Франция'
+    plan=app.state.repository.inspect_generation_checkpoint(jid,'interpret',True)['artifact']
+    assert plan['brief']==brief
+    assert next(c for c in plan['claims'] if c['field']==field and c['classification']=='explicit')['spans'][0]['quote']==source
+    assert client.get(f'/api/workspaces/{wid}/draft').json()['state'] is None

@@ -64,6 +64,8 @@ def patch_checkpoint(repo,wid,jid,unit,revision,artifact_version,path,value,*,pr
     job=repo.preparation_job(jid)
     if not job or job['workspace_id']!=wid:raise ValueError('generation/edit: чужой черновик')
     cp=repo.inspect_generation_checkpoint(jid,unit,True)
+    if operation=='unlock':
+        return repo.unlock_generation_fields(jid,unit,revision,artifact_version,[path],preview=preview)
     if cp['status']!='completed' or cp['artifact_version']!=artifact_version:raise ValueError('generation/artifact: обнови версию этапа')
     stage=cp['stage'];payload=deepcopy(cp['artifact'])
     if stage=='assembly':raise ValueError('generation/edit: сборка вычисляется из предыдущих этапов')
@@ -132,6 +134,15 @@ def patch_checkpoint(repo,wid,jid,unit,revision,artifact_version,path,value,*,pr
         validate_stage_facts(stage,payload['setting'] if stage=='setting' else payload,plan)
         if operation=='patch':
             sections={'places':{'location','organization'},'characters':{'character','appearance','personality'},'setting':{'setting'},'life':{'family','relationship','residence','role','possession','contact','commitment'},'lore':{'fact','knowledge','history'},'opening':{'opening','commitment'}}[stage]
+            # A source family constraint must not prevent editing an unrelated
+            # possession or role. Exact bindings still run for the whole stage;
+            # final semantic reviews revalidate affected accepted artifacts.
+            collection_sections={'objective_relations':{'family'},'relationships':{'relationship'},
+                'residences':{'residence'},'roles':{'role'},'possessions':{'possession'},
+                'contacts':{'contact'},'facts':{'fact'},'knowledge':{'knowledge'},
+                'initial_history':{'history'},'threads':{'fact'},'scheduled_events':{'commitment'}}
+            if parts and parts[0] in collection_sections:
+                sections=collection_sections[parts[0]]
             subject=parts[1] if stage in ('characters','places') and len(parts)>1 else None
             for claim in plan['claims']:
                 if not any(rule['stage']==stage for rule in claim.get('rules',[])) and claim['classification'] in ('explicit','prohibition') and claim['section'] in sections and (stage not in ('characters','places') or claim['subject_id'] in (None,subject)):

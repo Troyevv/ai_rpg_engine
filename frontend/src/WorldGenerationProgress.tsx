@@ -9,7 +9,7 @@ import {Button} from './components/ui/button';
 import {Dialog,DialogContent,DialogDescription,DialogHeader,DialogTitle} from './components/ui/dialog';
 
 type Unit={unit_id:string;stage:string;status:string;weight:number;attempts:number;error:string};
-type Checkpoint={stage:string;artifact_version:number;artifact?:unknown;diagnostic?:unknown;unit:string};
+type Checkpoint={status:string;stage:string;artifact_version:number;artifact?:unknown;diagnostic?:unknown;unit:string};
 type Impact={revision:number;artifact_version:number;stale_units:string[]};
 type Progress={revision:number;overall_progress:number;units:Unit[]};
 const stages:Record<string,string>={interpret:'Понимание замысла',setting:'Сеттинг и план',places:'Локации и организации',characters:'Персонажи',life:'Отношения и обстоятельства',lore:'Предыстория и знания',opening:'Начальная сцена',assembly:'Сборка и проверка'};
@@ -49,7 +49,7 @@ export function WorldGenerationProgress({job,workspaceId,apiKey,refresh}:{job:Jo
           {unit.status==='running'&&<progress aria-label={`${label}: запрос выполняется`}/>}
           <small>Попыток: {unit.attempts}</small>
           {unit.error&&<p role="alert">{unit.error}</p>}
-          {author&&(unit.status==='completed'||unit.status==='failed'&&unit.unit_id.startsWith('review_'))&&<Button variant="ghost" disabled={busy} onClick={()=>void api<Omit<Checkpoint,'unit'>>(`/jobs/${job.id}/generation/checkpoints/${unit.unit_id}?author=true`).then(value=>setInspected({...value,unit:unit.unit_id})).catch(e=>toast.error(e.message))}>Посмотреть результат</Button>}
+          {author&&(unit.status==='completed'||unit.status==='stale'||unit.status==='failed'&&unit.unit_id.startsWith('review_'))&&<Button variant="ghost" disabled={busy} onClick={()=>void api<Omit<Checkpoint,'unit'>>(`/jobs/${job.id}/generation/checkpoints/${unit.unit_id}?author=true`).then(value=>setInspected({...value,unit:unit.unit_id})).catch(e=>toast.error(e.message))}>Посмотреть результат</Button>}
         </div>):<p>Планируется после проверки входных данных.</p>}
       </details>;
     })}
@@ -60,7 +60,7 @@ export function WorldGenerationProgress({job,workspaceId,apiKey,refresh}:{job:Jo
       {resumable&&<Button disabled={busy||hasUncertain&&!uncertain} onClick={()=>void act('resume')}>Продолжить генерацию</Button>}
       {!['saved','cancelled'].includes(job.status)&&<Button variant="ghost" disabled={busy} onClick={()=>{setBusy(true);void api(`/jobs/${job.id}/stop`,{}).then(refresh).catch(e=>toast.error(e.message)).finally(()=>setBusy(false))}}>Отменить генерацию</Button>}
     </div>
-    <Dialog open={author&&!!inspected} onOpenChange={open=>{if(!open)setInspected(null)}}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>{stages[inspected?.stage||'']||'Результат этапа'}</DialogTitle><DialogDescription>Авторские данные, включая секреты. Просмотр не останавливает генерацию и не изменяет checkpoint.</DialogDescription></DialogHeader>{job.status==='generating'&&inspected?.stage!=='assembly'&&<Button disabled={busy} onClick={()=>void act('pause')}>Пауза и редактирование</Button>}{inspected?.stage==='characters'&&job.status==='paused'&&<CharacterCheckpointEdit key={inspected.artifact_version} checkpoint={inspected} revision={data.revision} workspaceId={workspaceId} jobId={job.id} onSaved={()=>{setInspected(null);void api<Progress>(`/jobs/${job.id}/generation`).then(setData);refresh()}}/>}{inspected&&inspected.stage!=='assembly'&&job.status==='paused'&&<CheckpointEditor key={'stage'+inspected.artifact_version} checkpoint={inspected} revision={data.revision} workspaceId={workspaceId} jobId={job.id} onSaved={()=>{setInspected(null);void api<Progress>(`/jobs/${job.id}/generation`).then(setData);refresh()}}/>}{inspected?.stage==='interpret'?<InterpretationPreview value={inspected.artifact}/>:<CheckpointValue value={inspected?.diagnostic||inspected?.artifact}/>}</DialogContent></Dialog>
+    <Dialog open={author&&!!inspected} onOpenChange={open=>{if(!open)setInspected(null)}}><DialogContent className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>{stages[inspected?.stage||'']||'Результат этапа'}</DialogTitle><DialogDescription>Авторские данные, включая секреты. Просмотр не останавливает генерацию и не изменяет checkpoint.</DialogDescription></DialogHeader>{job.status==='generating'&&inspected?.stage!=='assembly'&&<Button disabled={busy} onClick={()=>void act('pause')}>Пауза и редактирование</Button>}{inspected?.stage==='characters'&&inspected.status==='completed'&&job.status==='paused'&&<CharacterCheckpointEdit key={inspected.artifact_version} checkpoint={inspected} revision={data.revision} workspaceId={workspaceId} jobId={job.id} onSaved={()=>{setInspected(null);void api<Progress>(`/jobs/${job.id}/generation`).then(setData);refresh()}}/>}{!!inspected?.artifact&&inspected.stage!=='assembly'&&job.status==='paused'&&<CheckpointEditor key={'stage'+inspected.artifact_version} checkpoint={inspected} revision={data.revision} workspaceId={workspaceId} jobId={job.id} onSaved={()=>{setInspected(null);void api<Progress>(`/jobs/${job.id}/generation`).then(setData);refresh()}}/>}{inspected?.stage==='interpret'?<InterpretationPreview value={inspected.artifact}/>:<CheckpointValue value={inspected?.diagnostic||inspected?.artifact}/>}</DialogContent></Dialog>
   </section>;
 }
 

@@ -539,6 +539,29 @@ class GenerationCheckpoints:
             db.execute('UPDATE preparation_runs SET revision=revision+1 WHERE job_id=?',(jid,))
             return {**impact,'revision':revision+1,'artifact_version':vid}
 
+    def unlock_generation_fields(self,jid,unit,revision,artifact_version,paths,preview=True):
+        """Release accepted locks even when a source revision made data stale.
+
+        Unlocking cannot validate or mutate the stale artifact. Its next provider
+        execution still requires current inputs, schema and semantic validation.
+        """
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            run=self._pipeline_guard(db,jid,statuses=('paused',))
+            if run['lease_token'] or run['revision']!=revision:
+                raise ValueError('generation/revision: wait for a stable pause and refresh')
+            row=db.execute('SELECT * FROM preparation_units WHERE job_id=? AND unit_id=?',(jid,unit)).fetchone()
+            if not row or row['status'] not in ('completed','stale','failed') or not artifact_version or row['artifact_id']!=artifact_version:
+                raise ValueError('generation/artifact: checkpoint changed')
+            locks={r['pointer'] for r in db.execute('SELECT pointer FROM preparation_field_locks WHERE job_id=? AND unit_id=?',(jid,unit))}
+            if not paths or not set(paths)<=locks:raise ValueError('generation/locks: selected lock does not exist')
+            result=dict(revision=revision,artifact_version=artifact_version,stale_units=[],locked_paths=sorted(locks-set(paths)))
+            if preview:return result
+            for path in paths:db.execute('DELETE FROM preparation_field_locks WHERE job_id=? AND unit_id=? AND pointer=?',(jid,unit,path))
+            self._record_document(db,'generation_lock_revision',jid+':'+unit,dump({'unlocked_paths':paths,'artifact_version':artifact_version,'revision':revision+1}),True,'author_unlock')
+            db.execute('UPDATE preparation_runs SET revision=revision+1 WHERE job_id=?',(jid,))
+            return {**result,'revision':revision+1}
+
     def generation_field_locks(self,jid,unit):
         """Author-only input for the bounded regeneration request, never status."""
         with self.connect() as db:

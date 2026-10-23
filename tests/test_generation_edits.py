@@ -270,3 +270,70 @@ def test_player_draft_diagnostics_do_not_leak_hidden_character_names(api):
     player=repo.draft(wid,False)
     assert player['validation']['warnings']
     assert 'Секретный участник' not in json.dumps(player['validation'],ensure_ascii=False)
+
+
+@pytest.mark.parametrize('collection',['relationships','residences','roles','possessions','contacts','facts','threads','scheduled_events'])
+def test_paused_record_families_resume_without_rewriting_unrelated_characters(api,collection):
+    client,app=api;repo=app.state.repository
+    wid,jid,_,_=paused_world(client,repo,[])
+    registry=repo.generation_resources(jid,['registry'])['registry']
+    people=[r['id'] for r in registry if r['kind']=='character'];a,b=people
+    location=next(r['id'] for r in registry if r['kind']=='location')
+    values={
+        'relationships':{a+':'+b:dict(source_id=a,target_id=b,dimensions={'trust':0.4},context='Автор добавил доверие')},
+        'residences':{'home':dict(id='home',actor_id=a,location_id=location,evidence='Автор явно задал проживание')},
+        'roles':{'role':dict(id='role',actor_id=a,kind='occupation',title='Авторская профессия')},
+        'possessions':{'bag':dict(id='bag',name='Дорожная сумка',kind='personal',owner_id=a)},
+        'contacts':{'phone':dict(id='phone',owner_id=a,character_id=b,label='Личный номер',address='fixture-contact',provenance='Явно добавлено автором',created_at=6120)},
+        'facts':{'note':dict(id='note',text='Авторский факт',visibility='public')},
+        'threads':{'thread':dict(id='thread',description='Открытая возможность',character_ids=[a])},
+        'scheduled_events':{'event':dict(id='event',description='Встреча когда будет удобно',character_ids=[a],due_minute=None)},
+    }
+    stage='lore' if collection in ('facts','threads') else 'opening' if collection=='scheduled_events' else 'life'
+    prior=repo.inspect_generation_checkpoint(jid,stage,True)['artifact']
+    value={**prior[collection],**values[collection]}
+    peers={u:repo.inspect_generation_checkpoint(jid,u,True) for u in ('setting','places','core_0')}
+    body=checkpoint_body(repo,jid,stage,'/'+collection,value)
+    accepted=client.patch(f'/api/workspaces/{wid}/draft',json=body)
+    assert accepted.status_code==200,accepted.text
+    assert repo.generation_field_locks(jid,stage)['/'+collection]==repo.inspect_generation_checkpoint(jid,stage,True)['artifact'][collection]
+    for unit,old in peers.items():
+        current=repo.inspect_generation_checkpoint(jid,unit,True)
+        for key in ('artifact','artifact_version','status','locked_paths'):assert current[key]==old[key]
+        if collection=='facts':assert any(r['id']=='note' for r in current['reference_options'])
+    calls=[]
+    with patch('backend.services.preparation.chat_stream',side_effect=fake_stages(calls)):
+        resumed=client.post(f'/api/jobs/{jid}/generation/resume',json={'revision':accepted.json()['revision']})
+        assert resumed.status_code==200,resumed.text
+        assert wait(client,jid)['status']=='saved'
+    assert 'characters' not in calls and 'setting' not in calls and 'places' not in calls
+    draft=repo.draft(wid,True);confirmed=repo.confirm_draft(wid,draft['revision'],draft['version_id'])
+    state=repo.get_snapshot(confirmed['save'])['world_state']
+    for key,fields in values[collection].items():
+        for field,expected in fields.items():assert state[collection][key][field]==expected
+
+
+def test_source_revision_can_unlock_stale_character_without_revalidating_old_artifact(api):
+    client,app=api;repo=app.state.repository
+    wid,jid,body,_=paused_world(client,repo,[]);endpoint=f'/api/workspaces/{wid}/draft'
+    assert client.patch(endpoint,json={**body,'preview':False}).status_code==200
+    locked=repo.inspect_generation_checkpoint(jid,'core_0',True)
+    pointer=locked['locked_paths'][0]
+    source=checkpoint_body(repo,jid,'interpret','/entities/0/name','Анна Новая',warnings_ack=True)
+    assert client.patch(endpoint,json=source).status_code==200
+    stale=repo.inspect_generation_checkpoint(jid,'core_0',True)
+    assert stale['status']=='stale' and stale['artifact']==locked['artifact']
+    unlock={**checkpoint_body(repo,jid,'core_0',pointer,None),'operation':'unlock'}
+    rejected=client.patch(endpoint,json={**unlock,'artifact_version':-1})
+    assert rejected.status_code==409
+    preview=client.patch(endpoint,json={**unlock,'preview':True})
+    assert preview.status_code==200,preview.text
+    assert repo.generation_field_locks(jid,'core_0')
+    saved=client.patch(endpoint,json=unlock)
+    assert saved.status_code==200,saved.text
+    assert not repo.generation_field_locks(jid,'core_0')
+    after=repo.inspect_generation_checkpoint(jid,'core_0',True)
+    assert after['status']=='stale' and after['artifact']==stale['artifact']
+    assert after['artifact_version']==stale['artifact_version']
+    assert saved.json()['revision']==unlock['revision']+1
+    assert client.patch(endpoint,json=unlock).status_code==409
