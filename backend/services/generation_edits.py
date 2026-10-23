@@ -147,14 +147,17 @@ def patch_checkpoint(repo,wid,jid,unit,revision,artifact_version,path,value,*,pr
             if stages.allocate_entities(payload['setting'],plan,wid,protected)!=payload['registry']:raise ValueError('generation/edit: состав изменён')
         elif stage=='characters':payload=validate_character_batch(payload,list(cp['artifact']['characters']),registry)
         elif unit in ('life_ties','lore_background') or unit.startswith('life_ties_'):
-            model=stages.BackgroundPart if unit=='lore_background' else stages.TiesPart
+            model=stages.BackgroundPart if unit=='lore_background' else (stages.TiesAggregate if unit=='life_ties' else stages.TiesPart)
             payload=_check(model,payload,unit).model_dump()
-            if unit=='lore_background':stages.validate('lore',payload)
+            if unit=='lore_background':stages.validate_lore(payload,registry)
             else:
-                payload=stages.validate_ties(payload,registry)
+                payload=stages.validate_ties(payload,registry,aggregate=unit=='life_ties')
                 if unit.startswith('life_ties_'):
                     from backend.services.generation_ties import batches, check_pairs
                     check_pairs(payload,next(b for b in batches(registry) if b['id']==unit))
+        elif stage=='places':payload=stages.validate_places(payload,registry)
+        elif stage=='life':payload=stages.validate_life(payload,registry)
+        elif stage=='lore':payload=stages.validate_lore(payload,registry)
         else:payload=stages.validate(stage,payload)
         validate_stage_facts(stage,payload['setting'] if stage=='setting' else payload,plan)
         if plan.get('version')==2 and unit in ('life','lore') and parts and parts[0] in ({'objective_relations','relationships'} if unit=='life' else {'facts','initial_history'}):

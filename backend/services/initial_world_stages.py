@@ -41,6 +41,11 @@ class SettingPart(m.StrictModel):
             raise ValueError('duplicate planning key')
         if sum(item.tier == 'protagonist' for item in self.entities) > 1:
             raise ValueError('multiple protagonists')
+        if any(item.kind != 'character' and item.tier is not None for item in self.entities):
+            raise ValueError('only characters have a cast tier')
+        for kind in ('location', 'organization'):
+            if sum(item.kind == kind for item in self.entities) > 100:
+                raise ValueError(f'{kind} roster exceeds places stage capacity')
         return self
 
 
@@ -64,8 +69,10 @@ class PlacesPart(m.StrictModel):
 
 
 class LifePart(m.StrictModel):
-    objective_relations: dict[str, m.ObjectiveRelation] = Field(default_factory=dict, max_length=200)
-    relationships: dict[str, m.Relationship] = Field(default_factory=dict, max_length=200)
+    # Aggregate checkpoints are not provider responses. Per-request budgets live
+    # on TiesPart; applying them again here rejects valid disjoint batches.
+    objective_relations: dict[str, m.ObjectiveRelation] = Field(default_factory=dict)
+    relationships: dict[str, m.Relationship] = Field(default_factory=dict)
     residences: dict[str, m.Residence] = Field(default_factory=dict, max_length=100)
     roles: dict[str, m.NarrativeRole] = Field(default_factory=dict, max_length=200)
     possessions: dict[str, m.SignificantPossession] = Field(default_factory=dict, max_length=100)
@@ -189,8 +196,12 @@ def pair_keys(records, first, second, path):
     return result
 
 
-def validate_ties(payload, registry):
-    value = _check(TiesPart, normalize_relationship_dimensions(payload), 'ties').model_dump()
+def validate_ties(payload, registry, *, aggregate=False):
+    payload = deepcopy(payload)
+    if isinstance(payload, dict) and isinstance(payload.get('objective_relations'), dict):
+        for key, row in payload['objective_relations'].items():
+            if isinstance(row, dict): row.setdefault('id', key)
+    value = _check(TiesAggregate if aggregate else TiesPart, normalize_relationship_dimensions(payload), 'ties').model_dump()
     value['relationships'] = pair_keys(value['relationships'], 'source_id', 'target_id', 'ties/relationships')
     value['objective_relations'] = normalize_symmetric_phases(value['objective_relations'])
     actors = {r['id'] for r in registry if r['kind'] == 'character'}
@@ -202,6 +213,8 @@ def validate_ties(payload, registry):
         for key, row in value[section].items():
             if row['source_id'] not in actors or row['target_id'] not in actors:
                 raise ValueError(f'ties/{section}/{key}: both endpoints must be Character IDs; organizational jobs belong to roles')
+            if row['source_id'] == row['target_id']:
+                raise ValueError(f'ties/{section}/{key}: self relation')
     return value
 
 
@@ -209,6 +222,9 @@ def validate_opening(payload, people):
     value = validate('opening', payload)
     camera = value['camera']
     actors = {p['id']:p for p in people}
+    for field in ('controlled_actor_id', 'pov_actor_id'):
+        if camera[field] is not None and camera[field] not in actors:
+            raise ValueError('opening/camera/' + field + ': unknown actor')
     controlled = camera['controlled_actor_id']
     # The controlled actor is necessarily present in actor camera mode. Complete
     # only this redundant membership, using an already accepted physical location.
@@ -222,6 +238,44 @@ def validate_opening(payload, people):
     for cid in camera['present_character_ids']:
         if cid not in actors or actors[cid]['location_id'] != camera['location_id']:
             raise ValueError('opening/camera/present_character_ids: unknown actor or conflicting accepted location')
+    return value
+
+
+def validate_lore(payload, registry):
+    """Reject dangling holders/facts at the producing checkpoint, not assembly."""
+    value = validate('lore', payload)
+    actors = {r['id'] for r in registry if r['kind'] == 'character'}
+    for section in ('facts', 'threads'):
+        for key, row in value[section].items():
+            if row['id'] != key:
+                raise ValueError(f'lore/{section}/{key}/id: conflicting record ID')
+            if set(row['character_ids']) - actors:
+                raise ValueError(f'lore/{section}/{key}/character_ids: unknown actor')
+    for key, row in value['knowledge'].items():
+        if row['actor_id'] not in actors or row['fact_id'] not in value['facts']:
+            raise ValueError(f'lore/knowledge/{key}: unknown actor or fact')
+        if row['replaced_by'] is not None and row['replaced_by'] not in value['facts']:
+            raise ValueError(f'lore/knowledge/{key}/replaced_by: unknown fact')
+    return value
+
+
+def validate_life(payload, registry):
+    value = validate('life', payload)
+    domains = {kind: {r['id'] for r in registry if r['kind'] == kind}
+               for kind in ('character', 'location', 'organization')}
+    references = {'actor_id': 'character', 'source_id': 'character',
+                  'target_id': 'character', 'owner_id': 'character',
+                  'holder_id': 'character', 'character_id': 'character', 'gestational_actor_id': 'character',
+                  'impregnating_actor_id': 'character', 'location_id': 'location',
+                  'organization_id': 'organization'}
+    for section, records in value.items():
+        for key, row in records.items():
+            if 'id' in row and row['id'] != key:
+                raise ValueError(f'life/{section}/{key}/id: conflicting record ID')
+            for field, kind in references.items():
+                if row.get(field) is not None and row[field] not in domains[kind]:
+                    raise ValueError(f'life/{section}/{key}/{field}: unknown {kind}')
+    validate_ties({key: value[key] for key in TiesPart.model_fields}, registry, aggregate=True)
     return value
 
 
@@ -285,6 +339,16 @@ def validate_places(payload, registry):
     for child, parent in value['parent_organizations'].items():
         if child not in value['organizations'] or parent not in value['organizations']:
             raise ValueError('places/parent_organizations: unknown organization')
+    from backend.runtime_v3.residence import validate_hierarchy
+    from graphlib import TopologicalSorter, CycleError
+    try:
+        validate_hierarchy(value['locations'])
+        tuple(TopologicalSorter({child: {parent} for child, parent in value['parent_organizations'].items()}).static_order())
+    except (ValueError, CycleError) as exc:
+        raise ValueError('places: invalid or cyclic hierarchy') from exc
+    for oid, row in value['organizations'].items():
+        if set(row['location_ids']) - value['locations'].keys():
+            raise ValueError(f'places/organizations/{oid}/location_ids: unknown location')
     return value
 
 
@@ -296,19 +360,22 @@ def validate_character_batch(payload, expected_ids, registry):
     if set(value['characters']) != expected or set(value['cards']) != expected:
         raise ValueError('characters: result must contain exactly the assigned batch IDs')
     names = {row['id']: row['name'] for row in registry}
+    locations = {row['id'] for row in registry if row['kind'] == 'location'}
     for cid in expected:
         actor, card = value['characters'][cid], value['cards'][cid]
         if actor['id'] != cid or card['id'] != cid or card['name'] != names[cid] or actor['display_name'] != names[cid]:
             raise ValueError(f'characters/{cid}: changed assigned identity')
+        if actor['location_id'] is not None and actor['location_id'] not in locations:
+            raise ValueError(f'characters/{cid}/location_id: unknown location')
     return value
 
 
 def compose(setting, registry, places, batches, life, lore, opening, interpretation, creation=None):
     """Zero-provider assembly; reject omissions, collisions and broken references."""
     setting = validate('setting', setting)
-    places = validate('places', places)
-    life = validate('life', life)
-    lore = validate('lore', lore)
+    places = validate_places(places, registry)
+    life = validate_life(life, registry)
+    lore = validate_lore(lore, registry)
     opening = validate('opening', opening)
     from backend.services.generation_constraints import validate_stage_facts
     for stage,part in [('setting',setting),('places',places),('life',life),('lore',lore),('opening',opening)]:
@@ -400,7 +467,11 @@ def _subset_model(name, model, fields):
     return create_model(name, __base__=m.StrictModel,
         **{key:(model.model_fields[key].annotation, model.model_fields[key]) for key in fields})
 
-TiesPart = _subset_model('TiesPart', LifePart, ('objective_relations','relationships'))
+TiesAggregate = _subset_model('TiesAggregate', LifePart, ('objective_relations','relationships'))
+
+class TiesPart(TiesAggregate):
+    objective_relations: dict[str, m.ObjectiveRelation] = Field(default_factory=dict, max_length=200)
+    relationships: dict[str, m.Relationship] = Field(default_factory=dict, max_length=200)
 CircumstancesPart = _subset_model('CircumstancesPart', LifePart,
     tuple(k for k in LifePart.model_fields if k not in TiesPart.model_fields))
 BackgroundPart = _subset_model('BackgroundPart', LorePart, ('facts','initial_history'))

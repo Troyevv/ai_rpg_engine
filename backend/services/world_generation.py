@@ -345,9 +345,9 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             execute('life_ties',
                 (lambda:generation_ties.combine(repo.generation_resources(jid,tie_keys).values(),registry)) if tie_batches
                 else (lambda:request('ties',life_context,stages.TiesPart)),
-                lambda raw:stages.validate_ties(raw,registry))
+                lambda raw:stages.validate_ties(raw,registry,aggregate=bool(tie_batches)))
             ties=repo.generation_resources(jid,['ties'])['ties']
-            execute('life',lambda:{**ties,**_check(stages.CircumstancesPart,request('circumstances',{**life_context,'accepted_ties':ties},stages.CircumstancesPart),'circumstances').model_dump()},lambda raw:stages.validate('life',raw))
+            execute('life',lambda:{**ties,**_check(stages.CircumstancesPart,request('circumstances',{**life_context,'accepted_ties':ties},stages.CircumstancesPart),'circumstances').model_dump()},lambda raw:stages.validate_life(raw,registry))
         else:
             execute('life',lambda:request('life',life_context,stages.LifePart),lambda raw:stages.validate('life',raw))
         life=repo.generation_resources(jid,['life'])['life']
@@ -357,9 +357,9 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             constraints=_claims(plan,{'fact','knowledge','history','family','commitment','organization','location'}))
         if creative:
             execute('lore_background',lambda:request('background',lore_context,stages.BackgroundPart),
-                lambda raw:{k:v for k,v in stages.validate('lore',_check(stages.BackgroundPart,raw,'background').model_dump()).items() if k in stages.BackgroundPart.model_fields})
+                lambda raw:{k:v for k,v in stages.validate_lore(_check(stages.BackgroundPart,raw,'background').model_dump(),registry).items() if k in stages.BackgroundPart.model_fields})
             background=repo.generation_resources(jid,['background'])['background']
-            execute('lore',lambda:{**background,**_check(stages.KnowledgePart,request('knowledge',{**lore_context,'accepted_background':background},stages.KnowledgePart),'knowledge').model_dump()},lambda raw:stages.validate('lore',raw))
+            execute('lore',lambda:{**background,**_check(stages.KnowledgePart,request('knowledge',{**lore_context,'accepted_background':background},stages.KnowledgePart),'knowledge').model_dump()},lambda raw:stages.validate_lore(raw,registry))
         else:
             execute('lore',lambda:request('lore',lore_context,stages.LorePart),lambda raw:stages.validate('lore',raw))
         lore=repo.generation_resources(jid,['lore'])['lore']

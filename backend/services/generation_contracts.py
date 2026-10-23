@@ -18,7 +18,7 @@ or organization is NOT a coworker endpoint: occupations and organizational dutie
 belong to the later roles stage. A symmetric objective tie (spouse, coworker,
 close_friend etc.) has ONE record per pair, not both directions. Parent/adoptive
 parent/guardian remain directed. Emotional relationship dictionary keys are
-source_id + ':' + target_id; numeric dimensions use -100..100, NOT a 0..1
+arbitrary distinct labels (Python derives source_id + ':' + target_id); numeric dimensions use -100..100, NOT a 0..1
 scale. Only trust, affection, attraction, irritation, fear, jealousy, respect; other
 descriptions belong to context. Do not generate the controlled actor's feelings.
 When assigned_pairs is present, output ONLY those unordered pairs: each may have
@@ -36,7 +36,8 @@ Separate facts with different knowledge holders. Adoption truth, the occurrence
 of a private disclosure yesterday, and a parent's private marriage plan are distinct
 facts, not one compound secret. A public biography must not contain private motives
 or information whose holders are restricted. Do not add consent or future events.''',
-    'knowledge': '''Knowledge dictionary keys are actor_id + ':' + fact_id. Use only accepted
+    'knowledge': '''Knowledge dictionary keys may be distinct local labels; Python derives
+actor_id + ':' + fact_id. Use only accepted
 Fact IDs and registry Character IDs. Never infer holders from characters mentioned
 in a fact. Knowing an adoption truth does not imply knowing that someone else was
 told yesterday. Kinship, marriage or shared residence do not transmit knowledge.
@@ -70,6 +71,29 @@ def request_schema(stage, captured, context):
     schema=deepcopy(captured)
     registry={r['id']:r for r in context.get('registry',[])}
     fields={}
+    if stage=='setting':
+        schema['$defs']['PlannedEntity']['allOf']=[{
+            'if':{'properties':{'kind':{'enum':['location','organization']}}},
+            'then':{'properties':{'tier':{'type':'null'}}}}]
+        schema['properties']['entities']['allOf']=[{
+            'contains':{'properties':{'kind':{'const':kind}},'required':['kind']},
+            'minContains':0,'maxContains':100} for kind in ('location','organization')]
+    if stage in ('circumstances','background','knowledge','opening'):
+        refs={'actor_id':'character','owner_id':'character','holder_id':'character',
+              'character_id':'character','gestational_actor_id':'character',
+              'impregnating_actor_id':'character','organization_id':'organization',
+              'location_id':'location','controlled_actor_id':'character','pov_actor_id':'character'}
+        for definition in schema.get('$defs',{}).values():
+            for field, prop in definition.get('properties',{}).items():
+                if field in refs:
+                    ids=[eid for eid,r in registry.items() if r['kind']==refs[field]]
+                    nullable=any(option.get('type')=='null' for option in prop.get('anyOf',[]))
+                    allowed=([None] if nullable else [])+ids
+                    if allowed:prop['enum']=allowed
+                    else:prop['not']={}
+                elif field in ('character_ids','parent_ids','present_character_ids','stakes_for','participants') and prop.get('type')=='array':
+                    ids=[eid for eid,r in registry.items() if r['kind']=='character']
+                    prop['items']={'enum':ids} if ids else False
     if stage=='characters':
         from backend.services.world import CARD_FIELDS
         schema['$defs']['CharacterCard']['properties']['fields']['propertyNames']={'enum':list(CARD_FIELDS)}
@@ -87,13 +111,28 @@ def request_schema(stage, captured, context):
             'properties':{key:{'type':'number','minimum':-100,'maximum':100} for key in RELATION_DIMENSIONS}}
         for name in ('ObjectiveRelation','Relationship'):
             for field in ('source_id','target_id'):
-                schema['$defs'][name]['properties'][field]={'type':'string','enum':actors}
+                schema['$defs'][name]['properties'][field]={'type':'string','enum':actors} if actors else False
         if context.get('assigned_pairs'):
+            actors=sorted({cid for pair in context['assigned_pairs'] for cid in pair})
+            for name in ('ObjectiveRelation','Relationship'):
+                for field in ('source_id','target_id'):
+                    schema['$defs'][name]['properties'][field]={'type':'string','enum':actors}
             schema['properties']['relationships']['maxProperties']=2*len(context['assigned_pairs'])
             for name in ('ObjectiveRelation','Relationship'):
                 schema['$defs'][name]['anyOf'] = [
                     {'properties':{'source_id':{'const':a},'target_id':{'const':b}}}
                     for pair in context['assigned_pairs'] for a,b in (pair, pair[::-1])]
+        # The map key is sufficient to allocate a local technical identity.
+        objective=schema['$defs']['ObjectiveRelation']
+        objective['required']=[key for key in objective['required'] if key!='id']
+    if stage=='knowledge':
+        facts=list(context.get('accepted_background',{}).get('facts',{}))
+        actors=[eid for eid,r in registry.items() if r['kind']=='character']
+        for field,ids in (('actor_id',actors),('fact_id',facts)):
+            schema['$defs']['Knowledge']['properties'][field]={'type':'string','enum':ids} if ids else False
+        schema['$defs']['Knowledge']['properties']['replaced_by']={'enum':[None,*facts]}
+    if stage=='places':
+        schema['$defs']['Organization']['properties']['location_ids']['items']={'enum':fields['locations']} if fields['locations'] else False
     if stage in ('background','lore'):
 
         from backend.runtime_v3.models import WorldHistoryV3

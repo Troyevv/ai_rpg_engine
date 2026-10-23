@@ -541,8 +541,8 @@ class GenerationCheckpoints:
                 result['artifact']=json.loads(row['content'])
                 from backend.services.initial_world_stages import STAGES
                 if row['stage'] in STAGES:
-                    from backend.services.initial_world_stages import TiesPart, BackgroundPart
-                    schema=(TiesPart if unit.startswith('life_ties_') else {'life_ties':TiesPart,'lore_background':BackgroundPart}.get(unit,STAGES[row['stage']])).model_json_schema()
+                    from backend.services.initial_world_stages import TiesPart, TiesAggregate, BackgroundPart
+                    schema=(TiesPart if unit.startswith('life_ties_') else {'life_ties':TiesAggregate,'lore_background':BackgroundPart}.get(unit,STAGES[row['stage']])).model_json_schema()
                     if row['stage']=='setting':schema={**schema,'properties':{'setting':{'type':'object','properties':schema['properties']}}}
                     result['editor_schema']=schema
                 if row['stage']=='interpret' and unit=='interpret':

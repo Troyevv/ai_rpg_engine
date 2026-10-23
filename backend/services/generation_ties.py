@@ -19,7 +19,7 @@ def context(original, batch):
 
 
 def check_pairs(value, batch):
-    allowed = {tuple(pair) for pair in batch['pairs']}
+    allowed = {tuple(sorted(pair)) for pair in batch['pairs']}
     for section in ('objective_relations', 'relationships'):
         for row in value[section].values():
             if tuple(sorted((row['source_id'], row['target_id']))) not in allowed:
@@ -46,4 +46,4 @@ def combine(parts, registry):
             if result[section].keys() & part[section].keys():
                 raise ValueError('ties/' + section + ': duplicate batch record')
             result[section].update(part[section])
-    return stages.validate_ties(result, registry)
+    return stages.validate_ties(result, registry, aggregate=True)
