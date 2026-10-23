@@ -54,6 +54,12 @@ events, the player's decisions, automatic romance, childbirth or trauma.
 
 ### Validation and author review
 
+The common normalizer orders endpoints only for Runtime's existing SYMMETRIC
+objective-relation kinds. This deterministic representation change removes a
+random-ID-dependent failure for coworker/friend/spouse links without asking the
+model to sort IDs. Directed parent/adoption/guardian links retain their direction;
+source input is not mutated and Runtime validation still runs afterwards.
+
 Canonical schemas, IDs, references, family/life/Knowledge invariants, chronology,
 readiness manifests, locks and the temporal guard remain blocking. A semantic
 review uses small groups of notes and plain explanations without evidence-pointer

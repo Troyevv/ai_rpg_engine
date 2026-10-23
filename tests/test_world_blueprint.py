@@ -360,3 +360,24 @@ def test_periodic_recovery_cannot_steal_locally_dispatched_unleased_job(api):
     assert done['status']=='saved',done
     assert repo.generation_status(jid)['revision']==0
     assert calls.count('interpret')==1
+
+
+def test_common_normalizer_orders_only_symmetric_relations_without_mutating_source():
+    from copy import deepcopy
+    from backend.services.initial_world_v2 import normalize
+    from test_draft_world import fixture
+    snapshot=normalize(fixture()).snapshot
+    first,last=sorted(snapshot['world_state']['characters'])[:2]
+    snapshot['world_state']['objective_relations']={'pair':dict(id='pair',kind='coworker',source_id=last,target_id=first)}
+    original=deepcopy(snapshot)
+    accepted=normalize(snapshot).snapshot
+    pair=accepted['world_state']['objective_relations']['pair']
+    assert (pair['source_id'],pair['target_id'])==(first,last)
+    assert snapshot==original
+    assert normalize(accepted).snapshot==accepted
+    snapshot['world_state']['objective_relations']['pair']['kind']='adoptive_parent'
+    directed=normalize(snapshot).snapshot['world_state']['objective_relations']['pair']
+    assert (directed['source_id'],directed['target_id'])==(last,first)
+    snapshot['world_state']['objective_relations']['pair']['kind']=['invalid']
+    with pytest.raises(ValueError,match='world_state/objective_relations/pair/kind'):
+        normalize(snapshot)

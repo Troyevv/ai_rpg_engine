@@ -141,6 +141,15 @@ def normalize(source, *, operation: Operation = 'normalize_existing'):
         raise ValueError('operation: unknown initial-world operation')
     value = deepcopy(source)
     validate_initial_history(value)
+    # Symmetric endpoints have no narrative direction. Reuse Runtime's kind
+    # vocabulary to normalize their representation before strict validation;
+    # directed parent/adoption/guardian links must never be reordered.
+    from backend.runtime_v3.life import SYMMETRIC
+    records=(value.get('world_state') if value.get('schema_version')==3 else value.get('world')) or {}
+    relations=records.get('objective_relations',{}) if isinstance(records,dict) else {}
+    for relation in relations.values() if isinstance(relations,dict) else ():
+        if isinstance(relation,dict) and isinstance(relation.get('kind'),str) and relation['kind'] in SYMMETRIC and all(isinstance(relation.get(k),str) for k in ('source_id','target_id')):
+            relation['source_id'],relation['target_id']=sorted((relation['source_id'],relation['target_id']))
     if value.get('schema_version') == 3:
         _check(models.WorldStateV3, value['world_state'], 'world_state')
     else:
