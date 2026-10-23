@@ -356,9 +356,19 @@ Nonmaterial missing jurisdiction remains a warning in the rich-brief fixture.
 
 ### Verification and limits
 
-Final full-suite results for this increment are pending; see PR #105 for the
-published tree and observed results. The preceding published tree passed 1528
-Python tests and 198 Playwright tests (10 existing project-matrix skips).
+Merged code verified at commit `53a6d0079a932ef1715f5b197da11c94ae69fd2f`
+(tree `0fba2bf34f3a24b6b6d6d9a45c3bfd0dfedca483`):
+
+- `python -m pytest tests -q`: **1572 passed**, 220.11 seconds.
+- `npm run build`: passed; existing bundle-size advisory.
+- `npm run test:e2e`: **200 passed, 10 skipped**, 11.2 minutes. Skips are the
+  existing inspector/mobile-width/PWA project-matrix exclusions; no skips added.
+- `git diff --check`: passed.
+
+Environment: Python 3.12, Node 24, Chromium 153 through the external
+`PLAYWRIGHT_EXECUTABLE_PATH` override. The stock browser download was unavailable;
+no browser binaries or environment-specific paths were added to the repository.
+Only this documentation record changed after the verified code commit.
 
 All automated provider responses are deterministic fixtures, with no paid
 DeepSeek calls. Semantic review is model-assisted; it cannot guarantee exhaustive
