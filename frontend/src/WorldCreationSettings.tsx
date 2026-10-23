@@ -1,6 +1,7 @@
 import {Textarea} from './components/ui/textarea';
 export const defaultCreation={primary_genre:null as string|null,secondary_genres:[] as string[],custom_genre:'',npc_expressiveness:'expressive',cast_preset:'medium',core_npcs:6,secondary_npcs:12,world_type:'unspecified',geography:'',narrative_pacing:{preset:'moderate'},narrative_risk:{preset:'realistic'}};
 export type Creation=typeof defaultCreation;
+export const castCounts=(value:Creation)=>value.cast_preset==='custom'?[value.core_npcs,value.secondary_npcs]:value.cast_preset==='small'?[3,5]:value.cast_preset==='large'?[10,25]:[6,12];
 const genres:Record<string,string>={slice_of_life:'Повседневность',family_saga:'Семейная сага',romance:'Романтика',drama:'Драма',detective:'Детектив',thriller:'Триллер',science_fiction:'Научная фантастика',fantasy:'Фэнтези',horror:'Ужасы',adventure:'Приключения',post_apocalyptic:'Постапокалипсис',historical:'Исторический',custom:'Свой жанр'};
 const descriptions:Record<string,string>={
  slice_of_life:'Повседневные занятия, отношения и небольшие перемены в жизни.',
@@ -21,7 +22,7 @@ const expressions:Record<string,string>={
  expressive:'Живые, правдоподобные реакции. Например: NPC улыбается, оживлённо благодарит и уточняет детали.',
  hyperbolized:'Театральная или комедийная подача, если она подходит персонажу. Например: NPC драматично хватается за сердце от приятного удивления.'};
 export function WorldCreationSettings({value,onChange,disabled=false}:{value:Creation;onChange:(value:Creation)=>void;disabled?:boolean}){
- const counts=value.cast_preset==='custom'?[value.core_npcs,value.secondary_npcs]:value.cast_preset==='small'?[3,5]:value.cast_preset==='large'?[10,25]:[6,12];
+ const counts=castCounts(value);
  const change=(patch:Partial<Creation>)=>onChange({...value,...patch});
  return <details className="workshop-detail"><summary>Настройки генератора</summary><fieldset disabled={disabled}>
  <p>Настройки заполняют пробелы замысла. Заданные персонажи сохраняются независимо от размера мира.</p>

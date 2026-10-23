@@ -264,6 +264,11 @@ class GenerationCheckpoints:
             self._update_generation_progress(db,jid)
             return vid
 
+    def record_generation_diagnostic(self,jid,token,unit,payload):
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE');self._pipeline_guard(db,jid,token)
+            self._record_document(db,'generation_diagnostic',jid+':'+unit,dump(payload),True,'semantic_review')
+
     def fail_generation_unit(self,jid,token,unit,error):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE');self._pipeline_guard(db,jid,token)
@@ -401,6 +406,19 @@ class GenerationCheckpoints:
             if unit['stage']=='interpret' and payload.get('blocking_ids'):
                 raise ValueError(prefix+': unresolved blocking ambiguities')
 
+    def validate_generation_semantics(self,db,jid,snapshot):
+        from backend.services import generation_semantics as semantics
+        def resource(key):
+            row=db.execute('SELECT v.content,r.pointer FROM preparation_resources r JOIN document_versions v ON v.id=r.artifact_id WHERE r.job_id=? AND r.resource_key=?',(jid,key)).fetchone()
+            if not row:raise ValueError('generation/semantic: missing review resource '+key)
+            return self._pointer(json.loads(row['content']),row['pointer'])
+        if resource('prompt')['version']!='initial-world-stages-5':return
+        for group in semantics.groups(resource('interpretation')):
+            report=resource(group['id']);data=semantics.context(snapshot,group)
+            if report['basis_hash']!=fingerprint(data):
+                raise ValueError('generation/semantic/'+group['id']+': accepted world changed after semantic review; regenerate affected checkpoints before Start Game')
+            semantics.validate({'findings':report['findings']},data)
+
     def publish_generation_draft(self,jid,token,state):
         from backend.services import draft_world
         state=draft_world.prepare(state)
@@ -410,6 +428,8 @@ class GenerationCheckpoints:
             db.execute('BEGIN IMMEDIATE')
             run=self._pipeline_guard(db,jid,token,statuses=('generating',))
             self._generation_readiness(db,jid)
+            from backend.services.initial_world_v2 import normalize
+            self.validate_generation_semantics(db,jid,normalize(state).snapshot)
             assembled=db.execute("SELECT v.content FROM preparation_resources r JOIN document_versions v ON v.id=r.artifact_id WHERE r.job_id=? AND r.resource_key='assembled'",(jid,)).fetchone()
             if not assembled or fingerprint(draft_world.prepare(json.loads(assembled['content'])))!=fingerprint(state):
                 raise ValueError('generation/readiness/assembly: draft differs from validated checkpoint')
@@ -439,6 +459,9 @@ class GenerationCheckpoints:
             row=db.execute('SELECT u.stage,u.status,u.artifact_id,v.content FROM preparation_units u LEFT JOIN document_versions v ON v.id=u.artifact_id WHERE u.job_id=? AND u.unit_id=?',(jid,unit)).fetchone()
             if not row: raise ValueError('Generation unit not found.')
             result=dict(stage=row['stage'],status=row['status'],artifact_version=row['artifact_id'],author=author,read_only=True)
+            if author and row['status']=='failed':
+                diagnostic=db.execute("SELECT content FROM document_versions WHERE kind='generation_diagnostic' AND owner=? ORDER BY id DESC LIMIT 1",(jid+':'+unit,)).fetchone()
+                if diagnostic:result['diagnostic']=json.loads(diagnostic['content'])
             if author and row['content'] is not None:
                 result['artifact']=json.loads(row['content'])
                 from backend.services.initial_world_stages import STAGES
@@ -446,8 +469,19 @@ class GenerationCheckpoints:
                     schema=STAGES[row['stage']].model_json_schema()
                     if row['stage']=='setting':schema={**schema,'properties':{'setting':{'type':'object','properties':schema['properties']}}}
                     result['editor_schema']=schema
+                if row['stage']=='interpret':
+                    from backend.services.world_interpretation import Interpretation
+                    schema=Interpretation.model_json_schema()
+                    fields=schema['$defs']['InterpretedClaim']['properties']
+                    for source,target in (('subject_key','subject_id'),('holder_keys','holder_ids'),('related_keys','related_ids')):
+                        fields[target]=fields.pop(source)
+                    for key in ('section','field'):
+                        fields[key]['readOnly']=True
+                    result['editor_schema']=schema
                 registry=db.execute("SELECT v.content,r.pointer FROM preparation_resources r JOIN document_versions v ON v.id=r.artifact_id WHERE r.job_id=? AND r.resource_key='registry'",(jid,)).fetchone()
                 result['reference_options']=[{'id':r['id'],'name':r['name']} for r in self._pointer(json.loads(registry['content']),registry['pointer'])] if registry else []
+                if row['stage']=='interpret':
+                    result['reference_options']=[{'id':r['id'],'name':r['name']} for r in result['artifact']['entities']]
                 lore=db.execute("SELECT v.content,r.pointer FROM preparation_resources r JOIN document_versions v ON v.id=r.artifact_id WHERE r.job_id=? AND r.resource_key='lore'",(jid,)).fetchone()
                 if lore:
                     facts=self._pointer(json.loads(lore['content']),lore['pointer']).get('facts',{})

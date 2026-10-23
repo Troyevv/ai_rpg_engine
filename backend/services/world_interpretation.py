@@ -246,5 +246,9 @@ def scoped_plan(plan):
     scopes['character_global']={'claims':[r for r in claims if not targets(r)],'creation':plan.get('creation')}
     for entity in plan['entities']:
         if entity['kind']=='character':scopes['character_'+entity['id']]={'claims':[r for r in claims if entity['id'] in targets(r)]}
+    from backend.services.generation_semantics import groups
+    reviews=groups(plan)
+    for stage in ('setting','places','characters','life','lore','opening'):
+        scopes['review_'+stage]=[c for group in reviews if group['stage']==stage for c in group['claims']]
     plan['scopes']=scopes
     return plan

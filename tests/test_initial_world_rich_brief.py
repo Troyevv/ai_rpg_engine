@@ -44,6 +44,7 @@ def provider(calls):
         stage=kw['messages'][0]['content'].split('\nStage: ')[1].split('\n')[0]
         data=json.loads(kw['messages'][-1]['content']);calls.append(stage)
         if stage=='interpret':result=interpreted()
+        elif stage=='review':result={'findings':[dict(claim_id=c['id'],verdict='preserved',evidence_paths=['/accepted/'+next(iter(data['accepted']))],explanation='Fixture evidence is consistent') for c in data['claims']]}
         elif stage=='setting':result={'campaign':{'title':'Волковы'},'entities':[dict(key=str(i),existing_id=r['id'],kind=r['kind'],name=r['name'],tier=r['tier']) for i,r in enumerate(data['interpretation']['entities'])]+[dict(key='road',kind='location',name='Дорога к станции')]}
         else:
             ids={r['name']:r['id'] for r in data['registry']};ilya=ids['Илья'];road=ids['Дорога к станции']
@@ -124,7 +125,7 @@ def test_rich_constraint_revision_reuses_unrelated_character_batches(api):
     peers={u:repo.inspect_generation_checkpoint(jid,u,True) for u in ('core_1','core_2','places')}
     response=client.patch(f'/api/workspaces/{wid}/draft',json=body)
     assert response.status_code==200,response.text
-    assert response.json()['stale_units']==['assembly','core_0','life','lore','opening']
+    assert response.json()['stale_units']==['assembly','core_0','life','lore','opening','review_opening_0']
     for unit,old in peers.items():assert repo.inspect_generation_checkpoint(jid,unit,True)==old
 
 

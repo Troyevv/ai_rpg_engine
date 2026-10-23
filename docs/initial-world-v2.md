@@ -296,17 +296,69 @@ The latter verifies adoption versus marriage, known holders after discovery,
 Friday 06:00 activity and unchanged player intentions. Fixtures do not establish
 real-provider semantic reliability; no paid calls are used.
 
-### Still required before acceptance
+### Current paused editor and roster revisions
 
-1. Complete coverage/reconciliation for arbitrary unbound free-form facts and
-   changed textual constraints, including consistency between revised prose and
-   its canonical bindings. Current conservative edit guards and typed predicates
-   are not a universal semantic validator.
-2. Complete friendly domain forms for complex paused records and atomic roster
-   changes after a plan has already dispatched batches. The existing plan guard
-   intentionally rejects incompatible unit redefinitions; it must not be bypassed.
-3. Expand automated cross-stage edit/targeted-regeneration cases across every
-   supported record family; finish rich jurisdiction/settings-conflict and
-   browser-close/restart manual #78 acceptance. Existing recovery tests remain.
-4. Final verification and acceptance review must use the final published tree.
-   Keep PR #105 Draft until these requirements are actually met.
+The canonical record editor uses the existing Pydantic JSON schemas for nested
+records, optional values, typed enums and named entity/Fact references. Source
+claim records also have a form; anchored source spans and identity remain
+immutable and revisions require explicit acknowledgement. Advanced JSON remains
+available for complex predicates. Server validation remains authoritative.
+
+Prompt revision 4 atomically reconciles invalidated character batch definitions
+when the author changes the roster or its tiers. Accepted character/card locks
+move with canonical character IDs. Generated characters with accepted edits must
+remain in the revised roster. Previously completed units cannot be redefined
+without invalidation; obsolete units are retired while their artifacts, attempt
+history and document versions remain intact. The existing journal stores the
+revised plan. Older prompt revisions retain their recorded planning contracts.
+
+Quality-review warnings shown in player mode are limited to those reproducible
+from the player projection. Hidden-NPC details stay in author mode; ordinary
+import validation retains its actionable diagnostics.
+
+Deterministic regression coverage now includes moving a locked character between
+core/secondary batches, resuming and starting the resulting world, rejection of
+missing protected identities and transaction rollback on invalid replans. Browser
+coverage includes the Scenario hand-off and closing the browser context plus
+restarting the backend with the same SQLite database before resume/Start Game.
+
+### Semantic review and retry contract (prompt revision 5)
+
+Source claims without executable predicates, explicitly amended claims and
+structured setting claims receive bounded semantic review in groups of at most
+eight. Each request sees the relevant canonical sections and source constraints,
+not a full-world generation schema. Existing provider/model lease, request budget
+and usage accounting apply. Reports must cover every requested claim exactly once
+and cite existing canonical paths. Negative/unresolved reports pause generation
+before publication; their detailed explanations stay author-only. They do not
+silently repair user facts or repeatedly retry a valid negative judgment.
+
+Reviews are existing checkpoint/journal records under the assembly/validation
+stage. Scoped source inputs and accepted artifacts invalidate their dependents.
+A server-computed basis hash is rechecked against the actual normalized draft at
+Start Game, preventing author edits from silently reusing obsolete semantic
+approval. Imports, old saves and previously captured prompt versions do not gain
+new provider calls. No new Runtime model or database table is introduced.
+
+Definite HTTP 429/503 rejection before any streamed output gets one bounded retry
+with backoff. Lost responses, partial streams and other provider errors require
+explicit retry; no claim of exactly-once billing is made.
+
+The author preview includes filtered family/business/relationship edges and
+source-scoped chronology/Knowledge holders without inventing exact timestamps.
+It warns when explicit NPCs exceed target counts. Canonical record forms now
+include source-claim revisions, named references and editable dynamic map keys;
+advanced JSON remains available for unusual predicate values.
+
+### Acceptance still requiring verification
+
+- Semantic review is model-assisted and depends on the extracted source claims.
+  It is not proof that arbitrary prose was exhaustively extracted or that a
+  reviewer cannot make a semantic mistake. Complete the extraction-coverage and
+  structured-conflict regression matrix before claiming full acceptance.
+- Complete cross-stage edit/regenerate cases across all supported record
+  families, plus the #78 manual/live-provider quality record in
+  `docs/manual_qa/narrative_v4/initial-world.md`.
+- Final full Python, build and Playwright results must correspond to the final
+  published tree. PR #105 remains Draft until those gates and the remaining
+  acceptance review are complete.

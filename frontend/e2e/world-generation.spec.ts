@@ -135,3 +135,31 @@ test('Scenario handoff uses the same staged generator with captured source and c
  expect(cp.artifact.brief).toContain(workspace.idea.trim());
  expect(cp.artifact.creation.primary_genre).toBe('slice_of_life');
 });
+
+test('source constraint form requires acknowledgement and preserves anchored evidence',async({page,request})=>{
+  const seeded=await(await request.post('/test/staged-checkpoint')).json();
+  const endpoint=`/api/jobs/${seeded.job}/generation/checkpoints/interpret?author=true`;
+  const before=await(await request.get(endpoint)).json();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),seeded.workspace);
+  await page.goto('/');await nav(page,'Создать');
+  const panel=page.getByRole('region',{name:'Этапы генерации мира'});
+  await panel.getByLabel('Авторский просмотр:',{exact:false}).check();
+  await panel.locator('summary').filter({hasText:'Понимание замысла'}).click();
+  await panel.getByRole('button',{name:'Посмотреть результат'}).click();
+  const editor=page.getByRole('region',{name:'Редактирование этапа на паузе'});
+  await editor.getByLabel('Поле этапа',{exact:true}).selectOption({label:'Ограничения · 0 · запись целиком'});
+  await expect(editor.getByLabel('Расширенный JSON',{exact:true})).not.toBeChecked();
+  await editor.getByLabel('Описание',{exact:true}).fill('Автор уточнил исходное описание');
+  const check=editor.getByRole('button',{name:'Проверить изменение этапа'});
+  await expect(check).toBeDisabled();
+  await editor.getByLabel('Я явно пересматриваю ограничение.',{exact:false}).check();
+  await check.click();
+  await expect(editor.getByRole('status')).toBeVisible();
+  await editor.getByRole('button',{name:'Применить изменение этапа'}).click();
+  await expect(page.getByRole('dialog')).not.toBeVisible();
+  const after=await(await request.get(endpoint)).json();
+  expect(after.artifact.claims[0].description).toBe('Автор уточнил исходное описание');
+  expect(after.artifact.claims[0].spans).toEqual(before.artifact.claims[0].spans);
+  expect(after.artifact.claims[0].id).toBe(before.artifact.claims[0].id);
+  expect(after.artifact.amendments).toHaveLength(1);
+});

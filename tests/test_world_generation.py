@@ -14,6 +14,7 @@ def fake_stages(calls):
         data=json.loads(kwargs['messages'][-1]['content'])
         calls.append(stage)
         if stage=='interpret': result=interpretation()
+        elif stage=='review':result={'findings':[dict(claim_id=c['id'],verdict='preserved',evidence_paths=['/accepted/'+next(iter(data['accepted']))],explanation='Fixture evidence is consistent') for c in data['claims']]}
         elif stage=='setting':
             result={'campaign':{'title':'Пятница'}, 'entities':[
                 dict(key=str(i),existing_id=row['id'],name=row['name'],kind=row['kind'],tier=row['tier'])
@@ -62,7 +63,7 @@ def test_staged_api_assembles_playable_draft_and_tracks_each_request(api):
         wid,jid=submit(client)
         result=wait(client,jid)
     assert result['status']=='saved',result
-    assert calls==['interpret','setting','places','characters','life','lore','opening']
+    assert calls==['interpret','setting','places','characters','life','lore','opening','review','review','review']
     assert result['generation']['overall_progress']==1
     assert result['narrative']==''
     path=f'/api/workspaces/{wid}/draft'
@@ -75,8 +76,8 @@ def test_staged_api_assembles_playable_draft_and_tracks_each_request(api):
     assert snapshot['world_state']['camera']['situation']=='Мира идёт с сумками к станции.'
     assert snapshot['campaign']['initial_world']['brief']==BRIEF
     with app.state.repository.connect() as db:
-        assert db.execute('SELECT count(*) FROM llm_requests').fetchone()[0]==7
-        assert db.execute("SELECT count(*) FROM preparation_units WHERE status='completed'").fetchone()[0]==8
+        assert db.execute('SELECT count(*) FROM llm_requests').fetchone()[0]==10
+        assert db.execute("SELECT count(*) FROM preparation_units WHERE status='completed'").fetchone()[0]==11
         assert 'stage-test-key' not in '\n'.join(db.iterdump())
 
 
@@ -104,7 +105,7 @@ def test_pause_resume_reuses_completed_units_and_keeps_existing_draft(api):
         assert resumed.status_code==200,resumed.text
         done=wait(client,jid)
         assert done['status']=='saved',done
-    assert calls==['interpret','setting','places','characters','life','lore','opening']
+    assert calls==['interpret','setting','places','characters','life','lore','opening','review','review','review']
 
 
 def test_checkpoint_inspection_is_author_only_and_read_only(api):
@@ -151,7 +152,7 @@ def test_restart_resumes_safe_checkpoint_using_encrypted_provider_credential(tmp
                 time.sleep(.01)
             assert job['status']=='saved',job
             assert client.get(f'/api/workspaces/{wid}/draft').json()['version_id'] is not None
-    assert calls==['interpret','setting','places','characters','life','lore','opening']
+    assert calls==['interpret','setting','places','characters','life','lore','opening','review','review','review']
 
 
 def test_restart_without_credentials_keeps_valid_checkpoints_and_makes_no_request(tmp_path,monkeypatch):
@@ -188,7 +189,7 @@ def test_duplicate_submission_reuses_job_and_does_not_repeat_provider_requests(a
         completed=client.post(path,json=body)
         assert completed.status_code==200 and completed.json()['id']==first.json()['id']
         assert client.post(path,json={**body,'text':'different'}).status_code==409
-    assert len(calls)==7
+    assert len(calls)==10
     with app.state.repository.connect() as db:
         assert db.execute('SELECT count(*) FROM preparation_jobs').fetchone()[0]==1
 
@@ -241,10 +242,10 @@ def test_malformed_stage_retries_locally_without_repeating_accepted_inputs(api):
         _,jid=submit(client)
         done=wait(client,jid)
     assert done['status']=='saved',done
-    assert calls==['interpret','setting','places','characters','life','lore','opening']
+    assert calls==['interpret','setting','places','characters','life','lore','opening','review','review','review']
     assert next(row for row in done['generation']['units'] if row['stage']=='life')['attempts']==2
     with app.state.repository.connect() as db:
-        assert db.execute('SELECT count(*) FROM llm_requests').fetchone()[0]==8
+        assert db.execute('SELECT count(*) FROM llm_requests').fetchone()[0]==11
 
 
 @pytest.mark.parametrize('mutation,path', [

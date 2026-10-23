@@ -169,6 +169,7 @@ class DraftStorage:
                 from backend.services.initial_world_v2 import normalize
                 source=db.execute("SELECT v.content FROM preparation_resources r JOIN document_versions v ON v.id=r.artifact_id WHERE r.job_id=? AND r.resource_key='interpretation'",(record['generation']['job_id'],)).fetchone()
                 validate_snapshot_facts(normalize(state).snapshot,json.loads(source['content']))
+                self.validate_generation_semantics(db,record['generation']['job_id'],normalize(state).snapshot)
             name=state['campaign']['title'].strip() or w['name'];source=domain.export_markdown(state)
             digest=hashlib.sha256(dump(state).encode()).hexdigest()
             existing=db.execute('SELECT id FROM worlds WHERE name_key=? AND digest=?',(name.casefold(),digest)).fetchone()

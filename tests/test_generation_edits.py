@@ -30,7 +30,7 @@ def test_paused_character_patch_preview_cas_resume_and_start(api):
     with repo.connect() as db: count=db.execute('SELECT count(*) FROM document_versions').fetchone()[0]
     preview=client.patch(path,json=body)
     assert preview.status_code==200,preview.text
-    assert preview.json()['stale_units']==['assembly','life','lore','opening']
+    assert preview.json()['stale_units']==['assembly','life','lore','opening','review_life_0','review_lore_0','review_opening_0']
     with repo.connect() as db: assert db.execute('SELECT count(*) FROM document_versions').fetchone()[0]==count
     accepted=client.patch(path,json={**body,'preview':False})
     assert accepted.status_code==200,accepted.text
@@ -46,7 +46,7 @@ def test_paused_character_patch_preview_cas_resume_and_start(api):
         response=client.post(f'/api/jobs/{jid}/generation/resume',json={'revision':accepted.json()['revision']})
         assert response.status_code==200,response.text
         assert wait(client,jid)['status']=='saved'
-    assert calls==['interpret','setting','places','characters','life','lore','opening','life','lore','opening']
+    assert calls==['interpret','setting','places','characters','life','lore','opening','life','lore','opening','review','review','review']
     draft=repo.draft(wid,True)
     result=repo.confirm_draft(wid,draft['revision'],draft['version_id'])
     actor=repo.get_snapshot(result['save'])['world_state']['characters'][cid]
@@ -208,14 +208,14 @@ def test_source_knowledge_revision_keeps_setting_places_and_characters(api):
     body=checkpoint_body(repo,jid,'interpret','/claims/1/description','Мира узнала вчера вечером',warnings_ack=True)
     saved=client.patch(f'/api/workspaces/{wid}/draft',json=body)
     assert saved.status_code==200,saved.text
-    assert saved.json()['stale_units']==['assembly','lore','opening']
+    assert saved.json()['stale_units']==['assembly','lore','opening','review_life_0','review_lore_0','review_opening_0']
     for unit,before in original.items():assert repo.inspect_generation_checkpoint(jid,unit,True)==before
     calls=[]
     with patch('backend.services.preparation.chat_stream',side_effect=fake_stages(calls)):
         response=client.post(f'/api/jobs/{jid}/generation/resume',json={'revision':saved.json()['revision']})
         assert response.status_code==200,response.text
         assert wait(client,jid)['status']=='saved'
-    assert calls==['lore','opening']
+    assert calls==['lore','opening','review','review','review']
 
 
 def test_canonical_editor_schema_and_named_references_are_author_only(api):
