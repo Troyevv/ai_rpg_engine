@@ -290,6 +290,12 @@ def test_repeated_unchanged_schedule_claim_does_not_roll_relative_deadline():
             temporal=dict(day_offset=1,day_period='evening'),evidence=text,assertion='agreed',player_assertion='explicit_choice',player_evidence=text)])
     first=StateResolver(s,text,text).resolve(raw).state
     first['meta']['world_time']+=1440
+    # Repeating a claim neither reschedules an overdue plan nor permits time
+    # to pass it. Zero-minute interaction can still retain the original plan.
+    from backend.services.world_delta_errors import StructuralDeltaError
+    with pytest.raises(StructuralDeltaError):
+        StateResolver(first,text,text).resolve(raw)
+    raw['final_scene']['elapsed_minutes']=0
     second=StateResolver(first,text,text).resolve(raw).state
     assert second['scheduled_events']['trip']['time_reference_minute']==s['meta']['world_time']
     assert scheduled_time(second,second['scheduled_events']['trip'])['due_minute']==2520

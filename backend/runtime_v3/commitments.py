@@ -12,6 +12,21 @@ EDITABLE = ('id', 'description', 'character_ids', 'temporal', 'end_temporal',
             'due_minute', 'condition', 'type', 'location_id', 'interrupts', 'depends_on')
 
 
+def commitment_ready(state, event):
+    """Read-only readiness shared by temporal consumers (QA-01/QA-03).
+
+    Pending is not fulfilled. Legacy resolved prerequisites with no outcome
+    remain compatible; failed/blocked outcomes never unlock a dependent plan.
+    This does not move dates, resolve events or infer transitive outcomes.
+    """
+    return event['status'] == 'pending' and all(
+        state['scheduled_events'].get(key, {}).get('status') == 'resolved'
+        and state['scheduled_events'][key].get('outcome')
+        not in ('cancelled', 'dependency_cancelled', 'missed', 'blocked')
+        for key in event.get('depends_on', [])
+    )
+
+
 def invalid_dependencies(events, candidates=None):
     """Small explicit prerequisite graph; no scheduling/workflow inference."""
     invalid = set()

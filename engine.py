@@ -239,7 +239,7 @@ def run_job(path, job_id, handle):
                     if skip_result: raw.final_scene['elapsed_minutes'] = skip_result['elapsed_minutes']
                     elif job['kind']=='turn' and __import__('re').match(r'^(?:я )?(?:ложусь спать|сплю)\b',job['user_text'].strip(),__import__('re').I):
                         raw.final_scene['elapsed_minutes']=0
-                    resolved=StateResolver(before['world_state'],narrative,job['user_text'],pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_plan,continuity_decision=continuity_plan,turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),actor_names={c['id']:c['name'] for c in before['character_cards']}).resolve(raw)
+                    resolved=StateResolver(before['world_state'],narrative,job['user_text'],pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_plan,continuity_decision=continuity_plan,runtime_time_skip=bool(skip_result),turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),actor_names={c['id']:c['name'] for c in before['character_cards']}).resolve(raw)
                     state=deepcopy(before)
                     state.pop('_time_skip', None)
                     state.pop('last_time_skip', None)

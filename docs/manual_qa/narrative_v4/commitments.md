@@ -91,3 +91,40 @@ truncated явно сообщает об усечении. Чтение не м�
 CI использует детерминированные ответы провайдера. Семантическое различение
 «договорились»/«может быть» выполняет существующая Extraction, а не regex. Живую
 модель проверяйте отдельно по последовательностям выше; платные вызовы не нужны CI.
+
+## T5 — QA-01: ordinary turn cannot skip a temporal boundary (#106)
+
+Reset `commitments` using the isolated database command above. Use controlled
+provider responses (automated: `tests/test_temporal_guard.py`); live DeepSeek is
+not required and does not establish the frequency of the model error.
+
+1. Start with a one-minute scene: `world_time=5563`, Friday trip boundary `6840`.
+2. Input `Рассматриваю карту.`; supply narrative `Прошла неделя спокойной работы.`
+   and `final_scene.elapsed_minutes=10080`, without `compression`.
+   Before the fix this committed `15643`. Now the job is rejected with
+   `ordinary_temporal_boundary`; snapshot, History head and accepted variants
+   remain unchanged. The rejected prose must not become an accepted turn.
+3. Repeat with `compression=null`, `{}`, a string, or a supported compression
+   claim. None may bypass the boundary. No extraction-only retry silently
+   changes elapsed time beneath the same prose.
+4. Reload, make a short ordinary turn, then attempt the invalid jump via
+   regenerate. The accepted variant remains selected. Generate a valid variant,
+   select the original, rollback, and make another ordinary turn: each restores
+   its own canonical time and History lineage.
+5. Reaching exactly `6840` is allowed; advancing past a future relevant boundary
+   is not. Once due/overdue, advancement requires an accepted resolution,
+   cancellation, reschedule or interval transition moving its boundary forward.
+   Zero-minute interaction remains possible; time alone never fulfills a plan.
+6. An unresolved external response forbids advancement even without compression
+   metadata. An explicitly linked, accepted response with current player evidence
+   unlocks time; unrelated input does not answer every pending question.
+7. Explicit Time Skip retains its Runtime-planned target and interruption;
+   background and LTA retain their own clock ownership. Metadata from Extraction
+   cannot opt an ordinary turn into those modes.
+
+Shared QA-03 contract: `commitment_ready(state, event)` is a read-only predicate
+used by ordinary/compression boundaries, Time Skip and LTA. The event must be
+pending and each direct prerequisite resolved with no blocked/missed/cancelled
+outcome. No automatic rescheduling or completion occurs. Legacy resolved
+prerequisites without an outcome remain supported. This PR only shares this
+existing LTA criterion; further QA-03 scenarios remain in #108.

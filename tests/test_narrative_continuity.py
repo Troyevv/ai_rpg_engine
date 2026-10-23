@@ -175,7 +175,8 @@ def test_ilya_sonya_real_jobs_reload_regenerate_rollback_branch(tmp_path):
         assert len(calls)==2
         return repo.get_snapshot(sid),repo.get_job(job)
     initial=repo.get_snapshot(sid);s=initial['world_state']
-    s['scheduled_events']['date']=ScheduledEvent(id='date',description='Встреча Ильи и Сони в «Гвозде»',character_ids=[a,b],due_minute=s['meta']['world_time'],commitment=True).model_dump()
+    # Agreement reaches the deadline; the next scene explicitly fulfills it.
+    s['scheduled_events']['date']=ScheduledEvent(id='date',description='Встреча Ильи и Сони в «Гвозде»',character_ids=[a,b],due_minute=s['meta']['world_time']+1,commitment=True).model_dump()
     with repo.connect() as db:db.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(initial),sid))
     agreed,_=run('Илья и Соня договорились встретиться в «Гвозде».',kind='start')
     met,_=run('Соня пришла, Илья и Соня встретились в «Гвозде».','started',finish=True)
