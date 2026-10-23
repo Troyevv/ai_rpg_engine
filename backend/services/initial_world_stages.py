@@ -104,10 +104,11 @@ def validate(stage, payload):
     return _check(STAGES[stage], payload, stage).model_dump()
 
 
-def allocate_entities(setting, interpretation, namespace):
+def allocate_entities(setting, interpretation, namespace, protected=()):
     """Providers propose a roster, but cannot reidentify explicit user entities."""
     setting = validate('setting', setting)
-    explicit = {row['id']: row for row in interpretation['entities']}
+    explicit = {row['id']: row for row in protected}
+    explicit.update({row['id']: row for row in interpretation['entities']})
     result = []
     used = set()
     for index, row in enumerate(setting['entities']):
@@ -126,7 +127,7 @@ def allocate_entities(setting, interpretation, namespace):
             raise ValueError(f'setting/entities/{index}: duplicate identity')
         used.add(eid)
         result.append(dict(id=eid, name=row['name'], kind=row['kind'], tier=tier,
-                           origin='explicit' if row['existing_id'] is not None else 'generated'))
+                           origin=explicit[eid].get('origin','explicit') if row['existing_id'] is not None else 'generated'))
     if set(explicit) - used:
         raise ValueError('setting/entities: omitted source entities')
     return result

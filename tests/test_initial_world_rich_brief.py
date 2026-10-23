@@ -126,3 +126,48 @@ def test_rich_constraint_revision_reuses_unrelated_character_batches(api):
     assert response.status_code==200,response.text
     assert response.json()['stale_units']==['assembly','core_0','life','lore','opening']
     for unit,old in peers.items():assert repo.inspect_generation_checkpoint(jid,unit,True)==old
+
+
+def test_roster_tier_revision_replans_batches_and_moves_accepted_locks(api):
+    from test_generation_edits import checkpoint_body
+    client,app=api;repo=app.state.repository;calls=[]
+    commit=repo.commit_generation_unit
+    def pause(jid,token,unit,payload):
+        result=commit(jid,token,unit,payload)
+        if unit=='opening':repo.generation_control(jid,'pause')
+        return result
+    wid=repo.create_workspace('Пересмотр состава')['id']
+    with patch('backend.services.preparation.chat_stream',side_effect=provider(calls)),patch.object(repo,'commit_generation_unit',side_effect=pause):
+        response=client.post(f'/api/workspaces/{wid}/draft/generate',json=dict(task='world_staged',text=BRIEF,revision=0,config=REMOTE,api_key='fixture'))
+        jid=response.json()['id'];assert wait(client,jid)['status']=='paused'
+    plan=repo.generation_resources(jid,['interpretation'])['interpretation']
+    marina=plan['entities'][1]['id']
+    field='/characters/'+marina+'/physical_state'
+    changed=client.patch(f'/api/workspaces/{wid}/draft',json=checkpoint_body(repo,jid,'core_0',field,'Отдохнувшая'))
+    assert changed.status_code==200,changed.text
+    old=repo.inspect_generation_checkpoint(jid,'core_2',True)
+    revised=client.patch(f'/api/workspaces/{wid}/draft',json=checkpoint_body(repo,jid,'interpret','/entities/1/tier','secondary',warnings_ack=True))
+    assert revised.status_code==200,revised.text
+    fixture=provider(calls)
+    def locked_provider(**kwargs):
+        data=json.loads(kwargs['messages'][-1]['content'])
+        for raw in fixture(**kwargs):
+            result=json.loads(raw)
+            for pointer,value in data.get('accepted_field_locks',{}).items():
+                target=result;bits=pointer.split('/')[1:]
+                for bit in bits[:-1]:target=target[bit.replace('~1','/').replace('~0','~')]
+                target[bits[-1]]=value
+            yield json.dumps(result,ensure_ascii=False)
+    with patch('backend.services.preparation.chat_stream',side_effect=locked_provider):
+        resumed=client.post(f'/api/jobs/{jid}/generation/resume',json={'revision':revised.json()['revision']})
+        assert resumed.status_code==200,resumed.text
+        finished=wait(client,jid);assert finished['status']=='saved',finished
+    assert repo.generation_field_locks(jid,'secondary_0')=={field:'Отдохнувшая'}
+    assert not repo.generation_field_locks(jid,'core_0')
+    assert 'core_2' not in {u['unit_id'] for u in repo.generation_status(jid)['units']}
+    with repo.connect() as db:
+        retired=db.execute("SELECT status,artifact_id FROM preparation_units WHERE job_id=? AND unit_id='core_2'",(jid,)).fetchone()
+        assert retired['status']=='retired' and retired['artifact_id']==old['artifact_version']
+        assert db.execute("SELECT count(*) FROM preparation_attempts WHERE job_id=? AND unit_id='core_2'",(jid,)).fetchone()[0]==1
+    draft=repo.draft(wid,True);saved=repo.confirm_draft(wid,draft['revision'],draft['version_id'])
+    assert repo.get_snapshot(saved['save'])['world_state']['characters'][marina]['physical_state']=='Отдохнувшая'

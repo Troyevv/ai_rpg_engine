@@ -242,3 +242,31 @@ def test_absence_binding_does_not_prove_a_prohibition_when_path_is_missing():
     plan={'claims':[dict(id='no-marriage',classification='prohibition',rules=[dict(stage='life',path='/objective_relations/missing',operator='absent',expected={'kind':'spouse'})])]}
     with pytest.raises(ValueError,match='no-marriage'):
         validate_stage_facts('life',{'objective_relations':{}},plan)
+
+
+def test_source_entity_tier_edit_uses_the_existing_interpretation_schema(api):
+    client,app=api;repo=app.state.repository
+    wid,jid,_,_=paused_world(client,repo,[])
+    before=repo.inspect_generation_checkpoint(jid,'interpret',True)
+    body=checkpoint_body(repo,jid,'interpret','/entities/0/tier','unsupported-tier',warnings_ack=True)
+    response=client.patch(f'/api/workspaces/{wid}/draft',json=body)
+    assert response.status_code==409 and 'tier' in response.text
+    assert repo.inspect_generation_checkpoint(jid,'interpret',True)==before
+
+
+def test_player_draft_diagnostics_do_not_leak_hidden_character_names(api):
+    from test_draft_world import fixture
+    client,app=api;repo=app.state.repository
+    wid=repo.create_workspace('Private review')['id']
+    state=fixture();card=state['characters'][1]
+    card['name']='Секретный участник';card['hidden']=True
+    card['fields']['Внешность']=''
+    for scene in state['world']['scenes'].values():
+        scene['participants']=[cid for cid in scene['participants'] if cid!=card['id']]
+    card['visible_to_ids']=[]
+    with repo.connect() as db:repo._write_draft(db,wid,state,'fixture',generated=True)
+    authored=repo.draft(wid,True)
+    assert 'Секретный участник' in json.dumps(authored['validation'],ensure_ascii=False)
+    player=repo.draft(wid,False)
+    assert player['validation']['warnings']
+    assert 'Секретный участник' not in json.dumps(player['validation'],ensure_ascii=False)

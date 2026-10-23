@@ -205,3 +205,34 @@ def test_retry_migration_preserves_consumed_budget_and_is_idempotent(tmp_path):
     assert unit['retry_attempts']==unit['attempts']==3
     with migrated.connect() as db:
         assert db.execute('SELECT count(*) FROM preparation_attempts').fetchone()[0]==3
+
+
+def test_replan_is_atomic_rejects_completed_redefinition_and_never_drops_locks(tmp_path):
+    repo,jid,token=new_run(tmp_path)
+    repo.begin_generation_unit(jid,token,'interpret')
+    source=repo.commit_generation_unit(jid,token,'interpret',{'cast':1})
+    old=[dict(id='core_0',stage='characters',inputs=['plan'],outputs={'batch:core_0':''})]
+    repo.reconcile_generation_plan(jid,token,old,[dict(id='core_0',character_ids=['a'])])
+    repo.begin_generation_unit(jid,token,'core_0')
+    payload={'characters':{'a':{'physical_state':'Rested'}},'cards':{}}
+    artifact=repo.commit_generation_unit(jid,token,'core_0',payload)
+    new=[dict(id='secondary_0',stage='characters',inputs=['plan'],outputs={'batch:secondary_0':''})]
+    batches=[dict(id='secondary_0',character_ids=['a'])]
+    with pytest.raises(ValueError,match='invalidate upstream'):
+        repo.reconcile_generation_plan(jid,token,new,batches)
+    repo.generation_control(jid,'pause');repo.generation_boundary(jid,token)
+    revision=repo.generation_status(jid)['revision']
+    edited=repo.revise_generation_checkpoint(jid,'core_0',payload,revision,artifact,['/characters/a/physical_state'],preview=False)
+    repo.revise_generation_checkpoint(jid,'interpret',{'cast':2},edited['revision'],source,[],preview=False)
+    repo.generation_control(jid,'resume');token=repo.claim_generation(jid)
+    with repo.connect() as db:before='\n'.join(db.iterdump())
+    with pytest.raises(ValueError,match='protected character'):
+        repo.reconcile_generation_plan(jid,token,[],[])
+    with repo.connect() as db:assert '\n'.join(db.iterdump())==before
+    repo.reconcile_generation_plan(jid,token,new,batches)
+    assert repo.generation_field_locks(jid,'secondary_0')=={'/characters/a/physical_state':'Rested'}
+    assert not repo.generation_field_locks(jid,'core_0')
+    assert repo.inspect_generation_checkpoint(jid,'core_0',True)['status']=='retired'
+    assert repo.inspect_generation_checkpoint(jid,'core_0',True)['artifact']==payload
+    with pytest.raises(ValueError,match='source unit ownership'):
+        repo.reconcile_generation_plan(jid,token,[dict(id='interpret',stage='characters',inputs=['brief'],outputs={'spoof':''})],[])

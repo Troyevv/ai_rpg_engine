@@ -57,7 +57,7 @@ def patch_character(repo, wid, jid, unit, revision, artifact_version, cid, field
 
 def patch_checkpoint(repo,wid,jid,unit,revision,artifact_version,path,value,*,preview=True,operation='patch',ack=False):
     from backend.services import initial_world_stages as stages
-    from backend.services.world_interpretation import InterpretedClaim
+    from backend.services.world_interpretation import InterpretedClaim, EntitySeed
     from backend.services.initial_world_v2 import _check
     from backend.services.world_creation_settings import CreationSettings
     from backend.services.generation_constraints import validate_stage_facts
@@ -90,6 +90,8 @@ def patch_checkpoint(repo,wid,jid,unit,revision,artifact_version,path,value,*,pr
                 target[parts[-1]]=value
         except (KeyError,IndexError,TypeError,ValueError):raise ValueError('generation/edit: поле не найдено') from None
     if stage=='interpret':
+        for index,entity in enumerate(payload['entities']):
+            _check(EntitySeed,{'key':str(index),**{k:v for k,v in entity.items() if k in EntitySeed.model_fields}},'interpretation/entities/'+str(index))
         ids={r['id'] for r in payload['entities']};people={r['id'] for r in payload['entities'] if r['kind']=='character'}
         for claim in payload['claims']:
             required={'id','subject_id','holder_ids','related_ids','classification','blocking','spans','section','field'}
@@ -122,7 +124,9 @@ def patch_checkpoint(repo,wid,jid,unit,revision,artifact_version,path,value,*,pr
         if stage=='setting':
             if operation=='patch' and parts[:2]!=['setting','campaign']:raise ValueError('generation/edit: состав мира меняется в интерпретации')
             payload['setting']=stages.validate('setting',payload['setting'])
-            if stages.allocate_entities(payload['setting'],plan,wid)!=payload['registry']:raise ValueError('generation/edit: состав изменён')
+            retained={e.get('existing_id') for e in cp['artifact']['setting']['entities']}
+            protected=[r for r in cp['artifact']['registry'] if r['id'] in retained]
+            if stages.allocate_entities(payload['setting'],plan,wid,protected)!=payload['registry']:raise ValueError('generation/edit: состав изменён')
         elif stage=='characters':payload=validate_character_batch(payload,list(cp['artifact']['characters']),registry)
         else:payload=stages.validate(stage,payload)
         validate_stage_facts(stage,payload['setting'] if stage=='setting' else payload,plan)

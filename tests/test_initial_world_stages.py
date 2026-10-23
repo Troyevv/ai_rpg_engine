@@ -84,3 +84,12 @@ def test_semantic_dependencies_invalidate_only_consumers_and_their_outputs():
     resources['character:a:personality'] = {'traits':['терпеливый']}
     assert stages.stale_units(checkpoints,resources) == ['opening','relations-a']
     with pytest.raises(ValueError,match='missing'): stages.input_manifest(resources,['missing'])
+
+
+def test_replanned_setting_preserves_locked_generated_identity_without_promoting_origin():
+    data=parts();protected=[dict(id='protected_npc',name='Сосед',kind='character',tier='secondary',origin='generated')]
+    with pytest.raises(ValueError,match='omitted source entities'):
+        stages.allocate_entities(data['setting'],data['interpretation'],'w',protected)
+    data['setting']['entities'].append(dict(key='neighbor',existing_id='protected_npc',kind='character',name='Сосед',tier='secondary'))
+    registry=stages.allocate_entities(data['setting'],data['interpretation'],'w',protected)
+    assert registry[-1]==protected[0]

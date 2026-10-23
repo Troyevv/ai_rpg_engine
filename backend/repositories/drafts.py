@@ -56,11 +56,19 @@ class DraftStorage:
             record=json.loads(head['content']) if head else None
             state=domain.prepare(record['state']) if record else None
             report=domain.validate(state) if state else {'errors':[],'warnings':[]}
-            if state and record.get('generated'):report['warnings'].extend(domain.review_initial(state,record.get('source','')))
+            visible=state if author or state is None else domain.player_view(state)
+            if state and record.get('generated'):
+                review=domain.review_initial(state,record.get('source',''))
+                if not author:
+                    public_review=domain.review_initial(visible,'')
+                    safe=[item for item in review if item in public_review]
+                    if len(safe)!=len(review):safe.append('В авторском просмотре есть замечания к миру.')
+                    review=safe
+                report['warnings'].extend(review)
             history=[dict(r) for r in db.execute("SELECT id,reason,created_at FROM document_versions WHERE kind='world_draft' AND owner=? ORDER BY id DESC",(wid,))]
             latest=db.execute('SELECT * FROM preparation_jobs WHERE workspace_id=? ORDER BY rowid DESC LIMIT 1',(wid,)).fetchone()
             return {'id':wid,'name':w['name'],'revision':w['revision'],'version_id':head['id'] if head else None,
-                'state':state if author or state is None else domain.player_view(state),
+                'state':visible,
                 'validation':report,
                 'import_warnings':record.get('warnings',[]) if record and author else [],
                 'source_text':record.get('source','') if record and author else '',

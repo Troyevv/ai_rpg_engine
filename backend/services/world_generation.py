@@ -11,7 +11,7 @@ from llm import find_loaded_model
 from backend.services.world_creation_settings import CreationSettings
 from backend.services.generation_constraints import validate_character_facts, validate_stage_facts
 
-PROMPT_VERSION = 'initial-world-stages-3'
+PROMPT_VERSION = 'initial-world-stages-4'
 RULES = '''Generate only the requested typed partial payload, never an entire world.
 Use the user's language. Explicit user facts and prohibitions outrank conventions.
 Genre tendencies never mandate romance, conflict, births or deaths. Family saga
@@ -80,7 +80,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     job=repo.preparation_job(jid)
     inputs=repo.generation_resources(jid,['brief','constraint_revision','prompt','creation'])
     brief=inputs['brief']
-    scoped=inputs['prompt']['version'] in ('initial-world-stages-2','initial-world-stages-3')
+    scoped=inputs['prompt']['version'] in ('initial-world-stages-2','initial-world-stages-3','initial-world-stages-4')
     source=lambda stage:'scope:'+stage if scoped else 'interpretation'
     token=repo.claim_generation(jid)
     if not token: return
@@ -178,9 +178,22 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         if plan['blocking_ids']:
             repo.release_generation(jid,token,'paused','interpretation: resolve material ambiguities before continuing')
             return
-        execute('setting',lambda:request('setting',{'interpretation':(plan['scopes']['setting'] if scoped else plan),
+        protected=[]
+        replannable=inputs['prompt']['version']=='initial-world-stages-4'
+        if replannable:
+            protected_ids=set()
+            for old_unit in repo.generation_status(jid)['units']:
+                if old_unit['stage']!='characters':continue
+                for pointer,value in repo.generation_field_locks(jid,old_unit['unit_id']).items():
+                    bits=pointer.split('/')[1:]
+                    if len(bits)>1:protected_ids.add(bits[1].replace('~1','/').replace('~0','~'))
+                    elif isinstance(value,dict):protected_ids.update(value)
+            if protected_ids:
+                old_setting=repo.inspect_generation_checkpoint(jid,'setting',True).get('artifact') or {}
+                protected=[r for r in old_setting.get('registry',[]) if r['id'] in protected_ids]
+        execute('setting',lambda:request('setting',{'protected_entities':protected,'interpretation':(plan['scopes']['setting'] if scoped else plan),
             'cast_targets':CreationSettings.model_validate(inputs['creation']).cast_targets(plan['entities'])},stages.SettingPart),
-            lambda raw:dict(setting=stages.validate('setting',raw),registry=stages.allocate_entities(raw,plan,job['workspace_id'])))
+            lambda raw:dict(setting=stages.validate('setting',raw),registry=stages.allocate_entities(raw,plan,job['workspace_id'],protected)))
         setting=repo.generation_resources(jid,['setting','registry'])
         registry=setting['registry']
         execute('places',lambda:request('places',dict(registry=registry,campaign=setting['setting']['campaign'],
@@ -189,18 +202,20 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         places=repo.generation_resources(jid,['places'])['places']
         batches=stages.character_batches(registry)
         batch_keys=['batch:'+batch['id'] for batch in batches]
-        repo.plan_generation_units(jid,token,[
+        planned_units=[
             *[_unit(batch['id'],'characters',([source('character_global'),*['scope:character_'+cid for cid in batch['character_ids'] if 'character_'+cid in plan['scopes']]] if scoped else ['interpretation'])+['setting','registry','places','prompt'],{'batch:'+batch['id']:''}) for batch in batches],
             _unit('life','life',[source('life'),'registry','places',*batch_keys,'prompt'],{'life':''}),
             _unit('lore','lore',[source('lore'),'registry','life',*batch_keys,'prompt'],{'lore':''}),
             _unit('opening','opening',[source('opening'),'registry','places','life','lore',*batch_keys,'prompt'],{'opening':''}),
             _unit('assembly','assembly',['interpretation','setting','registry','places','life','lore','opening',*batch_keys],{'assembled':''}),
-        ])
+        ]
+        if replannable:repo.reconcile_generation_plan(jid,token,planned_units,batches)
+        else:repo.plan_generation_units(jid,token,planned_units)
         for batch in batches:
             ids=batch['character_ids']
             execute(batch['id'],lambda:request('characters',dict(assigned_ids=ids,
                 registry=registry,locations=places['locations'],campaign=setting['setting']['campaign'],
-                constraints=_claims(plan,{'character','appearance','personality','role','history','family','opening'} | ({'commitment'} if inputs['prompt']['version']=='initial-world-stages-3' else set()),ids)),stages.CharactersPart),
+                constraints=_claims(plan,{'character','appearance','personality','role','history','family','opening'} | ({'commitment'} if inputs['prompt']['version'] in ('initial-world-stages-3','initial-world-stages-4') else set()),ids)),stages.CharactersPart),
                 lambda raw:validate_character_facts(stages.validate_character_batch(raw,ids,registry),plan))
         parts=list(repo.generation_resources(jid,batch_keys).values())
         people=_people(parts)
@@ -222,7 +237,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     except InterruptedError:
         pass
     except Exception as exc:
-        repo.release_generation(jid,token,'failed',str(exc))
+        repo.release_generation(jid,token,'paused' if str(exc).startswith('generation/plan/locks') else 'failed',str(exc))
     finally:
         stopped.set();renewer.join(timeout=1)
         repo.release_generation(jid,token)

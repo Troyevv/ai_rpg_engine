@@ -147,6 +147,70 @@ class GenerationCheckpoints:
                 result[key]=self._pointer(json.loads(row['content']),row['pointer'])
             return result
 
+    def reconcile_generation_plan(self,jid,token,units,batches):
+        """Replan invalidated batches atomically, retaining artifacts and attempts.
+
+        Only the leased worker may replace definitions, and only after upstream
+        invalidation. Locks follow canonical characters across batch boundaries.
+        Retired units remain in SQLite and the document journal for audit.
+        """
+        assigned={cid:batch['id'] for batch in batches for cid in batch['character_ids']}
+        if len(assigned)!=sum(len(batch['character_ids']) for batch in batches):
+            raise ValueError('generation/plan: duplicate character assignment')
+        expected={u['id']:u for u in units}
+        if len(expected)!=len(units):raise ValueError('generation/plan: duplicate unit')
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE');self._pipeline_guard(db,jid,token)
+            old={r['unit_id']:r for r in db.execute('SELECT * FROM preparation_units WHERE job_id=?',(jid,))}
+            if any(uid in old and old[uid]['stage'] not in ('characters','life','lore','opening','assembly') for uid in expected):
+                raise ValueError('generation/plan: source unit ownership cannot change')
+            for uid,row in old.items():
+                if row['stage'] not in ('characters','life','lore','opening','assembly'):continue
+                definition=expected.get(uid)
+                changed=definition is None or (row['stage'],row['weight'],row['required_inputs'],row['output_paths'])!=(definition['stage'],float(definition.get('weight',1)),dump(sorted(definition['inputs'])),dump(definition['outputs']))
+                if row['stage']=='characters' and row['status']=='completed':
+                    artifact=db.execute('SELECT content FROM document_versions WHERE id=?',(row['artifact_id'],)).fetchone()
+                    prior_ids=set(json.loads(artifact['content'])['characters']) if artifact else set()
+                    changed=changed or prior_ids!={cid for cid,target in assigned.items() if target==uid}
+                if changed and row['status'] not in ('pending','stale','retired'):
+                    raise ValueError('generation/plan/'+uid+': invalidate upstream inputs before changing the plan')
+            moved={}
+            for lock in db.execute("SELECT l.* FROM preparation_field_locks l JOIN preparation_units u ON u.job_id=l.job_id AND u.unit_id=l.unit_id WHERE l.job_id=? AND u.stage='characters'",(jid,)):
+                parts=lock['pointer'].split('/')[1:]
+                value=json.loads(lock['value_json'])
+                if not parts or parts[0] not in ('characters','cards'):
+                    raise ValueError('generation/plan/locks: unsupported character lock')
+                targets=[(parts[1].replace('~1','/').replace('~0','~'),lock['pointer'],value)] if len(parts)>1 else [(cid,'/'+parts[0]+'/'+cid.replace('~','~0').replace('/','~1'),item) for cid,item in value.items()]
+                for cid,pointer,item in targets:
+                    if cid not in assigned:raise ValueError('generation/plan/locks/'+cid+': protected character is missing from the new roster')
+                    key=(assigned[cid],pointer)
+                    candidate=(dump(item),lock['revision'])
+                    if key in moved and moved[key][0]!=candidate[0]:raise ValueError('generation/plan/locks: conflicting accepted edits')
+                    moved[key]=candidate
+            producers={}
+            for uid,row in old.items():
+                if row['stage'] in ('characters','life','lore','opening','assembly'):continue
+                producers.update({key:uid for key in json.loads(row['output_paths'])})
+            for unit in units:
+                if unit['stage'] not in ('characters','life','lore','opening','assembly'):
+                    raise ValueError('generation/plan: cannot replan source stages')
+                for key in unit['outputs']:
+                    if key in producers:raise ValueError('generation/plan: duplicate resource producer')
+                    producers[key]=unit['id']
+            for uid,row in old.items():
+                if row['stage'] in ('characters','life','lore','opening','assembly') and uid not in expected:
+                    db.execute("UPDATE preparation_units SET status='retired',error='Superseded by explicit roster revision.' WHERE job_id=? AND unit_id=?",(jid,uid))
+            for unit in units:
+                uid=unit['id'];definition=(unit['stage'],float(unit.get('weight',1)),dump(sorted(unit['inputs'])),dump(unit['outputs']))
+                if uid in old:
+                    db.execute("UPDATE preparation_units SET stage=?,weight=?,required_inputs=?,output_paths=?,status=CASE WHEN status='retired' THEN 'stale' ELSE status END WHERE job_id=? AND unit_id=?",(*definition,jid,uid))
+                else:
+                    db.execute('INSERT INTO preparation_units(job_id,unit_id,stage,weight,required_inputs,output_paths) VALUES(?,?,?,?,?,?)',(jid,uid,*definition))
+            db.execute("DELETE FROM preparation_field_locks WHERE job_id=? AND unit_id IN (SELECT unit_id FROM preparation_units WHERE job_id=? AND stage='characters')",(jid,jid))
+            for (uid,pointer),(value,revision) in moved.items():
+                db.execute('INSERT INTO preparation_field_locks VALUES(?,?,?,?,?)',(jid,uid,pointer,value,revision))
+            self._record_document(db,'generation_plan',jid,dump({'units':units,'batches':batches}),True,'reconcile')
+
     def begin_generation_unit(self,jid,token,unit,attempt_limit=3):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE');self._pipeline_guard(db,jid,token,statuses=('generating',))
@@ -210,7 +274,7 @@ class GenerationCheckpoints:
 
     @staticmethod
     def _update_generation_progress(db,jid):
-        rows=db.execute("SELECT stage,sum(CASE WHEN status='completed' THEN weight ELSE 0 END) done,sum(weight) total FROM preparation_units WHERE job_id=? GROUP BY stage",(jid,)).fetchall()
+        rows=db.execute("SELECT stage,sum(CASE WHEN status='completed' THEN weight ELSE 0 END) done,sum(weight) total FROM preparation_units WHERE job_id=? AND status!='retired' GROUP BY stage",(jid,)).fetchall()
         # Fixed logical stages; batches split a stage's weight, not the entire
         # denominator. Planning later batches cannot announce completion early.
         progress=sum((row['done'] or 0)/(row['total'] or 1) for row in rows)/8
@@ -228,7 +292,7 @@ class GenerationCheckpoints:
         with self.connect() as db:
             run=db.execute('SELECT revision,progress_floor FROM preparation_runs WHERE job_id=?',(jid,)).fetchone()
             if not run: return None
-            units=[dict(row) for row in db.execute('SELECT unit_id,stage,status,weight,attempts,retry_attempts,error FROM preparation_units WHERE job_id=? ORDER BY rowid',(jid,))]
+            units=[dict(row) for row in db.execute("SELECT unit_id,stage,status,weight,attempts,retry_attempts,error FROM preparation_units WHERE job_id=? AND status!='retired' ORDER BY rowid",(jid,))]
             return dict(revision=run['revision'],overall_progress=run['progress_floor'],units=units)
 
     def generation_control(self,jid,action,revision=None,allow_uncertain_retry=False):
@@ -310,7 +374,7 @@ class GenerationCheckpoints:
             raise ValueError('generation/readiness/job: missing or foreign generation')
         if revision is not None and (run['revision']!=revision or run['status']!='saved'):
             raise ValueError('generation/readiness/revision: generation changed; rebuild the draft')
-        units=db.execute('SELECT * FROM preparation_units WHERE job_id=?',(jid,)).fetchall()
+        units=db.execute("SELECT * FROM preparation_units WHERE job_id=? AND status!='retired'",(jid,)).fetchall()
         stages={row['stage'] for row in units}
         if not {'interpret','setting','places','life','lore','opening','assembly'}<=stages:
             raise ValueError('generation/readiness: missing required stages')
@@ -403,7 +467,7 @@ class GenerationCheckpoints:
             run=self._pipeline_guard(db,jid,statuses=('paused',))
             if run['lease_token'] or run['revision']!=revision:
                 raise ValueError('generation/revision: wait for a stable pause and refresh')
-            rows={row['unit_id']:row for row in db.execute('SELECT * FROM preparation_units WHERE job_id=?',(jid,))}
+            rows={row['unit_id']:row for row in db.execute("SELECT * FROM preparation_units WHERE job_id=? AND status!='retired'",(jid,))}
             row=rows.get(unit)
             if not row or row['status']!='completed' or row['artifact_id']!=artifact_version:
                 raise ValueError('generation/artifact: checkpoint changed or is not validated')
