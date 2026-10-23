@@ -2,6 +2,8 @@
 import json
 from unittest.mock import patch
 import pytest
+
+pytestmark = pytest.mark.usefixtures('captured_generation_v6')
 from test_api import api, REMOTE
 from test_world_generation import wait, fake_stages
 from test_world_interpretation import interpretation, BRIEF

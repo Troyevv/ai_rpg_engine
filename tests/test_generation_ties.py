@@ -4,6 +4,8 @@ from itertools import combinations
 from unittest.mock import patch
 
 import pytest
+
+pytestmark = pytest.mark.usefixtures('captured_generation_v6')
 from backend.services import generation_ties as ties
 from backend.services.initial_world_stages import TiesPart
 from backend.services.generation_contracts import request_schema

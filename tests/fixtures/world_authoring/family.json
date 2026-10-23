@@ -1,0 +1,130 @@
+{
+  "world": {
+    "title": "Семейный вечер"
+  },
+  "characters": [
+    {
+      "key": "son",
+      "name": "Артём",
+      "origin": "explicit",
+      "location": "home",
+      "biography": "Приёмный сын.",
+      "personality": "Упрям, болезненно реагирует на опеку, но умеет признавать ошибки."
+    },
+    {
+      "key": "father",
+      "name": "Сергей",
+      "origin": "explicit",
+      "location": "home"
+    }
+  ],
+  "locations": [
+    {
+      "key": "home",
+      "name": "Дом"
+    }
+  ],
+  "organizations": [
+    {
+      "key": "group",
+      "name": "Группа"
+    },
+    {
+      "key": "bank",
+      "name": "Банк",
+      "parent": "group",
+      "description": "Дочерний банк."
+    }
+  ],
+  "objective_relations": [
+    {
+      "key": "adoption",
+      "source": "father",
+      "target": "son",
+      "kind": "adoptive_parent",
+      "origin": "explicit"
+    }
+  ],
+  "facts": [
+    {
+      "key": "secret",
+      "text": "Артём усыновлён.",
+      "secret": true,
+      "participants": [
+        "son",
+        "father"
+      ],
+      "origin": "explicit"
+    }
+  ],
+  "events": [
+    {
+      "key": "dinner",
+      "text": "Сергей рассказал об усыновлении.",
+      "time_description": "Вчера вечером",
+      "participants": [
+        "son",
+        "father"
+      ],
+      "witnesses": [
+        "son"
+      ],
+      "facts": [
+        "secret"
+      ],
+      "medium": "conversation",
+      "origin": "explicit"
+    }
+  ],
+  "knowledge": [
+    {
+      "key": "before",
+      "actor": "son",
+      "fact": "secret",
+      "status": "unknown",
+      "evidence": "До ужина",
+      "current": false
+    },
+    {
+      "key": "after",
+      "actor": "son",
+      "fact": "secret",
+      "status": "known",
+      "evidence": "Услышал от отца",
+      "event": "dinner"
+    },
+    {
+      "key": "parent",
+      "actor": "father",
+      "fact": "secret",
+      "status": "known",
+      "evidence": "Участвовал в усыновлении"
+    }
+  ],
+  "feelings": [
+    {
+      "key": "respect",
+      "source": "son",
+      "target": "father",
+      "levels": {
+        "respect": "high",
+        "trust": "unknown"
+      }
+    }
+  ],
+  "opening": {
+    "protagonist": "son",
+    "controlled": "son",
+    "pov": "son",
+    "location": "home",
+    "present": [
+      "son",
+      "father"
+    ],
+    "situation": "Сергей пьёт чай, Артём стоит у двери.",
+    "time": {
+      "date": "2020-06-05",
+      "clock": "06:00"
+    }
+  }
+}

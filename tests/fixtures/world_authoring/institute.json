@@ -1,0 +1,66 @@
+{
+  "world": {
+    "title": "Новая жизнь",
+    "setting": "Большой город",
+    "genre": "slice of life"
+  },
+  "characters": [
+    {
+      "key": "newcomer",
+      "name": "Илья",
+      "age": "Около 25",
+      "location": "lab",
+      "personality": "В компании молчалив, но умеет спорить по существу. Не любит обещать то, чего не может выполнить.",
+      "communication": "Сначала уточняет вопрос, затем отвечает коротко.",
+      "biography": "Учился в небольшом городе. Переехал после окончания университета.",
+      "appearance": "Тёмные волосы, серая рубашка с закатанными рукавами."
+    },
+    {
+      "key": "mentor",
+      "name": "Вера",
+      "location": "lab",
+      "biography": "Пятнадцать лет работает в институте."
+    }
+  ],
+  "locations": [
+    {
+      "key": "lab",
+      "name": "Лаборатория",
+      "kind": "workplace"
+    }
+  ],
+  "organizations": [
+    {
+      "key": "institute",
+      "name": "НИИ",
+      "description": "Исследует оптические материалы.",
+      "locations": [
+        "lab"
+      ]
+    }
+  ],
+  "roles": [
+    {
+      "key": "job",
+      "actor": "newcomer",
+      "kind": "employment",
+      "title": "Младший исследователь",
+      "organization": "institute"
+    }
+  ],
+  "opening": {
+    "protagonist": "newcomer",
+    "controlled": "newcomer",
+    "pov": "newcomer",
+    "location": "lab",
+    "present": [
+      "newcomer",
+      "mentor"
+    ],
+    "situation": "Вера разбирает бумаги у окна. Илья стоит у входа.",
+    "time": {
+      "weekday": 4,
+      "clock": "09:00"
+    }
+  }
+}

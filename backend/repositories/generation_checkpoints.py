@@ -160,7 +160,7 @@ class GenerationCheckpoints:
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE');self._pipeline_guard(db,jid,token)
             for unit in units:
-                if unit['stage'] not in ('interpret','setting','places','characters','life','lore','opening','assembly'):
+                if unit['stage'] not in ('interpret','setting','places','characters','life','lore','opening','assembly','author_brief','author_plan','author_document','author_batch','compile'):
                     raise ValueError('generation/stage: unknown stage')
                 old=db.execute('SELECT * FROM preparation_units WHERE job_id=? AND unit_id=?',(jid,unit['id'])).fetchone()
                 definition=(unit['stage'],float(unit.get('weight',1)),dump(sorted(unit['inputs'])),dump(unit['outputs']))
@@ -452,7 +452,10 @@ class GenerationCheckpoints:
             raise ValueError('generation/readiness/revision: generation changed; rebuild the draft')
         units=db.execute("SELECT * FROM preparation_units WHERE job_id=? AND status!='retired'",(jid,)).fetchall()
         stages={row['stage'] for row in units}
-        if not {'interpret','setting','places','life','lore','opening','assembly'}<=stages:
+        prompt_row=db.execute("SELECT v.content,r.pointer FROM preparation_resources r JOIN document_versions v ON v.id=r.artifact_id WHERE r.job_id=? AND r.resource_key='prompt'",(jid,)).fetchone()
+        authoring=bool(prompt_row and self._pointer(json.loads(prompt_row['content']),prompt_row['pointer'])['version']=='world-authoring-1')
+        required={'author_brief','author_document','compile'} if authoring else {'interpret','setting','places','life','lore','opening','assembly'}
+        if not required<=stages:
             raise ValueError('generation/readiness: missing required stages')
         resources={r['resource_key']:r for r in db.execute('SELECT * FROM preparation_resources WHERE job_id=?',(jid,))}
         for unit in units:
@@ -501,8 +504,8 @@ class GenerationCheckpoints:
             self._generation_readiness(db,jid)
             from backend.services.initial_world_v2 import normalize
             self.validate_generation_semantics(db,jid,normalize(state).snapshot)
-            assembled=db.execute("SELECT v.content FROM preparation_resources r JOIN document_versions v ON v.id=r.artifact_id WHERE r.job_id=? AND r.resource_key='assembled'",(jid,)).fetchone()
-            if not assembled or fingerprint(draft_world.prepare(json.loads(assembled['content'])))!=fingerprint(state):
+            assembled=db.execute("SELECT v.content,r.pointer FROM preparation_resources r JOIN document_versions v ON v.id=r.artifact_id WHERE r.job_id=? AND r.resource_key='assembled'",(jid,)).fetchone()
+            if not assembled or fingerprint(draft_world.prepare(self._pointer(json.loads(assembled['content']),assembled['pointer'])))!=fingerprint(state):
                 raise ValueError('generation/readiness/assembly: draft differs from validated checkpoint')
             config=json.loads(db.execute('SELECT config_json FROM preparation_jobs WHERE id=?',(jid,)).fetchone()[0])
             previous={}
@@ -539,6 +542,12 @@ class GenerationCheckpoints:
                 if diagnostic:result['diagnostic']=json.loads(diagnostic['content'])
             if author and row['content'] is not None:
                 result['artifact']=json.loads(row['content'])
+                if row['stage'].startswith('author_') or row['stage']=='compile':
+                    from backend.services.world_authoring_pipeline import SCHEMAS
+                    if row['stage'] in SCHEMAS:result['editor_schema']=SCHEMAS[row['stage']].model_json_schema()
+                    result['locked_paths']=[r['pointer'] for r in db.execute('SELECT pointer FROM preparation_field_locks WHERE job_id=? AND unit_id=?',(jid,unit))]
+                    result['contract']='world-authoring-1'
+                    return result
                 from backend.services.initial_world_stages import STAGES
                 if row['stage'] in STAGES:
                     from backend.services.initial_world_stages import TiesPart, TiesAggregate, BackgroundPart

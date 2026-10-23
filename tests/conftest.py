@@ -13,3 +13,10 @@ def legacy_generation_v5(monkeypatch):
     """Exercise captured pre-Blueprint jobs without changing their contract."""
     from backend.services import world_generation
     monkeypatch.setattr(world_generation, 'PROMPT_VERSION', 'initial-world-stages-5')
+
+
+@pytest.fixture
+def captured_generation_v6(monkeypatch):
+    """Keep the revision-6 regression matrix exercising its captured schemas."""
+    from backend.services import world_generation
+    monkeypatch.setattr(world_generation, 'PROMPT_VERSION', 'initial-world-stages-6')

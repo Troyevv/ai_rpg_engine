@@ -69,6 +69,8 @@ class DraftStorage:
                     review=safe
                 report['warnings'].extend(review)
             if author and record and record.get('generation'):
+                initial=(state.get('runtime_campaign') or {}).get('initial_world',{}) if state else {}
+                report['warnings'].extend(d['reason'] for d in initial.get('diagnostics',[]) if d['category']=='semantic')
                 for row in db.execute("SELECT v.content FROM preparation_resources r JOIN document_versions v ON v.id=r.artifact_id WHERE r.job_id=? AND r.resource_key LIKE 'review_%'",(record['generation']['job_id'],)):
                     review=json.loads(row['content'])
                     if review.get('advisory'):
@@ -76,7 +78,8 @@ class DraftStorage:
             history=[dict(r) for r in db.execute("SELECT id,reason,created_at FROM document_versions WHERE kind='world_draft' AND owner=? ORDER BY id DESC",(wid,))]
             latest=db.execute('SELECT * FROM preparation_jobs WHERE workspace_id=? ORDER BY rowid DESC LIMIT 1',(wid,)).fetchone()
             return {'id':wid,'name':w['name'],'revision':w['revision'],'version_id':head['id'] if head else None,
-                'state':visible,'can_review_generation':bool(record and record.get('generation')),
+                'state':visible,'can_review_generation':bool(record and record.get('generation') and
+                    (state.get('runtime_campaign') or {}).get('initial_world',{}).get('version')!='world-authoring-1'),
                 'validation':report,
                 'import_warnings':record.get('warnings',[]) if record and author else [],
                 'source_text':record.get('source','') if record and author else '',
@@ -138,7 +141,7 @@ class DraftStorage:
                 record=json.loads(old['content']);state=domain.prepare(record['state'])
             elif operation=='patch' and kind=='canonical':
                 from backend.services.initial_world_editor import patch
-                state=domain.prepare(patch(state,field,value))
+                state=domain.prepare(patch(state,field,value,ack=ack))
             elif operation=='patch':state=domain.patch(state,kind,eid,field,value)
             elif operation=='add':state,eid=domain.add(state,kind)
             elif operation=='remove':state=domain.remove(state,kind,eid)
@@ -179,7 +182,12 @@ class DraftStorage:
                 from backend.services.generation_constraints import validate_snapshot_facts
                 from backend.services.initial_world_v2 import normalize
                 source=db.execute("SELECT v.content FROM preparation_resources r JOIN document_versions v ON v.id=r.artifact_id WHERE r.job_id=? AND r.resource_key='interpretation'",(record['generation']['job_id'],)).fetchone()
-                validate_snapshot_facts(normalize(state).snapshot,json.loads(source['content']))
+                if source:
+                    validate_snapshot_facts(normalize(state).snapshot,json.loads(source['content']))
+                else:
+                    captured=self.generation_resources(record['generation']['job_id'],['prompt'])
+                    if captured['prompt']['version']!='world-authoring-1':
+                        raise ValueError('generation/readiness: missing interpretation')
                 self.validate_generation_semantics(db,record['generation']['job_id'],normalize(state).snapshot)
             name=state['campaign']['title'].strip() or w['name'];source=domain.export_markdown(state)
             digest=hashlib.sha256(dump(state).encode()).hexdigest()

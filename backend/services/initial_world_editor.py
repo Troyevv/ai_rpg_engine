@@ -19,6 +19,16 @@ SECTIONS = {
 
 def view(state):
     snapshot=normalize(state).snapshot;world=snapshot['world_state']
+    source=snapshot.get('campaign',{}).get('initial_world',{})
+    if source.get('version')=='world-authoring-1':
+        from backend.services.world_authoring import Document
+        from backend.services.world_authoring_pipeline import compiled_hash
+        document=source['source_document']
+        labels={**SECTIONS, 'world':'Описание мира','feelings':'Направленные чувства',
+                'events':'События предыстории','commitments':'Обязательства','opening':'Начальная сцена','uncertainties':'Неоднозначности'}
+        return dict(values=document,sections={k:labels.get(k,k) for k in document if k!='version'},
+            schema=Document.model_json_schema(),references=[{'id':r['key'],'name':r['name']} for k in ('characters','locations','organizations') for r in document[k]],
+            contract='world-authoring-1',compiled_conflict=compiled_hash(snapshot)!=source.get('compiled_hash'))
     schema=WorldStateV3.model_json_schema()
     meta=schema['$defs'][schema['properties']['meta']['$ref'].split('/')[-1]]
     properties={k:schema['properties'][k] for k in SECTIONS if k in schema['properties']}
@@ -33,7 +43,22 @@ def view(state):
     return dict(values=values,sections=SECTIONS,schema={'type':'object','properties':properties,'$defs':schema['$defs']},references=references)
 
 
-def patch(state,section,value):
+def patch(state,section,value,*,ack=False):
+    snapshot=normalize(state).snapshot
+    source=snapshot.get('campaign',{}).get('initial_world',{})
+    if source.get('version')=='world-authoring-1':
+        from backend.services.world_authoring import Document
+        from backend.services.world_authoring_compiler import compile_document
+        from backend.services.world_authoring_pipeline import compiled_hash, mark_author_changes
+        if section not in Document.model_fields or section=='version':raise ValueError('author/section: неизвестный раздел')
+        if compiled_hash(snapshot)!=source.get('compiled_hash') and not ack:
+            raise ValueError('author/conflict: есть ручные правки скомпилированного мира. Подтвердите их замену перед повторной компиляцией.')
+        document=deepcopy(source['source_document']);document[section]=value
+        document=mark_author_changes(source['source_document'],document)
+        result=compile_document(document,source.get('id_map'),snapshot['campaign'].get('creation'))
+        result.snapshot['campaign']['initial_world']={**source,'source_document':document,'id_map':result.id_map,
+            'compiled_hash':compiled_hash(result.snapshot),'diagnostics':result.diagnostics}
+        return result.snapshot
     if section not in SECTIONS:raise ValueError('author/section: неизвестный раздел')
     snapshot=deepcopy(normalize(state).snapshot)
     if section=='initial_history':snapshot[section]=value;validate_initial_history(snapshot)

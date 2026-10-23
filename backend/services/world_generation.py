@@ -18,7 +18,7 @@ from llm import find_loaded_model
 from backend.services.world_creation_settings import CreationSettings
 from backend.services.generation_constraints import validate_character_facts, validate_stage_facts
 
-PROMPT_VERSION = 'initial-world-stages-6'
+PROMPT_VERSION = 'world-authoring-1'
 LEGACY_RULES = '''Generate only the requested typed partial payload, never an entire world.
 Use the user's language. Explicit user facts and prohibitions outrank conventions.
 Genre tendencies never mandate romance, conflict, births or deaths. Family saga
@@ -109,6 +109,9 @@ def generation_input(config, idea=''):
     if config.get('_use_idea'):
         if not idea.strip(): raise ValueError('Сначала создай сценарий в режиме Сценариста.')
         brief+='\n\n'+idea.strip()
+    if PROMPT_VERSION == 'world-authoring-1':
+        from backend.services.world_authoring_pipeline import capture
+        return capture(brief, config)
     return {'brief':brief,'constraint_revision':1,'creation':config.get('_creation',{}),
         'prompt':{'version':PROMPT_VERSION,'rules':(RULES + APPEARANCE_INSTRUCTIONS) if PROMPT_VERSION=='initial-world-stages-6' else LEGACY_RULES,
             'interpretation':(blueprint if PROMPT_VERSION=='initial-world-stages-6' else interpretation).messages('')[0]['content'],
@@ -123,6 +126,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     brief=inputs['brief']
     scoped=inputs['prompt']['version'] in ('initial-world-stages-2','initial-world-stages-3','initial-world-stages-4','initial-world-stages-5','initial-world-stages-6')
     creative=inputs['prompt']['version']=='initial-world-stages-6'
+    authoring=inputs['prompt']['version']=='world-authoring-1'
     source=lambda stage:'scope:'+stage if scoped else 'interpretation'
     token=repo.claim_generation(jid)
     if not token: return
@@ -145,16 +149,24 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     last_error=''
     current_unit=None
     def request(stage,context_data,model):
-        system=inputs['prompt']['interpretation'] if stage=='interpret' else inputs['prompt']['rules']+'\nJSON Schema:\n'+json.dumps(request_schema(stage,inputs['prompt']['schemas'][stage],context_data),ensure_ascii=False,separators=(',',':'))
+        if authoring:
+            system=(inputs['prompt']['interpretation'] if stage=='author_brief' else inputs['prompt']['rules'])+'\nJSON Schema:\n'+json.dumps(inputs['prompt']['schemas'][stage],ensure_ascii=False,separators=(',',':'))
+        else:
+            system=inputs['prompt']['interpretation'] if stage=='interpret' else inputs['prompt']['rules']+'\nJSON Schema:\n'+json.dumps(request_schema(stage,inputs['prompt']['schemas'][stage],context_data),ensure_ascii=False,separators=(',',':'))
         if stage=='review':system=inputs['prompt']['semantic_review']+'\nJSON Schema:\n'+json.dumps(inputs['prompt']['schemas']['review'],ensure_ascii=False)
         system += '\n' + HINTS.get(stage, '')
         context_data={**context_data,'creation_settings':inputs['creation']}
-        if stage not in ('interpret','review'):context_data['source_rules']=[row for row in plan['claims'] if any(rule['stage']==stage for rule in row.get('rules',[])) and (stage!='characters' or not ({row['subject_id'],*row['related_ids']}-{None}) or ({row['subject_id'],*row['related_ids']} & set(context_data['assigned_ids'])))]
+        if not authoring and stage not in ('interpret','review'):context_data['source_rules']=[row for row in plan['claims'] if any(rule['stage']==stage for rule in row.get('rules',[])) and (stage!='characters' or not ({row['subject_id'],*row['related_ids']}-{None}) or ({row['subject_id'],*row['related_ids']} & set(context_data['assigned_ids'])))]
         locks=repo.generation_field_locks(jid,current_unit)
         if locks: context_data['accepted_field_locks']=locks
         if last_error: context_data={**context_data,'repair_error':last_error,'repair_scope':'Only this stage; preserve all previously accepted inputs.'}
         request=[dict(role='system',content=system+'\nStage: '+stage),
                  dict(role='user',content=json.dumps(context_data,ensure_ascii=False))]
+        if authoring:
+            from context_builder import estimate
+            from backend.services.world_authoring_compiler import CompileError
+            if estimate(request)+config['max_tokens']+512>context:
+                raise CompileError('author/request/'+stage, 'Контекст не вмещает исходные данные, схему и резерв ответа.', 'Увеличьте контекст или уменьшите размер задания; платный запрос не отправлен.')
         # Keep the durable executor lease/heartbeat while waiting for the shared
         # local model. The process-local scheduler is not the job owner.
         pieces=[]
@@ -211,7 +223,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             repo.begin_generation_unit(jid,token,unit)
             try:
                 payload=validate(producer())
-                if status['stage'] not in ('interpret','assembly'):
+                if not authoring and status['stage'] not in ('interpret','assembly'):
                     validate_stage_facts(status['stage'],payload['setting'] if unit=='setting' else payload,plan)
                 repo.commit_generation_unit(jid,token,unit,payload)
             except TransientProviderFailure as exc:
@@ -227,6 +239,11 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             except ValueError as exc:
                 last_error=str(exc)
                 repo.fail_generation_unit(jid,token,unit,last_error)
+                if authoring:
+                    from backend.services.world_authoring_compiler import CompileError
+                    if isinstance(exc, CompileError) or status['stage']=='compile':
+                        if isinstance(exc, CompileError):repo.record_generation_diagnostic(jid,token,unit,exc.diagnostic)
+                        raise
                 if retry==0: continue
                 raise
             except Exception as exc:
@@ -235,6 +252,10 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             last_error=''
             return
     try:
+        if authoring:
+            from backend.services.world_authoring_pipeline import run as run_authoring
+            run_authoring(repo,jid,token,inputs,config,context,request,execute)
+            return
         if config.get('_review_only'):
             saved=repo.generation_resources(jid,['interpretation','author_draft'])
             plan=saved['interpretation'];assembled=saved['author_draft']
@@ -377,7 +398,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     except InterruptedError:
         pass
     except Exception as exc:
-        repo.release_generation(jid,token,'paused' if isinstance(exc,semantics.SemanticConflict) or str(exc).startswith('generation/plan/locks') else 'failed',str(exc))
+        repo.release_generation(jid,token,'paused' if (authoring and current_unit=='compile') or isinstance(exc,semantics.SemanticConflict) or str(exc).startswith('generation/plan/locks') else 'failed',str(exc))
     finally:
         stopped.set();renewer.join(timeout=1)
         repo.release_generation(jid,token)

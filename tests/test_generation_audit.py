@@ -4,6 +4,8 @@ from copy import deepcopy
 from unittest.mock import patch
 
 import pytest
+
+pytestmark = pytest.mark.usefixtures('captured_generation_v6')
 from pydantic import ValidationError
 from backend.services import initial_world_stages as stages, generation_ties as ties
 from backend.services.generation_contracts import request_schema

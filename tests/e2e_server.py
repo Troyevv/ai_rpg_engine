@@ -15,6 +15,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import engine
 import llm
 import backend.services.preparation as preparation
+from backend.services import world_generation
+# The historical browser matrix contains captured revision-6 checkpoint fixtures.
+# The author-contract browser scenario starts this same server with its own flag.
+world_generation.PROMPT_VERSION = 'world-authoring-1' if os.getenv('E2E_AUTHORING')=='1' else 'initial-world-stages-6'
 from backend.api.app import create_app
 from test_worlds import summary
 from test_engine import result
@@ -44,6 +48,10 @@ def runtime_v3_request(messages):
 def stream(**kwargs):
     full='\n'.join(m['content'] for m in kwargs['messages'])
     if '\nStage: ' in kwargs['messages'][0]['content']:
+        if '\nStage: author_' in kwargs['messages'][0]['content']:
+            from test_world_authoring import institute, provider
+            yield from provider(institute(),[])(**kwargs)
+            return
         from staged_browser_fixture import staged_result
         stage=kwargs['messages'][0]['content'].split('\nStage: ')[1].split('\n')[0]
         yield json.dumps(staged_result(stage,json.loads(kwargs['messages'][-1]['content'])),ensure_ascii=False)

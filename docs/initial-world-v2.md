@@ -5,6 +5,37 @@
 Baseline: master `442c95b`, after merged PR #104. Read `AGENTS.md`, Epic #36,
 and the complete #44 description including the pre-implementation clarifications.
 
+## New author-document contract — world-authoring-1
+
+New staged Quick/Scenario jobs now use AuthorBrief → a compact structured author
+document → pure Python compilation → the existing InitialWorldStateV2 validator,
+draft journal, confirmation and Start Game. See
+[the author contract and transformation matrix](world-authoring-contract.md).
+The revision-6 sections below describe captured legacy jobs, not new provider
+contracts. They remain readable/resumable and their regression tests explicitly
+select the captured version; no existing assertion was weakened.
+
+The original idea is retained in immutable generation inputs. Analysis extracts
+supplied entities/circumstances and ambiguities without spans or executable rules.
+Creative responses contain prose, local references and qualitative feelings, not
+Runtime DTOs. Small output estimates select one document request; larger estimates
+select a registry/record plan and bounded assigned-record batches. Accepted records
+and compilation are versioned in the existing checkpoint store. No automatic
+semantic-review pass is added.
+
+The complete editor exposes the same author document as forms/JSON and compiles
+edits without a provider. A fingerprint detects independent canonical edits and
+requires explicit replacement confirmation. After Start Game Runtime is the only
+live state; source materials remain provenance. Compiler errors pause for local
+source corrections and never ask a provider to change technically valid content.
+
+**Implementation remains incomplete against the full 2026-10-24 specification.**
+In particular, creative planning of source text exceeding context and partitioned
+planning of very dense/large registries are not implemented. Such input is rejected
+or stopped with retained checkpoints, not silently truncated. See the explicit
+limits in the linked contract. Browser verification and live quality are separate
+gates; do not close #44 or merge on this increment alone.
+
 ## Current creative contract — prompt revision 6
 
 The user's architectural refinement of 2026-10-23 supersedes the older strict

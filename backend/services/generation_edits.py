@@ -67,6 +67,10 @@ def patch_checkpoint(repo,wid,jid,unit,revision,artifact_version,path,value,*,pr
     if not job or job['workspace_id']!=wid:raise ValueError('generation/edit: чужой черновик')
     if json.loads(job['config_json']).get('_review_only'):raise ValueError('generation/review: отмени проверку и исправь мир в редакторе автора')
     cp=repo.inspect_generation_checkpoint(jid,unit,True)
+    if cp.get('contract')=='world-authoring-1':
+        from backend.services.world_authoring_pipeline import patch_author_checkpoint
+        return patch_author_checkpoint(repo,jid,unit,cp,revision,artifact_version,path,value,
+            preview=preview,operation=operation,ack=ack)
     if operation=='unlock':
         return repo.unlock_generation_fields(jid,unit,revision,artifact_version,[path],preview=preview)
     if cp['status']!='completed' or cp['artifact_version']!=artifact_version:raise ValueError('generation/artifact: обнови версию этапа')

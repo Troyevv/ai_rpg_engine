@@ -63,7 +63,7 @@ def test_provider_schema_expresses_pairs():
     assert {p['properties']['category']['const']:set(p['properties']['kind']['enum']) for p in pairs} == KINDS
 
 
-def test_failed_character_batch_resumes_without_repeating_accepted_stages(api):
+def test_failed_character_batch_resumes_without_repeating_accepted_stages(api, captured_generation_v6):
     client, app = api; repo = app.state.repository; calls = []; base = short_provider(calls)
     broken = True
     requested = []

@@ -1,0 +1,61 @@
+{
+  "world": {
+    "title": "Орбитальный архив",
+    "setting": "Далёкая луна",
+    "era": "Четвёртая эра",
+    "genre": "science fiction"
+  },
+  "characters": [
+    {
+      "key": "archivist",
+      "name": "К-17",
+      "age": "Собран 80 циклов назад",
+      "location": "vault",
+      "appearance": "Керамический корпус со следами ремонта.",
+      "biography": "Хранит архив погибшей экспедиции."
+    }
+  ],
+  "locations": [
+    {
+      "key": "vault",
+      "name": "Хранилище"
+    }
+  ],
+  "opening": {
+    "protagonist": "archivist",
+    "controlled": "archivist",
+    "pov": "archivist",
+    "location": "vault",
+    "present": [
+      "archivist"
+    ],
+    "situation": "В хранилище включилась лампа.",
+    "time": {
+      "date": "1370-02-10",
+      "weekday": 2,
+      "clock": "04:00"
+    },
+    "calendar": {
+      "system": "custom",
+      "month_lengths": [
+        30,
+        30,
+        30,
+        30,
+        30,
+        30,
+        30,
+        30,
+        30,
+        30
+      ],
+      "weekday_names": [
+        "А",
+        "Б",
+        "В",
+        "Г",
+        "Д"
+      ]
+    }
+  }
+}
