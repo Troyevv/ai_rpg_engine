@@ -10,6 +10,7 @@ from typing import Literal
 from pydantic import Field
 from backend.runtime_v3.models import StrictModel, fatal
 from backend.runtime_v3.calendar import scheduled_boundary
+from backend.runtime_v3.commitments import commitment_ready
 
 
 class ContinuityBeat(StrictModel):
@@ -120,13 +121,13 @@ def scene_signature(state):
     return [camera['location_id'], sorted(camera['present_character_ids']), camera['controlled_actor_id']]
 
 
-def compression_limit(state, actors):
+def compression_limit(state, actors, max_minutes=30):
     now = state['meta']['world_time']
-    limit = 30
+    limit = max_minutes
     boundaries = []
     for event in state['scheduled_events'].values():
         due = scheduled_boundary(state, event)
-        if event['status'] != 'pending' or due is None: continue
+        if not commitment_ready(state, event) or due is None: continue
         relevant = bool(set(event['character_ids']) & actors or event.get('interrupts') or
                         event.get('location_id') and event['location_id'] == state['camera']['location_id'])
         if relevant and due <= now+limit:
@@ -142,8 +143,44 @@ def recorded(messages):
     return {}
 
 
+def validate_temporal_boundaries(resolver, elapsed):
+    """Ordinary-turn guard, independent of Extraction's compression claim.
+
+    Future boundaries may be reached, never crossed. Already due plans and
+    pending responses must be addressed by accepted canonical changes before
+    time advances. Validate after domain handlers, before returning a patch.
+    Time Skip has a Runtime-owned target; background/LTA own their clock outside
+    this ordinary-turn path. Never repair only elapsed time under unchanged prose.
+    """
+    if resolver.mode == 'background' or resolver.runtime_time_skip or not elapsed:
+        return
+    state = resolver.before
+    actors = set(state['camera']['present_character_ids'])
+    actors.add(state['camera']['controlled_actor_id'])
+    actors.update(r['actor_id'] for r in state['camera'].get('remote_interactions', []))
+    now = state['meta']['world_time']
+    boundaries = dict(state['scheduled_events'])
+    for eid, event in state['scheduled_events'].items():
+        due = scheduled_boundary(state, event)
+        updated = resolver.state['scheduled_events'].get(eid, event)
+        next_due = scheduled_boundary(resolver.state, updated)
+        if due is not None and due <= now and updated != event and (
+            updated['status'] != 'pending' or next_due is not None and next_due > now
+        ):
+            boundaries[eid] = updated
+    boundary = compression_limit(dict(state, scheduled_events=boundaries), actors, elapsed)
+    if elapsed > boundary['max_minutes']:
+        fatal('Обычный ход пересекает временную границу договорённости.',
+              'ordinary_temporal_boundary', repairable=False)
+    pending = set((resolver.continuity_decision or {}).get('pending_response_ids', []))
+    answered = set(turn_signal(resolver)['answered_response_ids'])
+    if pending - answered:
+        fatal('Обычный ход пропускает неразрешённую возможность ответа.',
+              'ordinary_response_boundary', repairable=False)
+
+
 def validate_compression(resolver, scene, elapsed):
-    if 'compression' not in scene or resolver.mode == 'background': return
+    if 'compression' not in scene or resolver.mode == 'background' or resolver.runtime_time_skip: return
     try: claim = Compression.model_validate(scene['compression'])
     except (ValueError, TypeError): reject('compression_invalid')
     permit = resolver.continuity_decision or {}

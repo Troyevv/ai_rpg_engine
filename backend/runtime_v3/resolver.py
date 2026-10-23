@@ -32,7 +32,7 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False):
         if mode not in ("turn", "background"):
             raise ValueError("Неизвестный режим StateResolver.")
         self.minimal_promotion_ids = set(minimal_promotion_ids or ())
@@ -44,6 +44,7 @@ class StateResolver:
         self.initiative_decision = initiative_decision
         self.continuity_decision = continuity_decision
         self.mode = mode
+        self.runtime_time_skip = runtime_time_skip
         self.protected_knowledge_actor_ids = set(protected_knowledge_actor_ids or [self.protected_actor_id])
         self.milestone_query = milestone_query
         self.development_query = development_query
@@ -154,7 +155,7 @@ class StateResolver:
                       'elapsed_minutes', code='background_elapsed_ignored')
             self.warnings[-1].update(proposed_minutes=elapsed, applied_minutes=0)
             elapsed = 0
-        from backend.runtime_v3.continuity import validate_compression
+        from backend.runtime_v3.continuity import validate_compression, validate_temporal_boundaries
         validate_compression(self, scene, elapsed)
         situation = scene.get('situation',camera['situation'])
         if not isinstance(situation,str):
@@ -419,6 +420,7 @@ class StateResolver:
             self.history.state_changes.append(dict(kind='narrative_developments',accepted=accepted,turn_id=self.turn_id))
         from backend.runtime_v3.continuity import apply as apply_continuity, turn_signal, filter_choices
         apply_continuity(self, raw, events)
+        validate_temporal_boundaries(self, elapsed)
         from backend.runtime_v3.remote import advance as advance_remote
         advance_remote(s, self.history)
         upserts = {section:{key:deepcopy(value) for key,value in s[section].items() if value != self.before[section].get(key)}
