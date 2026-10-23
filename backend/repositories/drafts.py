@@ -68,7 +68,7 @@ class DraftStorage:
             history=[dict(r) for r in db.execute("SELECT id,reason,created_at FROM document_versions WHERE kind='world_draft' AND owner=? ORDER BY id DESC",(wid,))]
             latest=db.execute('SELECT * FROM preparation_jobs WHERE workspace_id=? ORDER BY rowid DESC LIMIT 1',(wid,)).fetchone()
             return {'id':wid,'name':w['name'],'revision':w['revision'],'version_id':head['id'] if head else None,
-                'state':visible,
+                'state':visible,'can_review_generation':bool(record and record.get('generation')),
                 'validation':report,
                 'import_warnings':record.get('warnings',[]) if record and author else [],
                 'source_text':record.get('source','') if record and author else '',

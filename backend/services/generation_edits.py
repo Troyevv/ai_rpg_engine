@@ -1,5 +1,6 @@
 """Author patches of validated generation checkpoints; no alternate world model."""
 from copy import deepcopy
+import json
 
 from backend.services.initial_world_stages import validate_character_batch
 from backend.runtime_v3.models import PersonalityItem
@@ -10,6 +11,7 @@ def patch_character(repo, wid, jid, unit, revision, artifact_version, cid, field
     job=repo.preparation_job(jid)
     if not job or job['workspace_id']!=wid:
         raise ValueError('generation/edit: job does not belong to this workspace')
+    if json.loads(job['config_json']).get('_review_only'):raise ValueError('generation/review: отмени проверку и исправь мир в редакторе автора')
     checkpoint=repo.inspect_generation_checkpoint(jid,unit,author=True)
     if checkpoint['stage']!='characters' or checkpoint['status']!='completed':
         raise ValueError('generation/edit: select a validated character checkpoint')
@@ -63,6 +65,7 @@ def patch_checkpoint(repo,wid,jid,unit,revision,artifact_version,path,value,*,pr
     from backend.services.generation_constraints import validate_stage_facts
     job=repo.preparation_job(jid)
     if not job or job['workspace_id']!=wid:raise ValueError('generation/edit: чужой черновик')
+    if json.loads(job['config_json']).get('_review_only'):raise ValueError('generation/review: отмени проверку и исправь мир в редакторе автора')
     cp=repo.inspect_generation_checkpoint(jid,unit,True)
     if operation=='unlock':
         return repo.unlock_generation_fields(jid,unit,revision,artifact_version,[path],preview=preview)

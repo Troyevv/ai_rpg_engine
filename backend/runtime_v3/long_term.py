@@ -14,6 +14,7 @@ from backend.runtime_v3.models import (
     assert_world_state_v3_invariants,
     identity,
 )
+from backend.runtime_v3.commitments import commitment_ready
 from backend.runtime_v3.calendar import (
     scheduled_boundary,
     current_time,
@@ -108,20 +109,12 @@ def plan(snapshot, request, history=None):
     controlled = s["camera"]["controlled_actor_id"]
     pending = [e for e in s["scheduled_events"].values() if e["status"] == "pending"]
 
-    def dependencies_ready(row):
-        return all(
-            s["scheduled_events"].get(key, {}).get("status") == "resolved"
-            and s["scheduled_events"][key].get("outcome")
-            not in ("cancelled", "dependency_cancelled", "missed", "blocked")
-            for key in row["depends_on"]
-        )
-
     due = [
         (max(start, minute), e)
         for e in pending
         if (minute := scheduled_boundary(s, e)) is not None
         and minute <= target
-        and dependencies_ready(e)
+        and commitment_ready(s, e)
     ]
     interruptions = sorted(
         (
@@ -698,18 +691,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
             if protected:
                 for event in resolved.state["scheduled_events"].values():
                     due = scheduled_boundary(resolved.state, event)
-                    ready = all(
-                        resolved.state["scheduled_events"].get(dep, {}).get("status")
-                        == "resolved"
-                        and resolved.state["scheduled_events"][dep].get("outcome")
-                        not in (
-                            "cancelled",
-                            "dependency_cancelled",
-                            "blocked",
-                            "missed",
-                        )
-                        for dep in event["depends_on"]
-                    )
+                    ready = commitment_ready(resolved.state, event)
                     if (
                         event["status"] == "pending"
                         and protected in event["character_ids"]

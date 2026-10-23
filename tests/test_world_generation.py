@@ -301,3 +301,42 @@ def test_later_stage_context_uses_current_canonical_personality_and_active_motiv
     assert set(result['values'])=={'v'}
     assert [goal['id'] for goal in result['goals']]==['g']
     assert 'evidence' not in result['personality']
+
+
+def test_generated_world_obeys_merged_temporal_guard_through_history(api):
+    """#44 + #112: generated time/commitment reaches the real ordinary-turn guard."""
+    from test_temporal_guard import run
+    from backend.repositories.preparation import Repository
+    client,app=api;repo=app.state.repository;calls=[];fixture=fake_stages(calls)
+    def provider(**kwargs):
+        for chunk in fixture(**kwargs):
+            result=json.loads(chunk)
+            if calls[-1]=='opening':
+                actor=result['camera']['controlled_actor_id']
+                result['scheduled_events']={'train':dict(id='train',description='Отправление поезда',
+                    character_ids=[actor],due_minute=6125,commitment=True)}
+            yield json.dumps(result,ensure_ascii=False)
+    with patch('backend.services.preparation.chat_stream',side_effect=provider):
+        wid,jid=submit(client);assert wait(client,jid)['status']=='saved'
+    draft=repo.draft(wid,True);sid=repo.confirm_draft(wid,draft['revision'],draft['version_id'])['save']
+    initial=repo.get_snapshot(sid)
+    assert initial['world_state']['meta']['world_time']==6120
+    assert initial['world_state']['scheduled_events']['train']['due_minute']==6125
+    assert run(repo,sid,1,kind='start')[0]['status']=='saved'
+    started=repo.get_snapshot(sid)
+    assert run(repo,sid,2)[0]['status']=='saved'
+    accepted=repo.get_snapshot(sid);turn=repo.list_turns(sid)[-1]
+    assert run(repo,sid,10080,kind='regenerate')[0]['status']=='error'
+    assert repo.get_snapshot(sid)==accepted
+    repo=Repository(repo.path)
+    assert run(repo,sid,1,kind='regenerate')[0]['status']=='saved'
+    repo.select_variant(sid,turn['id'],turn['active_variant_id'],repo.get_save(sid)['revision'])
+    assert repo.get_snapshot(sid)==accepted
+    repo.rollback_last(sid);assert repo.get_snapshot(sid)==started
+    assert run(repo,sid,4)[0]['status']=='saved'
+    boundary=repo.get_snapshot(sid)
+    assert boundary['world_state']['meta']['world_time']==6125
+    assert run(repo,sid,1)[0]['status']=='error'
+    assert Repository(repo.path).get_snapshot(sid)==boundary
+    assert boundary['world_state']['meta']['calendar']==initial['world_state']['meta']['calendar']
+    assert boundary['world_state']['knowledge']==initial['world_state']['knowledge']

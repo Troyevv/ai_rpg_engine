@@ -40,6 +40,9 @@ responses; they do not establish live-provider narrative quality.
 
 Confirm only current, complete, canonically valid and semantically reviewed data.
 Change a reviewed opening in Author World: Start Game must require revalidation.
+Use "Проверить изменённый мир": only affected semantic reviews rerun, edited
+content remains intact and successful validation allows Start Game. A conflict
+keeps the edited draft; cancel the review to correct it in Author World.
 Play an ordinary turn, reload the save, regenerate/rollback and create sibling
 branches. Verify hidden adoption knowledge does not spread, opening history stays
 unchanged and player agency/expressiveness policy survive. Repeat legacy imports
@@ -50,3 +53,13 @@ Automation: `test_initial_world_v2.py`, `test_initial_world_rich_brief.py`,
 `world-generation.spec.ts`, `world-generation-recovery.spec.ts` and the existing
 parity/import/Runtime/Tabletop suites. Record exact commands, tree and results in
 PR #105; do not mark manual/live-provider checks passed merely from mock tests.
+
+## Temporal guard integration (#112)
+
+After generated Start Game, retain the specified initial clock/calendar and a
+nearby pending commitment. An ordinary turn may reach its due minute, never cross
+it without accepted resolution. A rejected long regenerate preserves active
+variant/snapshot; valid regenerate, variant selection, reload and rollback remain
+available. The automated generated-world case is
+`test_generated_world_obeys_merged_temporal_guard_through_history`; the broader
+#78 matrix remains in `commitments.md` and `test_temporal_guard.py`.

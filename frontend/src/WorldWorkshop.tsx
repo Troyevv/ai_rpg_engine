@@ -44,6 +44,7 @@ type Draft = {
     revision: number;
     version_id: number | null;
     state: DraftState | null;
+    can_review_generation?: boolean;
     validation: {
         errors: string[];
         warnings: string[];
@@ -351,6 +352,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
             {author && <><details className="workshop-detail"><summary>Исходный замысел или импорт</summary><Markdown text={draft?.source_text || 'Исходный текст не сохранён.'}/></details>{draft?.outline && <details className="workshop-detail"><summary>Как сценарист развил идею</summary><Markdown text={draft.outline}/></details>}<div className="workshop-export">{['md','txt','json'].map(format=><Button key={format} variant="outline" onClick={()=>void run(async()=>{const response=await fetch(`/api/workspaces/${id}/draft/export?version_id=${draft?.version_id}&format=${format}`);if(!response.ok)throw new Error('Не удалось экспортировать мир');download(await response.text(),`world.${format}`)})}>{format === 'json' ? 'Экспорт JSON' : `Скачать .${format}`}</Button>)}</div></>}
           </>}
         </div>
+        {author && draft?.can_review_generation && <div className="workshop-review"><p>После правки мира повторно проверь его соответствие исходным ограничениям. Проверка сохранит ваши изменения и не перегенерирует персонажей.</p><Button disabled={locked} onClick={() => void generate({task:'world_review'})}>Проверить изменённый мир</Button></div>}
         <div className="workshop-finish"><p>Всё готово? Начни игру в этом мире. Его можно будет редактировать до подтверждения.</p><Button disabled={locked || !!draft?.validation.errors.length} onClick={() => setConfirmStart(true)}>Подтвердить мир и начать игру</Button></div>
       </section>}
  <Dialog open={authorAsk} onOpenChange={setAuthorAsk}><DialogContent><DialogHeader><DialogTitle>Открыть вид автора?</DialogTitle><DialogDescription>Ты увидишь тайны, неизвестные персонажам факты и скрытые намерения. Это может раскрыть будущие события.</DialogDescription></DialogHeader><Button onClick={() => { setAuthorAsk(false); setAuthorAcknowledged(true); setAuthor(true); }}>Показать всё</Button></DialogContent></Dialog>

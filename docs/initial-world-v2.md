@@ -368,3 +368,32 @@ Real-provider narrative-quality evaluation has not been executed. The #78 manual
 recipe is `docs/manual_qa/narrative_v4/initial-world.md`; automation covers its
 creation/recovery/ordinary-turn/save/branch/legacy/Tabletop paths. Do not represent
 the recipe itself as a completed manual evaluation.
+
+### Integration with #112 and author revalidation
+
+Merged master `105833d` (PR #112) into the existing #44 branch through a merge
+commit, without rebase or force push. No merge conflicts; the e2e provider keeps
+both staged generation and the explicit pending-response evidence required by
+the temporal guard. Runtime guard code is unchanged by #44.
+
+A generated-world integration case now runs actual engine jobs after Start Game:
+Friday 06:00, a pending commitment at 06:05, accepted short turns, rejected weekly
+regeneration, successful variant selection, reload, rollback and a sibling turn
+reaching exactly 06:05. Advancing beyond the unresolved boundary fails without
+changing the snapshot. Initial calendar and private Knowledge survive.
+
+The existing Author World editor now offers "Проверить изменённый мир". It submits
+an existing durable Preparation job with immutable current author snapshot and
+copies validated checkpoints into a new versioned review journal with source
+links. Only reviews whose canonical context changed call the provider; unchanged
+reviews and creative stages are reused. Assembly consumes the captured author
+snapshot, never regenerates characters or silently discards edits. Source
+bindings/canonical validation run before submission and confirmation. A negative
+review preserves the edited draft; cancel returns to ordinary author editing.
+Inherited generation artifacts are read-only in this review job. Existing lease,
+CAS, idempotency, credential, recovery and billing-uncertainty behavior apply.
+No new database tables, Runtime schemas or historical snapshot rewrites.
+
+Tests cover successful edit/review/confirm, zero-call repeated validation,
+negative review/cancel, duplicate submission, read-only inherited checkpoints,
+original checkpoint preservation and desktop/mobile editor integration.

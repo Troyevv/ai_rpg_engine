@@ -2,6 +2,7 @@
 from dataclasses import dataclass, asdict
 import re
 from backend.runtime_v3.calendar import calendar_label, scheduled_boundary
+from backend.runtime_v3.commitments import commitment_ready
 
 
 @dataclass(frozen=True)
@@ -66,7 +67,7 @@ def parse_skip(text, now, cards=()):
 
 
 def plan_skip(state, request):
-    candidates = [dict(e, due_minute=scheduled_boundary(state, e)) for e in state['scheduled_events'].values() if e['status']=='pending' and scheduled_boundary(state, e) is not None
+    candidates = [dict(e, due_minute=scheduled_boundary(state, e)) for e in state['scheduled_events'].values() if commitment_ready(state, e) and scheduled_boundary(state, e) is not None
                   and scheduled_boundary(state, e) <= request.target_minute]
     controlled = state['camera']['controlled_actor_id']
     def interrupts_actor(e):

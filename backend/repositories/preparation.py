@@ -112,7 +112,8 @@ class Repository(PresentationStorage, DraftStorage, GenerationCheckpoints, Stora
                        (jid, wid, kind, revision, json.dumps(config)))
             if kind=='draft_world_staged':
                 from backend.services.world_generation import generation_input
-                self._create_generation_run(db,jid,generation_input(config,w['idea']))
+                if config.get('_review_only'):self._create_generation_review(db,jid,wid)
+                else:self._create_generation_run(db,jid,generation_input(config,w['idea']))
             if request_key:
                 db.execute('INSERT INTO preparation_submissions VALUES(?,?,?,?)',(wid,request_key,request_digest,jid))
         return jid

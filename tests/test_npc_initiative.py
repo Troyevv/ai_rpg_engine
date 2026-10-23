@@ -173,7 +173,9 @@ def test_real_job_start_save_reload_next_turn_regenerate_rollback_branch(tmp_pat
         before=repo.get_snapshot(sid);camera=before['world_state']['camera']
         action=dict(actor_id='qa_vera',target_ids=[ACTOR_ID],source_event_id='invitation',phase=phase,
                     modality='speech',adult=True,interruptible=True,response='open',evidence=text)
-        raw=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=1),
+        # These open invitations deliberately do not acknowledge a prior
+        # response ID; later dialogue must retain its temporal boundary.
+        raw=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=1 if kind=='start' else 0),
             events=[dict(id='invitation',text=text,evidence=text,participants=['qa_vera',ACTOR_ID],witnesses=list(camera['present_character_ids']),medium='conversation')],scene_actions=[action])
         job=repo.begin_job(sid,player,kind,CONFIG);calls=execute(repo,job,raw,text)
         assert repo.get_job(job)['status']=='saved',repo.get_job(job)['error']
@@ -189,6 +191,7 @@ def test_real_job_start_save_reload_next_turn_regenerate_rollback_branch(tmp_pat
     first,_=run('start','Вера предлагает вечером побыть вдвоём.','offer')
     repo=Repository(repo.path);assert repo.get_snapshot(sid)==first
     second,job=run('turn','Вера меняет тему и спрашивает о фотографиях.','redirect','Пока не хочу.')
+    assert second['world_state']['meta']['world_time']==first['world_state']['meta']['world_time']
     turn=repo.list_turns(sid)[-1]
     original_plan=recorded_plan(json.loads(job['context_json']))
     variant,newjob=run('regenerate','Вера заканчивает разговор, оставляя ответ открытым.','end')

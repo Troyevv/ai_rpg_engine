@@ -96,6 +96,47 @@ class GenerationCheckpoints:
         vid=self._record_document(db,'generation_input',jid,dump(inputs),True,'input')
         self._publish_resources(db,jid,vid,inputs,{key:'/'+key.replace('~','~0').replace('/','~1') for key in inputs})
 
+    def _create_generation_review(self,db,jid,wid):
+        """Fork the validated journal for review of an explicitly edited draft.
+
+        No creative stages are rerun and no historical checkpoint is rewritten.
+        The immutable author snapshot is the sole assembly input for this job.
+        """
+        from backend.services import generation_semantics as semantics
+        from backend.services.initial_world_v2 import normalize
+        from backend.services.generation_constraints import validate_snapshot_facts
+        head=self._draft_head(db,wid)
+        record=json.loads(head['content']) if head else {}
+        origin=record.get('generation')
+        if not origin:raise ValueError('generation/review: нужен мир поэтапного генератора')
+        old=origin['job_id']
+        self._generation_readiness(db,old,workspace_id=wid,revision=origin['revision'])
+        resources=db.execute('SELECT * FROM preparation_resources WHERE job_id=?',(old,)).fetchall()
+        def value(row):
+            return self._pointer(json.loads(db.execute('SELECT content FROM document_versions WHERE id=?',(row['artifact_id'],)).fetchone()[0]),row['pointer'])
+        values={r['resource_key']:value(r) for r in resources}
+        if values['prompt']['version']!='initial-world-stages-5':
+            raise ValueError('generation/review: этот мир использует прежний контракт генерации')
+        snapshot=normalize(record['state']).snapshot
+        validate_snapshot_facts(snapshot,values['interpretation'])
+        self._create_generation_run(db,jid,{**{r['resource_key']:values[r['resource_key']] for r in resources if r['unit_id'] is None},
+            'author_draft':snapshot,'review_origin':{'job_id':old,'version_id':head['id']}})
+        groups={g['id']:g for g in semantics.groups(values['interpretation'])}
+        digest=fingerprint(snapshot)
+        for unit in db.execute("SELECT * FROM preparation_units WHERE job_id=? AND status!='retired' ORDER BY rowid",(old,)).fetchall():
+            payload=json.loads(db.execute('SELECT content FROM document_versions WHERE id=?',(unit['artifact_id'],)).fetchone()[0])
+            vid=self._record_document(db,'generation_checkpoint',jid+':'+unit['unit_id'],dump(payload),True,'review_reuse',unit['artifact_id'])
+            inputs=json.loads(unit['required_inputs']);manifest=json.loads(unit['input_manifest'])
+            status='completed'
+            if unit['unit_id'] in groups or unit['unit_id']=='assembly':
+                if 'author_draft' not in inputs:inputs.append('author_draft')
+                manifest['author_draft']=digest
+                if unit['unit_id']=='assembly' or payload.get('basis_hash')!=fingerprint(semantics.context(snapshot,groups[unit['unit_id']])):
+                    status='stale'
+            db.execute('INSERT INTO preparation_units(job_id,unit_id,stage,status,weight,required_inputs,output_paths,input_manifest,artifact_id) VALUES(?,?,?,?,?,?,?,?,?)',
+                (jid,unit['unit_id'],unit['stage'],status,unit['weight'],dump(inputs),unit['output_paths'],dump(manifest),vid))
+            self._publish_resources(db,jid,vid,payload,json.loads(unit['output_paths']),unit['unit_id'])
+
     def claim_generation(self,jid,seconds=90,now=None):
         now=time.time() if now is None else now
         with self.connect() as db:
@@ -298,7 +339,8 @@ class GenerationCheckpoints:
             run=db.execute('SELECT revision,progress_floor FROM preparation_runs WHERE job_id=?',(jid,)).fetchone()
             if not run: return None
             units=[dict(row) for row in db.execute("SELECT unit_id,stage,status,weight,attempts,retry_attempts,error FROM preparation_units WHERE job_id=? AND status!='retired' ORDER BY rowid",(jid,))]
-            return dict(revision=run['revision'],overall_progress=run['progress_floor'],units=units)
+            review_only=db.execute("SELECT 1 FROM preparation_resources WHERE job_id=? AND resource_key='review_origin'",(jid,)).fetchone() is not None
+            return dict(revision=run['revision'],overall_progress=run['progress_floor'],units=units,review_only=review_only)
 
     def generation_control(self,jid,action,revision=None,allow_uncertain_retry=False):
         """Idempotent transitions. Resume never replays an uncertain call silently."""
@@ -434,7 +476,11 @@ class GenerationCheckpoints:
             if not assembled or fingerprint(draft_world.prepare(json.loads(assembled['content'])))!=fingerprint(state):
                 raise ValueError('generation/readiness/assembly: draft differs from validated checkpoint')
             config=json.loads(db.execute('SELECT config_json FROM preparation_jobs WHERE id=?',(jid,)).fetchone()[0])
-            self._write_draft(db,run['workspace_id'],state,'staged_generation',config.get('_draft_input',''),generated=True,
+            previous={}
+            if config.get('_review_only'):
+                previous=json.loads(self._draft_head(db,run['workspace_id'])['content'])
+            self._write_draft(db,run['workspace_id'],state,'staged_review' if previous else 'staged_generation',
+                previous.get('source',config.get('_draft_input','')),warnings=previous.get('warnings',[]),outline=previous.get('outline',''),generated=True,
                 generation={'job_id':jid,'revision':run['revision']})
             db.execute("UPDATE preparation_jobs SET status='saved',phase='completed',error='' WHERE id=?",(jid,))
             db.execute('UPDATE preparation_runs SET progress_floor=1,lease_token=NULL,lease_until=0 WHERE job_id=?',(jid,))

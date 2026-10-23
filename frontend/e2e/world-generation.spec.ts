@@ -163,3 +163,33 @@ test('source constraint form requires acknowledgement and preserves anchored evi
   expect(after.artifact.claims[0].id).toBe(before.artifact.claims[0].id);
   expect(after.artifact.amendments).toHaveLength(1);
 });
+
+
+test('author can revalidate an edited completed world without regenerating its characters',async({page,request})=>{
+  const workspace=await(await request.post('/api/workspaces',{data:{name:'Повторная проверка'}})).json();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),workspace.id);
+  await page.goto('/');await nav(page,'Создать');
+  await page.getByLabel('Описание мира или текст импорта').fill('Соседи в общем доме.');
+  await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
+  const path=`/api/workspaces/${workspace.id}/draft`;
+  const before=await(await request.get(path+'?author=true')).json();
+  const scene=before.state.camera.scene_id;
+  const edited=await request.patch(path,{data:{revision:before.revision,operation:'patch',kind:'scene',entity_id:scene,field:'text',value:'Соседи разговаривают. За окном дождь.',warnings_ack:true}});
+  expect(edited.ok()).toBeTruthy();
+  await page.reload();await nav(page,'Создать');
+  await page.getByRole('button',{name:'Автор мира',exact:true}).click();
+  await page.getByRole('button',{name:'Показать всё',exact:true}).click();
+  const submitted=page.waitForResponse(r=>r.url().endsWith('/draft/generate')&&r.request().method()==='POST');
+  await page.getByRole('button',{name:'Проверить изменённый мир',exact:true}).click();
+  const response=await submitted;expect(response.ok()).toBeTruthy();
+  const review=await response.json();
+  await expect.poll(async()=>(await(await request.get(`/api/jobs/${review.id}`)).json()).status).toBe('saved');
+  await expect(page.getByRole('region',{name:'Этапы генерации мира'}).getByRole('heading',{name:'Готово',exact:true})).toBeVisible();
+  const after=await(await request.get(path+'?author=true')).json();
+  expect(after.version_id).not.toBe(before.version_id);
+  expect(after.state.characters).toEqual(before.state.characters);
+  expect(after.state.world.scenes[scene].text).toBe('Соседи разговаривают. За окном дождь.');
+  expect((await request.post(path+'/confirm',{data:{revision:after.revision,version_id:after.version_id}})).ok()).toBeTruthy();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+});

@@ -187,6 +187,16 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             last_error=''
             return
     try:
+        if config.get('_review_only'):
+            saved=repo.generation_resources(jid,['interpretation','author_draft'])
+            plan=saved['interpretation'];assembled=saved['author_draft']
+            inputs['creation']=plan.get('creation',inputs['creation'])
+            for group in semantics.groups(plan):
+                review_context=semantics.context(assembled,group)
+                execute(group['id'],lambda:request('review',review_context,semantics.Review),lambda raw:semantics.validate(raw,review_context))
+            execute('assembly',lambda:assembled,lambda value:value)
+            if repo.generation_boundary(jid,token):repo.publish_generation_draft(jid,token,assembled)
+            return
         repo.plan_generation_units(jid,token,[
             _unit('interpret','interpret',['brief','constraint_revision','creation','prompt'],{'interpretation':''}),
             _unit('setting','setting',[source('setting'),'prompt'],{'setting':'/setting','registry':'/registry'}),

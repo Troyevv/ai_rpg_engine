@@ -127,3 +127,73 @@ def test_structured_conflict_and_material_jurisdiction_uncertainty_pause_with_so
     assert plan['brief']==brief
     assert next(c for c in plan['claims'] if c['field']==field and c['classification']=='explicit')['spans'][0]['quote']==source
     assert client.get(f'/api/workspaces/{wid}/draft').json()['state'] is None
+
+
+def test_author_edit_revalidation_reuses_generation_and_keeps_user_changes(api):
+    from test_api import REMOTE
+    client,app=api;repo=app.state.repository;calls=[]
+    with patch('backend.services.preparation.chat_stream',side_effect=fake_stages(calls)):
+        wid,jid=submit(client);assert wait(client,jid)['status']=='saved'
+    path=f'/api/workspaces/{wid}/draft'
+    draft=repo.draft(wid,True);scene=draft['state']['camera']['scene_id']
+    changed=client.patch(path,json=dict(revision=draft['revision'],operation='patch',kind='scene',entity_id=scene,field='text',value='Мира идёт с сумками к станции. Прохладный ветер.',warnings_ack=True))
+    assert changed.status_code==200,changed.text
+    edited=repo.draft(wid,True);calls.clear()
+    with patch('backend.services.preparation.chat_stream',side_effect=fake_stages(calls)):
+        response=client.post(path+'/generate',json=dict(task='world_review',revision=edited['revision'],config=REMOTE,api_key='test'))
+        assert response.status_code==200,response.text
+        review_id=response.json()['id'];result=wait(client,review_id)
+        assert result['status']=='saved',result
+    assert calls==['review']
+    final=repo.draft(wid,True)
+    from backend.services.initial_world_v2 import normalize
+    assert normalize(final['state']).snapshot==normalize(edited['state']).snapshot
+    assert final['source_text']==edited['source_text']
+    saved=repo.confirm_draft(wid,final['revision'],final['version_id'])
+    assert 'Прохладный ветер' in repo.get_snapshot(saved['save'])['world_state']['camera']['situation']
+    assert repo.inspect_generation_checkpoint(jid,'opening',True)['artifact']['camera']['situation']=='Мира идёт с сумками к станции.'
+
+
+def test_unchanged_author_review_is_zero_call_and_can_be_reviewed_again(api):
+    from test_api import REMOTE
+    client,app=api;repo=app.state.repository
+    with patch('backend.services.preparation.chat_stream',side_effect=fake_stages([])):
+        wid,jid=submit(client);assert wait(client,jid)['status']=='saved'
+    for _ in range(2):
+        draft=repo.draft(wid,True)
+        with patch('backend.services.preparation.chat_stream',side_effect=AssertionError('unchanged review must reuse evidence')) as provider:
+            response=client.post(f'/api/workspaces/{wid}/draft/generate',json=dict(task='world_review',revision=draft['revision'],config=REMOTE,api_key='test'))
+            assert response.status_code==200,response.text
+            result=wait(client,response.json()['id']);assert result['status']=='saved',result
+            provider.assert_not_called()
+        current=repo.draft(wid,True)
+        assert current['state']==draft['state']
+        assert repo.confirm_draft(wid,current['revision'],current['version_id'])['save']
+
+
+def test_failed_author_review_preserves_edited_draft_and_can_cancel(api):
+    from test_api import REMOTE
+    client,app=api;repo=app.state.repository
+    with patch('backend.services.preparation.chat_stream',side_effect=fake_stages([])):
+        wid,jid=submit(client);assert wait(client,jid)['status']=='saved'
+    draft=repo.draft(wid,True);path=f'/api/workspaces/{wid}/draft'
+    response=client.patch(path,json=dict(revision=draft['revision'],operation='patch',kind='scene',entity_id=draft['state']['camera']['scene_id'],field='text',value='Мира уже приехала домой.',warnings_ack=True))
+    assert response.status_code==200,response.text
+    edited=repo.draft(wid,True);calls=[];fixture=fake_stages(calls)
+    def reject(**kwargs):
+        for chunk in fixture(**kwargs):
+            result=json.loads(chunk);result['findings'][0]['verdict']='conflict';yield json.dumps(result)
+    with patch('backend.services.preparation.chat_stream',side_effect=reject):
+        body=dict(task='world_review',revision=edited['revision'],config=REMOTE,api_key='test',request_id='review-once')
+        response=client.post(path+'/generate',json=body)
+        assert response.status_code==200,response.text
+        review_id=response.json()['id'];assert wait(client,review_id)['status']=='paused'
+        assert client.post(path+'/generate',json=body).json()['id']==review_id
+    assert calls==['review']
+    assert repo.draft(wid,True)['version_id']==edited['version_id']
+    cp=repo.inspect_generation_checkpoint(review_id,'opening',True)
+    response=client.patch(path,json=dict(revision=repo.generation_status(review_id)['revision'],operation='patch',kind='checkpoint',generation_job=review_id,generation_unit='opening',artifact_version=cp['artifact_version'],field='/world_time',value=999))
+    assert response.status_code==409 and 'редакторе автора' in response.text
+    assert client.post(f'/api/jobs/{review_id}/stop',json={}).status_code==200
+    assert repo.draft(wid,True)['state']==edited['state']
+    assert client.post(path+'/confirm',json={'revision':edited['revision'],'version_id':edited['version_id']}).status_code==409
