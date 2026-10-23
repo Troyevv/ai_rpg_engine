@@ -239,7 +239,9 @@ def run(preparation, jid, config, api_key, handle, loaded, stream_fn):
 
 
 STAGE_SECTIONS = {
-    'setting': {'setting'}, 'places': {'setting','location','organization','residence','opening'},
+    # The roster precedes places: unnamed subsidiaries/rooms may occur only in
+    # these notes and must reach planning before stable entity IDs are allocated.
+    'setting': {'setting','location','organization','residence','opening'}, 'places': {'setting','location','organization','residence','opening'},
     'characters': {'character','appearance','personality','role','history','family','opening','commitment'},
     'life': {'relationship','family','residence','role','possession','contact','commitment'},
     'lore': {'fact','knowledge','history','family','commitment'},
@@ -252,7 +254,7 @@ def scoped_plan(plan):
     scopes={stage:{'claims':[row for row in plan['claims'] if row['classification']=='prohibition' or row['section'] in sections or any(r['stage']==stage for r in row.get('rules',[]))],
         **({'entities':plan['entities']} if stage=='setting' else {}),
         **({'creation':plan['creation']} if 'creation' in plan else {})} for stage,sections in STAGE_SECTIONS.items()}
-    claims=scopes['characters']['claims']
+    claims=plan['claims'] if plan.get('version')==2 else scopes['characters']['claims']
     def targets(row):return {row.get('subject_id'),*row.get('related_ids',[])}-{None}
     scopes['character_global']={'claims':[r for r in claims if not targets(r)],'creation':plan.get('creation')}
     for entity in plan['entities']:

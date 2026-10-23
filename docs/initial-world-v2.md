@@ -576,3 +576,28 @@ No new database tables, Runtime schemas or historical snapshot rewrites.
 Tests cover successful edit/review/confirm, zero-call repeated validation,
 negative review/cancel, duplicate submission, read-only inherited checkpoints,
 original checkpoint preservation and desktop/mobile editor integration.
+
+### Bounded live-provider assessment (2026-10-23)
+
+Real Flash generation now has evidence beyond fixtures; see
+[`initial-world-live-2026-10-23.md`](manual_qa/narrative_v4/initial-world-live-2026-10-23.md).
+69 paid requests used 743,022 tokens, estimated $0.1445856 against a $3 cap.
+Two of three generated worlds passed canonical publication, author edit/save and
+real Start Game; the complex world also passed an ordinary real turn. The short
+world exhausted per-unit attempts before publication. Quality issues remain;
+Issue #44 is not complete and PR #105 stays Draft.
+
+Generation-only adapters now preserve card/personality and organization prose,
+canonicalize redundant keys/calendar representation, and reject bad references
+before downstream calls. Request-local schemas constrain assigned IDs and Runtime
+relationship/time structures. Linked character notes participate in dependency
+scopes regardless of their section. Setting now receives organization/place notes
+needed for roster allocation; lore receives accepted places and those source notes.
+These last context fixes are deterministically covered but have not received a
+fresh live-provider assessment. Captured scopes and accepted
+saves are not rewritten; no schema migration or Runtime guard change is involved.
+
+Final local checks: Python **1619 passed**; frontend build passed; full Playwright
+**204 passed / 10 existing skips**; final generator-only browser rerun **18 passed**.
+The last rerun used a fresh backend after the lore-context fix. See the live report
+for exact commands, timing and the distinction between fixtures and live quality.

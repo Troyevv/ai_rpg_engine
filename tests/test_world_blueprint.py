@@ -79,9 +79,18 @@ def test_advisory_conflict_does_not_retry_or_block_start_and_stays_private(api):
 def test_rich_blueprint_preserves_family_business_and_knowledge(api):
     from test_initial_world_rich_brief import interpreted,provider,BRIEF as RICH
     client,app=api;calls=[]
-    with patch('backend.services.preparation.chat_stream',side_effect=creative_provider(calls,interpreted(),provider(calls))):
+    base=creative_provider(calls,interpreted(),provider(calls));contexts=[]
+    def inspect_lore(**kw):
+        stage=kw['messages'][0]['content'].split('\nStage: ')[1].split('\n')[0]
+        if stage in ('background','knowledge'):
+            data=json.loads(kw['messages'][-1]['content']);contexts.append(data)
+            assert len(data['places']['organizations'])==6
+            assert any(c['section']=='organization' for c in data['constraints'])
+        yield from base(**kw)
+    with patch('backend.services.preparation.chat_stream',side_effect=inspect_lore):
         wid,jid=submit(client,RICH);done=wait(client,jid)
     assert done['status']=='saved',json.dumps(done,ensure_ascii=False)
+    assert len(contexts)==2
     repo=app.state.repository;draft=repo.draft(wid,True)
     save=repo.confirm_draft(wid,draft['revision'],draft['version_id'])
     state=repo.get_snapshot(save['save'])['world_state']
@@ -282,7 +291,10 @@ def test_blueprint_circumstance_revision_preserves_original_and_scoped_work(api)
     after=repo.generation_resources(jid,['interpretation'])['interpretation']
     assert after['brief']==BRIEF and after['amendments'][-1]['value']=='Мира узнала только сегодня.'
     assert repo.inspect_generation_checkpoint(jid,'core_0',True)['artifact_version']==before
-    assert repo.inspect_generation_checkpoint(jid,'core_0',True)['status']=='completed'
+    # Mixed Blueprint notes now reach their linked characters regardless of
+    # section; knowledge chronology can affect their biography/initial motives.
+    assert repo.inspect_generation_checkpoint(jid,'core_0',True)['status']=='stale'
+    assert repo.inspect_generation_checkpoint(jid,'places',True)['status']=='completed'
 
 
 def test_schema_diagnostics_do_not_echo_secret_input(api):

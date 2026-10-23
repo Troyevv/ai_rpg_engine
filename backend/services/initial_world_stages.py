@@ -101,7 +101,128 @@ STAGES = {'setting': SettingPart, 'places': PlacesPart, 'characters': Characters
 
 
 def validate(stage, payload):
-    return _check(STAGES[stage], payload, stage).model_dump()
+    if stage == 'life': payload = normalize_relationship_dimensions(payload)
+    if stage == 'opening' and isinstance(payload, dict):
+        payload = deepcopy(payload)
+        calendar = payload.get('calendar')
+        profile = calendar.get('profile') if isinstance(calendar, dict) else None
+        for event in (payload.get('scheduled_events') or {}).values() if isinstance(payload.get('scheduled_events', {}), dict) else ():
+            if not isinstance(event, dict): continue
+            for field in ('temporal', 'end_temporal'):
+                temporal = event.get(field)
+                if not isinstance(temporal, dict): continue
+                clock = temporal.get('time')
+                if isinstance(clock, str) and temporal.get('day_period'):
+                    import re
+                    from backend.runtime_v3.calendar import day_period
+                    if re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d', clock):
+                        hour, minute = map(int, clock.split(':'))
+                        if day_period(hour*60+minute) == temporal['day_period']:
+                            temporal['day_period'] = None
+        if isinstance(profile, dict) and profile.get('system', 'gregorian') == 'gregorian':
+            # Redundant Earth month tables are representation, not custom calendars.
+            if profile.get('month_lengths') in ([31,28,31,30,31,30,31,31,30,31,30,31],
+                                               [31,29,31,30,31,30,31,31,30,31,30,31]):
+                profile['month_lengths'] = []
+    value = _check(STAGES[stage], payload, stage).model_dump()
+    if stage == 'life':
+        value['relationships'] = pair_keys(value['relationships'], 'source_id', 'target_id', 'life/relationships')
+        value['objective_relations'] = normalize_symmetric_phases(value['objective_relations'])
+    if stage == 'lore':
+        knowledge = {}
+        for row in value['knowledge'].values():
+            key = row['actor_id'] + ':' + row['fact_id']
+            if key in knowledge:
+                raise ValueError('lore/knowledge: duplicate actor/fact pair')
+            knowledge[key] = row
+        value['knowledge'] = knowledge
+    return value
+
+
+def normalize_symmetric_phases(records):
+    from backend.runtime_v3.life import SYMMETRIC
+    result = {}; active = {}
+    for rid, original in sorted(records.items()):
+        row = deepcopy(original)
+        if row['id'] != rid: raise ValueError('life/objective_relations: conflicting record ID')
+        if row['kind'] in SYMMETRIC:
+            row['source_id'], row['target_id'] = sorted((row['source_id'], row['target_id']))
+        key = (row['kind'], row['source_id'], row['target_id'])
+        if row['kind'] in SYMMETRIC and row['status'] == 'active' and key in active:
+            prior = result[active[key]]
+            structural = set(row) - {'id', 'context', 'evidence'}
+            if any(row[k] != prior[k] for k in structural):
+                raise ValueError('life/objective_relations: conflicting duplicate symmetric phase')
+            for field in ('context', 'evidence'):
+                if row[field] and row[field] != prior[field]:
+                    prior[field] += ('\n' if prior[field] else '') + row[field]
+            continue
+        result[rid] = row
+        if row['status'] == 'active': active[key] = rid
+    return result
+
+
+def normalize_relationship_dimensions(payload):
+    from backend.services.relation_dimensions import RELATION_DIMENSIONS
+    import json
+    import math
+    result = deepcopy(payload)
+    if not isinstance(result, dict) or not isinstance(result.get('relationships', {}), dict): return result
+    for row in result.get('relationships', {}).values():
+        if not isinstance(row, dict) or not isinstance(row.get('dimensions', {}), dict): continue
+        if not isinstance(row.get('context', ''), str): continue
+        extra = {key: value for key, value in row.get('dimensions', {}).items() if key not in RELATION_DIMENSIONS}
+        if extra and all(type(v) in (int, float) and math.isfinite(v) for v in extra.values()):
+            # Unsupported labels have no canonical numeric meaning. Preserve them
+            # as unclassified authoring prose, never guess an equivalent dimension.
+            row['context'] = row.get('context', '') + '\nДополнительное описание модели (не шкала Runtime): ' + json.dumps(extra, ensure_ascii=False, sort_keys=True)
+            row['dimensions'] = {k:v for k,v in row['dimensions'].items() if k in RELATION_DIMENSIONS}
+    return result
+
+
+def pair_keys(records, first, second, path):
+    result = {}
+    for row in records.values():
+        key = row[first] + ':' + row[second]
+        if key in result: raise ValueError(path + ': duplicate pair')
+        result[key] = row
+    return result
+
+
+def validate_ties(payload, registry):
+    value = _check(TiesPart, normalize_relationship_dimensions(payload), 'ties').model_dump()
+    value['relationships'] = pair_keys(value['relationships'], 'source_id', 'target_id', 'ties/relationships')
+    value['objective_relations'] = normalize_symmetric_phases(value['objective_relations'])
+    actors = {r['id'] for r in registry if r['kind'] == 'character'}
+    from backend.services.relation_dimensions import RELATION_DIMENSIONS
+    for row in value['relationships'].values():
+        if set(row['dimensions']) - set(RELATION_DIMENSIONS) or any(not -100 <= n <= 100 for n in row['dimensions'].values()):
+            raise ValueError('ties/relationships/dimensions: unsupported dimension or value outside -100..100')
+    for section in ('objective_relations', 'relationships'):
+        for key, row in value[section].items():
+            if row['source_id'] not in actors or row['target_id'] not in actors:
+                raise ValueError(f'ties/{section}/{key}: both endpoints must be Character IDs; organizational jobs belong to roles')
+    return value
+
+
+def validate_opening(payload, people):
+    value = validate('opening', payload)
+    camera = value['camera']
+    actors = {p['id']:p for p in people}
+    controlled = camera['controlled_actor_id']
+    # The controlled actor is necessarily present in actor camera mode. Complete
+    # only this redundant membership, using an already accepted physical location.
+    if camera['mode'] == 'actor' and controlled in actors:
+        actor = actors[controlled]
+        if actor.get('life_status', 'alive') != 'dead':
+            if actor['location_id'] != camera['location_id']:
+                raise ValueError('opening/camera/location_id: differs from accepted controlled actor location')
+            if controlled not in camera['present_character_ids']:
+                camera['present_character_ids'].append(controlled)
+    for cid in camera['present_character_ids']:
+        if cid not in actors or actors[cid]['location_id'] != camera['location_id']:
+            raise ValueError('opening/camera/present_character_ids: unknown actor or conflicting accepted location')
+    return value
 
 
 def allocate_entities(setting, interpretation, namespace, protected=()):
@@ -142,9 +263,35 @@ def character_batches(registry):
             for index in range(0, len(ids), size)]
 
 
+def validate_places(payload, registry):
+    payload = deepcopy(payload)
+    # Organization inherits SocialPhase.context, whereas Location uses description.
+    # Preserve the provider's common presentation alias without changing Runtime.
+    if isinstance(payload, dict) and isinstance(payload.get('organizations'), dict):
+        for row in payload['organizations'].values():
+            if isinstance(row, dict) and isinstance(row.get('description'), str) and isinstance(row.get('context', ''), str):
+                text = row.pop('description')
+                row['context'] = row.get('context', '') + ('\n' if row.get('context') and text else '') + text
+    value = validate('places', payload)
+    for kind, field in (('location', 'locations'), ('organization', 'organizations')):
+        expected = {r['id']: r['name'] for r in registry if r['kind'] == kind}
+        if set(value[field]) != set(expected):
+            raise ValueError(f'places/{field}: return exactly the registered IDs; no unplanned entities')
+        for eid, row in value[field].items():
+            if row['id'] != eid or row['name'] != expected[eid]:
+                raise ValueError(f'places/{field}/{eid}: changed registered identity')
+            if field == 'locations' and row['parent_id'] is not None and row['parent_id'] not in expected:
+                raise ValueError(f'places/locations/{eid}/parent_id: unknown location')
+    for child, parent in value['parent_organizations'].items():
+        if child not in value['organizations'] or parent not in value['organizations']:
+            raise ValueError('places/parent_organizations: unknown organization')
+    return value
+
+
 def validate_character_batch(payload, expected_ids, registry):
     from backend.services.generated_appearance import normalize_batch
-    value = validate('characters', normalize_batch(payload))
+    from backend.services.generated_characters import normalize_cards
+    value = validate('characters', normalize_cards(normalize_batch(payload)))
     expected = set(expected_ids)
     if set(value['characters']) != expected or set(value['cards']) != expected:
         raise ValueError('characters: result must contain exactly the assigned batch IDs')
@@ -183,7 +330,12 @@ def compose(setting, registry, places, batches, life, lore, opening, interpretat
             record = places[row['kind']+'s'][row['id']]
             if record['id'] != row['id'] or record['name'] != row['name']:
                 raise ValueError(f"{row['kind']}/{row['id']}: changed planned identity")
+    opening = validate_opening(opening, list(actors.values()))
     facts = deepcopy(lore['facts'])
+    from backend.services.generated_characters import private_card_facts
+    for fid, fact in private_card_facts(cards).items():
+        if fid in facts: raise ValueError('facts: initial card secret identity collision')
+        facts[fid] = fact
     for child, parent in places['parent_organizations'].items():
         fid = m.identity('organization_parent', child, parent)
         if fid in facts: raise ValueError(f'facts/{fid}: duplicate parent claim')

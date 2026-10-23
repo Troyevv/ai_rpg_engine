@@ -3,6 +3,8 @@ import json
 import threading
 
 from backend.services import initial_world_stages as stages
+from backend.services.generation_contracts import request_schema, HINTS
+from backend.services.generated_characters import normalize_cards
 from backend.services import world_interpretation as interpretation
 from backend.services import world_blueprint as blueprint
 from backend.services.generated_appearance import character_schema, INSTRUCTIONS as APPEARANCE_INSTRUCTIONS
@@ -73,6 +75,12 @@ def _unit(uid,stage,inputs,outputs):
 
 
 def _claims(plan, sections, ids=None):
+    if ids is not None and plan.get('version') == 2:
+        # Blueprint notes group several circumstances under one section. An
+        # actor's employment may be inside a relationship note; do not lose it.
+        def targets(row): return {row['subject_id'], *row['related_ids']} - {None}
+        return [row for row in plan['claims'] if targets(row) & set(ids) or
+                (not targets(row) and (row['classification']=='prohibition' or row['section'] in sections))]
     return [row for row in plan['claims'] if (row['classification']=='prohibition' or row['section'] in sections) and
         (ids is None or not ({row['subject_id'],*row['related_ids']}-{None}) or row['subject_id'] in ids or set(row['related_ids']) & set(ids))]
 
@@ -82,14 +90,16 @@ def _people(batches):
     return [dict(id=cid,name=part['cards'][cid]['name'],
         role=part['cards'][cid]['fields'].get('Роль',''),
         character='' if (actor.get('personality') or {}).get('items') else part['cards'][cid]['fields'].get('Характер',''),
-        location_id=actor['location_id'],
+        background=part['cards'][cid]['fields'].get('Биография',''),
+        author_notes={k:v for k,v in part['cards'][cid]['fields'].items() if k.casefold() in ('секрет','секреты','тайна','тайны','secret','secrets')},
+        life_status=actor.get('life_status','alive'),location_id=actor['location_id'],
         personality={key:{'field':item['field'],'text':item['text'],'revision':item['revision']}
             for key,item in (actor.get('personality') or {}).get('items',{}).items()},
         values={key:{'text':item['text'],'revision':item['revision']}
             for key,item in (actor.get('values') or {}).items() if item['status']=='active'},
         **{field:[{'id':item['id'],'text':item['text'],'status':item['status']} for item in actor.get(field,[])
                   if item['status'] in ('active','blocked')] for field in ('goals','intentions','obligations')})
-        for part in batches for cid,actor in part['characters'].items()]
+        for part in map(normalize_cards,batches) for cid,actor in part['characters'].items()]
 
 
 def generation_input(config, idea=''):
@@ -134,8 +144,9 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     last_error=''
     current_unit=None
     def request(stage,context_data,model):
-        system=inputs['prompt']['interpretation'] if stage=='interpret' else inputs['prompt']['rules']+'\nJSON Schema:\n'+json.dumps(inputs['prompt']['schemas'][stage],ensure_ascii=False,separators=(',',':'))
+        system=inputs['prompt']['interpretation'] if stage=='interpret' else inputs['prompt']['rules']+'\nJSON Schema:\n'+json.dumps(request_schema(stage,inputs['prompt']['schemas'][stage],context_data),ensure_ascii=False,separators=(',',':'))
         if stage=='review':system=inputs['prompt']['semantic_review']+'\nJSON Schema:\n'+json.dumps(inputs['prompt']['schemas']['review'],ensure_ascii=False)
+        system += '\n' + HINTS.get(stage, '')
         context_data={**context_data,'creation_settings':inputs['creation']}
         if stage not in ('interpret','review'):context_data['source_rules']=[row for row in plan['claims'] if any(rule['stage']==stage for rule in row.get('rules',[])) and (stage!='characters' or not ({row['subject_id'],*row['related_ids']}-{None}) or ({row['subject_id'],*row['related_ids']} & set(context_data['assigned_ids'])))]
         locks=repo.generation_field_locks(jid,current_unit)
@@ -272,7 +283,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         registry=setting['registry']
         execute('places',lambda:request('places',dict(registry=registry,campaign=setting['setting']['campaign'],
             constraints=_claims(plan,{'setting','location','organization','residence','opening'})),stages.PlacesPart),
-            lambda raw:stages.validate('places',raw))
+            lambda raw:stages.validate_places(raw,registry))
         places=repo.generation_resources(jid,['places'])['places']
         batches=stages.character_batches(registry)
         batch_keys=['batch:'+batch['id'] for batch in batches]
@@ -300,14 +311,16 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         life_context=dict(registry=registry,people=people,places=places,
             constraints=_claims(plan,{'relationship','family','residence','role','possession','contact','commitment'}))
         if creative:
-            execute('life_ties',lambda:request('ties',life_context,stages.TiesPart),lambda raw:_check(stages.TiesPart,raw,'ties').model_dump())
+            execute('life_ties',lambda:request('ties',life_context,stages.TiesPart),lambda raw:stages.validate_ties(raw,registry))
             ties=repo.generation_resources(jid,['ties'])['ties']
             execute('life',lambda:{**ties,**_check(stages.CircumstancesPart,request('circumstances',{**life_context,'accepted_ties':ties},stages.CircumstancesPart),'circumstances').model_dump()},lambda raw:stages.validate('life',raw))
         else:
             execute('life',lambda:request('life',life_context,stages.LifePart),lambda raw:stages.validate('life',raw))
         life=repo.generation_resources(jid,['life'])['life']
-        lore_context=dict(registry=registry,people=people,relations=life['objective_relations'],
-            constraints=_claims(plan,{'fact','knowledge','history','family','commitment'}))
+        # Life already depends on places, so edits invalidate lore transitively.
+        # Include accepted profiles rather than asking lore to reinvent businesses.
+        lore_context=dict(registry=registry,people=people,places=places,relations=life['objective_relations'],
+            constraints=_claims(plan,{'fact','knowledge','history','family','commitment','organization','location'}))
         if creative:
             execute('lore_background',lambda:request('background',lore_context,stages.BackgroundPart),
                 lambda raw:{k:v for k,v in stages.validate('lore',_check(stages.BackgroundPart,raw,'background').model_dump()).items() if k in stages.BackgroundPart.model_fields})
@@ -318,7 +331,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         lore=repo.generation_resources(jid,['lore'])['lore']
         execute('opening',lambda:request('opening',dict(registry=registry,people=people,places=places,
             facts=lore['facts'],knowledge=lore['knowledge'],constraints=_claims(plan,{'opening','setting','knowledge','commitment'})),stages.OpeningPart),
-            lambda raw:stages.validate('opening',raw))
+            lambda raw:stages.validate_opening(raw,people))
         opening=repo.generation_resources(jid,['opening'])['opening']
         assembled=stages.compose(setting['setting'],registry,places,parts,life,lore,opening,plan,creation=inputs['creation'])
         for group in semantic_groups:
