@@ -138,6 +138,16 @@ def test_author_repairs_family_knowledge_and_opening_with_canonical_forms(api):
     def edit(section,value):
         rev=repo.draft(wid,True)['revision']
         return client.patch(endpoint,json=dict(operation='patch',kind='canonical',field=section,value=value,revision=rev,warnings_ack=True))
+    # Author can repair the actual live-model failure classes without rebuilding
+    # the world: an imposed goal and an overprecise adoption description.
+    actors=data['values']['characters'];hero=names['Мира']
+    actors[hero]['goals']=[dict(id='unrequested_goal',text='Добиться успеха любой ценой')]
+    assert edit('characters',actors).status_code==200
+    actors[hero]['goals']=[]
+    assert edit('characters',actors).status_code==200
+    facts=data['values']['facts']
+    facts['adoption']['text']='Мира была удочерена в детстве; точный возраст не задан.'
+    assert edit('facts',facts).status_code==200
     org={'institute':dict(id='institute',name='НИИ системных исследований')}
     assert edit('organizations',org).status_code==200
     relations=data['values']['objective_relations']
@@ -158,6 +168,8 @@ def test_author_repairs_family_knowledge_and_opening_with_canonical_forms(api):
     assert state['objective_relations']['adoption']['kind']=='parent'
     assert names['Мира']+':adoption' not in state['knowledge']
     assert state['camera']['situation']=='Мира ждёт на платформе.'
+    assert state['characters'][hero]['goals']==[]
+    assert state['facts']['adoption']['text']==facts['adoption']['text']
 
 
 def test_exhausted_budget_requires_explicit_reset_and_retains_checkpoints(api):

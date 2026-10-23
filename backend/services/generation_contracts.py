@@ -21,9 +21,19 @@ parent/guardian remain directed. Emotional relationship dictionary keys are
 source_id + ':' + target_id; numeric dimensions use -100..100, NOT a 0..1
 scale. Only trust, affection, attraction, irritation, fear, jealousy, respect; other
 descriptions belong to context. Do not generate the controlled actor's feelings.''',
+    'background': '''Preserve the precision of source chronology: "in childhood" does not
+mean "in infancy" and "yesterday" does not imply an invented date or age.
+Use accepted places/organizations and their business areas; do not reinvent them.
+Separate facts with different knowledge holders. Adoption truth, the occurrence
+of a private disclosure yesterday, and a parent's private marriage plan are distinct
+facts, not one compound secret. A public biography must not contain private motives
+or information whose holders are restricted. Do not add consent or future events.''',
     'knowledge': '''Knowledge dictionary keys are actor_id + ':' + fact_id. Use only accepted
 Fact IDs and registry Character IDs. Never infer holders from characters mentioned
-in a fact. Keep source_event_id null unless it names accepted initial History.''',
+in a fact. Knowing an adoption truth does not imply knowing that someone else was
+told yesterday. Kinship, marriage or shared residence do not transmit knowledge.
+Apply source holder restrictions separately to each fact; unknown stays unknown.
+Keep source_event_id null unless it names accepted initial History.''',
     'opening': '''world_time is absolute world minutes: its remainder modulo 1440 MUST equal
 the opening clock (09:00 = 540). Calendar.start_minute anchors a day, not an offset
 added to world_time. Gregorian profile.month_lengths must be empty/omitted; Python
@@ -40,7 +50,11 @@ Differentiate each NPC's personal motives, voice, habits and grounded biography;
 put biography in card fields. Use canonical personality.items for traits/voice/habits
 and canonical NPC goals for motives. Cards use the supplied Russian field labels.
 Cards are public presentation: never put secrets there; lore owns private facts and
-explicit Knowledge holders. Do not assign player decisions or feelings.''',
+explicit Knowledge holders. For registry tier protagonist, goals, intentions and
+obligations stay empty unless explicitly supplied by the user. Moving or starting
+a job is not permission to invent a goal to fit in, succeed, make friends or find
+romance. Do not assign player decisions or feelings, including in card prose.
+Keep source chronology at its stated precision, without inventing ages or dates.''',
 }
 
 
