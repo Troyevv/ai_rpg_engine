@@ -80,6 +80,11 @@ def stream(**kwargs):
                 events=[dict(id='initiative',text=text,evidence=text,participants=['qa_vera','qa_kirill'],witnesses=camera['present_character_ids'],medium='conversation')],
                 scene_actions=[dict(actor_id='qa_vera',target_ids=['qa_kirill'],source_event_id='initiative',phase='end' if refused else 'offer',modality='speech',adult=True,interruptible=not refused,response='player_supplied' if refused else 'open',player_evidence=task['player_input'] if refused else '',evidence=text)],
                 choices=[dict(action='Отказаться',speech='Нет, сегодня не хочу.')])
+            if refused:
+                # A player refusal answers this invitation, not every open beat.
+                pending=current.get('continuity', {}).get('pending_response_ids', [])
+                assert len(pending)==1, pending
+                payload['scene_actions'][0]['response_event_id']=pending[0]
             value=json.dumps(payload,ensure_ascii=False)
         else: value=text
     elif 'Ты редактор черновика Character' in full:
