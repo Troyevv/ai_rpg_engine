@@ -301,6 +301,9 @@ class ExtractionContextBuilder:
         saved = (prompts or {}).get('state_update_prompt.md', {}).get('content')
         # Preserve user overrides, but do not send the bundled generic contract twice.
         rules = (saved + '\n' if saved and saved.strip() != default.strip() else '') + EXTRACTION_CONTRACT
+        if current.get('relationship_evidence'):
+            from backend.runtime_v3.context_contract import RELATIONSHIP_EVIDENCE_CONTRACT
+            rules += RELATIONSHIP_EVIDENCE_CONTRACT
         reproductive = bool(current.get('pregnancies')) or any(
             c.get('reproductive_capability','unknown')!='unknown' or c.get('birth_provenance')
             for c in current['characters'].values())
@@ -317,7 +320,7 @@ class ExtractionContextBuilder:
                        block('Choice context / controlled actor', choice_context(snapshot, scope, current, views, kind)),
                        block('Entity IDs', [dict(id=c['id'], name=c['name'], aliases=c.get('aliases', []))
                             for c in snapshot['character_cards'] if c['id'] in scope.relevant_actor_ids]),
-                       block('JSON Schema', prompt_schema(communication=bool(current.get('communication')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
+                       block('JSON Schema', prompt_schema(relationship_evidence=bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
 
 
 def choice_context(snapshot, scope, current, views, kind):
@@ -463,6 +466,16 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         milestones = [m for m in milestones if not m['category'].startswith('possession_') or known(state, scope.pov_actor_id or scope.controlled_actor_id, m.get('fact_id'))]
     if milestones: current['milestones'] = list(milestones)
     if extraction_text is not None:
+        # Reuse the bounded ContextScope history; never expose a new global feed.
+        from backend.runtime_v3.relationships import interaction_event
+        pairs = [(r['source_id'], r['target_id']) for r in current['relationships']]
+        pairs += [(a, b) for a in current['characters'] for b in current['characters'] if a != b]
+        evidence = [e for e in scope.history_events if isinstance(e.get('id'), str)
+                    and type(e.get('turn_id')) is int and isinstance(e.get('text'), str)
+                    and any(interaction_event(e, a, b) for a, b in pairs)]
+        if evidence:
+            current['relationship_evidence'] = [dict(id=e['id'], participants=e['participants'],
+                turn_id=e['turn_id'], text=e['text'][:600]) for e in evidence[-8:]]
         current['continuity'] = {key: value for key, value in scope.continuity_decision.items()
                                  if key not in ('pressure', 'ordinary_scene_valid', 'extra_llm_calls')}
         current['narrative_policy'] = extraction_policy(scope.pacing_decision)
@@ -552,6 +565,12 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
             if actor.get('personality') and not actor['personality'].get('evidence'):
                 actor.pop('personality')
                 refresh_current()
+    while estimate(messages) > target and len(current.get('relationship_evidence', [])) > 1:
+        current['relationship_evidence'].pop(0)
+        refresh_current()
+    if estimate(messages) > hard_context_limit and current.get('relationship_evidence'):
+        current.pop('relationship_evidence')
+        refresh_current()
     if estimate(messages) > target and 'social_history' in current:
         current.pop('social_history')
         refresh_current()

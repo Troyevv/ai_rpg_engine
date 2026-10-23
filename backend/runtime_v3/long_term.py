@@ -623,6 +623,8 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 initiative_decision=messages.selection["initiative"],
                 milestone_query=(history or {}).get("_milestone_query"),
                 development_query=(history or {}).get("_development_query"),
+                relationship_query=(history or {}).get("_relationship_query"),
+                relationship_receipts=batch["relationship_changes"],
                 actor_names={c["id"]: c["name"] for c in result["character_cards"]},
                 minimal_promotion_ids=promotions,
                 event_namespace=identity("advance-group", sorted(c.id for c in group)),

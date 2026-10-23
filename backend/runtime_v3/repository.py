@@ -177,3 +177,39 @@ def advance_receipt_reader(storage, head):
                 (head,json.dumps(ids))).fetchall()
         return {row[0] for row in rows}
     return read
+
+
+def relationship_reader(storage, head):
+    """Exact evidence lookup on the recorded BEFORE lineage, including tombstones.
+
+    Filter receipts in SQLite rather than loading unbounded relationship history.
+    Both consumption and player edits live in the existing immutable History DAG.
+    """
+    cache = {}
+    def read(pair, event_ids):
+        key = (pair, tuple(sorted(event_ids)))
+        if key not in cache:
+            with storage.connect() as db:
+                rows = db.execute('''WITH RECURSIVE lineage(id) AS (
+                    SELECT ? UNION SELECT h.parent_id FROM world_history_v3 h
+                    JOIN lineage l ON h.id=l.id WHERE h.parent_id IS NOT NULL
+                ), batches AS (
+                    SELECT CASE WHEN json_valid(h.payload_json) THEN h.payload_json ELSE '{}' END AS payload
+                    FROM lineage l JOIN world_history_v3 h ON h.id=l.id
+                ), changes AS (
+                    SELECT c.value AS value FROM batches, json_each(payload,'$.relationship_changes') c
+                    WHERE c.type='object' AND json_extract(c.value,'$.entity')=?
+                ) SELECT e.value FROM batches, json_each(payload,'$.events') e
+                WHERE e.type='object' AND json_type(e.value,'$.turn_id')='integer'
+                AND json_extract(e.value,'$.turn_id') >= 0
+                AND json_extract(e.value,'$.id') IN (SELECT value FROM json_each(?))
+                AND NOT EXISTS (
+                    SELECT 1 FROM changes c WHERE
+                    (json_extract(c.value,'$.source') IN ('player_edit','player_input') AND
+                     json_extract(c.value,'$.turn_id') >= json_extract(e.value,'$.turn_id')) OR
+                    EXISTS (SELECT 1 FROM json_each(c.value,'$.source_event_ids') used
+                            WHERE used.value=json_extract(e.value,'$.id'))
+                ) LIMIT 8''', (head, pair, json.dumps(event_ids))).fetchall()
+            cache[key] = [json.loads(row[0]) for row in rows]
+        return deepcopy(cache[key])
+    return read

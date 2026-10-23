@@ -96,10 +96,10 @@ def test_physical_state_appears_changes_clears_and_requires_current_source(actor
 
 @pytest.mark.parametrize('source,target',[('b','c'),('b','a'),('a','b')])
 def test_relationship_all_directions_no_player_gate_and_no_mirroring(source,target):
-    state=initial(); state['relationships']={}
+    state=initial(); state['relationships']={source+':'+target:Relationship(source_id=source,target_id=target,dimensions={'trust':30}).model_dump()}
     quote='Один спас другого из огня.'
-    payload=raw(relationship_changes=[dict(source_id=source,target_id=target,dimensions={'trust':35},evidence=quote)])
-    result=StateResolver(state,quote,'').resolve(payload)
+    payload=raw(relationship_changes=[dict(source_id=source,target_id=target,dimensions={'trust':35},evidence=quote,source_event_ids=['prior'],assertion='grounded_feelings',rationale=quote)])
+    result=StateResolver(state,quote,'',relationship_query=lambda pair, ids:[dict(id='prior',participants=[source,target],player_interaction=True)]).resolve(payload)
     assert result.state['relationships'][source+':'+target]['dimensions']['trust']==35
     assert target+':'+source not in result.state['relationships']
 
@@ -111,16 +111,18 @@ def test_relationship_inertia_directed_dynamics_manual_baseline():
     neutral=StateResolver(state,'Обменялись приветствиями.','').resolve(raw())
     assert neutral.state['relationships']==state['relationships']
     quote='Он поддержал друга в трудную минуту.'
-    positive=StateResolver(state,quote,'').resolve(raw(relationship_changes=[dict(source_id='a',target_id='b',dimensions={'trust':42},evidence=quote)]))
+    reader=lambda pair, ids:[dict(id=ids[0],participants=['a','b'],player_interaction=True)]
+    positive=StateResolver(state,quote,'',relationship_query=reader).resolve(raw(relationship_changes=[dict(source_id='a',target_id='b',dimensions={'trust':42},evidence=quote,source_event_ids=['support'],assertion='grounded_feelings',rationale=quote)]))
     assert positive.state['relationships']['a:b']['dimensions']['trust']==42
     assert positive.state['relationships']['b:a']['dimensions']['trust']==10
     quote='Предательство вскрылось, оба поссорились.'
-    result=StateResolver(positive.state,quote,'').resolve(raw(relationship_changes=[
-        dict(source_id='a',target_id='b',dimensions={'trust':-20},evidence=quote),
-        dict(source_id='b',target_id='a',dimensions={'irritation':30},evidence=quote)]))
-    assert result.state['relationships']['a:b']['dimensions']['trust']==-20
-    assert result.state['relationships']['b:a']['dimensions']=={'trust':10.0,'irritation':30}
-    assert 'Нейтральный разговор' in EXTRACTION_CONTRACT and 'новые абсолютные значения' in EXTRACTION_CONTRACT
+    result=StateResolver(positive.state,quote,'',relationship_query=reader).resolve(raw(relationship_changes=[
+        dict(source_id='a',target_id='b',dimensions={'trust':37},evidence=quote,source_event_ids=['betrayal'],assertion='grounded_feelings',rationale=quote),
+        dict(source_id='b',target_id='a',dimensions={'irritation':5},evidence=quote,source_event_ids=['betrayal'],assertion='grounded_feelings',rationale=quote)]))
+    assert result.state['relationships']['a:b']['dimensions']['trust']==37
+    assert result.state['relationships']['b:a']['dimensions']=={'trust':10.0,'irritation':5}
+    from backend.runtime_v3.context_contract import RELATIONSHIP_EVIDENCE_CONTRACT
+    assert 'Neutral talk' in RELATIONSHIP_EVIDENCE_CONTRACT and 'Absolute dimensions' in RELATIONSHIP_EVIDENCE_CONTRACT
 
 
 def test_compact_schema_has_identical_validation_rules():

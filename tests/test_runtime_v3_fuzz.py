@@ -16,11 +16,11 @@ def test_optional_mutations(seed):
         p['events'][0][key]=rng.choice([None,[],{},'wrong',True,5])
     p['knowledge_gained'].append(dict(actor_id=rng.choice([[],{},None,42]),fact_id='f',source_event_id=['e'],evidence=QUOTE))
     p['character_changes']=[dict(id='a',situation='У двери',emotion=rng.choice([None,[],'злится']),evidence=QUOTE)]
-    p['relationship_changes']=[dict(source_id='a',target_id='b',dimensions={'trust':10,'surprise':rng.choice([[],{},None,True,50])},context='Контекст',evidence=QUOTE)]
+    p['relationship_changes']=[dict(source_id='a',target_id='b',dimensions={'trust':10,'surprise':rng.choice([[],{},None,True,50])},context='Контекст',evidence=QUOTE,player_assertion='explicit_directed_feelings',player_evidence='Я доверяю ей.')]
     for key in ('events','knowledge_gained','character_changes','relationship_changes'):
         p[key].append(rng.choice([None,[],3,'bad']))
         rng.shuffle(p[key])
-    result=StateResolver(initial(),QUOTE,'Я подхожу к окну.').resolve(p)
+    result=StateResolver(initial(),QUOTE,'Я подхожу к окну. Я доверяю ей.').resolve(p)
     assert result.state['knowledge']['a:f']['status']=='known'
     assert result.state['characters']['a']['situation']=='У двери'
     assert result.state['relationships']['a:b']['dimensions']=={'trust':10}

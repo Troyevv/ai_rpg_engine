@@ -29,6 +29,16 @@ def test_leaf_errors_keep_independent_changes_without_repair(db,case):
     if case=='source':p['knowledge_gained'][0]['source_event_id']='missing'
     if case=='action':p['events'][0]['medium']='action'
     if case=='dimension':p['relationship_changes'][0]['dimensions']['sympathy']=40
+    # Preserve the independent valid relationship while testing malformed leaves:
+    # #107 now requires a prior accepted interaction, not self-confirming prose.
+    from backend.runtime_v3.repository import append_history
+    from backend.runtime_v3.models import Relationship
+    before=repo.get_snapshot(sid)
+    before['world_state']['relationships']['character_2:character_1']=Relationship(source_id='character_2',target_id='character_1',dimensions={'trust':50,'respect':65}).model_dump()
+    with repo.connect() as conn:
+        before['history_head']=append_history(conn,before['history_head'],dict(events=[dict(id='prior',text='Помощь.',participants=['character_1','character_2'],witnesses=[],fact_ids=[],turn_id=0,player_interaction=True)]))
+        conn.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(before),sid))
+    p['relationship_changes'][0].update(source_event_ids=['prior'],assertion='grounded_feelings',rationale='Подтверждённая помощь.')
     job=repo.begin_job(sid,'','start',CONFIG)
     assert len(execute(repo,job,p,NARRATIVE))==2
     assert repo.get_job(job)['status']=='saved'

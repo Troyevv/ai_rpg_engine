@@ -96,15 +96,18 @@ def test_noncurrent_evidence_does_not_complete():
 
 def test_relationship_semantics_hidden_new_pairs():
     state=initial();state['relationships']['a:b']=Relationship(source_id='a',target_id='b',dimensions=dict(trust=10,irritation=0)).model_dump()
-    p=dict(final_scene=dict(location_id='room',present_character_ids=['a']),relationship_changes=[dict(source_id='a',target_id='b',dimensions=dict(trust=15,irritation=5),evidence='Разговор окончен.')])
-    result=StateResolver(state,'Разговор окончен.','').resolve(p)
+    p=dict(final_scene=dict(location_id='room',present_character_ids=['a']),relationship_changes=[dict(source_id='a',target_id='b',dimensions=dict(trust=15,irritation=5),evidence='Разговор окончен.',source_event_ids=['prior'],assertion='grounded_feelings',rationale='Поддержка и разногласие.')])
+    reader=lambda pair,ids:[dict(id='prior',participants=['a','b'],player_interaction=True)]
+    result=StateResolver(state,'Разговор окончен.','',relationship_query=reader).resolve(p)
     notice=notifications(result.state,result.history)[0]
     assert notice['direction']=='mixed' and notice['deltas']==dict(trust=5,irritation=5)
-    hidden=StateResolver(state,'Разговор окончен.','',observed=False).resolve(p)
+    hidden=StateResolver(state,'Разговор окончен.','',observed=False,relationship_query=reader).resolve(p)
     assert notifications(hidden.state,hidden.history)==[]
-    state['relationships']={};fresh=StateResolver(state,'Разговор окончен.','').resolve(p)
+    p['relationship_changes'][0]['dimensions']['trust']=5
+    state['relationships']={};fresh=StateResolver(state,'Разговор окончен.','',relationship_query=reader).resolve(p)
     assert not notifications(fresh.state,fresh.history)
 
+    assert fresh.state['relationships']['a:b']['dimensions']['trust']==5
 
 def test_history_bounded_and_legacy_memory_excluded():
     snapshot=snapshot_fixture();snapshot['memory']={'summary':'STALE PROSE MUST NOT BECOME TRUTH'}
