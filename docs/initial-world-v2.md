@@ -52,6 +52,35 @@ and biographies appropriate to significance. Optional records stay optional.
 Genres/scale/expressiveness/pacing/risk shape possibilities, never obligatory future
 events, the player's decisions, automatic romance, childbirth or trauma.
 
+### Appearance generation boundary (PR #105 follow-up)
+
+`AppearanceFeature` has independent category/kind enums in its default Pydantic
+JSON Schema, but its Runtime validator additionally requires the pair to belong
+to `appearance.KINDS`. A model can therefore satisfy the former and fail the
+latter with an item-level `value_error`. Empty cosmetic text, condition links or
+copied condition prose can produce the same error type. The reported production
+paths alone do not disclose which exact values DeepSeek returned.
+
+New captured character schemas express category/kind pairs explicitly and prompts
+explain initial traits versus unclassified prose. Before validating a generated
+character batch, `generated_appearance.py` copies the response and derives the
+category of known baseline kinds from Runtime's existing KINDS table. Natural
+hair color stays intrinsic; hairstyle stays presentation. Explicitly unclassified
+hair/color/style/clothing/outfit/appearance labels are retained verbatim in
+`appearance.legacy_text`, alongside existing prose. No NLP guesses, invented
+clothing kinds or conversion of clothing to cosmetics. Unknown kinds, unknown
+fields, invalid condition projections, source-linked rows and revision history
+are not silently discarded. Canonical validation still follows; transformations
+log only safe operation codes/kinds, never appearance text.
+
+This is a generation-boundary adapter, not a save migration or a relaxation of
+Runtime validators. Previously failed batches can resume using the same captured
+prompt and accepted checkpoints; new jobs receive improved schema/prompt guidance.
+Regression fixtures reproduce hair/hairstyle mismatches, clothing and mixed prose,
+retain strict invalid-input rejection, and fail/resume the secondary batch while
+asserting unchanged completed checkpoint versions, successful confirmation and
+reload. Real DeepSeek output quality still requires a live credential.
+
 ### Validation and author review
 
 The common normalizer orders endpoints only for Runtime's existing SYMMETRIC

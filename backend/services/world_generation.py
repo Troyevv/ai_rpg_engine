@@ -5,6 +5,7 @@ import threading
 from backend.services import initial_world_stages as stages
 from backend.services import world_interpretation as interpretation
 from backend.services import world_blueprint as blueprint
+from backend.services.generated_appearance import character_schema, INSTRUCTIONS as APPEARANCE_INSTRUCTIONS
 from backend.services.initial_world_v2 import _check
 from backend.services import generation_semantics as semantics
 from backend.services.continuation import request_context
@@ -98,10 +99,10 @@ def generation_input(config, idea=''):
         if not idea.strip(): raise ValueError('Сначала создай сценарий в режиме Сценариста.')
         brief+='\n\n'+idea.strip()
     return {'brief':brief,'constraint_revision':1,'creation':config.get('_creation',{}),
-        'prompt':{'version':PROMPT_VERSION,'rules':RULES if PROMPT_VERSION=='initial-world-stages-6' else LEGACY_RULES,
+        'prompt':{'version':PROMPT_VERSION,'rules':(RULES + APPEARANCE_INSTRUCTIONS) if PROMPT_VERSION=='initial-world-stages-6' else LEGACY_RULES,
             'interpretation':(blueprint if PROMPT_VERSION=='initial-world-stages-6' else interpretation).messages('')[0]['content'],
             'semantic_review':semantics.ADVISORY_INSTRUCTIONS if PROMPT_VERSION=='initial-world-stages-6' else semantics.INSTRUCTIONS,
-            'schemas':{name:model.model_json_schema() for name,model in {**stages.STAGES,**(stages.CREATIVE_PARTS if PROMPT_VERSION=='initial-world-stages-6' else {}),'review':semantics.AdvisoryReview if PROMPT_VERSION=='initial-world-stages-6' else semantics.Review}.items()}}}
+            'schemas':{name:(character_schema(model) if name=='characters' else model.model_json_schema()) for name,model in {**stages.STAGES,**(stages.CREATIVE_PARTS if PROMPT_VERSION=='initial-world-stages-6' else {}),'review':semantics.AdvisoryReview if PROMPT_VERSION=='initial-world-stages-6' else semantics.Review}.items()}}}
 
 
 def run(preparation,jid,config,api_key,handle,loaded,stream_fn):

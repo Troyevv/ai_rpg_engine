@@ -143,7 +143,8 @@ def character_batches(registry):
 
 
 def validate_character_batch(payload, expected_ids, registry):
-    value = validate('characters', payload)
+    from backend.services.generated_appearance import normalize_batch
+    value = validate('characters', normalize_batch(payload))
     expected = set(expected_ids)
     if set(value['characters']) != expected or set(value['cards']) != expected:
         raise ValueError('characters: result must contain exactly the assigned batch IDs')
