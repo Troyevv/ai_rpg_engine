@@ -21,7 +21,7 @@ class DraftStorage:
             plan=json.loads(row['content'])
             return {'version_id':row['id'],'plan':plan if author else public_summary(plan)}
 
-    def finish_interpretation_job(self,jid,raw,brief):
+    def finish_interpretation_job(self,jid,raw,brief,version=1):
         from backend.services.world_interpretation import accept
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -31,7 +31,10 @@ class DraftStorage:
             prior=db.execute("SELECT v.* FROM document_heads h JOIN document_versions v ON v.id=h.version_id WHERE h.kind='world_interpretation' AND h.owner=?",(wid,)).fetchone()
             previous=json.loads(prior['content']) if prior else None
             revision=previous['constraint_revision']+1 if previous else 1
-            plan=accept(raw,brief,wid,revision,previous)
+            if version==2:
+                from backend.services.world_blueprint import accept_parts
+                plan=accept_parts(raw,brief,wid,revision)
+            else:plan=accept(raw,brief,wid,revision,previous)
             self._record_document(db,'world_interpretation',wid,dump(plan),True,'interpretation',prior['id'] if prior else None)
             db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))
             db.execute("UPDATE preparation_jobs SET status='saved',phase='interpreted',narrative='' WHERE id=?",(jid,))
@@ -65,6 +68,11 @@ class DraftStorage:
                     if len(safe)!=len(review):safe.append('В авторском просмотре есть замечания к миру.')
                     review=safe
                 report['warnings'].extend(review)
+            if author and record and record.get('generation'):
+                for row in db.execute("SELECT v.content FROM preparation_resources r JOIN document_versions v ON v.id=r.artifact_id WHERE r.job_id=? AND r.resource_key LIKE 'review_%'",(record['generation']['job_id'],)):
+                    review=json.loads(row['content'])
+                    if review.get('advisory'):
+                        report['warnings'].extend('Проверь интерпретацию: '+r['explanation'] for r in review['findings'] if r['verdict']!='preserved')
             history=[dict(r) for r in db.execute("SELECT id,reason,created_at FROM document_versions WHERE kind='world_draft' AND owner=? ORDER BY id DESC",(wid,))]
             latest=db.execute('SELECT * FROM preparation_jobs WHERE workspace_id=? ORDER BY rowid DESC LIMIT 1',(wid,)).fetchone()
             return {'id':wid,'name':w['name'],'revision':w['revision'],'version_id':head['id'] if head else None,
@@ -128,6 +136,9 @@ class DraftStorage:
                 old=db.execute("SELECT * FROM document_versions WHERE id=? AND kind='world_draft' AND owner=?",(source_id,wid)).fetchone()
                 if not old:raise ValueError('Версия не принадлежит черновику.')
                 record=json.loads(old['content']);state=domain.prepare(record['state'])
+            elif operation=='patch' and kind=='canonical':
+                from backend.services.initial_world_editor import patch
+                state=domain.prepare(patch(state,field,value))
             elif operation=='patch':state=domain.patch(state,kind,eid,field,value)
             elif operation=='add':state,eid=domain.add(state,kind)
             elif operation=='remove':state=domain.remove(state,kind,eid)

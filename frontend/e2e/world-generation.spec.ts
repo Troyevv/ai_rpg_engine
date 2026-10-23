@@ -193,3 +193,46 @@ test('author can revalidate an edited completed world without regenerating its c
   expect((await request.post(path+'/confirm',{data:{revision:after.revision,version_id:after.version_id}})).ok()).toBeTruthy();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
 });
+
+
+test('full author editor changes canonical organizations and time before Start Game',async({page,request})=>{
+  const workspace=await(await request.post('/api/workspaces',{data:{name:'Полный редактор'}})).json();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),workspace.id);
+  await page.goto('/');await nav(page,'Создать');
+  await page.getByLabel('Описание мира или текст импорта').fill('Соседи в общем доме.');
+  await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Открыть полный редактор'})).toHaveCount(0);
+  await page.getByRole('button',{name:'Автор мира',exact:true}).click();
+  await page.getByRole('button',{name:'Показать всё',exact:true}).click();
+  const panel=page.getByRole('region',{name:'Полный редактор начального мира'});
+  await panel.getByRole('button',{name:'Открыть полный редактор'}).click();
+  await panel.getByLabel('Раздел мира').selectOption('organizations');
+  await panel.getByRole('button',{name:'Добавить запись',exact:true}).click();
+  await panel.getByLabel('Название',{exact:true}).fill('Институт городских систем');
+  await panel.getByRole('button',{name:'Сохранить раздел мира'}).click();
+  await expect(panel.getByRole('button',{name:'Открыть полный редактор'})).toBeVisible();
+  await panel.getByRole('button',{name:'Открыть полный редактор'}).click();
+  await panel.getByLabel('Раздел мира').selectOption('world_time');
+  await panel.getByLabel('Начальное время',{exact:true}).fill('6120');
+  await panel.getByRole('button',{name:'Сохранить раздел мира'}).click();
+  await expect(panel.getByRole('button',{name:'Открыть полный редактор'})).toBeVisible();
+  const path=`/api/workspaces/${workspace.id}/draft`;
+  const canonical=await(await request.get(path+'/canonical?author=true')).json();
+  expect(Object.values(canonical.values.organizations).some((o:any)=>o.name==='Институт городских систем')).toBe(true);
+  expect(canonical.values.world_time).toBe(6120);
+  const draft=await(await request.get(path+'?author=true')).json();
+  expect((await request.post(path+'/confirm',{data:{revision:draft.revision,version_id:draft.version_id}})).ok()).toBeTruthy();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+});
+
+
+test('exhausted generation offers a bounded retry instead of impossible resume',async({page,request})=>{
+  const seeded=await(await request.post('/test/staged-checkpoint?exhausted=true')).json();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),seeded.workspace);
+  await page.goto('/');await nav(page,'Создать');
+  const panel=page.getByRole('region',{name:'Этапы генерации мира'});
+  await expect(panel.getByRole('button',{name:'Продолжить генерацию'})).toHaveCount(0);
+  await expect(panel.getByRole('button',{name:'Повторить с новым бюджетом'})).toBeVisible();
+  await expect(panel).toContainText('ограничен тремя попытками');
+});

@@ -115,7 +115,7 @@ class GenerationCheckpoints:
         def value(row):
             return self._pointer(json.loads(db.execute('SELECT content FROM document_versions WHERE id=?',(row['artifact_id'],)).fetchone()[0]),row['pointer'])
         values={r['resource_key']:value(r) for r in resources}
-        if values['prompt']['version']!='initial-world-stages-5':
+        if values['prompt']['version'] not in ('initial-world-stages-5','initial-world-stages-6'):
             raise ValueError('generation/review: этот мир использует прежний контракт генерации')
         snapshot=normalize(record['state']).snapshot
         validate_snapshot_facts(snapshot,values['interpretation'])
@@ -339,8 +339,12 @@ class GenerationCheckpoints:
             run=db.execute('SELECT revision,progress_floor FROM preparation_runs WHERE job_id=?',(jid,)).fetchone()
             if not run: return None
             units=[dict(row) for row in db.execute("SELECT unit_id,stage,status,weight,attempts,retry_attempts,error FROM preparation_units WHERE job_id=? AND status!='retired' ORDER BY rowid",(jid,))]
+            for unit in units:
+                error=unit['error'].lower()
+                unit['error_kind']=('json' if 'invalid json' in error else 'provider' if 'provider' in error else 'semantic' if 'generation/semantic' in error else 'budget' if 'budget' in error else 'schema' if error else None)
             review_only=db.execute("SELECT 1 FROM preparation_resources WHERE job_id=? AND resource_key='review_origin'",(jid,)).fetchone() is not None
-            return dict(revision=run['revision'],overall_progress=run['progress_floor'],units=units,review_only=review_only)
+            exhausted=[u['unit_id'] for u in units if u['status'] in ('pending','failed','uncertain') and u['retry_attempts']>=3]
+            return dict(revision=run['revision'],overall_progress=run['progress_floor'],units=units,review_only=review_only,can_resume=not exhausted,exhausted_units=exhausted)
 
     def generation_control(self,jid,action,revision=None,allow_uncertain_retry=False):
         """Idempotent transitions. Resume never replays an uncertain call silently."""
@@ -360,7 +364,7 @@ class GenerationCheckpoints:
                 db.execute("UPDATE preparation_units SET status='cancelled' WHERE job_id=? AND status IN ('running','pending','failed','stale','uncertain')",(jid,))
                 db.execute("UPDATE preparation_attempts SET status='cancelled',finished=? WHERE job_id=? AND status='running'",(time.time(),jid))
                 db.execute('UPDATE preparation_runs SET lease_token=NULL,lease_until=0 WHERE job_id=?',(jid,))
-            elif action=='resume':
+            elif action in ('resume','retry'):
                 if status=='generating': return status
                 if status not in ('paused','waiting_for_credentials','failed'): raise ValueError('generation/resume: wait for a stable checkpoint')
                 if run['lease_token'] and run['lease_until']>time.time():
@@ -368,6 +372,12 @@ class GenerationCheckpoints:
                 uncertain=db.execute("SELECT 1 FROM preparation_units WHERE job_id=? AND status='uncertain'",(jid,)).fetchone()
                 if uncertain and not allow_uncertain_retry:
                     raise ValueError('generation/resume: interrupted request may have been billed; explicit retry required')
+                exhausted=db.execute("SELECT unit_id FROM preparation_units WHERE job_id=? AND status IN ('pending','failed','uncertain') AND retry_attempts>=3",(jid,)).fetchall()
+                if exhausted and action!='retry':raise ValueError('generation/budget: попытки исчерпаны; разреши новый ограниченный повтор')
+                if action=='retry':
+                    if not exhausted:raise ValueError('generation/budget: новый бюджет не требуется')
+                    self._record_document(db,'generation_retry',jid,dump({'units':[r['unit_id'] for r in exhausted],'revision':run['revision'],'attempt_limit':3}),True,'author_retry')
+                    db.execute("UPDATE preparation_units SET retry_attempts=0 WHERE job_id=? AND status IN ('pending','failed','uncertain') AND retry_attempts>=3",(jid,))
                 if uncertain:
                     db.execute("UPDATE preparation_units SET status='pending' WHERE job_id=? AND status='uncertain'",(jid,))
                 status='generating'
@@ -386,12 +396,15 @@ class GenerationCheckpoints:
                 return False
             return True
 
-    def recover_generations(self,now=None):
+    def recover_generations(self,now=None,owned_jobs=()):
         """No speculative provider retry. Return jobs needing secure resumption."""
         now=time.time() if now is None else now
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
-            rows=db.execute("SELECT r.job_id FROM preparation_runs r JOIN preparation_jobs j ON j.id=r.job_id WHERE j.status IN ('generating','pause_requested') AND r.lease_until<=?",(now,)).fetchall()
+            rows=db.execute("SELECT r.job_id,r.lease_token FROM preparation_runs r JOIN preparation_jobs j ON j.id=r.job_id WHERE j.status IN ('generating','pause_requested') AND r.lease_until<=?",(now,)).fetchall()
+            # A local dispatcher may not have reached claim_generation yet.
+            # Never suppress recovery of an expired leased worker, however.
+            rows=[r for r in rows if r['lease_token'] is not None or r['job_id'] not in owned_jobs]
             for row in rows:
                 jid=row['job_id']
                 if db.execute("SELECT 1 FROM preparation_units WHERE job_id=? AND status='running'",(jid,)).fetchone():
@@ -512,13 +525,17 @@ class GenerationCheckpoints:
                 result['artifact']=json.loads(row['content'])
                 from backend.services.initial_world_stages import STAGES
                 if row['stage'] in STAGES:
-                    schema=STAGES[row['stage']].model_json_schema()
+                    from backend.services.initial_world_stages import TiesPart, BackgroundPart
+                    schema={'life_ties':TiesPart,'lore_background':BackgroundPart}.get(unit,STAGES[row['stage']]).model_json_schema()
                     if row['stage']=='setting':schema={**schema,'properties':{'setting':{'type':'object','properties':schema['properties']}}}
                     result['editor_schema']=schema
-                if row['stage']=='interpret':
+                if row['stage']=='interpret' and unit=='interpret':
                     from backend.services.world_interpretation import Interpretation
                     schema=Interpretation.model_json_schema()
                     fields=schema['$defs']['InterpretedClaim']['properties']
+                    if result['artifact'].get('version')==2:
+                        for key in ('spans','rules','blocking','value'):fields.pop(key,None)
+                        schema['$defs']['InterpretedClaim']['required']=[k for k in schema['$defs']['InterpretedClaim'].get('required',[]) if k in fields]
                     for source,target in (('subject_key','subject_id'),('holder_keys','holder_ids'),('related_keys','related_ids')):
                         fields[target]=fields.pop(source)
                     for key in ('section','field'):
@@ -526,7 +543,7 @@ class GenerationCheckpoints:
                     result['editor_schema']=schema
                 registry=db.execute("SELECT v.content,r.pointer FROM preparation_resources r JOIN document_versions v ON v.id=r.artifact_id WHERE r.job_id=? AND r.resource_key='registry'",(jid,)).fetchone()
                 result['reference_options']=[{'id':r['id'],'name':r['name']} for r in self._pointer(json.loads(registry['content']),registry['pointer'])] if registry else []
-                if row['stage']=='interpret':
+                if row['stage']=='interpret' and unit=='interpret':
                     result['reference_options']=[{'id':r['id'],'name':r['name']} for r in result['artifact']['entities']]
                 lore=db.execute("SELECT v.content,r.pointer FROM preparation_resources r JOIN document_versions v ON v.id=r.artifact_id WHERE r.job_id=? AND r.resource_key='lore'",(jid,)).fetchone()
                 if lore:

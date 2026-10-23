@@ -24,15 +24,17 @@ class Preparation:
     def submit(self, wid, kind, text, config, revision, api_key=None):
         if config['provider'] == 'deepseek':
             api_key = deepseek_key(api_key)
-        jid = self.repo.begin_preparation(wid, kind, text, config, revision)
         handle = Handle()
         with self.lock:
+            # Publish the queued job and register its local dispatcher together
+            # with respect to periodic recovery, before the worker claims a lease.
+            jid = self.repo.begin_preparation(wid, kind, text, config, revision)
             if jid in self.handles or self.repo.preparation_job(jid)['status']!='generating': return jid
             self.handles[jid] = handle
         threading.Thread(target=self.run, args=(jid, config, api_key, handle), daemon=True).start()
         return jid
 
-    def resume_generation(self,jid,api_key=None,revision=None,allow_uncertain_retry=False):
+    def resume_generation(self,jid,api_key=None,revision=None,allow_uncertain_retry=False,new_budget=False):
         job=self.repo.preparation_job(jid)
         if job['kind']!='draft_world_staged': raise ValueError('This job has no staged checkpoints.')
         config=json.loads(job['config_json'])
@@ -41,12 +43,13 @@ class Preparation:
             if jid in self.handles:
                 if job['status']=='generating': return
                 raise ValueError('The current worker is finishing its checkpoint. Retry resume after it stops.')
-            self.repo.generation_control(jid,'resume',revision,allow_uncertain_retry)
+            self.repo.generation_control(jid,'retry' if new_budget else 'resume',revision,allow_uncertain_retry)
             handle=Handle();self.handles[jid]=handle
             threading.Thread(target=self.run,args=(jid,config,api_key,handle),daemon=True).start()
 
     def recover_generations(self,credentials):
-        recovered=self.repo.recover_generations()
+        with self.lock:
+            recovered=self.repo.recover_generations(owned_jobs=tuple(self.handles))
         with self.repo.connect() as db:
             waiting=[row['id'] for row in db.execute("SELECT j.id FROM preparation_jobs j JOIN preparation_runs r ON r.job_id=j.id WHERE j.status='waiting_for_credentials'")]
         for jid in set(recovered+waiting):

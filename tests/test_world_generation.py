@@ -2,6 +2,8 @@
 import json
 import time
 import pytest
+
+pytestmark = pytest.mark.usefixtures('legacy_generation_v5')
 from unittest.mock import patch
 
 from test_api import api, REMOTE

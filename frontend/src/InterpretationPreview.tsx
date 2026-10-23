@@ -1,8 +1,8 @@
 import {useState} from 'react';
 import {castCounts,defaultCreation,type Creation} from './WorldCreationSettings';
-type Plan={creation?:Creation;entities:{id:string;name:string;kind:string;tier:string|null}[];claims:{id:string;description:string;section:string;classification:string;subject_id:string|null;related_ids:string[];holder_ids:string[];time_scope:string;blocking:boolean;spans:{quote:string}[]}[];constraint_revision:number};
+type Plan={creation?:Creation;entities:{id:string;name:string;kind:string;tier:string|null}[];claims:{id:string;description:string;section:string;classification:string;subject_id:string|null;related_ids:string[];holder_ids:string[];time_scope:string;blocking:boolean;spans?:{quote:string}[]}[];constraint_revision:number};
 const sections:Record<string,string>={character:'Персонажи',appearance:'Внешность',personality:'Характер',location:'Места',organization:'Организации',family:'Семья',relationship:'Отношения',residence:'Жильё',role:'Занятия и роли',fact:'Факты',knowledge:'Знания',history:'Предыстория',opening:'Начальная сцена',setting:'Мир',possession:'Имущество',contact:'Контакты',commitment:'Планы'};
-const classes:Record<string,string>={explicit:'Задано пользователем',inferred:'Вывод из контекста',open:'Можно дополнить',prohibition:'Запрет',ambiguity:'Требует уточнения'};
+const classes:Record<string,string>={explicit:'Задано пользователем',inferred:'Творческое дополнение / интерпретация',open:'Можно дополнить',prohibition:'Запрет',ambiguity:'Требует уточнения'};
 export function InterpretationPreview({value}:{value:unknown}){
  const [focus,setFocus]=useState('');
  const plan=value as Plan;if(!plan?.entities||!plan.claims)return null;
@@ -21,6 +21,6 @@ export function InterpretationPreview({value}:{value:unknown}){
  <p>Время показано словами источника. Неопределённые даты не превращаются в точные; порядок записей не устанавливает порядок событий.</p>
  <ul>{plan.claims.filter(c=>c.time_scope||['history','opening','commitment'].includes(c.section)).map(c=><li key={c.id}><strong>{c.time_scope||'Точное время не задано'}</strong> · {name(c.subject_id)}: {c.description}<br/>{classes[c.classification]}{c.holder_ids.length>0&&' · Кто знает: '+c.holder_ids.map(name).join(', ')}</li>)}</ul>
  </section>
- {Object.entries(sections).map(([section,label])=>{const rows=plan.claims.filter(c=>c.section===section);return rows.length>0&&<section key={section}><h4>{label}</h4>{rows.map(c=><article key={c.id} className="draft-field"><strong>{name(c.subject_id)}{c.related_ids.length>0&&' → '+c.related_ids.map(name).join(', ')}</strong><p>{c.description}</p><small>{classes[c.classification]}{c.time_scope&&' · '+c.time_scope}</small>{c.holder_ids.length>0&&<p>Кто знает: {c.holder_ids.map(name).join(', ')}</p>}{c.blocking&&<p role="alert">Нужно разрешить противоречие перед продолжением.</p>}{c.spans.length>0&&<details><summary>Источник</summary>{c.spans.map((s,i)=><blockquote key={i}>{s.quote}</blockquote>)}</details>}</article>)}</section>})}
+ {Object.entries(sections).map(([section,label])=>{const rows=plan.claims.filter(c=>c.section===section);return rows.length>0&&<section key={section}><h4>{label}</h4>{rows.map(c=><article key={c.id} className="draft-field"><strong>{name(c.subject_id)}{c.related_ids.length>0&&' → '+c.related_ids.map(name).join(', ')}</strong><p>{c.description}</p><small>{classes[c.classification]}{c.time_scope&&' · '+c.time_scope}</small>{c.holder_ids.length>0&&<p>Кто знает: {c.holder_ids.map(name).join(', ')}</p>}{c.blocking&&<p role="alert">Нужно разрешить противоречие перед продолжением.</p>}{!!c.spans?.length&&<details><summary>Источник</summary>{c.spans?.map((s,i)=><blockquote key={i}>{s.quote}</blockquote>)}</details>}</article>)}</section>})}
  </section>;
 }

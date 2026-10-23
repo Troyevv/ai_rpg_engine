@@ -238,3 +238,19 @@ def stale_units(checkpoints, resources):
         if not newly: return sorted(stale)
         stale.update(newly)
         for unit in newly: unavailable.update(checkpoints[unit]['outputs'])
+
+# Provider-facing subsets reuse the same canonical fields. The last unit of each
+# logical stage combines them into its existing LifePart/LorePart checkpoint.
+from pydantic import create_model
+
+def _subset_model(name, model, fields):
+    return create_model(name, __base__=m.StrictModel,
+        **{key:(model.model_fields[key].annotation, model.model_fields[key]) for key in fields})
+
+TiesPart = _subset_model('TiesPart', LifePart, ('objective_relations','relationships'))
+CircumstancesPart = _subset_model('CircumstancesPart', LifePart,
+    tuple(k for k in LifePart.model_fields if k not in TiesPart.model_fields))
+BackgroundPart = _subset_model('BackgroundPart', LorePart, ('facts','initial_history'))
+KnowledgePart = _subset_model('KnowledgePart', LorePart, ('knowledge','threads'))
+CREATIVE_PARTS = {'ties':TiesPart,'circumstances':CircumstancesPart,
+                  'background':BackgroundPart,'knowledge':KnowledgePart}

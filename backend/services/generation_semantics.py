@@ -108,3 +108,33 @@ class SemanticConflict(RuntimeError):
     def __init__(self,message,report):
         super().__init__(message)
         self.report=report
+
+
+class AdvisoryFinding(StrictModel):
+    claim_id: str
+    verdict: Literal['preserved','conflict','unresolved']
+    explanation: str = Field(min_length=1,max_length=1500)
+
+
+class AdvisoryReview(StrictModel):
+    findings: list[AdvisoryFinding] = Field(max_length=8)
+
+
+ADVISORY_INSTRUCTIONS = """Review the listed circumstances against accepted world
+records. Give one concise finding per claim in the user's language. Distinguish
+explicit user circumstances from creative additions and unknown information.
+Free creative elaboration is welcome; missing optional details are not conflicts.
+Flag possible changes to explicit conditions, kinship, chronology, Knowledge or
+player agency for the author to inspect. Do not repair or rewrite the world, and
+do not require quotations or JSON pointers. These are advisory findings, not a
+technical validation verdict. Return JSON matching the provided schema.
+"""
+
+
+def validate_advisory(raw,data):
+    from backend.services.initial_world_v2 import _check
+    report=_check(AdvisoryReview,raw,'generation/review/schema').model_dump()
+    ids=[r['claim_id'] for r in report['findings']]
+    if len(ids)!=len(set(ids)) or set(ids)!={c['id'] for c in data['claims']}:
+        raise ValueError('generation/review/schema: findings must cover requested notes')
+    return {**report,'advisory':True,'basis_hash':fingerprint(data)}

@@ -6,6 +6,7 @@ pretend a fuzzy text match proves that a generated fact preserves the source.
 
 
 def validate_character_facts(payload, plan):
+    if plan.get('version')==2:return payload
     fields={'birth_date','biological_sex','life_status','display_name','developmental_stage'}
     for claim in plan['claims']:
         if claim['classification']!='explicit' or claim['section']!='character': continue
@@ -26,6 +27,7 @@ def _subset(value,expected):
 
 def validate_stage_facts(stage,payload,plan):
     """Enforce source-backed canonical bindings without fuzzy identity matching."""
+    if plan.get('version')==2:return payload
     for claim in plan['claims']:
         if claim['classification'] not in ('explicit','prohibition'):continue
         for rule in claim.get('rules',[]):
@@ -53,6 +55,7 @@ def validate_stage_facts(stage,payload,plan):
 
 
 def validate_snapshot_facts(snapshot,plan):
+    if plan.get('version')==2:return snapshot
     from backend.services.initial_world_stages import LifePart
     state=snapshot['world_state'];campaign=snapshot.get('campaign',{})
     parents={f['claim']['subject_id']:f['claim']['value'] for f in state['facts'].values() if f.get('claim') and f['claim']['predicate']=='organization.parent'}

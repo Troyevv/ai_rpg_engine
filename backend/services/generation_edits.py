@@ -39,7 +39,7 @@ def patch_character(repo, wid, jid, unit, revision, artifact_version, cid, field
     else:
         raise ValueError('generation/edit: this field is not editable at a checkpoint')
     plan=repo.generation_resources(jid,['interpretation'])['interpretation']
-    for claim in plan['claims']:
+    for claim in ([] if plan.get('version')==2 else plan['claims']):
         if claim['classification'] not in ('explicit','prohibition'): continue
         if claim['subject_id'] not in (None,cid): continue
         # A free-form source constraint cannot safely be reconciled by substring
@@ -71,6 +71,7 @@ def patch_checkpoint(repo,wid,jid,unit,revision,artifact_version,path,value,*,pr
         return repo.unlock_generation_fields(jid,unit,revision,artifact_version,[path],preview=preview)
     if cp['status']!='completed' or cp['artifact_version']!=artifact_version:raise ValueError('generation/artifact: обнови версию этапа')
     stage=cp['stage'];payload=deepcopy(cp['artifact'])
+    if stage=='interpret' and unit!='interpret':raise ValueError('generation/edit: редактируй собранный замысел')
     if stage=='assembly':raise ValueError('generation/edit: сборка вычисляется из предыдущих этапов')
     parts=[p.replace('~1','/').replace('~0','~') for p in path.split('/')[1:]] if path.startswith('/') else []
     if operation not in ('patch','regenerate','unlock'):raise ValueError('generation/edit: неизвестное действие')
@@ -95,15 +96,27 @@ def patch_checkpoint(repo,wid,jid,unit,revision,artifact_version,path,value,*,pr
                 target[parts[-1]]=value
         except (KeyError,IndexError,TypeError,ValueError):raise ValueError('generation/edit: поле не найдено') from None
     if stage=='interpret':
+        modern=payload.get('version')==2
+        if modern:
+            from backend.services.world_blueprint import Seed, Note
         for index,entity in enumerate(payload['entities']):
+            if modern:
+                _check(Seed,dict(key=str(index),kind=entity['kind'],name=entity['name'],tier=entity.get('tier'),origin='explicit' if entity['origin']=='explicit' else 'generated'),'blueprint/entities/'+str(index))
+                continue
             _check(EntitySeed,{'key':str(index),**{k:v for k,v in entity.items() if k in EntitySeed.model_fields}},'interpretation/entities/'+str(index))
         ids={r['id'] for r in payload['entities']};people={r['id'] for r in payload['entities'] if r['kind']=='character'}
         for claim in payload['claims']:
             required={'id','subject_id','holder_ids','related_ids','classification','blocking','spans','section','field'}
+            if modern:
+                required.discard('spans');required.update(('description','time_scope'))
             if not isinstance(claim,dict) or not required<=claim.keys():raise ValueError('generation/constraints: запись ограничения неполна')
             raw={k:v for k,v in claim.items() if k in InterpretedClaim.model_fields}
             raw.update(subject_key=claim['subject_id'],holder_keys=claim['holder_ids'],related_keys=claim['related_ids'])
-            _check(InterpretedClaim,raw,'interpretation/claims/'+claim['id'])
+            if modern:
+                if claim['classification'] not in ('explicit','inferred','open','prohibition','ambiguity'):raise ValueError('blueprint: неизвестный тип обстоятельства')
+                if claim.get('rules') or claim.get('blocking'):raise ValueError('blueprint: смысловые замечания не являются исполняемыми блокировками')
+                _check(Note,dict(origin={'explicit':'explicit','inferred':'generated','open':'unknown','prohibition':'explicit','ambiguity':'unknown'}[claim['classification']],section=claim['section'],text=claim['description'],subject_key=claim['subject_id'],related_keys=claim['related_ids'],holder_keys=claim['holder_ids'],time_scope=claim['time_scope']),'blueprint/notes/'+claim['id'])
+            else:_check(InterpretedClaim,raw,'interpretation/claims/'+claim['id'])
             if (claim['subject_id'] is not None and claim['subject_id'] not in ids) or set(claim['holder_ids'])-people or set(claim['related_ids'])-ids:
                 raise ValueError('generation/constraints: неизвестная ссылка')
         if sum(e.get('tier')=='protagonist' for e in payload['entities'])>1:raise ValueError('generation/constraints: выбери одного главного героя')
@@ -133,8 +146,14 @@ def patch_checkpoint(repo,wid,jid,unit,revision,artifact_version,path,value,*,pr
             protected=[r for r in cp['artifact']['registry'] if r['id'] in retained]
             if stages.allocate_entities(payload['setting'],plan,wid,protected)!=payload['registry']:raise ValueError('generation/edit: состав изменён')
         elif stage=='characters':payload=validate_character_batch(payload,list(cp['artifact']['characters']),registry)
+        elif unit in ('life_ties','lore_background'):
+            model={'life_ties':stages.TiesPart,'lore_background':stages.BackgroundPart}[unit]
+            payload=_check(model,payload,unit).model_dump()
+            if unit=='lore_background':stages.validate('lore',payload)
         else:payload=stages.validate(stage,payload)
         validate_stage_facts(stage,payload['setting'] if stage=='setting' else payload,plan)
+        if plan.get('version')==2 and unit in ('life','lore') and parts and parts[0] in ({'objective_relations','relationships'} if unit=='life' else {'facts','initial_history'}):
+            raise ValueError('generation/edit: измени это поле в этапе '+('life_ties' if unit=='life' else 'lore_background'))
         if operation=='patch':
             sections={'places':{'location','organization'},'characters':{'character','appearance','personality'},'setting':{'setting'},'life':{'family','relationship','residence','role','possession','contact','commitment'},'lore':{'fact','knowledge','history'},'opening':{'opening','commitment'}}[stage]
             # A source family constraint must not prevent editing an unrelated
@@ -147,10 +166,10 @@ def patch_checkpoint(repo,wid,jid,unit,revision,artifact_version,path,value,*,pr
             if parts and parts[0] in collection_sections:
                 sections=collection_sections[parts[0]]
             subject=parts[1] if stage in ('characters','places') and len(parts)>1 else None
-            for claim in plan['claims']:
+            for claim in ([] if plan.get('version')==2 else plan['claims']):
                 if not any(rule['stage']==stage for rule in claim.get('rules',[])) and claim['classification'] in ('explicit','prohibition') and claim['section'] in sections and (stage not in ('characters','places') or claim['subject_id'] in (None,subject)):
                     raise ValueError('generation/constraints/'+claim['id']+': сначала явно пересмотри исходное ограничение')
-        if operation=='patch':
+        if operation=='patch' and unit not in ('life_ties','lore_background'):
             # Once all parts exist, also check the edit against Runtime's own
             # cross-reference/invariant layer before writing a checkpoint.
             units=repo.generation_status(jid)['units']

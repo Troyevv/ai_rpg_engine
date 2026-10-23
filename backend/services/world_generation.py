@@ -4,6 +4,8 @@ import threading
 
 from backend.services import initial_world_stages as stages
 from backend.services import world_interpretation as interpretation
+from backend.services import world_blueprint as blueprint
+from backend.services.initial_world_v2 import _check
 from backend.services import generation_semantics as semantics
 from backend.services.continuation import request_context
 from backend.services.usage import tracked_stream
@@ -12,8 +14,8 @@ from llm import find_loaded_model
 from backend.services.world_creation_settings import CreationSettings
 from backend.services.generation_constraints import validate_character_facts, validate_stage_facts
 
-PROMPT_VERSION = 'initial-world-stages-5'
-RULES = '''Generate only the requested typed partial payload, never an entire world.
+PROMPT_VERSION = 'initial-world-stages-6'
+LEGACY_RULES = '''Generate only the requested typed partial payload, never an entire world.
 Use the user's language. Explicit user facts and prohibitions outrank conventions.
 Genre tendencies never mandate romance, conflict, births or deaths. Family saga
 allows long/multigenerational horizons without predetermining any life events.
@@ -38,6 +40,27 @@ Use unknown/null/empty optional fields when evidence is absent. Do not invent
 historical events or exact dates to satisfy schema. Later stages cannot rewrite
 accepted earlier records. Return one JSON object matching the supplied schema.
 '''
+
+
+RULES = """Create a rich, coherent playable world from the author's idea and settings.
+You are a creative coauthor, not a literal parser. Develop missing surroundings,
+organizations, locations, biographies, relationships, distinctive voices, habits
+and motives. Major NPCs need depth; secondary NPCs need enough to act independently;
+incidental figures need only useful detail. Optional fields may remain empty.
+Respect explicit circumstances and accepted author edits. Mark uncertainty honestly.
+Genres, geography, cast scale, expressiveness, pacing and risk guide possibilities,
+not mandatory drama. Create circumstances and opportunities, never a future script.
+Do not decide the controlled protagonist's next actions, speech, consent or feelings.
+Assign that actor goals, intentions or commitments only when explicitly supplied
+by the author; creative NPC motivations never grant control over the protagonist.
+Adoption is not biology; affection is not romance; plans are not completed events.
+Knowledge requires specific holders and chronology. Never put private NPC secrets
+in public descriptions or opening prose without a POV knowledge path. Preserve
+explicit initial time and commitments. Do not invent exact dates from vague ages.
+Use supplied canonical IDs; never duplicate assigned entities or rewrite accepted
+records. Return only this stage's typed JSON, not a complete WorldState. Use the
+user's language. Technical schema and Runtime invariants remain mandatory.
+"""
 
 
 class TransientProviderFailure(RuntimeError):
@@ -75,10 +98,10 @@ def generation_input(config, idea=''):
         if not idea.strip(): raise ValueError('Сначала создай сценарий в режиме Сценариста.')
         brief+='\n\n'+idea.strip()
     return {'brief':brief,'constraint_revision':1,'creation':config.get('_creation',{}),
-        'prompt':{'version':PROMPT_VERSION,'rules':RULES,
-            'interpretation':interpretation.messages('')[0]['content'],
-            'semantic_review':semantics.INSTRUCTIONS,
-            'schemas':{name:model.model_json_schema() for name,model in {**stages.STAGES,'review':semantics.Review}.items()}}}
+        'prompt':{'version':PROMPT_VERSION,'rules':RULES if PROMPT_VERSION=='initial-world-stages-6' else LEGACY_RULES,
+            'interpretation':(blueprint if PROMPT_VERSION=='initial-world-stages-6' else interpretation).messages('')[0]['content'],
+            'semantic_review':semantics.ADVISORY_INSTRUCTIONS if PROMPT_VERSION=='initial-world-stages-6' else semantics.INSTRUCTIONS,
+            'schemas':{name:model.model_json_schema() for name,model in {**stages.STAGES,**(stages.CREATIVE_PARTS if PROMPT_VERSION=='initial-world-stages-6' else {}),'review':semantics.AdvisoryReview if PROMPT_VERSION=='initial-world-stages-6' else semantics.Review}.items()}}}
 
 
 def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
@@ -86,7 +109,8 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     job=repo.preparation_job(jid)
     inputs=repo.generation_resources(jid,['brief','constraint_revision','prompt','creation'])
     brief=inputs['brief']
-    scoped=inputs['prompt']['version'] in ('initial-world-stages-2','initial-world-stages-3','initial-world-stages-4','initial-world-stages-5')
+    scoped=inputs['prompt']['version'] in ('initial-world-stages-2','initial-world-stages-3','initial-world-stages-4','initial-world-stages-5','initial-world-stages-6')
+    creative=inputs['prompt']['version']=='initial-world-stages-6'
     source=lambda stage:'scope:'+stage if scoped else 'interpretation'
     token=repo.claim_generation(jid)
     if not token: return
@@ -147,7 +171,8 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             status=getattr(getattr(exc,'response',None),'status_code',None)
             if status in (429,503) and not pieces:
                 raise TransientProviderFailure('stage/'+stage+': provider temporarily rejected request') from exc
-            raise RuntimeError('stage/'+stage+': provider request failed; inspect usage and retry explicitly.') from exc
+            code=' HTTP '+str(status) if isinstance(status,int) else ' '+type(exc).__name__
+            raise RuntimeError('stage/'+stage+': provider request failed ('+code.strip()+'); inspect usage and retry explicitly.') from exc
         try: return json.loads(''.join(pieces))
         except ValueError as exc: raise ValueError('stage/'+stage+': invalid JSON') from exc
     def execute(unit, producer, validate):
@@ -163,7 +188,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             repo.begin_generation_unit(jid,token,unit)
             try:
                 payload=validate(producer())
-                if unit not in ('interpret','assembly'):
+                if status['stage'] not in ('interpret','assembly'):
                     validate_stage_facts(status['stage'],payload['setting'] if unit=='setting' else payload,plan)
                 repo.commit_generation_unit(jid,token,unit,payload)
             except TransientProviderFailure as exc:
@@ -181,8 +206,8 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
                 repo.fail_generation_unit(jid,token,unit,last_error)
                 if retry==0: continue
                 raise
-            except Exception:
-                repo.fail_generation_unit(jid,token,unit,'Provider request failed; inspect usage before retry.')
+            except Exception as exc:
+                repo.fail_generation_unit(jid,token,unit,str(exc) if isinstance(exc,RuntimeError) and str(exc).startswith('stage/') else 'Provider request failed; inspect usage before retry.')
                 raise
             last_error=''
             return
@@ -193,25 +218,41 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             inputs['creation']=plan.get('creation',inputs['creation'])
             for group in semantics.groups(plan):
                 review_context=semantics.context(assembled,group)
-                execute(group['id'],lambda:request('review',review_context,semantics.Review),lambda raw:semantics.validate(raw,review_context))
+                execute(group['id'],lambda:request('review',review_context,semantics.Review),lambda raw:semantics.validate_advisory(raw,review_context) if creative else semantics.validate(raw,review_context))
             execute('assembly',lambda:assembled,lambda value:value)
             if repo.generation_boundary(jid,token):repo.publish_generation_draft(jid,token,assembled)
             return
+        chunks=blueprint.fragments(brief) if creative else []
+        chunk_keys=['brief_part:'+str(i) for i in range(len(chunks))]
         repo.plan_generation_units(jid,token,[
-            _unit('interpret','interpret',['brief','constraint_revision','creation','prompt'],{'interpretation':''}),
+            *[_unit('interpret_'+str(i),'interpret',['brief','prompt',*chunk_keys[:i]],{key:''}) for i,key in enumerate(chunk_keys)],
+            _unit('interpret','interpret',['brief','constraint_revision','creation','prompt',*chunk_keys],{'interpretation':''}),
             _unit('setting','setting',[source('setting'),'prompt'],{'setting':'/setting','registry':'/registry'}),
             _unit('places','places',[source('places'),'setting','registry','prompt'],{'places':''}),
         ])
-        execute('interpret',lambda:request('interpret',{'brief':brief},interpretation.Interpretation),
-            lambda raw:(interpretation.scoped_plan if scoped else lambda value:value)({**interpretation.accept(raw,brief,job['workspace_id'],inputs['constraint_revision']),'creation':inputs['creation']}))
+        if creative:
+            accepted=[]
+            for i,chunk in enumerate(chunks):
+                known={e['key']:e for part in accepted for e in part['entities']}
+                def validate_fragment(raw):
+                    part=_check(blueprint.Blueprint,raw,'blueprint').model_dump()
+                    blueprint.accept_parts([*accepted,part],brief,job['workspace_id'],inputs['constraint_revision'])
+                    return part
+                execute('interpret_'+str(i),lambda:request('interpret',{'brief':chunk,'known_entities':list(known.values())},blueprint.Blueprint),validate_fragment)
+                accepted.append(repo.generation_resources(jid,[chunk_keys[i]])[chunk_keys[i]])
+            execute('interpret',lambda:blueprint.accept_parts(accepted,brief,job['workspace_id'],inputs['constraint_revision']),
+                lambda value:interpretation.scoped_plan({**value,'creation':inputs['creation']}))
+        else:
+            execute('interpret',lambda:request('interpret',{'brief':brief},interpretation.Interpretation),
+                lambda raw:(interpretation.scoped_plan if scoped else lambda value:value)({**interpretation.accept(raw,brief,job['workspace_id'],inputs['constraint_revision']),'creation':inputs['creation']}))
         plan=repo.generation_resources(jid,['interpretation'])['interpretation']
         if 'creation' in plan: inputs['creation']=plan['creation']
         if plan['blocking_ids']:
             repo.release_generation(jid,token,'paused','interpretation: resolve material ambiguities before continuing')
             return
         protected=[]
-        replannable=inputs['prompt']['version'] in ('initial-world-stages-4','initial-world-stages-5')
-        semantic_groups=semantics.groups(plan) if inputs['prompt']['version']=='initial-world-stages-5' else []
+        replannable=inputs['prompt']['version'] in ('initial-world-stages-4','initial-world-stages-5','initial-world-stages-6')
+        semantic_groups=semantics.groups(plan) if inputs['prompt']['version'] in ('initial-world-stages-5','initial-world-stages-6') else []
         if replannable:
             protected_ids=set()
             for old_unit in repo.generation_status(jid)['units']:
@@ -237,8 +278,10 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         review_inputs={'setting':['setting'],'places':['places','lore'],'characters':batch_keys,'life':['life','lore'],'lore':['life','lore'],'opening':['life','lore','opening',*batch_keys]}
         planned_units=[
             *[_unit(batch['id'],'characters',([source('character_global'),*['scope:character_'+cid for cid in batch['character_ids'] if 'character_'+cid in plan['scopes']]] if scoped else ['interpretation'])+['setting','registry','places','prompt'],{'batch:'+batch['id']:''}) for batch in batches],
-            _unit('life','life',[source('life'),'registry','places',*batch_keys,'prompt'],{'life':''}),
-            _unit('lore','lore',[source('lore'),'registry','life',*batch_keys,'prompt'],{'lore':''}),
+            *([_unit('life_ties','life',[source('life'),'registry','places',*batch_keys,'prompt'],{'ties':''})] if creative else []),
+            _unit('life','life',[source('life'),'registry','places',*batch_keys,'prompt',*(['ties'] if creative else [])],{'life':''}),
+            *([_unit('lore_background','lore',[source('lore'),'registry','life',*batch_keys,'prompt'],{'background':''})] if creative else []),
+            _unit('lore','lore',[source('lore'),'registry','life',*batch_keys,'prompt',*(['background'] if creative else [])],{'lore':''}),
             _unit('opening','opening',[source('opening'),'registry','places','life','lore',*batch_keys,'prompt'],{'opening':''}),
             *[_unit(group['id'],'assembly',['scope:review_'+group['stage'],'prompt',*review_inputs[group['stage']]],{group['id']:''}) for group in semantic_groups],
             _unit('assembly','assembly',['interpretation','setting','registry','places','life','lore','opening',*batch_keys,*[g['id'] for g in semantic_groups]],{'assembled':''}),
@@ -249,17 +292,28 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             ids=batch['character_ids']
             execute(batch['id'],lambda:request('characters',dict(assigned_ids=ids,
                 registry=registry,locations=places['locations'],campaign=setting['setting']['campaign'],
-                constraints=_claims(plan,{'character','appearance','personality','role','history','family','opening'} | ({'commitment'} if inputs['prompt']['version'] in ('initial-world-stages-3','initial-world-stages-4','initial-world-stages-5') else set()),ids)),stages.CharactersPart),
+                constraints=_claims(plan,{'character','appearance','personality','role','history','family','opening'} | ({'commitment'} if inputs['prompt']['version'] in ('initial-world-stages-3','initial-world-stages-4','initial-world-stages-5','initial-world-stages-6') else set()),ids)),stages.CharactersPart),
                 lambda raw:validate_character_facts(stages.validate_character_batch(raw,ids,registry),plan))
         parts=list(repo.generation_resources(jid,batch_keys).values())
         people=_people(parts)
-        execute('life',lambda:request('life',dict(registry=registry,people=people,places=places,
-            constraints=_claims(plan,{'relationship','family','residence','role','possession','contact','commitment'})),stages.LifePart),
-            lambda raw:stages.validate('life',raw))
+        life_context=dict(registry=registry,people=people,places=places,
+            constraints=_claims(plan,{'relationship','family','residence','role','possession','contact','commitment'}))
+        if creative:
+            execute('life_ties',lambda:request('ties',life_context,stages.TiesPart),lambda raw:_check(stages.TiesPart,raw,'ties').model_dump())
+            ties=repo.generation_resources(jid,['ties'])['ties']
+            execute('life',lambda:{**ties,**_check(stages.CircumstancesPart,request('circumstances',{**life_context,'accepted_ties':ties},stages.CircumstancesPart),'circumstances').model_dump()},lambda raw:stages.validate('life',raw))
+        else:
+            execute('life',lambda:request('life',life_context,stages.LifePart),lambda raw:stages.validate('life',raw))
         life=repo.generation_resources(jid,['life'])['life']
-        execute('lore',lambda:request('lore',dict(registry=registry,people=people,
-            relations=life['objective_relations'],constraints=_claims(plan,{'fact','knowledge','history','family','commitment'})),stages.LorePart),
-            lambda raw:stages.validate('lore',raw))
+        lore_context=dict(registry=registry,people=people,relations=life['objective_relations'],
+            constraints=_claims(plan,{'fact','knowledge','history','family','commitment'}))
+        if creative:
+            execute('lore_background',lambda:request('background',lore_context,stages.BackgroundPart),
+                lambda raw:{k:v for k,v in stages.validate('lore',_check(stages.BackgroundPart,raw,'background').model_dump()).items() if k in stages.BackgroundPart.model_fields})
+            background=repo.generation_resources(jid,['background'])['background']
+            execute('lore',lambda:{**background,**_check(stages.KnowledgePart,request('knowledge',{**lore_context,'accepted_background':background},stages.KnowledgePart),'knowledge').model_dump()},lambda raw:stages.validate('lore',raw))
+        else:
+            execute('lore',lambda:request('lore',lore_context,stages.LorePart),lambda raw:stages.validate('lore',raw))
         lore=repo.generation_resources(jid,['lore'])['lore']
         execute('opening',lambda:request('opening',dict(registry=registry,people=people,places=places,
             facts=lore['facts'],knowledge=lore['knowledge'],constraints=_claims(plan,{'opening','setting','knowledge','commitment'})),stages.OpeningPart),
@@ -268,7 +322,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         assembled=stages.compose(setting['setting'],registry,places,parts,life,lore,opening,plan,creation=inputs['creation'])
         for group in semantic_groups:
             review_context=semantics.context(assembled,group)
-            execute(group['id'],lambda:request('review',review_context,semantics.Review),lambda raw:semantics.validate(raw,review_context))
+            execute(group['id'],lambda:request('review',review_context,semantics.Review),lambda raw:semantics.validate_advisory(raw,review_context) if creative else semantics.validate(raw,review_context))
         execute('assembly',lambda:assembled,lambda value:value)
         if repo.generation_boundary(jid,token):
             repo.publish_generation_draft(jid,token,repo.generation_resources(jid,['assembled'])['assembled'])

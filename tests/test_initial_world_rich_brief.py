@@ -3,6 +3,8 @@ import json
 from copy import deepcopy
 from unittest.mock import patch
 import pytest
+
+pytestmark = pytest.mark.usefixtures('legacy_generation_v5')
 from test_api import api,REMOTE
 from test_world_generation import wait
 from backend.runtime_v3.repository import committed_snapshot,read_history

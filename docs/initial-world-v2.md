@@ -5,6 +5,124 @@
 Baseline: master `442c95b`, after merged PR #104. Read `AGENTS.md`, Epic #36,
 and the complete #44 description including the pre-implementation clarifications.
 
+## Current creative contract — prompt revision 6
+
+The user's architectural refinement of 2026-10-23 supersedes the older strict
+extraction/review behavior described in the historical increments below. New
+Quick/Scenario generation uses revision 6; existing captured jobs keep their
+original prompt, schema, journal and dependency contracts. No historical save or
+checkpoint is rewritten. This change adds no database tables or migrations.
+
+### Retained and replaced components
+
+Retained: Preparation jobs, SQLite leases/CAS, usage accounting, checkpoint and
+field-lock journals, scoped dependencies, roster reconciliation, World Workshop,
+canonical Character/Family/Knowledge/Location/Organization models,
+InitialWorldStateV2 normalization, Runtime v4, History and the #112 temporal guard.
+
+Replaced for new jobs: mandatory source-span extraction, exact-quote verification,
+LLM-authored JSON-pointer constraints and negative semantic verdicts as a start
+blocker. Legacy SourceSpan/ConstraintRule classes remain only for captured older
+contracts; they are absent from the new provider schema. The standalone
+interpretation preview also uses the new contract for new requests.
+
+`world_blueprint.py` describes authoring notes, not canonical truth. The model
+returns entity keys and concise circumstances tagged explicit/generated/unknown.
+The application allocates stable IDs and adapts notes to existing editor/scoped
+resource structures. Original source is stored unchanged; author amendments are
+versioned separately. No note needs a quote or character offset. Generated stage
+artifacts have existing journal provenance and do not become user-authored facts.
+
+Ideas longer than 6,000 characters are split losslessly at paragraph/word
+boundaries. Each fragment is independently checkpointed, sees a compact prior
+entity registry, and can be retried without repeating accepted fragments. A
+zero-provider unit assembles the blueprint. Setting/roster is the next creative
+operation, followed by bounded character batches and domain-specific stages.
+
+Life now separates family/social ties from residences/roles/possessions/contacts
+and life conditions. Lore separates facts/backstory from Knowledge/threads, so
+Knowledge receives accepted Fact IDs. `life_ties` and `lore_background` are durable
+editable units; the existing `life` and `lore` checkpoints combine accepted
+subsets. Edit an inherited field at its owning subunit. Changing ties invalidates
+downstream life/lore/opening/reviews while retaining character/place checkpoints.
+The number of provider calls grows by two, not one call per individual field.
+
+Prompts explicitly invite creative surroundings, distinct personalities, motives
+and biographies appropriate to significance. Optional records stay optional.
+Genres/scale/expressiveness/pacing/risk shape possibilities, never obligatory future
+events, the player's decisions, automatic romance, childbirth or trauma.
+
+### Validation and author review
+
+Canonical schemas, IDs, references, family/life/Knowledge invariants, chronology,
+readiness manifests, locks and the temporal guard remain blocking. A semantic
+review uses small groups of notes and plain explanations without evidence-pointer
+requirements. Conflict/unresolved findings are author-only warnings and do not
+cause automatic retries or prevent publication/Start Game. They are not proof that
+every interpretation is correct. Technical malformed JSON/schema responses still
+receive bounded local repair; provider failures require explicit recovery.
+
+The existing draft API now has a transient canonical form projection. The
+Workshop's full author editor can change characters/personality, family/social
+relations, organizations, locations, residences, roles, facts/secrets, Knowledge,
+possessions/contacts, life state, initial history, calendar/time, commitments and
+opening camera. It reuses CheckpointRecordForm and existing canonical schemas;
+advanced JSON is available for portable History/unusual nested data. Patches use
+the same versioned draft and normalizer, with no second persistent WorldState.
+Invalid references reject atomically. Author mode is required to fetch these
+forms; public draft/job responses never include private advisory explanations.
+
+Authors may correct a generated circumstance without first rewriting it into an
+executable rule. Accepted paused edits still acquire field locks. Original source
+revisions require explicit acknowledgement. After final author edits, optional
+semantic revalidation uses the captured edited draft; creative units are not
+replayed. Revision-5 jobs retain their previous strict revalidation gate.
+
+### Errors and bounded retry
+
+Status separates JSON, schema, provider, semantic and exhausted-budget failures.
+Provider diagnostics retain an HTTP code or exception category, never exception
+messages that may contain credentials/prompts. Schema diagnostics include paths
+and error types without raw input values. Successful usage remains recorded by
+the existing tracked provider wrapper.
+
+Exhaustion makes `can_resume=false`; the UI hides the impossible resume action.
+“Повторить с новым бюджетом” explicitly grants up to three fresh attempts to
+exhausted units under the same stable-pause/lease/revision checks. A journal entry
+records this authorization; total attempts remain monotonic. Accepted artifacts
+are untouched. Interrupted-call billing uncertainty still requires acknowledgement.
+
+Periodic recovery also excludes a locally dispatched, not-yet-leased job while
+submission registers its handle under the same lock. This fixes a race observed
+in the full browser suite: recovery could briefly mark a new job as requiring
+credentials, causing the UI to stop following it even though generation later
+completed. Expired real leases remain recoverable, including locally owned ones.
+Both sides of this distinction have deterministic regression tests. No browser
+timeout or assertion was relaxed to hide the race.
+
+### Evidence and limits
+
+`test_world_blueprint.py` exercises short Ilya/Moscow/НИИ, medium coworker/backstory with two organizations, adoption/Knowledge,
+and rich Volkov/Apex briefs with deterministic providers. It checks expanded and
+distinct NPCs, absence of imposed hero intentions/future commitments, canonical
+Start Game, actual ordinary turns, save/reload, #112 temporal boundaries,
+regenerate/rollback/branches, author repairs, paused edits, fragment recovery,
+explicit budget reset, warning privacy and safe schema diagnostics. Old strict
+contract tests explicitly select revision 5; they are retained as compatibility
+coverage rather than weakened to accept the new behavior.
+
+Browser coverage includes Quick/Scenario, pause/restart recovery, full author
+forms and exhausted-budget UX on desktop/mobile. Full suite results for this
+revision are recorded below after execution.
+
+**Live DeepSeek quality remains unverified.** No real API credential is available
+in this working environment; only deterministic test credentials are used.
+Fixtures establish pipeline behavior, not the model's actual creativity, complete
+retention of arbitrary conditions, NPC voice quality or absence of semantic
+mistakes. PR #105 remains Draft pending a bounded real-provider assessment.
+
+## Historical implementation record
+
 ## Boundary audit
 
 The authoring document is a versioned `world_draft` in the existing document

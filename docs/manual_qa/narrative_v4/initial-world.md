@@ -26,23 +26,25 @@ responses; they do not establish live-provider narrative quality.
    through canonical forms. Inspect impact before saving; independent versions
    remain intact. Lock/edit, regenerate and unlock explicitly; provider attempts
    cannot silently overwrite accepted locks.
-3. Revise a source claim with acknowledgement. Original brief/quotes/IDs remain
+3. Revise a source claim with acknowledgement. Original brief and IDs remain
    in history. Change a core NPC to secondary: locks follow its stable identity,
    obsolete batches remain in audit history and no duplicate NPC appears.
 4. Close the browser context, restart the backend with the same SQLite DB, reopen
    and resume. Completed checkpoints must not trigger repeated requests. Missing
    credentials and interrupted billing uncertainty require explicit recovery.
-5. A semantic review conflict pauses before publication. Only author inspection
-   exposes its explanation/evidence. Repair the originating stage or explicitly
-   revise the source; retry must preserve accepted unrelated work.
+5. A semantic conflict in a revision-6 job is an author-only warning, not a
+   publication blocker. Accept or repair the interpretation in the author editor.
+   A malformed technical payload still blocks its own unit. Exhaust its budget:
+   Resume must disappear and an explicit bounded retry must preserve prior work.
 
 ## Ready world and regressions
 
-Confirm only current, complete, canonically valid and semantically reviewed data.
-Change a reviewed opening in Author World: Start Game must require revalidation.
-Use "Проверить изменённый мир": only affected semantic reviews rerun, edited
-content remains intact and successful validation allows Start Game. A conflict
-keeps the edited draft; cancel the review to correct it in Author World.
+Confirm only current, complete, canonically valid data. Open the full author
+editor and correct family links, organizations, Knowledge, calendar/time and
+opening. Invalid references must reject without losing the prior version.
+Revision-6 semantic warnings do not block Start Game. Optional
+"Проверить изменённый мир" reruns only affected reviews without overwriting edits.
+Captured revision-5 jobs retain their strict semantic revalidation gate.
 Play an ordinary turn, reload the save, regenerate/rollback and create sibling
 branches. Verify hidden adoption knowledge does not spread, opening history stays
 unchanged and player agency/expressiveness policy survive. Repeat legacy imports
@@ -63,3 +65,25 @@ variant/snapshot; valid regenerate, variant selection, reload and rollback remai
 available. The automated generated-world case is
 `test_generated_world_obeys_merged_temporal_guard_through_history`; the broader
 #78 matrix remains in `commitments.md` and `test_temporal_guard.py`.
+
+
+## Separate live-provider quality assessment (not completed by fixtures)
+
+Use a real DeepSeek credential, a separate database and a small bounded budget.
+Record provider/model, creation settings, actual token/cost usage and original
+outputs; do not expose credentials or private world details in public reports.
+
+1. Short: «Молодой парень Илья переезжает в Москву, устраивается в НИИ и пытается
+   начать новую жизнь. Повседневность, романтика, юмор и драма».
+2. Medium: several named people, two organizations, explicit social relationships,
+   a move/job transition and a private fact with limited holders.
+3. Complex: the Volkov/Apex brief above, including five subsidiaries, adoption,
+   parental marriage plans, discovery chronology and Friday 06:00 opening.
+
+For each inspect whether missing surroundings were creatively developed, core
+NPCs have distinct voices/motives/backstories, secondary detail is sufficient,
+explicit circumstances are retained, private knowledge does not leak, and the
+opening offers possibilities without prescribing the player's next action or a
+future plot. Record disagreements as warnings and try correcting them in the UI.
+Continue through Start Game, an ordinary turn and reload. Automated fixtures do
+not count as this assessment; leave untested quality dimensions explicitly open.

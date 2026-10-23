@@ -45,6 +45,13 @@ def install(app,repo,preparation,credentials,job):
     @app.get('/api/workspaces/{wid}/draft')
     def draft(wid:str,author:bool=False):return repo.draft(wid,author)
 
+    @app.get('/api/workspaces/{wid}/draft/canonical')
+    def canonical(wid:str,author:bool=False):
+        if not author:raise ValueError('author: подтвердите авторский просмотр')
+        from backend.services.initial_world_editor import view
+        draft=repo.draft(wid,True)
+        return {**view(draft['state']),'revision':draft['revision']}
+
     @app.get('/api/workspaces/{wid}/draft/interpretation')
     def interpretation(wid:str,author:bool=False):return repo.interpretation(wid,author)
 
@@ -81,6 +88,9 @@ def install(app,repo,preparation,credentials,job):
             if body.task=='field' and body.field not in domain.FIELDS.get(body.kind,set()) and not(body.kind=='character' and body.field.startswith('fields.')):raise ValueError('Поле недоступно.')
         config={**body.config.model_dump(),'_creation':body.creation.model_dump(),'_draft_task':body.task,'_draft_input':body.text,'_use_idea':body.use_idea,
                 '_request_id':body.request_id,'_warnings_ack':body.warnings_ack,'_draft_target':{'kind':body.kind,'id':body.entity_id,'field':body.field}}
+        if body.task=='interpret':
+            from backend.services.world_generation import PROMPT_VERSION
+            config['_interpretation_version']=2 if PROMPT_VERSION=='initial-world-stages-6' else 1
         if body.task=='world_review':config.update(_review_only=True,_draft_task='world_staged')
         jid=preparation.submit(wid,'draft_'+('world_staged' if body.task=='world_review' else body.task),body.text,config,body.revision,credentials.resolve(body.config.provider,body.key()))
         return job(jid)

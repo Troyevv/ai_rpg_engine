@@ -2,6 +2,8 @@ import json
 from unittest.mock import patch
 
 import pytest
+
+pytestmark = pytest.mark.usefixtures('legacy_generation_v5')
 from test_api import api
 from test_world_generation import fake_stages, submit, wait
 

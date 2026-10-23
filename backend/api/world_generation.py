@@ -29,3 +29,11 @@ def install(app,repo,preparation,credentials,job):
         preparation.resume_generation(jid,credentials.resolve(config['provider'],body.key()),
             body.revision,body.retry_uncertain)
         return job(jid)
+
+    @app.post('/api/jobs/{jid}/generation/retry')
+    def retry(jid:str,body:Resume):
+        import json
+        config=json.loads(repo.preparation_job(jid)['config_json'])
+        preparation.resume_generation(jid,credentials.resolve(config['provider'],body.key()),
+            body.revision,body.retry_uncertain,new_budget=True)
+        return job(jid)

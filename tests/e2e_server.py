@@ -275,7 +275,7 @@ if __name__ == '__main__':
         return {'stage':'places'}
 
     @app.post('/test/staged-checkpoint')
-    def staged_checkpoint(characters:bool=False):
+    def staged_checkpoint(characters:bool=False,exhausted:bool=False):
         from test_api import REMOTE
         from test_world_interpretation import BRIEF, interpretation
         from backend.services.world_interpretation import accept
@@ -306,6 +306,10 @@ if __name__ == '__main__':
             repo.commit_generation_unit(jid,token,'interpret',accept(interpretation(),BRIEF,wid,1))
         repo.generation_control(jid,'pause')
         repo.generation_boundary(jid,token)
+        if exhausted:
+            with repo.connect() as db:
+                db.execute("UPDATE preparation_jobs SET status='failed' WHERE id=?",(jid,))
+                db.execute("UPDATE preparation_units SET status='failed',attempts=3,retry_attempts=3 WHERE job_id=? AND unit_id='interpret'",(jid,))
         return {'workspace':wid,'job':jid}
 
     @app.post('/test/appearance-seed')

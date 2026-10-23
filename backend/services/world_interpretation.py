@@ -207,24 +207,35 @@ def run(preparation, jid, config, api_key, handle, loaded, stream_fn):
         brief+='\n\n'+idea
     context=config['context_length']
     if loaded: context=min(context,int(loaded.get('config',{}).get('context_length') or context))
-    request,limit=request_context(messages(brief),'',context,config['max_tokens'],format_hint='json')
+    modern=config.get('_interpretation_version')==2
+    from backend.services import world_blueprint as blueprint
+    chunks=blueprint.fragments(brief) if modern else [brief]
+    accepted=[]
     repo.draft_phase(jid,'interpreting')
     def opened(stream):
         handle.stream=stream
         if handle.cancel.is_set():stream.close()
-    parts=[]
-    for chunk in tracked_stream(repo,stream_fn,jid,'world_interpretation',config,request,
-            model=config['model'],provider=config['provider'],api_key=api_key,
-            temperature=config['temperature'],max_tokens=limit,require_complete=True,
-            cancel_event=handle.cancel,on_stream=opened,
-            **({'response_format':{'type':'json_object'}} if config['provider']=='deepseek' else {})):
+    for fragment in chunks:
+        data=json.dumps({'brief':fragment,'known_entities':list({e['key']:e for part in accepted for e in part['entities']}.values())},ensure_ascii=False) if modern else fragment
+        request,limit=request_context((blueprint.messages if modern else messages)(data),'',context,config['max_tokens'],format_hint='json')
+        pieces=[]
+        for chunk in tracked_stream(repo,stream_fn,jid,'world_interpretation',config,request,
+                model=config['model'],provider=config['provider'],api_key=api_key,
+                temperature=config['temperature'],max_tokens=limit,require_complete=True,
+                cancel_event=handle.cancel,on_stream=opened,
+                **({'response_format':{'type':'json_object'}} if config['provider']=='deepseek' else {})):
+            if handle.cancel.is_set():return
+            pieces.append(chunk)
         if handle.cancel.is_set():return
-        parts.append(chunk)
-    if handle.cancel.is_set():return
-    try:raw=json.loads(''.join(parts))
-    except (ValueError,TypeError) as exc:raise ValueError('interpretation: invalid JSON; previous interpretation retained') from exc
-    # The repository assigns the next constraint revision and commits by CAS.
-    repo.finish_interpretation_job(jid,raw,brief)
+        try:raw=json.loads(''.join(pieces))
+        except (ValueError,TypeError) as exc:raise ValueError('interpretation: invalid JSON; previous interpretation retained') from exc
+        if modern:
+            from backend.services.initial_world_v2 import _check
+            raw=_check(blueprint.Blueprint,raw,'blueprint').model_dump()
+            blueprint.accept_parts([*accepted,raw],brief,job['workspace_id'],1)
+        accepted.append(raw)
+    # Existing standalone preview is atomic; creation uses durable per-fragment jobs.
+    repo.finish_interpretation_job(jid,accepted if modern else accepted[0],brief,version=2 if modern else 1)
 
 
 STAGE_SECTIONS = {

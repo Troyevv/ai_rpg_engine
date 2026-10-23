@@ -5,6 +5,8 @@ from copy import deepcopy
 from unittest.mock import patch
 
 import pytest
+
+pytestmark = pytest.mark.usefixtures('legacy_generation_v5')
 from test_api import api, REMOTE, wait_job
 from backend.services.world_interpretation import accept, public_summary
 

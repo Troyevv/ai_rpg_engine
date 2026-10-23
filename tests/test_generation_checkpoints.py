@@ -173,9 +173,10 @@ def test_author_revision_gets_new_retry_budget_without_erasing_attempt_history(t
     repo.generation_control(jid,'pause');repo.generation_boundary(jid,token)
     revision=repo.generation_status(jid)['revision']
     # Pause/resume alone cannot replenish an exhausted provider budget.
-    repo.generation_control(jid,'resume',revision);token=repo.claim_generation(jid)
-    with pytest.raises(ValueError,match='budget'): repo.begin_generation_unit(jid,token,'setting')
-    repo.generation_control(jid,'pause');repo.generation_boundary(jid,token)
+    with pytest.raises(ValueError,match='budget'):
+        repo.generation_control(jid,'resume',revision)
+    assert repo.preparation_job(jid)['status']=='paused'
+    assert not repo.generation_status(jid)['can_resume']
     repo.revise_generation_checkpoint(jid,'interpret',{'text':'revised'},
         repo.generation_status(jid)['revision'],original,['/text'],preview=False)
     repo.generation_control(jid,'resume');token=repo.claim_generation(jid)
@@ -236,3 +237,10 @@ def test_replan_is_atomic_rejects_completed_redefinition_and_never_drops_locks(t
     assert repo.inspect_generation_checkpoint(jid,'core_0',True)['artifact']==payload
     with pytest.raises(ValueError,match='source unit ownership'):
         repo.reconcile_generation_plan(jid,token,[dict(id='interpret',stage='characters',inputs=['brief'],outputs={'spoof':''})],[])
+
+
+def test_local_dispatch_exclusion_does_not_hide_expired_lease(tmp_path):
+    repo,jid,token=new_run(tmp_path)
+    repo.begin_generation_unit(jid,token,'interpret')
+    assert repo.recover_generations(now=time.time()+200,owned_jobs=(jid,))==[jid]
+    assert repo.generation_status(jid)['units'][0]['status']=='uncertain'
