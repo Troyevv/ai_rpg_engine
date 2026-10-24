@@ -8,7 +8,7 @@ class DTO(BaseModel):
 class ModelConfig(DTO):
     provider: Literal['local', 'deepseek', 'compatible'] = 'local'
     model: str = Field(min_length=1, max_length=300)
-    context_length: int = Field(default=32768, ge=8192, le=131072)
+    context_length: int = Field(default=32768, ge=8192)
     temperature: float = Field(default=0.8, ge=0, le=1.5)
     max_tokens: int = Field(default=2000, ge=256, le=32000)
     thinking: Literal['off','low','high'] = 'off'
@@ -63,7 +63,7 @@ class Models(Credential):
 
 class Load(DTO):
     model: str = Field(min_length=1, max_length=300)
-    context_length: int = Field(default=16384, ge=8192, le=131072)
+    context_length: int = Field(default=16384, ge=8192)
     eval_batch_size: Literal[256, 512, 1024, 2048] = 512
     flash_attention: bool = True
     offload_kv_cache_to_gpu: bool = True

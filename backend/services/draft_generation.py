@@ -1,15 +1,16 @@
 """Structured preparation using the existing provider, accounting and job lifecycle."""
 import json
-import time
+import hashlib
 from backend.services import draft_world as domain
 from backend.services.continuation import stream_document
 from backend.services.usage import tracked_stream
-from backend.services.draft_schema import world_state_schema
-from llm import OutputLimitReached
 
 
 
 def idea_text(repo,job,config):
+    if '_draft_source' in config:
+        if not config['_draft_source'].strip():raise ValueError('Опиши мир или сначала создай сценарий.')
+        return 'Исходная идея пользователя (высший приоритет):\n'+config['_draft_source']
     instructions=('Исходная идея пользователя (высший приоритет):\n'+config['_draft_input']) if config['_draft_input'].strip() else ''
     if config.get('_use_idea'):
         scenario=repo.workspace(job['workspace_id'])['idea'].strip()
@@ -22,10 +23,17 @@ def messages_for(repo,job,config):
     task=config['_draft_task'];wid=job['workspace_id']
     if task=='world':
         instructions=idea_text(repo,job,config)
+        from backend.services.world_creation_settings import CreationSettings
+        settings=CreationSettings.model_validate(config.get('_creation_settings',{}))
+        instructions+='\nНастройки мира (не переопределяют явные факты идеи): '+json.dumps(settings.model_dump(),ensure_ascii=False)
+        instructions+='\nЦелевой состав NPC: '+json.dumps(settings.cast_targets([]),ensure_ascii=False)
+        instructions+='\nЧисла NPC — ориентир, не квота. Именованные NPC входят в состав. Выразительность меняет подачу, а не характер. Темп и риск не создают предысторию.'
+        instructions+='\nНе выводи пустые технические defaults (dependencies, review_required, reviewed_signature) и производные поля, когда схема позволяет их опустить. Непустые метаданные Motivation, факты, биографии и тайны сохраняй полностью.'
         instructions+='\nРазработай пригодный для немедленной игры мир. Недостающие детали концепции дополни самостоятельно; исходная идея не является исчерпывающей спецификацией.'
+        from backend.services.draft_initial import prompt_schema
         system=(config['_prompts']['draft_world_prompt.md']['content']
                 +'\n\nКаноническая JSON Schema WorldState для ПЕРВОНАЧАЛЬНОЙ генерации (не заполняй саму схему; верни объект по ней):\n'
-                +json.dumps(world_state_schema(),ensure_ascii=False,separators=(',',':')))
+                +json.dumps(prompt_schema(),ensure_ascii=False,separators=(',',':')))
         return [{'role':'system','content':system},
                 {'role':'user','content':instructions}]
     draft=repo.draft(wid,author=True);state=draft['state']
@@ -63,77 +71,141 @@ def decode_result(text,state,config):
 
 
 def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
+    from backend.repositories.drafts import candidate_hash
+    from backend.services.draft_response import response, strict_loads
+    from backend.services import draft_initial, draft_repair, draft_completeness
     repo=preparation.repo;job=repo.preparation_job(jid)
-    original=repo.draft(job['workspace_id'],author=True)['state'];stage='draft_world'
+    original=repo.draft(job['workspace_id'],author=True)['state']
     context=config['context_length']
-    if loaded:context=min(context,int(loaded.get('config',{}).get('context_length') or context))
-    # The UI's shared context preference may be only 8K, although the
-    # DeepSeek models support much more. Draft creation needs room for both
-    # the brief and a complete structured answer.
-    if config['_draft_task']=='world' and config['provider']=='deepseek':
-        context=max(context,32768)
+    if loaded: context=min(context,int(loaded.get('config',{}).get('context_length') or context))
+    stage='draft_world'
     def opened(stream):
         handle.stream=stream
         if handle.cancel.is_set():stream.close()
     def generate(messages,limit):
-        structured = config['provider']=='deepseek' and not any(m['role']=='assistant' for m in messages)
+        structured=config['provider']=='deepseek' and not any(m['role']=='assistant' for m in messages)
         return tracked_stream(repo,stream_fn,jid,stage,config,messages,model=config['model'],provider=config['provider'],api_key=api_key,
             temperature=config['temperature'],max_tokens=limit,require_complete=True,cancel_event=handle.cancel,on_stream=opened,
             **({'response_format':{'type':'json_object'}} if structured else {}))
-    world_task=config['_draft_task']=='world'
-    repo.draft_phase(jid,'world' if world_task else 'editing',reset_progress=True)
-    messages=messages_for(repo,job,config)
-    json_budget=max(config['max_tokens'],min(12000,context//2)) if world_task else config['max_tokens']
-
-    def answer(request,one_request=False):
-        result='';last=0.0
-        # One finished World State must cost exactly one provider request.
-        # Do not use stream_document: it can silently issue continuation calls.
-        if one_request:
-            from backend.services.continuation import request_context
-            request,limit=request_context(request,'',context,json_budget,format_hint='json')
-            chunks=generate(request,limit)
-        else:
-            chunks=stream_document(request,context,json_budget,generate,handle.cancel,format_hint='json')
-        try:
-            for chunk in chunks:
-                if handle.cancel.is_set():return ''
-                result+=chunk
-                if time.monotonic()-last>.25:
-                    repo.preparation_progress(jid,result);last=time.monotonic()
-        except OutputLimitReached as exc:
-            raise ValueError('Ответ не поместился в лимит модели. Увеличь лимит ответа/контекста и повтори; предыдущая версия сохранена.') from exc
-        return result
-
-    def checked(result):
-        state=decode_result(result,original,config)
-        if world_task:state=domain.repair_scene_interval(state)
-        report=domain.validate(state)
+    if config['_draft_task']!='world':
+        repo.draft_phase(jid,'editing',reset_progress=True)
+        result=''
+        for chunk in stream_document(messages_for(repo,job,config),context,config['max_tokens'],generate,handle.cancel,format_hint='json'):
+            result+=chunk;repo.preparation_progress(jid,result)
+        if handle.cancel.is_set():return
+        state=decode_result(result,original,config);report=domain.validate(state)
         if report['errors']:raise ValueError('; '.join(report['errors']))
-        return state,report
-
-    result=answer(messages,one_request=world_task)
-    if handle.cancel.is_set():return
-    repo.draft_phase(jid,'validating')
-    try:state,report=checked(result)
-    except ValueError as exc:
-        if not world_task:raise
-        # A single repair may fix syntax/references; it must preserve the
-        # generated content and must not invent any new narrative material.
-        stage='draft_world_repair';repo.draft_phase(jid,'retrying',reset_progress=True)
-        repair=[{'role':'system','content':
-            'Ты исправляешь ТОЛЬКО технические ошибки JSON World State. Верни один JSON-объект. '
-            'Сохрани всё содержание ответа: персонажей, описания, тайны, факты, время, связи. '
-            'Исправь только синтаксис, типы, отсутствующие структурные поля и битые ID/ссылки. '
-            'Не придумывай новых персонажей, событий или деталей мира.'},
-            {'role':'user','content':json.dumps({'error':str(exc),'response':result},ensure_ascii=False)}]
-        repaired=answer(repair,one_request=True)
+        if report['warnings'] and not config.get('_warnings_ack'):raise ValueError('; '.join(report['warnings']))
+        repo.finish_draft_job(jid,state);return
+    journal=json.loads(job.get('response_journal') or '{}')
+    repo.draft_phase(jid,'world')
+    messages=journal.setdefault('messages',messages_for(repo,job,config))
+    input_hash=hashlib.sha256(json.dumps(messages,ensure_ascii=False,sort_keys=True).encode()).hexdigest()
+    binding=dict(job_id=jid,input_hash=input_hash)
+    if journal.get('binding',binding)!=binding:raise ValueError('Ответ принадлежит другому заданию или входу.')
+    journal['binding']=binding
+    # A preflight rejection has no provider outcome to recover, but must retain
+    # the original request so Resume can use a larger configured context.
+    repo.save_response_journal(jid,journal)
+    result=response(repo,jid,journal,'world',messages,config,context,generate,handle.cancel)
+    if result is None:return
+    result=journal.get('candidate_text',result)
+    epoch=journal.get('recovery_epoch',0)
+    patch_failure=None
+    for attempt in range(3):
         if handle.cancel.is_set():return
         repo.draft_phase(jid,'validating')
-        try:state,report=checked(repaired)
-        except ValueError as final:
-            raise ValueError('Модель вернула некорректный World State JSON: '+str(final)+'. Предыдущая версия сохранена.') from final
-    if config['_draft_task']!='world' and report['warnings'] and not config.get('_warnings_ack'):
-        raise ValueError('Возможные связанные противоречия: '+'; '.join(report['warnings'])+'. Повтори с явным подтверждением.')
-    repo.draft_phase(jid,'saving')
-    repo.finish_draft_job(jid,state)
+        try:
+            raw=strict_loads(result)
+            if isinstance(raw,dict):raw['creation_settings']=config.get('_creation_settings',{})
+            state,report=draft_initial.inspect_candidate(raw)
+            errors=report['diagnostics']
+            if isinstance(state,dict):
+                result=json.dumps(state,ensure_ascii=False)
+                journal['candidate_text']=result;repo.save_response_journal(jid,journal)
+                repo.save_draft_candidate(jid,state,errors,review=dict(status='not_started',issues=[],contract_version=draft_completeness.CONTRACT_VERSION),epoch=epoch)
+        except (ValueError,TypeError,KeyError) as exc:
+            errors=exc.errors if isinstance(exc,draft_initial.DraftErrors) else [dict(path='/',category='validation',message=str(exc))]
+        if not errors:
+            review_meta=dict(status='running',contract_version=draft_completeness.CONTRACT_VERSION,issues=[])
+            repo.save_draft_candidate(jid,state,[],review=review_meta,epoch=epoch)
+            repo.draft_phase(jid,'reviewing')
+            stage='draft_world_validation'
+            review_messages=draft_completeness.messages(state,messages[-1]['content'])
+            signature=hashlib.sha256(json.dumps(review_messages,ensure_ascii=False,sort_keys=True).encode()).hexdigest()
+            review_meta['signature']=signature
+            accepted=journal.setdefault('accepted_reviews',{})
+            if signature in accepted:
+                try:
+                    cached=[{k:v for k,v in e.items() if k in ('path','message','related_paths','severity','patch_paths')} for e in accepted[signature]]
+                    for e in cached:
+                        if not e.get('path'):e['path']=None
+                    draft_completeness.parse(json.dumps({'issues':cached}),state)
+                except (ValueError,TypeError,KeyError,IndexError,AttributeError):
+                    journal.setdefault('invalid_cached_reviews',[]).append(accepted.pop(signature))
+            if signature in accepted:
+                issues=accepted[signature]
+            else:
+                previous_failure=next((f for f in reversed(journal.get('review_failures',[])) if f.get('signature')==signature),None)
+                if not previous_failure:
+                    # Old jobs stored only slot/error; recover the original report from their response journal.
+                    for old in reversed(journal.get('review_failures',[])):
+                        if 'signature' in old:continue
+                        saved=journal.get('responses',{}).get(old.get('slot'),{})
+                        rejected=''.join(p['text'] for p in saved.get('parts',[]))
+                        if rejected:
+                            try:draft_completeness.parse(rejected,state)
+                            except draft_completeness.ReportError as exc:
+                                previous_failure=dict(response=rejected,validation_errors=exc.errors)
+                            break
+                if previous_failure:
+                    review_messages=draft_completeness.correction(review_messages,previous_failure['response'],previous_failure['validation_errors'])
+                # A malformed report is a failed check, never a bad world or a success.
+                for review_attempt in range(2):
+                    slot='completeness_'+signature if epoch==0 and review_attempt==0 else f'completeness_{signature}_{epoch}_{review_attempt}'
+                    try:review=response(repo,jid,journal,slot,review_messages,config,context,generate,handle.cancel)
+                    except ValueError as exc:
+                        repo.save_draft_candidate(jid,state,[],review=dict(review_meta,status='failed',reason=str(exc)),epoch=epoch)
+                        raise
+                    if review is None:return
+                    try:
+                        issues=draft_completeness.parse(review,state)
+                        unresolved=[dict(report_path=f'/issues/{i}/patch_paths',world_path=e['path'],message='Уточните точные поля для исправления противоречия, сохранив замечание.') for i,e in enumerate(issues) if e.get('severity')=='blocker' and not e.get('patch_paths')]
+                        if unresolved:raise draft_completeness.ReportError(unresolved,issues)
+                    except (ValueError,TypeError,KeyError,IndexError) as exc:
+                        details=getattr(exc,'errors',[dict(report_path='/',world_path=None,message=str(exc))])
+                        partial=getattr(exc,'issues',[])
+                        failure=dict(candidate_hash=candidate_hash(state),slot=slot,stage=stage,attempt=review_attempt+1,epoch=epoch,signature=signature,contract_version=draft_completeness.CONTRACT_VERSION,response=review,error=str(exc),validation_errors=details,partial_issues=partial)
+                        journal.setdefault('review_failures',[]).append(failure)
+                        repo.save_draft_candidate(jid,state,[],review=dict(review_meta,status='failed',reason='Получен отчёт неправильного формата.',issues=partial,validation_errors=details),epoch=epoch)
+                        review_messages=draft_completeness.correction(review_messages,review,details)
+                        repo.draft_phase(jid,'review_format_repair')
+                        repo.save_response_journal(jid,journal)
+                        if review_attempt==1:raise ValueError('Проверка не завершена: неверный отчёт. Кандидат доступен автору; Resume повторит только проверку.') from exc
+                    else:
+                        accepted[signature]=issues
+                        journal.setdefault('review_recoveries',[]).append(dict(signature=signature,slot=slot,result='completed',epoch=epoch))
+                        repo.save_response_journal(jid,journal);break
+            errors=[e for e in issues if e.get('severity','blocker')=='blocker']
+            repo.save_draft_candidate(jid,state,errors,review=dict(review_meta,status='completed',issues=issues),epoch=epoch)
+            if not errors:break
+            result=json.dumps(state,ensure_ascii=False)
+        journal['errors']=errors;repo.save_response_journal(jid,journal)
+        if attempt==2:raise ValueError('Две попытки исправления исчерпаны. Ответ сохранён. '+str(errors))
+        repair,paths=draft_repair.request(result,errors,author_context=messages[-1]['content'])
+        if patch_failure:repair.append(dict(role='user',content=json.dumps(patch_failure,ensure_ascii=False)))
+        repo.draft_phase(jid,'retrying');stage='draft_world_repair'
+        slot='repair_'+str(attempt+1)+(f'_resume_{epoch}' if epoch else '')
+        reply=response(repo,jid,journal,slot,repair,config,context,generate,handle.cancel)
+        if reply is None:return
+        try:
+            result=draft_repair.apply(result,reply,paths)
+            journal['candidate_text']=result;repo.save_response_journal(jid,journal)
+        except ValueError as invalid_patch:
+            patch_failure=dict(rejected_response=reply,error=str(invalid_patch),instruction='Исправь формат patch, сохрани требуемые исправления и разрешённые пути.')
+            journal.setdefault('repair_failures',[]).append(dict(slot=slot,**patch_failure))
+            repo.save_response_journal(jid,journal)
+            if attempt==1:raise ValueError('Две попытки исправления исчерпаны. '+str(invalid_patch)) from invalid_patch
+
+    if handle.cancel.is_set():return
+    repo.draft_phase(jid,'saving');repo.finish_draft_job(jid,state,epoch=epoch)

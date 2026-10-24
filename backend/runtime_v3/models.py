@@ -132,6 +132,7 @@ from backend.runtime_v3.remote_models import CommunicationCapabilities, Contact,
 
 
 class Meta(StrictModel):
+    npc_expressiveness: Literal["realistic", "expressive", "hyperbolized"] = "realistic"
     communication: CommunicationCapabilities = Field(default_factory=CommunicationCapabilities)
     interaction_focus: Literal["physical", "call"] = "physical"
     narrative_pacing: NarrativePacingProfile = Field(default_factory=NarrativePacingProfile)
@@ -407,6 +408,7 @@ class Character(StrictModel):
         if not isinstance(value, dict): return value
         value = deepcopy(value)
         for field in ('goals', 'intentions', 'obligations'):
+            if not isinstance(value.get(field, []), list):continue  # Let Pydantic report the container's exact field.
             value[field] = [dict(id=identity(field, value.get('id'), i, item), text=item)
                 if isinstance(item, str) else item for i, item in enumerate(value.get(field, []))]
         return value

@@ -137,6 +137,7 @@ export interface Turn {
   timing?: Record<string,number>|null;
 }
 export interface Job {
+  resumable?: boolean;
   replaces_id?:number|null;
   phase?: "scenario" | "world" | "retrying" | "validating" | "saving" | "editing" | "";
   progress_chars?: number;

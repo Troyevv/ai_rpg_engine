@@ -41,7 +41,21 @@ def runtime_v3_request(messages):
     return any('RawTurnResult v3' in message['content'] for message in messages)
 
 
+review_protocol_attempts={}
+fragment_attempts={}
+
 def stream(**kwargs):
+    from backend.services.draft_completeness import MARKER
+    if kwargs['messages'][0]['content'].startswith(MARKER):
+        request=json.loads(kwargs['messages'][1]['content'])
+        source=request.get('author_context','')
+        if 'TEST_REVIEW_PROTOCOL' in source:
+            count=review_protocol_attempts.get(source,0);review_protocol_attempts[source]=count+1
+            if count<2:
+                yield '{"issues":[{"path":"/world/world/roles/missing","message":"Неверный корень отчёта"}]}'
+                return
+        yield '{"issues":[]}'
+        return
     full='\n'.join(m['content'] for m in kwargs['messages'])
     observer='Тип хода: background' in full or 'Режим observer:' in full or 'mode=observer' in full
     if kwargs['messages'][0]['content'].startswith('Select at most ONE optional grounded autonomous remote action.'):
@@ -95,9 +109,33 @@ def stream(**kwargs):
             value['character']['location_id']=task['context']['locations'][0]['id']
             value['starting_scene']='У входа в дом.'
         value=json.dumps({'value':value},ensure_ascii=False)
+    elif 'TEST_CANDIDATE_RECOVERY' in full and 'patches' in kwargs['messages'][0]['content']:
+        value='{"patches":[]}'
     elif 'Каноническая JSON Schema WorldState' in full:
         from test_draft_world import fixture
-        value=json.dumps(fixture(),ensure_ascii=False)
+        candidate=fixture()
+        if 'TEST_MOTIVATION_OBJECTS' in full:
+            from test_draft_motivations import motivated
+            candidate,_=motivated()
+        if 'TEST_CANDIDATE_RECOVERY' in full:candidate['protagonist_id']='missing'
+        value=json.dumps(candidate,ensure_ascii=False)
+        if 'TEST_FRAGMENT_RECOVERY' in full:
+            key=kwargs['messages'][1]['content'];count=fragment_attempts.get(key,0);fragment_attempts[key]=count+1
+            cut=value.index('"world":')+len('"world":')
+            if count<2:
+                from llm import OutputLimitReached
+                yield value[:cut] if count==0 else 'INVALID CONTINUATION'
+                if kwargs.get('on_finish'):kwargs['on_finish']('length')
+                raise OutputLimitReached()
+            value=value[cut:]
+        if 'TEST_JSON_CONTINUATION' in full:
+            cut=len(value)//2
+            if not any(m['role']=='assistant' for m in kwargs['messages']):
+                from llm import OutputLimitReached
+                yield value[:cut]
+                if kwargs.get('on_finish'):kwargs['on_finish']('length')
+                raise OutputLimitReached()
+            value=value[cut:]
     elif 'Ты редактор RPG' in full:
         value=json.dumps({'value':'Обновлённая внешность'},ensure_ascii=False)
     elif kwargs.get('response_format') and runtime_v3_request(kwargs['messages']):

@@ -13,6 +13,7 @@ from backend.services.generation_prompts import build_idea_messages, build_summa
 class Handle:
     cancel: threading.Event = field(default_factory=threading.Event)
     stream: object = None
+    epoch: int = 0
 
 
 class Preparation:
@@ -29,6 +30,17 @@ class Preparation:
         with self.lock:
             self.handles[jid] = handle
         threading.Thread(target=self.run, args=(jid, config, api_key, handle), daemon=True).start()
+        return jid
+
+    def resume(self,jid,api_key=None,**options):
+        with self.lock:
+            if jid in self.handles: raise ValueError('Запрос ещё завершается.')
+            job=self.repo.preparation_job(jid)
+            config=json.loads(job['config_json'])
+            if config['provider']=='deepseek': api_key=deepseek_key(api_key)
+            config=self.repo.resume_draft_response(jid,**options)
+            handle=Handle(epoch=json.loads(job.get('response_journal') or '{}').get('recovery_epoch',0)+1);self.handles[jid]=handle
+        threading.Thread(target=self.run,args=(jid,config,api_key,handle),daemon=True).start()
         return jid
 
     def live(self, jid):
@@ -52,6 +64,7 @@ class Preparation:
 
     def run(self, jid, config, api_key, handle):
         narrative = ''
+        worker_epoch=handle.epoch if config.get('_draft_task')=='world' else None
         try:
             with model_lease(config['provider']):
                 if handle.cancel.is_set():
@@ -64,6 +77,7 @@ class Preparation:
                     loaded=find_loaded_model(config['model'])
                     if not loaded:raise ValueError('Сначала загрузи выбранную локальную модель.')
                 config = json.loads(job['config_json'])
+                if worker_epoch is not None and json.loads(job.get('response_journal') or '{}').get('recovery_epoch',0)!=worker_epoch:return
                 if job['kind'].startswith('draft_'):
                     from backend.services.draft_generation import run
                     return run(self,jid,config,api_key,handle,loaded,chat_stream)
@@ -95,11 +109,12 @@ class Preparation:
                 if not handle.cancel.is_set():
                     self.repo.preparation_progress(jid, narrative, 'saved')
         except Exception as exc:
+            if worker_epoch is not None and json.loads(self.repo.preparation_job(jid).get('response_journal') or '{}').get('recovery_epoch',0)!=worker_epoch:return
             if config.get('_draft_task'):
                 narrative=self.repo.preparation_job(jid)['narrative']
             self.repo.preparation_progress(jid, narrative, 'stopped' if handle.cancel.is_set() else 'error', str(exc))
         finally:
-            if handle.cancel.is_set() and narrative:
+            if handle.cancel.is_set() and narrative and (worker_epoch is None or json.loads(self.repo.preparation_job(jid).get('response_journal') or '{}').get('recovery_epoch',0)==worker_epoch):
                 self.repo.preparation_progress(jid,narrative,'stopped')
             with self.lock:
                 self.handles.pop(jid, None)

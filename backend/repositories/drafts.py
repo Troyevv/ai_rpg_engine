@@ -6,6 +6,25 @@ from backend.services import draft_world as domain
 
 def dump(value):return json.dumps(value,ensure_ascii=False)
 
+def candidate_hash(state):
+    return hashlib.sha256(json.dumps(state,ensure_ascii=False,sort_keys=True).encode()).hexdigest()
+
+def review_metadata(record):
+    review=record.get('review')
+    if review is not None:return review
+    if any(e.get('category')=='review_incomplete' for e in record.get('diagnostics',[])):
+        return {'status':'failed','reason':'Смысловая проверка не завершена. Повторите проверку.','issues':[]}
+    return None
+
+def review_block(record):
+    review=review_metadata(record)
+    if not review:return None  # Historical/manual imports keep their technical-only contract.
+    if review.get('status')!='completed':return 'Смысловая проверка не завершена: '+review.get('reason','повторите проверку.')
+    if review.get('candidate_hash')!=candidate_hash(record['state']):return 'Смысловая проверка устарела. Повторите проверку.'
+    if any(e.get('severity','blocker')=='blocker' for e in review.get('issues',[])):return 'Смысловая проверка обнаружила противоречия. Исправьте их и повторите проверку.'
+    return None
+
+
 
 def _invalid_json_constant(value):
     raise ValueError(f'Некорректное JSON-значение: {value}.')
@@ -30,23 +49,82 @@ class DraftStorage:
         with self.connect() as db:
             w=self._draft_workspace(db,wid,idle=False);head=self._draft_head(db,wid)
             record=json.loads(head['content']) if head else None
-            state=domain.prepare(record['state']) if record else None
-            report=domain.validate(state) if state else {'errors':[],'warnings':[]}
+            candidate=record.get('candidate',False) if record else False
+            raw=record['state'] if record else None
+            if candidate:
+                from backend.services.draft_initial import inspect_candidate
+                checked,report=inspect_candidate(raw)
+                try:state=domain.prepare(checked)
+                except (ValueError,TypeError,KeyError,AttributeError):state=None
+                saved_errors=record.get('diagnostics',[])
+                semantic=[e for e in saved_errors if e.get('category') in ('semantic_completeness',)]
+                report['diagnostics'].extend(semantic)
+                report['errors'].extend(e['path']+': '+e['message'] for e in semantic)
+                if report['errors']:state=None  # Never expose a partial world to Player View.
+            else:
+                state=domain.prepare(raw) if record else None
+                report=domain.validate(state) if state else {'errors':[],'warnings':[]}
             if state and record.get('generated'):report['warnings'].extend(domain.review_initial(state,record.get('source','')))
+            technical_valid=not report['errors'] if not candidate else not any(e.get('category')!='semantic_completeness' for e in report.get('diagnostics',[]))
+            block=review_block(record) if record else None
+            if block:report['errors'].append(block)
+            if block and not author:state=None
             history=[dict(r) for r in db.execute("SELECT id,reason,created_at FROM document_versions WHERE kind='world_draft' AND owner=? ORDER BY id DESC",(wid,))]
             latest=db.execute('SELECT * FROM preparation_jobs WHERE workspace_id=? ORDER BY rowid DESC LIMIT 1',(wid,)).fetchone()
             return {'id':wid,'name':w['name'],'revision':w['revision'],'version_id':head['id'] if head else None,
+                'candidate':raw if candidate and author else None,
                 'state':state if author or state is None else domain.player_view(state),
-                'validation':report,
+                'validation':report if author or not (record and review_metadata(record)) else {'errors':['Мир пока не готов к запуску. Откройте редактор автора.'] if report['errors'] else [],'warnings':[]},
+                'review':review_metadata(record) if record and author else ({'status':review_metadata(record).get('status')} if record and review_metadata(record) else None),
+                'start_block_reason':block,
+                'technical_valid':technical_valid,
                 'import_warnings':record.get('warnings',[]) if record and author else [],
                 'source_text':record.get('source','') if record and author else '',
                 'outline':record.get('outline','') if record and author else '',
                 'history':history,'job':self.public_job(dict(latest)) if latest else None,'author':author}
 
-    def _write_draft(self,db,wid,state,reason,source='',warnings=None,source_id=None,outline='',generated=False):
+    def _write_draft(self,db,wid,state,reason,source='',warnings=None,source_id=None,outline='',generated=False,review=None,origin_job=None):
         state=domain.prepare(state)
-        self._record_document(db,'world_draft',wid,dump({'state':state,'source':source,'warnings':warnings or [],'outline':outline,'generated':generated}),True,reason,source_id)
+        record={'state':state,'source':source,'warnings':warnings or [],'outline':outline,'generated':generated}
+        if origin_job:record['origin_job']=origin_job
+        if review is not None:
+            record['review']=dict(review)
+            if reason=='draft_world' and review.get('status')=='completed':record['review']['candidate_hash']=candidate_hash(state)
+        self._record_document(db,'world_draft',wid,dump(record),True,reason,source_id)
         db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))
+
+    def save_draft_candidate(self,jid,value,diagnostics,review=None,epoch=None):
+        # Append author versions without replacing the previous valid version.
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            job=db.execute('SELECT * FROM preparation_jobs WHERE id=?',(jid,)).fetchone()
+            if job['status']!='generating':return
+            if epoch is not None and json.loads(job['response_journal'] or '{}').get('recovery_epoch',0)!=epoch:raise ValueError('Устаревший результат генерации.')
+            self._draft_workspace(db,job['workspace_id'],job['revision'],idle=False)
+            config=json.loads(job['config_json']);head=self._draft_head(db,job['workspace_id'])
+            previous=json.loads(head['content']) if head else {}
+            if review is None:review=review_metadata(previous)
+            if review is not None:review=dict(review,candidate_hash=candidate_hash(value))
+            if previous.get('origin_job')==jid and previous.get('candidate') and previous.get('state')==value and previous.get('diagnostics')==diagnostics and previous.get('review')==review:return
+            record=dict(state=value,origin_job=jid,candidate=True,source=config.get('_draft_source',config.get('_draft_input','')),warnings=[],diagnostics=diagnostics,review=review)
+            self._record_document(db,'world_draft',job['workspace_id'],dump(record),True,'generation_candidate',None)
+            db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(job['workspace_id'],))
+            db.execute('UPDATE preparation_jobs SET revision=revision+1 WHERE id=?',(jid,))
+
+    def edit_candidate(self,wid,revision,path,value):
+        from backend.services.draft_repair import apply
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE');self._draft_workspace(db,wid,revision)
+            head=self._draft_head(db,wid)
+            if not head:raise ValueError('Нет кандидата.')
+            record=json.loads(head['content'])
+            # Exact assignment retains all unknown fields and other errors.
+            record['state']=json.loads(apply(dump(record['state']),dump({'patches':[{'path':path,'value':value}]}),[path]))
+            record['candidate']=True
+            if review_metadata(record):record['review']=dict(review_metadata(record),status='stale',reason='Кандидат изменён. Повторите проверку.')
+            record['diagnostics']=[e for e in record.get('diagnostics',[]) if e.get('path')!=path and not e.get('path','').startswith(path+'/')]
+            self._record_document(db,'world_draft',wid,dump(record),True,'candidate_patch',None)
+            db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))
 
     def import_draft(self,wid,text,revision,format='text'):
         if format=='json':
@@ -90,30 +168,36 @@ class DraftStorage:
             db.execute('BEGIN IMMEDIATE');self._draft_workspace(db,wid,revision)
             head=self._draft_head(db,wid)
             if not head:raise ValueError('Сначала создай или импортируй мир.')
-            record=json.loads(head['content']);state=domain.prepare(record['state']);before=domain.validate(state)
+            record=json.loads(head['content'])
             if operation=='restore':
                 old=db.execute("SELECT * FROM document_versions WHERE id=? AND kind='world_draft' AND owner=?",(source_id,wid)).fetchone()
                 if not old:raise ValueError('Версия не принадлежит черновику.')
-                record=json.loads(old['content']);state=domain.prepare(record['state'])
-            elif operation=='patch':state=domain.patch(state,kind,eid,field,value)
+                self._record_document(db,'world_draft',wid,old['content'],True,'restore',source_id)
+                db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))
+                return eid
+            state=domain.prepare(record['state']);before=domain.validate(state)
+            if operation=='patch':state=domain.patch(state,kind,eid,field,value)
             elif operation=='add':state,eid=domain.add(state,kind)
             elif operation=='remove':state=domain.remove(state,kind,eid)
             else:raise ValueError('Неизвестная операция.')
             state=domain.prepare(state);after=domain.validate(state)
             new_warnings=set(after['warnings'])-set(before['warnings'])
             if new_warnings and not ack:raise ValueError('Возможные связанные противоречия: '+'; '.join(new_warnings)+'. Подтверди «Изменить всё равно».')
-            self._write_draft(db,wid,state,operation,record.get('source',''),record.get('warnings',[]),source_id,record.get('outline',''),record.get('generated',False))
+            review=review_metadata(record)
+            if review:review=dict(review,status='stale',reason='Кандидат изменён. Повторите проверку.')
+            self._write_draft(db,wid,state,operation,record.get('source',''),record.get('warnings',[]),source_id,record.get('outline',''),record.get('generated',False),review=review,origin_job=record.get('origin_job'))
         return eid
 
-    def finish_draft_job(self,jid,state,outline=''):
+    def finish_draft_job(self,jid,state,outline='',epoch=None):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             job=db.execute('SELECT * FROM preparation_jobs WHERE id=?',(jid,)).fetchone()
             if not job or job['status']!='generating':return
+            if epoch is not None and json.loads(job['response_journal'] or '{}').get('recovery_epoch',0)!=epoch:raise ValueError('Устаревший результат генерации.')
             self._draft_workspace(db,job['workspace_id'],job['revision'],idle=False)
             config=json.loads(job['config_json']);old=self._draft_head(db,job['workspace_id'])
             record=json.loads(old['content']) if old else {}
-            self._write_draft(db,job['workspace_id'],state,job['kind'],config.get('_draft_input','') if config['_draft_task']=='world' else record.get('source',''),record.get('warnings',[]),outline=outline if config['_draft_task']=='world' else record.get('outline',''),generated=config['_draft_task']=='world' or record.get('generated',False))
+            self._write_draft(db,job['workspace_id'],state,job['kind'],config.get('_draft_source',config.get('_draft_input','')) if config['_draft_task']=='world' else record.get('source',''),record.get('warnings',[]),outline=outline if config['_draft_task']=='world' else record.get('outline',''),generated=config['_draft_task']=='world' or record.get('generated',False),origin_job=jid if config['_draft_task']=='world' else record.get('origin_job'),review=review_metadata(record) if config['_draft_task']=='world' else (dict(review_metadata(record),status='stale',reason='Кандидат изменён.') if review_metadata(record) else None))
             db.execute("UPDATE preparation_jobs SET status='saved' WHERE id=?",(jid,))
 
     def confirm_draft(self,wid,revision,version_id):
@@ -126,7 +210,13 @@ class DraftStorage:
             if done:return json.loads(done[0])
             w=self._draft_workspace(db,wid,revision);head=self._draft_head(db,wid)
             if not head or head['id']!=version_id:raise ValueError('Подтверждённая версия устарела.')
-            state=domain.prepare(json.loads(head['content'])['state']);report=domain.validate(state)
+            record=json.loads(head['content'])
+            if review_block(record):raise ValueError('Нельзя начать игру: '+review_block(record))
+            if record.get('candidate'):
+                from backend.services.draft_initial import inspect_candidate
+                state,report=inspect_candidate(record['state'])
+                report['errors'].extend(e['path']+': '+e['message'] for e in record.get('diagnostics',[]) if e.get('category') in ('semantic_completeness',))
+            else:state=domain.prepare(record['state']);report=domain.validate(state)
             if report['errors']:raise ValueError('Нельзя начать игру: '+'; '.join(report['errors']))
             name=state['campaign']['title'].strip() or w['name'];source=domain.export_markdown(state)
             digest=hashlib.sha256(dump(state).encode()).hexdigest()
