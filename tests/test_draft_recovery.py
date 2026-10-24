@@ -113,6 +113,71 @@ def test_malformed_review_resume_does_not_regenerate(api):
     cfg=json.loads(app.state.repository.preparation_job(jid)['config_json']);assert cfg['max_tokens']==2048
 
 
+@pytest.mark.parametrize('context_length',[65536,262144])
+def test_context_preflight_can_resume_with_larger_budget(api,context_length):
+    client,app=api
+    wid=client.post('/api/workspaces',json={'name':'context recovery'}).json()['id']
+    url=f'/api/workspaces/{wid}/draft'
+    source=SHORT+'\n'+('Подробность. '*2500)
+    config=dict(REMOTE,context_length=32768)
+    with patch('backend.services.preparation.chat_stream') as provider:
+        created=client.post(url+'/generate',json={'revision':0,'text':source,'config':config,'api_key':'test'})
+        assert created.status_code==200,created.text
+        jid=created.json()['id']
+        failed=wait_job(client,jid)
+        assert failed['status']=='error' and 'Контекст 32768' in failed['error']
+        assert failed['resumable'] and not failed['unknown_outcome']
+        provider.assert_not_called()
+    before=json.loads(app.state.repository.preparation_job(jid)['response_journal'])
+    assert source in before['messages'][-1]['content']
+    assert not before.get('pending') and not before.get('reserved_tokens')
+    calls=[]
+    def stream(**kw):
+        calls.append(kw)
+        if kw['messages'][0]['content'].startswith(review.MARKER):
+            yield '{"issues":[]}'
+        else:
+            assert kw['messages']==before['messages']
+            yield json.dumps(rich())
+    d=client.get(url+'?author=true').json()
+    with patch('backend.services.preparation.chat_stream',side_effect=stream):
+        resumed=client.post(url+'/resume',json={'revision':d['revision'],'context_length':context_length,'api_key':'test'})
+        assert resumed.status_code==200,resumed.text
+        assert wait_job(client,jid)['status']=='saved'
+    assert len(calls)==2
+    saved=app.state.repository.preparation_job(jid)
+    assert json.loads(saved['config_json'])['context_length']==context_length
+    assert client.get(url+'?author=true').json()['source_text']==source
+
+
+def test_review_context_resume_keeps_completed_world(api):
+    client,app=api
+    wid=client.post('/api/workspaces',json={'name':'review context recovery'}).json()['id']
+    url=f'/api/workspaces/{wid}/draft'
+    raw=rich()
+    raw['characters'][0]['fields']['Биография']='Деталь. '*5000
+    with patch('backend.services.preparation.chat_stream',return_value=iter([json.dumps(raw)])) as provider:
+        created=client.post(url+'/generate',json={'revision':0,'text':SHORT,'config':REMOTE,'api_key':'test'})
+        jid=created.json()['id']
+        failed=wait_job(client,jid)
+        assert failed['status']=='error' and 'Контекст 32768' in failed['error']
+        assert provider.call_count==1
+    repo=app.state.repository
+    before=json.loads(repo.preparation_job(jid)['response_journal'])['responses']['world']
+    d=client.get(url+'?author=true').json()
+    assert d['candidate']['characters'][0]['fields']['Биография']==raw['characters'][0]['fields']['Биография']
+    def review_only(**kw):
+        assert kw['messages'][0]['content'].startswith(review.MARKER)
+        yield '{"issues":[]}'
+    with patch('backend.services.preparation.chat_stream',side_effect=review_only) as provider:
+        resumed=client.post(url+'/resume',json={'revision':d['revision'],'context_length':65536,'api_key':'test'})
+        assert resumed.status_code==200,resumed.text
+        assert wait_job(client,jid)['status']=='saved'
+        assert provider.call_count==1
+    assert json.loads(repo.preparation_job(jid)['response_journal'])['responses']['world']==before
+    assert client.get(url+'?author=true').json()['state']['characters'][0]['fields']['Биография']==raw['characters'][0]['fields']['Биография']
+
+
 @pytest.mark.parametrize('status',[429,503])
 def test_confirmed_http_retry_keeps_category(status):
     class Repo:

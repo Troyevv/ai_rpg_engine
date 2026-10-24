@@ -98,6 +98,9 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     journal=json.loads(job.get('response_journal') or '{}')
     repo.draft_phase(jid,'world')
     messages=journal.setdefault('messages',messages_for(repo,job,config))
+    # A preflight rejection has no provider outcome to recover, but must retain
+    # the original request so Resume can use a larger configured context.
+    repo.save_response_journal(jid,journal)
     result=response(repo,jid,journal,'world',messages,config,context,generate,handle.cancel)
     if result is None:return
     result=journal.get('candidate_text',result)

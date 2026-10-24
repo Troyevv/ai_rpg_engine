@@ -42,7 +42,7 @@ class Generate(Revision,Credential):
 class Resume(Credential):
     revision: int | None = None
     max_tokens: int | None = Field(default=None,ge=256,le=65536)
-    context_length: int | None = Field(default=None,ge=8192,le=131072)
+    context_length: int | None = Field(default=None,ge=8192)
     acknowledge_unknown: bool = False
 
 class CandidateChange(Revision):
