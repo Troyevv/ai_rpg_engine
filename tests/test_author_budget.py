@@ -139,3 +139,80 @@ def test_first_request_reaches_sdk_with_stage_budget(api):
     assert estimate(sent['messages']) + sent['max_tokens'] + b.MARGIN <= 8192
     cp=app.state.repository.inspect_generation_checkpoint(response.json()['id'],'author_source_0',True)
     assert cp['status']=='completed'
+
+
+@pytest.mark.parametrize('detailed', [False, True], ids=['short', 'detailed'])
+def test_default_cast_direct_document_edit_start_turn_reload(api, detailed):
+    """Exercise real services; provider output is controlled, not live acceptance."""
+    from test_world_authoring import family
+    from test_temporal_guard import run
+    from backend.repositories.preparation import Repository
+    client, app = api
+    document = family() if detailed else institute()
+    source = ('Семейная история. Артём — приёмный сын Сергея. Он упрям, болезненно '
+              'реагирует на опеку, но умеет признавать ошибки. Сергей владеет группой '
+              'компаний с дочерним банком. Вчера вечером Артём узнал об усыновлении. '
+              'Сергей знал об этом раньше. Это секрет, остальные не узнают его автоматически. '
+              'Начало в пятницу в 06:00, дома. Не решай за Артёма и не придумывай ему '
+              'обязательств. Сохрани различие между биологическим и приёмным родством. '
+              'Раскрой характеры, внешность, голоса и обстановку; дальнейший сюжет открыт.'
+              if detailed else SHORT)
+    calls, requests = [], []
+    base = provider(document, calls)
+    def stream(**kw):
+        requests.append(kw)
+        assert estimate(kw['messages']) + kw['max_tokens'] + b.MARGIN <= 32768
+        if '\nStage: author_brief' in kw['messages'][0]['content']:
+            calls.append('author_brief')
+            yield json.dumps(dict(entities=[dict(key=p['key'], name=p['name'],
+                kind='character', origin='explicit') for p in document['characters']],
+                observations=[], ambiguities=[]))
+        else:
+            assert json.loads(kw['messages'][-1]['content'])['original_source'] == source
+            yield from base(**kw)
+    wid = client.post('/api/workspaces', json={'name':'Direct creation'}).json()['id']
+    with patch('backend.services.preparation.chat_stream', side_effect=stream):
+        response = client.post(f'/api/workspaces/{wid}/draft/generate', json=dict(
+            task='world_staged', text=source, revision=0,
+            config={**REMOTE, 'context_length':32768, 'max_tokens':8192}, api_key='fixture'))
+        assert response.status_code == 200, response.text
+        done = wait(client, response.json()['id'])
+    assert done['status'] == 'saved', done
+    assert calls == ['author_brief', 'author_document']
+    assert requests[-1]['max_tokens'] == 8192
+    repo = app.state.repository
+    draft = repo.draft(wid, True)
+    repo.edit_draft(wid, draft['revision'], 'patch', kind='campaign', field='title', value='Моя история')
+    edited = repo.draft(wid, True)
+    sid = repo.confirm_draft(wid, edited['revision'], edited['version_id'])['save']
+    initial = repo.get_snapshot(sid)
+    assert initial['campaign']['campaign']['title'] == 'Моя история'
+    assert initial['campaign']['initial_world']['brief'] == source
+    assert run(repo, sid, 0, kind='start')[0]['status'] == 'saved'
+    assert run(repo, sid, 1)[0]['status'] == 'saved'
+    saved = repo.get_snapshot(sid)
+    reloaded = Repository(repo.path)
+    assert reloaded.get_snapshot(sid) == saved
+    assert saved['world_state']['knowledge'] == initial['world_state']['knowledge']
+    assert run(reloaded, sid, 1)[0]['status'] == 'saved'
+
+
+def test_captured_legacy_job_retains_paged_route(api):
+    from backend.services import world_authoring_pipeline as pipeline
+    client, app = api; calls=[]
+    original_capture = pipeline.capture
+    def legacy(*args, **kwargs):
+        result = original_capture(*args, **kwargs)
+        result['prompt'].pop('document_first')
+        return result
+    wid = client.post('/api/workspaces', json={'name':'Captured contract'}).json()['id']
+    with patch.object(pipeline, 'capture', side_effect=legacy), patch(
+            'backend.services.preparation.chat_stream', side_effect=provider(institute(), calls)):
+        response = client.post(f'/api/workspaces/{wid}/draft/generate', json=dict(
+            task='world_staged', text=SHORT, revision=0,
+            config={**REMOTE, 'context_length':32768, 'max_tokens':8192}, api_key='fixture'))
+        assert response.status_code == 200, response.text
+        done = wait(client, response.json()['id'])
+    assert done['status'] == 'saved', done
+    assert 'author_plan_page' in calls and 'author_batch' in calls
+    assert 'author_document' not in calls

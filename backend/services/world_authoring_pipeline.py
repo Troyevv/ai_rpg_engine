@@ -22,7 +22,7 @@ def capture(brief, config):
     context, output, model_context = budgets.limits(config)
     source_sections(brief, context, output, a.AuthorBrief.model_json_schema(), creation=config.get('_creation', {}), user_context=config['context_length'], model_context=model_context)
     return dict(brief=brief, constraint_revision=1, creation=config.get('_creation', {}),
-        prompt=dict(version=a.VERSION, planning_version=2, budget_version=1, rules=a.AUTHOR_RULES, interpretation=a.ANALYSIS_RULES,
+        prompt=dict(version=a.VERSION, planning_version=2, budget_version=1, document_first=1, rules=a.AUTHOR_RULES, interpretation=a.ANALYSIS_RULES,
                     schemas={k: model.model_json_schema() for k, model in SCHEMAS.items()}))
 
 
@@ -225,6 +225,24 @@ def run(repo, jid, token, inputs, config, context, request, execute):
         compact = expected <= config['max_tokens'] and estimate(document_messages) + expected + budgets.MARGIN <= context
     else:
         compact = expected <= config['max_tokens'] and fits(system, data, context, expected)
+    if inputs['prompt'].get('document_first') == 1:
+        # A detailed *estimate* is not a mandatory output size. In particular,
+        # the old 1600-token biography allowance forced even ordinary ideas
+        # into a paginated registry before any creative generation could occur.
+        # Try a complete document when there is room for a substantive cast and
+        # the original source. Retain bounded batches for genuinely large work.
+        # This is captured per job so resuming old checkpoints keeps its route.
+        minimum = max(4000, 1500 + (1 + targets['core']) * 400
+                      + targets['secondary'] * 200
+                      + estimate([dict(content=brief)]))
+        _, ceiling, _ = budgets.limits(config)
+        data.update(response_budget=ceiling, cast_targets=targets,
+                    instruction='Create the complete playable world directly. Use the response budget for substantive character descriptions and meaningful circumstances; omit unused optional fields and empty arrays. Preserve every explicit source fact and named entity. Do not return a plan or promise later expansion. Return one complete JSON document.')
+        document_messages = budgets.messages(inputs['prompt'], 'author_document',
+                                             {**data, 'creation_settings': inputs['creation']})
+        available = context - estimate(document_messages) - budgets.MARGIN
+        data['response_budget'] = min(ceiling, available)
+        compact = len(parts) == 1 and data['response_budget'] >= minimum
     if compact:
         repo.plan_generation_units(jid, token, [unit('author_document', 'author_document',
             ['brief', 'author_brief', 'creation', 'prompt'], {'author_document': ''})])

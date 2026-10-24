@@ -5,6 +5,29 @@
 Baseline: master `442c95b`, after merged PR #104. Read `AGENTS.md`, Epic #36,
 and the complete #44 description including the pre-implementation clarifications.
 
+## Direct creation acceptance follow-up (2026-10-24)
+
+New jobs capture `document_first=1`. Ordinary ideas may go directly from source
+analysis to the complete author document, then deterministic compilation and the
+existing editable Draft. The former per-character maximum prose estimate no
+longer forces every default medium cast through paginated planning. The provider
+receives the actual remaining response budget and explicit cast targets; no
+source is truncated, optional fields need not be emitted, and no global limit is
+raised. Large sources, small windows and insufficient response budgets retain
+bounded planning/batches. Previously captured jobs retain their original route.
+
+This is a routing correction, not proof of live generation reliability. Output
+size remains estimated; a provider truncation still preserves checkpoints and
+requires an explicit retry. Canonical validation, reference checks, source entity
+name checks, the editor and save migration are unchanged. No new UI or migration.
+
+Offline regression covers short/detailed input at 32768 context / 8192 output
+with default creation settings, exact source retention, two provider calls,
+Draft editing, confirmation, start, ordinary turn, reload and another turn.
+These tests use controlled provider responses and do not prove cast quality or
+semantic fidelity of DeepSeek. Actual live acceptance on this revision remains
+blocked by the absence of an available key and separate authorized budget.
+
 ## New author-document contract — world-authoring-1
 
 New staged Quick/Scenario jobs now use AuthorBrief → a compact structured author
