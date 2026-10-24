@@ -35,6 +35,13 @@ test('author contract exposes one editable document and preserves its biography 
   await editor.getByLabel('Расширенный JSON',{exact:true}).check();
   await expect(area).toHaveValue(/Автор сохранил подробную биографию\./);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+  await editor.getByRole('button',{name:'Закрыть редактор',exact:true}).click();
+  await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
+  await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+  await page.getByRole('button',{name:'Начать игру',exact:true}).click();
+  await expect(page.locator('.choices button')).toHaveCount(6);
+  await page.reload();
+  await expect(page.locator('.choices button')).toHaveCount(6);
  }finally{
   await context.close();
   if(server&&server.exitCode===null){const stopped=new Promise<void>(r=>server!.once('exit',()=>r()));server.kill('SIGTERM');await stopped;}

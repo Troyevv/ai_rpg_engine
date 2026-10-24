@@ -25,7 +25,7 @@ def view(state):
         from backend.services.world_authoring_pipeline import compiled_hash
         document=source['source_document']
         labels={**SECTIONS, 'world':'Описание мира','feelings':'Направленные чувства',
-                'events':'События предыстории','commitments':'Обязательства','opening':'Начальная сцена','uncertainties':'Неоднозначности'}
+                'source_notes':'Сведения без автоматического исполнения','events':'События предыстории','commitments':'Обязательства','opening':'Начальная сцена','uncertainties':'Неоднозначности'}
         return dict(values=document,sections={k:labels.get(k,k) for k in document if k!='version'},
             schema=Document.model_json_schema(),references=[{'id':r['key'],'name':r['name']} for k in ('characters','locations','organizations') for r in document[k]],
             contract='world-authoring-1',compiled_conflict=compiled_hash(snapshot)!=source.get('compiled_hash'))

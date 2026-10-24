@@ -234,6 +234,17 @@ def compile_document(document, id_map=None, creation=None):
             temporal=temporal, time_reference_minute=minute if temporal else None,
             commitment=True, evidence=time.description).model_dump()
         track(row, path, 'world_state/scheduled_events/' + rid)
+    for row, rid, path in records('source_notes'):
+        participants=[actor(k,path+'/participants') for k in row.participants]
+        if row.requires_execution:
+            raise CompileError(path, 'Начальная сцена требует неподдерживаемого процесса: '+row.capability,
+                'Измените стартовую сцену или явно выберите сохранение сведений только описанием. Исходник остаётся в checkpoint.')
+        state['facts'][rid]=m.Fact(id=rid,text=row.capability+'\n'+row.text,
+            visibility='secret',character_ids=participants).model_dump()
+        diagnostics.append(dict(category='semantic',path=path,code='descriptive_only',
+            reason=row.capability+': сведения сохранены описанием; автоматическое исполнение этого процесса не поддерживается.',
+            action='Проверьте исходную запись и выберите другую стартовую сцену, если её исполнение обязательно.'))
+        track(row,path,'world_state/facts/'+rid)
     compile_pregnancies(doc, state, ids, actor, history, track)
     for field in a.World.model_fields:
         mapping.append(dict(source='world/' + field, target='campaign/campaign/' + field, method='copy', origin='unknown'))

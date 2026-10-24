@@ -62,6 +62,9 @@ def expand(doc, ids, coarse, snapshot):
                     elif field in ('goals','intentions','obligations') and len(parts)>2:
                         if parts[2]=='key':target=root+'/'+field+'/'+parts[1]+'/id';entry['method']='stable_identity'
                         elif parts[2] in ('origin','field_origins'):target='source_document/'+section+'/'+str(index)+suffix;entry['method']='provenance'
+                elif section=='source_notes':
+                    if field in ('capability','text'):target=root+'/text';entry['method']='descriptive_only'
+                    elif field=='requires_execution':target='source_document/'+section+'/'+str(index)+suffix;entry['method']='execution_gate'
                 elif section=='organizations':
                     if field=='description':target=root+'/context'
                     elif field=='locations':target=root+'/location_ids'+(('/'+tail) if tail else '')

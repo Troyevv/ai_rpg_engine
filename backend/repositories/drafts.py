@@ -68,9 +68,13 @@ class DraftStorage:
                     if len(safe)!=len(review):safe.append('В авторском просмотре есть замечания к миру.')
                     review=safe
                 report['warnings'].extend(review)
+            initial=(state.get('runtime_campaign') or {}).get('initial_world',{}) if state else {}
+            diagnostics=[d for d in initial.get('diagnostics',[]) if d['category']=='semantic']
+            if author:
+                report['warnings'].extend(d['reason'] for d in diagnostics)
+            elif diagnostics:
+                report['warnings'].append('В авторском просмотре есть замечания компилятора; некоторые сведения могут быть сохранены только описанием.')
             if author and record and record.get('generation'):
-                initial=(state.get('runtime_campaign') or {}).get('initial_world',{}) if state else {}
-                report['warnings'].extend(d['reason'] for d in initial.get('diagnostics',[]) if d['category']=='semantic')
                 for row in db.execute("SELECT v.content FROM preparation_resources r JOIN document_versions v ON v.id=r.artifact_id WHERE r.job_id=? AND r.resource_key LIKE 'review_%'",(record['generation']['job_id'],)):
                     review=json.loads(row['content'])
                     if review.get('advisory'):

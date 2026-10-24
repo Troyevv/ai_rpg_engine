@@ -273,7 +273,16 @@ class Opening(Model):
     calendar: Calendar = Field(default_factory=Calendar)
 
 
+class SourceNote(Record):
+    """Author information outside the executable initial-world contract."""
+    capability: str = Field(min_length=1, max_length=200)
+    text: str = Field(min_length=1)
+    participants: list[str] = Field(default_factory=list)
+    requires_execution: bool = False
+
+
 class Sections(Model):
+    source_notes: list[SourceNote] = Field(default_factory=list)
     characters: list[Person] = Field(default_factory=list)
     locations: list[Place] = Field(default_factory=list)
     organizations: list[Organization] = Field(default_factory=list)
@@ -300,7 +309,7 @@ class Document(Sections):
 
 class PlannedRecord(Model):
     section: Literal['characters', 'locations', 'organizations', 'objective_relations',
-        'feelings', 'facts', 'events', 'knowledge', 'residences', 'roles', 'possessions', 'conditions', 'commitments', 'contacts', 'pregnancies']
+        'feelings', 'facts', 'events', 'knowledge', 'residences', 'roles', 'possessions', 'conditions', 'commitments', 'contacts', 'pregnancies', 'source_notes']
     key: str = Field(min_length=1, max_length=100, pattern=r'^[\w-]+$')
     summary: str = Field(min_length=1, max_length=3000)
     references: list[str] = Field(default_factory=list)
@@ -343,6 +352,12 @@ and calendar reference; creative choices must be acknowledged as uncertainties.
 Only author-explicit goals/intentions/obligations/commitments may bind the controlled
 actor. Never choose that actor's next action or consent. Optional circumstances need
 not exist. Build starting circumstances, never a predetermined future plot.
+Do not omit supplied information outside supported executable fields. Preserve it
+as source_notes with capability, full text and explicit participants. Examples:
+pending naming decisions, pre-existing calls/messages, historical process internals.
+Set requires_execution=true when the starting scene depends on executing such a
+process; otherwise false means descriptive preservation, not working mechanics.
+Do not invent source notes for absent circumstances.
 Return only the requested structured JSON in the user's language.'''
 
 

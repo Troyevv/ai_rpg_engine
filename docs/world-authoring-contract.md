@@ -1,4 +1,4 @@
-# World authoring contract 1 (implementation in progress)
+# World authoring contract 1
 
 This contract supersedes revision 6's direct Runtime DTO generation, exhaustive
 pair planning, mandatory semantic review and mechanical 6,000-character splitting
@@ -129,20 +129,20 @@ source and target paths. Provenance points to retained source metadata; unknown
 levels have an explicit omitted disposition. Paths identify source local keys and
 canonical record IDs; they are an audit map, not executable LLM-generated rules.
 
-## Remaining acceptance gaps
+## Scope exclusions and validation boundary
 
-- Lifecycle coverage is expanded, but not complete parity: author-side pending
-  naming decisions, communication conversations/in-flight messages and all
-  optional historical lifecycle transitions are not yet modeled. Historical name
-  changes are preserved as supported history, not fabricated executable events.
-- Replanning protects changed-batch locks by stopping for explicit conflict
-  resolution; it does not automatically migrate arbitrary array locks between
-  reshuffled batches. Source coverage in requests does not prove that a real model
-  will retain every supplied trait: author review and live evaluation remain needed.
+- Executable pending naming decisions and already active remote sessions are
+  optional initial-state bridges, tracked in [#114](https://github.com/Troyevv/ai_rpg_engine/issues/114).
+  They are not prerequisites for the mandatory creation path. `source_notes`
+  preserves their full text with a visible diagnostic; an opening requiring their
+  execution blocks compilation rather than pretending that prose is executable.
+- Changed-batch field locks require explicit conflict resolution. This is the
+  intended protection against lost edits, not an unfinished auto-migration feature.
 - No paid provider was called. **Live-проверка не выполнена.** Literary quality,
-  actual DeepSeek response-size behavior and schema adherence remain unverified.
-- Chromium is unavailable in this environment. The browser suite was attempted,
-  but browser checks have not passed; frontend build is not browser evidence.
+  actual DeepSeek response-size behavior and source-preservation quality remain
+  unverified. Fixtures verify transport, compilation and persistence, not LLM truth.
+- Current Python/build/browser results and the exact commit are recorded in PR #105.
+  Build success and the existence of browser tests alone are never browser evidence.
 
 ## Reproducible checks
 
@@ -170,3 +170,48 @@ and conservative token reservations, records actual requests through existing
 instrumentation, and never resumes a failed or uncertain job automatically. The
 command has been prepared but **has not been run**. Its token reservation bound
 is not a dollar-price guarantee.
+
+## Final scope classification (#44)
+
+The completion criterion is a valid initial playable world, not exhaustive
+serialization of every possible intermediate Runtime process.
+
+| Capability | Initial-world obligation | Scope decision |
+|---|---|---|
+| Identity, prose, current location/state, objectives, relations, explicit Knowledge, chronology, opening/calendar | Required; invalid references/invariants block confirmation | Implemented; keep existing canonical gate |
+| Existing residence/work, possessions, conditions, contacts, explicitly specified ongoing pregnancy | Required when supplied and supported | Implemented; never create absent circumstances |
+| Historical name changes and other past transitions without executable time | Preserve precision and text | Portable History; no synthetic turn/minute |
+| Pending naming decisions, pre-existing remote conversations/in-flight messages, specialized historical process internals | Rare optional initial scenarios | Preserve as source_notes with a visible diagnostic; no executable process is implied |
+| Future births/naming, phone activity, progression of motives/personality, background lifecycle | Runtime simulation after Start Game | Existing Runtime owns progression; no parallel authoring simulator |
+
+For an optional scenario that is indispensable to the opening, source_notes must
+set requires_execution=true. Compilation then blocks with an actionable error;
+accepting a warning never fabricates an executable state. The author may change
+the opening or explicitly choose descriptive preservation. Source, source notes,
+private descriptive Facts, and versions remain intact. Unknown schema fields are
+still rejected rather than discarded. Model extraction/coverage accuracy remains
+a live-review responsibility, not a claim of deterministic NLP verification.
+
+| New author field | Destination | Conversion / missing behavior | Test |
+|---|---|---|---|
+| source_notes key/origin/field_origins | ID map / provenance | existing stable identity and metadata rules | source note compiler |
+| capability, text | private Fact.text | exact labeled text, no inferred mechanics | source note compiler |
+| participants | Fact.character_ids | explicit references only; no automatic Knowledge | source note privacy |
+| requires_execution | diagnostics / compilation gate | true blocks; false retains prose with warning; no note means no generated record | source note gate |
+
+## CI cancellation investigation
+
+Run 40042668121 reached Playwright after Python (1772 passed on its merge ref),
+build and browser installation succeeded. Setup/Python/build/install occupied
+about 11m44s; the serial 216-test browser matrix then had only ~8m left in the
+20-minute job. The log ends with cancellation at ~20m14s, consistent with the
+configured job deadline; the API does not identify an external cancelling actor.
+The job allowance is now 35 minutes, preserving every assertion and per-test
+limit. Line reporting exposes individual progress. Browser fixture servers use
+the existing structural retrieval path explicitly, avoiding attempts to load an
+unavailable optional encoder; semantic retrieval retains its Python tests.
+
+In this executor the Playwright CDN returned an HTML page instead of a ZIP. The
+same Chrome-for-Testing 153.0.8010.12 headless ZIP from Google's official storage
+installed successfully. Local runs use the existing PLAYWRIGHT_EXECUTABLE_PATH
+option. CI keeps the normal Playwright installation, which already worked there.

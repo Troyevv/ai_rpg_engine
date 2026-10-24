@@ -5,6 +5,9 @@ import json
 import re
 import os
 os.environ["TABLETOP_DEBUG"] = "1"
+# Browser fixtures use the supported structural path, never local model loading.
+# Encoder/retrieval behavior has its own Python regression suite.
+os.environ["RPG_SEMANTIC_ENABLED"] = "0"
 from pathlib import Path
 import sys
 import tempfile

@@ -478,3 +478,66 @@ def test_prior_knowledge_map_distinguishes_multiple_historical_states():
     result=compile_document(d)
     entries={r['source']:r for r in result.transformations}
     assert entries['knowledge/'+prior['key']+'/status']['target']!=entries['knowledge/second-prior/status']['target']
+
+
+def test_optional_source_notes_preserve_text_and_block_required_execution():
+    d=family();text='Имя будущего ребёнка уже выбрано: Север. Его происхождение пока скрывают.'
+    d['source_notes']=[dict(key='naming',origin='explicit',capability='Предварительное решение об имени',text=text,participants=['son'])]
+    before=deepcopy(d);result=compile_document(d)
+    fid=result.id_map['source_notes/naming'];state=result.snapshot['world_state']
+    assert d==before and state['facts'][fid]['text'].endswith(text)
+    assert state['facts'][fid]['visibility']=='secret'
+    assert not any(k['fact_id']==fid for k in state['knowledge'].values())
+    assert result.diagnostics[-1]['code']=='descriptive_only'
+    assert any(t['source']=='source_notes/naming/text' and t['target']==f'world_state/facts/{fid}/text' for t in result.transformations)
+    d['source_notes'][0]['requires_execution']=True
+    with pytest.raises(CompileError,match='Начальная сцена требует неподдерживаемого процесса'):compile_document(d)
+    d['source_notes'][0]['requires_execution']=False;d['source_notes'][0]['participants']=['missing']
+    with pytest.raises(CompileError,match='Неизвестная ссылка'):compile_document(d)
+
+
+@pytest.mark.parametrize('fixture',[institute,family,orbital])
+def test_complete_author_path_with_real_brief_editor_start_and_reload(api,fixture):
+    from backend.repositories.preparation import Repository
+    from test_temporal_guard import run
+    client,app=api;repo=app.state.repository;document=fixture();calls=[]
+    document['source_notes']=[dict(key='remote-history',origin='explicit',capability='Исторический разговор',
+        text='Разговор состоялся до начала игры; его техническая сессия не восстановлена.',participants=[])]
+    brief={'entities':[dict(key=r['key'],origin='explicit',kind=kind,name=r['name']) for section,kind in
+        [('characters','character'),('locations','location'),('organizations','organization')] for r in document.get(section,[])],
+        'observations':[dict(section='characters',text=r['biography'],entities=[r['key']]) for r in document['characters'] if r.get('biography')],
+        'ambiguities':[]}
+    source='\n'.join([document['world']['title'],*[r['name']+' '+r.get('biography','') for r in document['characters']]])
+    base=provider(document,calls)
+    def stream(**kw):
+        if '\nStage: author_brief' in kw['messages'][0]['content']:
+            calls.append('author_brief');yield json.dumps(brief,ensure_ascii=False)
+        else:yield from base(**kw)
+    wid=client.post('/api/workspaces',json={'name':'Complete author path'}).json()['id']
+    with patch('backend.services.preparation.chat_stream',side_effect=stream):
+        response=client.post(f'/api/workspaces/{wid}/draft/generate',json=dict(task='world_staged',text=source,revision=0,
+            creation={'cast_preset':'custom','core_npcs':1,'secondary_npcs':0},
+            config={**REMOTE,'context_length':131072,'max_tokens':16000},api_key='fixture'))
+        assert response.status_code==200,response.text
+        jid=response.json()['id'];done=wait(client,jid)
+    assert done['status']=='saved',done
+    analysis=repo.generation_resources(jid,['author_brief'])['author_brief']
+    assert [r['name'] for r in analysis['entities']]==[r['name'] for r in brief['entities']]
+    author=repo.draft(wid,True);public=repo.draft(wid)
+    assert any('автоматическое исполнение' in w for w in author['validation']['warnings'])
+    assert any('замечания компилятора' in w for w in public['validation']['warnings'])
+    assert 'техническая сессия' not in json.dumps(public,ensure_ascii=False)
+    path=f'/api/workspaces/{wid}/draft';view=client.get(path+'/canonical?author=true').json()
+    characters=deepcopy(view['values']['characters']);characters[0]['biography']+=' Авторское уточнение.'
+    response=client.patch(path,json=dict(operation='patch',kind='canonical',revision=view['revision'],field='characters',value=characters,warnings_ack=True))
+    assert response.status_code==200,response.text
+    draft=repo.draft(wid,True)
+    assert any('автоматическое исполнение' in w for w in draft['validation']['warnings'])
+    sid=repo.confirm_draft(wid,draft['revision'],draft['version_id'])['save']
+    assert run(repo,sid,1,kind='start')[0]['status']=='saved'
+    assert run(repo,sid,1)[0]['status']=='saved'
+    snapshot=repo.get_snapshot(sid);reloaded=Repository(repo.path).get_snapshot(sid)
+    assert reloaded==snapshot
+    assert snapshot['campaign']['initial_world']['brief']==source
+    assert any(c['fields'].get('Биография','').endswith('Авторское уточнение.') for c in snapshot['character_cards'])
+    assert snapshot['campaign']['initial_world']['source_document']['source_notes'][0]['text']==document['source_notes'][0]['text']
