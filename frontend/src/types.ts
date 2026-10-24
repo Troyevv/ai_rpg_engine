@@ -197,7 +197,7 @@ export const defaults: Preferences = {
   link_names: true,
 };
 export const active = (job: Job | null | undefined) =>
-  !!job && ["generating", "extracting", "validating"].includes(job.status);
+  !!job && ["generating", "extracting", "validating", "pause_requested"].includes(job.status);
 
 export interface WorldFact {id:string;text:string;secret:boolean;character_ids:string[];evidence?:string[]}
 export interface Knowledge {actor_id:string;fact_id:string;status:string;source_event_id?:string|null;evidence?:string;revision?:number;replaced_by?:string|null}

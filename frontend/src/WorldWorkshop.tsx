@@ -6,6 +6,9 @@ import { detectWorldImport } from './worldImport';
 import { initialWorkshopIdentity, workshopIdentityReducer } from './workshopIdentity';
 import { useJob } from './hooks';
 import { active, type Job, type Preferences, type Workspace } from './types';
+import {WorldCreationSettings,defaultCreation} from './WorldCreationSettings';
+import {InitialWorldEditor} from './InitialWorldEditor';
+import { WorldGenerationProgress } from "./WorldGenerationProgress";
 import { Preparation } from './Preparation';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
@@ -42,6 +45,7 @@ type Draft = {
     revision: number;
     version_id: number | null;
     state: DraftState | null;
+    can_review_generation?: boolean;
     validation: {
         errors: string[];
         warnings: string[];
@@ -81,6 +85,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
     onGame: (world: number, save: number) => void;
 }) {
     const [mode, setMode] = useState('quick');
+    const [creation,setCreation] = useState(defaultCreation);
     const [section, setSection] = useState<'overview'|'characters'|'world'|'relations'|'story'|'start'|'more'>('overview');
     const [selectedCharacter, setSelectedCharacter] = useState('');
     const [editingIdea, setEditingIdea] = useState(false);
@@ -151,7 +156,8 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
         return () => loadController.current?.abort();
     }, [id, author]);
     const { job, reconnecting } = useJob(draft?.job, refresh);
-    const locked = busy || loading || active(job);
+    const staged=job?.kind==='draft_world_staged';
+    const locked = busy || loading || active(job) || staged&&!!job&&!['saved','cancelled'].includes(job.status);
     const phaseStatus: Record<string, [string,string]> = {
         world: ['Собираем игровой мир…', 'Модель развивает идею и сразу создаёт готовый World State.'],
         retrying: ['Исправляем формат ответа…', 'Модель исправляет только ошибки JSON и ссылок.'],
@@ -247,6 +253,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
         {mode === 'import' && <p role="status">Распознано: {detectedImport.format === 'json' ? detectedImport.error ? 'JSON (ошибка)' : 'JSON World State' : 'текстовая выжимка'}{importFile && ` · ${importFile}`}{importFile && importFormat === 'json' && <> · Будет импортирован готовый World State. <Button variant="ghost" disabled={locked} onClick={() => {setText(''); setImportFormat('text'); setImportFile('');}}>Вставить текст выжимки</Button></>}</p>}
         {mode === 'import' && detectedImport.error && <p className="workshop-error" role="alert">{detectedImport.error}</p>}
         {!id && <Input aria-label="Название черновика" value={name} onChange={e => setName(e.target.value)} placeholder="Название истории (можно изменить позже)" />}
+        {mode === 'quick' && <WorldCreationSettings value={creation} onChange={setCreation} disabled={locked}/>}
         {!(mode === 'import' && importFile && importFormat === 'json') && <Textarea className="workshop-idea-input" value={text} onChange={e => {setText(e.target.value); setImportFile(''); setImportFormat('text');}} aria-label="Описание мира или текст импорта" placeholder={mode === 'import' ? 'Вставь здесь текст выжимки или JSON мира…' : 'Например: современная клиника. Я играю за врача. Придумай важных коллег и напряжённые, но живые отношения. Сейчас четверг, 14:00…'} />}
         {mode === 'quick' && draft && <label className="workshop-scenario-option"><input type="checkbox" checked={useIdea} onChange={e => setUseIdea(e.target.checked)}/> Взять за основу сценарий этого черновика</label>}
         <div className="workshop-create-actions">
@@ -265,7 +272,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
               selectWorkspace(wid, opened);
             }
             else {
-              const j = await api<Job>(`/workspaces/${wid}/draft/generate`, {revision: current.revision, task: 'world', text, use_idea: useIdea, config: prefs.summary, api_key: apiKey});
+              const j = await api<Job>(`/workspaces/${wid}/draft/generate`, {revision: current.revision, task: 'world_staged', creation, text, use_idea: useIdea, config: prefs.summary, api_key: apiKey});
               selectWorkspace(wid, {...current, job: j});
             }
             setEditingIdea(false);
@@ -274,7 +281,8 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
           {state && <Button variant="ghost" onClick={() => setEditingIdea(false)}>Вернуться к миру</Button>}
         </div>
       </section>}
-      {active(job) && <section className="workshop-generating" role="status">
+      {staged && job && <WorldGenerationProgress job={job} workspaceId={id} apiKey={apiKey} refresh={refresh}/> }
+      {!staged && active(job) && <section className="workshop-generating" role="status">
         <span className="workshop-pulse"/><div><strong>{reconnecting ? 'Восстанавливаем соединение…' : status[0]}</strong><p>{reconnecting ? 'Ожидаем связь с сервером. Генерация продолжает выполняться.' : status[1]}</p>{!reconnecting && !!job?.progress_chars && !['validating','saving'].includes(job.phase || '') && <small>Получено {job.progress_chars.toLocaleString('ru-RU')} символов ответа</small>}</div>
         <Button variant="ghost" onClick={() => void run(async () => {await api(`/jobs/${job!.id}/stop`, {}); refresh();})}>Остановить</Button>
       </section>}
@@ -345,6 +353,8 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
             {author && <><details className="workshop-detail"><summary>Исходный замысел или импорт</summary><Markdown text={draft?.source_text || 'Исходный текст не сохранён.'}/></details>{draft?.outline && <details className="workshop-detail"><summary>Как сценарист развил идею</summary><Markdown text={draft.outline}/></details>}<div className="workshop-export">{['md','txt','json'].map(format=><Button key={format} variant="outline" onClick={()=>void run(async()=>{const response=await fetch(`/api/workspaces/${id}/draft/export?version_id=${draft?.version_id}&format=${format}`);if(!response.ok)throw new Error('Не удалось экспортировать мир');download(await response.text(),`world.${format}`)})}>{format === 'json' ? 'Экспорт JSON' : `Скачать .${format}`}</Button>)}</div></>}
           </>}
         </div>
+        {author && state && <InitialWorldEditor key={String(draft?.version_id)} workspaceId={id} disabled={locked} onSaved={refresh}/>}
+        {author && draft?.can_review_generation && <div className="workshop-review"><p>После правки мира повторно проверь его соответствие исходным ограничениям. Проверка сохранит ваши изменения и не перегенерирует персонажей.</p><Button disabled={locked} onClick={() => void generate({task:'world_review'})}>Проверить изменённый мир</Button></div>}
         <div className="workshop-finish"><p>Всё готово? Начни игру в этом мире. Его можно будет редактировать до подтверждения.</p><Button disabled={locked || !!draft?.validation.errors.length} onClick={() => setConfirmStart(true)}>Подтвердить мир и начать игру</Button></div>
       </section>}
  <Dialog open={authorAsk} onOpenChange={setAuthorAsk}><DialogContent><DialogHeader><DialogTitle>Открыть вид автора?</DialogTitle><DialogDescription>Ты увидишь тайны, неизвестные персонажам факты и скрытые намерения. Это может раскрыть будущие события.</DialogDescription></DialogHeader><Button onClick={() => { setAuthorAsk(false); setAuthorAcknowledged(true); setAuthor(true); }}>Показать всё</Button></DialogContent></Dialog>

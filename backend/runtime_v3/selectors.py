@@ -100,8 +100,12 @@ def ui_view(snapshot, history=None):
         card['fields'].update({'Сейчас':c['situation'],'Чего хочет':'\n'.join(active_texts(c['goals'])),'Намерения':'\n'.join(active_texts(c['intentions']))})
     metadata=dict(time=label(now),location=place(camera['location_id']),present_ids=list(camera['present_character_ids']))
     campaign=deepcopy(snapshot.get('campaign',{}))
+    # Authoring provenance contains the original brief and secret source spans.
+    # It travels with canonical saves, never with the player projection.
+    campaign.pop('initial_world',None)
+    campaign.pop('creation',None)
     result=dict(campaign,characters=cards,world=world,controlled_actor_id=camera['controlled_actor_id'],
-        narrative_policy={k:deepcopy(state['meta'][k]) for k in ('narrative_pacing','narrative_risk','outcome_preference')},
+        narrative_policy={k:deepcopy(state['meta'][k]) for k in ('narrative_pacing','narrative_risk','outcome_preference','npc_expressiveness')},
         protagonist_required=state['meta']['protagonist_required'], protagonist_periods=state['meta']['protagonist_periods'],
         protagonist_id=state['meta']['current_protagonist_id'] or campaign.get('protagonist_id') or next((c['id'] for c in cards if c.get('is_player')),None),
         camera=dict(scene_id=sid,mode=camera['mode'],scope='scene',subject_id=camera.get('subject_id'),pov_actor_id=camera.get('pov_actor_id')),scene=camera['situation'],scene_meta=metadata,
@@ -161,11 +165,18 @@ def ui_view(snapshot, history=None):
         for key in ('birth_provenance','biological_sex','identity_components','reproductive_capability'):
             actor.pop(key,None)
     protected=private_fact_ids(state)
+    protected |= {fid for fid,fact in state['facts'].items() if fact['visibility']=='secret'}
     protected |= {identity('communicated_text',e['id']) for e in state.get('remote_events',{}).values() if e['channel']=='TEXT_MESSAGE' and observer != e['sender_id']}
-    hidden_facts={fid for fid in protected if state['knowledge'].get(str(observer)+':'+fid,{}).get('status')!='known'}
+    # Retired/suspected beliefs remain inspectable by their holder. Hiding the
+    # associated text would erase the knowledge lifecycle from that actor's UI.
+    disclosed={'known','suspected','outdated','refuted','superseded'}
+    hidden_facts={fid for fid in protected if state['knowledge'].get(str(observer)+':'+fid,{}).get('status') not in disclosed}
     world['facts']={k:v for k,v in world['facts'].items() if k not in hidden_facts}
     result['facts']=[f for f in result['facts'] if f['id'] not in hidden_facts]
-    world['knowledge']={k:v for k,v in world['knowledge'].items() if v['fact_id'] not in hidden_facts}
+    visible_knowers={observer} if observer is not None else set(camera['present_character_ids'])
+    world['knowledge']={k:v for k,v in world['knowledge'].items() if v['fact_id'] not in hidden_facts and v['actor_id'] in visible_knowers}
+    for fact in result['facts']:
+        fact['known_by']=[cid for cid in fact['known_by'] if cid in visible_knowers]
     for scene in world['scenes'].values():
         scene['participants']=[cid for cid in scene['participants'] if cid not in hidden]
     for pid,p in state['pregnancies'].items():

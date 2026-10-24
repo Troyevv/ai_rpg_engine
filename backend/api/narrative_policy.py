@@ -11,7 +11,7 @@ def install(app, repo):
         if snapshot.get('mode')=='tabletop' or 'world_state' not in snapshot:
             raise ValueError('Настройки доступны только в Narrative.')
         meta=snapshot['world_state']['meta']
-        return dict(current={k:meta[k] for k in ('narrative_pacing','narrative_risk','outcome_preference')},
+        return dict(current={k:meta[k] for k in ('narrative_pacing','narrative_risk','outcome_preference','npc_expressiveness')},
             pacing_presets={k:NarrativePacingProfile(preset=k).model_dump() for k in PACING_PRESETS},
             risk_presets={k:NarrativeRiskProfile(preset=k).model_dump() for k in RISK_PRESETS},
             schema=PolicyUpdate.model_json_schema())

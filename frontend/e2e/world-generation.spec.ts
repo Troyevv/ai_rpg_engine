@@ -1,0 +1,238 @@
+import {test,expect} from '@playwright/test';
+import {nav} from './navigation';
+
+test('paused generation survives reload with author-only inspection and safe cancellation',async({page,request})=>{
+  const seeded=await(await request.post('/test/staged-checkpoint')).json();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),seeded.workspace);
+  await page.goto('/');await nav(page,'Создать');
+  const panel=page.getByRole('region',{name:'Этапы генерации мира'});
+  await expect(panel.getByRole('heading',{name:'На паузе'})).toBeVisible();
+  await expect(panel.getByRole('progressbar',{name:'Общий прогресс генерации'})).toHaveAttribute('value','0.125');
+  await expect(panel).not.toContainText('удочер');
+  await expect(panel.getByRole('button',{name:'Посмотреть результат'})).toHaveCount(0);
+  await page.reload();await nav(page,'Создать');
+  await expect(panel.getByRole('heading',{name:'На паузе'})).toBeVisible();
+  await panel.getByLabel('Авторский просмотр:',{exact:false}).check();
+  await panel.locator('summary').filter({hasText:'Понимание замысла'}).click();
+  await panel.getByRole('button',{name:'Посмотреть результат'}).click();
+  await expect(page.getByRole('dialog')).toContainText('удочер');
+  expect((await(await request.get(`/api/jobs/${seeded.job}`)).json()).status).toBe('paused');
+  await page.keyboard.press('Escape');
+  await panel.getByRole('button',{name:'Отменить генерацию'}).click();
+  await expect(panel.getByRole('heading',{name:'Отменено'})).toBeVisible();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+});
+
+
+test('author edits personality on pause after dependency preview and reloads the accepted checkpoint',async({page,request})=>{
+  const seeded=await(await request.post('/test/staged-checkpoint?characters=true')).json();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),seeded.workspace);
+  await page.goto('/');await nav(page,'Создать');
+  const panel=page.getByRole('region',{name:'Этапы генерации мира'});
+  await panel.getByLabel('Авторский просмотр:',{exact:false}).check();
+  const stage=panel.locator('details').filter({has:page.locator('summary').filter({hasText:'Персонажи'})});
+  await stage.locator('summary').click();
+  await stage.getByRole('button',{name:'Посмотреть результат'}).click();
+  const dialog=page.getByRole('dialog');
+  await dialog.getByLabel('Описание черты').fill('Спокойная, внимательная и настойчивая');
+  await dialog.getByRole('button',{name:'Проверить влияние правки'}).click();
+  await expect(dialog.getByRole('status')).toContainText('Отношения и обстоятельства');
+  const before=await(await request.get(`/api/jobs/${seeded.job}/generation/checkpoints/core_0?author=true`)).json();
+  expect(JSON.stringify(before)).not.toContain('Спокойная, внимательная');
+  await dialog.getByRole('button',{name:'Сохранить правку'}).click();
+  await expect(dialog).not.toBeVisible();
+  await page.reload();await nav(page,'Создать');
+  await panel.getByLabel('Авторский просмотр:',{exact:false}).check();
+  await stage.locator('summary').click();
+  await stage.getByRole('button',{name:'Посмотреть результат'}).click();
+  await expect(dialog.getByLabel('Описание черты')).toHaveValue('Спокойная, внимательная и настойчивая');
+  const after=await(await request.get(`/api/jobs/${seeded.job}/generation/checkpoints/core_0?author=true`)).json();
+  expect(after.artifact_version).not.toBe(before.artifact_version);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+});
+
+test('creation settings reach the staged generator and canonical game policy',async({page,request})=>{
+  const workspace=await(await request.post('/api/workspaces',{data:{name:'Настройки генератора'}})).json();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),workspace.id);
+  await page.goto('/');await nav(page,'Создать');
+  await page.getByLabel('Описание мира или текст импорта').fill('Восемь соседей собрались на кухне.');
+  await page.locator('summary').filter({hasText:/^Настройки генератора$/}).click();
+  await page.getByLabel('Основной жанр',{exact:true}).selectOption('family_saga');
+  await expect(page.getByLabel('Описание основного жанра',{exact:true})).toContainText('поколений');
+  await page.getByLabel('Выразительность NPC',{exact:true}).selectOption('hyperbolized');
+  await expect(page.getByLabel('Пример выразительности',{exact:true})).toContainText('Театральная');
+  await page.getByLabel('Масштаб состава',{exact:true}).selectOption('custom');
+  await page.getByLabel('Важные NPC',{exact:true}).fill('7');
+  await page.getByLabel('Второстепенные NPC',{exact:true}).fill('0');
+  await expect(page.getByLabel('Целевой состав мира',{exact:true})).toContainText('всего: 7');
+  await page.getByLabel('География',{exact:true}).fill('Вымышленный город у моря');
+  await page.getByLabel('Темп истории',{exact:true}).selectOption('calm');
+  await page.getByLabel('Риск последствий',{exact:true}).selectOption('safe');
+  const submitted=page.waitForRequest(r=>r.url().endsWith('/draft/generate')&&r.method()==='POST');
+  await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+  const body=(await submitted).postDataJSON();
+  expect(body.task).toBe('world_staged');
+  expect(body.creation).toMatchObject({primary_genre:'family_saga',core_npcs:7,secondary_npcs:0,npc_expressiveness:'hyperbolized',geography:'Вымышленный город у моря'});
+  await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
+  const wid=await page.locator('main.world-workshop').getAttribute('data-workspace-id');
+  const draft=await(await request.get(`/api/workspaces/${wid}/draft?author=true`)).json();
+  const saved=await(await request.post(`/api/workspaces/${wid}/draft/confirm`,{data:{revision:draft.revision,version_id:draft.version_id}})).json();
+  expect(saved.save).toBeTruthy();
+  expect(draft.state.world.narrative_pacing.preset).toBe('calm');
+  expect(draft.state.world.narrative_risk.preset).toBe('safe');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+});
+
+
+test('paused canonical record form protects accepted edits without exposing editor metadata publicly',async({page,request})=>{
+  const seeded=await(await request.post('/test/staged-checkpoint?characters=true')).json();
+  const endpoint=`/api/jobs/${seeded.job}/generation/checkpoints/core_0`;
+  const cp=await(await request.get(endpoint+'?author=true')).json();
+  const cid=Object.keys(cp.artifact.characters)[0];
+  expect(cp.editor_schema.$defs.Character).toBeTruthy();
+  const publicView=await(await request.get(endpoint)).json();
+  expect(publicView.reference_options).toBeUndefined();
+  expect(publicView.editor_schema).toBeUndefined();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),seeded.workspace);
+  await page.goto('/');await nav(page,'Создать');
+  const panel=page.getByRole('region',{name:'Этапы генерации мира'});
+  await panel.getByLabel('Авторский просмотр:',{exact:false}).check();
+  const stage=panel.locator('details').filter({has:page.locator('summary').filter({hasText:'Персонажи'})});
+  await stage.locator('summary').click();await stage.getByRole('button',{name:'Посмотреть результат'}).click();
+  const editor=page.getByRole('region',{name:'Редактирование этапа на паузе'});
+  await editor.getByLabel('Поле этапа',{exact:true}).selectOption({label:`Персонажи · ${cid} · запись целиком`});
+  await editor.getByLabel('Физическое состояние',{exact:true}).fill('Бодрствует');
+  await editor.getByRole('button',{name:'Проверить изменение этапа'}).click();
+  await expect(editor.getByRole('status')).toBeVisible();
+  await editor.getByRole('button',{name:'Применить изменение этапа'}).click();
+  await expect(page.getByRole('dialog')).not.toBeVisible();
+  const changed=await(await request.get(endpoint+'?author=true')).json();
+  expect(changed.artifact.characters[cid].physical_state).toBe('Бодрствует');
+  expect(changed.locked_paths).toContain(`/characters/${cid}`);
+});
+
+test('Scenario handoff uses the same staged generator with captured source and creation settings',async({page,request})=>{
+ await page.goto('/');await nav(page,'Создать');
+ await page.getByRole('button',{name:'Со Сценаристом',exact:true}).click();
+ await page.getByLabel('Название сценария').fill('Сценарий по этапам');
+ await page.getByRole('button',{name:'Новый сценарий',exact:true}).click();
+ await page.getByLabel('Идея или правки сценария').fill('Восемь соседей собрались на кухне.');
+ await page.getByRole('button',{name:'Написать сценарий',exact:true}).click();
+ await expect(page.getByText('Сценарий готов',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Продолжить в редакторе мира',exact:true}).click();
+ await expect(page.getByLabel('Взять за основу сценарий этого черновика')).toBeChecked();
+ await page.locator('summary').filter({hasText:/^Настройки генератора$/}).click();
+ await page.getByLabel('Основной жанр',{exact:true}).selectOption('slice_of_life');
+ const submitted=page.waitForResponse(r=>r.url().endsWith('/draft/generate')&&r.request().method()==='POST');
+ await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+ const response=await submitted;expect(response.request().postDataJSON()).toMatchObject({task:'world_staged',use_idea:true,creation:{primary_genre:'slice_of_life'}});
+ const job=await response.json();
+ await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
+ const cp=await(await request.get(`/api/jobs/${job.id}/generation/checkpoints/interpret?author=true`)).json();
+ const wid=await page.locator('main.world-workshop').getAttribute('data-workspace-id');
+ const workspace=await(await request.get(`/api/workspaces/${wid}`)).json();
+ expect(workspace.idea.trim().length).toBeGreaterThan(0);
+ expect(cp.artifact.brief).toContain(workspace.idea.trim());
+ expect(cp.artifact.creation.primary_genre).toBe('slice_of_life');
+});
+
+test('source constraint form requires acknowledgement and preserves anchored evidence',async({page,request})=>{
+  const seeded=await(await request.post('/test/staged-checkpoint')).json();
+  const endpoint=`/api/jobs/${seeded.job}/generation/checkpoints/interpret?author=true`;
+  const before=await(await request.get(endpoint)).json();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),seeded.workspace);
+  await page.goto('/');await nav(page,'Создать');
+  const panel=page.getByRole('region',{name:'Этапы генерации мира'});
+  await panel.getByLabel('Авторский просмотр:',{exact:false}).check();
+  await panel.locator('summary').filter({hasText:'Понимание замысла'}).click();
+  await panel.getByRole('button',{name:'Посмотреть результат'}).click();
+  const editor=page.getByRole('region',{name:'Редактирование этапа на паузе'});
+  await editor.getByLabel('Поле этапа',{exact:true}).selectOption({label:'Ограничения · 0 · запись целиком'});
+  await expect(editor.getByLabel('Расширенный JSON',{exact:true})).not.toBeChecked();
+  await editor.getByLabel('Описание',{exact:true}).fill('Автор уточнил исходное описание');
+  const check=editor.getByRole('button',{name:'Проверить изменение этапа'});
+  await expect(check).toBeDisabled();
+  await editor.getByLabel('Я явно пересматриваю ограничение.',{exact:false}).check();
+  await check.click();
+  await expect(editor.getByRole('status')).toBeVisible();
+  await editor.getByRole('button',{name:'Применить изменение этапа'}).click();
+  await expect(page.getByRole('dialog')).not.toBeVisible();
+  const after=await(await request.get(endpoint)).json();
+  expect(after.artifact.claims[0].description).toBe('Автор уточнил исходное описание');
+  expect(after.artifact.claims[0].spans).toEqual(before.artifact.claims[0].spans);
+  expect(after.artifact.claims[0].id).toBe(before.artifact.claims[0].id);
+  expect(after.artifact.amendments).toHaveLength(1);
+});
+
+
+test('author can revalidate an edited completed world without regenerating its characters',async({page,request})=>{
+  const workspace=await(await request.post('/api/workspaces',{data:{name:'Повторная проверка'}})).json();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),workspace.id);
+  await page.goto('/');await nav(page,'Создать');
+  await page.getByLabel('Описание мира или текст импорта').fill('Соседи в общем доме.');
+  await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
+  const path=`/api/workspaces/${workspace.id}/draft`;
+  const before=await(await request.get(path+'?author=true')).json();
+  const scene=before.state.camera.scene_id;
+  const edited=await request.patch(path,{data:{revision:before.revision,operation:'patch',kind:'scene',entity_id:scene,field:'text',value:'Соседи разговаривают. За окном дождь.',warnings_ack:true}});
+  expect(edited.ok()).toBeTruthy();
+  await page.reload();await nav(page,'Создать');
+  await page.getByRole('button',{name:'Автор мира',exact:true}).click();
+  await page.getByRole('button',{name:'Показать всё',exact:true}).click();
+  const submitted=page.waitForResponse(r=>r.url().endsWith('/draft/generate')&&r.request().method()==='POST');
+  await page.getByRole('button',{name:'Проверить изменённый мир',exact:true}).click();
+  const response=await submitted;expect(response.ok()).toBeTruthy();
+  const review=await response.json();
+  await expect.poll(async()=>(await(await request.get(`/api/jobs/${review.id}`)).json()).status).toBe('saved');
+  await expect(page.getByRole('region',{name:'Этапы генерации мира'}).getByRole('heading',{name:'Готово',exact:true})).toBeVisible();
+  const after=await(await request.get(path+'?author=true')).json();
+  expect(after.version_id).not.toBe(before.version_id);
+  expect(after.state.characters).toEqual(before.state.characters);
+  expect(after.state.world.scenes[scene].text).toBe('Соседи разговаривают. За окном дождь.');
+  expect((await request.post(path+'/confirm',{data:{revision:after.revision,version_id:after.version_id}})).ok()).toBeTruthy();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+});
+
+
+test('full author editor changes canonical organizations and time before Start Game',async({page,request})=>{
+  const workspace=await(await request.post('/api/workspaces',{data:{name:'Полный редактор'}})).json();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),workspace.id);
+  await page.goto('/');await nav(page,'Создать');
+  await page.getByLabel('Описание мира или текст импорта').fill('Соседи в общем доме.');
+  await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Открыть полный редактор'})).toHaveCount(0);
+  await page.getByRole('button',{name:'Автор мира',exact:true}).click();
+  await page.getByRole('button',{name:'Показать всё',exact:true}).click();
+  const panel=page.getByRole('region',{name:'Полный редактор начального мира'});
+  await panel.getByRole('button',{name:'Открыть полный редактор'}).click();
+  await panel.getByLabel('Раздел мира').selectOption('organizations');
+  await panel.getByRole('button',{name:'Добавить запись',exact:true}).click();
+  await panel.getByLabel('Название',{exact:true}).fill('Институт городских систем');
+  await panel.getByRole('button',{name:'Сохранить раздел мира'}).click();
+  await expect(panel.getByRole('button',{name:'Открыть полный редактор'})).toBeVisible();
+  await panel.getByRole('button',{name:'Открыть полный редактор'}).click();
+  await panel.getByLabel('Раздел мира').selectOption('world_time');
+  await panel.getByLabel('Начальное время',{exact:true}).fill('6120');
+  await panel.getByRole('button',{name:'Сохранить раздел мира'}).click();
+  await expect(panel.getByRole('button',{name:'Открыть полный редактор'})).toBeVisible();
+  const path=`/api/workspaces/${workspace.id}/draft`;
+  const canonical=await(await request.get(path+'/canonical?author=true')).json();
+  expect(Object.values(canonical.values.organizations).some((o:any)=>o.name==='Институт городских систем')).toBe(true);
+  expect(canonical.values.world_time).toBe(6120);
+  const draft=await(await request.get(path+'?author=true')).json();
+  expect((await request.post(path+'/confirm',{data:{revision:draft.revision,version_id:draft.version_id}})).ok()).toBeTruthy();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+});
+
+
+test('exhausted generation offers a bounded retry instead of impossible resume',async({page,request})=>{
+  const seeded=await(await request.post('/test/staged-checkpoint?exhausted=true')).json();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),seeded.workspace);
+  await page.goto('/');await nav(page,'Создать');
+  const panel=page.getByRole('region',{name:'Этапы генерации мира'});
+  await expect(panel.getByRole('button',{name:'Продолжить генерацию'})).toHaveCount(0);
+  await expect(panel.getByRole('button',{name:'Повторить с новым бюджетом'})).toBeVisible();
+  await expect(panel).toContainText('ограничен тремя попытками');
+});

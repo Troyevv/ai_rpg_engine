@@ -5,6 +5,9 @@ import json
 import re
 import os
 os.environ["TABLETOP_DEBUG"] = "1"
+# Browser fixtures use the supported structural path, never local model loading.
+# Encoder/retrieval behavior has its own Python regression suite.
+os.environ["RPG_SEMANTIC_ENABLED"] = "0"
 from pathlib import Path
 import sys
 import tempfile
@@ -15,6 +18,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import engine
 import llm
 import backend.services.preparation as preparation
+from backend.services import world_generation
+# The historical browser matrix contains captured revision-6 checkpoint fixtures.
+# The author-contract browser scenario starts this same server with its own flag.
+world_generation.PROMPT_VERSION = 'world-single-1' if os.getenv('E2E_AUTHORING')=='1' else 'initial-world-stages-6'
 from backend.api.app import create_app
 from test_worlds import summary
 from test_engine import result
@@ -43,6 +50,15 @@ def runtime_v3_request(messages):
 
 def stream(**kwargs):
     full='\n'.join(m['content'] for m in kwargs['messages'])
+    if '\nStage: ' in kwargs['messages'][0]['content']:
+        if '\nStage: author_' in kwargs['messages'][0]['content']:
+            from test_world_authoring import institute, provider
+            yield from provider(institute(),[])(**kwargs)
+            return
+        from staged_browser_fixture import staged_result
+        stage=kwargs['messages'][0]['content'].split('\nStage: ')[1].split('\n')[0]
+        yield json.dumps(staged_result(stage,json.loads(kwargs['messages'][-1]['content'])),ensure_ascii=False)
+        return
     observer='Тип хода: background' in full or 'Режим observer:' in full or 'mode=observer' in full
     if kwargs['messages'][0]['content'].startswith('Select at most ONE optional grounded autonomous remote action.'):
         yield '{"action":null}'
@@ -112,6 +128,8 @@ def stream(**kwargs):
             place='Подвал' if observer else 'Кухня'
             location_id=identity('location',place.casefold())
             present=['character_3','character_4'] if observer and 'character_3' in present else present if observer else ['character_1','character_2']
+            if not observer and len(camera.get('controlled_actor_id') or '')>20:
+                location_id=camera['location_id'];present=camera['present_character_ids'][:2]
             if location_id not in state['locations']:locations=[dict(id=location_id,name=place,evidence=SECRET if observer else NARRATIVE)]
         payload=dict(locations=locations,final_scene=dict(location_id=location_id,
             present_character_ids=present,situation='Тайная встреча.' if observer else 'Разговор на кухне.',elapsed_minutes=1),
@@ -250,6 +268,60 @@ if __name__ == '__main__':
         global hold_next_preparation
         hold_next_preparation=True
         return {'held':True}
+
+    pause_staged_after=None
+    commit_staged=app.state.repository.commit_generation_unit
+    def checkpoint_with_pause(jid,token,unit,payload):
+        global pause_staged_after
+        result=commit_staged(jid,token,unit,payload)
+        if unit==pause_staged_after:
+            pause_staged_after=None
+            app.state.repository.generation_control(jid,'pause')
+        return result
+    app.state.repository.commit_generation_unit=checkpoint_with_pause
+    @app.post('/test/pause-next-staged')
+    def pause_next_staged():
+        global pause_staged_after
+        pause_staged_after='places'
+        return {'stage':'places'}
+
+    @app.post('/test/staged-checkpoint')
+    def staged_checkpoint(characters:bool=False,exhausted:bool=False):
+        from test_api import REMOTE
+        from test_world_interpretation import BRIEF, interpretation
+        from backend.services.world_interpretation import accept
+        repo=app.state.repository
+        wid=repo.create_workspace('Checkpoint browser QA')['id']
+        config={**REMOTE,'_draft_task':'world_staged','_draft_input':BRIEF}
+        jid=repo.begin_preparation(wid,'draft_world_staged',BRIEF,config,0)
+        token=repo.claim_generation(jid)
+        repo.plan_generation_units(jid,token,[dict(id='interpret',stage='interpret',inputs=['brief'],outputs={'interpretation':''})])
+        repo.begin_generation_unit(jid,token,'interpret')
+        if characters:
+            from test_initial_world_stages import parts
+            from backend.services.initial_world_stages import validate_character_batch
+            data=parts()
+            repo.commit_generation_unit(jid,token,'interpret',data['interpretation'])
+            repo.plan_generation_units(jid,token,[
+                dict(id='setting',stage='setting',inputs=['interpretation'],outputs={'registry':''}),
+                dict(id='core_0',stage='characters',inputs=['registry'],outputs={'batch:core_0':''}),
+                dict(id='life',stage='life',inputs=['batch:core_0'],outputs={'life':''}),
+                dict(id='lore',stage='lore',inputs=['life'],outputs={'lore':''}),
+                dict(id='opening',stage='opening',inputs=['lore'],outputs={'opening':''})])
+            batch=data['batches'][0]
+            batch=validate_character_batch(batch,list(batch['characters']),data['registry'])
+            for unit,payload in [('setting',data['registry']),('core_0',batch),('life',{}),('lore',{}),('opening',{})]:
+                repo.begin_generation_unit(jid,token,unit)
+                repo.commit_generation_unit(jid,token,unit,payload)
+        else:
+            repo.commit_generation_unit(jid,token,'interpret',accept(interpretation(),BRIEF,wid,1))
+        repo.generation_control(jid,'pause')
+        repo.generation_boundary(jid,token)
+        if exhausted:
+            with repo.connect() as db:
+                db.execute("UPDATE preparation_jobs SET status='failed' WHERE id=?",(jid,))
+                db.execute("UPDATE preparation_units SET status='failed',attempts=3,retry_attempts=3 WHERE job_id=? AND unit_id='interpret'",(jid,))
+        return {'workspace':wid,'job':jid}
 
     @app.post('/test/appearance-seed')
     def appearance_seed():

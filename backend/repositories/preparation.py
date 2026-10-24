@@ -3,12 +3,13 @@ import json
 import uuid
 from storage import Storage
 from backend.repositories.drafts import DraftStorage
+from backend.repositories.generation_checkpoints import GenerationCheckpoints
 
 
 from backend.repositories.presentation import PresentationStorage
 
 
-class Repository(PresentationStorage, DraftStorage, Storage):
+class Repository(PresentationStorage, DraftStorage, GenerationCheckpoints, Storage):
     def __init__(self, path=None):
         super().__init__(path)
         self.init_presentation()
@@ -39,6 +40,8 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                 for kind in ('idea','summary'):
                     if not db.execute('SELECT 1 FROM document_heads WHERE kind=? AND owner=?',(kind,w['id'])).fetchone():
                         self._record_document(db,kind,w['id'],w[kind],bool(w['summary_complete']) if kind=='summary' else bool(w[kind]),'migration')
+
+        self.init_generation_checkpoints()
 
     def list_workspaces(self, deleted=False):
         with self.connect() as db:
@@ -84,9 +87,18 @@ class Repository(PresentationStorage, DraftStorage, Storage):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             w = db.execute('SELECT * FROM preparation_workspaces WHERE id=?', (wid,)).fetchone()
+            request_key=config.get('_request_id') if kind=='draft_world_staged' else None
+            request_digest=None
+            if request_key and w and not w['deleted']:
+                from backend.services.initial_world_stages import fingerprint
+                request_digest=fingerprint(dict(kind=kind,text=text,config=config,revision=revision))
+                prior=db.execute('SELECT digest,job_id FROM preparation_submissions WHERE workspace_id=? AND request_key=?',(wid,request_key)).fetchone()
+                if prior:
+                    if prior['digest']!=request_digest: raise ValueError('Idempotency key was already used with different input.')
+                    return prior['job_id']
             if not w or w['deleted'] or w['revision'] != revision:
                 raise ValueError('Подготовка изменилась. Обнови её перед запросом.')
-            if db.execute("SELECT 1 FROM preparation_jobs WHERE workspace_id=? AND status='generating'", (wid,)).fetchone():
+            if db.execute("SELECT 1 FROM preparation_jobs WHERE workspace_id=? AND (status='generating' OR kind='draft_world_staged' AND status IN ('pause_requested','paused','waiting_for_credentials','failed'))", (wid,)).fetchone():
                 raise ValueError('Подготовка уже выполняется.')
             if kind == 'summary' and not w['idea'].strip():
                 raise ValueError('Сначала создай сценарий.')
@@ -98,6 +110,12 @@ class Repository(PresentationStorage, DraftStorage, Storage):
             config = dict(config, _prompts=self.prompt_snapshot(db))
             db.execute("INSERT INTO preparation_jobs(id,workspace_id,kind,status,revision,config_json) VALUES(?,?,?,'generating',?,?)",
                        (jid, wid, kind, revision, json.dumps(config)))
+            if kind=='draft_world_staged':
+                from backend.services.world_generation import generation_input
+                if config.get('_review_only'):self._create_generation_review(db,jid,wid)
+                else:self._create_generation_run(db,jid,generation_input(config,w['idea']))
+            if request_key:
+                db.execute('INSERT INTO preparation_submissions VALUES(?,?,?,?)',(wid,request_key,request_digest,jid))
         return jid
 
     def preparation_progress(self, jid, narrative, status='generating', error=''):
@@ -130,7 +148,7 @@ class Repository(PresentationStorage, DraftStorage, Storage):
     def reset_workspace(self, wid, revision):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
-            if db.execute("SELECT 1 FROM preparation_jobs WHERE workspace_id=? AND status='generating'", (wid,)).fetchone():
+            if db.execute("SELECT 1 FROM preparation_jobs WHERE workspace_id=? AND (status='generating' OR kind='draft_world_staged' AND status IN ('pause_requested','paused','waiting_for_credentials','failed'))", (wid,)).fetchone():
                 raise ValueError('Сначала останови генерацию.')
             cursor = db.execute("UPDATE preparation_workspaces SET idea='',summary='',summary_complete=0,messages_json='[]',revision=revision+1 WHERE id=? AND revision=?", (wid, revision))
             if not cursor.rowcount:

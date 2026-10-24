@@ -63,6 +63,12 @@ def decode_result(text,state,config):
 
 
 def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
+    if config['_draft_task']=='world_staged':
+        from backend.services.world_generation import run as generate_staged
+        return generate_staged(preparation,jid,config,api_key,handle,loaded,stream_fn)
+    if config['_draft_task']=='interpret':
+        from backend.services.world_interpretation import run as interpret
+        return interpret(preparation,jid,config,api_key,handle,loaded,stream_fn)
     repo=preparation.repo;job=repo.preparation_job(jid)
     original=repo.draft(job['workspace_id'],author=True)['state'];stage='draft_world'
     context=config['context_length']
@@ -137,3 +143,155 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         raise ValueError('Возможные связанные противоречия: '+'; '.join(report['warnings'])+'. Повтори с явным подтверждением.')
     repo.draft_phase(jid,'saving')
     repo.finish_draft_job(jid,state)
+
+
+# The normal creation path follows master's single-response contract. The
+# existing durable executor owns transport, leases, cancellation and accounting.
+SINGLE_VERSION = 'world-single-1'
+
+
+def compact_schema(value):
+    """Remove annotation noise, never validation keywords or domain fields."""
+    if isinstance(value, dict):
+        return {k: ({name: compact_schema(schema) for name, schema in v.items()}
+                    if k in ('properties', '$defs') else compact_schema(v))
+                for k, v in value.items() if k not in ('title', 'default')}
+    if isinstance(value, list):
+        return [compact_schema(v) for v in value]
+    return value
+
+
+def request_budget(messages, ceiling, context):
+    from context_builder import estimate
+    from backend.services.author_budget import MARGIN
+    from backend.services.world_authoring_compiler import CompileError
+    available = min(ceiling, context - estimate(messages) - MARGIN)
+    if available < 1024:
+        raise CompileError('author/request/world',
+            f'Полный исходник и схема не оставляют места для мира: вход ≈{estimate(messages)}, '
+            f'контекст {context}, лимит ответа {ceiling}, доступно {max(0, available)} токенов.',
+            'Запрос не отправлен. Увеличьте доступный контекст/ответ в пределах модели. Исходник не обрезан.')
+    return available
+
+
+def capture_world(brief, config):
+    from backend.services import world_authoring as a, author_budget as b
+    from backend.services.world_creation_settings import CreationSettings
+    # Generated from the same author model accepted by the compiler/editor.
+    prompt = dict(version=SINGLE_VERSION, budget_version=1,
+        rules=a.AUTHOR_RULES.replace('its analysis\nand creation settings', 'creation settings') +
+        '\nReturn ONE complete world, not a plan. Populate meaningful character biographies, appearance, personality and voice. '
+        'Use creation settings for genre, geography, cast and presentation. Explicit named characters always survive cast targets. '
+        'Omit unused optional fields. The original idea is authoritative. A parental marriage plan is not a marriage or consent. '
+        'Resolve knowledge chronologically: a discovery yesterday changes only its supported holders. '
+        'Opening time uses clock plus date or weekday (Monday=0). Never infer exact birth dates from age.',
+        schemas={'author_document':compact_schema(a.Document.model_json_schema())})
+    creation=CreationSettings.model_validate(config.get('_creation', {})).model_dump()
+    inputs=dict(brief=brief, constraint_revision=1, creation=creation, prompt=prompt)
+    context,ceiling,_=b.limits(config)
+    request_budget(b.messages(prompt,'author_document',world_request(inputs)),ceiling,context)
+    return inputs
+
+
+def world_request(inputs):
+    from backend.services.world_creation_settings import CreationSettings
+    return dict(original_source=inputs['brief'], creation_settings=inputs['creation'],
+        cast_targets=CreationSettings.model_validate(inputs['creation']).cast_targets([]))
+
+
+def technical_report(exc):
+    """Private structured repair evidence; never echo raw model input publicly."""
+    from pydantic import ValidationError
+    current=exc
+    while current is not None:
+        if isinstance(current, ValidationError):
+            return [dict(path='/'+'/'.join(map(str,e['loc'])), reason=e['type'],
+                expected=e['msg'], allowed=str(e.get('ctx',{})))
+                for e in current.errors(include_input=False,include_url=False)]
+        if isinstance(current, json.JSONDecodeError):
+            return [dict(path='/',reason='json_syntax',expected='One complete JSON object',
+                line=current.lineno,column=current.colno)]
+        current=current.__cause__
+    diagnostic=getattr(exc,'diagnostic',None)
+    if isinstance(diagnostic,dict):
+        return [dict(path='/'+diagnostic['path'].removeprefix('author_document/'),
+            reason=diagnostic['reason'],expected=diagnostic['action'])]
+    return [dict(path='/',reason=str(exc),expected='Canonical Runtime invariants; preserve unrelated data')]
+
+
+def preserve_unaffected(before, after, report):
+    """A technical repair cannot silently rewrite already valid creative fields."""
+    from backend.services.world_authoring_compiler import CompileError
+    paths=[r['path'].strip('/').split('/') for r in report]
+    if any(p==[''] for p in paths):
+        raise CompileError('repair/scope', 'Нельзя безопасно локализовать правку; исходный результат сохранён.')
+    def allowed(path):
+        return any(path[:len(p)]==p for p in paths)
+    def walk(left,right,path):
+        if allowed(path):return
+        if type(left) is not type(right):
+            raise CompileError('/'.join(path),'Техническая правка изменила корректные данные.')
+        if isinstance(left,dict):
+            for key in left.keys() | right.keys():
+                if allowed(path+[key]):continue
+                if key not in left or key not in right:
+                    raise CompileError('/'.join(path+[key]),'Техническая правка добавила или удалила корректное поле.')
+                walk(left[key],right[key],path+[key])
+        elif isinstance(left,list):
+            if len(left)!=len(right):
+                raise CompileError('/'.join(path),'Техническая правка изменила состав записей.')
+            for i,(l,r) in enumerate(zip(left,right)):
+                # Compiler diagnostics address records by key; DTO errors by index.
+                key=l.get('key',str(i)) if isinstance(l,dict) else str(i)
+                child=path+[str(i)] if any(p[:len(path)+1]==path+[str(i)] for p in paths) else path+[key]
+                walk(l,r,child)
+        elif left!=right:
+            raise CompileError('/'.join(path),'Техническая правка изменила корректное значение.')
+    walk(before,after,[])
+
+
+def run_world(repo,jid,token,inputs,request,execute):
+    from backend.services import world_authoring as a
+    from backend.services.world_authoring_compiler import compile_document
+    from backend.services.world_authoring_pipeline import compiled_hash
+    def unit(name,dependencies,outputs):
+        return dict(id=name,stage=name,inputs=dependencies,outputs=outputs)
+    repo.plan_generation_units(jid,token,[
+        unit('author_document',['brief','creation','prompt'],{'author_document':''}),
+        unit('compile',['author_document','creation','brief'],{'assembled':'/snapshot','author_compilation':''})])
+    previous=None;report=None
+    cp=repo.inspect_generation_checkpoint(jid,'author_document',True)
+    diagnostic=cp.get('diagnostic',{})
+    if diagnostic.get('category')=='technical_repair':
+        try:previous=json.loads(diagnostic['raw_response']);report=diagnostic['report']
+        except (ValueError,TypeError):pass
+    def validate(raw):
+        nonlocal previous,report
+        if previous is not None:
+            try:preserve_unaffected(previous,raw,report)
+            except ValueError as exc:
+                raise RuntimeError('stage/author_document: repair changed valid content; original result retained') from exc
+        try:
+            # DTO, reference, family, knowledge, temporal and canonical checks
+            # all happen before the document can become a completed checkpoint.
+            value=a.Document.model_validate(raw).model_dump()
+            compile_document(value,creation=inputs['creation'])
+        except ValueError as exc:
+            # Preserve the original repair basis if a reply rewrote good fields.
+            previous=raw
+            report=technical_report(exc)
+            raise
+        return value
+    execute('author_document',lambda:request('author_document',world_request(inputs),a.Document),validate)
+    def compile_current():
+        document=repo.generation_resources(jid,['author_document'])['author_document']
+        result=compile_document(document,creation=inputs['creation'])
+        snapshot=result.snapshot
+        snapshot['campaign']['initial_world']=dict(version=a.VERSION,brief=inputs['brief'],
+            analysis={'entities':[],'observations':[],'ambiguities':[]},source_document=document,
+            id_map=result.id_map,compiled_hash=compiled_hash(snapshot),diagnostics=result.diagnostics)
+        return dict(snapshot=snapshot,id_map=result.id_map,diagnostics=result.diagnostics,
+            transformations=result.transformations)
+    execute('compile',compile_current,lambda v:v)
+    if repo.generation_boundary(jid,token):
+        repo.publish_generation_draft(jid,token,repo.generation_resources(jid,['assembled'])['assembled'])

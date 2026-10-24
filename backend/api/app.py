@@ -25,7 +25,7 @@ from backend.services.coordinator import LOCAL_MODEL_LOCK
 from backend.services.credentials import Credentials
 
 ROOT = Path(__file__).resolve().parents[2]
-ACTIVE = ('generating', 'extracting', 'validating')
+ACTIVE = ('generating', 'extracting', 'validating', 'pause_requested')
 
 
 def create_app(db_path=None, recover=True):
@@ -37,19 +37,29 @@ def create_app(db_path=None, recover=True):
     async def lifespan(app):
         if recover:
             with repo.connect() as db:
-                stale = [r['id'] for r in db.execute("SELECT id FROM preparation_jobs WHERE status='generating'")]
+                stale = [r['id'] for r in db.execute("SELECT id FROM preparation_jobs WHERE status='generating' AND id NOT IN (SELECT job_id FROM preparation_runs)")]
                 db.execute("UPDATE game_jobs SET status='stopped',error='Сервер перезапущен. Можно повторить запрос.' WHERE status IN ('generating','extracting','validating')")
                 db.execute("UPDATE llm_requests SET status='interrupted' WHERE status='running'")
             for jid in stale:
                 preparation.stop(jid)
+        recovery_stop=asyncio.Event()
+        async def recover_checkpoints():
+            while not recovery_stop.is_set():
+                await asyncio.to_thread(preparation.recover_generations,credentials)
+                try: await asyncio.wait_for(recovery_stop.wait(),timeout=5)
+                except asyncio.TimeoutError: pass
+        recovery_task=asyncio.create_task(recover_checkpoints()) if recover else None
         yield
+        recovery_stop.set()
+        if recovery_task: await recovery_task
         with repo.connect() as db:
             games = [r['id'] for r in db.execute("SELECT id FROM game_jobs WHERE status IN ('generating','extracting','validating')")]
-            drafts = [r['id'] for r in db.execute("SELECT id FROM preparation_jobs WHERE status='generating'")]
+            drafts = [r['id'] for r in db.execute("SELECT id FROM preparation_jobs WHERE status IN ('generating','pause_requested')")]
         for jid in games:
             engine.stop(repo, jid)
         for jid in drafts:
-            preparation.stop(jid)
+            if repo.generation_status(jid) is not None: preparation.suspend_generation(jid)
+            else: preparation.stop(jid)
 
     app = FastAPI(title='AI RPG Engine', version='2.0.0', lifespan=lifespan)
     from backend.api.protagonist import install as install_protagonist
@@ -94,11 +104,12 @@ def create_app(db_path=None, recover=True):
             raise HTTPException(403, 'Недоступно')
         with repo.connect() as db:
             games = [r['id'] for r in db.execute("SELECT id FROM game_jobs WHERE status IN ('generating','extracting','validating')")]
-            drafts = [r['id'] for r in db.execute("SELECT id FROM preparation_jobs WHERE status='generating'")]
+            drafts = [r['id'] for r in db.execute("SELECT id FROM preparation_jobs WHERE status IN ('generating','pause_requested')")]
         for jid in games:
             engine.stop(repo, jid)
         for jid in drafts:
-            preparation.stop(jid)
+            if repo.generation_status(jid) is not None: preparation.suspend_generation(jid)
+            else: preparation.stop(jid)
         if hasattr(app.state, 'shutdown'):
             app.state.shutdown()
         return {'ok': True}
@@ -147,7 +158,12 @@ def create_app(db_path=None, recover=True):
             value['live'] = engine.live(jid)
         value['repairs'] = json.loads(value.get('repair_diagnostics_json') or '[]')
         value['warnings'] = json.loads(value.get('warnings_json','[]'))
+        if jid.startswith('prep_'):
+            value['generation']=repo.generation_status(jid)
         return repo.public_job(value)
+
+    from backend.api.world_generation import install as install_world_generation
+    install_world_generation(app,repo,preparation,credentials,job)
 
     @app.get('/api/saves/{sid}')
     def save(sid: int):

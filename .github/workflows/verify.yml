@@ -9,7 +9,9 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Setup, Python, build and browser install took ~11m in run 40042668121;
+    # retain all serial desktop/mobile tests and their per-test deadlines.
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -28,7 +30,7 @@ jobs:
         working-directory: frontend
       - run: npx playwright install --with-deps chromium
         working-directory: frontend
-      - run: npx playwright test
+      - run: npx playwright test --reporter=line
         working-directory: frontend
         env:
           CI: 'true'

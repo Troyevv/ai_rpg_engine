@@ -157,6 +157,21 @@ export function Settings({
                   onChange={(e) => update(key, { max_tokens: +e.target.value })}
                 />
               </label>
+              <label>
+                Бюджет контекста
+                <select
+                  value={draft[key].context_length}
+                  onChange={(e) =>
+                    update(key, { context_length: +e.target.value })
+                  }
+                >
+                  {[8192, 16384, 32768, 65536, 131072].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
               {key === "game" && (
                 <>
                   <details>
@@ -165,21 +180,6 @@ export function Settings({
                   <label>Последних ходов в контексте<Input type="number" min="2" max="20" value={draft.game.recent_turns} onChange={e=>update(key,{recent_turns:+e.target.value})}/></label>
                   <label>Максимум ходов в пакете памяти<Input type="number" min="2" max="20" value={draft.game.memory_batch} onChange={e=>update(key,{memory_batch:+e.target.value})}/></label>
                   </details>
-                  <label>
-                    Бюджет контекста
-                    <select
-                      value={draft.game.context_length}
-                      onChange={(e) =>
-                        update(key, { context_length: +e.target.value })
-                      }
-                    >
-                      {[8192, 16384, 32768, 65536, 131072].map((n) => (
-                        <option key={n} value={n}>
-                          {n}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
                   <label>
                     Лимит обработки мира
                     <Input

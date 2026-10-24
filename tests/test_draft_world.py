@@ -1,6 +1,8 @@
 import json
 from copy import deepcopy
 import pytest
+
+pytestmark = pytest.mark.usefixtures("captured_authoring_v1")
 from test_api import api, REMOTE, wait_job
 from test_worlds import summary
 from world_parser import parse_summary

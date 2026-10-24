@@ -22,14 +22,62 @@ class Preparation:
         self.lock = threading.Lock()
 
     def submit(self, wid, kind, text, config, revision, api_key=None):
+        from backend.services.world_generation import PROMPT_VERSION
+        if kind=='draft_world' and PROMPT_VERSION=='world-single-1':
+            kind='draft_world_staged';config={**config,'_draft_task':'world_staged'}
         if config['provider'] == 'deepseek':
             api_key = deepseek_key(api_key)
-        jid = self.repo.begin_preparation(wid, kind, text, config, revision)
         handle = Handle()
         with self.lock:
+            # Publish the queued job and register its local dispatcher together
+            # with respect to periodic recovery, before the worker claims a lease.
+            jid = self.repo.begin_preparation(wid, kind, text, config, revision)
+            if jid in self.handles or self.repo.preparation_job(jid)['status']!='generating': return jid
             self.handles[jid] = handle
         threading.Thread(target=self.run, args=(jid, config, api_key, handle), daemon=True).start()
         return jid
+
+    def resume_generation(self,jid,api_key=None,revision=None,allow_uncertain_retry=False,new_budget=False):
+        job=self.repo.preparation_job(jid)
+        if job['kind']!='draft_world_staged': raise ValueError('This job has no staged checkpoints.')
+        config=json.loads(job['config_json'])
+        if config['provider']=='deepseek': api_key=deepseek_key(api_key)
+        with self.lock:
+            if jid in self.handles:
+                if job['status']=='generating': return
+                raise ValueError('The current worker is finishing its checkpoint. Retry resume after it stops.')
+            self.repo.generation_control(jid,'retry' if new_budget else 'resume',revision,allow_uncertain_retry)
+            handle=Handle();self.handles[jid]=handle
+            threading.Thread(target=self.run,args=(jid,config,api_key,handle),daemon=True).start()
+
+    def recover_generations(self,credentials):
+        with self.lock:
+            recovered=self.repo.recover_generations(owned_jobs=tuple(self.handles))
+        with self.repo.connect() as db:
+            waiting=[row['id'] for row in db.execute("SELECT j.id FROM preparation_jobs j JOIN preparation_runs r ON r.job_id=j.id WHERE j.status='waiting_for_credentials'")]
+        for jid in set(recovered+waiting):
+            job=self.repo.preparation_job(jid)
+            if job['status']!='waiting_for_credentials': continue
+            config=json.loads(job['config_json'])
+            try:
+                key=credentials.resolve(config['provider'])
+                if config['provider']=='local' and not find_loaded_model(config['model']): continue
+                self.resume_generation(jid,key)
+            except ValueError:
+                # Retain an actionable state. Missing/decryption-failed credentials
+                # cannot erase checkpoints or trigger an implicit new account.
+                continue
+
+    def suspend_generation(self,jid):
+        self.repo.interrupt_generation(jid)
+        with self.lock: handle=self.handles.get(jid)
+        if handle:
+            handle.cancel.set()
+            if handle.stream:
+                def close():
+                    try: handle.stream.close()
+                    except Exception: pass
+                threading.Thread(target=close,daemon=True).start()
 
     def live(self, jid):
         with self.lock:
@@ -41,7 +89,10 @@ class Preparation:
         if handle:
             handle.cancel.set()
         job = self.repo.preparation_job(jid)
-        self.repo.preparation_progress(jid, job['narrative'], 'stopped')
+        if self.repo.generation_status(jid) is not None:
+            self.repo.generation_control(jid,'cancel')
+        else:
+            self.repo.preparation_progress(jid, job['narrative'], 'stopped')
         if handle and handle.stream:
             def close():
                 try:
@@ -53,6 +104,11 @@ class Preparation:
     def run(self, jid, config, api_key, handle):
         narrative = ''
         try:
+            job=self.repo.preparation_job(jid)
+            if job['kind']=='draft_world_staged':
+                if handle.cancel.is_set() or job['status']!='generating': return
+                from backend.services.world_generation import run
+                return run(self,jid,json.loads(job['config_json']),api_key,handle,None,chat_stream)
             with model_lease(config['provider']):
                 if handle.cancel.is_set():
                     return

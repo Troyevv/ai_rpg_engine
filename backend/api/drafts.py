@@ -5,6 +5,7 @@ from pydantic import Field
 from fastapi.responses import PlainTextResponse
 from backend.api.schemas import DTO, Revision, Credential, ModelConfig
 from backend.services import draft_world as domain
+from backend.services.world_creation_settings import CreationSettings
 
 
 class Import(Revision):
@@ -12,7 +13,11 @@ class Import(Revision):
     format: Literal['text','json'] = 'text'
 
 class Change(Revision):
-    operation: Literal['patch','add','remove','restore']
+    generation_job: str | None = None
+    generation_unit: str | None = None
+    artifact_version: int | None = None
+    preview: bool = True
+    operation: Literal['patch','add','remove','restore','regenerate','unlock']
     kind: str = ''
     entity_id: str = ''
     field: str = ''
@@ -21,14 +26,16 @@ class Change(Revision):
     warnings_ack: bool = False
 
 class Generate(Revision,Credential):
-    task: Literal['world','field','character'] = 'world'
+    task: Literal['world','world_staged','world_review','field','character','interpret'] = 'world'
     text: str = Field(default='',max_length=100000)
     use_idea: bool = False
+    request_id: str | None = Field(default=None,min_length=1,max_length=128,pattern=r'^[\w-]+$')
     kind: str = ''
     entity_id: str = ''
     field: str = ''
     warnings_ack: bool = False
     config: ModelConfig
+    creation: CreationSettings = Field(default_factory=CreationSettings)
 
 class Confirm(Revision):
     version_id: int
@@ -38,6 +45,16 @@ def install(app,repo,preparation,credentials,job):
     @app.get('/api/workspaces/{wid}/draft')
     def draft(wid:str,author:bool=False):return repo.draft(wid,author)
 
+    @app.get('/api/workspaces/{wid}/draft/canonical')
+    def canonical(wid:str,author:bool=False):
+        if not author:raise ValueError('author: подтвердите авторский просмотр')
+        from backend.services.initial_world_editor import view
+        draft=repo.draft(wid,True)
+        return {**view(draft['state']),'revision':draft['revision']}
+
+    @app.get('/api/workspaces/{wid}/draft/interpretation')
+    def interpretation(wid:str,author:bool=False):return repo.interpretation(wid,author)
+
     @app.post('/api/workspaces/{wid}/draft/import')
     def import_world(wid:str,body:Import):
         repo.import_draft(wid,body.text,body.revision,body.format)
@@ -45,6 +62,14 @@ def install(app,repo,preparation,credentials,job):
 
     @app.patch('/api/workspaces/{wid}/draft')
     def change(wid:str,body:Change):
+        if body.generation_job is not None:
+            from backend.services.generation_edits import patch_character,patch_checkpoint
+            if body.kind=='checkpoint' and body.generation_unit and body.artifact_version is not None:
+                return patch_checkpoint(repo,wid,body.generation_job,body.generation_unit,body.revision,body.artifact_version,body.field,body.value,preview=body.preview,operation=body.operation,ack=body.warnings_ack)
+            if body.operation!='patch' or body.kind!='character' or not body.generation_unit or body.artifact_version is None:
+                raise ValueError('generation/edit: select a character field and checkpoint version')
+            return patch_character(repo,wid,body.generation_job,body.generation_unit,body.revision,
+                body.artifact_version,body.entity_id,body.field,body.value,preview=body.preview)
         eid=repo.edit_draft(wid,body.revision,body.operation,body.kind,body.entity_id,body.field,body.value,body.source_id,body.warnings_ack)
         return {**repo.draft(wid,True),'entity_id':eid}
 
@@ -55,15 +80,19 @@ def install(app,repo,preparation,credentials,job):
 
     @app.post('/api/workspaces/{wid}/draft/generate')
     def generate(wid:str,body:Generate):
-        if body.task=='world' and not body.text.strip() and not body.use_idea:raise ValueError('Опиши желаемый мир.')
-        if body.task!='world':
+        if body.task in ('world','world_staged','interpret') and not body.text.strip() and not body.use_idea:raise ValueError('Опиши желаемый мир.')
+        if body.task not in ('world','world_staged','world_review','interpret'):
             state=repo.draft(wid,True)['state']
             domain.entity(state,body.kind,body.entity_id)
             if body.task=='character' and body.kind!='character':raise ValueError('Нужна карточка персонажа.')
             if body.task=='field' and body.field not in domain.FIELDS.get(body.kind,set()) and not(body.kind=='character' and body.field.startswith('fields.')):raise ValueError('Поле недоступно.')
-        config={**body.config.model_dump(),'_draft_task':body.task,'_draft_input':body.text,'_use_idea':body.use_idea,
-                '_warnings_ack':body.warnings_ack,'_draft_target':{'kind':body.kind,'id':body.entity_id,'field':body.field}}
-        jid=preparation.submit(wid,'draft_'+body.task,body.text,config,body.revision,credentials.resolve(body.config.provider,body.key()))
+        config={**body.config.model_dump(),'_creation':body.creation.model_dump(),'_draft_task':body.task,'_draft_input':body.text,'_use_idea':body.use_idea,
+                '_request_id':body.request_id,'_warnings_ack':body.warnings_ack,'_draft_target':{'kind':body.kind,'id':body.entity_id,'field':body.field}}
+        if body.task=='interpret':
+            from backend.services.world_generation import PROMPT_VERSION
+            config['_interpretation_version']=2 if PROMPT_VERSION=='initial-world-stages-6' else 1
+        if body.task=='world_review':config.update(_review_only=True,_draft_task='world_staged')
+        jid=preparation.submit(wid,'draft_'+('world_staged' if body.task=='world_review' else body.task),body.text,config,body.revision,credentials.resolve(body.config.provider,body.key()))
         return job(jid)
 
     @app.post('/api/workspaces/{wid}/draft/confirm')
