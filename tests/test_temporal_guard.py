@@ -9,14 +9,14 @@ from unittest.mock import patch
 import engine
 
 
-def run(repo, sid, minutes, *, kind='turn', compression='missing', text='Рассматриваю карту.', config=None, extra=None):
+def run(repo, sid, minutes, *, kind='turn', compression='missing', text='Рассматриваю карту.', config=None, extra=None, player_input='Рассматриваю карту.'):
     s = repo.get_snapshot(sid)['world_state']
     raw = dict(final_scene=dict(location_id=s['camera']['location_id'],
         present_character_ids=s['camera']['present_character_ids'], elapsed_minutes=minutes))
     if compression != 'missing':
         raw['final_scene']['compression'] = compression
     raw.update(extra or {})
-    job = repo.begin_job(sid, '' if kind == 'start' else 'Рассматриваю карту.', kind, config or CONFIG)
+    job = repo.begin_job(sid, '' if kind == 'start' else player_input, kind, config or CONFIG)
     calls = []
     def stream(**kw):
         calls.append(kw)

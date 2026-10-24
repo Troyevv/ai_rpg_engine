@@ -128,3 +128,49 @@ pending and each direct prerequisite resolved with no blocked/missed/cancelled
 outcome. No automatic rescheduling or completion occurs. Legacy resolved
 prerequisites without an outcome remain supported. This PR only shares this
 existing LTA criterion; further QA-03 scenarios remain in #108.
+
+## T6 — QA-03: prerequisite readiness after rescheduling (#108)
+
+Reset `commitments` in the isolated database using the command above. Automated
+coverage: `tests/test_commitment_readiness.py` uses real Repository, engine jobs,
+Resolver and SQLite persistence with controlled provider responses; no paid calls.
+
+1. Start with one minute: `world_time=5563`. Explicitly reschedule
+   `qa_friday_trip` with `assertion=rescheduled` and
+   `temporal={day_offset:6,time:"18:00"}`, current evidence and player evidence.
+   Use zero elapsed minutes for the reproducible setup. The same canonical ID
+   now has boundary `14040`; `qa_sunday_return` stays pending at `9720`, dependent
+   on the trip. Do not move the return or invent a completed departure.
+2. Request a five-day Time Skip (`7200` minutes). Expected: `12763`, no
+   interruption by `qa_sunday_return`. Both plans keep their IDs, dates, statuses
+   and evidence. Independent NPC background attempts may update their existing
+   `last_attempt_minute` metadata, without inventing outcomes.
+3. Reload, regenerate the skip, select its original variant, then rollback.
+   Each restores its own time and snapshot; rollback returns to `5563`. Make two
+   short ordinary turns with reload between them to exercise the new branch.
+4. After rollback, submit a rejected ordinary jump across the rescheduled trip,
+   including a proposed cancellation. The entire operation must leave snapshot,
+   History and accepted turns unchanged, including after reload.
+5. On separate resets, establish `blocked`, `cancelled`, or `occurred` for the
+   parent through accepted current evidence. Pending/blocked never unlock the
+   dependent; cancellation uses the existing dependency-cancellation lifecycle.
+   Only accepted fulfillment makes the pending return actionable. The five-day
+   skip then stops at `9720`; reaching that date still does not resolve the return.
+   Rollback of the outcome restores the pending prerequisite and readiness.
+6. From the rescheduled setup, a two-week LTA with `max_llm_calls=0` stops at the
+   parent at `14040`, never the unready return at `9720`. Reload/regenerate and
+   rollback preserve the same boundaries. Compression shares the same predicate
+   (near-boundary status matrix: `test_shared_readiness_for_skip_compression_and_lta`).
+
+The root-cause correction landed with QA-01 / PR #112: the read-only
+`commitment_ready` from `runtime_v3/commitments.py` is already consumed by Time
+Skip, LTA and ordinary/compression boundaries. #108 adds integration coverage,
+not a competing policy or a new persisted contract. Direct prerequisites must be
+resolved with no failed/blocked/cancelled outcome; legacy resolved records without
+an outcome retain compatibility. UI remains a projection; no new actor knowledge
+or player decisions are inferred from the clock.
+
+Before/after reproduction: on pre-QA-01 master `442c95b`,
+`test_dependency_does_not_interrupt_skip` fails with `9720 != 12763`; on master
+containing PR #112 it passes. Controlled responses prove deterministic Runtime
+behavior, not the frequency of a live model's mistakes.
