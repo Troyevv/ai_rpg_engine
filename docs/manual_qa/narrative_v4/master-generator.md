@@ -87,8 +87,8 @@ This remains a live-model acceptance concern.
 
 ## Live acceptance still required
 
-No paid DeepSeek requests are authorized by this task. Do not mark fully ready
-without a separately agreed budget and real tests for both full inputs, inspecting
+Paid DeepSeek checks require an available key and an agreed budget. Do not mark fully ready
+without real tests for both full inputs, inspecting
 cast completeness, source fidelity, knowledge secrecy, creative quality, opening
 agency, ordinary turns and reload. No mock result substitutes for that check.
 
@@ -228,3 +228,66 @@ Live acceptance remains unperformed: no `DEEPSEEK_API_KEY` was available in this
 execution environment. No paid requests were sent. Short/Volkov/other-setting/custom
 calendar live generation, semantic quality and real-model gameplay remain required
 before claiming production stability.
+
+## Reviewer protocol recovery (2026-10-24)
+
+The raw report from the user's failing request was not available in this checkout.
+Protocol failures in `test_review_protocol.py` are labelled synthetic regressions;
+the complete Volkov world/brief fixtures remain unchanged. The combined smoke uses
+those full fixtures and the previously documented explicit dinner clarification.
+
+Confirmed code defects: the reviewer received record schemas but no report schema;
+its `world` envelope obscured the pointer root; diagnostic addresses granted patch
+permissions; rejected reports received identical retries; ordinary edits erased
+review blockers; raw export omitted failure journals; settings were attached after
+the first candidate save; pre-stream HTTP rejections retained their reservation.
+
+`ReviewReport` / `ReviewIssue` now own the report schema, example and strict parsing.
+`candidate` is the payload wrapper; pointers are relative to its contents. Diagnostic
+`path` and exact `patch_paths` are separate. Legacy exact safe paths may infer one
+patch permission; whole records never do. Missing paths are allowed for literary
+recommendations. Malformed siblings retain valid issues but cannot certify a review.
+Unknown fields/severities, duplicate JSON keys, bad escapes and ambiguous wrappers
+are rejected; no substring extraction or invented content is used.
+
+Review metadata tracks not_started/running/completed/failed/stale independently of
+technical validation. Candidate hash, complete review-input signature and contract
+version bind acceptance. Manual edits invalidate reviews; restore reinstates the
+selected immutable version and its own status. Manual imports remain technical-only.
+No SQLite reset or new table is required. Resume increments the existing recovery
+epoch; stale workers cannot save a journal/candidate/final result across epochs.
+
+### Existing failed workspace
+
+1. Update to this PR and restart the backend. Open the existing workspace; do not
+   delete SQLite or regenerate the world.
+2. If necessary increase context in generator settings. This does not change an
+   explicit total token or money cap.
+3. Click **Повторить проверку**. The existing candidate (including manual edits) is
+   checked; the saved world-generation response is not requested again. Legacy
+   `review_incomplete` is recognized; old reports are recovered from response slots.
+4. If a request had an unknown outcome, inspect/download the partial response and
+   use the explicit possible-repeat-payment recovery action. Both Resume variants
+   pass the current context/output settings. Unknown requests retain reservations.
+5. Invalid reports expose author-only raw output, validation addresses inside the
+   report, world addresses, partial issues, attempts, versions, usage and recovery.
+   No empty field editor appears. A field form opens only after choosing a field.
+6. After review succeeds, edit if needed, repeat review of the edited version, then
+   Start Game → ordinary turn → save/reload → next ordinary turn. Check adoption
+   secrecy, per-character Knowledge, directed feelings and creation settings.
+
+The existing `tests/e2e_server.py` / `draft-v4.spec.ts` controlled-provider setup uses
+an isolated test DB and runs desktop/mobile reload, malformed-review recovery and
+Start Game without paid calls. `TEST_REVIEW_PROTOCOL` injects two malformed reports.
+It is not a claim about live DeepSeek quality. Full suite includes existing Tabletop
+and supported-save migration regressions. Exact commands/results belong in the PR.
+
+DeepSeek JSON mode is retained (`json_object`), with application validation still
+mandatory: https://api-docs.deepseek.com/guides/json_mode/ . Beta structured output
+is not required. No DeepSeek environment key was available for this follow-up, so
+real paid short-idea/Volkov acceptance remains unverified.
+
+Equivalent symmetric phases are merged only when all non-ID fields match, with
+structured relation references remapped. Distinct phases and directed emotions are
+preserved; conflicting active records are diagnosed without proposing a fabricated
+closure. Such a conflict may require author clarification, not an invented history.

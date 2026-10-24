@@ -75,8 +75,8 @@ def test_real_response_reproduces_semantic_holes_despite_canonical_validity():
     draft_initial.canonical_check(s)  # Demonstrates why type checks alone fail.
     payload=json.loads(review.messages(s,DINNER)[-1]['content'])
     assert payload['author_context']==DINNER
-    assert payload['world']['characters']==s['characters']
-    assert payload['world']['world']['events']==raw['world']['events']
+    assert payload['candidate']['characters']==s['characters']
+    assert payload['candidate']['world']['events']==raw['world']['events']
     errors=review.parse(json.dumps({'issues':findings()}),s)
     assert len(errors)==len(corrections())
     assert all(e['category']=='semantic_completeness' for e in errors)
@@ -127,8 +127,12 @@ def test_local_repair_retains_cards_relationships_and_unaffected_secrets():
 
 @pytest.mark.parametrize('path', ['/world','/world/roles','/world/characters/c1','/characters/0','/world/events/nope/minute'])
 def test_review_cannot_authorize_broad_or_impossible_changes(path):
-    with pytest.raises((ValueError,KeyError)):
-        review.parse(json.dumps({'issues':[dict(path=path,message='bad')]}),candidate())
+    if path=='/world/events/nope/minute':
+        with pytest.raises(review.ReportError):review.parse(json.dumps({'issues':[dict(path=path,message='bad')]}),candidate())
+    else:
+        issues=review.parse(json.dumps({'issues':[dict(path=path,message='bad')]}),candidate())
+        assert issues[0]['patch_paths']==[]
+        with pytest.raises(ValueError):draft_repair.request(json.dumps(candidate()),issues)
 
 
 @pytest.mark.parametrize('section,key,field,value',[
@@ -160,7 +164,7 @@ def test_real_response_review_repair_start_turn_reload(api):
         res=client.post(path+'/generate',json={'revision':0,'text':DINNER,'config':dict(REMOTE,context_length=65536),'api_key':'test'})
         job=wait_job(client,res.json()['id']);assert job['status']=='saved',job
     assert len(calls)==4 and len(reviews)==2
-    assert reviews[1]['world']['world']['knowledge']['k4']['status']=='known'
+    assert reviews[1]['candidate']['world']['knowledge']['k4']['status']=='known'
     draft=client.get(path+'?author=true').json()
     for before,after in zip(real()['characters'],draft['state']['characters']):
         for field in ('Биография','Характер','Внешность'):assert before['fields'][field]==after['fields'][field]

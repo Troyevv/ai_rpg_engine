@@ -43,6 +43,8 @@ type Draft = {
     revision: number;
     version_id: number | null;
     candidate?: Record<string,unknown> | null;
+    review?: {status:string;reason?:string} | null;
+    start_block_reason?: string | null;
     state: DraftState | null;
     validation: {
         diagnostics?: {path:string;message:string}[];
@@ -165,7 +167,9 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
         continuing: ['Продолжаем ответ…', 'Полученная часть сохранена. Модель дописывает тот же мир.'],
         world: ['Собираем игровой мир…', 'Модель развивает идею и сразу создаёт готовый World State.'],
         retrying: ['Исправляем формат ответа…', 'Модель исправляет только ошибки JSON и ссылок.'],
-        validating: ['Проверяем структуру мира…', 'Движок проверяет заполнение полей, ссылки и согласованность.'],
+        validating: ['Проверяем структуру мира…', 'Локальная проверка типов и ссылок.'],
+        reviewing: ['Проверяем смысловую согласованность…', 'Модель проверяет сохранённый мир.'],
+        review_format_repair: ['Исправляем отчёт проверки…', 'Мир сохранён. Исправляется формат ответа проверяющего.'],
         saving: ['Сохраняем версию…', 'Проверенный мир записывается в SQLite.'],
         editing: ['Обновляем выбранное поле…', 'Модель подготавливает новую версию поля.'],
     };
@@ -251,16 +255,18 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
           {removed.length === 0 ? <p>Корзина пуста.</p> : removed.map(w => <div className="workshop-draft-row" data-workspace-id={w.id} key={w.id}><span>{w.name}</span><Button variant="ghost" size="sm" disabled={locked} onClick={() => void run(async () => { await api(`/workspaces/${w.id}/restore`,{revision:w.revision}); setList(await api<WorkspacePick[]>('/workspaces')); setRemoved(await api<WorkspacePick[]>('/workspaces?deleted=true')); selectWorkspace(w.id); toast.success('Черновик восстановлен'); })}>Восстановить</Button></div>)}
         </details>
       </details>
-      {job?.resumable && <Button disabled={locked} onClick={()=>void run(async()=>{await api(`/workspaces/${id}/draft/resume`,{api_key:apiKey,revision:draft?.revision,max_tokens:prefs.summary.max_tokens,context_length:prefs.summary.context_length});await refresh();})}>Продолжить сохранённую генерацию</Button>}
-      {job?.status === 'error' && <div><Button variant="outline" onClick={()=>void run(async()=>{download(JSON.stringify(await api(`/workspaces/${id}/draft/raw`),null,2),'generation-response.json');})}>Скачать исходный ответ и диагностику</Button>
-      {(job as Job & {unknown_outcome?:boolean}).unknown_outcome && <details><summary>Восстановить запрос с неизвестным исходом</summary><p>Провайдер мог списать оплату. Повтор может быть оплачен ещё раз; полученный текст останется в истории.</p><Button disabled={locked} onClick={()=>void run(async()=>{await api(`/workspaces/${id}/draft/resume`,{api_key:apiKey,revision:draft?.revision,acknowledge_unknown:true});await refresh();})}>Повторить с возможной повторной оплатой</Button></details>}</div>}
+      {(job?.resumable || (draft?.review?.status==='stale' && job?.status==='saved')) && <Button disabled={locked} onClick={()=>void run(async()=>{await api(`/workspaces/${id}/draft/resume`,{api_key:apiKey,revision:draft?.revision,max_tokens:prefs.summary.max_tokens,context_length:prefs.summary.context_length});await refresh();})}>{draft?.review ? 'Повторить проверку' : 'Продолжить сохранённую генерацию'}</Button>}
+      {(job?.status === 'error' || job?.status === 'stopped') && <div><Button variant="outline" onClick={()=>void run(async()=>{download(JSON.stringify(await api(`/workspaces/${id}/draft/raw`),null,2),'generation-response.json');})}>Скачать исходный ответ и диагностику</Button>
+      {(job as Job & {unknown_outcome?:boolean}).unknown_outcome && <details><summary>Восстановить запрос с неизвестным исходом</summary><p>Провайдер мог списать оплату. Повтор может быть оплачен ещё раз; полученный текст останется в истории.</p><Button disabled={locked} onClick={()=>void run(async()=>{await api(`/workspaces/${id}/draft/resume`,{api_key:apiKey,revision:draft?.revision,max_tokens:prefs.summary.max_tokens,context_length:prefs.summary.context_length,acknowledge_unknown:true});await refresh();})}>Повторить с возможной повторной оплатой</Button></details>}</div>}
+      {draft?.review && ['failed','running','not_started','stale'].includes(draft.review.status) && <section className="workshop-review" role="status"><h3>Смысловая проверка не завершена</h3><p>Мир сохранён. Автоматическая проверка не завершилась. Это не установленная ошибка поля мира.</p><p>{draft.review.reason || 'Для запуска игры требуется проверить актуальную версию мира.'}</p></section>}
+      {draft?.start_block_reason && <p role="alert">Запуск заблокирован: {draft.start_block_reason}</p>}
       {!state && job && <Button variant="outline" onClick={()=>authorAcknowledged ? setAuthor(true) : setAuthorAsk(true)}>Открыть результат в редакторе автора</Button>}
-      {author && draft?.candidate && <section className="workshop-review"><h3>Восстановление черновика</h3><p>Результат сохранён целиком. Исправляй поля последовательно; другие ошибки не мешают сохранению.</p>
-        {draft.validation.diagnostics?.map((d,i)=><div key={i}><p role="alert">{d.path}: {d.message}</p><Button variant="outline" disabled={d.path==='/'} onClick={()=>{setCandidatePath(d.path);let v:unknown=draft.candidate;try{for(const key of d.path.slice(1).split('/'))v=(v as Record<string,unknown>)[key.replace(/~1/g,'/').replace(/~0/g,'~')];}catch{v=null;}setCandidateValue(JSON.stringify(v??null,null,2));}}>Исправить поле</Button></div>)}
-        <Input aria-label="Путь поля кандидата" value={candidatePath} onChange={e=>setCandidatePath(e.target.value)}/>
+      {author && draft?.candidate && <section className="workshop-review"><h3>Восстановление черновика</h3><p>Результат сохранён целиком. Поля с установленными ошибками можно выбрать ниже. Сбой проверки исправляется кнопкой «Повторить проверку».</p>
+        {draft.validation.diagnostics?.filter(d=>d.path && d.path!=='/').map((d,i)=><div key={i}><p role="alert">{d.path}: {d.message}</p><Button variant="outline" disabled={d.path==='/'} onClick={()=>{setCandidatePath(d.path);let v:unknown=draft.candidate;try{for(const key of d.path.slice(1).split('/'))v=(v as Record<string,unknown>)[key.replace(/~1/g,'/').replace(/~0/g,'~')];}catch{v=null;}setCandidateValue(JSON.stringify(v??null,null,2));}}>Исправить поле</Button></div>)}
+        {candidatePath && <><Input aria-label="Путь поля кандидата" value={candidatePath} onChange={e=>setCandidatePath(e.target.value)}/>
         <Textarea aria-label="Значение поля кандидата JSON" value={candidateValue} onChange={e=>setCandidateValue(e.target.value)}/>
-        <Button disabled={locked || !candidatePath || candidatePath==='/'} onClick={()=>void run(async()=>{await api(`/workspaces/${id}/draft/candidate`,{revision:draft.revision,path:candidatePath,value:JSON.parse(candidateValue)},'PATCH');await refresh();})}>Сохранить исправление</Button>
-        <Button variant="outline" onClick={()=>void refresh()}>Проверить черновик</Button>
+        <Button disabled={locked || !candidatePath || candidatePath==='/'} onClick={()=>void run(async()=>{await api(`/workspaces/${id}/draft/candidate`,{revision:draft.revision,path:candidatePath,value:JSON.parse(candidateValue)},'PATCH');await refresh();})}>Сохранить исправление</Button></>}
+        <Button variant="outline" onClick={()=>void refresh()}>Проверить структуру локально</Button>
         <details><summary>Полный кандидат (включая тайны)</summary><pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify(draft.candidate,null,2)}</pre></details>
       </section>}
       {(!state || editingIdea) && <section className="workshop-inspiration">

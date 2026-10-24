@@ -16,8 +16,16 @@ def request(raw,errors,author_context=None):
     except ValueError:
         return [dict(role='system',content='Исправь только синтаксическую пунктуацию JSON. Сохрани все ключи, строки, числа и их порядок дословно. Верни полный JSON без Markdown.'),
                 dict(role='user',content=json.dumps(dict(response=raw,errors=errors),ensure_ascii=False))],None
-    paths=[e['path'] for e in errors if e.get('path') and e['path']!='/']
-    if len(paths)!=len(errors):
+    if any(e.get('category')=='duplicate' for e in errors):raise ValueError('Конфликт фаз связи требует уточнения автором. Нельзя закрывать связь ради устранения дубля.')
+    expanded=[]
+    for e in errors:
+        if e.get('category')=='semantic_completeness':
+            if not e.get('patch_paths'):raise ValueError('Замечание сохранено, но точные поля для автоматического исправления не определены. Повторите проверку или откройте редактор автора.')
+            expanded.extend(dict(e,path=p) for p in e['patch_paths'])
+        else:expanded.append(e)
+    errors=expanded
+    paths=list(dict.fromkeys(e['path'] for e in errors if e.get('path') and e['path']!='/'))
+    if any(not e.get('path') or e['path']=='/' for e in errors):
         raise ValueError('Ошибка требует интерпретации без однозначного пути. Исходный ответ сохранён: '+str(errors))
     fragments={}
     for path in paths:

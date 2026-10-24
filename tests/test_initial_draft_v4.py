@@ -91,6 +91,12 @@ def test_source_settings_continuation_editor_start_reload(api,source):
     changed=client.patch(path,json={'revision':draft['revision'],'operation':'patch','kind':'roles','entity_id':'job','field':'title','value':'Старший юрист','warnings_ack':True})
     assert changed.status_code==200,changed.text
     draft=changed.json()
+    assert draft['review']['status']=='stale'
+    with patch('backend.services.preparation.chat_stream',return_value=iter(['{"issues":[]}'])):
+        r=client.post(path+'/resume',json={'revision':draft['revision'],'api_key':'test-secret'})
+        assert r.status_code==200,r.text
+        assert wait_job(client,reply.json()['id'])['status']=='saved'
+    draft=client.get(path+'?author=true').json()
     confirmed=client.post(path+'/confirm',json={'revision':draft['revision'],'version_id':draft['version_id']})
     assert confirmed.status_code==200,confirmed.text
     sid=confirmed.json()['save']

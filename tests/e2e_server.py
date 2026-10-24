@@ -41,9 +41,18 @@ def runtime_v3_request(messages):
     return any('RawTurnResult v3' in message['content'] for message in messages)
 
 
+review_protocol_attempts={}
+
 def stream(**kwargs):
     from backend.services.draft_completeness import MARKER
     if kwargs['messages'][0]['content'].startswith(MARKER):
+        request=json.loads(kwargs['messages'][1]['content'])
+        source=request.get('author_context','')
+        if 'TEST_REVIEW_PROTOCOL' in source:
+            count=review_protocol_attempts.get(source,0);review_protocol_attempts[source]=count+1
+            if count<2:
+                yield '{"issues":[{"path":"/world/world/roles/missing","message":"Неверный корень отчёта"}]}'
+                return
         yield '{"issues":[]}'
         return
     full='\n'.join(m['content'] for m in kwargs['messages'])

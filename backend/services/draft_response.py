@@ -148,6 +148,10 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
         return join_fragments(record['parts']) if len(record['parts'])>1 else ''.join(p['text'] for p in record['parts'])
     text = join_fragments(record['parts'])
     if journal.get('pending'): raise TransportError('Исход прошлого запроса неизвестен; повтор запрещён.')
+    def accounting():
+        if not hasattr(repo,'request_log'):return {}
+        rows=repo.request_log(job_id=jid)
+        return rows[0] if rows else {}
     while not cancel.is_set():
         if len(record['parts']) >= MAX_FRAGMENTS: raise TransportError('Исчерпан лимит пяти фрагментов. Ответ сохранён.')
         request = deepcopy(messages)
@@ -161,7 +165,8 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
         # provider usage. Accounting remains actual usage in llm_requests.
         budget = config.get('_draft_token_budget',3*MAX_FRAGMENTS*(context+config['max_tokens']))
         reserved = journal.get('reserved_tokens',0)
-        if reserved+input_bound+limit > budget: raise TransportError('Исчерпан бюджет токенов генерации. Ответ сохранён.')
+        if reserved+journal.get('actual_tokens',0)+input_bound+limit > budget: raise TransportError('Исчерпан бюджет токенов генерации. Ответ сохранён.')
+        previous_cost=journal.get('reserved_cost','0')
         cap = config.get('_draft_cost_budget_usd')
         if cap is not None:
             from backend.services.usage import price_snapshot
@@ -170,11 +175,21 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
             if pricing is None: raise TransportError('Тариф неизвестен: нельзя гарантировать бюджет расходов.')
             upper = Decimal(0) if pricing['version']=='local' else (input_bound*Decimal(pricing['input'])+limit*Decimal(pricing['output']))/1000000
             cost = Decimal(journal.get('reserved_cost','0'))+upper
-            if cost > Decimal(str(cap)): raise TransportError('Исчерпан бюджет расходов. Ответ сохранён.')
+            if cost+Decimal(journal.get('actual_cost','0')) > Decimal(str(cap)): raise TransportError('Исчерпан бюджет расходов. Ответ сохранён.')
             journal['reserved_cost'] = str(cost)
         journal['reserved_tokens'] = reserved+input_bound+limit
         journal['pending'] = {'slot':slot,'offset':len(text),'text':''}
         repo.save_response_journal(jid,journal)  # commit BEFORE opening a paid request
+        def settle(metadata, rejected=False):
+            inp,out=metadata.get('input_tokens'),metadata.get('output_tokens')
+            known=type(inp) is int and type(out) is int
+            if known or rejected:
+                journal['reserved_tokens']=reserved
+                if known:journal['actual_tokens']=journal.get('actual_tokens',0)+inp+out
+            amount=metadata.get('cost_usd')
+            if amount is not None or rejected:
+                journal['reserved_cost']=previous_cost
+                if amount is not None:journal['actual_cost']=str(Decimal(journal.get('actual_cost','0'))+Decimal(amount))
         fragment = ''; ended = False
         try:
             try:
@@ -190,8 +205,10 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
             if cancel.is_set(): return None
         except ProviderHTTPError as exc:
             # A rejected HTTP request before streaming has a known outcome.
+            metadata=accounting()
+            settle(metadata,rejected=not bool(fragment))
             journal['pending']=None
-            journal.setdefault('http_failures',[]).append(dict(slot=slot,status=exc.status_code))
+            journal.setdefault('http_failures',[]).append(dict(slot=slot,status=exc.status_code,reservation_released=not bool(fragment)))
             retries=record.get('http_retries',0)
             record['http_retries']=retries+1
             repo.save_response_journal(jid,journal)
@@ -203,7 +220,9 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
             # Network errors and cancellation have unknown billing/output, even
             # if no visible characters arrived. Do not turn them into a retry.
             raise TransportError('Запрос прерван; его исход неизвестен. Полученный текст сохранён, слепой повтор запрещён.') from None
-        part = dict(text=fragment,sha256=hashlib.sha256(fragment.encode()).hexdigest(),offset=len(text),finish_reason='stop' if ended else 'length')
+        metadata=accounting()
+        settle(metadata)
+        part = dict(request_id=metadata.get('id'),usage=json.loads(metadata['usage_json']) if metadata.get('usage_json') else None,provider_finish_reason=metadata.get('finish_reason'),text=fragment,sha256=hashlib.sha256(fragment.encode()).hexdigest(),offset=len(text),finish_reason='stop' if ended else 'length')
         record['parts'].append(part)
         record['complete'] = ended
         journal['pending'] = None

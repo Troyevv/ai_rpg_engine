@@ -71,15 +71,21 @@ def test_failed_generation_manual_edit_start_turn_reload(api):
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         jid=client.post(url+'/generate',json={'revision':0,'text':SHORT,'config':REMOTE,'api_key':'test'}).json()['id']
         assert wait_job(client,jid)['status']=='error'
-    d=client.get(url+'?author=true').json();assert d['candidate']==initial.normalize(raw)
+    d=client.get(url+'?author=true').json();assert {k:v for k,v in d['candidate'].items() if k!='creation_settings'}==initial.normalize(raw)
     assert client.get(url).json()['candidate'] is None
     assert client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id']}).status_code==409
     for path in ('/protagonist_id','/controlled_actor_id'):
         r=client.patch(url+'/candidate',json={'revision':d['revision'],'path':path,'value':original})
         assert r.status_code==200,r.text
         d=r.json()
+    assert d['review']['status']=='stale'
+    assert client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id']}).status_code==409
+    with patch('backend.services.preparation.chat_stream',return_value=iter(['{"issues":[]}'])):
+        client.post(url+'/resume',json={'revision':d['revision'],'api_key':'test'})
+        assert wait_job(client,jid)['status']=='saved'
+    d=client.get(url+'?author=true').json()
     assert not d['validation']['errors'],d['validation']
-    assert d['candidate']['world']['facts']==raw['world']['facts']
+    assert d['state']['world']['facts']==raw['world']['facts']
     started=client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id']});assert started.status_code==200,started.text
     sid=started.json()['save'];repo=app.state.repository
     from test_runtime_v3_engine import run as play,raw_for

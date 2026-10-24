@@ -68,7 +68,12 @@ def install(app,repo,preparation,credentials,job):
         if not current:raise ValueError('Нет задания.')
         saved=repo.preparation_job(current['id'])
         journal=json.loads(saved.get('response_journal') or '{}')
-        return {'responses':journal.get('responses',{}),'pending':journal.get('pending'),'errors':journal.get('errors',[])}
+        # Explicit allowlist: never export config, credentials or authorization headers.
+        keys=('responses','pending','errors','review_failures','repair_failures','http_failures','review_recoveries',
+              'accepted_reviews','unknown_attempts','recovery_epoch','reserved_tokens','reserved_cost','actual_tokens','actual_cost')
+        requests=[{k:r.get(k) for k in ('id','stage','status','finish_reason','usage_json','input_tokens','output_tokens','cost_usd')} for r in repo.request_log(job_id=current['id'])]
+        return {'requests':requests,**{k:journal[k] for k in keys if k in journal},'recovery':{'status':saved['status'],'phase':saved.get('phase'),
+                'revision':saved['revision'],'review':repo.draft(wid,True).get('review')}}
 
     @app.post('/api/workspaces/{wid}/draft/import')
     def import_world(wid:str,body:Import):

@@ -179,6 +179,24 @@ def normalize(value):
     for rel in world['objective_relations'].values():
         if isinstance(rel,dict) and rel.get('kind') in SYMMETRIC and isinstance(rel.get('source_id'),str) and isinstance(rel.get('target_id'),str):
             rel['source_id'],rel['target_id']=sorted((rel['source_id'],rel['target_id']))
+    # Merge only byte-equivalent symmetric phases (apart from their technical ID).
+    # References to the removed ID are remapped in structured *_id fields only.
+    equivalents={}; relation_remap={}
+    import json
+    for key,rel in list(world['objective_relations'].items()):
+        if not isinstance(rel,dict) or rel.get('kind') not in SYMMETRIC:continue
+        signature=json.dumps({k:v for k,v in rel.items() if k!='id'},sort_keys=True,ensure_ascii=False)
+        if signature in equivalents:
+            relation_remap[key]=equivalents[signature]
+            del world['objective_relations'][key]
+        else:equivalents[signature]=key
+    if relation_remap:
+        def relation_refs(v,field=''):
+            if isinstance(v,dict):return {k:relation_refs(x,k) for k,x in v.items()}
+            if isinstance(v,list):return [relation_refs(x,field) for x in v]
+            if isinstance(v,str) and field in ('objective_relation_id','objective_relation_ids','relation_id','relation_ids'):return relation_remap.get(v,v)
+            return v
+        value=relation_refs(value);world=value['world']
     scene=world['scenes'].get(value['camera'].get('scene_id'),{})
     if isinstance(scene,dict) and isinstance(scene.get('location'),str):
         for cid in scene.get('participants',[]):
@@ -228,8 +246,9 @@ def validate_typed(state):
                 except (ValueError,TypeError,KeyError) as exc:
                     problems.append(error('/world/characters/'+escape(cid)+'/birth_date',str(exc),'calendar_date',expected='YYYY-MM-DD'))
     for field in ('protagonist_id','controlled_actor_id'):
-        if state.get(field) not in ids: problems.append(error('/'+field,'Неизвестный персонаж.','reference',allowed=sorted(ids)))
+        if (not isinstance(state.get(field),str) or state.get(field) not in ids): problems.append(error('/'+field,'Неизвестный персонаж.','reference',allowed=sorted(ids)))
     for index,place in enumerate(state['locations']):
+        check(m.Location,{k:v for k,v in place.items() if k in m.Location.model_fields},f'/locations/{index}')
         if place.get('parent_id') is not None and place['parent_id'] not in locations:
             problems.append(error(f'/locations/{index}/parent_id','Неизвестное родительское место.','reference',allowed=sorted(locations)))
     for index,place in enumerate(state['locations']):
@@ -251,7 +270,7 @@ def validate_typed(state):
     for section in (*EXTENSIONS,'characters','knowledge','relationships'):
         for key,record in world.get(section,{}).items():
             for field,valid in references.items():
-                if record.get(field) is not None and record[field] not in valid:
+                if record.get(field) is not None and (not isinstance(record[field],str) or record[field] not in valid):
                     problems.append(error(f'/world/{section}/{escape(key)}/{field}','Ссылка не существует.','reference',allowed=sorted(valid)))
     from backend.services.relation_dimensions import RELATION_DIMENSIONS
     for key,record in world['relationships'].items():
@@ -281,11 +300,11 @@ def validate_typed(state):
             problems.append(error('/world/knowledge/'+escape(key)+'/source_event_id','Событие не подтверждает получение этого знания персонажем.','provenance'))
     for key,record in world.get('organizations',{}).items():
         for index,lid in enumerate(record.get('location_ids',[])):
-            if lid not in locations:problems.append(error(f'/world/organizations/{escape(key)}/location_ids/{index}','Неизвестная локация организации.','reference',allowed=sorted(locations)))
+            if not isinstance(lid,str) or lid not in locations:problems.append(error(f'/world/organizations/{escape(key)}/location_ids/{index}','Неизвестная локация организации.','reference',allowed=sorted(locations)))
     for key,record in world['events'].items():
         for field,valid in (('participants',ids),('witnesses',ids),('fact_ids',facts)):
             for index,ref in enumerate(record.get(field,[])):
-                if ref not in valid:problems.append(error(f'/world/events/{escape(key)}/{field}/{index}','Ссылка события не существует.','reference',allowed=sorted(valid)))
+                if not isinstance(ref,str) or ref not in valid:problems.append(error(f'/world/events/{escape(key)}/{field}/{index}','Ссылка события не существует.','reference',allowed=sorted(valid)))
     problems.extend(cross_record_errors(state))
     if problems: raise DraftErrors(problems)
 
@@ -346,22 +365,22 @@ def cross_record_errors(state):
                         if row.get(field) not in (None,''):problems.append(error(base+'/'+field,'Активная запись содержит завершение.','chronology',related_paths=[base+'/status'] if 'status' in row else []))
             if section=='objective_relations':
                 a,b=row.get('source_id'),row.get('target_id');kind=row.get('kind')
-                if a==b:problems.append(error(base+'/target_id','Связь с самим собой недопустима.','relation',allowed=sorted(ids-{a})))
+                if isinstance(a,str) and a==b:problems.append(error(base+'/target_id','Связь с самим собой недопустима.','relation',allowed=sorted(ids-{a})))
                 endpoints=tuple(sorted((a,b))) if kind in SYMMETRIC and isinstance(a,str) and isinstance(b,str) else (a,b)
                 signature=(kind,*endpoints)
-                if row.get('status','active')=='active':
-                    if signature in active:problems.append(error(base+'/status','Дублирующая активная фаза связи.','duplicate',related_paths=[active[signature]]))
+                if row.get('status','active')=='active' and isinstance(a,str) and isinstance(b,str):
+                    if signature in active:problems.append(error(base,'Конфликт записей одной активной связи. Уточните различающиеся данные; не закрывайте связь ради удаления дубля.','duplicate',related_paths=[active[signature]]))
                     active[signature]=base
-                if kind in PARENTAGE|{'guardian','foster_parent','step_parent'} and a in ids and b in ids:graph.setdefault(b,set()).add(a)
+                if kind in PARENTAGE|{'guardian','foster_parent','step_parent'} and isinstance(a,str) and isinstance(b,str) and a in ids and b in ids:graph.setdefault(b,set()).add(a)
             participants=[row.get('actor_id')] if row.get('actor_id') else [row.get('source_id'),row.get('target_id')] if section=='objective_relations' else []
             for field in ('fact_id','closure_fact_id','life_fact_id','parentage_complete_fact_id'):
-                fact=world['facts'].get(row.get(field))
-                if fact and participants and not set(participants)<=set(fact.get('character_ids',[])):
+                fact=world['facts'].get(row.get(field)) if isinstance(row.get(field),str) else None
+                if fact and participants and all(isinstance(x,str) for x in participants) and not set(participants)<=set(fact.get('character_ids',[])):
                     problems.append(error(base+'/'+field,'Факт не относится ко всем участникам.','provenance',related_paths=[ptr('world','facts',row[field],'character_ids')]))
             ref_lists={'participants':ids,'witnesses':ids,'character_ids':ids,'visible_to_ids':ids,'fact_ids':set(world['facts']),'event_ids':set(world['events']),'depends_on':set(world['scheduled_events'])}
             for field,known in ref_lists.items():
                 for i,ref in enumerate(row.get(field,[])):
-                    if ref not in known:problems.append(error(base+'/'+field+'/'+str(i),'Ссылка не существует.','reference',allowed=sorted(known)))
+                    if not isinstance(ref,str) or ref not in known:problems.append(error(base+'/'+field+'/'+str(i),'Ссылка не существует.','reference',allowed=sorted(known)))
             for field,known in (('scene_id',world['scenes']),('last_event_id',world['events']),('resolved_event_id',world['events'])):
                 if row.get(field) and row[field] not in known:problems.append(error(base+'/'+field,'Ссылка не существует.','reference',allowed=sorted(known)))
     from graphlib import TopologicalSorter,CycleError

@@ -74,11 +74,16 @@ class Repository(PresentationStorage, DraftStorage, Storage):
             job = {**job, 'narrative': ''}
         if job.get('kind','').startswith('draft_'):
             job={**job,'narrative':'','progress_chars':len(job.get('narrative',''))}
+            if job.get('error','').startswith('Две попытки'):job['error']='Две попытки исправления исчерпаны. Мир сохранён; подробности доступны автору.'
         return {k: v for k, v in job.items() if k not in ('config_json', 'before_json', 'context_json', 'memory_before_json', 'warnings_json', 'response_journal')}
 
     def save_response_journal(self, jid, journal):
         """Private response transport state; no new checkpoint table or world format."""
         with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            current=db.execute('SELECT response_journal FROM preparation_jobs WHERE id=?',(jid,)).fetchone()
+            if current and json.loads(current[0] or '{}').get('recovery_epoch',0)!=journal.get('recovery_epoch',0):
+                raise ValueError('Устаревший работник генерации: результат не принят.')
             db.execute('UPDATE preparation_jobs SET response_journal=? WHERE id=?',
                        (json.dumps(journal,ensure_ascii=False),jid))
 
@@ -87,7 +92,7 @@ class Repository(PresentationStorage, DraftStorage, Storage):
             db.execute('BEGIN IMMEDIATE')
             job = dict(db.execute('SELECT * FROM preparation_jobs WHERE id=?',(jid,)).fetchone())
             journal = json.loads(job['response_journal'])
-            if job['kind'] != 'draft_world' or job['status'] not in ('error','stopped') or not journal:
+            if job['kind'] != 'draft_world' or job['status'] not in ('error','stopped','saved') or not journal:
                 raise ValueError('Нет сохранённого ответа для продолжения.')
             if journal.get('pending') and not acknowledge_unknown:
                 raise ValueError('Исход прерванного запроса неизвестен. Автоматический повтор запрещён; полученный текст сохранён.')
@@ -102,7 +107,7 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                 head=self._draft_head(db,job['workspace_id'])
                 if head:
                     record=json.loads(head['content'])
-                    if record.get('candidate'):journal['candidate_text']=json.dumps(record['state'],ensure_ascii=False)
+                    journal['candidate_text']=json.dumps(record['state'],ensure_ascii=False)
                 db.execute('UPDATE preparation_jobs SET revision=? WHERE id=?',(revision,jid))
             db.execute('UPDATE preparation_jobs SET config_json=? WHERE id=?',(json.dumps(config,ensure_ascii=False),jid))
             journal['recovery_epoch']=journal.get('recovery_epoch',0)+1
