@@ -117,6 +117,9 @@ def create_app(db_path=None, recover=True):
     @app.get('/api/worlds/{wid}')
     def world(wid: int):
         w = repo.get_world(wid)
+        if w['state'].get('schema_version')==3:
+            from backend.runtime_v3.selectors import ui_view
+            w['state']=ui_view(w['state'])
         w['scene_meta'] = scene_metadata(w['state'])
         w['presentation'] = repo.get_presentation(wid)
         return w

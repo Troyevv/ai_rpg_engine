@@ -1,3 +1,4 @@
+import {WorldBuilder} from './WorldBuilder';
 import {SectionTabs} from "./components/ui/section-tabs";
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -37,6 +38,7 @@ type DraftState = {
     };
 };
 type Draft = {
+    manual?: boolean;
     id: string;
     name: string;
     revision: number;
@@ -214,6 +216,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
         id: string;
     }[]>(`/workspaces/${id}/draft/dependencies?kind=${kind}&entity_id=${eid}`); setRemoval({ kind, id: eid, deps }); })}>Удалить</Button></div>}
  </div>;
+    if (mode === 'manual' || draft?.manual) return <WorldBuilder prefs={prefs} apiKey={apiKey} onGame={onGame} initialId={draft?.manual?id:''} onBack={()=>{selectWorkspace('');setMode('quick');}}/>;
     if (mode === 'scenario')
         return <><Button className="workshop-back" variant="ghost" onClick={() => setMode('quick')}>← Генератор мира</Button><Preparation prefs={prefs} apiKey={apiKey} onWorld={onWorld} onDraft={wid => { selectWorkspace(wid); setUseIdea(true); setMode('quick'); }}/></>;
     return <main className="preparation world-workshop" aria-busy={loading} data-workspace-id={id} data-draft-workspace-id={draft?.id || ''}>
@@ -224,6 +227,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
       </header>
       <nav className="workshop-paths" aria-label="Способ создания">
         <button className={mode === 'quick' ? 'selected' : ''} onClick={() => setMode('quick')}>По моей идее</button>
+        <button onClick={() => setMode('manual')}>Создание мира вручную</button>
         <button onClick={() => setMode('scenario')}>Со Сценаристом</button>
         <button className={mode === 'import' ? 'selected' : ''} onClick={() => setMode('import')}>Импортировать</button>
       </nav>

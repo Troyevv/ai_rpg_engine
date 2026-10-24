@@ -2,6 +2,7 @@
 import hashlib
 import json
 from backend.services import draft_world as domain
+from backend.repositories.world_builder import BuilderStorage
 
 
 def dump(value):return json.dumps(value,ensure_ascii=False)
@@ -11,7 +12,7 @@ def _invalid_json_constant(value):
     raise ValueError(f'Некорректное JSON-значение: {value}.')
 
 
-class DraftStorage:
+class DraftStorage(BuilderStorage):
     def draft_phase(self,jid,phase,reset_progress=False):
         with self.connect() as db:
             db.execute("UPDATE preparation_jobs SET phase=?,narrative=CASE WHEN ? THEN '' ELSE narrative END WHERE id=? AND status='generating'",(phase,int(reset_progress),jid))
@@ -30,6 +31,8 @@ class DraftStorage:
         with self.connect() as db:
             w=self._draft_workspace(db,wid,idle=False);head=self._draft_head(db,wid)
             record=json.loads(head['content']) if head else None
+            if record and record['state'].get('schema_version')==3:
+                return {'id':wid,'name':w['name'],'revision':w['revision'],'state':None,'manual':True}
             state=domain.prepare(record['state']) if record else None
             report=domain.validate(state) if state else {'errors':[],'warnings':[]}
             if state and record.get('generated'):report['warnings'].extend(domain.review_initial(state,record.get('source','')))
@@ -44,7 +47,7 @@ class DraftStorage:
                 'history':history,'job':self.public_job(dict(latest)) if latest else None,'author':author}
 
     def _write_draft(self,db,wid,state,reason,source='',warnings=None,source_id=None,outline='',generated=False):
-        state=domain.prepare(state)
+        if state.get('schema_version')!=3:state=domain.prepare(state)
         self._record_document(db,'world_draft',wid,dump({'state':state,'source':source,'warnings':warnings or [],'outline':outline,'generated':generated}),True,reason,source_id)
         db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))
 
@@ -126,9 +129,19 @@ class DraftStorage:
             if done:return json.loads(done[0])
             w=self._draft_workspace(db,wid,revision);head=self._draft_head(db,wid)
             if not head or head['id']!=version_id:raise ValueError('Подтверждённая версия устарела.')
-            state=domain.prepare(json.loads(head['content'])['state']);report=domain.validate(state)
+            state=json.loads(head['content'])['state']
+            manual=state.get('schema_version')==3
+            if manual:
+                from backend.services.world_builder import launch, markdown
+                state=launch(state);report={'errors':[]}
+                from backend.runtime_v3.repository import append_history
+                history=state.pop('initial_history',None)
+                if history and any(history.values()):state['history_head']=append_history(db,None,history)
+            else:
+                state=domain.prepare(state);report=domain.validate(state)
             if report['errors']:raise ValueError('Нельзя начать игру: '+'; '.join(report['errors']))
-            name=state['campaign']['title'].strip() or w['name'];source=domain.export_markdown(state)
+            name=(state['campaign'].get('campaign',{}) if manual else state['campaign']).get('title','').strip() or w['name']
+            source=markdown(state) if manual else domain.export_markdown(state)
             digest=hashlib.sha256(dump(state).encode()).hexdigest()
             existing=db.execute('SELECT id FROM worlds WHERE name_key=? AND digest=?',(name.casefold(),digest)).fetchone()
             if existing:world_id=existing[0]

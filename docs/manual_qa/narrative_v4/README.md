@@ -194,3 +194,12 @@ reload/rollback: [relations.md](relations.md).
 Checkpoint `initiative` и [протокол инициативы](initiative.md) проверяют самостоятельное
 начало/изменение/завершение общения, взрослые предложения, отказ, EXTERNAL, смену
 управления, наблюдение и совместимость с pacing без отдельного LLM-вызова.
+
+## Initial-world builder (#117)
+
+The existing `family`, `residence-roles` and `appearance` checkpoints are also exercised by
+`tests/test_world_builder.py` through canonical manual-authoring validation and launch. No
+second QA world or fixture format is introduced. The end-to-end authoring checklist, including
+secret holders, calendar modes, dependency deletion, proposal preview, unfinished save/reload
+and Start Game → ordinary turn → reload → next turn, is in [world-builder.md](../../world-builder.md).
+The [field inventory](../../world-builder-field-matrix.md) is generated from current models.
