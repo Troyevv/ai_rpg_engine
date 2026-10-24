@@ -72,7 +72,7 @@ class Repository(PresentationStorage, DraftStorage, Storage):
         assembly_error=world.get('assembly_error','')
         retry_boundary=bool(assembly_error and len(world.get('parts',[]))>=2 and not any(word in assembly_error for word in ('целостность','Пропущен')))
         job = {**job, 'fragment_recovery':retry_boundary, 'transport_blocked':bool(assembly_error and not retry_boundary),
-               'transport_incomplete':bool(world and not world.get('complete') and not journal.get('candidate_text')),
+               'transport_incomplete':bool(world and not journal.get('candidate_text')),
                'unknown_outcome':bool(journal.get('pending')),
                'resumable':bool(journal and not journal.get('pending') and job.get('status') in ('error','stopped'))}
         if assembly_error:job['error']='Не удалось собрать сохранённые части ответа. Диагностика доступна автору.'

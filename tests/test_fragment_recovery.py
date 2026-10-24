@@ -239,3 +239,10 @@ def test_identical_candidate_from_new_job_gets_new_lineage(api):
         client.post(url+'/resume',json={'revision':d['revision'],'api_key':'test'})
         assert wait_job(client,jid)['status']=='saved'
         assert provider.call_count==1
+
+
+def test_terminal_syntax_failure_is_not_a_published_world():
+    from backend.repositories.preparation import Repository
+    j={'responses':{'world':{'parts':[part('{"bad":}',0)],'complete':True,'document_state':'syntax_error'}}}
+    public=Repository.public_job(dict(kind='draft_world',status='error',response_journal=json.dumps(j)))
+    assert public['transport_incomplete'] and not public['fragment_recovery']
