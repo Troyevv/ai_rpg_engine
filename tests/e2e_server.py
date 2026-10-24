@@ -113,6 +113,9 @@ def stream(**kwargs):
     elif 'Каноническая JSON Schema WorldState' in full:
         from test_draft_world import fixture
         candidate=fixture()
+        if 'TEST_MOTIVATION_OBJECTS' in full:
+            from test_draft_motivations import motivated
+            candidate,_=motivated()
         if 'TEST_CANDIDATE_RECOVERY' in full:candidate['protagonist_id']='missing'
         value=json.dumps(candidate,ensure_ascii=False)
         if 'TEST_JSON_CONTINUATION' in full:

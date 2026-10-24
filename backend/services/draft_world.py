@@ -25,7 +25,8 @@ FIELDS={
 }
 
 # Extend the existing editor vocabulary with the Runtime's own record fields.
-from backend.services.draft_initial import EXTENSIONS, ACTOR_FIELDS
+from backend.services.draft_initial import EXTENSIONS, ACTOR_FIELDS, MOTIVATION_FIELDS, motivation_records, normalize_motivations, DraftErrors
+from backend.runtime_v3.lifecycle import active_texts
 for _section,_model in EXTENSIONS.items():
     GROUPS[_section]=_section
     FIELDS[_section]=set(_model.model_fields)-{'id'}
@@ -60,7 +61,7 @@ def prepare(original):
         if key in original and not isinstance(original[key],dict):raise ValueError(f'{key}: нужен объект.')
     clock=original.get('world_clock',{}).get('minute')
     if clock is not None and (type(clock) is not int or clock<0):raise ValueError('Игровое время должно быть неотрицательным целым числом.')
-    state=normalize(original)
+    state=normalize_motivations(normalize(original))
     from backend.services.timeline import current_time
     minute=current_time(state)
     state.setdefault('world_clock',{'minute':minute,'last_event_time':label(minute)})
@@ -72,10 +73,6 @@ def prepare(original):
         if not isinstance(state['world'].get(kind),dict):raise ValueError(f'Некорректный раздел {kind}.')
     if not isinstance(state['campaign'],dict) or any(not isinstance(v,str) for v in state['campaign'].values()):
         raise ValueError('Поля кампании должны быть текстом.')
-    for c in state['world']['characters'].values():
-        for field in ('goals','intentions','obligations'):
-            if not isinstance(c.get(field,[]),list) or any(not isinstance(v,str) for v in c.get(field,[])):
-                raise ValueError(f'{field}: нужен список строк.')
     for kind in KINDS:
         for key,item in state['world'][kind].items():
             if kind not in ('relationships','knowledge'):item.setdefault('id',key)
@@ -88,16 +85,17 @@ def prepare(original):
 
 def sync(state):
     """Update compatibility projections from canonical data; no parsing or LLM."""
+    normalize_motivations(state)
     world=state['world'];campaign=state.get('campaign',{})
     state.setdefault('sections',{})['tone']=campaign.get('tone','')
     state['story_notes']=campaign.get('rules','')
     for c in state['characters']:
         c['is_player']=c['id']==state.get('protagonist_id')
         a=world['characters'].get(c['id'],{})
-        if 'goals' in a:a['short_goal']='\n\n'.join(a['goals'])
+        if 'goals' in a:a['short_goal']='\n\n'.join(active_texts(a['goals']))
         for key,field in [('short_goal','Чего хочет'),('situation','Сейчас')]:
             if key in a:c['fields'][field]=a[key]
-        if 'intentions' in a:c['fields']['Намерения']='\n\n'.join(a['intentions'])
+        if 'intentions' in a:c['fields']['Намерения']='\n\n'.join(active_texts(a['intentions']))
     state['relationships']=[dict(source_id=r.get('source_id',''),target_id=r.get('target_id',''),text=r.get('context','')) for r in world['relationships'].values()]
     scene=world['scenes'].get(state.get('camera',{}).get('scene_id'))
     if scene:
@@ -207,8 +205,9 @@ def validate(state, *, canonical=True):
         refs(e.get('fact_ids',[]),set(world['facts']),f'event facts {eid}')
     for cid,c in world['characters'].items():
         require(not c.get('scene_id') or c['scene_id'] in world['scenes'],f'Персонаж {cid}: неизвестная сцена.')
-        for field in ('goals','intentions','obligations'):
-            require(isinstance(c.get(field,[]),list) and all(isinstance(x,str) for x in c.get(field,[])),f'{cid}/{field}: нужен список строк.')
+        for field in MOTIVATION_FIELDS:
+            try:motivation_records(c.get(field,[]),cid,field)
+            except DraftErrors as exc:errors.extend(e['path']+': '+e['message'] for e in exc.errors)
     for rid,r in world['relationships'].items():
         require(isinstance(r.get('dimensions',{}),dict) and all(isinstance(v,(int,float)) and not isinstance(v,bool) and -100<=v<=100 for v in r.get('dimensions',{}).values()),f'Отношение {rid}: показатели должны быть числами от -100 до 100.')
     for tid,t in world['threads'].items():
@@ -373,7 +372,8 @@ def patch(state,kind,eid,field,value):
         if not key or '.' in key or len(key)>100 or not isinstance(value,str):raise ValueError('Некорректное поле карточки.')
         target['fields'][key]=value
     elif field in FIELDS[kind]:
-        list_fields={'goals','intentions','obligations','aliases','character_ids','participants','witnesses','fact_ids','evidence'}
+        if kind=='actor' and field in MOTIVATION_FIELDS:value=motivation_records(value,eid,field)
+        list_fields={'aliases','character_ids','participants','witnesses','fact_ids','evidence'}
         if field in list_fields and (not isinstance(value,list) or any(not isinstance(x,str) for x in value)):
             raise ValueError('Нужен список строк.')
         if field in ('minute','start_minute','end_minute') and (type(value) is not int or value<0):raise ValueError('Нужно неотрицательное целое время.')
@@ -503,7 +503,7 @@ def export_markdown(state):
         actor=state['world']['characters'][c['id']]
         for key,title in [('location','Место'),('emotion','Эмоциональное состояние'),('goals','Цели'),('intentions','Намерения'),('obligations','Обязательства')]:
             value=actor.get(key)
-            if value:lines += ['### '+title,'\n'.join('- '+v for v in value) if isinstance(value,list) else str(value)]
+            if value:lines += ['### '+title,'\n'.join('- '+(v if isinstance(v,str) else v['text']+' ['+v.get('status','active')+']') for v in value) if isinstance(value,list) else str(value)]
     lines+=['## Направленные отношения']
     for r in state['world']['relationships'].values():
         lines += ['### '+person(r['source_id'])+' → '+person(r['target_id']),r.get('context','')]

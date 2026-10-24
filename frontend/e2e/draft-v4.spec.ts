@@ -95,3 +95,45 @@ test('review protocol failure survives reload and resumes only review',async({pa
   await expect(page.locator('.choices button')).toHaveCount(6);
   await page.reload();await expect(page.locator('.choices button')).toHaveCount(6);
 });
+
+test('structured motivations render and edit without losing lifecycle metadata',async({page,request})=>{
+  const workspace=await(await request.post('/api/workspaces',{data:{name:'Structured motivations'}})).json();
+  const url=`/api/workspaces/${workspace.id}/draft`;
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),workspace.id);
+  await page.goto('/');await nav(page,'Создать');
+  await page.getByLabel('Описание мира или текст импорта').fill('TEST_MOTIVATION_OBJECTS. Сохрани заданные цели и намерения.');
+  await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+  await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('saved');
+  await page.getByRole('group',{name:'Разделы мира'}).getByRole('button',{name:'Персонажи',exact:true}).click();
+  await expect(page.getByText('Цели: Текущая goals',{exact:true})).toBeVisible();
+  await expect(page.getByText('[object Object]',{exact:false})).toHaveCount(0);
+  await page.getByRole('button',{name:'Автор мира',exact:true}).click();
+  await page.getByRole('button',{name:'Показать всё',exact:true}).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByText('Состояние, цели и намерения',{exact:true}).click();
+  const before=await(await request.get(url+'?author=true')).json();
+  const cid=before.state.protagonist_id;
+  for (const [field,label] of [['goals','Цели'],['intentions','Намерения'],['obligations','Обязательства']]) {
+    await page.getByRole('button',{name:`Изменить ${label}`,exact:true}).click();
+    const input=page.getByRole('dialog').getByLabel(label,{exact:true});
+    const records=JSON.parse(await input.inputValue());
+    expect(records).toEqual(before.state.world.characters[cid][field]);
+    records[0].text=`Редактирование ${field}`;
+    await input.fill(JSON.stringify(records,null,2));
+    await page.getByRole('button',{name:'Сохранить поле',exact:true}).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect.poll(async()=> (await(await request.get(url+'?author=true')).json()).state.world.characters[cid][field]).toEqual(records);
+  }
+  await page.getByRole('button',{name:'Повторить проверку',exact:true}).click();
+  await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('saved');
+  await page.screenshot({path:`test-results/motivations-${page.viewportSize()?.width}.png`,fullPage:true});
+  await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
+  const confirm=page.waitForResponse(r=>r.url().endsWith('/draft/confirm'));
+  await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+  const {save}=await(await confirm).json();
+  await page.getByRole('button',{name:'Начать игру',exact:true}).click();
+  await expect(page.locator('.choices button')).toHaveCount(6);
+  await page.reload();await expect(page.locator('.choices button')).toHaveCount(6);
+  // API save-load path is exercised here; canonical metadata is asserted by backend smoke.
+  expect((await request.get(`/api/saves/${save}`)).ok()).toBeTruthy();
+});

@@ -291,3 +291,44 @@ Equivalent symmetric phases are merged only when all non-ID fields match, with
 structured relation references remapped. Distinct phases and directed emotions are
 preserved; conflicting active records are diagnosed without proposing a fabricated
 closure. Such a conflict may require author clarification, not an invented history.
+
+## Motivation objects across authoring and play (PR #116 follow-up)
+
+The Runtime Character schema already described `goals`, `intentions`, and
+`obligations` as `list[Motivation]`. The old draft preparation/validation/patch
+contract still required strings; compatibility-card sync and Markdown export
+joined elements as text. This caused the generic `goals: нужен список строк`
+failure even for a valid provider response. Changing thinking mode cannot repair
+that application contract mismatch.
+
+Draft normalization now uses the existing Runtime Character/Motivation models.
+Structured records keep ID, status, evidence, sequence/event provenance, revision,
+due minute, dependencies, review requirements and reviewed signature. Legacy
+strings receive Runtime's deterministic `(field, actor, index, text)` identity and
+normal defaults. Invalid containers are not iterated as strings; invalid elements
+and duplicate IDs produce escaped character/field/index addresses. No second
+Motivation model or migration format was introduced.
+
+The author editor edits the complete JSON list (also when empty). Read-only text
+and card projections use motivation text; current-goal projections follow Runtime's
+`active_texts`, excluding completed/blocked/pending-review entries. Canonical arrays
+are never replaced by these projections. Markdown includes lifecycle status and its
+existing embedded round-trip payload retains every structured field.
+
+Reproduction and regression:
+- `tests/test_draft_motivations.py`: nonempty objects and legacy strings in all three
+  fields; malformed containers/elements; metadata-preserving patch, targeted AI
+  field result, Markdown/JSON import/export, canonical migration, Start Game and
+  SQLite reopen; ordinary turns after load. Imports make no provider calls.
+- Saved old job with a complete world response and the exact former root-level
+  `validation_incomplete` error → Resume invokes only reviewer → editor → review
+  of edited version → Start Game → ordinary turn → reload → next turn. Existing
+  world text is reused; no regeneration or thinking-mode switch is required.
+- Existing isolated `e2e_server.py` fixture mode `TEST_MOTIVATION_OBJECTS` and
+  `draft-v4.spec.ts`: desktop/mobile text rendering (no `[object Object]`), edit all
+  three JSON lists, assert metadata survives, then review/start/reload.
+
+To continue a previously failed candidate: update/restart the backend, open its
+existing workspace, click **Повторить проверку** (or the existing saved-generation
+Resume action for a legacy technical-only failure). Keep the workspace/SQLite and
+saved response. Real-model quality remains outside these deterministic regressions.

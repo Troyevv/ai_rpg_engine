@@ -30,6 +30,41 @@ def error(path,message,category='invalid',**extra):
     return dict(path=path,message=message,category=category,**extra)
 
 
+MOTIVATION_FIELDS = ('goals', 'intentions', 'obligations')
+
+
+def motivation_records(values, cid, field):
+    """Use Runtime's explicit string compatibility and strict Motivation contract.
+
+    No prose inference, regenerated IDs for objects, or removal of lifecycle data.
+    """
+    try:
+        actor=m.Character.model_validate({'id':cid,field:values})
+    except ValidationError as exc:
+        raise DraftErrors([error('/world/characters/'+escape(cid)+'/'+ '/'.join(escape(p) for p in e['loc']),
+            e['msg'],e['type']) for e in exc.errors(include_url=False,include_input=False)]) from exc
+    records=[item.model_dump() for item in getattr(actor,field)]
+    seen=set();problems=[]
+    for index,row in enumerate(records):
+        if row['id'] in seen:problems.append(error(f'/world/characters/{escape(cid)}/{field}/{index}/id','Повторный Motivation ID.','duplicate_id'))
+        seen.add(row['id'])
+    if problems:raise DraftErrors(problems)
+    return records
+
+
+def normalize_motivations(state):
+    """Normalize only motivation fields, collecting independent element failures."""
+    problems=[]
+    for cid,actor in state.get('world',{}).get('characters',{}).items():
+        if not isinstance(actor,dict):continue
+        for field in MOTIVATION_FIELDS:
+            if field not in actor:continue
+            try:actor[field]=motivation_records(actor[field],cid,field)
+            except DraftErrors as exc:problems.extend(exc.errors)
+    if problems:raise DraftErrors(problems)
+    return state
+
+
 def runtime_schema(model):
     schema = model.model_json_schema(); definitions = schema.pop('$defs',{})
     def inline(v):
@@ -204,7 +239,7 @@ def normalize(value):
             if isinstance(actor,dict) and actor.get('location') is None:actor['location']=scene['location']
     if problems: raise DraftErrors(problems)
     value['draft_contract']=4
-    return value
+    return normalize_motivations(value)
 
 
 def validate_typed(state):

@@ -568,7 +568,7 @@ def test_quick_generation_creative_completion_is_playable_with_review(api):
     assert 'редкий симптом' in draft['state']['characters'][0]['fields']['Биография']
     assert all(all(draft['state']['characters'][i]['fields'][key] for key in CARD_FIELDS) for i in range(5))
     assert len({draft['state']['world']['facts']['private_'+cid]['text'] for cid in ids})==5
-    assert {tuple(draft['state']['world']['characters'][cid]['goals']) for cid in npc_goals}=={(goal,) for goal in npc_goals.values()}
+    assert {tuple(g['text'] for g in draft['state']['world']['characters'][cid]['goals']) for cid in npc_goals}=={(goal,) for goal in npc_goals.values()}
     assert draft['state']['world']['threads']['work']['visible_to_ids']==[a]
     assert 'cheat' not in client.get(f"/api/workspaces/{w['id']}/draft").json()['state']['world']['facts']
     confirmed=client.post(f"/api/workspaces/{w['id']}/draft/confirm",json={'revision':draft['revision'],'version_id':draft['version_id']})

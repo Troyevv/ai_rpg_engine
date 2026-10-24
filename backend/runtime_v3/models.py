@@ -408,6 +408,7 @@ class Character(StrictModel):
         if not isinstance(value, dict): return value
         value = deepcopy(value)
         for field in ('goals', 'intentions', 'obligations'):
+            if not isinstance(value.get(field, []), list):continue  # Let Pydantic report the container's exact field.
             value[field] = [dict(id=identity(field, value.get('id'), i, item), text=item)
                 if isinstance(item, str) else item for i, item in enumerate(value.get(field, []))]
         return value

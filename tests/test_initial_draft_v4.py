@@ -15,7 +15,7 @@ from backend.services.draft_generation import run
 from llm import OutputLimitReached
 
 SHORT='Молодой парень переезжает в Москву, устраивается в НИИ и пытается начать новую жизнь'
-FULL=Path('tests/fixtures/initial_world/volkov_user_brief.txt').read_text()
+FULL=(Path(__file__).parent/'fixtures/initial_world/volkov_user_brief.txt').read_text()
 
 
 def rich():
