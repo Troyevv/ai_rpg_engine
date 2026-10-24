@@ -108,7 +108,7 @@ def validate_state(state):
             calls |= participants(e)
 
 
-def _event_history(batch, state, event, previous=None):
+def _event_history(batch, state, event, previous=None, *, termination=None):
     """A lifecycle transition references its stable interaction identity."""
     eid = identity("remote_transition", event["id"], event["status"], event["read_by"])
     batch.events.append(
@@ -138,6 +138,74 @@ def _event_history(batch, state, event, previous=None):
             turn_id=state["meta"]["turn_id"],
         )
     )
+
+    if termination is not None:
+        # System lifecycle evidence is not a voluntary action or shared Knowledge.
+        batch.events[-1]["termination"] = deepcopy(termination)
+        batch.state_changes[-1]["termination"] = deepcopy(termination)
+
+
+def call_incapacitation(state, event):
+    """Read-only canonical capability evidence; unknown endpoints stay unknown."""
+    blocked = {}
+    for actor in sorted(participants(event)):
+        caps = capabilities(state, actor)
+        unavailable = [
+            key for key in ("can_act", "can_speak", "can_perceive") if not caps[key]
+        ]
+        if unavailable:
+            blocked[actor] = dict(
+                life_status=state["characters"][actor]["life_status"],
+                unavailable=unavailable,
+            )
+    return blocked
+
+
+def reconcile_calls(state, batch):
+    """Reconcile on a transaction's working state, never on read/load snapshots.
+
+    Ringing does not require an available recipient (nor prove why they did not
+    answer). Only its caller must sustain the attempt; an answered conversation
+    requires both known participants. Terminal records are immutable here.
+    """
+    for event in state["remote_events"].values():
+        if event["channel"] != "VOICE_CALL" or event["status"] not in OPEN_CALL:
+            continue
+        blocked = call_incapacitation(state, event)
+        if event["status"] == "ringing":
+            blocked = {k: v for k, v in blocked.items() if k == event["sender_id"]}
+        if not blocked:
+            continue
+        previous = deepcopy(event)
+        event.update(
+            status="ended",
+            updated_at=state["meta"]["world_time"],
+            provenance="system:participant_incapacitated",
+        )
+        _event_history(
+            batch,
+            state,
+            event,
+            previous,
+            termination=dict(reason="participant_incapacitated", actors=blocked),
+        )
+        release_call_channel(state, event)
+
+
+def release_call_channel(state, event):
+    """Release only a terminated call's channel, including after camera restore."""
+    # Only the closed call's channel is invalidated; physical scene/POV and
+    # unrelated remote interactions are untouched.
+    controlled = state["camera"]["controlled_actor_id"]
+    if controlled in participants(event):
+        state["meta"]["interaction_focus"] = "physical"
+    state["camera"]["remote_interactions"] = [
+        row
+        for row in state["camera"]["remote_interactions"]
+        if not (
+            row["channel"] == "phone" and row["actor_id"] in participants(event)
+        )
+    ]
 
 
 def _read(state, event, actor, batch):
@@ -738,7 +806,8 @@ def context_projection(state):
 
 
 def advance(state, batch):
-    """Only canonical time, never prose or physical actions, expires ringing."""
+    """Canonical capabilities/time reconcile calls without authored actions."""
+    reconcile_calls(state, batch)
     now = state["meta"]["world_time"]
     timeout = state["meta"]["communication"]["ring_timeout_minutes"]
     for event in state["remote_events"].values():

@@ -128,10 +128,10 @@ def plan(snapshot, request, history=None):
     if s["meta"].get("protagonist_required"):
         interruption = dict(kind="protagonist_required", minute=start)
     else:
-        from backend.runtime_v3.remote import active_call
+        from backend.runtime_v3.remote import active_call, call_incapacitation
 
         call = active_call(s, controlled)
-        if call and call["status"] == "answered":
+        if call and call["status"] == "answered" and not call_incapacitation(s, call):
             interruption = dict(kind="remote_call", minute=start, source_id=call["id"])
     if interruption is None and interruptions:
         minute, event = interruptions[0]
@@ -412,10 +412,16 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
     result = deepcopy(snapshot)
     result["world_state"] = assert_world_state_v3_invariants(result["world_state"])
     original = deepcopy(result["world_state"])
-    projection = plan(result, request, history)
-    batch = WorldHistoryV3().to_dict()
     turn = original["meta"]["turn_id"] + 1
     result["world_state"]["meta"]["turn_id"] = turn
+    # Repair legacy active calls only in the job's atomic working snapshot.
+    # History keeps the original before state, including rollback to that save.
+    from backend.runtime_v3.remote import reconcile_calls
+
+    remote_batch = WorldHistoryV3()
+    reconcile_calls(result["world_state"], remote_batch)
+    batch = remote_batch.to_dict()
+    projection = plan(result, request, history)
     protected = original["camera"]["controlled_actor_id"]
     report = dict(
         start=projection.start,
@@ -654,6 +660,11 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 raise ValueError("Нет принятого события, подтверждающего исход.")
             # Restore camera only; off-camera location changes remain canonical.
             resolved.state["camera"] = deepcopy(result["world_state"]["camera"])
+            from backend.runtime_v3.remote import release_call_channel
+
+            for event in resolved.history["events"]:
+                if event.get("termination") and event.get("remote_interaction_id"):
+                    release_call_channel(resolved.state, event["remote"])
             resolved.state["camera"]["present_character_ids"] = [
                 cid
                 for cid in resolved.state["camera"]["present_character_ids"]
@@ -666,6 +677,8 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
             claims = {e["id"]: e for e in raw.records["events"] if isinstance(e, dict)}
             accepted_ids = set()
             for event in resolved.history["events"]:
+                if event.get("remote_interaction_id"):
+                    continue  # Deterministic lifecycle consequence, not an LLM claim.
                 links = claims[event["local_id"]]["advance_candidate_ids"]
                 event["advance_source_ids"] = [
                     c.source_id for c in group if c.id in links
