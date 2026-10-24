@@ -111,10 +111,31 @@ def test_terminal_json_duplicate_keys_and_syntax_not_guessed():
 def test_technical_patch_preserves_all_other_content():
     raw=json.dumps({'characters':[{'name':'Илья','bio':'Не менять'}],'bad':999})
     request,paths=draft_repair.request(raw,[{'path':'/bad','message':'range'}])
+    assert json.loads(request[-1]['content'])['fragments']=={'/bad':{'value':json.loads(raw)['bad']}}
     out=draft_repair.apply(raw,'{"patches":[{"path":"/bad","value":99}]}',paths)
     assert json.loads(out)['characters']==json.loads(raw)['characters']
     with pytest.raises(ValueError,match='неразрешённый'):
         draft_repair.apply(raw,'{"patches":[{"path":"/characters","value":[]}]}',paths)
+
+
+def test_local_repair_context_keeps_unrelated_biographies_out_of_request():
+    raw=json.dumps({'characters':[{'name':'Авторское имя','fields':{'bio':'Длинная биография.'*1000}}],
+                    'world':{'knowledge':{'a/b':{'actor_id':'missing','fact_id':'f'}}}})
+    errors=[{'path':'/world/knowledge/a~1b/actor_id','category':'reference','allowed':['a'],'message':'Unknown actor'}]
+    messages,paths=draft_repair.request(raw,errors)
+    payload=json.loads(messages[-1]['content'])
+    assert payload=={'errors':errors,'fragments':{'/world/knowledge/a~1b':{'value':{'actor_id':'missing','fact_id':'f'}}}}
+    repaired=draft_repair.apply(raw,json.dumps({'patches':[{'path':paths[0],'value':'a'}]}),paths)
+    assert json.loads(repaired)['characters']==json.loads(raw)['characters']
+
+
+def test_missing_repair_field_is_explicit_without_sending_entire_world():
+    messages,paths=draft_repair.request('{"world":{}}',[{'path':'/protagonist_id','message':'required'}])
+    assert json.loads(messages[-1]['content'])['fragments']=={'/protagonist_id':{'missing':True}}
+    assert json.loads(draft_repair.apply('{"world":{}}','{"patches":[{"path":"/protagonist_id","value":"a"}]}',paths))['protagonist_id']=='a'
+
+
+def test_syntax_repair_preserves_literal_content():
     raw='{"a":"слово" "b":2}'
     assert json.loads(draft_repair.apply(raw,'{"a":"слово", "b":2}',None))['a']=='слово'
     with pytest.raises(ValueError,match='содержание'):

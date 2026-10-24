@@ -32,7 +32,8 @@ checkpoint table, or staged world generation is introduced.
   receives one additive `response_journal` JSON column; no new checkpoint table.
   Existing `llm_requests` remains authoritative for usage, finish reason and pricing.
   Journals/raw output are excluded from public job projections.
-- `draft_repair.py` accepts exact-path patches only. Syntax-only repairs must retain
+- `draft_repair.py` sends only affected records and diagnostics for localized errors,
+  and accepts exact-path patches only. Syntax-only repairs must retain
   all complete JSON literal tokens in order. Unlocalizable errors and destructive
   repairs are rejected rather than granting permission to regenerate the world.
 

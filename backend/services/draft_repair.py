@@ -19,8 +19,23 @@ def request(raw,errors):
     paths=[e['path'] for e in errors if e.get('path') and e['path']!='/']
     if len(paths)!=len(errors):
         raise ValueError('Ошибка требует интерпретации без однозначного пути. Исходный ответ сохранён: '+str(errors))
+    fragments={}
+    for path in paths:
+        parts=path.lstrip('/').split('/')
+        # A local record provides context for interdependent fields. Never send
+        # its entire containing world just to repair a root/section property.
+        scope=parts[:-1] if len(parts)>=3 else parts
+        scope_path='/'+('/'.join(scope))
+        current=value
+        try:
+            for part in scope:
+                key=part.replace('~1','/').replace('~0','~')
+                current=current[int(key)] if isinstance(current,list) else current[key]
+            fragments[scope_path]={'value':current}
+        except (KeyError,IndexError,TypeError,ValueError):
+            fragments[scope_path]={'missing':True}
     return [dict(role='system',content='Исправь только перечисленные технические ошибки. Верни JSON {"patches":[{"path":"/точный/путь","value":новое_значение}]}. Не меняй остальные данные, персонажей, описания и события. Не придумывай сведения.'),
-            dict(role='user',content=json.dumps(dict(errors=errors,response=value),ensure_ascii=False))],paths
+            dict(role='user',content=json.dumps(dict(errors=errors,fragments=fragments),ensure_ascii=False))],paths
 
 
 def apply(raw,reply,paths):
