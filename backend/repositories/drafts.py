@@ -113,7 +113,7 @@ class DraftStorage:
             self._draft_workspace(db,job['workspace_id'],job['revision'],idle=False)
             config=json.loads(job['config_json']);old=self._draft_head(db,job['workspace_id'])
             record=json.loads(old['content']) if old else {}
-            self._write_draft(db,job['workspace_id'],state,job['kind'],config.get('_draft_input','') if config['_draft_task']=='world' else record.get('source',''),record.get('warnings',[]),outline=outline if config['_draft_task']=='world' else record.get('outline',''),generated=config['_draft_task']=='world' or record.get('generated',False))
+            self._write_draft(db,job['workspace_id'],state,job['kind'],config.get('_draft_source',config.get('_draft_input','')) if config['_draft_task']=='world' else record.get('source',''),record.get('warnings',[]),outline=outline if config['_draft_task']=='world' else record.get('outline',''),generated=config['_draft_task']=='world' or record.get('generated',False))
             db.execute("UPDATE preparation_jobs SET status='saved' WHERE id=?",(jid,))
 
     def confirm_draft(self,wid,revision,version_id):

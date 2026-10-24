@@ -110,7 +110,7 @@ def world_state_schema():
         'description':'Подробная концепция мира, включая закрытые вводные.',
         'public_description':'Краткое описание без спойлеров.','rules':'Правила авторского повествования.'}.items()},
         ('title','setting','era','genre','tone','description','public_description','rules'))
-    return {'$schema':'https://json-schema.org/draft/2020-12/schema','title':'WorldState',
+    schema = {'$schema':'https://json-schema.org/draft/2020-12/schema','title':'WorldState',
             'description':'Один готовый к игре мир; пользовательская идея — канон, остальные детали придумываются творчески.',
             **obj({'schema_version':{'const':1},'campaign':campaign,'sections':obj({}),
                    'story_notes':{'type':'string'},
@@ -121,6 +121,9 @@ def world_state_schema():
                    'world_clock':obj({'calendar':calendar_schema(),'minute':MINUTE,'last_event_time':text('День N (день недели) HH:MM, согласован с minute.')},('minute','last_event_time')),
                    'world':world},('schema_version','campaign','locations','characters','protagonist_id',
                                   'controlled_actor_id','camera','world_clock','world'))}
+
+    from backend.services.draft_initial import extend_schema
+    return extend_schema(schema)
 
 
 def calendar_schema():

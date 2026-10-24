@@ -97,7 +97,7 @@ def migrate_v2(original):
         actors[cid] = Character(id=cid, location_id=lid,
             **{key:deepcopy(entry[key]) for key in ('situation','emotion','goals','intentions','obligations') if key in entry}).model_dump()
         actors[cid]['birth_date'] = deepcopy(entry.get('birth_date'))
-        for field in ('life_status','life_fact_id','capabilities','developmental_stage','name_history','display_name','parentage_complete_fact_id','reproductive_capability','identity_components','biological_sex','appearance'):
+        for field in ('life_status','life_fact_id','capabilities','developmental_stage','name_history','display_name','parentage_complete_fact_id','reproductive_capability','identity_components','biological_sex','appearance','personality','values','physical_state'):
             if field in entry: actors[cid][field] = deepcopy(entry[field])
         actors[cid]['display_name'] = actors[cid].get('display_name') or next((c['name'] for c in old['characters'] if c['id']==cid), None)
     actor = old.get('controlled_actor_id')
@@ -124,12 +124,12 @@ def migrate_v2(original):
     history.turns.extend(deepcopy(list(world.get('scene_records', {}).values()) if isinstance(world.get('scene_records',{}),dict) else [world.get('scene_records')]))
     for fid, f in world.get('facts', {}).items():
         state['facts'][fid] = Fact(id=fid, text=f['text'], visibility='secret' if f.get('secret') else 'public',
-            character_ids=[cid for cid in f.get('character_ids', []) if cid in actors]).model_dump()
+            character_ids=[cid for cid in f.get('character_ids', []) if cid in actors], claim=deepcopy(f.get('claim'))).model_dump()
     for key, k in world.get('knowledge', {}).items():
         if k.get('actor_id') not in actors or k.get('fact_id') not in state['facts']:
             report.append(dict(section='knowledge', entity=key, reason='отсутствует actor или fact', action='drop_record'))
             continue
-        current = Knowledge(**{field:k[field] for field in ('actor_id','fact_id','status')}).model_dump()
+        current = Knowledge(**{field:k[field] for field in ('actor_id','fact_id','status','revision','source_event_id','evidence','source_turn','replaced_by') if field in k}).model_dump()
         state['knowledge'][current['actor_id'] + ':' + current['fact_id']] = current
         acquisition = dict(current, source_event_id=k.get('source_event_id'), migrated=True)
         source = world.get('events', {}).get(k.get('source_event_id'), {})
@@ -165,7 +165,7 @@ def migrate_v2(original):
     if 'reproduction_policy' in world: state['reproduction_policy'] = deepcopy(world['reproduction_policy'])
     state['objective_relations'] = deepcopy(world.get('objective_relations',{}))
     state['conditions'] = deepcopy(world.get('conditions',{}))
-    for section in ('residences','roles','organizations','possessions','contacts','conversations','remote_events'):
+    for section in ('residences','roles','organizations','possessions','contacts','conversations','remote_events','pregnancies','reproductive_events','naming_decisions'):
         state[section] = deepcopy(world.get(section,{}))
     if world.get('communication'):
         from backend.runtime_v3.remote_models import CommunicationCapabilities
@@ -177,6 +177,12 @@ def migrate_v2(original):
         except (ValueError, TypeError):
             report.append(dict(section='calendar', reason='invalid optional calendar preserved in legacy history; relative time retained'))
             history.legacy.append(dict(calendar=deepcopy(configured)))
+    if old.get('creation_settings'):
+        from backend.services.world_creation_settings import CreationSettings
+        settings=CreationSettings.model_validate(old['creation_settings'])
+        state['meta']['narrative_pacing']=settings.narrative_pacing.model_dump()
+        state['meta']['narrative_risk']=settings.narrative_risk.model_dump()
+        state['meta']['npc_expressiveness']=settings.npc_expressiveness
     initialize_calendar(state)
     from backend.runtime_v3.appearance import salvage_profiles as salvage_appearance
     salvage_appearance(state)
@@ -192,6 +198,8 @@ def migrate_v2(original):
         memory=deepcopy(old.get('memory', {})), history_head=None)
     from backend.runtime_v3.personality import initialize_profiles
     initialize_profiles(snapshot)
+    from backend.runtime_v3.appearance import initialize_profiles as initialize_appearance
+    initialize_appearance(snapshot)
     from backend.runtime_v3.protagonist import initialize
     initialize(snapshot)
     return MigrationResult(snapshot, history.to_dict(), report)

@@ -1,0 +1,34 @@
+import {test,expect} from '@playwright/test';
+import {nav} from './navigation';
+
+test('creation settings and JSON continuation survive editor start and reload',async({page,request})=>{
+  const workspace=await(await request.post('/api/workspaces',{data:{name:'Runtime v4 settings'}})).json();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),workspace.id);
+  await page.goto('/');await nav(page,'Создать');
+  await page.getByText('Настройки генератора',{exact:true}).click();
+  await page.getByLabel('Основной жанр',{exact:true}).selectOption('family_saga');
+  await page.getByLabel('Выразительность NPC',{exact:true}).selectOption('hyperbolized');
+  await page.getByLabel('Темп истории',{exact:true}).selectOption('calm');
+  await page.getByLabel('Риск последствий',{exact:true}).selectOption('safe');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth));
+  await page.screenshot({path:`test-results/draft-v4-settings-${page.viewportSize()?.width}.png`,fullPage:true});
+  await page.getByLabel('Описание мира или текст импорта').fill('TEST_JSON_CONTINUATION. Соседи разговаривают на кухне.');
+  const sent=page.waitForRequest(r=>r.url().endsWith('/draft/generate'));
+  await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+  expect((await sent).postDataJSON().creation_settings.primary_genre).toBe('family_saga');
+  await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
+  const draft=await(await request.get(`/api/workspaces/${workspace.id}/draft?author=true`)).json();
+  expect(draft.state.creation_settings.npc_expressiveness).toBe('hyperbolized');
+  expect(draft.validation.errors).toEqual([]);
+  const requests=await(await request.get(`/api/workspaces/${workspace.id}/requests`)).json();
+  expect(requests.filter((r:{stage:string})=>r.stage==='draft_world')).toHaveLength(2);
+  expect(requests.some((r:{finish_reason:string,status:string})=>r.finish_reason==='length' || r.status==='length')).toBeTruthy();
+  expect(draft.job).not.toHaveProperty('response_journal');
+  await page.reload();await nav(page,'Создать');
+  await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
+  await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+  await page.getByRole('button',{name:'Начать игру',exact:true}).click();
+  await expect(page.locator('.choices button')).toHaveCount(6);
+  await page.reload();
+  await expect(page.locator('.choices button')).toHaveCount(6);
+});

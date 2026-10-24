@@ -98,6 +98,14 @@ def stream(**kwargs):
     elif 'Каноническая JSON Schema WorldState' in full:
         from test_draft_world import fixture
         value=json.dumps(fixture(),ensure_ascii=False)
+        if 'TEST_JSON_CONTINUATION' in full:
+            cut=len(value)//2
+            if not any(m['role']=='assistant' for m in kwargs['messages']):
+                from llm import OutputLimitReached
+                yield value[:cut]
+                if kwargs.get('on_finish'):kwargs['on_finish']('length')
+                raise OutputLimitReached()
+            value=value[cut:]
     elif 'Ты редактор RPG' in full:
         value=json.dumps({'value':'Обновлённая внешность'},ensure_ascii=False)
     elif kwargs.get('response_format') and runtime_v3_request(kwargs['messages']):

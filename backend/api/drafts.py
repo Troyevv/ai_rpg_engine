@@ -1,6 +1,7 @@
 """Thin draft endpoints. All authoritative state and validation are backend-side."""
 import json
 from typing import Any, Literal
+from decimal import Decimal
 from pydantic import Field
 from fastapi.responses import PlainTextResponse
 from backend.api.schemas import DTO, Revision, Credential, ModelConfig
@@ -20,7 +21,15 @@ class Change(Revision):
     source_id: int | None = None
     warnings_ack: bool = False
 
+from backend.services.world_creation_settings import CreationSettings
+
+class ResponseBudget(DTO):
+    max_total_tokens: int | None = Field(default=None,ge=1)
+    max_cost_usd: Decimal | None = Field(default=None,ge=0)
+
 class Generate(Revision,Credential):
+    budget: ResponseBudget = Field(default_factory=ResponseBudget)
+    creation_settings: CreationSettings = Field(default_factory=CreationSettings)
     task: Literal['world','field','character'] = 'world'
     text: str = Field(default='',max_length=100000)
     use_idea: bool = False
@@ -62,9 +71,20 @@ def install(app,repo,preparation,credentials,job):
             if body.task=='character' and body.kind!='character':raise ValueError('Нужна карточка персонажа.')
             if body.task=='field' and body.field not in domain.FIELDS.get(body.kind,set()) and not(body.kind=='character' and body.field.startswith('fields.')):raise ValueError('Поле недоступно.')
         config={**body.config.model_dump(),'_draft_task':body.task,'_draft_input':body.text,'_use_idea':body.use_idea,
-                '_warnings_ack':body.warnings_ack,'_draft_target':{'kind':body.kind,'id':body.entity_id,'field':body.field}}
+                '_creation_settings':body.creation_settings.model_dump(), '_warnings_ack':body.warnings_ack,'_draft_target':{'kind':body.kind,'id':body.entity_id,'field':body.field}}
+        if body.budget.max_total_tokens is not None:config['_draft_token_budget']=body.budget.max_total_tokens
+        if body.budget.max_cost_usd is not None:config['_draft_cost_budget_usd']=str(body.budget.max_cost_usd)
         jid=preparation.submit(wid,'draft_'+body.task,body.text,config,body.revision,credentials.resolve(body.config.provider,body.key()))
         return job(jid)
+
+    @app.post('/api/workspaces/{wid}/draft/resume')
+    def resume(wid:str,body:Credential):
+        current=repo.workspace(wid)['job']
+        if not current: raise ValueError('Нет задания.')
+        saved=repo.preparation_job(current['id'])
+        provider=json.loads(saved['config_json'])['provider']
+        preparation.resume(current['id'],credentials.resolve(provider,body.key()))
+        return job(current['id'])
 
     @app.post('/api/workspaces/{wid}/draft/confirm')
     def confirm(wid:str,body:Confirm):return repo.confirm_draft(wid,body.revision,body.version_id)

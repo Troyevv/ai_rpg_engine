@@ -257,15 +257,16 @@ def test_deepseek_json_mode_repairs_only_bad_format(api):
     calls=[]
     def stream(**kwargs):
         calls.append(kwargs)
-        if len(calls)==1:yield '{"world":'
-        else:yield json.dumps(fixture(),ensure_ascii=False)
+        good=json.dumps(fixture(),ensure_ascii=False)
+        if len(calls)==1:yield good.replace(', \"campaign\"', ' \"campaign\"',1) if ', \"campaign\"' in good else good[:-1]+',}'
+        else:yield good
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         job=client.post(path+'/generate',json={'revision':draft['revision'],'task':'world',
                                                 'text':'Сложный мир','config':REMOTE,'api_key':'fixture'})
         assert wait_job(client,job.json()['id'])['status']=='saved'
     assert len(calls)==2
     assert all(c['response_format']=={'type':'json_object'} for c in calls)
-    assert 'ТОЛЬКО технические ошибки' in calls[1]['messages'][0]['content']
+    assert 'только синтаксическую' in calls[1]['messages'][0]['content']
     with app.state.repository.connect() as db:
         assert sorted(r[0] for r in db.execute('SELECT stage FROM llm_requests'))==['draft_world','draft_world_repair']
 
@@ -282,11 +283,11 @@ def test_failed_structural_repair_keeps_previous_version(api):
         job=client.post(path+'/generate',json={'revision':draft['revision'],'task':'world','text':'Идея',
                                                 'config':REMOTE,'api_key':'fixture'})
         assert wait_job(client,job.json()['id'])['status']=='error'
-    assert len(calls)==2
+    assert len(calls)==3
     assert client.get(path+'?author=true').json()['version_id']==draft['version_id']
 
 
-def test_output_limit_does_not_start_a_continuation(api):
+def test_output_limit_is_bounded_and_preserves_previous_version(api):
     from unittest.mock import patch
     from llm import OutputLimitReached
     client,app=api;path,draft=make(client)
@@ -299,9 +300,9 @@ def test_output_limit_does_not_start_a_continuation(api):
         job=client.post(path+'/generate',json={'revision':draft['revision'],'task':'world','text':'Идея',
                                                 'config':REMOTE,'api_key':'fixture'})
         assert wait_job(client,job.json()['id'])['status']=='error'
-    assert len(calls)==1
+    assert len(calls)==5
     with app.state.repository.connect() as db:
-        assert [r[0] for r in db.execute('SELECT stage FROM llm_requests')]==['draft_world']
+        assert [r[0] for r in db.execute('SELECT stage FROM llm_requests')]==['draft_world']*5
     assert client.get(path+'?author=true').json()['version_id']==draft['version_id']
 
 

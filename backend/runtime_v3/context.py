@@ -515,6 +515,8 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     rules += f'\nRuntime v3. controlled_actor_id={camera["controlled_actor_id"]}; mode={camera["mode"]}; world_time={state["meta"]["world_time"]} минут.'
     if snapshot.get('_time_skip'): rules += '\nДетерминированный Time Skip: ' + json.dumps(snapshot['_time_skip'], ensure_ascii=False) + '. Описывай только до actual_target, не позже. Hidden не становится знанием игрока.'
     if validation_feedback: rules += '\nИсправь структурную ошибку, верни полный JSON:\n' + validation_feedback
+    from backend.services.world_creation_settings import presentation_rule
+    rules += presentation_rule(state['meta'].get('npc_expressiveness','realistic'))
     messages.insert(0, dict(role='system', content='Постоянные правила\n'+rules))
     messages.append(block('Текущий ввод', dict(kind=kind, player_input=user_text)))
     if extraction_text is not None: messages.append(block('completed_narrative', extraction_text))

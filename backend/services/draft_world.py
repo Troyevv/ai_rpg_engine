@@ -24,6 +24,17 @@ FIELDS={
  'start':{'protagonist_id','controlled_actor_id','scene_id','minute'},
 }
 
+# Extend the existing editor vocabulary with the Runtime's own record fields.
+from backend.services.draft_initial import EXTENSIONS, ACTOR_FIELDS
+for _section,_model in EXTENSIONS.items():
+    GROUPS[_section]=_section
+    FIELDS[_section]=set(_model.model_fields)-{'id'}
+FIELDS['actor'].update(ACTOR_FIELDS)
+FIELDS['location'].update({'parent_id','kind','aliases'})
+FIELDS['fact'].add('claim')
+FIELDS['knowledge'].update({'evidence','replaced_by','source_turn','revision'})
+FIELDS['clock']={'minute','calendar'}
+
 
 def prepare(original):
     if not isinstance(original,dict) or not isinstance(original.get('characters'),list):
@@ -96,7 +107,7 @@ def sync(state):
     return state
 
 
-def validate(state):
+def validate(state, *, canonical=True):
     errors=[];warnings=[];world=state['world']
     cards=state['characters'];ids={c['id'] for c in cards}
     def require(ok,message):
@@ -168,7 +179,7 @@ def validate(state):
         if f.get('owner_id') is not None:require(isinstance(f['owner_id'],str) and f['owner_id'] in ids,f'Факт {fid}: неизвестный владелец тайны.')
     for kid,k in world['knowledge'].items():
         require(k.get('actor_id') in ids and k.get('fact_id') in world['facts'],f'Знание {kid}: ссылка не существует.')
-        require(k.get('status') in ('known','suspected','unknown'),f'Знание {kid}: некорректный статус.')
+        require(k.get('status') in ('known','suspected','unknown','outdated','refuted','superseded'),f'Знание {kid}: некорректный статус.')
         require(not k.get('source_event_id') or k['source_event_id'] in world['events'],f'Знание {kid}: неизвестный источник.')
     for sid,s in world['scenes'].items():
         refs(s.get('participants',[]),ids,f'scene {sid}')
@@ -233,6 +244,11 @@ def validate(state):
         age=re.search(r'\b(\d{1,3})\s*(?:лет|год)',c['fields'].get('Возраст','')+' '+c['fields'].get('Статус',''))
         if age and int(age[1])<18 and re.search(r'врач|университет|женат|замуж',json.dumps(c,ensure_ascii=False),re.I):
             warnings.append(f"{c['id']}: возраст может противоречить профессии или биографии. Проверь связанные факты и события.")
+    if canonical and state.get('draft_contract')==4 and not errors:
+        try:
+            from backend.services.draft_initial import canonical_check
+            canonical_check(state)
+        except (ValueError,TypeError,KeyError) as exc: errors.append(str(exc))
     return {'errors':errors,'warnings':warnings}
 
 
@@ -258,8 +274,7 @@ def review_initial(state,source=''):
             warnings.append(f"{card['name']}: мало информации о личности важного персонажа.")
         if cid!=actor and not (character.get('goals') or character.get('intentions')):
             warnings.append(f"{card['name']}: не задана цель или намерение для самостоятельных действий.")
-        if cid not in secrets:
-            warnings.append(f"{card['name']}: не задана личная тайна с указанием того, кто о ней знает.")
+
     for r in world['relationships'].values():
         if r.get('source_id') in ids and r.get('target_id') in ids and len(r.get('context','').strip())<25:
             warnings.append('Связь между персонажами описана слишком кратко: добавь мотив и динамику.')
@@ -329,6 +344,7 @@ def repair_scene_interval(state):
 
 def entity(state,kind,eid):
     if kind=='campaign':return state['campaign']
+    if kind=='clock':return state['world_clock']
     if kind=='start':return {'protagonist_id':state.get('protagonist_id'),'controlled_actor_id':state.get('controlled_actor_id'),
         'scene_id':state.get('camera',{}).get('scene_id'),'minute':state['world_clock'].get('minute')}
     if kind in ('character','location'):
@@ -355,7 +371,7 @@ def patch(state,kind,eid,field,value):
         if field=='dimensions' and (not isinstance(value,dict) or any(type(x) not in (int,float) or not -100<=x<=100 for x in value.values())):raise ValueError('Показатели должны быть числами от -100 до 100.')
         old=target.get(field)
         if old is not None and type(value) is not type(old):raise ValueError('Тип поля менять нельзя.')
-        if len(json.dumps(value,ensure_ascii=False))>30000:raise ValueError('Поле слишком длинное.')
+        # Creative text is not clipped or arbitrarily length-limited here.
         target[field]=value
     else:raise ValueError('Поле недоступно для изменения.')
     if kind=='start':
@@ -486,7 +502,7 @@ def export_markdown(state):
     for fid,f in state['world']['facts'].items():
         lines += ['### '+('Тайна: ' if f.get('secret') else '')+f['text']]
         for k in state['world']['knowledge'].values():
-            if k['fact_id']==fid:lines += ['- '+person(k['actor_id'])+': '+{'known':'знает','suspected':'подозревает','unknown':'не знает'}[k['status']]]
+            if k['fact_id']==fid:lines += ['- '+person(k['actor_id'])+': '+{'known':'знает','suspected':'подозревает','unknown':'не знает','outdated':'устарело','refuted':'опровергнуто','superseded':'заменено'}[k['status']]]
         if f.get('evidence'):lines += ['Основания: '+'; '.join(f['evidence'])]
     for kind,title in [('threads','Сюжетные линии'),('scenes','Сцены'),('events','События'),('scheduled_events','Отложенные события')]:
         lines+=['## '+title]

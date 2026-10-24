@@ -35,6 +35,8 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                 db.execute('ALTER TABLE preparation_workspaces ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0')
             if 'phase' not in {r['name'] for r in db.execute('PRAGMA table_info(preparation_jobs)')}:
                 db.execute("ALTER TABLE preparation_jobs ADD COLUMN phase TEXT NOT NULL DEFAULT ''")
+            if 'response_journal' not in {r['name'] for r in db.execute('PRAGMA table_info(preparation_jobs)')}:
+                db.execute("ALTER TABLE preparation_jobs ADD COLUMN response_journal TEXT NOT NULL DEFAULT '{}'")
             for w in db.execute('SELECT * FROM preparation_workspaces').fetchall():
                 for kind in ('idea','summary'):
                     if not db.execute('SELECT 1 FROM document_heads WHERE kind=? AND owner=?',(kind,w['id'])).fetchone():
@@ -65,12 +67,33 @@ class Repository(PresentationStorage, DraftStorage, Storage):
 
     @staticmethod
     def public_job(job):
+        journal = json.loads(job.get('response_journal') or '{}')
+        job = {**job, 'resumable': bool(journal and not journal.get('pending') and job.get('status') in ('error','stopped'))}
         staged = json.loads(job.get('memory_before_json') or '{}').get('_remote_batch')
         if staged and job.get('status') != 'saved':
             job = {**job, 'narrative': ''}
         if job.get('kind','').startswith('draft_'):
             job={**job,'narrative':'','progress_chars':len(job.get('narrative',''))}
-        return {k: v for k, v in job.items() if k not in ('config_json', 'before_json', 'context_json', 'memory_before_json', 'warnings_json')}
+        return {k: v for k, v in job.items() if k not in ('config_json', 'before_json', 'context_json', 'memory_before_json', 'warnings_json', 'response_journal')}
+
+    def save_response_journal(self, jid, journal):
+        """Private response transport state; no new checkpoint table or world format."""
+        with self.connect() as db:
+            db.execute('UPDATE preparation_jobs SET response_journal=? WHERE id=?',
+                       (json.dumps(journal,ensure_ascii=False),jid))
+
+    def resume_draft_response(self, jid):
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            job = dict(db.execute('SELECT * FROM preparation_jobs WHERE id=?',(jid,)).fetchone())
+            journal = json.loads(job['response_journal'])
+            if job['kind'] != 'draft_world' or job['status'] not in ('error','stopped') or not journal:
+                raise ValueError('Нет сохранённого ответа для продолжения.')
+            if journal.get('pending'):
+                raise ValueError('Исход прерванного запроса неизвестен. Автоматический повтор запрещён; полученный текст сохранён.')
+            self._draft_workspace(db,job['workspace_id'],job['revision'])
+            db.execute("UPDATE preparation_jobs SET status='generating',error='' WHERE id=?",(jid,))
+            return json.loads(job['config_json'])
 
     def preparation_job(self, jid):
         with self.connect() as db:
@@ -96,6 +119,9 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                 messages = json.loads(w['messages_json']) + [{'role': 'user', 'content': text}]
                 db.execute('UPDATE preparation_workspaces SET messages_json=? WHERE id=?', (json.dumps(messages, ensure_ascii=False), wid))
             config = dict(config, _prompts=self.prompt_snapshot(db))
+            if config.get('_draft_task')=='world':
+                config['_draft_source']=config.get('_draft_input','')
+                if config.get('_use_idea'):config['_draft_source']+='\n\n'+w['idea']
             db.execute("INSERT INTO preparation_jobs(id,workspace_id,kind,status,revision,config_json) VALUES(?,?,?,'generating',?,?)",
                        (jid, wid, kind, revision, json.dumps(config)))
         return jid

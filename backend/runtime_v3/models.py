@@ -132,6 +132,7 @@ from backend.runtime_v3.remote_models import CommunicationCapabilities, Contact,
 
 
 class Meta(StrictModel):
+    npc_expressiveness: Literal["realistic", "expressive", "hyperbolized"] = "realistic"
     communication: CommunicationCapabilities = Field(default_factory=CommunicationCapabilities)
     interaction_focus: Literal["physical", "call"] = "physical"
     narrative_pacing: NarrativePacingProfile = Field(default_factory=NarrativePacingProfile)
