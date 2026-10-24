@@ -83,9 +83,10 @@ class DraftStorage:
                 'outline':record.get('outline','') if record and author else '',
                 'history':history,'job':self.public_job(dict(latest)) if latest else None,'author':author}
 
-    def _write_draft(self,db,wid,state,reason,source='',warnings=None,source_id=None,outline='',generated=False,review=None):
+    def _write_draft(self,db,wid,state,reason,source='',warnings=None,source_id=None,outline='',generated=False,review=None,origin_job=None):
         state=domain.prepare(state)
         record={'state':state,'source':source,'warnings':warnings or [],'outline':outline,'generated':generated}
+        if origin_job:record['origin_job']=origin_job
         if review is not None:
             record['review']=dict(review)
             if reason=='draft_world' and review.get('status')=='completed':record['review']['candidate_hash']=candidate_hash(state)
@@ -105,7 +106,7 @@ class DraftStorage:
             if review is None:review=review_metadata(previous)
             if review is not None:review=dict(review,candidate_hash=candidate_hash(value))
             if previous.get('candidate') and previous.get('state')==value and previous.get('diagnostics')==diagnostics and previous.get('review')==review:return
-            record=dict(state=value,candidate=True,source=config.get('_draft_source',config.get('_draft_input','')),warnings=[],diagnostics=diagnostics,review=review)
+            record=dict(state=value,origin_job=jid,candidate=True,source=config.get('_draft_source',config.get('_draft_input','')),warnings=[],diagnostics=diagnostics,review=review)
             self._record_document(db,'world_draft',job['workspace_id'],dump(record),True,'generation_candidate',None)
             db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(job['workspace_id'],))
             db.execute('UPDATE preparation_jobs SET revision=revision+1 WHERE id=?',(jid,))
@@ -184,7 +185,7 @@ class DraftStorage:
             if new_warnings and not ack:raise ValueError('Возможные связанные противоречия: '+'; '.join(new_warnings)+'. Подтверди «Изменить всё равно».')
             review=review_metadata(record)
             if review:review=dict(review,status='stale',reason='Кандидат изменён. Повторите проверку.')
-            self._write_draft(db,wid,state,operation,record.get('source',''),record.get('warnings',[]),source_id,record.get('outline',''),record.get('generated',False),review=review)
+            self._write_draft(db,wid,state,operation,record.get('source',''),record.get('warnings',[]),source_id,record.get('outline',''),record.get('generated',False),review=review,origin_job=record.get('origin_job'))
         return eid
 
     def finish_draft_job(self,jid,state,outline='',epoch=None):
@@ -196,7 +197,7 @@ class DraftStorage:
             self._draft_workspace(db,job['workspace_id'],job['revision'],idle=False)
             config=json.loads(job['config_json']);old=self._draft_head(db,job['workspace_id'])
             record=json.loads(old['content']) if old else {}
-            self._write_draft(db,job['workspace_id'],state,job['kind'],config.get('_draft_source',config.get('_draft_input','')) if config['_draft_task']=='world' else record.get('source',''),record.get('warnings',[]),outline=outline if config['_draft_task']=='world' else record.get('outline',''),generated=config['_draft_task']=='world' or record.get('generated',False),review=review_metadata(record) if config['_draft_task']=='world' else (dict(review_metadata(record),status='stale',reason='Кандидат изменён.') if review_metadata(record) else None))
+            self._write_draft(db,job['workspace_id'],state,job['kind'],config.get('_draft_source',config.get('_draft_input','')) if config['_draft_task']=='world' else record.get('source',''),record.get('warnings',[]),outline=outline if config['_draft_task']=='world' else record.get('outline',''),generated=config['_draft_task']=='world' or record.get('generated',False),origin_job=jid if config['_draft_task']=='world' else record.get('origin_job'),review=review_metadata(record) if config['_draft_task']=='world' else (dict(review_metadata(record),status='stale',reason='Кандидат изменён.') if review_metadata(record) else None))
             db.execute("UPDATE preparation_jobs SET status='saved' WHERE id=?",(jid,))
 
     def confirm_draft(self,wid,revision,version_id):

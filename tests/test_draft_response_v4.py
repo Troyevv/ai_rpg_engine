@@ -52,8 +52,8 @@ def part(text,offset):return dict(text=text,offset=offset,sha256=hashlib.sha256(
 
 def test_repetition_omission_integrity_order():
     first='{"s":"abcdefghijklmnopqrstuvwxyz'
-    with pytest.raises(TransportError,match='Повтор текста'):
-        join_fragments([part(first,0),part('abcdefghijklmnopqrstuvwxyz"}',len(first))])
+    # A repeated substring within an open string is literal content, not evidence of overlap.
+    assert join_fragments([part(first,0),part('abcdefghijklmnopqrstuvwxyz"}',len(first))])==first+'abcdefghijklmnopqrstuvwxyz"}'
     with pytest.raises(TransportError,match='Пропущен'):
         join_fragments([part('{"a":',0),part('1}',7)])
     broken=part('{"a":',0);broken['text']+='x'

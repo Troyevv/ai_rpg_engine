@@ -44,6 +44,7 @@ class Resume(Credential):
     max_tokens: int | None = Field(default=None,ge=256,le=65536)
     context_length: int | None = Field(default=None,ge=8192)
     acknowledge_unknown: bool = False
+    retry_last_fragment: bool = False
 
 class CandidateChange(Revision):
     path: str
@@ -70,7 +71,7 @@ def install(app,repo,preparation,credentials,job):
         journal=json.loads(saved.get('response_journal') or '{}')
         # Explicit allowlist: never export config, credentials or authorization headers.
         keys=('responses','pending','errors','review_failures','repair_failures','http_failures','review_recoveries',
-              'accepted_reviews','unknown_attempts','recovery_epoch','reserved_tokens','reserved_cost','actual_tokens','actual_cost')
+              'accepted_reviews','unknown_attempts','recovery_epoch','reserved_tokens','reserved_cost','actual_tokens','actual_cost','fragment_recoveries','binding')
         requests=[{k:r.get(k) for k in ('id','stage','status','finish_reason','usage_json','input_tokens','output_tokens','cost_usd')} for r in repo.request_log(job_id=current['id'])]
         return {'requests':requests,**{k:journal[k] for k in keys if k in journal},'recovery':{'status':saved['status'],'phase':saved.get('phase'),
                 'revision':saved['revision'],'review':repo.draft(wid,True).get('review')}}
@@ -113,7 +114,7 @@ def install(app,repo,preparation,credentials,job):
         provider=json.loads(saved['config_json'])['provider']
         preparation.resume(current['id'],credentials.resolve(provider,body.key()),revision=body.revision,
             config_changes={k:getattr(body,k) for k in ('max_tokens','context_length') if getattr(body,k) is not None},
-            acknowledge_unknown=body.acknowledge_unknown)
+            acknowledge_unknown=body.acknowledge_unknown,retry_last_fragment=body.retry_last_fragment)
         return job(current['id'])
 
     @app.post('/api/workspaces/{wid}/draft/confirm')

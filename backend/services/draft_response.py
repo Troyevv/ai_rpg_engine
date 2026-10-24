@@ -25,7 +25,7 @@ class _Incomplete(Exception):
     pass
 
 
-def prefix_complete(text):
+def prefix_complete(text, schema=None):
     """Validate JSON grammar without completing strings/containers or discarding bytes."""
     i, n = 0, len(text)
     def whitespace():
@@ -48,23 +48,42 @@ def prefix_complete(text):
                         if text[i] not in '0123456789abcdefABCDEF': raise TransportError('Повреждён Unicode escape.')
                         i += 1
                 elif ch not in '"\\/bfnrt': raise TransportError('Повреждён escape JSON-строки.')
-    def value(depth=0):
+    def child_schema(node, key):
+        if not node:return None
+        if 'anyOf' in node:
+            node=next((x for x in node['anyOf'] if x.get('type')=='object'),{})
+        props=node.get('properties',{})
+        if key in props:return props[key]
+        extra=node.get('additionalProperties')
+        if isinstance(extra,dict):return extra
+        if props or extra is False:raise TransportError('Неверная вложенность: неизвестный ключ '+key)
+        return None
+    def value(depth=0, node=None):
         nonlocal i
         if depth > 100: raise TransportError('Слишком глубокая вложенность JSON.')
         whitespace(); need(); ch = text[i]
+        if node:
+            kinds=[node.get('type')]+[x.get('type') for x in node.get('anyOf',[])]
+            expected=[t for x in kinds if x for t in (x if isinstance(x,list) else [x])]
+            actual='object' if ch=='{' else 'array' if ch=='[' else 'string' if ch=='"' else 'null' if ch=='n' else 'boolean' if ch in 'tf' else 'number'
+            if expected and actual not in expected and not (actual=='number' and 'integer' in expected):
+                raise TransportError('Неверная вложенность: ожидался '+str(expected))
         if ch == '"': string(); return
         if ch in '{[':
-            close = '}' if ch == '{' else ']'; is_object = ch == '{'; i += 1
+            close = '}' if ch == '{' else ']'; is_object = ch == '{'; i += 1; keys=set()
             whitespace(); need()
             if text[i] == close: i += 1; return
             while True:
                 whitespace(); need()
                 if is_object:
                     if text[i] != '"': raise TransportError('Ожидался ключ JSON-объекта.')
-                    string(); whitespace(); need()
+                    start=i;string();key=json.loads(text[start:i])
+                    if key in keys:raise TransportError('Повтор JSON-ключа: '+key)
+                    keys.add(key);child=child_schema(node,key)
+                    whitespace(); need()
                     if text[i] != ':': raise TransportError('Ожидалось двоеточие JSON.')
                     i += 1
-                value(depth+1); whitespace(); need()
+                value(depth+1,child if is_object else (node or {}).get('items')); whitespace(); need()
                 if text[i] == close: i += 1; return
                 if text[i] != ',': raise TransportError('Повреждена граница JSON: ожидалась запятая.')
                 i += 1
@@ -84,7 +103,7 @@ def prefix_complete(text):
                 i += len(literal); return
         raise TransportError('Недопустимое начало JSON-значения.')
     try:
-        value(); whitespace()
+        value(node=schema); whitespace()
         if i != n: raise TransportError('Повтор объекта или лишний текст после JSON.')
         return True
     except _Incomplete:
@@ -102,28 +121,54 @@ def strict_loads(text):
     return json.loads(text,object_pairs_hook=pairs,parse_constant=constant)
 
 
-def join_fragments(parts):
-    result = ''
-    for part in parts:
-        text = part['text']
-        if hashlib.sha256(text.encode()).hexdigest() != part['sha256']:
-            raise TransportError('Нарушена целостность сохранённого фрагмента.')
-        if part['offset'] != len(result): raise TransportError('Пропущен или переставлен фрагмент JSON.')
-        if result:
-            # Ambiguous overlap is rejected, never silently deduplicated. Small
-            # punctuation overlaps are normal JSON and are checked by grammar.
-            # KMP computes overlap in linear time even for long biographies.
-            combined=text+'\x00'+result[-len(text):]
-            prefix=[0]*len(combined)
-            for i in range(1,len(combined)):
-                j=prefix[i-1]
-                while j and combined[i]!=combined[j]:j=prefix[j-1]
-                if combined[i]==combined[j]:j+=1
-                prefix[i]=j
-            if prefix and prefix[-1]>=16:
-                raise TransportError('Повтор текста на границе фрагментов. Ответ сохранён; склейка неоднозначна.')
-        result += text
-        prefix_complete(result)
+ASSEMBLY_VERSION = 1
+
+
+def digest(text):return hashlib.sha256(text.encode()).hexdigest()
+
+
+def overlaps(left,right):
+    # Bounded exact candidates; a larger repeated block requires explicit recovery.
+    return [n for n in range(1,min(len(left),len(right),4096)+1) if left.endswith(right[:n])]
+
+
+def join_fragments(parts, manifest=None, *, schema=None, terminal=False):
+    """Raw offsets are Python characters; accepted offsets are recorded separately.
+
+    Always prefer valid literal concatenation. Only a uniquely schema-compatible
+    overlap may be removed. No missing fields/references are checked on prefixes.
+    """
+    result='';raw_offset=0;boundaries=[]
+    for index,part in enumerate(parts):
+        text=part['text']
+        if digest(text)!=part['sha256']:raise TransportError('Нарушена целостность сохранённого фрагмента.')
+        if part['offset']!=raw_offset:raise TransportError('Пропущен или переставлен фрагмент JSON.')
+        raw_offset+=len(text);literal=result+text;remove=0;failures=[]
+        if result and prefix_complete(result):raise TransportError('Повтор объекта или лишний фрагмент после полного JSON.')
+        try:prefix_complete(literal)
+        except TransportError as invalid:
+            duplicate='Повтор JSON-ключа' in str(invalid)
+            if duplicate and not (terminal and index==len(parts)-1):raise
+            candidates=[]
+            for count in ([] if duplicate else overlaps(result,text)):
+                try:
+                    prefix_complete(result+text[count:],schema)
+                    candidates.append(count)
+                except TransportError as exc:failures.append(dict(overlap=count,reason=str(exc)))
+            if len(candidates)==1:remove=candidates[0]
+            elif candidates:
+                raise TransportError('Неоднозначная граница фрагментов: '+str(candidates)+'. Требуется повтор только последнего продолжения.')
+            elif not terminal or index!=len(parts)-1:
+                raise TransportError(str(invalid)) from invalid
+            # Terminal syntax errors are returned intact to the existing repair.
+        boundaries.append(dict(index=index,raw_offset=part['offset'],assembled_offset=len(result),
+            removed_prefix=remove,source_sha256=part['sha256'],prefix_sha256=digest(result),rejected=failures))
+        result+=text[remove:]
+    built=dict(version=ASSEMBLY_VERSION,offset_unit='python_characters',boundaries=boundaries,
+        raw_length=raw_offset,assembled_length=len(result),sha256=digest(result))
+    if manifest is not None:
+        if manifest and manifest!=built:raise TransportError('Нарушена целостность манифеста сборки.')
+        manifest.update(built)
     return result
 
 
@@ -136,23 +181,38 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
     context=min(context,capabilities.get('context_window',context))
     output_limit=min(config['max_tokens'],capabilities.get('max_output_tokens',config['max_tokens']))
     record = journal.setdefault('responses',{}).setdefault(slot,{'parts':[],'complete':False})
-    # Finished (including syntactically invalid) replies belong to validation,
-    # not another request. Preserve them byte-for-byte for bounded repair.
+    schema=None
+    if slot=='world':
+        from backend.services.draft_initial import prompt_schema
+        schema=prompt_schema()
+    def assemble():
+        manifest=record.setdefault('assembly',{})
+        try:
+            result=join_fragments(record['parts'],manifest,schema=schema,terminal=record['complete'])
+        except TransportError as exc:
+            record['assembly_error']=str(exc)
+            repo.save_response_journal(jid,journal)
+            raise
+        record.pop('assembly_error',None)
+        try:record['document_state']='empty' if record['complete'] and record['parts'] and not result else 'complete' if prefix_complete(result) else 'incomplete'
+        except TransportError:record['document_state']='syntax_error'
+        repo.save_response_journal(jid,journal)
+        return result
+    text=assemble()
+    if record['complete'] and record['document_state']!='incomplete':return text
     if record['complete']:
-        offset=0
-        for part in record['parts']:
-            if part['offset']!=offset:raise TransportError('Пропущен или переставлен фрагмент JSON.')
-            offset+=len(part['text'])
-            if hashlib.sha256(part['text'].encode()).hexdigest()!=part['sha256']:
-                raise TransportError('Нарушена целостность сохранённого ответа.')
-        return join_fragments(record['parts']) if len(record['parts'])>1 else ''.join(p['text'] for p in record['parts'])
-    text = join_fragments(record['parts'])
+        record['complete']=False
+        repo.save_response_journal(jid,journal)
     if journal.get('pending'): raise TransportError('Исход прошлого запроса неизвестен; повтор запрещён.')
     def accounting():
         if not hasattr(repo,'request_log'):return {}
         rows=repo.request_log(job_id=jid)
         return rows[0] if rows else {}
     while not cancel.is_set():
+        if text and prefix_complete(text):
+            record['complete']=True
+            repo.save_response_journal(jid,journal)
+            return text
         if len(record['parts']) >= MAX_FRAGMENTS: raise TransportError('Исчерпан лимит пяти фрагментов. Ответ сохранён.')
         request = deepcopy(messages)
         if text:
@@ -178,7 +238,7 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
             if cost+Decimal(journal.get('actual_cost','0')) > Decimal(str(cap)): raise TransportError('Исчерпан бюджет расходов. Ответ сохранён.')
             journal['reserved_cost'] = str(cost)
         journal['reserved_tokens'] = reserved+input_bound+limit
-        journal['pending'] = {'slot':slot,'offset':len(text),'text':''}
+        journal['pending'] = {'slot':slot,'offset':sum(len(p['text']) for p in record['parts']),'text':''}
         repo.save_response_journal(jid,journal)  # commit BEFORE opening a paid request
         def settle(metadata, rejected=False):
             inp,out=metadata.get('input_tokens'),metadata.get('output_tokens')
@@ -222,17 +282,21 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
             raise TransportError('Запрос прерван; его исход неизвестен. Полученный текст сохранён, слепой повтор запрещён.') from None
         metadata=accounting()
         settle(metadata)
-        part = dict(request_id=metadata.get('id'),usage=json.loads(metadata['usage_json']) if metadata.get('usage_json') else None,provider_finish_reason=metadata.get('finish_reason'),text=fragment,sha256=hashlib.sha256(fragment.encode()).hexdigest(),offset=len(text),finish_reason='stop' if ended else 'length')
+        part = dict(provider=config.get('provider'),model=re.sub(r'[^A-Za-z0-9_./:-]','',str(config.get('model','')))[:128],request_id=metadata.get('id'),usage=json.loads(metadata['usage_json']) if metadata.get('usage_json') else None,provider_finish_reason=metadata.get('finish_reason'),text=fragment,sha256=hashlib.sha256(fragment.encode()).hexdigest(),offset=sum(len(p['text']) for p in record['parts']),requested_output_limit=limit,finish_reason='stop' if ended else 'length')
+        # Verify the prior manifest before extending it; retain every raw part.
+        record.pop('assembly',None)
         record['parts'].append(part)
         record['complete'] = ended
         journal['pending'] = None
         repo.save_response_journal(jid,journal)
         repo.preparation_progress(jid,text+fragment)
-        if ended:
-            # Verify continuation boundaries even on the terminal reply. The
-            # first full response may instead need syntax repair.
-            if text: return join_fragments(record['parts'])
-            return fragment
-        if not fragment: raise TransportError('Лимит ответа исчерпан без текста. Автоматическое увеличение лимита запрещено.')
-        text = join_fragments(record['parts'])
+        text=assemble()
+        repo.preparation_progress(jid,text)
+        if record['document_state']!='incomplete' or (ended and not text):
+            record['complete']=True
+            repo.save_response_journal(jid,journal)
+            return text
+        record['complete']=False
+        repo.save_response_journal(jid,journal)
+        if not fragment:raise TransportError('Пустое продолжение: ответ сохранён, автоматический повтор остановлен.')
     return None

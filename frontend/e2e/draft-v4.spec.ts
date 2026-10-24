@@ -137,3 +137,33 @@ test('structured motivations render and edit without losing lifecycle metadata',
   // API save-load path is exercised here; canonical metadata is asserted by backend smoke.
   expect((await request.get(`/api/saves/${save}`)).ok()).toBeTruthy();
 });
+
+
+test('fragment recovery survives reload and repeats only rejected continuation',async({page,request},info)=>{
+  const workspace=await(await request.post('/api/workspaces',{data:{name:'Fragment recovery'}})).json();
+  const url=`/api/workspaces/${workspace.id}/draft`;
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),workspace.id);
+  await page.goto('/');await nav(page,'Создать');
+  await page.getByLabel('Описание мира или текст импорта').fill(`TEST_FRAGMENT_RECOVERY ${info.project.name}. Соседи на кухне.`);
+  await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+  await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('error');
+  const before=await(await request.get(url+'/raw')).json();
+  await page.reload();await nav(page,'Создать');
+  await expect(page.getByRole('heading',{name:'Восстановление ответа'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Открыть результат в редакторе автора'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Исправить поле',exact:true})).toHaveCount(0);
+  await page.getByText('Повторить проблемное продолжение',{exact:true}).click();
+  await page.screenshot({path:`test-results/fragment-recovery-${info.project.name}.png`,fullPage:true});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth));
+  await page.getByRole('button',{name:'Запросить только последнее продолжение',exact:true}).click();
+  await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('saved');
+  const after=await(await request.get(url+'/raw')).json();
+  expect(after.responses.world.parts[0]).toEqual(before.responses.world.parts[0]);
+  expect(after.fragment_recoveries[0].part).toEqual(before.responses.world.parts[1]);
+  expect(after.responses.world.parts).toHaveLength(2);
+  await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
+  await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+  await page.getByRole('button',{name:'Начать игру',exact:true}).click();
+  await expect(page.locator('.choices button')).toHaveCount(6);
+  await page.reload();await expect(page.locator('.choices button')).toHaveCount(6);
+});

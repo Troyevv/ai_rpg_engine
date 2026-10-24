@@ -68,7 +68,8 @@ class Repository(PresentationStorage, DraftStorage, Storage):
     @staticmethod
     def public_job(job):
         journal = json.loads(job.get('response_journal') or '{}')
-        job = {**job, 'unknown_outcome': bool(journal.get('pending')), 'resumable': bool(journal and not journal.get('pending') and job.get('status') in ('error','stopped'))}
+        job = {**job, 'fragment_recovery':bool(journal.get('responses',{}).get('world',{}).get('assembly_error')), 'transport_incomplete':bool(journal.get('responses',{}).get('world') and not journal['responses']['world'].get('complete') and not journal.get('candidate_text')), 'unknown_outcome': bool(journal.get('pending')), 'resumable': bool(journal and not journal.get('pending') and job.get('status') in ('error','stopped'))}
+        if job.get('fragment_recovery'):job['error']='Не удалось собрать сохранённые части ответа. Диагностика доступна автору; можно повторить только проблемное продолжение.'
         staged = json.loads(job.get('memory_before_json') or '{}').get('_remote_batch')
         if staged and job.get('status') != 'saved':
             job = {**job, 'narrative': ''}
@@ -87,7 +88,7 @@ class Repository(PresentationStorage, DraftStorage, Storage):
             db.execute('UPDATE preparation_jobs SET response_journal=? WHERE id=?',
                        (json.dumps(journal,ensure_ascii=False),jid))
 
-    def resume_draft_response(self, jid, *, revision=None, config_changes=None, acknowledge_unknown=False):
+    def resume_draft_response(self, jid, *, revision=None, config_changes=None, acknowledge_unknown=False, retry_last_fragment=False):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             job = dict(db.execute('SELECT * FROM preparation_jobs WHERE id=?',(jid,)).fetchone())
@@ -103,11 +104,49 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                 config.update(config_changes)
             if journal.get('pending'):
                 journal.setdefault('unknown_attempts',[]).append(journal.pop('pending'))
+            if retry_last_fragment:
+                from backend.services.draft_response import digest,join_fragments
+                record=journal.get('responses',{}).get('world',{})
+                parts=record.get('parts',[])
+                if not record.get('assembly_error') or len(parts)<2:
+                    raise ValueError('Нет проблемного продолжения для повтора.')
+                offset=0
+                for part in parts:
+                    if part['sha256']!=digest(part['text']) or part['offset']!=offset:
+                        raise ValueError('Повреждена целостность исходных фрагментов; повтор не разрешён.')
+                    offset+=len(part['text'])
+                if record.get('assembly'):
+                    from backend.services.draft_initial import prompt_schema
+                    join_fragments(parts,dict(record['assembly']),schema=prompt_schema(),terminal=record.get('complete',False))
+                journal.setdefault('fragment_recoveries',[]).append(dict(part=parts.pop(),assembly=record.pop('assembly',None),reason=record.pop('assembly_error'),epoch=journal.get('recovery_epoch',0)))
+                record['complete']=False
             if revision is not None:
                 head=self._draft_head(db,job['workspace_id'])
                 if head:
                     record=json.loads(head['content'])
-                    journal['candidate_text']=json.dumps(record['state'],ensure_ascii=False)
+                    owned=record.get('origin_job')==jid
+                    if not record.get('origin_job') and journal.get('candidate_text') and journal.get('responses',{}).get('world',{}).get('complete'):
+                        # Legacy jobs must prove an accepted candidate, never adopt
+                        # an arbitrary workspace head merely because a revision matched.
+                        try:
+                            accepted=json.loads(journal['candidate_text']);ancestor=head
+                            while ancestor:
+                                content=json.loads(ancestor['content'])
+                                if content.get('origin_job') not in (None,jid):break
+                                if content.get('state')==accepted and content.get('source','')==config.get('_draft_source',config.get('_draft_input','')):
+                                    owned=True;break
+                                if ancestor['reason']=='restore':
+                                    ancestor=db.execute("SELECT * FROM document_versions WHERE id=? AND owner=? AND kind='world_draft'",(ancestor['source_version_id'],job['workspace_id'])).fetchone()
+                                elif ancestor['reason'] in ('patch','add','remove','candidate_patch'):
+                                    ancestor=db.execute("SELECT * FROM document_versions WHERE id<? AND owner=? AND kind='world_draft' ORDER BY id DESC LIMIT 1",(ancestor['id'],job['workspace_id'])).fetchone()
+                                else:break
+                        except (ValueError,KeyError):owned=False
+                    if owned:
+                        journal['candidate_text']=json.dumps(record['state'],ensure_ascii=False)
+                        journal['candidate_job']=jid
+                    else:
+                        journal.pop('candidate_text',None)
+                        journal.pop('candidate_job',None)
                 db.execute('UPDATE preparation_jobs SET revision=? WHERE id=?',(revision,jid))
             db.execute('UPDATE preparation_jobs SET config_json=? WHERE id=?',(json.dumps(config,ensure_ascii=False),jid))
             journal['recovery_epoch']=journal.get('recovery_epoch',0)+1

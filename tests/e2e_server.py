@@ -42,6 +42,7 @@ def runtime_v3_request(messages):
 
 
 review_protocol_attempts={}
+fragment_attempts={}
 
 def stream(**kwargs):
     from backend.services.draft_completeness import MARKER
@@ -118,6 +119,15 @@ def stream(**kwargs):
             candidate,_=motivated()
         if 'TEST_CANDIDATE_RECOVERY' in full:candidate['protagonist_id']='missing'
         value=json.dumps(candidate,ensure_ascii=False)
+        if 'TEST_FRAGMENT_RECOVERY' in full:
+            key=kwargs['messages'][1]['content'];count=fragment_attempts.get(key,0);fragment_attempts[key]=count+1
+            cut=value.index('"world":')+len('"world":')
+            if count<2:
+                from llm import OutputLimitReached
+                yield value[:cut] if count==0 else 'INVALID CONTINUATION'
+                if kwargs.get('on_finish'):kwargs['on_finish']('length')
+                raise OutputLimitReached()
+            value=value[cut:]
         if 'TEST_JSON_CONTINUATION' in full:
             cut=len(value)//2
             if not any(m['role']=='assistant' for m in kwargs['messages']):

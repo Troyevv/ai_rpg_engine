@@ -28,6 +28,7 @@ def messages_for(repo,job,config):
         instructions+='\nНастройки мира (не переопределяют явные факты идеи): '+json.dumps(settings.model_dump(),ensure_ascii=False)
         instructions+='\nЦелевой состав NPC: '+json.dumps(settings.cast_targets([]),ensure_ascii=False)
         instructions+='\nЧисла NPC — ориентир, не квота. Именованные NPC входят в состав. Выразительность меняет подачу, а не характер. Темп и риск не создают предысторию.'
+        instructions+='\nНе выводи пустые технические defaults (dependencies, review_required, reviewed_signature) и производные поля, когда схема позволяет их опустить. Непустые метаданные Motivation, факты, биографии и тайны сохраняй полностью.'
         instructions+='\nРазработай пригодный для немедленной игры мир. Недостающие детали концепции дополни самостоятельно; исходная идея не является исчерпывающей спецификацией.'
         from backend.services.draft_initial import prompt_schema
         system=(config['_prompts']['draft_world_prompt.md']['content']
@@ -99,6 +100,10 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     journal=json.loads(job.get('response_journal') or '{}')
     repo.draft_phase(jid,'world')
     messages=journal.setdefault('messages',messages_for(repo,job,config))
+    input_hash=hashlib.sha256(json.dumps(messages,ensure_ascii=False,sort_keys=True).encode()).hexdigest()
+    binding=dict(job_id=jid,input_hash=input_hash)
+    if journal.get('binding',binding)!=binding:raise ValueError('Ответ принадлежит другому заданию или входу.')
+    journal['binding']=binding
     # A preflight rejection has no provider outcome to recover, but must retain
     # the original request so Resume can use a larger configured context.
     repo.save_response_journal(jid,journal)

@@ -332,3 +332,68 @@ To continue a previously failed candidate: update/restart the backend, open its
 existing workspace, click **Повторить проверку** (or the existing saved-generation
 Resume action for a legacy technical-only failure). Keep the workspace/SQLite and
 saved response. Real-model quality remains outside these deterministic regressions.
+
+## Saved fragment recovery (PR #116)
+
+The exact user journal is `tests/fixtures/initial_world/generation_response_overlap.json`,
+SHA-256 `a72bbdb4f2861bea0a58e2935b131031aea60cc9801256209e82912845f2bfdd`.
+Its requests are not chronologically ordered: `responses.world.parts` is authoritative.
+The former substring threshold rejected every overlap >=16 and Resume retried the same
+assembly before making any call. It also rejected legitimate repeated string content.
+
+Assembly now checks raw hashes/order, JSON parser state and the existing initial-world
+schema (only already emitted structure, never missing required fields or future links).
+Literal concatenation wins whenever valid. Otherwise bounded exact overlaps are tried;
+only a unique structurally valid interpretation is accepted. Here overlap 1 puts a null
+record in `world.characters`; overlap 51 preserves nesting. The accepted prefix is
+76,395 Python characters, still incomplete inside `roles/role_liza_lawyer`.
+No brackets, events, biographies or motivations are invented by assembly.
+
+Raw parts, request IDs, hashes and usage never change. Version 1 assembly manifests
+record raw and accepted offsets (Python characters, not UTF-8 bytes), boundary decisions,
+rejected alternatives, hashes and lengths. Reload recomputes and verifies the manifest;
+new fragments use raw offsets and separate assembled offsets. Old journals gain a
+manifest in place; historical game snapshots are untouched. Assembly consumes no usage.
+
+To continue the existing failed job, restart the updated backend, reopen the workspace
+and click **Продолжить сохранённую генерацию**. Existing parts are assembled locally;
+only the missing suffix is requested. If context is too small, change context/output
+settings and Resume again; this does not increase the monetary ceiling. For genuinely
+ambiguous/malformed boundaries, **Повторить проблемное продолжение** archives the last
+raw part and explicitly requests only that continuation; previous accepted parts stay.
+Unknown network outcomes retain the separate possible-repeat-payment acknowledgement.
+Corrupted hashes/order/manifests cannot be bypassed by this action.
+
+Transport completion is independent of finish_reason: complete JSON on `length` goes to
+validation without another call, incomplete valid JSON on `stop` continues, terminal
+malformed JSON reaches punctuation-only repair even with multiple parts. Duplicate keys
+and repeated full roots remain errors. An incomplete transport never advertises an
+editable full world. Author diagnostic export includes assembly and recovery histories.
+
+Draft records carry their originating job through accepted edits and restores. Resume
+only adopts that lineage. Legacy adoption additionally requires a completed world response
+and equality with the job's saved candidate; an unrelated previous workspace draft cannot
+become the result of a new, incomplete generation. Input messages are hash-bound to job.
+
+The official DeepSeek Chat Prefix Completion guide was evaluated:
+https://api-docs.deepseek.com/guides/chat_prefix_completion/
+It requires a final assistant message with prefix=true and a beta base URL. The guide's
+example does not establish streaming/thinking support for every selected model. No live
+key/capability probe was available, so beta remains disabled rather than being assumed
+supported or changing the global provider endpoint. The tested fallback sends accepted
+text as assistant context and requests only its suffix; it deliberately does not require
+that suffix to satisfy json_object on its own. Integrity checks remain necessary either way.
+
+The real-journal regression uses an explicitly synthetic missing suffix, then surfaces
+the real sibling-description conflict for author clarification and the adoption/age
+contradiction through a controlled reviewer and exact biography patches. It exercises
+editor → Start Game → turn → save/reload → next turn, preserving Motivation metadata and
+Knowledge. It makes one continuation call (zero replays of the two original calls), then
+three calls for semantic report/local repair/re-review. This proves the application path,
+not live DeepSeek reliability. Optional empty Motivation defaults may be omitted, with
+normalization equivalence tested; nonempty metadata and literary content remain intact.
+
+The cancelled Actions run 40105881873 passed pytest/build but its artifacts show 14 old
+editor tests expecting immediate play after a manual edit, bypassing required re-review.
+Those tests now re-review after reload. CI runs desktop/mobile in separate jobs with the
+same timeout and all tests retained; line reporting makes any remaining failures visible.
