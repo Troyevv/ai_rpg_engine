@@ -143,6 +143,10 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     renewer=threading.Thread(target=heartbeat,daemon=True);renewer.start()
     context=config['context_length']
     if loaded: context=min(context,int(loaded.get('config',{}).get('context_length') or context))
+    budgeted = authoring and inputs['prompt'].get('budget_version') == 1
+    if budgeted:
+        from backend.services import author_budget as budgets
+        context, output_ceiling, model_context = budgets.limits(config, loaded)
     def opened(stream):
         handle.stream=stream
         if handle.cancel.is_set(): stream.close()
@@ -162,7 +166,13 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         if last_error: context_data={**context_data,'repair_error':last_error,'repair_scope':'Only this stage; preserve all previously accepted inputs.'}
         request=[dict(role='system',content=system+'\nStage: '+stage),
                  dict(role='user',content=json.dumps(context_data,ensure_ascii=False))]
-        if authoring:
+        output = config['max_tokens']
+        diagnostics = None
+        if budgeted:
+            request = budgets.messages(inputs['prompt'], stage, context_data)
+            output = budgets.response_budget(stage, context_data, output_ceiling, context)
+            diagnostics = budgets.check(request, output, context, stage, user_context=config['context_length'], model_context=model_context)
+        elif authoring:
             from context_builder import estimate
             from backend.services.world_authoring_compiler import CompileError
             if estimate(request)+config['max_tokens']+512>context:
@@ -178,9 +188,14 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
                     current=find_loaded_model(config['model'])
                     if not current: raise ValueError('Сначала загрузи выбранную локальную модель.')
                     actual_context=min(context,int(current.get('config',{}).get('context_length') or context))
-                messages,limit=request_context(request,'',actual_context,config['max_tokens'],format_hint='json')
+                if budgeted:
+                    # Recheck after acquiring a local model: its loaded window can change.
+                    diagnostics = budgets.check(request, output, actual_context, stage, user_context=config['context_length'], model_context=current.get('config',{}).get('context_length') if config['provider']=='local' else model_context)
+                    messages, limit = request, output
+                else:
+                    messages,limit=request_context(request,'',actual_context,output,format_hint='json')
                 pieces=[]
-                for chunk in tracked_stream(repo,stream_fn,jid,'initial_'+stage,config,messages,
+                for chunk in tracked_stream(repo,stream_fn,jid,'initial_'+stage,config,messages,diagnostics=diagnostics,
                         model=config['model'],provider=config['provider'],api_key=api_key,
                         temperature=config['temperature'],max_tokens=limit,require_complete=True,
                         cancel_event=handle.cancel,on_stream=opened,
@@ -203,6 +218,8 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
                     finish_reason=measured.get('finish_reason'),
                     partial_json_bytes=len(''.join(pieces).encode('utf-8')),
                     expected_json_bytes=None,assigned_pair_count=len(context_data.get('assigned_pairs',[]))))
+            if budgeted and isinstance(exc, budgets.CompileError):
+                raise
             status=getattr(getattr(exc,'response',None),'status_code',None)
             if status in (429,503) and not pieces:
                 raise TransientProviderFailure('stage/'+stage+': provider temporarily rejected request') from exc
@@ -254,7 +271,12 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     try:
         if authoring:
             from backend.services.world_authoring_pipeline import run as run_authoring
-            run_authoring(repo,jid,token,inputs,config,context,request,execute)
+            if budgeted and config['provider']=='local':
+                loaded=find_loaded_model(config['model'])
+                if not loaded: raise ValueError('Сначала загрузи выбранную локальную модель.')
+                context, output_ceiling, model_context = budgets.limits(config, loaded)
+            run_config = {**config, 'max_tokens': output_ceiling} if budgeted else config
+            run_authoring(repo,jid,token,inputs,run_config,context,request,execute)
             return
         if config.get('_review_only'):
             saved=repo.generation_resources(jid,['interpretation','author_draft'])

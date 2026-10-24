@@ -2,6 +2,7 @@
 import json
 from copy import deepcopy
 from context_builder import estimate
+from backend.services import author_budget as budgets
 from backend.services import world_authoring as a
 from backend.services.initial_world_v2 import _check
 from backend.services.world_authoring_compiler import compile_document, CompileError
@@ -18,9 +19,10 @@ def capture(brief, config):
         raise ValueError('author/brief: максимум 120000 байт UTF-8; сократите замысел до запроса провайдера.')
     # Validate the minimum viable request before any provider work. Long sources
     # are retained in full and processed as independently checkpointed sections.
-    source_sections(brief, config['context_length'], config['max_tokens'], a.AuthorBrief.model_json_schema())
+    context, output, model_context = budgets.limits(config)
+    source_sections(brief, context, output, a.AuthorBrief.model_json_schema(), creation=config.get('_creation', {}), user_context=config['context_length'], model_context=model_context)
     return dict(brief=brief, constraint_revision=1, creation=config.get('_creation', {}),
-        prompt=dict(version=a.VERSION, planning_version=2, rules=a.AUTHOR_RULES, interpretation=a.ANALYSIS_RULES,
+        prompt=dict(version=a.VERSION, planning_version=2, budget_version=1, rules=a.AUTHOR_RULES, interpretation=a.ANALYSIS_RULES,
                     schemas={k: model.model_json_schema() for k, model in SCHEMAS.items()}))
 
 
@@ -28,7 +30,46 @@ def fits(system, data, context, output):
     return estimate([dict(content=system), dict(content=json.dumps(data, ensure_ascii=False))]) + output + 512 <= context
 
 
-def source_sections(brief, context, output, schema):
+def source_sections(brief, context, output, schema, *, creation=None, user_context=None, model_context=None):
+    """Lossless source sections using the analysis schema and its own response cap.
+
+    Bound source input to one third of the context for subsequent replay alongside
+    accepted analysis/registry. This is not a global output reservation. Ordinary
+    ideas fitting that source allowance are kept intact.
+    """
+    prompt = dict(interpretation=a.ANALYSIS_RULES, schemas={'author_brief': schema})
+    def task(text):
+        data = dict(source=text, known_entities=[], creation_settings=creation or {})
+        response = budgets.response_budget('author_brief', data, output, context)
+        return budgets.messages(prompt, 'author_brief', data), response
+    messages, reserve = task('')
+    budgets.check(messages, reserve, context, 'author_brief', user_context=user_context, model_context=model_context)
+    def accepts(text):
+        messages, reserve = task(text)
+        return (estimate(messages) + reserve + budgets.MARGIN <= context
+                and estimate([dict(content=text)]) <= context // 3)
+    if accepts(brief):
+        return [brief]
+    sections = []
+    remaining = brief
+    while remaining:
+        lo, hi = 0, len(remaining)
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            if accepts(remaining[:mid]): lo = mid
+            else: hi = mid - 1
+        if not lo:
+            messages, reserve = task(remaining[:1])
+            budgets.check(messages, reserve, context, 'author_brief', user_context=user_context, model_context=model_context)
+            raise CompileError('author/source', 'Недостаточно бюджета для раздела исходного текста.')
+        boundary = remaining.rfind('\n', 0, lo)
+        cut = boundary + 1 if boundary > lo // 2 else lo
+        sections.append(remaining[:cut]); remaining = remaining[cut:]
+    assert ''.join(sections) == brief
+    return sections
+
+
+def legacy_source_sections(brief, context, output, schema):
     """Lossless only-when-needed splitting; every section gets a checkpoint."""
     system = a.ANALYSIS_RULES + json.dumps(schema, ensure_ascii=False)
     # Reserve room for previously registered keys and ordinary response framing.
@@ -77,8 +118,11 @@ def run(repo, jid, token, inputs, config, context, request, execute):
         return repo.generation_resources(jid, [key])[key]
     brief = inputs['brief']
     schemas = inputs['prompt']['schemas']
-    split_schema = max(schemas.values(), key=lambda s: len(json.dumps(s))) if inputs['prompt'].get('planning_version') == 2 else schemas['author_brief']
-    parts = source_sections(brief, context, config['max_tokens'], split_schema)
+    if inputs['prompt'].get('budget_version') == 1:
+        parts = source_sections(brief, context, config['max_tokens'], schemas['author_brief'], creation=inputs['creation'])
+    else:
+        split_schema = max(schemas.values(), key=lambda s: len(json.dumps(s))) if inputs['prompt'].get('planning_version') == 2 else schemas['author_brief']
+        parts = legacy_source_sections(brief, context, config['max_tokens'], split_schema)
     part_keys = ['author_source_' + str(i) for i in range(len(parts))]
     repo.plan_generation_units(jid, token, [
         *[unit(key, 'author_brief', ['brief', 'prompt', *part_keys[:i]], {key: ''}) for i, key in enumerate(part_keys)],
@@ -99,13 +143,19 @@ def run(repo, jid, token, inputs, config, context, request, execute):
             if row is None:raise CompileError('author_document/'+section+'/'+entity['key'],'Пропущена сущность, заданная автором.')
             if row['name']!=entity['name']:raise CompileError('author_document/'+section+'/'+entity['key'],'Изменено заданное автором имя.')
         return value
+    output_cap = min(config['max_tokens'], context // 3) if inputs['prompt'].get('budget_version') else config['max_tokens']
     data = dict(original_source=brief, author_brief=analysis)
     targets = CreationSettings.model_validate(inputs['creation']).cast_targets(analysis['entities'])
     # Output estimate includes substantive prose, sparse ties and schema overhead;
     # it is planning, not an assertion about actual tokenizer usage.
     expected = (1 + targets['core']) * 1600 + targets['secondary'] * 700 + len(brief.encode('utf-8')) // 2 + 2500
     system = inputs['prompt']['rules'] + json.dumps(inputs['prompt']['schemas']['author_document'], ensure_ascii=False)
-    compact = expected <= config['max_tokens'] and fits(system, data, context, expected)
+    if inputs['prompt'].get('budget_version') == 1:
+        data['response_budget'] = expected
+        document_messages = budgets.messages(inputs['prompt'], 'author_document', {**data, 'creation_settings': inputs['creation']})
+        compact = expected <= config['max_tokens'] and estimate(document_messages) + expected + budgets.MARGIN <= context
+    else:
+        compact = expected <= config['max_tokens'] and fits(system, data, context, expected)
     if compact:
         repo.plan_generation_units(jid, token, [unit('author_document', 'author_document',
             ['brief', 'author_brief', 'creation', 'prompt'], {'author_document': ''})])
@@ -128,7 +178,7 @@ def run(repo, jid, token, inputs, config, context, request, execute):
                     repo.append_author_plan_unit(jid, token, definition)
                     def validate_page(raw):
                         value = _check(a.PlanPage, raw, key).model_dump()
-                        if len(value['records']) > min(32, max(1, (config['max_tokens']-1200)//400)):
+                        if len(value['records']) > min(32, max(1, (output_cap-1200)//400)):
                             raise ValueError(key + ': превышен назначенный размер страницы')
                         if not value['records'] and not value['complete']:
                             raise CompileError(key, 'Пустая незавершённая страница плана.')
@@ -143,10 +193,10 @@ def run(repo, jid, token, inputs, config, context, request, execute):
                         registered_records=[dict(section=r['section'], key=r['key']) for r in registry.values()],
                         accepted_world=next((p['world'] for p in reversed(pages) if p['world']), None),
                         accepted_opening=next((p['opening'] for p in reversed(pages) if p['opening']), None),
-                        max_records=min(32, max(1, (config['max_tokens']-1200)//400)),
+                        max_records=min(32, max(1, (output_cap-1200)//400)),
                         instruction='Continue the registry for this source section. Return at most max_records short records (summary <= 200 characters). Never repeat accepted records. Set complete only when every supplied entity, relation and circumstance in this section is registered. Supply world/opening on the first page. On later pages use null unless this source explicitly corrects or supplements the accepted world/opening; then return its complete revised value, preserving all other accepted details and report the correction in uncertainties. References may name records on later pages; final compilation checks them. Do not enumerate unrelated pairs.'), a.PlanPage), validate_page)
                     page = get(key)
-                    if len(page['records']) > min(32, max(1, (config['max_tokens']-1200)//400)):
+                    if len(page['records']) > min(32, max(1, (output_cap-1200)//400)):
                         raise CompileError(key, 'Страница превысила назначенный размер; исправьте checkpoint.')
                     page_keys.append(key); pages.append(page)
                     registry.update({r['section']+'/'+r['key']:r for r in page['records']})
@@ -171,9 +221,9 @@ def run(repo, jid, token, inputs, config, context, request, execute):
         current, budget = [], 0
         for record in plan['records']:
             cost = 1800 if record['section'] == 'characters' else 650
-            if cost > config['max_tokens']:
+            if cost > output_cap:
                 raise CompileError('author_plan/' + record['key'], 'Резерв ответа слишком мал для содержательной записи.')
-            if current and budget + cost > config['max_tokens'] * .7:
+            if current and (budget + cost > output_cap * .7 or (context <= 16384 and record['section'] != current[0]['section'])):
                 batches.append(current); current, budget = [], 0
             current.append(record); budget += cost
         if current:

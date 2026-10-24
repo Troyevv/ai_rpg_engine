@@ -215,3 +215,73 @@ In this executor the Playwright CDN returned an HTML page instead of a ZIP. The
 same Chrome-for-Testing 153.0.8010.12 headless ZIP from Google's official storage
 installed successfully. Local runs use the existing PLAYWRIGHT_EXECUTABLE_PATH
 option. CI keeps the normal Playwright installation, which already worked there.
+
+## Request budgets: regression correction (2026-10-24)
+
+New captures record `prompt.budget_version=1`. The authoring contract and Runtime
+are unchanged. Previously captured jobs without this marker keep their source
+partition/checkpoint identities; they are not silently repartitioned on resume.
+A failed old job can be recreated explicitly with the new budget policy and its
+original idea. No automatic paid retry or schema migration is performed.
+
+The previous preflight subtracted the user's entire `max_tokens` plus 4096 from
+every analysis context. The worker additionally used the largest author schema
+for analysis partitioning. This reproduced the reported failure at 8192/12000
+and 32768/16000 (context/output ceiling), before the first provider request.
+The compact AuthorBrief schema is **1466 UTF-8 bytes**, versus **23268 bytes** for
+Document at this revision. The shared `estimate()` is deliberately conservative:
+`sum(ceil(message UTF-8 bytes / 2) + 32) + 256`. It is not a DeepSeek tokenizer;
+actual token usage remains the provider's reported usage, never this estimate.
+
+`author_budget.py` separates three values:
+
+1. **User settings:** `context_length` and `max_tokens` are ceilings; stored values
+   are not rewritten. Workshop sends `prefs.summary`, not game settings. Settings
+   now exposes the context selector for each stage, including the world generator.
+2. **Model capability:** effective context is the minimum of the user ceiling and
+   known model window; output also respects the known provider output ceiling.
+   The published DeepSeek Flash/V4 aliases and V4 Pro capabilities are 1048576
+   context / 393216 output, checked against the official
+   [model metadata documentation](https://api-docs.deepseek.com/api/list-models/)
+   on 2026-10-24, without an inference request. These values never enlarge user
+   settings. Unknown compatible models retain an explicitly unknown model window;
+   local models use their loaded window, rechecked after acquiring the model lease.
+3. **Request budget:** analysis reserves its source-dependent estimated response
+   (minimum target 1024, capped by the user/model ceilings and one third of the
+   effective context). A compact document uses the existing cast/source size
+   estimate; plan pages use 1200 + 400 per assigned record; expansion uses 512 +
+   1800 per character / 650 per other record, capped by the output ceiling.
+   Thinking, when enabled, consumes this same output budget. Length/uncertain
+   termination still stops for explicit recovery; no blind continuation/retry.
+
+Analysis partitioning uses **only AuthorBrief**, the actual analysis instructions,
+creation settings and request framing. Source input is bounded to one third of
+context to leave room for its replay with accepted analysis/registry in later
+stages. Long sources are concatenation-lossless, independently checkpointed and
+replayed in full; no source is trimmed. Every final request additionally checks
+all actual accepted entities, locks, repair feedback and settings. Large accepted
+registries can still exceed a small window: this produces a local diagnostic and
+retains the accepted checkpoints, rather than silently deleting context.
+
+Expansion at small windows separates section types and includes only assigned
+section schemas and their reachable Pydantic definitions. Python still validates
+against the full canonical author models. This prevents merely moving the 8192
+failure from analysis to the first character expansion. No Runtime schema is sent.
+
+The same message builder is used for planning and dispatch. Before any authoring
+request, `estimate(messages) + request_output + 512 <= effective_context` must hold.
+There is no permissive continuation fallback for this path. A failure reports
+required total, estimated input including schema, response, safety margin, user
+ceiling, known model window and effective available budget. Request accounting
+stores these separately and records the actual `max_tokens` sent to the SDK.
+For the short institute idea with empty creation settings, this is input ≈1377 +
+response 1258 + margin 512 = **3147**, at all three user windows 8192/32768/65536.
+These are planning estimates, not claimed actual model token counts.
+
+Regressions cover short/detailed input across 8192/32768/65536 and output ceilings
+256/2000/6000/12000/32000; whole fixture generation across the three windows;
+lossless long-source splitting; known model overflow rejected before the provider;
+the SDK boundary; and browser Settings → Workshop → logged first request → editor
+→ Start Game → reload on desktop/mobile. Existing recovery/checkpoint tests remain.
+An output ceiling of 256 permits a small request but does not promise completion
+of a substantive world. Fixture success does not establish real DeepSeek quality.
