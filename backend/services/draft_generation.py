@@ -100,44 +100,67 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     messages=journal.setdefault('messages',messages_for(repo,job,config))
     result=response(repo,jid,journal,'world',messages,config,context,generate,handle.cancel)
     if result is None:return
+    result=journal.get('candidate_text',result)
+    epoch=journal.get('recovery_epoch',0)
     for attempt in range(3):
         if handle.cancel.is_set():return
         repo.draft_phase(jid,'validating')
         try:
             raw=strict_loads(result)
-            state=domain.prepare(draft_initial.normalize(raw))
-            state['creation_settings']=config.get('_creation_settings',{})
-            draft_initial.validate_typed(state)
-            report=domain.validate(state,canonical=False)
-            if report['errors']: raise ValueError('; '.join(report['errors']))
-            draft_initial.canonical_check(state)
+            state,report=draft_initial.inspect_candidate(raw)
+            errors=report['diagnostics']
+            if isinstance(state,dict):
+                result=json.dumps(state,ensure_ascii=False)
+                journal['candidate_text']=result;repo.save_response_journal(jid,journal)
+                repo.save_draft_candidate(jid,state,errors)
         except (ValueError,TypeError,KeyError) as exc:
             errors=exc.errors if isinstance(exc,draft_initial.DraftErrors) else [dict(path='/',category='validation',message=str(exc))]
-        else:
-            # One read-only completeness check per candidate, inside validation.
-            # Persisted response slots reuse completed checks after restart.
+        if not errors:
+            repo.save_draft_candidate(jid,state,[dict(path='/',category='review_incomplete',message='Смысловая проверка не завершена.')])
+            state['creation_settings']=config.get('_creation_settings',{})
             stage='draft_world_validation'
             review_messages=draft_completeness.messages(state,messages[-1]['content'])
             signature=hashlib.sha256(json.dumps(review_messages,ensure_ascii=False,sort_keys=True).encode()).hexdigest()
-            review=response(repo,jid,journal,'completeness_'+signature,
-                review_messages,config,context,generate,handle.cancel)
-            if review is None:return
-            errors=draft_completeness.parse(review,state)
+            accepted=journal.setdefault('accepted_reviews',{})
+            if signature in accepted:
+                try:
+                    cached=[{k:v for k,v in e.items() if k in ('path','message','related_paths','severity')} for e in accepted[signature]]
+                    draft_completeness.parse(json.dumps({'issues':cached}),state)
+                except (ValueError,TypeError,KeyError,IndexError,AttributeError):
+                    journal.setdefault('invalid_cached_reviews',[]).append(accepted.pop(signature))
+            if signature in accepted:
+                issues=accepted[signature]
+            else:
+                # A malformed report is a failed check, never a bad world or a success.
+                for review_attempt in range(2):
+                    slot='completeness_'+signature if epoch==0 and review_attempt==0 else f'completeness_{signature}_{epoch}_{review_attempt}'
+                    review=response(repo,jid,journal,slot,review_messages,config,context,generate,handle.cancel)
+                    if review is None:return
+                    try:issues=draft_completeness.parse(review,state)
+                    except (ValueError,TypeError,KeyError,IndexError) as exc:
+                        journal.setdefault('review_failures',[]).append(dict(slot=slot,error=str(exc)))
+                        repo.save_response_journal(jid,journal)
+                        if review_attempt==1:raise ValueError('Проверка не завершена: неверный отчёт. Кандидат доступен автору; Resume повторит только проверку.') from exc
+                    else:
+                        accepted[signature]=issues;repo.save_response_journal(jid,journal);break
+            errors=[e for e in issues if e.get('severity','blocker')=='blocker']
+            repo.save_draft_candidate(jid,state,errors)
             if not errors:break
-            # Repair addresses the normalized candidate inspected by the reviewer.
-            # Original provider bytes remain in the persisted response journal.
             result=json.dumps(state,ensure_ascii=False)
-        if errors:
-            journal['errors']=errors;repo.save_response_journal(jid,journal)
-            if attempt==2:raise ValueError('Две попытки исправления исчерпаны. Ответ сохранён. '+str(errors))
-            repair,paths=draft_repair.request(result,errors,author_context=messages[-1]['content'])
-            repo.draft_phase(jid,'retrying');stage='draft_world_repair'
-            reply=response(repo,jid,journal,'repair_'+str(attempt+1),repair,config,context,generate,handle.cancel)
-            if reply is None:return
-            try: result=draft_repair.apply(result,reply,paths)
-            except ValueError as invalid_patch:
-                journal['repair_error']=str(invalid_patch);repo.save_response_journal(jid,journal)
-                if attempt==1:raise ValueError('Две попытки исправления исчерпаны. '+str(invalid_patch)) from invalid_patch
+        journal['errors']=errors;repo.save_response_journal(jid,journal)
+        if attempt==2:raise ValueError('Две попытки исправления исчерпаны. Ответ сохранён. '+str(errors))
+        repair,paths=draft_repair.request(result,errors,author_context=messages[-1]['content'])
+        repo.draft_phase(jid,'retrying');stage='draft_world_repair'
+        slot='repair_'+str(attempt+1)+(f'_resume_{epoch}' if epoch else '')
+        reply=response(repo,jid,journal,slot,repair,config,context,generate,handle.cancel)
+        if reply is None:return
+        try:
+            result=draft_repair.apply(result,reply,paths)
+            journal['candidate_text']=result;repo.save_response_journal(jid,journal)
+        except ValueError as invalid_patch:
+            journal.setdefault('repair_failures',[]).append(dict(slot=slot,error=str(invalid_patch)))
+            repo.save_response_journal(jid,journal)
+            if attempt==1:raise ValueError('Две попытки исправления исчерпаны. '+str(invalid_patch)) from invalid_patch
 
     if handle.cancel.is_set():return
     repo.draft_phase(jid,'saving');repo.finish_draft_job(jid,state)

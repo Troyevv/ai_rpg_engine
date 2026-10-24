@@ -68,7 +68,7 @@ class Repository(PresentationStorage, DraftStorage, Storage):
     @staticmethod
     def public_job(job):
         journal = json.loads(job.get('response_journal') or '{}')
-        job = {**job, 'resumable': bool(journal and not journal.get('pending') and job.get('status') in ('error','stopped'))}
+        job = {**job, 'unknown_outcome': bool(journal.get('pending')), 'resumable': bool(journal and not journal.get('pending') and job.get('status') in ('error','stopped'))}
         staged = json.loads(job.get('memory_before_json') or '{}').get('_remote_batch')
         if staged and job.get('status') != 'saved':
             job = {**job, 'narrative': ''}
@@ -82,18 +82,33 @@ class Repository(PresentationStorage, DraftStorage, Storage):
             db.execute('UPDATE preparation_jobs SET response_journal=? WHERE id=?',
                        (json.dumps(journal,ensure_ascii=False),jid))
 
-    def resume_draft_response(self, jid):
+    def resume_draft_response(self, jid, *, revision=None, config_changes=None, acknowledge_unknown=False):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             job = dict(db.execute('SELECT * FROM preparation_jobs WHERE id=?',(jid,)).fetchone())
             journal = json.loads(job['response_journal'])
             if job['kind'] != 'draft_world' or job['status'] not in ('error','stopped') or not journal:
                 raise ValueError('Нет сохранённого ответа для продолжения.')
-            if journal.get('pending'):
+            if journal.get('pending') and not acknowledge_unknown:
                 raise ValueError('Исход прерванного запроса неизвестен. Автоматический повтор запрещён; полученный текст сохранён.')
-            self._draft_workspace(db,job['workspace_id'],job['revision'])
+            self._draft_workspace(db,job['workspace_id'],job['revision'] if revision is None else revision)
+            config=json.loads(job['config_json'])
+            if config_changes:
+                journal.setdefault('config_history',[]).append(config.copy())
+                config.update(config_changes)
+            if journal.get('pending'):
+                journal.setdefault('unknown_attempts',[]).append(journal.pop('pending'))
+            if revision is not None:
+                head=self._draft_head(db,job['workspace_id'])
+                if head:
+                    record=json.loads(head['content'])
+                    if record.get('candidate'):journal['candidate_text']=json.dumps(record['state'],ensure_ascii=False)
+                db.execute('UPDATE preparation_jobs SET revision=? WHERE id=?',(revision,jid))
+            db.execute('UPDATE preparation_jobs SET config_json=? WHERE id=?',(json.dumps(config,ensure_ascii=False),jid))
+            journal['recovery_epoch']=journal.get('recovery_epoch',0)+1
+            db.execute('UPDATE preparation_jobs SET response_journal=? WHERE id=?',(json.dumps(journal,ensure_ascii=False),jid))
             db.execute("UPDATE preparation_jobs SET status='generating',error='' WHERE id=?",(jid,))
-            return json.loads(job['config_json'])
+            return config
 
     def preparation_job(self, jid):
         with self.connect() as db:

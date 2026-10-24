@@ -39,6 +39,16 @@ class Generate(Revision,Credential):
     warnings_ack: bool = False
     config: ModelConfig
 
+class Resume(Credential):
+    revision: int | None = None
+    max_tokens: int | None = Field(default=None,ge=256,le=65536)
+    context_length: int | None = Field(default=None,ge=8192,le=131072)
+    acknowledge_unknown: bool = False
+
+class CandidateChange(Revision):
+    path: str
+    value: Any
+
 class Confirm(Revision):
     version_id: int
 
@@ -46,6 +56,19 @@ class Confirm(Revision):
 def install(app,repo,preparation,credentials,job):
     @app.get('/api/workspaces/{wid}/draft')
     def draft(wid:str,author:bool=False):return repo.draft(wid,author)
+
+    @app.patch('/api/workspaces/{wid}/draft/candidate')
+    def candidate(wid:str,body:CandidateChange):
+        repo.edit_candidate(wid,body.revision,body.path,body.value)
+        return repo.draft(wid,True)
+
+    @app.get('/api/workspaces/{wid}/draft/raw')
+    def raw(wid:str):
+        current=repo.workspace(wid)['job']
+        if not current:raise ValueError('Нет задания.')
+        saved=repo.preparation_job(current['id'])
+        journal=json.loads(saved.get('response_journal') or '{}')
+        return {'responses':journal.get('responses',{}),'pending':journal.get('pending'),'errors':journal.get('errors',[])}
 
     @app.post('/api/workspaces/{wid}/draft/import')
     def import_world(wid:str,body:Import):
@@ -78,12 +101,14 @@ def install(app,repo,preparation,credentials,job):
         return job(jid)
 
     @app.post('/api/workspaces/{wid}/draft/resume')
-    def resume(wid:str,body:Credential):
+    def resume(wid:str,body:Resume):
         current=repo.workspace(wid)['job']
         if not current: raise ValueError('Нет задания.')
         saved=repo.preparation_job(current['id'])
         provider=json.loads(saved['config_json'])['provider']
-        preparation.resume(current['id'],credentials.resolve(provider,body.key()))
+        preparation.resume(current['id'],credentials.resolve(provider,body.key()),revision=body.revision,
+            config_changes={k:getattr(body,k) for k in ('max_tokens','context_length') if getattr(body,k) is not None},
+            acknowledge_unknown=body.acknowledge_unknown)
         return job(current['id'])
 
     @app.post('/api/workspaces/{wid}/draft/confirm')
@@ -93,5 +118,5 @@ def install(app,repo,preparation,credentials,job):
     def export(wid:str,version_id:int,format:Literal['md','txt','json']='md'):
         value=repo.draft(wid,True)
         if value['version_id']!=version_id:raise ValueError('Версия изменилась. Обнови редактор.')
-        text=json.dumps(value['state'],ensure_ascii=False,indent=2) if format=='json' else domain.export_markdown(value['state'])
+        text=json.dumps(value.get('candidate') if value.get('candidate') is not None else value['state'],ensure_ascii=False,indent=2) if format=='json' else domain.export_markdown(value['state'])
         return PlainTextResponse(text,media_type='application/json' if format=='json' else 'text/plain',headers={'Content-Disposition':f'attachment; filename="world.{format}"'})

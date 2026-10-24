@@ -250,6 +250,13 @@ def unload_all_models() -> int:
 # Inference
 # =========================================================
 
+class ProviderHTTPError(RuntimeError):
+    """Confirmed HTTP rejection, without credentials or response bodies."""
+    def __init__(self,message,status_code):
+        super().__init__(message)
+        self.status_code=status_code
+
+
 class OutputLimitReached(RuntimeError):
     """A valid streamed prefix reached the provider output/context limit."""
 
@@ -340,6 +347,8 @@ def chat_stream(
         if require_complete and finish_reason != "stop":
             raise RuntimeError("Ответ не завершён: увеличь лимит ответа/контекста и повтори генерацию.")
     except Exception as exc:
+        if stream is None and getattr(exc,'status_code',None) is not None:
+            raise ProviderHTTPError(deepseek_error(exc),exc.status_code) from None
         if remote and not isinstance(exc, RuntimeError):
             raise RuntimeError(deepseek_error(exc)) from None
         raise

@@ -31,13 +31,13 @@ class Preparation:
         threading.Thread(target=self.run, args=(jid, config, api_key, handle), daemon=True).start()
         return jid
 
-    def resume(self,jid,api_key=None):
+    def resume(self,jid,api_key=None,**options):
         with self.lock:
             if jid in self.handles: raise ValueError('Запрос ещё завершается.')
             job=self.repo.preparation_job(jid)
             config=json.loads(job['config_json'])
             if config['provider']=='deepseek': api_key=deepseek_key(api_key)
-            config=self.repo.resume_draft_response(jid)
+            config=self.repo.resume_draft_response(jid,**options)
             handle=Handle();self.handles[jid]=handle
         threading.Thread(target=self.run,args=(jid,config,api_key,handle),daemon=True).start()
         return jid

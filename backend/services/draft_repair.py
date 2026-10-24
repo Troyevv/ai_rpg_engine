@@ -54,7 +54,7 @@ def request(raw,errors,author_context=None):
         payload['record_schemas']={k:schema['properties']['world']['properties'][k] for k in sections}
         if any(p.startswith('/world_clock/') for p in paths):payload['clock_schema']=schema['properties']['world_clock']
     if author_context is not None:payload['author_context']=author_context
-    return [dict(role='system',content='Исправь только перечисленные ошибки структуры и смысловой согласованности. Верни JSON {"patches":[{"path":"/точный/путь","value":новое_значение}]}. Не меняй остальные данные, персонажей, описания и события. Не придумывай факты для прохождения проверки. При неизвестном точном времени события сохрани text/evidence, minute=null. Не меняй корректные биографии. Сохрани явные факты из контекста автора.'),
+    return [dict(role='system',content='Исправь только перечисленные ошибки структуры и смысловой согласованности. Верни JSON {"patches":[{"path":"/точный/путь","value":новое_значение}]}. Не меняй остальные данные, персонажей, описания и события. Технические ошибки исправляй без новых обстоятельств. При semantic_completeness допустимо смысловое дополнение на основе замысла и уже созданных непротиворечивых фактов, даже отсутствующих в исходном тексте. Сохраняй явные ограничения, знания конкретных участников и свободу будущих действий игрока. При неизвестном точном времени события сохрани text/evidence, minute=null. Не меняй корректные биографии. Сохрани явные факты из контекста автора.'),
             dict(role='user',content=json.dumps(payload,ensure_ascii=False))],paths
 
 
@@ -67,14 +67,19 @@ def apply(raw,reply,paths):
         raise ValueError('Ожидался объект patches.')
     value=strict_loads(raw); used=set()
     for patch in repaired['patches']:
-        if not isinstance(patch,dict) or set(patch)!={'path','value'} or patch['path'] not in paths or patch['path'] in used:
+        if not isinstance(patch,dict) or set(patch)!={'path','value'} or not isinstance(patch['path'],str) or patch['path'] not in paths or patch['path'] in used:
             raise ValueError('Исправление затронуло неразрешённый путь.')
         path=patch['path'];used.add(path)
+        if not path.startswith('/') or path=='/' or re.search(r'~(?![01])',path):raise ValueError('Некорректный JSON Pointer.')
         parts=[p.replace('~1','/').replace('~0','~') for p in path.lstrip('/').split('/')]
         target=value
         try:
-            for key in parts[:-1]: target=target[int(key)] if isinstance(target,list) else target[key]
-            if isinstance(target,list): target[int(parts[-1])]=deepcopy(patch['value'])
+            for key in parts[:-1]:
+                if isinstance(target,list) and not re.fullmatch(r'0|[1-9]\d*',key):raise ValueError('Некорректный индекс.')
+                target=target[int(key)] if isinstance(target,list) else target[key]
+            if isinstance(target,list):
+                if not re.fullmatch(r'0|[1-9]\d*',parts[-1]):raise ValueError('Некорректный индекс.')
+                target[int(parts[-1])]=deepcopy(patch['value'])
             else: target[parts[-1]]=deepcopy(patch['value'])
         except (KeyError,IndexError,TypeError,ValueError) as exc: raise ValueError('Путь исправления не существует.') from exc
     if not used: raise ValueError('Модель не исправила ни одной ошибки.')

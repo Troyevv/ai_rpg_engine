@@ -42,8 +42,10 @@ type Draft = {
     name: string;
     revision: number;
     version_id: number | null;
+    candidate?: Record<string,unknown> | null;
     state: DraftState | null;
     validation: {
+        diagnostics?: {path:string;message:string}[];
         errors: string[];
         warnings: string[];
     };
@@ -84,6 +86,8 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
     onGame: (world: number, save: number) => void;
 }) {
     const [creation, setCreation] = useState<Creation>(defaultCreation);
+    const [candidatePath,setCandidatePath] = useState('');
+    const [candidateValue,setCandidateValue] = useState('');
     const [structuredEdit, setStructuredEdit] = useState('');
     const [mode, setMode] = useState('quick');
     const [section, setSection] = useState<'overview'|'characters'|'world'|'relations'|'story'|'start'|'more'>('overview');
@@ -247,7 +251,18 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
           {removed.length === 0 ? <p>Корзина пуста.</p> : removed.map(w => <div className="workshop-draft-row" data-workspace-id={w.id} key={w.id}><span>{w.name}</span><Button variant="ghost" size="sm" disabled={locked} onClick={() => void run(async () => { await api(`/workspaces/${w.id}/restore`,{revision:w.revision}); setList(await api<WorkspacePick[]>('/workspaces')); setRemoved(await api<WorkspacePick[]>('/workspaces?deleted=true')); selectWorkspace(w.id); toast.success('Черновик восстановлен'); })}>Восстановить</Button></div>)}
         </details>
       </details>
-      {job?.resumable && <Button disabled={locked} onClick={()=>void run(async()=>{await api(`/workspaces/${id}/draft/resume`,{api_key:apiKey});await refresh();})}>Продолжить сохранённую генерацию</Button>}
+      {job?.resumable && <Button disabled={locked} onClick={()=>void run(async()=>{await api(`/workspaces/${id}/draft/resume`,{api_key:apiKey,revision:draft?.revision,max_tokens:prefs.summary.max_tokens,context_length:prefs.summary.context_length});await refresh();})}>Продолжить сохранённую генерацию</Button>}
+      {job?.status === 'error' && <div><Button variant="outline" onClick={()=>void run(async()=>{download(JSON.stringify(await api(`/workspaces/${id}/draft/raw`),null,2),'generation-response.json');})}>Скачать исходный ответ и диагностику</Button>
+      {(job as Job & {unknown_outcome?:boolean}).unknown_outcome && <details><summary>Восстановить запрос с неизвестным исходом</summary><p>Провайдер мог списать оплату. Повтор может быть оплачен ещё раз; полученный текст останется в истории.</p><Button disabled={locked} onClick={()=>void run(async()=>{await api(`/workspaces/${id}/draft/resume`,{api_key:apiKey,revision:draft?.revision,acknowledge_unknown:true});await refresh();})}>Повторить с возможной повторной оплатой</Button></details>}</div>}
+      {!state && job && <Button variant="outline" onClick={()=>authorAcknowledged ? setAuthor(true) : setAuthorAsk(true)}>Открыть результат в редакторе автора</Button>}
+      {author && draft?.candidate && <section className="workshop-review"><h3>Восстановление черновика</h3><p>Результат сохранён целиком. Исправляй поля последовательно; другие ошибки не мешают сохранению.</p>
+        {draft.validation.diagnostics?.map((d,i)=><div key={i}><p role="alert">{d.path}: {d.message}</p><Button variant="outline" disabled={d.path==='/'} onClick={()=>{setCandidatePath(d.path);let v:unknown=draft.candidate;try{for(const key of d.path.slice(1).split('/'))v=(v as Record<string,unknown>)[key.replace(/~1/g,'/').replace(/~0/g,'~')];}catch{v=null;}setCandidateValue(JSON.stringify(v??null,null,2));}}>Исправить поле</Button></div>)}
+        <Input aria-label="Путь поля кандидата" value={candidatePath} onChange={e=>setCandidatePath(e.target.value)}/>
+        <Textarea aria-label="Значение поля кандидата JSON" value={candidateValue} onChange={e=>setCandidateValue(e.target.value)}/>
+        <Button disabled={locked || !candidatePath || candidatePath==='/'} onClick={()=>void run(async()=>{await api(`/workspaces/${id}/draft/candidate`,{revision:draft.revision,path:candidatePath,value:JSON.parse(candidateValue)},'PATCH');await refresh();})}>Сохранить исправление</Button>
+        <Button variant="outline" onClick={()=>void refresh()}>Проверить черновик</Button>
+        <details><summary>Полный кандидат (включая тайны)</summary><pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify(draft.candidate,null,2)}</pre></details>
+      </section>}
       {(!state || editingIdea) && <section className="workshop-inspiration">
         <div className="workshop-inspiration-head"><span className="workshop-step">01 · ЗАМЫСЕЛ</span><h2>{mode === 'import' ? 'Загрузи готовую выжимку' : 'С чего начинается история?'}</h2></div>
         <p>{mode === 'import' ? 'Подойдёт .md, .txt или готовый .json мира. Можно вставить текст выжимки ниже.' : 'Пиши свободно, как Сценаристу: персонажи, атмосфера, отношения, важные события. Пробелы генератор заполнит сам.'}</p>

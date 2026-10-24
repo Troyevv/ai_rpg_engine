@@ -145,3 +145,86 @@ budget, inspect the reviewer issues and local patches, and verify the final worl
 against the actual input. In particular compare the old brief (only Ilya learned)
 with the clarified family-dinner brief (all five family members heard it). Do not
 claim production semantic quality solely from green offline tests.
+
+## Stabilization and editable recovery (2026-10-24)
+
+This section supersedes older statements above about publication requiring a valid
+world and about inventions being restricted to literal source facts. The latest
+user specification supersedes Issue #44's staged pipeline/spans requirements.
+The existing single-world response, local patches and Runtime remain the owners.
+
+- Creative generation/review may invent internally consistent people, secrets,
+  history and roles. Explicit author facts/prohibitions remain constraints. Initial
+  protagonist characterization is creative; future voluntary actions/consent and
+  active commitments remain protected. Import and Python normalization do not
+  invent circumstances. Recommendations do not block publication.
+- Gregorian month lengths are computed by Python, including leap years. Custom
+  profiles are retained. The provider schema now describes Gregorian/custom
+  conditional constraints, mutually exclusive temporal bases, and false/null
+  Condition effects. Missing participant positions may project the explicit opening
+  scene; conflicting explicit positions are errors.
+- Typed validation precedes legacy preparation. Independent references, condition
+  effects, symmetric duplicates, chronology, fact participants and relation cycles
+  have pointers; migration preservation differences are collected recursively.
+  Unlocalized legacy failures still fail visibly rather than authorize whole-world
+  repair. A root diagnostic means that automatic localized repair is unavailable,
+  not that the other areas have been verified.
+- Parsed candidates use the existing append-only `world_draft` journal. They are
+  author data until confirmed. No second canonical model/table is added. Previous
+  valid versions remain restorable. Invalid candidates are withheld from Player
+  View; author recovery can assign exact fields, retain other errors and unknown
+  data, and inspect the complete JSON. This fallback is deliberately a field-level
+  JSON editor, not a new visual schema/form system. Successful candidates use the
+  existing normal editor. Invalid JSON remains available in the raw response export.
+- A malformed semantic report is an incomplete check and blocks confirmation.
+  It gets at most one bounded report-format retry; accepted reports are cached by
+  input hash and checked before reuse. Resume allocates a new repair/review epoch,
+  preserving world output, earlier attempts and accounting. Current-revision Resume
+  adopts the manually edited candidate instead of overwriting it. Technical-only
+  manual recovery still requires the author to assess semantic fidelity; offline
+  validation cannot prove that arbitrary prose matches the author's intent.
+- Resume accepts a new context/output limit (UI uses current model preferences),
+  keeping explicit total-token/cost caps unchanged. Confirmed HTTP 429/503 gets up
+  to two delayed retries; other confirmed HTTP rejections retain their status.
+  Unknown outcomes require explicit acknowledgement of possible duplicate billing.
+  Partial text and reservations remain in history. Cost reservations are conservative
+  upper estimates, not provider billing guarantees. Provider caps for the known
+  DeepSeek Flash/V4 names are distinct from application preferences; other compatible
+  providers use their configured limits. Capability source:
+  https://api-docs.deepseek.com/api/list-models/ (checked 2026-10-24).
+
+### #78 manual recovery scenario
+
+1. Reset the existing isolated developer world using the commands in this folder's
+   README. Retain its workspace/version and a baseline save for comparison.
+2. Import/export its JSON and verify the baseline still opens, starts and reloads.
+   In a separate workspace, exercise generated failure with controlled provider
+   replies (the browser fixture marker is `TEST_CANDIDATE_RECOVERY`). Do not use that
+   marker as evidence about a live model.
+3. Open the author result after failure. Check exact error paths, complete candidate
+   and original raw output. Change one broken ID, save while another error remains,
+   reload the page and correct the remaining error. Check that secrets/biographies
+   and unknown properties have not been removed. Restore the previous version and
+   verify it remains intact; restore the candidate again.
+4. Resume with the current revision after manual editing; verify only repair/review
+   requests occur, never another world request. Change context/output preferences
+   and verify the resumed request uses them without raising the explicit total cap.
+5. Confirm, start, ordinary turn, persist, reload, next ordinary turn. Verify the
+   same Knowledge holders and adoption/biological distinctions. Exercise the
+   existing baseline branch/rollback/regenerate scenarios; generator recovery does
+   not rewrite historical game snapshots.
+6. Simulate malformed review, confirmed 429/503 and interrupted stream. Check
+   bounded requests, visible incomplete-check state, persisted fragments and explicit
+   recovery for unknown billing outcomes. Repeated/concurrent/stale Resume must not
+   start two workers or overwrite a manual edit.
+
+Automated coverage: `tests/test_draft_recovery.py`, existing initial-world,
+completeness, response transport and draft tests; `frontend/e2e/draft-v4.spec.ts`
+now includes author recovery/start on desktop and mobile. Full Volkov input and real
+response fixtures remain byte-for-byte unchanged. All model replies in these tests
+are controlled, including semantic acceptance; they do not establish live quality.
+
+Live acceptance remains unperformed: no `DEEPSEEK_API_KEY` was available in this
+execution environment. No paid requests were sent. Short/Volkov/other-setting/custom
+calendar live generation, semantic quality and real-model gameplay remain required
+before claiming production stability.

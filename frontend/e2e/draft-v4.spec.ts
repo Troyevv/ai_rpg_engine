@@ -33,3 +33,29 @@ test('creation settings and JSON continuation survive editor start and reload',a
   await page.reload();
   await expect(page.locator('.choices button')).toHaveCount(6);
 });
+
+test('failed world remains editable and starts without regeneration',async({page,request})=>{
+  const workspace=await(await request.post('/api/workspaces',{data:{name:'Candidate recovery'}})).json();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),workspace.id);
+  await page.goto('/');await nav(page,'Создать');
+  await page.getByLabel('Описание мира или текст импорта').fill('TEST_CANDIDATE_RECOVERY. Соседи на кухне.');
+  await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+  const url=`/api/workspaces/${workspace.id}/draft`;
+  await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('error');
+  await page.reload();await nav(page,'Создать');
+  await page.getByRole('button',{name:'Открыть результат в редакторе автора'}).click();
+  await page.getByRole('button',{name:'Показать всё',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Восстановление черновика'})).toBeVisible();
+  const before=await(await request.get(url+'?author=true')).json();
+  await page.getByLabel('Путь поля кандидата').fill('/protagonist_id');
+  await page.getByLabel('Значение поля кандидата JSON').fill(JSON.stringify(before.candidate.controlled_actor_id));
+  await page.getByRole('button',{name:'Сохранить исправление',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true})).toBeEnabled();
+  await page.screenshot({path:`test-results/draft-recovery-${page.viewportSize()?.width}.png`,fullPage:true});
+  const after=await(await request.get(url+'?author=true')).json();
+  expect(after.candidate.world.facts).toEqual(before.candidate.world.facts);
+  await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
+  await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+  await page.getByRole('button',{name:'Начать игру',exact:true}).click();
+  await expect(page.locator('.choices button')).toHaveCount(6);
+});

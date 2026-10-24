@@ -240,7 +240,9 @@ def test_generation_uses_one_world_request_plus_review_and_saves(api):
         assert not job['narrative']
     updated=client.get(path+'?author=true').json()
     assert updated['state']['campaign']['title']=='Маяк'
-    assert not updated['validation']['errors'] and len(updated['history'])==2
+    assert not updated['validation']['errors']
+    assert updated['history'][-1]['id']==draft['version_id']
+    assert any(v['reason']=='generation_candidate' for v in updated['history'])
     assert len(calls)==1 and phases==['world']
     prompt=calls[0]['messages'][0]['content']
     assert 'НЕ полная спецификация' in prompt and 'готов к игре' in prompt
@@ -288,7 +290,12 @@ def test_failed_structural_repair_keeps_previous_version(api):
                                                 'config':REMOTE,'api_key':'fixture'})
         assert wait_job(client,job.json()['id'])['status']=='error'
     assert len(calls)==3
-    assert client.get(path+'?author=true').json()['version_id']==draft['version_id']
+    current=client.get(path+'?author=true').json()
+    assert current['candidate']['protagonist_id']=='missing'
+    assert draft['version_id'] in [v['id'] for v in current['history']]
+    restored=client.patch(path,json={'revision':current['revision'],'operation':'restore','source_id':draft['version_id']})
+    assert restored.status_code==200,restored.text
+    assert restored.json()['state']==draft['state']
 
 
 def test_output_limit_is_bounded_and_preserves_previous_version(api):

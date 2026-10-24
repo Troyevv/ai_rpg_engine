@@ -144,7 +144,7 @@ def test_generation_repair_only_requested_field(api):
     assert len(calls)==2
     out=client.get(path+'?author=true').json()['state']
     assert out['world']['facts']==raw['world']['facts']
-    assert out['world']['characters']==draft_world.prepare(raw)['world']['characters']
+    assert out['world']['characters']==draft_world.prepare(draft_initial.normalize(raw))['world']['characters']
 
 
 def test_persistent_journal_restart_and_unknown_outcome(tmp_path):

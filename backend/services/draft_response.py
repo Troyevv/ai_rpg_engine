@@ -9,7 +9,7 @@ import hashlib
 import json
 import re
 from context_builder import estimate
-from llm import OutputLimitReached
+from llm import OutputLimitReached, ProviderHTTPError
 
 MAX_FRAGMENTS = 5
 CONTINUE = ('Продолжи тот же JSON строго с места остановки. Не начинай объект заново, '
@@ -128,11 +128,21 @@ def join_fragments(parts):
 
 
 def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
+    # Provider capability is distinct from the app's intentionally smaller context.
+    # Official model catalog, checked 2026-10-24: api-docs.deepseek.com/api/list-models/
+    capabilities=config.get('_model_capabilities',{})
+    if config.get('provider')=='deepseek' and config.get('model') in ('deepseek-flash','deepseek-v4-flash','deepseek-v4-flash-vision-exp','deepseek-v4-pro'):
+        capabilities=dict(context_window=1048576,max_output_tokens=393216)
+    context=min(context,capabilities.get('context_window',context))
+    output_limit=min(config['max_tokens'],capabilities.get('max_output_tokens',config['max_tokens']))
     record = journal.setdefault('responses',{}).setdefault(slot,{'parts':[],'complete':False})
     # Finished (including syntactically invalid) replies belong to validation,
     # not another request. Preserve them byte-for-byte for bounded repair.
     if record['complete']:
+        offset=0
         for part in record['parts']:
+            if part['offset']!=offset:raise TransportError('Пропущен или переставлен фрагмент JSON.')
+            offset+=len(part['text'])
             if hashlib.sha256(part['text'].encode()).hexdigest()!=part['sha256']:
                 raise TransportError('Нарушена целостность сохранённого ответа.')
         return join_fragments(record['parts']) if len(record['parts'])>1 else ''.join(p['text'] for p in record['parts'])
@@ -145,8 +155,8 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
             request += [{'role':'assistant','content':text},{'role':'user','content':CONTINUE}]
             repo.draft_phase(jid,'continuing')
         input_bound = estimate(request)+512
-        limit = min(config['max_tokens'],context-input_bound)
-        if limit < 256: raise TransportError('Контекст не вмещает полный запрос и продолжение. Текст сохранён, запрос не отправлен.')
+        limit = min(output_limit,context-input_bound)
+        if limit < 256: raise TransportError(f'Контекст {context} не вмещает полный запрос: требуется минимум {input_bound+256} токенов. Текст сохранён, запрос не отправлен.')
         # A conservative reserved token envelope bounds even calls with missing
         # provider usage. Accounting remains actual usage in llm_requests.
         budget = config.get('_draft_token_budget',3*MAX_FRAGMENTS*(context+config['max_tokens']))
@@ -178,6 +188,17 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
             except OutputLimitReached:
                 ended = False
             if cancel.is_set(): return None
+        except ProviderHTTPError as exc:
+            # A rejected HTTP request before streaming has a known outcome.
+            journal['pending']=None
+            journal.setdefault('http_failures',[]).append(dict(slot=slot,status=exc.status_code))
+            retries=record.get('http_retries',0)
+            record['http_retries']=retries+1
+            repo.save_response_journal(jid,journal)
+            if exc.status_code in (429,503) and not fragment and retries<2:
+                if cancel.wait(min(2**retries,4)):return None
+                continue
+            raise TransportError(f'Провайдер отклонил запрос: HTTP {exc.status_code}. Ответ сохранён.') from None
         except Exception:
             # Network errors and cancellation have unknown billing/output, even
             # if no visible characters arrived. Do not turn them into a retry.

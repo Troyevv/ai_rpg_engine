@@ -99,9 +99,13 @@ def stream(**kwargs):
             value['character']['location_id']=task['context']['locations'][0]['id']
             value['starting_scene']='У входа в дом.'
         value=json.dumps({'value':value},ensure_ascii=False)
+    elif 'TEST_CANDIDATE_RECOVERY' in full and 'patches' in kwargs['messages'][0]['content']:
+        value='{"patches":[]}'
     elif 'Каноническая JSON Schema WorldState' in full:
         from test_draft_world import fixture
-        value=json.dumps(fixture(),ensure_ascii=False)
+        candidate=fixture()
+        if 'TEST_CANDIDATE_RECOVERY' in full:candidate['protagonist_id']='missing'
+        value=json.dumps(candidate,ensure_ascii=False)
         if 'TEST_JSON_CONTINUATION' in full:
             cut=len(value)//2
             if not any(m['role']=='assistant' for m in kwargs['messages']):

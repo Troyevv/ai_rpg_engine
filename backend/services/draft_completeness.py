@@ -17,12 +17,12 @@ RULES = '''Проверь исходный замысел и уже утверж
 1. Родители/усыновители, братья/сёстры, дружба, коллеги должны иметь objective_relations; эмоциональный relationships не заменяет их. adoptive_parent не parent. Не требуй все пары. Социальный sibling не доказывает биологическое родство.
 2. Указанные профессии и учёба требуют roles, известное постоянное проживание — residences. Текущее нахождение не означает проживание. Уход из дома не означает новую постоянную прописку.
 3. Отдельные компании группы отражаются organizations и facts.claim(predicate=parent_organization). Направление деятельности/отдел не становится отдельным юридическим лицом без основания.
-4. Сопоставь объективные facts, events, участников, свидетелей и knowledge К НАЧАЛУ игры. «Никто не знал» до раскрытия не означает unknown после него. Знание не распространяется на отсутствовавших. Уточнение автора о событии раскрытия важнее прежнего описания тайны. Не угадывай неоднозначных свидетелей; сообщи проблему. Для раскрытия добавь событие и source_event_id; не переписывай истинность факта ради знания.
+4. Сопоставь объективные facts, events, участников, свидетелей и knowledge К НАЧАЛУ игры. «Никто не знал» до раскрытия не означает unknown после него. Знание не распространяется на отсутствовавших. Уточнение автора о событии раскрытия важнее прежнего описания тайны. При неоднозначности выбери согласованную трактовку, сохраняя явные ограничения автора. Для раскрытия добавь событие и source_event_id; не переписывай истинность факта ради знания.
 5. Числовое world_clock.minute авторитетно; строковые проекции не источник времени. Calendar должен соответствовать дате/дню недели/времени автора и сцены. Если только пятница 08:00 — start_date=null, start_weekday=4, время 08:00; календарный anchor может привязать пятницу к существующей минуте. Не назначай дату произвольно. Для обычного современного мира profile.system=gregorian. Для иной эпохи/мира учитывай заданный календарь.
 6. Вчера вечером не час назад сегодняшним утром. Не придумывай точные минуты событий: если точное время неизвестно, minute=null, обстоятельства остаются в text/evidence и source_sequence. История предшествует сцене. Проверь связанные временные поля вместе.
-7. controlled_actor_id: цели, intentions, obligations, emotion и решения в стартовой сцене допустимы только при явном основании в авторском вводе. Черта характера не намерение; не удаляй заданные автором стремления. NPC вправе иметь творчески дополненные цели.
+7. controlled_actor_id: начальный образ, эмоции и предысторию можно творчески дополнить. Не выполняй будущие добровольные действия игрока, не предрешай согласие; активные intentions/obligations требуют явного основания в авторском вводе. Черта характера не намерение; не удаляй заданные автором стремления. NPC вправе иметь творчески дополненные цели.
 8. Сцена должна сохранять заданные место, состав, время и действия на момент старта; не добавляй уже исполненные решения игрока после начала игры.
-Каждая проблема указывает точный JSON Pointer к изменяемому полю. Для отсутствующей записи используй /world/<раздел>/<новый_ID>, не весь раздел. Для существующей записи укажи поле, не всю запись. Для массива исправляй только нужное поле целиком. Нельзя заменять весь world, персонажей, коллекцию записей или литературную карточку ради пропущенной связи. related_paths — только существующие необходимые связанные записи/поля, не весь мир. Не объявляй отсутствие optional ошибкой без смыслового основания. Не выдумывай факты, свидетелей или действия для прохождения проверки.'''
+Каждая проблема указывает точный JSON Pointer к изменяемому полю. Для отсутствующей записи используй /world/<раздел>/<новый_ID>, не весь раздел. Для существующей записи укажи поле, не всю запись. Для массива исправляй только нужное поле целиком. Нельзя заменять весь world, персонажей, коллекцию записей или литературную карточку ради пропущенной связи. related_paths — только существующие необходимые связанные записи/поля, не весь мир. Не объявляй отсутствие optional ошибкой без смыслового основания. Идея — творческая основа, не перечень разрешённых фактов. Новые непротиворечивые персонажи, секреты, биографии и обстоятельства допустимы и становятся истиной мира. Используй их как основания для roles, objective_relations, residences, facts и knowledge. Отсутствие в исходном тексте не ошибка. Не требуй цитат или согласования дополнений. Необязательное литературное обогащение помечай severity="recommendation"; блокирующие противоречия — severity="blocker". Техническая ошибка самого отчёта не доказывает ошибку мира.'''
 SECTIONS = {'objective_relations','roles','residences','organizations','facts','knowledge','events','scenes','characters','relationships','threads','conditions','possessions','scheduled_events'}
 
 
@@ -32,7 +32,10 @@ def pointer(value, path):
     parts=[p.replace('~1','/').replace('~0','~') for p in path[1:].split('/')]
     current=value
     for p in parts:
-        current=current[int(p)] if isinstance(current,list) else current[p]
+        if isinstance(current,list):
+            if not re.fullmatch(r'0|[1-9]\d*',p):raise ValueError('Некорректный индекс массива.')
+            current=current[int(p)]
+        else:current=current[p]
     return current
 
 
@@ -50,13 +53,14 @@ def parse(reply, state):
         raise ValueError('Проверка полноты вернула неверный отчёт; мир не принят.')
     problems=[]
     for item in report['issues']:
-        if not isinstance(item,dict) or set(item)-{'path','message','related_paths'}:
+        if not isinstance(item,dict) or set(item)-{'path','message','related_paths','severity'}:
             raise ValueError('Некорректная диагностика полноты.')
         path=item.get('path');message=item.get('message');related=item.get('related_paths',[])
         if not isinstance(path,str) or not isinstance(message,str) or not message.strip() or not isinstance(related,list):
             raise ValueError('Нужны точный путь, описание ошибки и связанные записи.')
         parts=path.split('/')[1:]
         allowed=(len(parts)>=3 and parts[0]=='world' and parts[1] in SECTIONS) or (len(parts)>=2 and parts[0] in ('world_clock','camera'))
+        allowed = allowed or path in ('/controlled_actor_id','/protagonist_id')
         if not allowed: raise ValueError('Проверка полноты запросила слишком широкое изменение: '+path)
         try:
             existing=pointer(state,path)
@@ -67,9 +71,11 @@ def parse(reply, state):
             if isinstance(existing,dict) and len(parts)==3 and parts[0]=='world':
                 raise ValueError('Исправляйте поля существующей записи: '+path)
         for ref in related:
-            if not isinstance(ref,str) or len(ref.split('/'))<3:
+            if not isinstance(ref,str) or (len(ref.split('/'))<3 and ref not in ('/controlled_actor_id','/protagonist_id')):
                 raise ValueError('Связанный контекст должен указывать запись или поле.')
             pointer(state,ref)
-        problems.append(error(path,message,'semantic_completeness',related_paths=related))
+        severity=item.get('severity','blocker')
+        if severity not in ('blocker','recommendation'):raise ValueError('Неизвестная категория замечания.')
+        problems.append(error(path,message,'semantic_completeness',related_paths=related,severity=severity))
     # No arbitrary truncation of diagnostics.
     return problems
