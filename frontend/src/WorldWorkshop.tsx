@@ -194,6 +194,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
     const generate = (body: Item) => run(async () => { const j = await api<Job>(`/workspaces/${id}/draft/generate`, { revision: draft?.revision, config: prefs.summary, api_key: apiKey, ...body }); dispatchWorkspace({type:'update',id,update:d => d ? {...d,job:j} : d}); setEdit(null); });
     const openEdit = (target: Target) => { setEdit(target); setValue(target.value ?? ''); setStructuredEdit(JSON.stringify(target.value ?? null,null,2)); setInstruction(''); setAck(false); };
     const state = draft?.state;
+    const previousWorld = !!state && !!(job as Job & {transport_incomplete?:boolean})?.transport_incomplete;
     const characters = state?.characters || [];
     const actor = state?.controlled_actor_id;
     const person = (cid: unknown) => characters.find(c => c.id === cid)?.name || String(cid || 'Неизвестно');
@@ -323,7 +324,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
       {job?.error && <p className="workshop-error" role="alert">{job.error}</p>}
       {state && <section className="workshop-result">
         {job?.status === 'saved' && !!draft?.validation.warnings.length && <p className="workshop-hint">Мир сохранён. Некоторые творческие детали модель оставила неполными — они перечислены в «Проверке мира» и доступны для редактирования.</p>}
-        <div className="workshop-result-heading"><div><span className="workshop-step">02 · МИР ГОТОВ</span><h2>Посмотри, что получилось</h2></div>
+        <div className="workshop-result-heading"><div><span className="workshop-step">{previousWorld ? 'ПРЕДЫДУЩИЙ МИР' : '02 · МИР ГОТОВ'}</span><h2>{previousWorld ? 'Ранее сохранённый мир' : 'Посмотри, что получилось'}</h2></div>
           <Button variant="ghost" disabled={locked} onClick={() => {setEditingIdea(true); setText(draft?.source_text || text);}}>Изменить замысел</Button></div>
         <div className="workshop-result-toolbar">
           <div className="workshop-view"><span>Вид:</span><button className={!author ? 'selected' : ''} aria-pressed={!author} onClick={() => setAuthor(false)}>Игрок</button><button className={author ? 'selected' : ''} aria-pressed={author} onClick={() => authorAcknowledged ? setAuthor(true) : setAuthorAsk(true)}>Автор мира</button></div>
@@ -387,7 +388,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
             {author && <><details className="workshop-detail"><summary>Исходный замысел или импорт</summary><Markdown text={draft?.source_text || 'Исходный текст не сохранён.'}/></details>{draft?.outline && <details className="workshop-detail"><summary>Как сценарист развил идею</summary><Markdown text={draft.outline}/></details>}<div className="workshop-export">{['md','txt','json'].map(format=><Button key={format} variant="outline" onClick={()=>void run(async()=>{const response=await fetch(`/api/workspaces/${id}/draft/export?version_id=${draft?.version_id}&format=${format}`);if(!response.ok)throw new Error('Не удалось экспортировать мир');download(await response.text(),`world.${format}`)})}>{format === 'json' ? 'Экспорт JSON' : `Скачать .${format}`}</Button>)}</div></>}
           </>}
         </div>
-        <div className="workshop-finish"><p>Всё готово? Начни игру в этом мире. Его можно будет редактировать до подтверждения.</p><Button disabled={locked || !!draft?.validation.errors.length} onClick={() => setConfirmStart(true)}>Подтвердить мир и начать игру</Button></div>
+        <div className="workshop-finish"><p>{previousWorld ? 'Новая генерация ещё не завершена. Здесь доступен предыдущий мир, а не её результат.' : 'Всё готово? Начни игру в этом мире. Его можно будет редактировать до подтверждения.'}</p><Button disabled={locked || !!draft?.validation.errors.length} onClick={() => setConfirmStart(true)}>{previousWorld ? 'Начать игру в предыдущем мире' : 'Подтвердить мир и начать игру'}</Button></div>
       </section>}
  <Dialog open={authorAsk} onOpenChange={setAuthorAsk}><DialogContent><DialogHeader><DialogTitle>Открыть вид автора?</DialogTitle><DialogDescription>Ты увидишь тайны, неизвестные персонажам факты и скрытые намерения. Это может раскрыть будущие события.</DialogDescription></DialogHeader><Button onClick={() => { setAuthorAsk(false); setAuthorAcknowledged(true); setAuthor(true); }}>Показать всё</Button></DialogContent></Dialog>
  <Dialog open={!!edit} onOpenChange={o => { if (!o)

@@ -167,3 +167,25 @@ test('fragment recovery survives reload and repeats only rejected continuation',
   await expect(page.locator('.choices button')).toHaveCount(6);
   await page.reload();await expect(page.locator('.choices button')).toHaveCount(6);
 });
+
+test('previous world is labelled separately from an incomplete new response',async({page,request},info)=>{
+  const seed=await(await request.post('/test/seed')).json();
+  const source=await(await request.get(`/api/worlds/${seed.world}`)).json();
+  const w=await(await request.post('/api/workspaces',{data:{name:'Previous world'}})).json();
+  const url=`/api/workspaces/${w.id}/draft`;
+  expect((await request.post(url+'/import',{data:{revision:0,text:source.source_md}})).ok()).toBeTruthy();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),w.id);
+  await page.goto('/');await nav(page,'Создать');
+  await page.getByRole('button',{name:'Изменить замысел',exact:true}).click();
+  await page.getByLabel('Описание мира или текст импорта').fill(`TEST_FRAGMENT_RECOVERY previous ${info.project.name}. Новый мир.`);
+  await page.getByRole('button',{name:'Создать новую версию мира',exact:true}).click();
+  await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('error');
+  await page.reload();await nav(page,'Создать');
+  await expect(page.getByRole('heading',{name:'Ранее сохранённый мир',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Посмотри, что получилось',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Начать игру в предыдущем мире',exact:true})).toBeVisible();
+  await page.getByText('Повторить проблемное продолжение',{exact:true}).click();
+  await page.getByRole('button',{name:'Запросить только последнее продолжение',exact:true}).click();
+  await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('saved');
+  await expect(page.getByRole('heading',{name:'Посмотри, что получилось',exact:true})).toBeVisible();
+});
