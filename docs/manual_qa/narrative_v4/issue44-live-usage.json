@@ -1,0 +1,241 @@
+{
+  "requests": 14,
+  "tokens": 115835,
+  "cost_upper": 0.46334,
+  "actual_cost": 0.020817251999999998,
+  "attempts": {
+    "957036bdee5d467a2fea2bb142ca2a73797f772ce82642154288f293741c8a27": 2,
+    "bea12340c8e57cd869a7f87a339c6d9ff98401a772c063346933c4bb95e5fdf7": 3,
+    "60f1eb48f4ec2c8b2342caa57699e770e2bb23f7ea59ca8ea0c951b49f57e8d1": 1,
+    "17e8a4add982899e1716ed481bf3f0d80c4e326551795d94942038798e1dc8ee": 3,
+    "5974b4240af27370d8f36b2aad14618e5892ff5d362e7e542d4062661d08b640": 1,
+    "8e116035e69d752f33a58577f80b592465dae0f33c8aff1349376f9b73643b73": 2
+  },
+  "calls": [
+    {
+      "n": 3,
+      "stage": "author_brief",
+      "reserved_tokens": 4457,
+      "outcome": "not_dispatched",
+      "usage": null,
+      "error_type": "ImportError"
+    },
+    {
+      "n": 4,
+      "stage": "author_brief",
+      "reserved_tokens": 4457,
+      "outcome": "completed",
+      "usage": {
+        "completion_tokens": 138,
+        "prompt_tokens": 780,
+        "total_tokens": 918,
+        "completion_tokens_details": null,
+        "prompt_tokens_details": {
+          "audio_tokens": null,
+          "cache_write_tokens": null,
+          "cached_tokens": 128
+        },
+        "prompt_cache_hit_tokens": 128,
+        "prompt_cache_miss_tokens": 652
+      },
+      "finish_reason": "stop",
+      "estimated_cost_usd": 0.00018098399999999997
+    },
+    {
+      "n": 5,
+      "stage": "author_plan_page",
+      "reserved_tokens": 19866,
+      "outcome": "completed",
+      "usage": {
+        "completion_tokens": 881,
+        "prompt_tokens": 1972,
+        "total_tokens": 2853,
+        "completion_tokens_details": null,
+        "prompt_tokens_details": {
+          "audio_tokens": null,
+          "cache_write_tokens": null,
+          "cached_tokens": 384
+        },
+        "prompt_cache_hit_tokens": 384,
+        "prompt_cache_miss_tokens": 1588
+      },
+      "finish_reason": "stop",
+      "estimated_cost_usd": 0.000767952
+    },
+    {
+      "n": 6,
+      "stage": "author_plan_page",
+      "reserved_tokens": 20635,
+      "outcome": "completed",
+      "usage": {
+        "completion_tokens": 3653,
+        "prompt_tokens": 2114,
+        "total_tokens": 5767,
+        "completion_tokens_details": null,
+        "prompt_tokens_details": {
+          "audio_tokens": null,
+          "cache_write_tokens": null,
+          "cached_tokens": 1152
+        },
+        "prompt_cache_hit_tokens": 1152,
+        "prompt_cache_miss_tokens": 962
+      },
+      "finish_reason": "stop",
+      "estimated_cost_usd": 0.0023395559999999996
+    },
+    {
+      "n": 7,
+      "stage": "author_plan_page",
+      "reserved_tokens": 20831,
+      "outcome": "completed",
+      "usage": {
+        "completion_tokens": 4251,
+        "prompt_tokens": 2157,
+        "total_tokens": 6408,
+        "completion_tokens_details": null,
+        "prompt_tokens_details": {
+          "audio_tokens": null,
+          "cache_write_tokens": null,
+          "cached_tokens": 1920
+        },
+        "prompt_cache_hit_tokens": 1920,
+        "prompt_cache_miss_tokens": 237
+      },
+      "finish_reason": "stop",
+      "estimated_cost_usd": 0.00259191
+    },
+    {
+      "n": 8,
+      "stage": "author_brief",
+      "reserved_tokens": 24779,
+      "outcome": "completed",
+      "usage": {
+        "completion_tokens": 3220,
+        "prompt_tokens": 2721,
+        "total_tokens": 5941,
+        "completion_tokens_details": null,
+        "prompt_tokens_details": {
+          "audio_tokens": null,
+          "cache_write_tokens": null,
+          "cached_tokens": 256
+        },
+        "prompt_cache_hit_tokens": 256,
+        "prompt_cache_miss_tokens": 2465
+      },
+      "finish_reason": "stop",
+      "estimated_cost_usd": 0.002302518
+    },
+    {
+      "n": 9,
+      "stage": "author_plan_page",
+      "reserved_tokens": 45458,
+      "outcome": "completed",
+      "usage": {
+        "completion_tokens": 5297,
+        "prompt_tokens": 6956,
+        "total_tokens": 12253,
+        "completion_tokens_details": null,
+        "prompt_tokens_details": {
+          "audio_tokens": null,
+          "cache_write_tokens": null,
+          "cached_tokens": 1024
+        },
+        "prompt_cache_hit_tokens": 1024,
+        "prompt_cache_miss_tokens": 5932
+      },
+      "finish_reason": "stop",
+      "estimated_cost_usd": 0.004071071999999999
+    },
+    {
+      "n": 10,
+      "stage": "author_plan_page",
+      "reserved_tokens": 45601,
+      "outcome": "completed",
+      "usage": {
+        "completion_tokens": 5053,
+        "prompt_tokens": 6993,
+        "total_tokens": 12046,
+        "completion_tokens_details": null,
+        "prompt_tokens_details": {
+          "audio_tokens": null,
+          "cache_write_tokens": null,
+          "cached_tokens": 6784
+        },
+        "prompt_cache_hit_tokens": 6784,
+        "prompt_cache_miss_tokens": 209
+      },
+      "finish_reason": "stop",
+      "estimated_cost_usd": 0.0030835019999999997
+    },
+    {
+      "n": 11,
+      "stage": "author_plan_page",
+      "reserved_tokens": 45544,
+      "outcome": "completed",
+      "usage": {
+        "completion_tokens": 4864,
+        "prompt_tokens": 6984,
+        "total_tokens": 11848,
+        "completion_tokens_details": null,
+        "prompt_tokens_details": {
+          "audio_tokens": null,
+          "cache_write_tokens": null,
+          "cached_tokens": 384
+        },
+        "prompt_cache_hit_tokens": 384,
+        "prompt_cache_miss_tokens": 6600
+      },
+      "finish_reason": "stop",
+      "estimated_cost_usd": 0.003909552
+    },
+    {
+      "n": 12,
+      "stage": "author_batch",
+      "reserved_tokens": 53335,
+      "outcome": "uncertain",
+      "usage": null
+    },
+    {
+      "n": 13,
+      "stage": "author_brief",
+      "reserved_tokens": 6960,
+      "outcome": "completed",
+      "usage": {
+        "completion_tokens": 1425,
+        "prompt_tokens": 1029,
+        "total_tokens": 2454,
+        "completion_tokens_details": null,
+        "prompt_tokens_details": {
+          "audio_tokens": null,
+          "cache_write_tokens": null,
+          "cached_tokens": 256
+        },
+        "prompt_cache_hit_tokens": 256,
+        "prompt_cache_miss_tokens": 773
+      },
+      "finish_reason": "stop",
+      "estimated_cost_usd": 0.000971718
+    },
+    {
+      "n": 14,
+      "stage": "author_brief",
+      "reserved_tokens": 7094,
+      "outcome": "completed",
+      "usage": {
+        "completion_tokens": 952,
+        "prompt_tokens": 1060,
+        "total_tokens": 2012,
+        "completion_tokens_details": null,
+        "prompt_tokens_details": {
+          "audio_tokens": null,
+          "cache_write_tokens": null,
+          "cached_tokens": 896
+        },
+        "prompt_cache_hit_tokens": 896,
+        "prompt_cache_miss_tokens": 164
+      },
+      "finish_reason": "stop",
+      "estimated_cost_usd": 0.000598488
+    }
+  ]
+}

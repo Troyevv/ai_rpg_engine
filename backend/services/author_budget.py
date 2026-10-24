@@ -23,6 +23,30 @@ def limits(config, loaded=None):
 def schema_for(stage, schema, data):
     """Only assigned sections and reachable definitions; validation stays canonical."""
     result = deepcopy(schema)
+    definitions = result.get('$defs', {})
+    if 'Opening' in definitions and 'Time' in definitions:
+        # History supports vague/relative time; the executable opening does not.
+        opening_time = deepcopy(definitions['Time'])
+        props = opening_time['properties']
+        props['clock'] = {'type': 'string', 'pattern': r'^([01]\d|2[0-3]):[0-5]\d$'}
+        props['date'] = {'anyOf': [{'type': 'string', 'pattern': r'^\d{4}-\d{2}-\d{2}$'}, {'type': 'null'}], 'default': None}
+        for field in ('period', 'day_offset'):
+            props[field] = {'type': 'null', 'default': None}
+        props['weekday']['description'] = 'Zero-based calendar index. Gregorian: Monday=0, Tuesday=1, Wednesday=2, Thursday=3, Friday=4, Saturday=5, Sunday=6.'
+        opening_time['required'] = ['clock']
+        opening_time['anyOf'] = [
+            {'required': ['date'], 'properties': {'date': {'type': 'string'}}},
+            {'required': ['weekday'], 'properties': {'weekday': {'type': 'integer'}}},
+        ]
+        definitions['OpeningTime'] = opening_time
+        definitions['Opening']['properties']['time'] = {'$ref': '#/$defs/OpeningTime'}
+        if stage in ('author_plan_page', 'author_plan'):
+            definitions.pop('Time')  # planning has no historical-time records
+    if stage == 'author_plan_page':
+        result['properties'].pop('continuation', None)
+        result.get('$defs', {}).pop('PlanContinuation', None)
+        # Match the provider-visible contract to this exact scheduled page.
+        result['properties']['records']['maxItems'] = min(32, data.get('max_records', 32))
     if stage == 'author_batch':
         sections = {r['section'] for r in data['assigned_records']}
         result['properties'] = {k:v for k,v in result['properties'].items() if k in sections}

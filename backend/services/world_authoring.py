@@ -18,6 +18,8 @@ class Record(Model):
 
 
 class Seed(Record):
+    # Extraction cannot invent entities; expose this invariant to the provider.
+    origin: Literal['explicit']
     kind: Literal['character', 'location', 'organization']
     name: str = Field(min_length=1, max_length=200)
 
@@ -25,7 +27,7 @@ class Seed(Record):
 class Observation(Model):
     section: str
     text: str = Field(min_length=1, max_length=20000)
-    entities: list[str] = Field(default_factory=list)
+    entities: list[str] = Field(default_factory=list, description='Keys from this response entities array, never display names. Register every referenced entity.')
     time_description: str = ''
     uncertain: bool = False
 
@@ -311,8 +313,8 @@ class PlannedRecord(Model):
     section: Literal['characters', 'locations', 'organizations', 'objective_relations',
         'feelings', 'facts', 'events', 'knowledge', 'residences', 'roles', 'possessions', 'conditions', 'commitments', 'contacts', 'pregnancies', 'source_notes']
     key: str = Field(min_length=1, max_length=100, pattern=r'^[\w-]+$')
-    summary: str = Field(min_length=1, max_length=3000)
-    references: list[str] = Field(default_factory=list)
+    summary: str = Field(min_length=1)
+    references: list[str] = Field(default_factory=list, description='Exact planned record addresses in section/key form, for example characters/ilya. Never use names or unqualified keys.')
 
 
 class Plan(Model):
@@ -332,7 +334,7 @@ class Plan(Model):
 
 
 ANALYSIS_RULES = '''Extract only what the author has supplied. Do not invent missing
-entities, biographies, motives or relationships. Entity origin must be explicit.
+entities, biographies, motives or relationships. Entity origin must be explicit. Observation entities must use registered entity keys, never display names.
 Preserve temporal scope, before/after disclosures and uncertain groups separately.
 No quotes, character offsets, executable constraints or Runtime IDs are needed.
 Return the requested JSON. The original source is retained independently.'''
@@ -362,7 +364,13 @@ Return only the requested structured JSON in the user's language.'''
 
 
 class PageRecord(PlannedRecord):
-    summary: str = Field(min_length=1, max_length=200)
+    """Page size is bounded by records and request budgets, not prose length."""
+
+
+class PlanContinuation(Model):
+    """Validated surplus records retained for deterministic local pagination."""
+    records: list[PageRecord] = Field(max_length=3000)
+    complete: bool
 
 
 class PlanPage(Model):
@@ -370,6 +378,7 @@ class PlanPage(Model):
     world: World | None = None
     opening: Opening | None = None
     records: list[PageRecord] = Field(default_factory=list, max_length=32)
+    continuation: PlanContinuation | None = None
     complete: bool
     uncertainties: list[str] = Field(default_factory=list, max_length=8)
 

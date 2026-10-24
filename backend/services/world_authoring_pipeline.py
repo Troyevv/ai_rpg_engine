@@ -111,6 +111,75 @@ def combine_briefs(parts):
     return _check(a.CombinedBrief, result, 'author_brief').model_dump()
 
 
+def normalize_brief_references(raw):
+    """Resolve exact unique display names to extracted keys, without fuzzy matching."""
+    value = deepcopy(raw)
+    if not isinstance(value, dict) or not isinstance(value.get('entities', []), list) or not isinstance(value.get('observations', []), list):
+        return value
+    entities = [_check(a.Seed, row, 'author_brief/entities') for row in value.get('entities', [])]
+    keys = {row.key for row in entities}
+    for note in value.get('observations', []):
+        if not isinstance(note, dict) or not isinstance(note.get('entities', []), list):
+            continue  # The normal DTO validator reports malformed structures.
+        for i, ref in enumerate(note.get('entities', [])):
+            if not isinstance(ref, str) or ref in keys:
+                continue
+            candidates = [row.key for row in entities if row.name == ref]
+            if len(candidates) == 1:
+                note['entities'][i] = candidates[0]
+    return value
+
+
+def normalize_plan_references(records):
+    """Qualify only exact, unique local keys; never guess an entity identity."""
+    result = deepcopy(records)
+    keys = {r['section'] + '/' + r['key'] for r in result}
+    for row in result:
+        for i, ref in enumerate(row['references']):
+            if ref in keys:
+                continue
+            candidates = [key for key in keys if '/' not in ref and key.rsplit('/', 1)[-1] == ref]
+            if len(candidates) != 1:
+                raise CompileError('author_plan/' + row['section'] + '/' + row['key'] + '/references',
+                                   'Неизвестная или неоднозначная ссылка: ' + ref + '; используйте section/key.')
+            row['references'][i] = candidates[0]
+    return result
+
+
+def partition_plan_page(raw, capacity, registry):
+    """Keep overfull model responses losslessly within bounded durable pages."""
+    if not isinstance(raw, dict):
+        return _check(a.PlanPage, raw, 'author_plan_page').model_dump()
+    if 'continuation' in raw:
+        raise ValueError('author_plan: continuation is application-owned')
+    records = _check(a.PlanContinuation, dict(records=raw.get('records', []), complete=raw.get('complete')), 'author_plan_response')
+    if len(records.records) + len(registry) > MAX_RECORDS:
+        raise CompileError('author_plan/records', 'Превышен общий предел 3000 записей; принятые страницы сохранены.')
+    slots = [r.section + '/' + r.key for r in records.records]
+    if len(slots) != len(set(slots)) or set(slots) & set(registry):
+        raise CompileError('author_plan/records', 'Повторная регистрация записи; принятые страницы сохранены.')
+    value = deepcopy(raw)
+    value['records'] = [r.model_dump() for r in records.records[:capacity]]
+    if len(records.records) > capacity:
+        value['continuation'] = dict(records=[r.model_dump() for r in records.records[capacity:]], complete=records.complete)
+        value['complete'] = False
+    return _check(a.PlanPage, value, 'author_plan_page').model_dump()
+
+
+def validate_creative_page(value, registry):
+    """Reject incomplete executable openings before accepting a paid plan page."""
+    opening = value.get('opening')
+    if opening:
+        time = opening['time']
+        if time['clock'] is None or (time['date'] is None and time['weekday'] is None):
+            raise ValueError('author_plan/opening/time: supply an exact clock and date or weekday; creatively choose unspecified opening details and label them in uncertainties.')
+        if time['period'] is not None or time['day_offset'] is not None:
+            raise ValueError('author_plan/opening/time: use an absolute opening anchor, not a relative historical period.')
+    if value['complete'] and not value['records'] and not registry:
+        raise ValueError('author_plan/records: an empty world is not a completed creative plan; create the protagonist, supporting cast, locations and meaningful circumstances allowed by the idea.')
+    return value
+
+
 def run(repo, jid, token, inputs, config, context, request, execute):
     def unit(uid, stage, dependencies, outputs):
         return dict(id=uid, stage=stage, inputs=dependencies, outputs=outputs)
@@ -131,7 +200,7 @@ def run(repo, jid, token, inputs, config, context, request, execute):
     for i, key in enumerate(part_keys):
         known = {r['key']: r for p in accepted for r in p['entities']}
         execute(key, lambda: request('author_brief', dict(source=parts[i], known_entities=list(known.values())), a.AuthorBrief),
-                lambda raw: _check(a.AuthorBrief, raw, key).model_dump())
+                lambda raw: _check(a.AuthorBrief, normalize_brief_references(raw), key).model_dump())
         accepted.append(get(key))
     execute('author_brief', lambda: combine_briefs(accepted), lambda value: value)
     analysis = get('author_brief')
@@ -177,7 +246,7 @@ def run(repo, jid, token, inputs, config, context, request, execute):
                     definition = unit(key, 'author_plan', ['brief', 'author_brief', 'creation', 'prompt', *page_keys], {key: ''})
                     repo.append_author_plan_unit(jid, token, definition)
                     def validate_page(raw):
-                        value = _check(a.PlanPage, raw, key).model_dump()
+                        value = validate_creative_page(partition_plan_page(raw, min(32, max(1, (output_cap-1200)//400)), registry), registry)
                         if len(value['records']) > min(32, max(1, (output_cap-1200)//400)):
                             raise ValueError(key + ': превышен назначенный размер страницы')
                         if not value['records'] and not value['complete']:
@@ -187,14 +256,15 @@ def run(repo, jid, token, inputs, config, context, request, execute):
                             if slot in registry:
                                 raise CompileError(key + '/' + slot, 'Повторная регистрация меняет принятый план; исправьте исходный план явно.')
                         return value
-                    execute(key, lambda: request('author_plan_page', dict(
-                        source=source, source_index=source_index,
+                    execute(key, lambda: ({'records': pages[-1]['continuation']['records'], 'complete': pages[-1]['continuation']['complete']}
+                        if pages and pages[-1].get('continuation') else request('author_plan_page', dict(
+                        source=source, source_index=source_index, cast_targets=targets,
                         author_brief=accepted[source_index],
                         registered_records=[dict(section=r['section'], key=r['key']) for r in registry.values()],
                         accepted_world=next((p['world'] for p in reversed(pages) if p['world']), None),
                         accepted_opening=next((p['opening'] for p in reversed(pages) if p['opening']), None),
                         max_records=min(32, max(1, (output_cap-1200)//400)),
-                        instruction='Continue the registry for this source section. Return at most max_records short records (summary <= 200 characters). Never repeat accepted records. Set complete only when every supplied entity, relation and circumstance in this section is registered. Supply world/opening on the first page. On later pages use null unless this source explicitly corrects or supplements the accepted world/opening; then return its complete revised value, preserving all other accepted details and report the correction in uncertainties. References may name records on later pages; final compilation checks them. Do not enumerate unrelated pairs.'), a.PlanPage), validate_page)
+                        instruction='Creatively design the playable world, not just extract supplied facts. Analysis intentionally leaves unspecified details unknown; planning must now invent permitted missing names, characters, locations, relationships and opening details. Follow cast_targets across all pages, NEVER on one page if the records do not fit. The hard max_records limit applies to this response; return complete=false and continue on another page instead of exceeding it. Register generated records as well as explicit ones; expansion can only develop registered assignments. Choose an exact opening clock and date or weekday if absent, label that choice in uncertainties, and assign the protagonist/control/POV/location when the idea has a player character. Continue the registry for this source section. Return at most max_records planning records. Use summaries to identify each assignment; preserve supplied details without a character limit. Full creative expansion follows in independent batches. Never repeat accepted records. Set complete only when every supplied entity, relation and circumstance in this section AND the creative cast, locations and starting circumstances are registered. Never promise later pages while setting complete=true. Supply world/opening on the first page. On later pages use null unless this source explicitly corrects or supplements the accepted world/opening; then return its complete revised value, preserving all other accepted details and report the correction in uncertainties. References may name records on later pages; final compilation checks them. Do not enumerate unrelated pairs.'), a.PlanPage)), validate_page)
                     page = get(key)
                     if len(page['records']) > min(32, max(1, (output_cap-1200)//400)):
                         raise CompileError(key, 'Страница превысила назначенный размер; исправьте checkpoint.')
@@ -213,7 +283,7 @@ def run(repo, jid, token, inputs, config, context, request, execute):
                 openings = [p['opening'] for p in pages if p['opening']]
                 if not worlds or not openings:
                     raise CompileError('author_plan', 'Нужны согласованные мир и начальная сцена; исправьте страницы плана.')
-                return _check(a.Plan, dict(world=worlds[-1], opening=openings[-1], records=list(registry.values()),
+                return _check(a.Plan, dict(world=worlds[-1], opening=openings[-1], records=normalize_plan_references(list(registry.values())),
                     uncertainties=[u for p in pages for u in p['uncertainties']] + (['Мир или начальная сцена уточнены по последующим разделам исходника; проверьте принятую интерпретацию.'] if any(w != worlds[0] for w in worlds) or any(o != openings[0] for o in openings) else [])), 'author_plan').model_dump()
             execute('author_plan', combine_plan, lambda value: value)
         plan = get('author_plan')
