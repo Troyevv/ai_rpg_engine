@@ -11,7 +11,7 @@ def tokens(text):
     return re.findall(r'"(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null',text)
 
 
-def request(raw,errors):
+def request(raw,errors,author_context=None):
     try: value=strict_loads(raw)
     except ValueError:
         return [dict(role='system',content='Исправь только синтаксическую пунктуацию JSON. Сохрани все ключи, строки, числа и их порядок дословно. Верни полный JSON без Markdown.'),
@@ -34,8 +34,10 @@ def request(raw,errors):
             fragments[scope_path]={'value':current}
         except (KeyError,IndexError,TypeError,ValueError):
             fragments[scope_path]={'missing':True}
-    return [dict(role='system',content='Исправь только перечисленные технические ошибки. Верни JSON {"patches":[{"path":"/точный/путь","value":новое_значение}]}. Не меняй остальные данные, персонажей, описания и события. Не придумывай сведения.'),
-            dict(role='user',content=json.dumps(dict(errors=errors,fragments=fragments),ensure_ascii=False))],paths
+    payload=dict(errors=errors,fragments=fragments)
+    if author_context is not None:payload['author_context']=author_context
+    return [dict(role='system',content='Исправь только перечисленные технические ошибки. Верни JSON {"patches":[{"path":"/точный/путь","value":новое_значение}]}. Не меняй остальные данные, персонажей, описания и события. Не придумывай сведения. Сохрани явные факты из контекста автора.'),
+            dict(role='user',content=json.dumps(payload,ensure_ascii=False))],paths
 
 
 def apply(raw,reply,paths):

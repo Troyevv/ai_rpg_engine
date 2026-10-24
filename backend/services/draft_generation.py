@@ -115,7 +115,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             errors=exc.errors if isinstance(exc,draft_initial.DraftErrors) else [dict(path='/',category='validation',message=str(exc))]
             journal['errors']=errors;repo.save_response_journal(jid,journal)
             if attempt==2:raise ValueError('Две попытки исправления исчерпаны. Ответ сохранён. '+str(exc)) from exc
-            repair,paths=draft_repair.request(result,errors)
+            repair,paths=draft_repair.request(result,errors,author_context=messages[-1]['content'])
             repo.draft_phase(jid,'retrying');stage='draft_world_repair'
             reply=response(repo,jid,journal,'repair_'+str(attempt+1),repair,config,context,generate,handle.cancel)
             if reply is None:return

@@ -279,6 +279,7 @@ def test_saved_calendar_failure_resumes_with_repair_without_regenerating_world(t
         calls.append(kwargs)
         request=json.loads(kwargs['messages'][-1]['content'])
         assert request['errors'][0]['path']=='/world_clock/calendar/start_weekday'
+        assert SHORT in request['author_context']
         assert request['fragments']=={'/world_clock/calendar':{'value':original['world_clock']['calendar']}}
         yield json.dumps({'patches':[{'path':'/world_clock/calendar/start_weekday','value':4}]})
     run(Preparation(repo),jid,config,None,Handle(),None,stream)
