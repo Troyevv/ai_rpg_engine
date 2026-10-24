@@ -1,5 +1,46 @@
 # Initial World State v2 — implementation record (#44)
 
+## Current default: single-response creation (2026-10-24)
+
+This section supersedes older routing descriptions below. The user's current
+single-response requirement replaces the Issue's historical staged requirement.
+New Quick/Scenario submissions and the `world` compatibility alias capture
+`world-single-1`: full original idea + existing settings + Pydantic Document
+schema → one full author JSON → deterministic compiler/canonical validation →
+versioned editable Draft → existing confirmation/Start Game. This uses master's
+single-response and technical-repair principle, with the existing PR compiler
+instead of master's incompatible hand-maintained v2 provider schema.
+
+No AuthorBrief, Author Plan, PlanPage, pair generator or batch fallback runs for
+new jobs. Old captured versions retain their exact route and regression coverage;
+historical saves are not rewritten. No DB migration or Runtime invariant change.
+The source models/compiler and author/canonical editors remain the ones already
+in PR #105. Transport, streaming, usage, credentials, leases and CAS remain shared.
+
+Schema/type and compiler errors are repairable before document publication.
+Maximum two automatic technical repairs follow the first request. Each includes
+the previous raw result and a structured path/type/expected-value report; schema
+contains enum values. Python rejects changes outside localized error paths.
+Unlocalizable semantic failures cannot authorize unrestricted world rewrites.
+Syntax errors retain raw output, but structural comparison is inherently unavailable.
+Raw failure/output-limit diagnostics are private and durable. Pause/resume continues
+technical repair; truncation/uncertain provider outcomes stop without blind retry.
+A full repair that cannot fit is rejected locally, retaining the received result.
+
+Limits remain explicit: no source clipping, no raised global max_tokens. Full
+schema admission currently requires more than the 8192 context preference;
+32768 is the offline-tested budget. The conservative UTF-8 estimate is not model
+tokenizer usage. No safe fragmented continuation is implemented; exhausted output
+stops with diagnostics. Large/default casts and creative completeness require live
+assessment, not a size-estimate claim. Unsupported executable source_notes still
+block compilation rather than masquerade as functioning Runtime mechanics.
+
+Tests send the entire Volkov brief unchanged, but controlled responses establish
+transport/lifecycle only, not its semantic reproduction. There is no exhaustive
+deterministic natural-language fact checker. No test key is configured and no
+new paid test authorization was supplied: live short/full acceptance remains open.
+
+
 **Work in progress. This is not an acceptance-complete implementation of #44.**
 
 Baseline: master `442c95b`, after merged PR #104. Read `AGENTS.md`, Epic #36,

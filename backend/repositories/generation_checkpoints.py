@@ -539,8 +539,10 @@ class GenerationCheckpoints:
         units=db.execute("SELECT * FROM preparation_units WHERE job_id=? AND status!='retired'",(jid,)).fetchall()
         stages={row['stage'] for row in units}
         prompt_row=db.execute("SELECT v.content,r.pointer FROM preparation_resources r JOIN document_versions v ON v.id=r.artifact_id WHERE r.job_id=? AND r.resource_key='prompt'",(jid,)).fetchone()
-        authoring=bool(prompt_row and self._pointer(json.loads(prompt_row['content']),prompt_row['pointer'])['version']=='world-authoring-1')
+        prompt=self._pointer(json.loads(prompt_row['content']),prompt_row['pointer']) if prompt_row else {}
+        authoring=prompt.get('version') in ('world-authoring-1','world-single-1')
         required={'author_brief','author_document','compile'} if authoring else {'interpret','setting','places','life','lore','opening','assembly'}
+        if prompt.get('version')=='world-single-1':required={'author_document','compile'}
         if not required<=stages:
             raise ValueError('generation/readiness: missing required stages')
         resources={r['resource_key']:r for r in db.execute('SELECT * FROM preparation_resources WHERE job_id=?',(jid,))}

@@ -21,7 +21,7 @@ import backend.services.preparation as preparation
 from backend.services import world_generation
 # The historical browser matrix contains captured revision-6 checkpoint fixtures.
 # The author-contract browser scenario starts this same server with its own flag.
-world_generation.PROMPT_VERSION = 'world-authoring-1' if os.getenv('E2E_AUTHORING')=='1' else 'initial-world-stages-6'
+world_generation.PROMPT_VERSION = 'world-single-1' if os.getenv('E2E_AUTHORING')=='1' else 'initial-world-stages-6'
 from backend.api.app import create_app
 from test_worlds import summary
 from test_engine import result

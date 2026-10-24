@@ -2,6 +2,8 @@
 import json
 from unittest.mock import patch
 import pytest
+
+pytestmark = pytest.mark.usefixtures("captured_authoring_v1")
 from context_builder import estimate
 from backend.services import author_budget as b, world_authoring as a
 from backend.services.world_authoring_pipeline import capture, source_sections

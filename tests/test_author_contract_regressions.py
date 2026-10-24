@@ -1,5 +1,7 @@
 """Schema/validator contract regressions; no provider calls."""
 import pytest
+
+pytestmark = pytest.mark.usefixtures("captured_authoring_v1")
 from backend.services import world_authoring as a
 from test_api import api
 

@@ -20,3 +20,10 @@ def captured_generation_v6(monkeypatch):
     """Keep the revision-6 regression matrix exercising its captured schemas."""
     from backend.services import world_generation
     monkeypatch.setattr(world_generation, 'PROMPT_VERSION', 'initial-world-stages-6')
+
+
+@pytest.fixture
+def captured_authoring_v1(monkeypatch):
+    """Compatibility matrix for persisted authoring/planning jobs before single response."""
+    from backend.services import world_generation
+    monkeypatch.setattr(world_generation, 'PROMPT_VERSION', 'world-authoring-1')

@@ -12,7 +12,7 @@ type Unit={unit_id:string;stage:string;status:string;weight:number;attempts:numb
 type Checkpoint={status:string;stage:string;artifact_version:number;artifact?:unknown;diagnostic?:unknown;unit:string};
 type Impact={revision:number;artifact_version:number;stale_units:string[]};
 type Progress={can_resume?:boolean;exhausted_units?:string[];review_only?:boolean;revision:number;overall_progress:number;units:Unit[]};
-const stages:Record<string,string>={author_brief:'Анализ замысла',author_plan:'План раскрытия',author_batch:'Раскрытие разделов',author_document:'Авторский документ',compile:'Компиляция и проверка',interpret:'Понимание замысла',setting:'Сеттинг и план',places:'Локации и организации',characters:'Персонажи',life:'Отношения и обстоятельства',lore:'Предыстория и знания',opening:'Начальная сцена',assembly:'Сборка и проверка'};
+const stages:Record<string,string>={author_brief:'Анализ замысла',author_plan:'План раскрытия',author_batch:'Раскрытие разделов',author_document:'Создание мира',compile:'Проверка мира',interpret:'Понимание замысла',setting:'Сеттинг и план',places:'Локации и организации',characters:'Персонажи',life:'Отношения и обстоятельства',lore:'Предыстория и знания',opening:'Начальная сцена',assembly:'Сборка и проверка'};
 const statuses:Record<string,string>={pending:'Ожидает',running:'Выполняется',completed:'Проверено',saved:'Готово',failed:'Ошибка',stale:'Нужна повторная проверка',uncertain:'Исход запроса неизвестен',cancelled:'Отменено',generating:'Создаём мир',pause_requested:'Завершаем текущий этап перед паузой',paused:'На паузе',waiting_for_credentials:'Нужен доступ к провайдеру'};
 
 export function WorldGenerationProgress({job,workspaceId,apiKey,refresh}:{job:Job;workspaceId:string;apiKey:string;refresh:()=>void}){

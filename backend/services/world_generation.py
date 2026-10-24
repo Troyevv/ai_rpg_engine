@@ -18,7 +18,7 @@ from llm import find_loaded_model
 from backend.services.world_creation_settings import CreationSettings
 from backend.services.generation_constraints import validate_character_facts, validate_stage_facts
 
-PROMPT_VERSION = 'world-authoring-1'
+PROMPT_VERSION = 'world-single-1'
 LEGACY_RULES = '''Generate only the requested typed partial payload, never an entire world.
 Use the user's language. Explicit user facts and prohibitions outrank conventions.
 Genre tendencies never mandate romance, conflict, births or deaths. Family saga
@@ -109,6 +109,9 @@ def generation_input(config, idea=''):
     if config.get('_use_idea'):
         if not idea.strip(): raise ValueError('Сначала создай сценарий в режиме Сценариста.')
         brief+='\n\n'+idea.strip()
+    if PROMPT_VERSION == 'world-single-1':
+        from backend.services.draft_generation import capture_world
+        return capture_world(brief, config)
     if PROMPT_VERSION == 'world-authoring-1':
         from backend.services.world_authoring_pipeline import capture
         return capture(brief, config)
@@ -126,7 +129,8 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     brief=inputs['brief']
     scoped=inputs['prompt']['version'] in ('initial-world-stages-2','initial-world-stages-3','initial-world-stages-4','initial-world-stages-5','initial-world-stages-6')
     creative=inputs['prompt']['version']=='initial-world-stages-6'
-    authoring=inputs['prompt']['version']=='world-authoring-1'
+    single=inputs['prompt']['version']=='world-single-1'
+    authoring=single or inputs['prompt']['version']=='world-authoring-1'
     source=lambda stage:'scope:'+stage if scoped else 'interpretation'
     token=repo.claim_generation(jid)
     if not token: return
@@ -152,7 +156,10 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         if handle.cancel.is_set(): stream.close()
     last_error=''
     current_unit=None
+    prior_response=None
+    repair_report=None
     def request(stage,context_data,model):
+        nonlocal prior_response
         if authoring:
             system=(inputs['prompt']['interpretation'] if stage=='author_brief' else inputs['prompt']['rules'])+'\nJSON Schema:\n'+json.dumps(inputs['prompt']['schemas'][stage],ensure_ascii=False,separators=(',',':'))
         else:
@@ -163,6 +170,9 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         if not authoring and stage not in ('interpret','review'):context_data['source_rules']=[row for row in plan['claims'] if any(rule['stage']==stage for rule in row.get('rules',[])) and (stage!='characters' or not ({row['subject_id'],*row['related_ids']}-{None}) or ({row['subject_id'],*row['related_ids']} & set(context_data['assigned_ids'])))]
         locks=repo.generation_field_locks(jid,current_unit)
         if locks: context_data['accepted_field_locks']=locks
+        if single and repair_report:
+            context_data={**context_data, 'original_response':prior_response, 'validation_report':repair_report,
+                'instruction':'Repair ONLY the reported technical errors in original_response. Preserve every unaffected value, record, biography, relationship and fact. Do not regenerate the world. Return the complete corrected JSON.'}
         if last_error: context_data={**context_data,'repair_error':last_error,'repair_scope':'Only this stage; preserve all previously accepted inputs.'}
         request=[dict(role='system',content=system+'\nStage: '+stage),
                  dict(role='user',content=json.dumps(context_data,ensure_ascii=False))]
@@ -171,6 +181,16 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         if budgeted:
             request = budgets.messages(inputs['prompt'], stage, context_data)
             output = budgets.response_budget(stage, context_data, output_ceiling, context)
+            if single:
+                from backend.services.draft_generation import request_budget
+                output = request_budget(request, output_ceiling, context)
+                if repair_report and prior_response:
+                    from context_builder import estimate
+                    needed=min(output_ceiling,max(1024,estimate([dict(content=prior_response)])))
+                    if output<needed:
+                        raise budgets.CompileError('author/request/repair',
+                            f'Полный ответ для исправления не помещается: доступно {output}, требуется около {needed} токенов ответа.',
+                            'Исходный результат сохранён; запрос не отправлен. Увеличьте контекст или исправьте сохранённый документ.')
             diagnostics = budgets.check(request, output, context, stage, user_context=config['context_length'], model_context=model_context)
         elif authoring:
             from context_builder import estimate
@@ -217,6 +237,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
                     input_tokens=measured.get('input_tokens'),output_tokens=measured.get('output_tokens'),
                     finish_reason=measured.get('finish_reason'),
                     partial_json_bytes=len(''.join(pieces).encode('utf-8')),
+                    **({'raw_response':''.join(pieces)} if single else {}),
                     expected_json_bytes=None,assigned_pair_count=len(context_data.get('assigned_pairs',[]))))
             if budgeted and isinstance(exc, budgets.CompileError):
                 raise
@@ -225,17 +246,23 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
                 raise TransientProviderFailure('stage/'+stage+': provider temporarily rejected request') from exc
             code=' HTTP '+str(status) if isinstance(status,int) else ' '+type(exc).__name__
             raise RuntimeError('stage/'+stage+': provider request failed ('+code.strip()+'); inspect usage and retry explicitly.') from exc
+        if single: prior_response=''.join(pieces)
         try: return json.loads(''.join(pieces))
         except ValueError as exc: raise ValueError('stage/'+stage+': invalid JSON') from exc
     def execute(unit, producer, validate):
-        nonlocal last_error,current_unit
+        nonlocal last_error,current_unit,prior_response,repair_report
         current_unit=unit
         if handle.cancel.is_set() or not repo.generation_boundary(jid,token): raise InterruptedError('Generation paused or cancelled')
         status=next(row for row in repo.generation_status(jid)['units'] if row['unit_id']==unit)
         if status['status']=='completed': return
         # Bounded schema retries are local to this unit. Provider exceptions are
         # surfaced; uncertain requests are never replayed automatically.
-        for retry in range(2):
+        if single and unit=='author_document' and status['status']=='failed':
+            diagnostic=repo.inspect_generation_checkpoint(jid,unit,True).get('diagnostic',{})
+            if diagnostic.get('category')=='technical_repair':
+                prior_response=diagnostic['raw_response'];repair_report=diagnostic['report']
+        attempts=3 if single and unit=='author_document' else 2
+        for retry in range(attempts):
             if not repo.generation_boundary(jid,token): raise InterruptedError('Generation paused')
             repo.begin_generation_unit(jid,token,unit)
             try:
@@ -256,6 +283,14 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             except ValueError as exc:
                 last_error=str(exc)
                 repo.fail_generation_unit(jid,token,unit,last_error)
+                if single and unit=='author_document':
+                    from backend.services.draft_generation import technical_report
+                    repair_report=technical_report(exc)
+                    repo.record_generation_diagnostic(jid,token,unit,dict(category='technical_repair',
+                        raw_response=prior_response,report=repair_report))
+                    # Budget failures are not malformed provider results.
+                    if prior_response is None or str(exc).startswith('author/request/') or retry==attempts-1:raise
+                    continue
                 if authoring:
                     from backend.services.world_authoring_compiler import CompileError
                     if isinstance(exc, CompileError) or status['stage']=='compile':
@@ -276,7 +311,11 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
                 if not loaded: raise ValueError('Сначала загрузи выбранную локальную модель.')
                 context, output_ceiling, model_context = budgets.limits(config, loaded)
             run_config = {**config, 'max_tokens': output_ceiling} if budgeted else config
-            run_authoring(repo,jid,token,inputs,run_config,context,request,execute)
+            if single:
+                from backend.services.draft_generation import run_world
+                run_world(repo,jid,token,inputs,request,execute)
+            else:
+                run_authoring(repo,jid,token,inputs,run_config,context,request,execute)
             return
         if config.get('_review_only'):
             saved=repo.generation_resources(jid,['interpretation','author_draft'])

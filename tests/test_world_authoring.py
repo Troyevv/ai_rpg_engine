@@ -4,6 +4,8 @@ from copy import deepcopy
 from unittest.mock import patch
 import pytest
 
+pytestmark = pytest.mark.usefixtures("captured_authoring_v1")
+
 from backend.services.world_authoring import Document, AuthorBrief, VERSION
 from backend.services.world_authoring_compiler import compile_document, CompileError
 from backend.services.world_authoring_pipeline import source_sections

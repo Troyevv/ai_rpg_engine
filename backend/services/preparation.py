@@ -22,6 +22,9 @@ class Preparation:
         self.lock = threading.Lock()
 
     def submit(self, wid, kind, text, config, revision, api_key=None):
+        from backend.services.world_generation import PROMPT_VERSION
+        if kind=='draft_world' and PROMPT_VERSION=='world-single-1':
+            kind='draft_world_staged';config={**config,'_draft_task':'world_staged'}
         if config['provider'] == 'deepseek':
             api_key = deepseek_key(api_key)
         handle = Handle()

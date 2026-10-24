@@ -190,7 +190,7 @@ class DraftStorage:
                     validate_snapshot_facts(normalize(state).snapshot,json.loads(source['content']))
                 else:
                     captured=self.generation_resources(record['generation']['job_id'],['prompt'])
-                    if captured['prompt']['version']!='world-authoring-1':
+                    if captured['prompt']['version'] not in ('world-authoring-1','world-single-1'):
                         raise ValueError('generation/readiness: missing interpretation')
                 self.validate_generation_semantics(db,record['generation']['job_id'],normalize(state).snapshot)
             name=state['campaign']['title'].strip() or w['name'];source=domain.export_markdown(state)

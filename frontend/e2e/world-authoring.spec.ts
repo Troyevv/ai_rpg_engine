@@ -14,7 +14,7 @@ test('author contract exposes one editable document and preserves its biography 
   server=spawn(process.env.E2E_PYTHON||'python',[resolve('../tests/e2e_server.py')],{env:{...process.env,E2E_PORT:'8016',E2E_DB_PATH:join(dir,'world.db'),E2E_AUTHORING:'1'},stdio:'ignore'});
   await expect.poll(async()=>{try{return(await fetch(base+'/api/health')).status}catch{return 0}},{timeout:20000}).toBe(200);
   const page=await context.newPage();await page.goto(base);
-  const contextBudget=info.project.name==='desktop'?8192:32768;
+  const contextBudget=32768;
   await nav(page,'Настройки');
   await page.getByLabel('Провайдер summary').selectOption('deepseek');
   await page.getByLabel('API-ключ DeepSeek').fill('fixture-key');
@@ -32,8 +32,9 @@ test('author contract exposes one editable document and preserves its biography 
   await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
   const requestsUrl=submitted.url().replace('/draft/generate','/requests');
   const logs=await(await page.request.get(requestsUrl)).json();
-  const analysis=logs.find((r:{stage:string})=>r.stage==='initial_author_brief');
-  expect(analysis.max_tokens).toBeLessThan(2000);
+  expect(logs).toHaveLength(1);
+  const analysis=logs.find((r:{stage:string})=>r.stage==='initial_author_document');
+  expect(analysis.max_tokens).toBeLessThanOrEqual(12000);
   expect(analysis.diagnostics.effective_context).toBe(contextBudget);
   expect(analysis.diagnostics.estimated_tokens+analysis.max_tokens+analysis.diagnostics.margin).toBeLessThanOrEqual(contextBudget);
   await page.getByRole('button',{name:'Автор мира',exact:true}).click();

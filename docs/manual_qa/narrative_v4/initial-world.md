@@ -87,3 +87,34 @@ opening offers possibilities without prescribing the player's next action or a
 future plot. Record disagreements as warnings and try correcting them in the UI.
 Continue through Start Game, an ordinary turn and reload. Automated fixtures do
 not count as this assessment; leave untested quality dimensions explicitly open.
+
+## Single-response creation regression (2026-10-24)
+
+The current default captures `world-single-1`. Historical staged/checkpoint QA
+above still applies to captured old jobs, not new creation. Use an isolated dev DB.
+
+1. Quick Creation: enter the Moscow/institute premise, select existing genre,
+   cast, geography, expressiveness and pacing/risk controls, create once.
+2. Repeat via Scenario hand-off. Check the combined original idea reaches the
+   provider intact. No analysis, plan, pages, pair enumeration or review calls.
+3. With a separately authorized test key/budget, repeat with the **complete**
+   `tests/fixtures/world_authoring/volkov_user_brief.txt`, including Friday 08:00,
+   Ilya and Liza outside court. Review all eight named people, five subsidiaries,
+   adoption vs biological ties, parental marriage intentions vs actual marriage,
+   Ilya's discovery yesterday, restricted Knowledge and unchanged starting action.
+4. Editor: change a biography, relationship, Knowledge, location and start time;
+   save/reload, confirm, Start Game, ordinary turn, reload and another turn.
+   Use existing #78 History/branch/rollback checks for the resulting save.
+5. Inject a bad reference: the repair request contains the original response and
+   path report. Correct biographies survive; a repair rewriting them fails safely.
+   At most initial + two repairs; output truncation is never a schema retry.
+6. Pause after a validation failure, restart/reopen and resume: original raw output
+   and technical report survive; no fresh creative generation replaces them.
+7. Context 8192 currently rejects the full contract before a provider request;
+   32768 is the tested offline budget. Oversized input/repair reports estimates,
+   never clips the source or falls back to planning. A blocked first submission
+   has no job; the form retains the text. Failed received output stays author-only.
+
+Automated lifecycle fixtures are not semantic evidence for the complete Volkov
+brief, and this checklist is not a completed live test. Paid acceptance remains
+blocked until a test key and separate budget authorization are supplied.
