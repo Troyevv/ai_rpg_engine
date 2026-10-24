@@ -381,9 +381,9 @@ def cross_record_errors(state):
             if section=='objective_relations':
                 a,b=row.get('source_id'),row.get('target_id');kind=row.get('kind')
                 if isinstance(a,str) and a==b:problems.append(error(base+'/target_id','Связь с самим собой недопустима.','relation',allowed=sorted(ids-{a})))
-                endpoints=tuple(sorted((a,b))) if kind in SYMMETRIC and isinstance(a,str) and isinstance(b,str) else (a,b)
+                endpoints=tuple(sorted((a,b))) if isinstance(kind,str) and kind in SYMMETRIC and isinstance(a,str) and isinstance(b,str) else (a,b)
                 signature=(kind,*endpoints)
-                if row.get('status','active')=='active' and isinstance(a,str) and isinstance(b,str):
+                if row.get('status','active')=='active' and isinstance(kind,str) and isinstance(a,str) and isinstance(b,str):
                     if signature in active:
                         previous=active[signature]
                         other=world['objective_relations'][previous.rsplit('/',1)[-1].replace('~1','/').replace('~0','~')]
@@ -403,7 +403,7 @@ def cross_record_errors(state):
                                 problems.append(error(base+'/'+f,'Различающиеся данные одной активной связи. Согласуйте с другой записью; не закрывайте связь ради удаления дубля.','relation_conflict',related_paths=related,patch_paths=[previous+'/'+f,base+'/'+f]))
                         else:problems.append(error(base,'Повтор одной направленной активной связи требует смыслового уточнения.','duplicate',related_paths=[previous]))
                     active[signature]=base
-                if kind in PARENTAGE|{'guardian','foster_parent','step_parent'} and isinstance(a,str) and isinstance(b,str) and a in ids and b in ids:graph.setdefault(b,set()).add(a)
+                if isinstance(kind,str) and kind in PARENTAGE|{'guardian','foster_parent','step_parent'} and isinstance(a,str) and isinstance(b,str) and a in ids and b in ids:graph.setdefault(b,set()).add(a)
             participants=[row.get('actor_id')] if row.get('actor_id') else [row.get('source_id'),row.get('target_id')] if section=='objective_relations' else []
             for field in ('fact_id','closure_fact_id','life_fact_id','parentage_complete_fact_id'):
                 fact=world['facts'].get(row.get(field)) if isinstance(row.get(field),str) else None

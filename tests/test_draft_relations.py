@@ -157,3 +157,10 @@ def test_import_normalization_export_and_start_without_provider(api):
         exported=client.get(url+'/export',params={'version_id':d['version_id'],'format':'json'}).json()
         assert exported['world']['objective_relations']==d['state']['world']['objective_relations']
         r=client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id']});assert r.status_code==200,r.text
+
+
+def test_invalid_kind_is_not_a_root_level_merge_failure():
+    state=pair();state['world']['objective_relations']['b']['kind']=['sibling']
+    _,report=initial.inspect_candidate(state)
+    assert '/world/objective_relations/b/kind' in {e['path'] for e in report['diagnostics']}
+    assert all(e['path']!='/' for e in report['diagnostics'])

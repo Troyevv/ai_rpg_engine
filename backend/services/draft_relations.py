@@ -44,7 +44,7 @@ def merge(state,selected=None):
     if not isinstance(rows,dict):return value
     remap={}
     for row in rows.values():
-        if isinstance(row,dict) and row.get('kind') in SYMMETRIC and all(isinstance(row.get(f),str) for f in ('source_id','target_id')):
+        if isinstance(row,dict) and isinstance(row.get('kind'),str) and row['kind'] in SYMMETRIC and all(isinstance(row.get(f),str) for f in ('source_id','target_id')):
             row['source_id'],row['target_id']=sorted((row['source_id'],row['target_id']))
     for plan in plans(value):
         if not plan['safe'] or selected is not None and plan['ids']!=selected:continue
