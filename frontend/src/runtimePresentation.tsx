@@ -60,7 +60,7 @@ export function recordTitle(section:string,item:RecordValue,resolve:ReturnType<t
  if(section==='reproductive_events')return `${ref('gestational_actor_id')} и ${ref('impregnating_actor_id')} · событие предыстории`;
  if(section==='naming_decisions')return `Выбор имени · ${item.display_name || (item.components as RecordValue)?.given_name || 'Имя не определено'}`;
  if(section==='knowledge')return `${ref('actor_id')} · ${ref('fact_id')}`;
- return String(item.name || item.title || item.description || item.text || (item.actor_id?ref('actor_id'):'Запись'));
+ return String(item.name || item.title || item.description || item.text || item.meaning || (item.actor_id?ref('actor_id'):'Запись'));
 }
 export function RuntimeValue({field,value,resolve,author=false}:{field:string;value:unknown;resolve:ReturnType<typeof resolver>;author?:boolean}):ReactNode {
  if(value===null || value===undefined)return <span className="workshop-hint">Неизвестно</span>;
@@ -68,7 +68,7 @@ export function RuntimeValue({field,value,resolve,author=false}:{field:string;va
  if(Array.isArray(value))return value.length?<ul>{value.map((v,i)=><li key={i}><RuntimeValue field={field} value={v} resolve={resolve} author={author}/></li>)}</ul>:<span className="workshop-hint">Нет записей</span>;
  if(typeof value==='object') {
   const entries=Object.entries(value as RecordValue);
-  if(['items','values','sex_fact_ids','characters','locations','organizations','roles','residences','contacts','pregnancies','naming_decisions','reproductive_events','conditions','possessions','facts','knowledge','relationships','objective_relations','threads','events','scenes','scheduled_events'].includes(field))return <div className="runtime-value">{entries.length?entries.map(([id,v],i)=><section key={id}><h5>{v && typeof v==='object'?recordTitle(field,v as RecordValue,resolve,author):`Элемент ${i+1}`}</h5><RuntimeValue field={field==='sex_fact_ids'?'fact_id':'record'} value={v} resolve={resolve} author={author}/>{author && <details><summary>Технические сведения</summary><code>{id}</code></details>}</section>):<span className="workshop-hint">Нет записей</span>}</div>;
+  if(['items','values','evidence','sex_fact_ids','characters','locations','organizations','roles','residences','contacts','pregnancies','naming_decisions','reproductive_events','conditions','possessions','facts','knowledge','relationships','objective_relations','threads','events','scenes','scheduled_events'].includes(field))return <div className="runtime-value">{entries.length?entries.map(([id,v],i)=><section key={id}><h5>{v && typeof v==='object'?recordTitle(field,v as RecordValue,resolve,author):`Элемент ${i+1}`}</h5><RuntimeValue field={field==='sex_fact_ids'?'fact_id':'record'} value={v} resolve={resolve} author={author}/>{author && <details><summary>Технические сведения</summary><code>{id}</code></details>}</section>):<span className="workshop-hint">Нет записей</span>}</div>;
   const main=entries.filter(([k])=>!technical.has(k));const meta=entries.filter(([k])=>technical.has(k));
   return <div className="runtime-value">{main.length?<dl>{main.map(([k,v])=><div key={k}><dt>{runtimeLabels[k] || k}</dt><dd><RuntimeValue field={k} value={v} resolve={resolve} author={author}/></dd></div>)}</dl>:<span className="workshop-hint">Нет сведений</span>}{author && meta.length>0 && <details><summary>Технические сведения</summary><pre>{JSON.stringify(Object.fromEntries(meta),null,2)}</pre></details>}</div>;
  }

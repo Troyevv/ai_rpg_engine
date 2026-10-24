@@ -19,6 +19,8 @@ test('typed formatter preserves unknown false zero and nested data',()=>{
  expect(render('capabilities',{can_move:null})).toContain('Неизвестно');
  expect(render('minute',0)).toContain('>0<');
  expect(render('items',[{description:'Свойство',effects:{can_act:false},status:'active'}])).not.toContain('[object Object]');
+ expect(render('evidence',{'opaque-evidence-id':{meaning:'Полученный опыт',kind:'experience'}})).not.toContain('opaque-evidence-id');
+ expect(render('evidence',{'opaque-evidence-id':{meaning:'Полученный опыт',kind:'experience'}})).toContain('Полученный опыт');
  expect(render('items',[])).toContain('Нет записей');
  expect(render('life_status','dead')).toContain('Умер');
  expect(render('developmental_stage','adult')).toContain('Взрослый');
