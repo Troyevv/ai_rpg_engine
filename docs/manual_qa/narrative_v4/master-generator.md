@@ -14,6 +14,10 @@ checkpoint table, or staged world generation is introduced.
   Schema annotations duplicated by the prompt are omitted in provider requests.
   Python fills map IDs/defaults, normalizes invalid character IDs consistently,
   sorts symmetric family endpoints and checks references and chronology.
+  Calendar anchor defaults/numeric strings are normalized without inventing dates;
+  calendar, observance-reference and birth-date errors retain exact repair paths.
+  A saved complete response that failed the old generic calendar check can resume
+  validation/repair without another world-generation request.
 - `draft_world.py` exposes applicable fields in the existing editor. New generation
   must pass typed Runtime validation and canonical migration before publication;
   confirmation revalidates the current edited version. Legacy draft imports retain

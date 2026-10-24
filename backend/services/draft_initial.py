@@ -58,11 +58,34 @@ def extend_schema(schema):
     for part in (schema, schema['properties']['world']):
         part['required'] = [k for k in part.get('required',[]) if k not in ('schema_version','version')]
     schema['properties']['world_clock']['required'] = ['minute']
+    calendar=schema['properties']['world_clock']['properties']['calendar']
+    calendar['required']=[k for k in calendar.get('required',[]) if k not in ('start_minute','start_weekday')]
     actor['required'] = ['situation']
     for name in ('facts','scenes','events','threads'):
         part=world[name]['additionalProperties']
         part['required']=[k for k in part.get('required',[]) if k!='id']
     return schema
+
+
+def normalize_calendar(clock):
+    configured=clock.get('calendar')
+    if not isinstance(configured,dict):return
+    configured.setdefault('start_minute',clock['minute'])
+    for field in ('start_minute','start_weekday'):
+        value=configured.get(field)
+        if isinstance(value,str) and re.fullmatch(r'0|[1-9]\d*',value):configured[field]=int(value)
+    profile=configured.get('profile',{})
+    names=profile.get('weekday_names') if isinstance(profile,dict) else None
+    week_length=len(names) if isinstance(names,list) and names else 7
+    anchor=configured.get('start_minute')
+    if type(anchor) is int and anchor>=0:
+        configured.setdefault('start_weekday',anchor//1440%week_length)
+    try:
+        # Canonical defaults and the weekday of an explicit Gregorian date are
+        # deterministic. Invalid dates/profiles remain intact for local repair.
+        clock['calendar']=m.Calendar.model_validate(configured).model_dump()
+    except ValidationError:
+        pass
 
 
 def prompt_schema():
@@ -107,6 +130,7 @@ def normalize(value):
     if isinstance(clock.get('minute'),str) and re.fullmatch(r'0|[1-9]\d*',clock['minute']):clock['minute']=int(clock['minute'])
     if type(clock.get('minute')) is not int or clock['minute']<0:
         raise DraftErrors([error('/world_clock/minute','Ожидалось неотрицательное целое число.','int_type')])
+    normalize_calendar(clock)
     value['camera'].setdefault('mode','actor')
     if 'scene_id' not in value['camera'] and len(world['scenes'])==1:value['camera']['scene_id']=next(iter(world['scenes']))
     for scene in world['scenes'].values():
@@ -147,10 +171,17 @@ def validate_typed(state):
     """Validate before legacy migration's conservative salvage can discard input."""
     world=state['world']; problems=[]
     def check(model,record,path):
-        try: model.model_validate(record)
+        try: return model.model_validate(record)
         except ValidationError as exc:
             for e in exc.errors(include_url=False,include_input=False):
-                problems.append(error(path+'/'+('/'.join(str(x) for x in e['loc'])),e['msg'],e['type']))
+                location=e['loc']
+                if model is m.Calendar and not location and e['type']=='value_error':
+                    location=('start_weekday',) if 'start_weekday' in e['msg'] else ('start_date',)
+                suffix='/'.join(str(x).replace('~','~0').replace('/','~1') for x in location)
+                problems.append(error(path+('/'+suffix if suffix else ''),e['msg'],e['type']))
+    calendar=None
+    if state['world_clock'].get('calendar') is not None:
+        calendar=check(m.Calendar,state['world_clock']['calendar'],'/world_clock/calendar')
     for section,model in EXTENSIONS.items():
         for key,record in world.get(section,{}).items(): check(model,record,f'/world/{section}/{key}')
     for cid,record in world['characters'].items():
@@ -160,6 +191,20 @@ def validate_typed(state):
     for key,record in world['facts'].items():
         if record.get('claim') is not None: check(m.Claim,record['claim'],'/world/facts/'+key+'/claim')
     ids={c['id'] for c in state['characters']}; facts=set(world['facts']); locations={p['id'] for p in state['locations']}
+    if calendar:
+        for index,observance in enumerate(calendar.profile.observances):
+            for member,cid in enumerate(observance.character_ids):
+                if cid not in ids:
+                    problems.append(error(f'/world_clock/calendar/profile/observances/{index}/character_ids/{member}',
+                        'Дата календаря ссылается на неизвестного персонажа.','reference',allowed=sorted(ids)))
+    if calendar or state['world_clock'].get('calendar') is None:
+        from backend.runtime_v3.calendar import date_parts
+        profile=calendar.profile.model_dump() if calendar else {}
+        for cid,record in world['characters'].items():
+            if record.get('birth_date') is not None:
+                try: date_parts(record['birth_date'],profile)
+                except (ValueError,TypeError,KeyError) as exc:
+                    problems.append(error('/world/characters/'+cid+'/birth_date',str(exc),'calendar_date',expected='YYYY-MM-DD'))
     for field in ('protagonist_id','controlled_actor_id'):
         if state.get(field) not in ids: problems.append(error('/'+field,'Неизвестный персонаж.','reference',allowed=sorted(ids)))
     for index,place in enumerate(state['locations']):
@@ -218,6 +263,10 @@ def canonical_check(state):
     from backend.runtime_v3.migration import migrate_v2
     result=migrate_v2(state)
     canonical=result.snapshot['world_state']
+    if state['world_clock'].get('calendar') is not None:
+        expected=m.Calendar.model_validate(state['world_clock']['calendar']).model_dump()
+        if canonical['meta']['calendar']!=expected:
+            raise DraftErrors([error('/world_clock/calendar','Runtime изменил календарь; исправьте исходные данные.','lossy_normalization')])
     # Invariants include legacy salvage for old saves. New generation must not
     # silently lose supplied extension records or their values through salvage.
     for section,model in EXTENSIONS.items():

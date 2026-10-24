@@ -210,3 +210,80 @@ def test_prompt_schema_does_not_remove_data_fields_named_like_annotations():
         if isinstance(value,list):
             for child in value:visit(child)
     visit(schema)
+
+
+@pytest.mark.parametrize('configured',[
+    {'start_date':'2026-10-23'},
+    {'start_date':'2026-10-23','start_minute':'6240','start_weekday':'4'},
+])
+def test_calendar_technical_defaults_and_numeric_strings(configured):
+    raw=rich();raw['world_clock']['calendar']=configured
+    normalized=draft_initial.normalize(raw)
+    calendar=normalized['world_clock']['calendar']
+    assert (calendar['start_minute'],calendar['start_weekday'],calendar['start_date'])==(6240,4,'2026-10-23')
+    state=draft_world.prepare(normalized)
+    assert draft_world.validate(state)['errors']==[]
+    assert draft_initial.canonical_check(state).snapshot['world_state']['meta']['calendar']==calendar
+    assert raw['world_clock']['calendar']==configured
+
+
+@pytest.mark.parametrize('configured,path',[
+    ({'start_date':'2026-02-30'},'/world_clock/calendar/start_date'),
+    ({'start_date':'23/10/2026'},'/world_clock/calendar/start_date'),
+    ({'start_weekday':14},'/world_clock/calendar/start_weekday'),
+    ({'profile':{'system':'gregorian','weekday_names':['one']}},'/world_clock/calendar/profile'),
+])
+def test_invalid_calendar_has_localized_repair_diagnostic(configured,path):
+    raw=rich();raw['world_clock']['calendar']=configured
+    normalized=draft_initial.normalize(raw)
+    with pytest.raises(draft_initial.DraftErrors) as exc:
+        draft_initial.validate_typed(draft_world.prepare(normalized))
+    assert path in [e['path'] for e in exc.value.errors]
+    assert all(e['path']!='/' for e in exc.value.errors)
+    if 'start_date' in configured:
+        assert normalized['world_clock']['calendar']['start_date']==configured['start_date']
+
+
+def test_custom_calendar_and_birth_dates_do_not_use_gregorian_defaults():
+    raw=rich();raw['world_clock']['calendar']={'start_date':'0042-01-30',
+        'profile':{'system':'custom','month_lengths':[40],'weekday_names':['A','B','C']}}
+    state=draft_world.prepare(draft_initial.normalize(raw))
+    assert state['world_clock']['calendar']['start_weekday']==1
+    cid=state['characters'][0]['id'];state['world']['characters'][cid]['birth_date']='0040-01-40'
+    assert draft_world.validate(state)['errors']==[]
+    state['world']['characters'][cid]['birth_date']='0040-01-41'
+    with pytest.raises(draft_initial.DraftErrors) as exc:draft_initial.validate_typed(state)
+    assert exc.value.errors[0]['path']==f'/world/characters/{cid}/birth_date'
+
+
+def test_calendar_observance_reference_is_localized():
+    raw=rich();raw['world_clock']['calendar']['profile']={'observances':[
+        {'id':'birthday','name':'День рождения','month':10,'day':23,'character_ids':['missing']}]}
+    with pytest.raises(draft_initial.DraftErrors) as exc:
+        draft_initial.validate_typed(draft_world.prepare(draft_initial.normalize(raw)))
+    assert exc.value.errors[0]['path']=='/world_clock/calendar/profile/observances/0/character_ids/0'
+    assert exc.value.errors[0]['allowed']==sorted(c['id'] for c in raw['characters'])
+
+
+def test_saved_calendar_failure_resumes_with_repair_without_regenerating_world(tmp_path):
+    repo=Repository(tmp_path/'calendar-repair.sqlite3');w=repo.create_workspace('calendar repair')
+    config=dict(REMOTE,_draft_task='world',_draft_input=SHORT,_use_idea=False,_creation_settings={})
+    jid=repo.begin_preparation(w['id'],'draft_world',SHORT,config,0)
+    original=rich();original['world_clock']['calendar']['start_weekday']=14
+    raw=json.dumps(original,ensure_ascii=False)
+    repo.save_response_journal(jid,{'pending':None,'errors':[{'path':'/','category':'validation','message':'Некорректная конфигурация календаря.'}],
+        'responses':{'world':{'complete':True,'parts':[dict(text=raw,offset=0,sha256=hashlib.sha256(raw.encode()).hexdigest(),finish_reason='stop')]}}})
+    repo.preparation_progress(jid,raw,'error')
+    repo=Repository(repo.path);config=repo.resume_draft_response(jid);calls=[]
+    def stream(**kwargs):
+        calls.append(kwargs)
+        request=json.loads(kwargs['messages'][-1]['content'])
+        assert request['errors'][0]['path']=='/world_clock/calendar/start_weekday'
+        assert request['fragments']=={'/world_clock/calendar':{'value':original['world_clock']['calendar']}}
+        yield json.dumps({'patches':[{'path':'/world_clock/calendar/start_weekday','value':4}]})
+    run(Preparation(repo),jid,config,None,Handle(),None,stream)
+    assert len(calls)==1 and repo.preparation_job(jid)['status']=='saved'
+    saved=repo.draft(w['id'],True)['state']
+    assert saved['world']['facts']==original['world']['facts']
+    assert saved['characters']==draft_world.prepare(draft_initial.normalize(original))['characters']
+    assert saved['world_clock']['calendar']['start_date']=='2026-10-23'
