@@ -216,3 +216,26 @@ def test_public_integrity_error_does_not_offer_fragment_replacement():
     public=Repository.public_job(dict(kind='draft_world',status='error',response_journal=json.dumps(j)))
     assert public['transport_blocked'] and not public['fragment_recovery']
     assert 'responses' not in public and 'response_journal' not in public
+
+
+def test_identical_candidate_from_new_job_gets_new_lineage(api):
+    client,app=api;repo=app.state.repository
+    wid=client.post('/api/workspaces',json={'name':'identical failed worlds'}).json()['id'];url=f'/api/workspaces/{wid}/draft'
+    value=rich();cid=value['protagonist_id'];value['protagonist_id']='missing'
+    last_version=None
+    for _ in range(2):
+        d=client.get(url+'?author=true').json();count=[]
+        def broken(**kw):
+            count.append(kw);yield json.dumps(value) if len(count)==1 else '{"patches":[]}'
+        with patch('backend.services.preparation.chat_stream',side_effect=broken):
+            jid=client.post(url+'/generate',json={'revision':d['revision'],'text':SHORT,'config':REMOTE,'api_key':'test'}).json()['id']
+            assert wait_job(client,jid)['status']=='error'
+        d=client.get(url+'?author=true').json()
+        if last_version:assert d['version_id']>last_version
+        last_version=d['version_id']
+        with repo.connect() as db:assert json.loads(repo._draft_head(db,wid)['content'])['origin_job']==jid
+    d=client.patch(url+'/candidate',json={'revision':d['revision'],'path':'/protagonist_id','value':cid}).json()
+    with patch('backend.services.preparation.chat_stream',return_value=iter(['{"issues":[]}'])) as provider:
+        client.post(url+'/resume',json={'revision':d['revision'],'api_key':'test'})
+        assert wait_job(client,jid)['status']=='saved'
+        assert provider.call_count==1

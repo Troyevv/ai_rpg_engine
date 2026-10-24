@@ -105,7 +105,7 @@ class DraftStorage:
             previous=json.loads(head['content']) if head else {}
             if review is None:review=review_metadata(previous)
             if review is not None:review=dict(review,candidate_hash=candidate_hash(value))
-            if previous.get('candidate') and previous.get('state')==value and previous.get('diagnostics')==diagnostics and previous.get('review')==review:return
+            if previous.get('origin_job')==jid and previous.get('candidate') and previous.get('state')==value and previous.get('diagnostics')==diagnostics and previous.get('review')==review:return
             record=dict(state=value,origin_job=jid,candidate=True,source=config.get('_draft_source',config.get('_draft_input','')),warnings=[],diagnostics=diagnostics,review=review)
             self._record_document(db,'world_draft',job['workspace_id'],dump(record),True,'generation_candidate',None)
             db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(job['workspace_id'],))
