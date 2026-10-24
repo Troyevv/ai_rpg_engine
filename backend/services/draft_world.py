@@ -103,7 +103,17 @@ def sync(state):
     if scene:
         state['scene']=scene.get('text','')
         minute=state.get('world_clock',{}).get('minute')
-        state['scene_meta']={'time':label(minute) if type(minute) is int else '', 'location':scene.get('location',''), 'present_ids':scene.get('participants',[])}
+        time_label=label(minute) if type(minute) is int else ''
+        if type(minute) is int and state.get('world_clock',{}).get('calendar'):
+            from backend.runtime_v3.calendar import calendar_label
+            from backend.runtime_v3.models import Calendar
+            try:
+                calendar=Calendar.model_validate(state['world_clock']['calendar']).model_dump()
+                time_label=calendar_label({'meta':{'world_time':minute,'calendar':calendar}})
+            except (ValueError,TypeError):
+                pass  # Invalid input remains intact for path-specific validation.
+        state['world_clock']['last_event_time']=time_label
+        state['scene_meta']={'time':time_label, 'location':scene.get('location',''), 'present_ids':scene.get('participants',[])}
     return state
 
 
@@ -377,7 +387,7 @@ def patch(state,kind,eid,field,value):
     if kind=='start':
         state.update(protagonist_id=target['protagonist_id'],controlled_actor_id=target['controlled_actor_id'])
         state['camera']={'scene_id':target['scene_id'],'mode':'actor'}
-        state['world_clock']={'minute':target['minute'],'last_event_time':label(target['minute'])}
+        state['world_clock']={**state.get('world_clock',{}),'minute':target['minute'],'last_event_time':label(target['minute'])}
     return sync(state)
 
 

@@ -1,5 +1,6 @@
 """Structured preparation using the existing provider, accounting and job lifecycle."""
 import json
+import hashlib
 from backend.services import draft_world as domain
 from backend.services.continuation import stream_document
 from backend.services.usage import tracked_stream
@@ -70,7 +71,7 @@ def decode_result(text,state,config):
 
 def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     from backend.services.draft_response import response, strict_loads
-    from backend.services import draft_initial, draft_repair
+    from backend.services import draft_initial, draft_repair, draft_completeness
     repo=preparation.repo;job=repo.preparation_job(jid)
     original=repo.draft(job['workspace_id'],author=True)['state']
     context=config['context_length']
@@ -110,11 +111,25 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             report=domain.validate(state,canonical=False)
             if report['errors']: raise ValueError('; '.join(report['errors']))
             draft_initial.canonical_check(state)
-            break
         except (ValueError,TypeError,KeyError) as exc:
             errors=exc.errors if isinstance(exc,draft_initial.DraftErrors) else [dict(path='/',category='validation',message=str(exc))]
+        else:
+            # One read-only completeness check per candidate, inside validation.
+            # Persisted response slots reuse completed checks after restart.
+            stage='draft_world_validation'
+            review_messages=draft_completeness.messages(state,messages[-1]['content'])
+            signature=hashlib.sha256(json.dumps(review_messages,ensure_ascii=False,sort_keys=True).encode()).hexdigest()
+            review=response(repo,jid,journal,'completeness_'+signature,
+                review_messages,config,context,generate,handle.cancel)
+            if review is None:return
+            errors=draft_completeness.parse(review,state)
+            if not errors:break
+            # Repair addresses the normalized candidate inspected by the reviewer.
+            # Original provider bytes remain in the persisted response journal.
+            result=json.dumps(state,ensure_ascii=False)
+        if errors:
             journal['errors']=errors;repo.save_response_journal(jid,journal)
-            if attempt==2:raise ValueError('Две попытки исправления исчерпаны. Ответ сохранён. '+str(exc)) from exc
+            if attempt==2:raise ValueError('Две попытки исправления исчерпаны. Ответ сохранён. '+str(errors))
             repair,paths=draft_repair.request(result,errors,author_context=messages[-1]['content'])
             repo.draft_phase(jid,'retrying');stage='draft_world_repair'
             reply=response(repo,jid,journal,'repair_'+str(attempt+1),repair,config,context,generate,handle.cancel)
@@ -123,5 +138,6 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             except ValueError as invalid_patch:
                 journal['repair_error']=str(invalid_patch);repo.save_response_journal(jid,journal)
                 if attempt==1:raise ValueError('Две попытки исправления исчерпаны. '+str(invalid_patch)) from invalid_patch
+
     if handle.cancel.is_set():return
     repo.draft_phase(jid,'saving');repo.finish_draft_job(jid,state)

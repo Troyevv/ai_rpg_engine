@@ -42,6 +42,10 @@ def runtime_v3_request(messages):
 
 
 def stream(**kwargs):
+    from backend.services.draft_completeness import MARKER
+    if kwargs['messages'][0]['content'].startswith(MARKER):
+        yield '{"issues":[]}'
+        return
     full='\n'.join(m['content'] for m in kwargs['messages'])
     observer='Тип хода: background' in full or 'Режим observer:' in full or 'mode=observer' in full
     if kwargs['messages'][0]['content'].startswith('Select at most ONE optional grounded autonomous remote action.'):

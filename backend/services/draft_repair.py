@@ -24,7 +24,8 @@ def request(raw,errors,author_context=None):
         parts=path.lstrip('/').split('/')
         # A local record provides context for interdependent fields. Never send
         # its entire containing world just to repair a root/section property.
-        scope=parts[:-1] if len(parts)>=3 else parts
+        semantic=any(e.get('path')==path and e.get('category')=='semantic_completeness' for e in errors)
+        scope=parts if semantic and len(parts)==3 and parts[0]=='world' else parts[:-1] if len(parts)>=3 else parts
         scope_path='/'+('/'.join(scope))
         current=value
         try:
@@ -35,8 +36,25 @@ def request(raw,errors,author_context=None):
         except (KeyError,IndexError,TypeError,ValueError):
             fragments[scope_path]={'missing':True}
     payload=dict(errors=errors,fragments=fragments)
+    related={}
+    for issue in errors:
+        for path in issue.get('related_paths',[]):
+            from backend.services.draft_completeness import pointer
+            related[path]=pointer(value,path)
+    if related:payload['related']=related
+    if any(e.get('category')=='semantic_completeness' for e in errors):
+        from backend.services.draft_initial import prompt_schema
+        schema=prompt_schema()
+        # Include only the affected section schemas, not the full world schema.
+        payload['entities']={
+            'characters':[{'id':c['id'],'name':c['name']} for c in value.get('characters',[])],
+            'locations':[{'id':p['id'],'name':p['name']} for p in value.get('locations',[])],
+            'organizations':[{'id':k,'name':v.get('name','')} for k,v in value.get('world',{}).get('organizations',{}).items()]}
+        sections={p.split('/')[2] for p in paths if p.startswith('/world/')}
+        payload['record_schemas']={k:schema['properties']['world']['properties'][k] for k in sections}
+        if any(p.startswith('/world_clock/') for p in paths):payload['clock_schema']=schema['properties']['world_clock']
     if author_context is not None:payload['author_context']=author_context
-    return [dict(role='system',content='Исправь только перечисленные технические ошибки. Верни JSON {"patches":[{"path":"/точный/путь","value":новое_значение}]}. Не меняй остальные данные, персонажей, описания и события. Не придумывай сведения. Сохрани явные факты из контекста автора.'),
+    return [dict(role='system',content='Исправь только перечисленные ошибки структуры и смысловой согласованности. Верни JSON {"patches":[{"path":"/точный/путь","value":новое_значение}]}. Не меняй остальные данные, персонажей, описания и события. Не придумывай факты для прохождения проверки. При неизвестном точном времени события сохрани text/evidence, minute=null. Не меняй корректные биографии. Сохрани явные факты из контекста автора.'),
             dict(role='user',content=json.dumps(payload,ensure_ascii=False))],paths
 
 

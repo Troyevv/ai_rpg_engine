@@ -130,6 +130,9 @@ def normalize(value):
     if isinstance(clock.get('minute'),str) and re.fullmatch(r'0|[1-9]\d*',clock['minute']):clock['minute']=int(clock['minute'])
     if type(clock.get('minute')) is not int or clock['minute']<0:
         raise DraftErrors([error('/world_clock/minute','Ожидалось неотрицательное целое число.','int_type')])
+    if clock.get('calendar') is None:
+        # Same relative Gregorian anchor as Runtime migration; no invented date.
+        clock['calendar']=m.Calendar(start_minute=clock['minute'],start_weekday=clock['minute']//1440%7).model_dump()
     normalize_calendar(clock)
     value['camera'].setdefault('mode','actor')
     if 'scene_id' not in value['camera'] and len(world['scenes'])==1:value['camera']['scene_id']=next(iter(world['scenes']))
@@ -253,8 +256,17 @@ def validate_typed(state):
             problems.append(error('/world/events/'+key+'/minute','Событие предыстории находится в будущем.','chronology'))
     for key,record in world['knowledge'].items():
         source=world['events'].get(record.get('source_event_id'))
+        if record.get('source_event_id') and source is None:
+            problems.append(error('/world/knowledge/'+key+'/source_event_id','Неизвестное событие получения знания.','reference',allowed=sorted(world['events'])))
         if source and (record['actor_id'] not in source.get('witnesses',[])+source.get('participants',[]) or record['fact_id'] not in source.get('fact_ids',[])):
             problems.append(error('/world/knowledge/'+key+'/source_event_id','Событие не подтверждает получение этого знания персонажем.','provenance'))
+    for key,record in world.get('organizations',{}).items():
+        for index,lid in enumerate(record.get('location_ids',[])):
+            if lid not in locations:problems.append(error(f'/world/organizations/{key}/location_ids/{index}','Неизвестная локация организации.','reference',allowed=sorted(locations)))
+    for key,record in world['events'].items():
+        for field,valid in (('participants',ids),('witnesses',ids),('fact_ids',facts)):
+            for index,ref in enumerate(record.get(field,[])):
+                if ref not in valid:problems.append(error(f'/world/events/{key}/{field}/{index}','Ссылка события не существует.','reference',allowed=sorted(valid)))
     if problems: raise DraftErrors(problems)
 
 

@@ -91,3 +91,57 @@ No paid DeepSeek requests are authorized by this task. Do not mark fully ready
 without a separately agreed budget and real tests for both full inputs, inspecting
 cast completeness, source fidelity, knowledge secrecy, creative quality, opening
 agency, ordinary turns and reload. No mock result substitutes for that check.
+
+## Real-response completeness regression (PR #116 follow-up)
+
+`tests/fixtures/initial_world/volkov_deepseek_real.json` is the complete, unchanged
+user-uploaded DeepSeek response. Before this fix it passed canonical validation
+with empty objective relations, roles and residences, Thursday/Friday display
+conflicts, yesterday-evening events placed this morning, and an invented controlled
+actor intention. Tests retain the full original brief. That brief does **not**
+contain the later dinner clarification: the regression appends the user's explicit
+clarification separately, naming the five family members present. It does not
+silently rewrite the original input or give absent friends knowledge of the secret.
+
+The existing validation loop now includes `draft_completeness.py`: one read-only
+provider check of the full author idea and candidate state, followed only when
+needed by the existing exact-path repair. This is not staged world generation.
+Review responses are journaled under the hash of their complete input; resuming or
+rechecking an unchanged candidate does not repeat an already completed review.
+There are still at most **two repairs total**, shared between technical and semantic
+errors. Every request uses the same cancellation, context, token/cost envelope and
+usage logging (`draft_world_validation`). No approved report means no publication.
+Malformed/broad review reports fail visibly and cannot authorize a world rewrite.
+
+The reviewer checks established family/social links, jobs/education, residences,
+corporate subsidiaries, revelation chronology and per-person Knowledge, opening
+conditions and player agency. It requests new records by ID or existing fields by
+exact pointer, not replacement collections. Repair prompts carry only affected
+records, selected related context, relevant schemas, an ID/name directory and the
+intact author input. Correct biographies and unrelated records stay in Python.
+Python does not infer biological family, professions, witnesses or unknown dates.
+The reviewer remains an LLM: semantic recall and accuracy require live acceptance.
+
+Missing calendars receive Runtime's relative Gregorian anchor with no exact date.
+The semantic check reconciles an explicitly stated weekday/date with that anchor.
+Both compatibility time displays use Runtime calendar functions and the numeric
+clock. Editing the starting minute retains the calendar. For vague history times,
+`event.minute=null` retains text/evidence and order; no guessed exact minute is
+needed. Existing migration preserves events and knowledge-acquisition provenance
+in History. Reference validation now localizes missing knowledge source events,
+organization locations, event participants/witnesses and fact references.
+
+`tests/test_draft_completeness.py` checks the real response, localized repair,
+unchanged biographies and emotional relationships, adoption vs biological parent,
+Apex subsidiaries, professional roles, residence vs current court location,
+knowledge of attendees only, preserved user goal and removed invented intention,
+Start Game, ordinary turn, SQLite reload, bounded failure and completed-response
+reuse. Provider review/patch replies are explicitly controlled test doubles.
+Transport-only tests use `accept_semantics_unchecked` and do not claim semantic
+coverage. Browser tests also assert a separately accounted validation request.
+
+Live acceptance: generate both short and full briefs with an explicitly permitted
+budget, inspect the reviewer issues and local patches, and verify the final world
+against the actual input. In particular compare the old brief (only Ilya learned)
+with the clarified family-dinner brief (all five family members heard it). Do not
+claim production semantic quality solely from green offline tests.

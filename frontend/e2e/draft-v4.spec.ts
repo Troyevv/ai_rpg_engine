@@ -22,6 +22,7 @@ test('creation settings and JSON continuation survive editor start and reload',a
   expect(draft.validation.errors).toEqual([]);
   const requests=await(await request.get(`/api/workspaces/${workspace.id}/requests`)).json();
   expect(requests.filter((r:{stage:string})=>r.stage==='draft_world')).toHaveLength(2);
+  expect(requests.filter((r:{stage:string})=>r.stage==='draft_world_validation')).toHaveLength(1);
   expect(requests.some((r:{finish_reason:string,status:string})=>r.finish_reason==='length' || r.status==='length')).toBeTruthy();
   expect(draft.job).not.toHaveProperty('response_journal');
   await page.reload();await nav(page,'Создать');

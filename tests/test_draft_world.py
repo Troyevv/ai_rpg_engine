@@ -1,3 +1,4 @@
+from draft_provider_fixture import accept_semantics_unchecked
 import json
 from copy import deepcopy
 import pytest
@@ -220,11 +221,12 @@ def test_invalid_references_block_start_without_damage(api):
     with app.state.repository.connect() as db:assert db.execute('SELECT count(*) FROM saves').fetchone()[0]==0
 
 
-def test_generation_uses_one_request_and_saves_valid_world(api):
+def test_generation_uses_one_world_request_plus_review_and_saves(api):
     from unittest.mock import patch
     client,app=api;path,draft=make(client)
     expected=fixture();expected['campaign']['title']='Маяк'
     calls=[];phases=[]
+    @accept_semantics_unchecked
     def stream(**kwargs):
         calls.append(kwargs)
         with app.state.repository.connect() as db:
@@ -248,13 +250,14 @@ def test_generation_uses_one_request_and_saves_valid_world(api):
     assert set(CARD_FIELDS)==set(schema['properties']['characters']['items']['properties']['fields']['required'])
     with app.state.repository.connect() as db:
         stages=[row[0] for row in db.execute('SELECT stage FROM llm_requests')]
-    assert stages==['draft_world']
+    assert stages==['draft_world','draft_world_validation']
 
 
 def test_deepseek_json_mode_repairs_only_bad_format(api):
     from unittest.mock import patch
     client,app=api;path,draft=make(client)
     calls=[]
+    @accept_semantics_unchecked
     def stream(**kwargs):
         calls.append(kwargs)
         good=json.dumps(fixture(),ensure_ascii=False)
@@ -268,7 +271,7 @@ def test_deepseek_json_mode_repairs_only_bad_format(api):
     assert all(c['response_format']=={'type':'json_object'} for c in calls)
     assert 'только синтаксическую' in calls[1]['messages'][0]['content']
     with app.state.repository.connect() as db:
-        assert sorted(r[0] for r in db.execute('SELECT stage FROM llm_requests'))==['draft_world','draft_world_repair']
+        assert sorted(r[0] for r in db.execute('SELECT stage FROM llm_requests'))==['draft_world','draft_world_repair','draft_world_validation']
 
 
 def test_failed_structural_repair_keeps_previous_version(api):
@@ -276,6 +279,7 @@ def test_failed_structural_repair_keeps_previous_version(api):
     client,app=api;path,draft=make(client)
     invalid=fixture();invalid['protagonist_id']='missing'
     calls=[]
+    @accept_semantics_unchecked
     def stream(**kwargs):
         calls.append(kwargs)
         yield json.dumps(invalid,ensure_ascii=False)
@@ -292,6 +296,7 @@ def test_output_limit_is_bounded_and_preserves_previous_version(api):
     from llm import OutputLimitReached
     client,app=api;path,draft=make(client)
     calls=[]
+    @accept_semantics_unchecked
     def stream(**kwargs):
         calls.append(kwargs)
         yield '{"world":'
@@ -312,6 +317,7 @@ def test_scenario_route_stays_separate_from_quick_generation(api):
     workspace=client.post('/api/workspaces',json={'name':'История со Сценаристом'}).json()
     path=f"/api/workspaces/{workspace['id']}"
     calls=[]
+    @accept_semantics_unchecked
     def stream(**kwargs):
         calls.append(kwargs['messages'])
         if 'Ты — сценарист' in kwargs['messages'][0]['content']:
@@ -331,7 +337,7 @@ def test_scenario_route_stays_separate_from_quick_generation(api):
     assert current['idea'] in calls[1][-1]['content']
     with app.state.repository.connect() as db:
         stages=[row[0] for row in db.execute('SELECT stage FROM llm_requests ORDER BY created_at,id')]
-    assert sorted(stages)==['draft_world','idea']
+    assert sorted(stages)==['draft_world','draft_world_validation','idea']
 
 
 def test_semantic_warning_and_rename_preserves_directed_relationships(api):
@@ -350,6 +356,7 @@ def test_field_regeneration_instruction_and_restart(api):
     from backend.repositories.preparation import Repository
     client,app=api;path,d=make(client);cid=d['state']['characters'][0]['id'];before=d['state']
     captured=[]
+    @accept_semantics_unchecked
     def stream(**kwargs):
         captured.extend(kwargs['messages']);yield '{"value":"Говорит коротко, с сухими шутками."}'
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
@@ -410,6 +417,7 @@ def test_idea_generation_expands_into_independent_world_entities(api):
     for item in world['world']['characters'].values():
         if item['minute'] is not None:item['minute']=5160
     messages=[]
+    @accept_semantics_unchecked
     def stream(**kwargs):
         messages.extend(kwargs['messages'])
         yield json.dumps(world,ensure_ascii=False)
@@ -430,7 +438,7 @@ def test_idea_generation_expands_into_independent_world_entities(api):
     assert 'Тайная встреча' not in json.dumps(client.get(f"/api/workspaces/{workspace['id']}/draft").json()['state'],ensure_ascii=False)
 
 
-def test_quick_generation_creative_completion_is_playable_and_one_request(api):
+def test_quick_generation_creative_completion_is_playable_with_review(api):
     from unittest.mock import patch
     client,app=api
     w=client.post('/api/workspaces',json={'name':'Клиника'}).json()
@@ -537,6 +545,7 @@ def test_quick_generation_creative_completion_is_playable_and_one_request(api):
     assert not domain.validate(state)['errors']
     assert not domain.review_initial(state)
     calls=[]
+    @accept_semantics_unchecked
     def stream(**kwargs):
         calls.append(kwargs['messages'])
         yield json.dumps(state,ensure_ascii=False)
@@ -559,7 +568,7 @@ def test_quick_generation_creative_completion_is_playable_and_one_request(api):
     assert confirmed.status_code==200,confirmed.text
     assert client.get(f"/api/saves/{confirmed.json()['save']}").json()['state']['world_clock']['minute']==5160
     with app.state.repository.connect() as db:
-        assert [row[0] for row in db.execute('SELECT stage FROM llm_requests')]==['draft_world']
+        assert [row[0] for row in db.execute('SELECT stage FROM llm_requests')]==['draft_world','draft_world_validation']
 
 
 def test_generation_review_is_advisory_and_import_is_unchanged(api):
@@ -581,6 +590,7 @@ def test_sparse_but_structurally_valid_world_saves_without_completion(api):
     state['characters'][0]['fields'].pop('Стиль общения',None)
     state['characters'][0]['fields']['Внешность']='Высокий человек с уставшим видом. Носит халат.'
     calls=[]
+    @accept_semantics_unchecked
     def stream(**kwargs):
         calls.append(kwargs);yield json.dumps(state,ensure_ascii=False)
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
@@ -594,7 +604,7 @@ def test_sparse_but_structurally_valid_world_saves_without_completion(api):
     assert any('Внешность описана слишком общо' in note for note in after['validation']['warnings'])
     assert after['state']['world']['threads']=={} and after['state']['world']['relationships']=={}
     with app.state.repository.connect() as db:
-        assert [r[0] for r in db.execute('SELECT stage FROM llm_requests')]==['draft_world']
+        assert [r[0] for r in db.execute('SELECT stage FROM llm_requests')]==['draft_world','draft_world_validation']
 
 
 def test_shared_secret_does_not_count_as_every_characters_personal_secret():

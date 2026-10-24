@@ -1,3 +1,4 @@
+from draft_provider_fixture import accept_semantics_unchecked
 """Offline acceptance: controlled provider replies, never a live-model quality claim."""
 from copy import deepcopy
 import hashlib
@@ -63,6 +64,7 @@ def test_source_settings_continuation_editor_start_reload(api,source):
     client,app=api;workspace=client.post('/api/workspaces',json={'name':'Generation'}).json()
     path=f"/api/workspaces/{workspace['id']}/draft"
     expected=volkov_rich() if source==FULL else rich();raw=json.dumps(expected,ensure_ascii=False);cut=raw.index('Apex')+2;calls=[]
+    @accept_semantics_unchecked
     def stream(**kwargs):
         calls.append(kwargs)
         if len(calls)==1:
@@ -132,6 +134,7 @@ def test_safe_normalization_and_broken_references():
 def test_generation_repair_only_requested_field(api):
     client,app=api;w=client.post('/api/workspaces',json={'name':'Repair'}).json();path=f"/api/workspaces/{w['id']}/draft"
     raw=rich();original=raw['protagonist_id'];raw['protagonist_id']='broken';calls=[]
+    @accept_semantics_unchecked
     def stream(**kwargs):
         calls.append(kwargs)
         yield json.dumps(raw) if len(calls)==1 else json.dumps({'patches':[{'path':'/protagonist_id','value':original}]})
@@ -152,6 +155,7 @@ def test_persistent_journal_restart_and_unknown_outcome(tmp_path):
     journal={'pending':None,'responses':{'world':{'complete':False,'parts':[dict(text=first,offset=0,sha256=hashlib.sha256(first.encode()).hexdigest(),finish_reason='length')]}}}
     repo.save_response_journal(jid,journal);repo.preparation_progress(jid,first,'stopped')
     repo=Repository(tmp_path/'resume.sqlite3');config=repo.resume_draft_response(jid);calls=[]
+    @accept_semantics_unchecked
     def stream(**kwargs):calls.append(kwargs);yield raw[cut:]
     run(Preparation(repo),jid,config,None,Handle(),None,stream)
     assert len(calls)==1 and repo.preparation_job(jid)['status']=='saved'
@@ -169,6 +173,7 @@ def test_finish_reason_length_without_exception_and_budget_api(api):
         result=wait_job(client,r.json()['id']);assert result['status']=='error'
         assert 'бюджет токенов' in result['error'];provider.assert_not_called()
     raw=json.dumps(rich(),ensure_ascii=False);cut=500;calls=[]
+    @accept_semantics_unchecked
     def stream(**kwargs):
         calls.append(kwargs)
         kwargs['on_finish']('length' if len(calls)==1 else 'stop')
@@ -178,7 +183,7 @@ def test_finish_reason_length_without_exception_and_budget_api(api):
         result=wait_job(client,r.json()['id']);assert result['status']=='saved',result
     assert len(calls)==2
     records=app.state.repository.request_log(job_id=r.json()['id'])
-    assert sorted(row['status'] for row in records)==['complete','length']
+    assert sorted(row['status'] for row in records)==['complete','complete','length']
     assert any(row['finish_reason']=='length' for row in records)
 
 
@@ -275,6 +280,7 @@ def test_saved_calendar_failure_resumes_with_repair_without_regenerating_world(t
         'responses':{'world':{'complete':True,'parts':[dict(text=raw,offset=0,sha256=hashlib.sha256(raw.encode()).hexdigest(),finish_reason='stop')]}}})
     repo.preparation_progress(jid,raw,'error')
     repo=Repository(repo.path);config=repo.resume_draft_response(jid);calls=[]
+    @accept_semantics_unchecked
     def stream(**kwargs):
         calls.append(kwargs)
         request=json.loads(kwargs['messages'][-1]['content'])
