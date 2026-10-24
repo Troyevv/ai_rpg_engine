@@ -1,0 +1,76 @@
+import {test,expect} from '@playwright/test';
+import {readFileSync} from 'node:fs';
+import {nav} from './navigation';
+const fixture=JSON.parse(readFileSync(new URL('../../tests/fixtures/initial_world/runtime_presentation.json',import.meta.url),'utf8'));
+
+test('populated Runtime world has names, typed values, calendar, edit and reload',async({page,request},info)=>{
+ const w=await(await request.post('/api/workspaces',{data:{name:'Runtime presentation'}})).json();const url=`/api/workspaces/${w.id}/draft`;
+ const imported=await request.post(url+'/import',{data:{revision:0,format:'json',text:JSON.stringify(fixture)}});expect(imported.ok()).toBeTruthy();
+ await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),w.id);
+ await page.goto('/');await nav(page,'Создать');
+ await page.getByRole('button',{name:'Автор мира',exact:true}).click();await page.getByRole('button',{name:'Показать всё',exact:true}).click();
+ const sections=page.getByRole('group',{name:'Разделы мира'});
+ await sections.getByRole('button',{name:'Начало',exact:true}).click();
+ await expect(page.getByText('Пятница, 23 октября 2026, 08:00',{exact:true})).toBeVisible();
+ await expect(page.getByText('[object Object]',{exact:false})).toHaveCount(0);
+ await page.locator('.workshop-start').scrollIntoViewIfNeeded();
+ await page.screenshot({path:`test-results/runtime-calendar-${info.project.name}.png`,fullPage:true});
+ await sections.getByRole('button',{name:'Персонажи',exact:true}).click();
+ await page.getByText('Состояние, цели и намерения',{exact:true}).click();
+ await expect(page.getByText('Может передвигаться',{exact:true})).toBeVisible();
+ await expect(page.getByText('Взрослый',{exact:true})).toBeVisible();
+ await expect(page.getByText('Может воспринимать',{exact:true}).locator('..').getByText('Неизвестно',{exact:true})).toBeVisible();
+ await expect(page.getByText('[object Object]',{exact:false})).toHaveCount(0);
+ await page.screenshot({path:`test-results/runtime-character-${info.project.name}.png`,fullPage:true});
+ await sections.getByRole('button',{name:'Места и факты',exact:true}).click();
+ await page.locator('summary').filter({hasText:/^Проживание ·/}).click();
+ await page.getByLabel('Группировка проживания').selectOption('location');
+ const residence=page.locator('details').filter({has:page.locator('summary').filter({hasText:/^Проживание ·/})}).last();
+ await expect(residence.getByRole('heading',{name:'Дом у реки'})).toBeVisible();
+ await expect(residence.locator('summary').filter({hasText:'Анна → Дом у реки'})).toBeVisible();
+ await expect(residence.locator('summary').filter({hasText:'Борис → Дом у реки'})).toBeVisible();
+ await residence.locator('summary').filter({hasText:'Анна → Дом у реки'}).click();
+ await residence.getByRole('button',{name:'Изменить Контекст',exact:true}).first().click();
+ await page.getByRole('dialog').getByLabel('Контекст',{exact:true}).fill('Дом остаётся прежним; уточнение автора.');
+ await page.getByRole('button',{name:'Сохранить поле',exact:true}).click();
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ await residence.getByRole('button',{name:'Изменить С минуты',exact:true}).first().click();
+ await expect(page.getByRole('dialog').getByLabel('С минуты',{exact:true})).toHaveAttribute('type','number');
+ await page.getByRole('dialog').getByLabel('С минуты',{exact:true}).fill('0');
+ await page.getByRole('button',{name:'Сохранить поле',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+ expect((await(await request.get(url+'?author=true')).json()).state.world.residences.home_a.since).toBe(0);
+ await residence.getByRole('button',{name:'Изменить С минуты',exact:true}).first().click();
+ await page.getByRole('button',{name:'Оставить неизвестным',exact:true}).click();
+ await page.getByRole('button',{name:'Сохранить поле',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+ const after=await(await request.get(url+'?author=true')).json();expect(after.state.world.residences.home_a.context).toContain('уточнение автора');
+ expect(after.state.world.residences.home_a.since).toBeNull();
+ expect(after.state.world.residences.home_a.until).toBeNull();
+ await page.locator('summary').filter({hasText:/^Контакты ·/}).click();
+ await expect(page.locator('summary').filter({hasText:'Анна · Друг · Борис'})).toBeVisible();
+ await page.screenshot({path:`test-results/runtime-residences-${info.project.name}.png`,fullPage:true});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth));
+ await page.reload();await nav(page,'Создать');
+ const reloaded=await(await request.get(url+'?author=true')).json();expect(reloaded.state.world.residences).toEqual(after.state.world.residences);
+ const player=await(await request.get(url)).json();expect(player.state.world.contacts || {}).toEqual({});
+ await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
+ await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+ await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.choices button')).toHaveCount(6);
+ await page.reload();await expect(page.locator('.choices button')).toHaveCount(6);
+});
+
+test('separate family fixture exposes lifecycle structures only in author view',async({page,request},info)=>{
+ const family=JSON.parse(readFileSync(new URL('../../tests/fixtures/initial_world/runtime_family.json',import.meta.url),'utf8'));
+ const w=await(await request.post('/api/workspaces',{data:{name:'Synthetic family'}})).json();const url=`/api/workspaces/${w.id}/draft`;
+ expect((await request.post(url+'/import',{data:{revision:0,format:'json',text:JSON.stringify(family)}})).ok()).toBeTruthy();
+ await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),w.id);await page.goto('/');await nav(page,'Создать');
+ await page.getByRole('button',{name:'Автор мира',exact:true}).click();await page.getByRole('button',{name:'Показать всё',exact:true}).click();
+ await page.getByRole('group',{name:'Разделы мира'}).getByRole('button',{name:'Места и факты',exact:true}).click();
+ for(const title of ['Беременности','Репродуктивные события','Выбор имён']){
+  const heading=page.locator('summary').filter({hasText:new RegExp('^'+title+' · 1$')});await heading.click();
+  const section=heading.locator('..');await section.locator(':scope > details > summary').first().click();
+  await expect(section.getByText('[object Object]',{exact:false})).toHaveCount(0);
+ }
+ await page.screenshot({path:`test-results/runtime-family-${info.project.name}.png`,fullPage:true});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth));
+ const pub=await(await request.get(url)).json();expect(pub.state.world.pregnancies || {}).toEqual({});expect(pub.state.world.naming_decisions || {}).toEqual({});
+});

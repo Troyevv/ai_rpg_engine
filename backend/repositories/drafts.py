@@ -2,6 +2,7 @@
 import hashlib
 import json
 from backend.services import draft_world as domain
+from backend.services.draft_presentation import clock_view,editor_contract
 from backend.services.draft_relations import plans as relation_plans
 
 
@@ -75,6 +76,8 @@ class DraftStorage:
             return {'id':wid,'name':w['name'],'revision':w['revision'],'version_id':head['id'] if head else None,
                 'candidate':raw if candidate and author else None,
                 'relation_merges':relation_plans(raw) if raw and author else [],
+                'editor':editor_contract() if author else None,
+                'presentation':{'clock':clock_view(state['world_clock'])} if state else None,
                 'state':state if author or state is None else domain.player_view(state),
                 'validation':report if author or not (record and review_metadata(record)) else {'errors':['Мир пока не готов к запуску. Откройте редактор автора.'] if report['errors'] else [],'warnings':[]},
                 'review':review_metadata(record) if record and author else ({'status':review_metadata(record).get('status')} if record and review_metadata(record) else None),

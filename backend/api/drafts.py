@@ -81,7 +81,11 @@ def install(app,repo,preparation,credentials,job):
         keys=('responses','pending','errors','review_failures','repair_failures','http_failures','review_recoveries',
               'accepted_reviews','unknown_attempts','recovery_epoch','reserved_tokens','reserved_cost','actual_tokens','actual_cost','fragment_recoveries','binding')
         requests=[{k:r.get(k) for k in ('id','stage','status','finish_reason','usage_json','input_tokens','output_tokens','cost_usd')} for r in repo.request_log(job_id=current['id'])]
-        return {'requests':requests,**{k:journal[k] for k in keys if k in journal},'recovery':{'status':saved['status'],'phase':saved.get('phase'),
+        draft=repo.draft(wid,True)
+        return {'current_diagnostics':draft['validation'].get('diagnostics',[]),'current_start_block_reason':draft.get('start_block_reason'),
+                'candidate_snapshot':draft.get('candidate') or draft.get('state'),'candidate_version':draft.get('version_id'),
+                'author_input':{'text':json.loads(saved['config_json']).get('_draft_source',json.loads(saved['config_json']).get('_draft_input','')),'source_text':draft.get('source_text'),'outline':draft.get('outline')},
+                'requests':requests,**{k:journal[k] for k in keys if k in journal},'recovery':{'status':saved['status'],'phase':saved.get('phase'),
                 'revision':saved['revision'],'review':repo.draft(wid,True).get('review')}}
 
     @app.post('/api/workspaces/{wid}/draft/import')

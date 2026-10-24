@@ -35,7 +35,7 @@ def test_partial_report_and_patch_permissions_are_separate():
     rec={'message':'Можно подробнее описать вечер','severity':'recommendation'}
     invalid={'path':'/world/world/roles/job','message':'Не терять это замечание'}
     with pytest.raises(review.ReportError) as exc:review.parse(json.dumps({'issues':[valid,rec,invalid]}),state)
-    assert [e['message'] for e in exc.value.issues]==[valid['message'],rec['message']]
+    assert [e['message'] for e in exc.value.issues]==[valid['message'],rec['message'],invalid['message']]
     assert exc.value.errors[0]['world_path']==invalid['path']
     issues=review.parse(json.dumps({'issues':[valid,rec]}),state)
     _,paths=draft_repair.request(json.dumps(state),issues[:1])
@@ -210,7 +210,9 @@ def test_report_repair_keeps_valid_sibling_and_malformed_patch_feedback(api):
         elif n==3:
             feedback=json.loads(kw['messages'][-1]['content'])
             assert feedback['validation_errors'][0]['report_path']=='/issues/1/severity'
-            yield json.dumps({'issues':[good,dict(bad,severity='recommendation')]})
+            assert feedback['original_indices']==[1]
+            assert json.loads(feedback['rejected_response'])=={'issues':[bad]}
+            yield json.dumps({'issues':[dict(bad,severity='recommendation')]})
         elif n==4:yield '{"patches":[{"path":"/campaign","value":{}}]}'
         elif n==5:
             feedback=json.loads(kw['messages'][-1]['content'])

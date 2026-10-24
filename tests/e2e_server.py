@@ -54,6 +54,9 @@ def stream(**kwargs):
             if count<2:
                 yield '{"issues":[{"path":"/world/world/roles/missing","message":"Неверный корень отчёта"}]}'
                 return
+            # A scoped correction must retain the item, not drop it with issues=[].
+            yield '{"issues":[{"message":"Необязательное уточнение роли", "severity":"recommendation"}]}'
+            return
         yield '{"issues":[]}'
         return
     full='\n'.join(m['content'] for m in kwargs['messages'])

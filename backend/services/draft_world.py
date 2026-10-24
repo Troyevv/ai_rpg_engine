@@ -35,6 +35,9 @@ FIELDS['location'].update({'parent_id','kind','aliases'})
 FIELDS['fact'].add('claim')
 FIELDS['knowledge'].update({'evidence','replaced_by','source_turn','revision'})
 FIELDS['clock']={'minute','calendar'}
+from backend.runtime_v3.models import ScheduledEvent, Knowledge, Character
+GROUPS['scheduled_events']='scheduled_events'
+FIELDS['scheduled_events']=set(ScheduledEvent.model_fields)-{'id'}
 
 
 def prepare(original):
@@ -217,7 +220,7 @@ def validate(state, *, canonical=True):
         require(not t.get('last_event_id') or t['last_event_id'] in world['events'],f'Линия {tid}: неизвестное последнее событие.')
     for eid,e in world['scheduled_events'].items():
         refs(e.get('participants',[]),ids,f'scheduled {eid}')
-        from backend.runtime_v3.models import ScheduledEvent
+        from backend.runtime_v3.models import ScheduledEvent, Knowledge, Character
         try:
             scheduled = ScheduledEvent.model_validate({k:v for k,v in dict(e,character_ids=e.get('participants',[])).items() if k in ScheduledEvent.model_fields})
             refs(scheduled.depends_on,set(world['scheduled_events']),f'scheduled dependencies {eid}')
@@ -374,14 +377,19 @@ def patch(state,kind,eid,field,value):
         target['fields'][key]=value
     elif field in FIELDS[kind]:
         if kind=='actor' and field in MOTIVATION_FIELDS:value=motivation_records(value,eid,field)
+        model=EXTENSIONS.get(kind) or (ScheduledEvent if kind=='scheduled_events' else Knowledge if kind=='knowledge' else Character if kind=='actor' and field in ACTOR_FIELDS else None)
+        if model:
+            # Validate the actual Runtime field contract (including nullable periods
+            # and string evidence), not legacy string-list assumptions.
+            model.model_validate({k:v for k,v in dict(target,**{field:value}).items() if k in model.model_fields})
         list_fields={'aliases','character_ids','participants','witnesses','fact_ids','evidence'}
-        if field in list_fields and (not isinstance(value,list) or any(not isinstance(x,str) for x in value)):
+        if not model and field in list_fields and (not isinstance(value,list) or any(not isinstance(x,str) for x in value)):
             raise ValueError('Нужен список строк.')
         if field in ('minute','start_minute','end_minute') and (type(value) is not int or value<0):raise ValueError('Нужно неотрицательное целое время.')
         if field in ('secret','player_observed') and type(value) is not bool:raise ValueError('Нужно логическое значение.')
         if field=='dimensions' and (not isinstance(value,dict) or any(type(x) not in (int,float) or not -100<=x<=100 for x in value.values())):raise ValueError('Показатели должны быть числами от -100 до 100.')
         old=target.get(field)
-        if old is not None and type(value) is not type(old):raise ValueError('Тип поля менять нельзя.')
+        if not model and old is not None and type(value) is not type(old):raise ValueError('Тип поля менять нельзя.')
         # Creative text is not clipped or arbitrarily length-limited here.
         target[field]=value
     else:raise ValueError('Поле недоступно для изменения.')

@@ -430,3 +430,11 @@ synthetic missing suffix and controlled reviewer/repair replies. The Katya/Timur
 records no longer require manual JSON edits. The test carries their active
 sibling relation through Start Game, ordinary turns and SQLite reopen, alongside
 Motivation metadata and Knowledge. This does not claim live DeepSeek validation.
+
+## Consolidated saved-report and Runtime presentation follow-up
+
+See [consolidated acceptance and coverage](consolidated-acceptance.md) for the
+second immutable user journal, scoped report corrections, typed author UI,
+calendar/birth-date behavior, synthetic worlds, and precise recovery limitations.
+That section supersedes the old blanket statement that every malformed optional
+recommendation address makes the entire semantic review incomplete.

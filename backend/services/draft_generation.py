@@ -50,7 +50,13 @@ def messages_for(repo,job,config):
     else:system+=' Изменяется только поле '+target['field']+'.'
     deps=domain.dependencies(state,target['kind'],target['id'])
     related=[state['world'][d['kind']][d['id']] for d in deps if d['kind'] in state['world'] and d['id'] in state['world'][d['kind']]][:15]
-    return [{'role':'system','content':system},{'role':'user','content':json.dumps({'campaign':state['campaign'],'entity':item,'related':related,'instruction':config['_draft_input']},ensure_ascii=False)}]
+    payload={'campaign':state['campaign'],'entity':item,'related':related,'instruction':config['_draft_input']}
+    if task=='field' and target['kind']=='actor' and target['field']=='birth_date':
+        from backend.runtime_v3.models import Character
+        system+=' Для birth_date null можно заменить творчески выбранной датой по схеме, если автор явно просит дополнить поле. Сохрани точный возраст; проверь его на текущую дату мира с учётом anchor и минут. При относительном календаре или приблизительном возрасте не выдумывай точность. Явные ограничения автора приоритетны.'
+        payload.update(field_schema=Character.model_json_schema()['properties']['birth_date'],world_clock=state['world_clock'],
+                       card=next((c for c in state['characters'] if c['id']==target['id']),None))
+    return [{'role':'system','content':system},{'role':'user','content':json.dumps(payload,ensure_ascii=False)}]
 
 
 def decode_result(text,state,config):
@@ -158,34 +164,54 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
                             except draft_completeness.ReportError as exc:
                                 previous_failure=dict(response=rejected,validation_errors=exc.errors)
                             break
+                # Reparse a completed report locally before spending another request.
+                if previous_failure:
+                    try:
+                        local=draft_completeness.parse(previous_failure['response'],state)
+                        if any(e.get('severity')=='blocker' and not e.get('patch_paths') for e in local):raise ValueError('Unlocalized blocker')
+                    except (ValueError,TypeError,KeyError,IndexError):pass
+                    else:
+                        accepted[signature]=local
+                        journal.setdefault('review_recoveries',[]).append(dict(signature=signature,result='local_reparse',epoch=epoch))
+                        repo.save_response_journal(jid,journal)
                 if previous_failure:
                     review_messages=draft_completeness.correction(review_messages,previous_failure['response'],previous_failure['validation_errors'])
+                correction_source=previous_failure
                 # A malformed report is a failed check, never a bad world or a success.
-                for review_attempt in range(2):
+                for review_attempt in range(0 if signature in accepted else 2):
                     slot='completeness_'+signature if epoch==0 and review_attempt==0 else f'completeness_{signature}_{epoch}_{review_attempt}'
                     try:review=response(repo,jid,journal,slot,review_messages,config,context,generate,handle.cancel)
                     except ValueError as exc:
                         repo.save_draft_candidate(jid,state,[],review=dict(review_meta,status='failed',reason=str(exc)),epoch=epoch)
                         raise
                     if review is None:return
+                    provider_review=review;merge_failed=False
                     try:
+                        if correction_source:
+                            merge_failed=True
+                            review=draft_completeness.merge_correction(review,correction_source['response'],correction_source['validation_errors'])
+                            merge_failed=False
                         issues=draft_completeness.parse(review,state)
                         unresolved=[dict(report_path=f'/issues/{i}/patch_paths',world_path=e['path'],message='Уточните точные поля для исправления противоречия, сохранив замечание.') for i,e in enumerate(issues) if e.get('severity')=='blocker' and not e.get('patch_paths')]
                         if unresolved:raise draft_completeness.ReportError(unresolved,issues)
                     except (ValueError,TypeError,KeyError,IndexError) as exc:
                         details=getattr(exc,'errors',[dict(report_path='/',world_path=None,message=str(exc))])
                         partial=getattr(exc,'issues',[])
-                        failure=dict(candidate_hash=candidate_hash(state),slot=slot,stage=stage,attempt=review_attempt+1,epoch=epoch,signature=signature,contract_version=draft_completeness.CONTRACT_VERSION,response=review,error=str(exc),validation_errors=details,partial_issues=partial)
+                        failure=dict(candidate_hash=candidate_hash(state),slot=slot,stage=stage,attempt=review_attempt+1,epoch=epoch,signature=signature,contract_version=draft_completeness.CONTRACT_VERSION,response=review,provider_response=provider_review,error=str(exc),validation_errors=details,partial_issues=partial)
+                        if merge_failed:
+                            failure.update(response=correction_source['response'],validation_errors=correction_source['validation_errors'],correction_format_errors=details,partial_issues=correction_source.get('partial_issues',[]))
                         journal.setdefault('review_failures',[]).append(failure)
                         repo.save_draft_candidate(jid,state,[],review=dict(review_meta,status='failed',reason='Получен отчёт неправильного формата.',issues=partial,validation_errors=details),epoch=epoch)
-                        review_messages=draft_completeness.correction(review_messages,review,details)
+                        correction_source=failure
+                        review_messages=draft_completeness.correction(draft_completeness.messages(state,messages[-1]['content']),failure['response'],failure['validation_errors'])
                         repo.draft_phase(jid,'review_format_repair')
                         repo.save_response_journal(jid,journal)
-                        if review_attempt==1:raise ValueError('Проверка не завершена: неверный отчёт. Кандидат доступен автору; Resume повторит только проверку.') from exc
+                        if review_attempt==1 or previous_failure and details==previous_failure.get('validation_errors'):raise ValueError('Проверка не завершена: неверный отчёт. Кандидат доступен автору; Resume повторит только проверку.') from exc
                     else:
                         accepted[signature]=issues
                         journal.setdefault('review_recoveries',[]).append(dict(signature=signature,slot=slot,result='completed',epoch=epoch))
                         repo.save_response_journal(jid,journal);break
+            issues=accepted[signature]
             errors=[e for e in issues if e.get('severity','blocker')=='blocker']
             repo.save_draft_candidate(jid,state,errors,review=dict(review_meta,status='completed',issues=issues),epoch=epoch)
             if not errors:break
