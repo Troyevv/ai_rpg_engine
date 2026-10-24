@@ -43,6 +43,7 @@ type Draft = {
     revision: number;
     version_id: number | null;
     candidate?: Record<string,unknown> | null;
+    relation_merges?: {ids:string[];paths:string[];differences:string[];safe:boolean;records:Item[]}[];
     review?: {status:string;reason?:string} | null;
     start_block_reason?: string | null;
     state: DraftState | null;
@@ -272,6 +273,13 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
       {draft?.review && ['failed','running','not_started','stale'].includes(draft.review.status) && <section className="workshop-review" role="status"><h3>Смысловая проверка не завершена</h3><p>Мир сохранён. Автоматическая проверка не завершилась. Это не установленная ошибка поля мира.</p><p>{draft.review.reason || 'Для запуска игры требуется проверить актуальную версию мира.'}</p></section>}
       {draft?.start_block_reason && <p role="alert">Запуск заблокирован: {draft.start_block_reason}</p>}
       {!state && draft?.version_id && !(job as Job & {transport_incomplete?:boolean})?.transport_incomplete && job && <Button variant="outline" onClick={()=>authorAcknowledged ? setAuthor(true) : setAuthorAsk(true)}>Открыть результат в редакторе автора</Button>}
+      {author && draft?.relation_merges?.map((merge,i)=><section className="workshop-review" key={i}>
+        <h3>Две записи одной связи</h3>
+        <p>{merge.safe?'Структурированные данные совпадают. Объединение сохранит оба описания и ссылки. Смысловая проверка проверит согласованность текста.':'Записи различаются: повторите проверку для локального исправления противоречия.'}</p>
+        <p>Различающиеся поля: {merge.differences.join(', ') || 'только ID и порядок участников'}</p>
+        {merge.records.map((record,j)=><details key={j} open><summary>{merge.paths[j]}</summary><pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(record,null,2)}</pre></details>)}
+        {merge.safe && <Button disabled={locked} onClick={()=>void run(async()=>{await api(`/workspaces/${id}/draft/merge-relations`,{revision:draft.revision,ids:merge.ids});await refresh();})}>Объединить связи</Button>}
+      </section>)}
       {author && draft?.candidate && <section className="workshop-review"><h3>Восстановление черновика</h3><p>Результат сохранён целиком. Поля с установленными ошибками можно выбрать ниже. Сбой проверки исправляется кнопкой «Повторить проверку».</p>
         {draft.validation.diagnostics?.filter(d=>d.path && d.path!=='/').map((d,i)=><div key={i}><p role="alert">{d.path}: {d.message}</p><Button variant="outline" disabled={d.path==='/'} onClick={()=>{setCandidatePath(d.path);let v:unknown=draft.candidate;try{for(const key of d.path.slice(1).split('/'))v=(v as Record<string,unknown>)[key.replace(/~1/g,'/').replace(/~0/g,'~')];}catch{v=null;}setCandidateValue(JSON.stringify(v??null,null,2));}}>Исправить поле</Button></div>)}
         {candidatePath && <><Input aria-label="Путь поля кандидата" value={candidatePath} onChange={e=>setCandidatePath(e.target.value)}/>

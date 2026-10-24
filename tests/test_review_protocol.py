@@ -72,11 +72,12 @@ def test_symmetric_duplicates_preserve_phases_and_directed_feelings():
     normalized=initial.normalize(state)
     assert set(normalized['world']['objective_relations'])=={'a','past'}
     assert normalized['world']['relationships']==before
-    state['world']['objective_relations']['b']['context']='Различающиеся данные'
+    state['world']['objective_relations']['b']['since']=11
     _,report=initial.inspect_candidate(state)
-    duplicates=[e for e in report['diagnostics'] if e['category']=='duplicate']
+    duplicates=[e for e in report['diagnostics'] if e['category']=='relation_conflict']
     assert duplicates and all(not e['path'].endswith('/status') for e in duplicates)
-    with pytest.raises(ValueError,match='Нельзя закрывать'):draft_repair.request(json.dumps(state),duplicates)
+    _,paths=draft_repair.request(json.dumps(state),duplicates)
+    assert set(paths)=={'/world/objective_relations/a/since','/world/objective_relations/b/since'}
 
 
 @pytest.mark.parametrize('code',[429,503])

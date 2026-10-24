@@ -210,28 +210,8 @@ def normalize(value):
         if isinstance(place,dict):
             place.setdefault('id',identity('location',index,place.get('name','')))
             place.setdefault('kind','unknown')  # preserves explicit IDs during existing migration
-    from backend.runtime_v3.life import SYMMETRIC
-    for rel in world['objective_relations'].values():
-        if isinstance(rel,dict) and rel.get('kind') in SYMMETRIC and isinstance(rel.get('source_id'),str) and isinstance(rel.get('target_id'),str):
-            rel['source_id'],rel['target_id']=sorted((rel['source_id'],rel['target_id']))
-    # Merge only byte-equivalent symmetric phases (apart from their technical ID).
-    # References to the removed ID are remapped in structured *_id fields only.
-    equivalents={}; relation_remap={}
-    import json
-    for key,rel in list(world['objective_relations'].items()):
-        if not isinstance(rel,dict) or rel.get('kind') not in SYMMETRIC:continue
-        signature=json.dumps({k:v for k,v in rel.items() if k!='id'},sort_keys=True,ensure_ascii=False)
-        if signature in equivalents:
-            relation_remap[key]=equivalents[signature]
-            del world['objective_relations'][key]
-        else:equivalents[signature]=key
-    if relation_remap:
-        def relation_refs(v,field=''):
-            if isinstance(v,dict):return {k:relation_refs(x,k) for k,x in v.items()}
-            if isinstance(v,list):return [relation_refs(x,field) for x in v]
-            if isinstance(v,str) and field in ('objective_relation_id','objective_relation_ids','relation_id','relation_ids'):return relation_remap.get(v,v)
-            return v
-        value=relation_refs(value);world=value['world']
+    from backend.services.draft_relations import merge
+    value=merge(value);world=value['world']
     scene=world['scenes'].get(value['camera'].get('scene_id'),{})
     if isinstance(scene,dict) and isinstance(scene.get('location'),str):
         for cid in scene.get('participants',[]):
@@ -404,7 +384,24 @@ def cross_record_errors(state):
                 endpoints=tuple(sorted((a,b))) if kind in SYMMETRIC and isinstance(a,str) and isinstance(b,str) else (a,b)
                 signature=(kind,*endpoints)
                 if row.get('status','active')=='active' and isinstance(a,str) and isinstance(b,str):
-                    if signature in active:problems.append(error(base,'Конфликт записей одной активной связи. Уточните различающиеся данные; не закрывайте связь ради удаления дубля.','duplicate',related_paths=[active[signature]]))
+                    if signature in active:
+                        previous=active[signature]
+                        other=world['objective_relations'][previous.rsplit('/',1)[-1].replace('~1','/').replace('~0','~')]
+                        # Exact differing fields only. Identity, kind, endpoints and status
+                        # cannot be changed merely to hide a duplicate.
+                        defaults=m.ObjectiveRelation.model_fields
+                        fields=[f for f in defaults if f not in ('id','kind','source_id','target_id','status','context','evidence') and row.get(f,defaults[f].default)!=other.get(f,defaults[f].default)]
+                        related=[previous,base]
+                        for r in (other,row):
+                            for field in ('fact_id','closure_fact_id'):
+                                if isinstance(r.get(field),str) and r[field] in world['facts']:
+                                    related.append(ptr('world','facts',r[field]))
+                        related.extend(ptr('characters',i) for i,c in enumerate(state['characters']) if c['id'] in (a,b))
+                        related=list(dict.fromkeys(related))
+                        if fields:
+                            for f in fields:
+                                problems.append(error(base+'/'+f,'Различающиеся данные одной активной связи. Согласуйте с другой записью; не закрывайте связь ради удаления дубля.','relation_conflict',related_paths=related,patch_paths=[previous+'/'+f,base+'/'+f]))
+                        else:problems.append(error(base,'Повтор одной направленной активной связи требует смыслового уточнения.','duplicate',related_paths=[previous]))
                     active[signature]=base
                 if kind in PARENTAGE|{'guardian','foster_parent','step_parent'} and isinstance(a,str) and isinstance(b,str) and a in ids and b in ids:graph.setdefault(b,set()).add(a)
             participants=[row.get('actor_id')] if row.get('actor_id') else [row.get('source_id'),row.get('target_id')] if section=='objective_relations' else []

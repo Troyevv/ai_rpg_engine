@@ -189,3 +189,33 @@ test('previous world is labelled separately from an incomplete new response',asy
   await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('saved');
   await expect(page.getByRole('heading',{name:'Посмотри, что получилось',exact:true})).toBeVisible();
 });
+
+test('saved symmetric duplicates offer lossless merge after reconnect',async({page,request},info)=>{
+  const workspace=await(await request.post('/api/workspaces',{data:{name:'Relation merge '+info.project.name}})).json();
+  const url=`/api/workspaces/${workspace.id}/draft`;
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),workspace.id);
+  await page.goto('/');await nav(page,'Создать');
+  await page.getByLabel('Описание мира или текст импорта').fill('TEST_REVIEW_PROTOCOL sibling '+info.project.name);
+  await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+  await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('error');
+  const d=await(await request.get(url+'?author=true')).json();
+  const [a,b]=d.candidate.characters.map((c:{id:string})=>c.id);
+  const relation={id:'a',kind:'sibling',source_id:a,target_id:b,context:'Брат и сестра'};
+  await request.patch(url+'/candidate',{data:{revision:d.revision,path:'/world/objective_relations',value:{a:relation,b:{...relation,id:'b',source_id:b,target_id:a,context:'Сестра и брат'}}}});
+  await page.reload();await nav(page,'Создать');
+  await page.getByRole('button',{name:'Открыть результат в редакторе автора',exact:true}).click();
+  await page.getByRole('button',{name:'Показать всё',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Две записи одной связи'})).toBeVisible();
+  await expect(page.getByText('/world/objective_relations/a',{exact:true})).toBeVisible();
+  await expect(page.getByText('/world/objective_relations/b',{exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth));
+  await page.screenshot({path:`test-results/relation-merge-${info.project.name}.png`,fullPage:true});
+  await page.getByRole('button',{name:'Объединить связи',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Две записи одной связи'})).toHaveCount(0);
+  const merged=await(await request.get(url+'?author=true')).json();
+  expect(Object.keys(merged.candidate.world.objective_relations)).toEqual(['a']);
+  expect(merged.candidate.world.objective_relations.a.context).toBe('Брат и сестра\nСестра и брат');
+  expect(merged.review.status).toBe('stale');
+  await page.getByRole('button',{name:'Повторить проверку',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true})).toBeEnabled();
+});

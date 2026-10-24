@@ -19,7 +19,7 @@ def request(raw,errors,author_context=None):
     if any(e.get('category')=='duplicate' for e in errors):raise ValueError('Конфликт фаз связи требует уточнения автором. Нельзя закрывать связь ради устранения дубля.')
     expanded=[]
     for e in errors:
-        if e.get('category')=='semantic_completeness':
+        if e.get('category') in ('semantic_completeness','relation_conflict'):
             if not e.get('patch_paths'):raise ValueError('Замечание сохранено, но точные поля для автоматического исправления не определены. Повторите проверку или откройте редактор автора.')
             expanded.extend(dict(e,path=p) for p in e['patch_paths'])
         else:expanded.append(e)
@@ -62,7 +62,7 @@ def request(raw,errors,author_context=None):
         payload['record_schemas']={k:schema['properties']['world']['properties'][k] for k in sections}
         if any(p.startswith('/world_clock/') for p in paths):payload['clock_schema']=schema['properties']['world_clock']
     if author_context is not None:payload['author_context']=author_context
-    return [dict(role='system',content='Исправь только перечисленные ошибки структуры и смысловой согласованности. Верни JSON {"patches":[{"path":"/точный/путь","value":новое_значение}]}. Не меняй остальные данные, персонажей, описания и события. Технические ошибки исправляй без новых обстоятельств. При semantic_completeness допустимо смысловое дополнение на основе замысла и уже созданных непротиворечивых фактов, даже отсутствующих в исходном тексте. Сохраняй явные ограничения, знания конкретных участников и свободу будущих действий игрока. При неизвестном точном времени события сохрани text/evidence, minute=null. Не меняй корректные биографии. Сохрани явные факты из контекста автора.'),
+    return [dict(role='system',content='Исправь только перечисленные ошибки структуры и смысловой согласованности. Верни JSON {"patches":[{"path":"/точный/путь","value":новое_значение}]}. Для relation_conflict сопоставь обе записи и контекст автора. Исправляй только противоречивые поля, сохраняя существенные сведения. Не меняй status на closed, не выдумывай завершение связи и не меняй её участников или kind ради устранения дубля. Не меняй остальные данные, персонажей, описания и события. Технические ошибки исправляй без новых обстоятельств. При semantic_completeness допустимо смысловое дополнение на основе замысла и уже созданных непротиворечивых фактов, даже отсутствующих в исходном тексте. Сохраняй явные ограничения, знания конкретных участников и свободу будущих действий игрока. При неизвестном точном времени события сохрани text/evidence, minute=null. Не меняй корректные биографии. Сохрани явные факты из контекста автора.'),
             dict(role='user',content=json.dumps(payload,ensure_ascii=False))],paths
 
 

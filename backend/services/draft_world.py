@@ -61,7 +61,8 @@ def prepare(original):
         if key in original and not isinstance(original[key],dict):raise ValueError(f'{key}: нужен объект.')
     clock=original.get('world_clock',{}).get('minute')
     if clock is not None and (type(clock) is not int or clock<0):raise ValueError('Игровое время должно быть неотрицательным целым числом.')
-    state=normalize_motivations(normalize(original))
+    from backend.services.draft_relations import merge
+    state=merge(normalize_motivations(normalize(original)))
     from backend.services.timeline import current_time
     minute=current_time(state)
     state.setdefault('world_clock',{'minute':minute,'last_event_time':label(minute)})

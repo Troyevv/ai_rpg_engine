@@ -58,7 +58,8 @@ def test_condition_effects_and_symmetric_duplicates():
     _,report=initial.inspect_candidate(raw)
     paths={d['path'] for d in report['diagnostics']}
     assert '/world/conditions/ill/effects/can_act' in paths
-    assert any(d['category']=='duplicate' for d in report['diagnostics'])
+    assert not any(d['category']=='duplicate' for d in report['diagnostics'])
+    assert len(initial.normalize(raw)['world']['objective_relations'])==1
 
 
 def test_failed_generation_manual_edit_start_turn_reload(api):

@@ -2,6 +2,7 @@
 import hashlib
 import json
 from backend.services import draft_world as domain
+from backend.services.draft_relations import plans as relation_plans
 
 
 def dump(value):return json.dumps(value,ensure_ascii=False)
@@ -73,6 +74,7 @@ class DraftStorage:
             latest=db.execute('SELECT * FROM preparation_jobs WHERE workspace_id=? ORDER BY rowid DESC LIMIT 1',(wid,)).fetchone()
             return {'id':wid,'name':w['name'],'revision':w['revision'],'version_id':head['id'] if head else None,
                 'candidate':raw if candidate and author else None,
+                'relation_merges':relation_plans(raw) if raw and author else [],
                 'state':state if author or state is None else domain.player_view(state),
                 'validation':report if author or not (record and review_metadata(record)) else {'errors':['Мир пока не готов к запуску. Откройте редактор автора.'] if report['errors'] else [],'warnings':[]},
                 'review':review_metadata(record) if record and author else ({'status':review_metadata(record).get('status')} if record and review_metadata(record) else None),
@@ -124,6 +126,20 @@ class DraftStorage:
             if review_metadata(record):record['review']=dict(review_metadata(record),status='stale',reason='Кандидат изменён. Повторите проверку.')
             record['diagnostics']=[e for e in record.get('diagnostics',[]) if e.get('path')!=path and not e.get('path','').startswith(path+'/')]
             self._record_document(db,'world_draft',wid,dump(record),True,'candidate_patch',None)
+            db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))
+
+    def merge_draft_relations(self,wid,revision,ids):
+        from backend.services.draft_relations import plans,merge
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE');self._draft_workspace(db,wid,revision)
+            head=self._draft_head(db,wid)
+            if not head:raise ValueError('Нет кандидата.')
+            record=json.loads(head['content'])
+            if not any(p['safe'] and p['ids']==ids for p in plans(record['state'])):
+                raise ValueError('Эти связи нельзя безопасно объединить. Повторите проверку для локального исправления.')
+            record['state']=merge(record['state'],ids);record['candidate']=True
+            if review_metadata(record):record['review']=dict(review_metadata(record),status='stale',reason='Связи объединены. Повторите проверку.')
+            self._record_document(db,'world_draft',wid,dump(record),True,'merge_relations',None)
             db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))
 
     def import_draft(self,wid,text,revision,format='text'):

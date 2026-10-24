@@ -100,16 +100,18 @@ def test_real_saved_response_to_editor_game_and_reload(api):
         wait_job(client,jid)
     j=journal();j.pop('requests');j.pop('recovery');j['recovery_epoch']=0
     repo.save_response_journal(jid,j);calls=[]
-    def suffix(**kw):calls.append(kw);yield SYNTHETIC_TAIL
+    def suffix(**kw):
+        calls.append(kw);yield SYNTHETIC_TAIL if len(calls)==1 else '{"issues":"invalid report"}'
     with patch('backend.services.preparation.chat_stream',side_effect=suffix):
         assert client.post(url+'/resume',json={'revision':0,'api_key':'test'}).status_code==200
-        assert wait_job(client,jid)['status']=='error' # real contradictory duplicate needs author clarification
-    assert len(calls)==1 and calls[0]['messages'][-2]['content'].endswith('"status": "active",\n        "')
+        assert wait_job(client,jid)['status']=='error' # report failure retains the automatically coalesced world
+    assert len(calls)==3 and calls[0]['messages'][-2]['content'].endswith('"status": "active",\n        "')
     d=client.get(url+'?author=true').json();original=deepcopy(d['candidate'])
-    assert any(e['category']=='duplicate' for e in d['validation']['diagnostics'])
-    # Explicit author correction: unify equivalent sibling wording, preserving both wordings.
-    for rid in ('obj_katya_timur','obj_timur_katya'):
-        d=client.patch(url+'/candidate',json={'revision':d['revision'],'path':f'/world/objective_relations/{rid}/context','value':'Кровные сестра и брат; кровные брат и сестра'}).json()
+    assert not any(e['category']=='duplicate' for e in d['validation']['diagnostics'])
+    sibling=d['candidate']['world']['objective_relations']['obj_katya_timur']
+    assert sibling['status']=='active'
+    assert sibling['context']=='Кровные сестра и брат\nКровные брат и сестра'
+    assert 'obj_timur_katya' not in d['candidate']['world']['objective_relations']
     reviewed=[];corrections=[]
     # Synthetic provider patches fix only contradictory biography clauses.
     for index,card in enumerate(d['candidate']['characters']):
@@ -143,6 +145,8 @@ def test_real_saved_response_to_editor_game_and_reload(api):
         snap=repo.get_snapshot(sid);turn=repo.begin_job(sid,'Осматриваюсь.' if kind=='turn' else '',kind,dict(PLAY_CONFIG,provider='deepseek',model='deepseek-flash',context_length=262144))
         play(repo,turn,raw_for(snap));assert repo.get_job(turn)['status']=='saved',repo.get_job(turn)['error']
         repo=Repository(repo.path)
+        from backend.runtime_v3.models import ObjectiveRelation
+        assert repo.get_snapshot(sid)['world_state']['objective_relations']['obj_katya_timur']==ObjectiveRelation.model_validate(sibling).model_dump()
 
 
 def test_optional_motivation_defaults_are_recoverable_without_literary_loss():

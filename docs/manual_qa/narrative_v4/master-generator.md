@@ -397,3 +397,36 @@ The cancelled Actions run 40105881873 passed pytest/build but its artifacts show
 editor tests expecting immediate play after a manual edit, bypassing required re-review.
 Those tests now re-review after reload. CI runs desktop/mobile in separate jobs with the
 same timeout and all tests retained; line reporting makes any remaining failures visible.
+
+### Symmetric objective relation recovery (#116)
+
+Draft normalization uses Runtime's `SYMMETRIC` set. Active records with the same
+kind, canonical endpoints and typed phase/provenance data share the
+lexicographically smallest ID. Missing optional defaults compare as their Runtime
+defaults. Distinct `context` and `evidence` strings are retained verbatim, separated
+by a newline; this is lossless description coalescing, not a Python judgment that
+all prose is true. The ordinary semantic reviewer must still detect contradictory
+claims and issue exact field patches. Exact copies of directed objective records
+also coalesce, without reversing endpoints. Emotional `relationships` and all
+closed historical records remain untouched.
+
+Structured differences (dates, fact references, source turn, etc.) keep both
+records and produce `relation_conflict` diagnostics at exact differing fields.
+The existing bounded repair receives both records and the author context; it
+cannot change IDs, endpoints, kind or status to hide a duplicate. Raw provider
+responses and append-only author versions remain available. Recognized structured
+relation references are redirected to the retained ID, never by replacing prose.
+
+For an old failed job, open the same workspace and choose **Повторить проверку**.
+Resume normalizes its saved candidate before reviewing; it does not regenerate the
+world or reset the spending budget. In author mode, unmerged saved records expose
+both JSON records, differing fields, and **Объединить связи** only when the server
+can coalesce them losslessly. The action is revision-checked, preserves history
+and marks an existing review stale. Manual imports retain their technical-only
+contract and do not initiate paid review.
+
+Offline acceptance uses the unchanged real fragment journal, an explicitly
+synthetic missing suffix and controlled reviewer/repair replies. The Katya/Timur
+records no longer require manual JSON edits. The test carries their active
+sibling relation through Start Game, ordinary turns and SQLite reopen, alongside
+Motivation metadata and Knowledge. This does not claim live DeepSeek validation.

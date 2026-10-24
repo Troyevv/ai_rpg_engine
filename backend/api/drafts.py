@@ -50,6 +50,9 @@ class CandidateChange(Revision):
     path: str
     value: Any
 
+class MergeRelations(Revision):
+    ids: list[str] = Field(min_length=2,max_length=2)
+
 class Confirm(Revision):
     version_id: int
 
@@ -61,6 +64,11 @@ def install(app,repo,preparation,credentials,job):
     @app.patch('/api/workspaces/{wid}/draft/candidate')
     def candidate(wid:str,body:CandidateChange):
         repo.edit_candidate(wid,body.revision,body.path,body.value)
+        return repo.draft(wid,True)
+
+    @app.post('/api/workspaces/{wid}/draft/merge-relations')
+    def merge_relations(wid:str,body:MergeRelations):
+        repo.merge_draft_relations(wid,body.revision,body.ids)
         return repo.draft(wid,True)
 
     @app.get('/api/workspaces/{wid}/draft/raw')
