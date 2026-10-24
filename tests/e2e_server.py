@@ -42,6 +42,15 @@ def runtime_v3_request(messages):
 
 
 def stream(**kwargs):
+    if kwargs['messages'][0]['content'].startswith('Предложи изменение авторского поля RPG.'):
+        value=json.loads(kwargs['messages'][1]['content'])['value']
+        if isinstance(value,str):value='Спокойный, наблюдательный человек. Говорит коротко и с иронией.'
+        elif isinstance(value,dict):
+            value={**value}
+            for key in ('situation','description','text'):
+                if key in value:value[key]='Новое авторское описание.'
+        yield json.dumps({'value':value},ensure_ascii=False)
+        return
     full='\n'.join(m['content'] for m in kwargs['messages'])
     observer='Тип хода: background' in full or 'Режим observer:' in full or 'mode=observer' in full
     if kwargs['messages'][0]['content'].startswith('Select at most ONE optional grounded autonomous remote action.'):

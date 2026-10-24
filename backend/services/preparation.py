@@ -64,6 +64,9 @@ class Preparation:
                     loaded=find_loaded_model(config['model'])
                     if not loaded:raise ValueError('Сначала загрузи выбранную локальную модель.')
                 config = json.loads(job['config_json'])
+                if job['kind']=='draft_builder':
+                    from backend.services.builder_generation import run
+                    return run(self,jid,config,api_key,handle,loaded,chat_stream)
                 if job['kind'].startswith('draft_'):
                     from backend.services.draft_generation import run
                     return run(self,jid,config,api_key,handle,loaded,chat_stream)

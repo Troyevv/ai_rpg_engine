@@ -35,6 +35,9 @@ class Confirm(Revision):
 
 
 def install(app,repo,preparation,credentials,job):
+    from backend.api.world_builder import install as install_builder
+    install_builder(app,repo,preparation,credentials,job)
+
     @app.get('/api/workspaces/{wid}/draft')
     def draft(wid:str,author:bool=False):return repo.draft(wid,author)
 
