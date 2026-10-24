@@ -68,8 +68,14 @@ class Repository(PresentationStorage, DraftStorage, Storage):
     @staticmethod
     def public_job(job):
         journal = json.loads(job.get('response_journal') or '{}')
-        job = {**job, 'fragment_recovery':bool(journal.get('responses',{}).get('world',{}).get('assembly_error')), 'transport_incomplete':bool(journal.get('responses',{}).get('world') and not journal['responses']['world'].get('complete') and not journal.get('candidate_text')), 'unknown_outcome': bool(journal.get('pending')), 'resumable': bool(journal and not journal.get('pending') and job.get('status') in ('error','stopped'))}
-        if job.get('fragment_recovery'):job['error']='Не удалось собрать сохранённые части ответа. Диагностика доступна автору; можно повторить только проблемное продолжение.'
+        world=journal.get('responses',{}).get('world',{})
+        assembly_error=world.get('assembly_error','')
+        retry_boundary=bool(assembly_error and len(world.get('parts',[]))>=2 and not any(word in assembly_error for word in ('целостность','Пропущен')))
+        job = {**job, 'fragment_recovery':retry_boundary, 'transport_blocked':bool(assembly_error and not retry_boundary),
+               'transport_incomplete':bool(world and not world.get('complete') and not journal.get('candidate_text')),
+               'unknown_outcome':bool(journal.get('pending')),
+               'resumable':bool(journal and not journal.get('pending') and job.get('status') in ('error','stopped'))}
+        if assembly_error:job['error']='Не удалось собрать сохранённые части ответа. Диагностика доступна автору.'
         staged = json.loads(job.get('memory_before_json') or '{}').get('_remote_batch')
         if staged and job.get('status') != 'saved':
             job = {**job, 'narrative': ''}

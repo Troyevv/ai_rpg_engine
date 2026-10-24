@@ -208,3 +208,11 @@ def test_terminal_duplicate_keys_and_empty_report_reach_strict_validation():
     assert run([('','stop')])[0]==''
     from backend.services.draft_response import strict_loads
     with pytest.raises(ValueError,match='Повтор'):strict_loads(run([('{"a":1,','length'),('"a":2}','stop')])[0])
+
+
+def test_public_integrity_error_does_not_offer_fragment_replacement():
+    from backend.repositories.preparation import Repository
+    j=journal();j['responses']['world']['assembly_error']='Нарушена целостность манифеста сборки.'
+    public=Repository.public_job(dict(kind='draft_world',status='error',response_journal=json.dumps(j)))
+    assert public['transport_blocked'] and not public['fragment_recovery']
+    assert 'responses' not in public and 'response_journal' not in public
