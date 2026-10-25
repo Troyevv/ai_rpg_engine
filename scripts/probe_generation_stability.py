@@ -17,6 +17,19 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 
 
+def generation_input(client, wid, scenario):
+    """Both creation inputs; scenario text is authored, not another paid LLM call."""
+    use_idea=scenario.get('flow')=='scenario'
+    if use_idea:
+        document=f'/api/documents/idea/{wid}'
+        head=client.get(document).json()['active_id']
+        reply=client.post(document,json={'content':scenario['idea'],'expected_head':head})
+        reply.raise_for_status()
+    revision=client.get(f'/api/workspaces/{wid}').json()['revision']
+    return dict(revision=revision,text='' if use_idea else scenario['idea'],use_idea=use_idea,
+                creation_settings=dict(scenario.get('settings',{}),calendar_start=scenario['start']))
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--budget-usd',type=Decimal,required=True,help='Total reservation cap, divided across all runs')
@@ -43,7 +56,7 @@ def main():
                 started=time.monotonic()
                 wid=client.post('/api/workspaces',json={'name':scenario['id']+' '+str(run+1)}).json()['id']
                 url=f'/api/workspaces/{wid}/draft'
-                request=client.post(url+'/generate',json=dict(revision=0,text=scenario['idea'],config=config,api_key=key,creation_settings={'calendar_start':scenario['start']},budget={'max_cost_usd':str(cap)}))
+                request=client.post(url+'/generate',json=dict(generation_input(client,wid,scenario),config=config,api_key=key,budget={'max_cost_usd':str(cap)}))
                 if request.status_code!=200:
                     metrics.append(dict(commit=commit,scenario=scenario['id'],run=run+1,outcome='preflight_rejected',http_status=request.status_code,requests=[],cost_usd=None))
                 else:
@@ -77,7 +90,7 @@ def main():
                         else:gameplay.update(outcome='confirm_failed',http_status=confirmed.status_code)
                     rows=exported.get('requests',[])
                     costs=[r.get('cost_usd') for r in rows]
-                    metrics.append(dict(commit=commit,scenario=scenario['id'],run=run+1,config=config,calendar_start=scenario['start'],review_contract=CONTRACT_VERSION,outcome=job['status'],duration_seconds=round(time.monotonic()-started,3),requests=rows,cost_usd=str(sum(Decimal(str(c)) for c in costs)) if costs and all(c is not None for c in costs) else None,diagnostics=exported.get('current_diagnostics'),generation_contract=exported.get('generation_contract'),scope='live generation; controlled editor/confirm/start/turn/reload/next-turn',gameplay=gameplay,review_resolutions=exported.get('review_resolutions',[]),repair_failures=exported.get('repair_failures',[]),quality=exported.get('quality'),ready_to_start=job['status']=='saved'))
+                    metrics.append(dict(commit=commit,scenario=scenario['id'],run=run+1,config=config,creation_flow=scenario['flow'],creation_settings=dict(scenario['settings'],calendar_start=scenario['start']),review_contract=CONTRACT_VERSION,outcome=job['status'],duration_seconds=round(time.monotonic()-started,3),requests=rows,cost_usd=str(sum(Decimal(str(c)) for c in costs)) if costs and all(c is not None for c in costs) else None,diagnostics=exported.get('current_diagnostics'),generation_contract=exported.get('generation_contract'),scope='live generation; controlled editor/confirm/start/turn/reload/next-turn',gameplay=gameplay,review_resolutions=exported.get('review_resolutions',[]),repair_failures=exported.get('repair_failures',[]),quality=exported.get('quality'),ready_to_start=job['status']=='saved'))
                 (args.output/'metrics.json').write_text(json.dumps(metrics,ensure_ascii=False,indent=2,default=str)+'\n')
                 print(scenario['id'],run+1,metrics[-1]['outcome'],flush=True)
 

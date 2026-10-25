@@ -12,6 +12,7 @@ from test_initial_draft_v4 import rich,api,REMOTE,wait_job
 from backend.services import draft_completeness as review
 from backend.repositories.preparation import Repository
 from backend.runtime_v3.calendar import age_on,current_time
+from scripts.probe_generation_stability import generation_input
 
 SCENARIOS=json.loads((Path(__file__).parent/'fixtures/generation_scenarios/inputs_final.json').read_text())
 
@@ -95,13 +96,17 @@ def test_fresh_generation_editor_start_turn_reload(api,scenario):
         else:
             assert len(calls)==1
             assert scenario['idea'] in kw['messages'][1]['content']
+            for value in (scenario['settings']['primary_genre'],scenario['settings']['npc_expressiveness'],scenario['settings']['geography']):assert value in kw['messages'][1]['content']
             yield json.dumps(generated,ensure_ascii=False)
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
-        response=client.post(url+'/generate',json={'revision':0,'text':scenario['idea'],'creation_settings':{'calendar_start':scenario['start']},'config':dict(REMOTE,context_length=262144),'api_key':'offline'})
+        response=client.post(url+'/generate',json=dict(generation_input(client,wid,scenario),config=dict(REMOTE,context_length=262144),api_key='offline'))
         assert response.status_code==200,response.text
         jid=response.json()['id'];job=wait_job(client,jid);assert job['status']=='saved',job
         d=client.get(url+'?author=true').json()
         assert d['state']['world']['residences']=={}
+        for key,value in scenario['settings'].items():
+            actual=d['state']['creation_settings'][key]
+            assert all(actual[k]==v for k,v in value.items()) if isinstance(value,dict) else actual==value
         d=client.patch(url,json={'revision':d['revision'],'operation':'patch','kind':'campaign','field':'title','value':'Автор: '+scenario['id']}).json()
         assert client.post(url+'/resume',json={'revision':d['revision'],'api_key':'offline'}).status_code==200
         assert wait_job(client,jid)['status']=='saved'
@@ -112,6 +117,9 @@ def test_fresh_generation_editor_start_turn_reload(api,scenario):
     assert before['campaign']['campaign']['title']=='Автор: '+scenario['id']
     assert w['meta']['calendar']['start_date']==scenario['start']['date']
     assert w['relationships'] and w['knowledge'] and w['facts']
+    assert w['meta']['npc_expressiveness']==scenario['settings']['npc_expressiveness']
+    assert w['meta']['narrative_pacing']['preset']==scenario['settings']['narrative_pacing']['preset']
+    assert w['meta']['narrative_risk']['preset']==scenario['settings']['narrative_risk']['preset']
     assert scenario['idea']==before['campaign']['campaign']['description']
     if scenario['id']=='e4_new':
         assert [c['name'] for c in d['state']['characters']]==[c['name'] for c in generated['characters']]

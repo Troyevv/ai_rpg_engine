@@ -92,7 +92,7 @@ E4 before/after:
 
 ## 4. Команды и слои тестирования
 
-Локальный полный прогон: **1731 passed in 213.87s**. Последний focused contract/regression прогон: **72 passed in 20.61s**. Frontend build: **passed, 3.43s** (существующее предупреждение о chunk >500 kB). Compileall, pip check и diff check успешны. Итоговый CI опубликованного SHA фиксируется в PR; локальный backend результат не подменяет browser CI. Команды воспроизводимы из корня репозитория:
+Локальный полный прогон дерева `b3854564c07c713839a6160e2a421aea06b6a12a`: **1731 passed in 213.87s**. После расширения сценарных настроек повторён затронутый набор; окончательный полный прогон выполняется CI опубликованного SHA. Последний focused contract/regression прогон: **72 passed in 20.61s**. Frontend build: **passed, 3.43s** (существующее предупреждение о chunk >500 kB). Compileall, pip check и diff check успешны. Итоговый CI опубликованного SHA фиксируется в PR; локальный backend результат не подменяет browser CI. Команды воспроизводимы из корня репозитория:
 
 ```bash
 HF_HUB_OFFLINE=1 python -m pytest -q
@@ -113,7 +113,7 @@ npx playwright test --project=mobile --reporter=line
 - Безопасный механизм ключа: переменная `DEEPSEEK_API_KEY`; в этой среде не настроена. Проверено только наличие; значение не выводилось.
 - Явный конечный бюджет для текущей работы не задан.
 - **Новых реальных DeepSeek calls: 0** (world, review, correction, repair, quality и gameplay). Новых платных расходов нет. Исторические requests E1–E4 не являются новыми вызовами. Стоимость будущего успешного мира неизвестна, а не нулевая.
-- Входы заранее зафиксированы в `tests/fixtures/generation_scenarios/inputs_final.json`. Шесть fresh-workspace offline сценариев используют controlled world/review/gameplay; они не измеряют творческую способность модели.
+- Входы заранее зафиксированы в `tests/fixtures/generation_scenarios/inputs_final.json`. Шесть fresh-workspace offline сценариев используют controlled world/review/gameplay; они не измеряют творческую способность модели. Входы чередуют Quick Creation и Scenario Creation (заранее написанный сценарий через штатный документ editor, без дополнительного платного вызова сценариста), small/medium cast, основные/дополнительные жанры и Custom, три выразительности, geography, pacing/risk. Проверены передача в prompt, сохранение creation_settings и Runtime-проекции. Эпоха задана в тексте и календарной дате.
 
 | Сценарий | Повтор 1 | Повтор 2 | Live requests/tokens/cost | Live gameplay |
 |---|---|---|---|---|

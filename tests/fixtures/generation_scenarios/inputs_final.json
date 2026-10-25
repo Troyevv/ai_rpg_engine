@@ -12,7 +12,25 @@
       "asymmetric_feelings",
       "no_assumed_residence",
       "no_player_acceptance"
-    ]
+    ],
+    "settings": {
+      "primary_genre": "drama",
+      "secondary_genres": [
+        "family_saga",
+        "romance"
+      ],
+      "npc_expressiveness": "expressive",
+      "cast_preset": "medium",
+      "world_type": "alternate",
+      "geography": "Город и вокзал из авторского замысла",
+      "narrative_pacing": {
+        "preset": "calm"
+      },
+      "narrative_risk": {
+        "preset": "realistic"
+      }
+    },
+    "flow": "quick"
   },
   {
     "id": "daily",
@@ -25,7 +43,24 @@
     "invariants": [
       "independent_npc_goals",
       "usable_cards"
-    ]
+    ],
+    "settings": {
+      "primary_genre": "slice_of_life",
+      "secondary_genres": [
+        "drama"
+      ],
+      "npc_expressiveness": "realistic",
+      "cast_preset": "small",
+      "world_type": "real_world",
+      "geography": "Небольшой современный город",
+      "narrative_pacing": {
+        "preset": "calm"
+      },
+      "narrative_risk": {
+        "preset": "safe"
+      }
+    },
+    "flow": "scenario"
   },
   {
     "id": "historical",
@@ -38,7 +73,24 @@
     "invariants": [
       "historical_date",
       "no_modern_year"
-    ]
+    ],
+    "settings": {
+      "primary_genre": "historical",
+      "secondary_genres": [
+        "detective"
+      ],
+      "npc_expressiveness": "realistic",
+      "cast_preset": "medium",
+      "world_type": "real_world",
+      "geography": "Средневековый европейский город, 1370 год",
+      "narrative_pacing": {
+        "preset": "moderate"
+      },
+      "narrative_risk": {
+        "preset": "realistic"
+      }
+    },
+    "flow": "quick"
   },
   {
     "id": "fantasy",
@@ -68,7 +120,26 @@
       "custom_calendar",
       "birth_age",
       "calendar_boundary"
-    ]
+    ],
+    "settings": {
+      "primary_genre": "custom",
+      "secondary_genres": [
+        "fantasy",
+        "adventure"
+      ],
+      "custom_genre": "Камерная сказка о ремесленниках и магии времён года",
+      "npc_expressiveness": "hyperbolized",
+      "cast_preset": "small",
+      "world_type": "fictional",
+      "geography": "Островной город со своим календарём",
+      "narrative_pacing": {
+        "preset": "moderate"
+      },
+      "narrative_risk": {
+        "preset": "safe"
+      }
+    },
+    "flow": "scenario"
   },
   {
     "id": "adoption",
@@ -83,7 +154,24 @@
       "asymmetric_knowledge",
       "directed_feelings",
       "player_agency"
-    ]
+    ],
+    "settings": {
+      "primary_genre": "family_saga",
+      "secondary_genres": [
+        "drama"
+      ],
+      "npc_expressiveness": "expressive",
+      "cast_preset": "small",
+      "world_type": "fictional",
+      "geography": "Современный жилой квартал",
+      "narrative_pacing": {
+        "preset": "calm"
+      },
+      "narrative_risk": {
+        "preset": "safe"
+      }
+    },
+    "flow": "quick"
   },
   {
     "id": "organizations",
@@ -98,6 +186,23 @@
       "no_residences",
       "nullable_due",
       "temporal_interval_dependencies"
-    ]
+    ],
+    "settings": {
+      "primary_genre": "slice_of_life",
+      "secondary_genres": [
+        "detective"
+      ],
+      "npc_expressiveness": "realistic",
+      "cast_preset": "medium",
+      "world_type": "fictional",
+      "geography": "Портовый город и мастерские",
+      "narrative_pacing": {
+        "preset": "moderate"
+      },
+      "narrative_risk": {
+        "preset": "realistic"
+      }
+    },
+    "flow": "scenario"
   }
 ]
