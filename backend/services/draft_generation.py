@@ -60,8 +60,9 @@ def messages_for(repo,job,config):
 
 
 def decode_result(text,state,config):
-    try:value=json.loads(text)
-    except (TypeError,json.JSONDecodeError) as exc:raise ValueError('Модель вернула незавершённый или некорректный JSON. Предыдущая версия сохранена.') from exc
+    from backend.services.draft_response import strict_loads
+    try:value=strict_loads(text)
+    except ValueError as exc:raise ValueError('Модель вернула незавершённый или некорректный JSON. Предыдущая версия сохранена.') from exc
     if config['_draft_task']=='world':return domain.prepare(value)
     if not isinstance(value,dict) or set(value)!={'value'}:raise ValueError('Для поля разрешён только объект {value: ...}.')
     target=config['_draft_target']

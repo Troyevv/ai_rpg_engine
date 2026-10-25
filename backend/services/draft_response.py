@@ -111,6 +111,19 @@ def prefix_complete(text, schema=None):
 
 
 def strict_loads(text):
+    if not isinstance(text,str):raise ValueError('Ответ JSON должен быть текстом.')
+    # Same supported nesting bound as streaming prefix validation, before recursion.
+    depth=0;quoted=False;escaped=False
+    for char in text:
+        if quoted:
+            if escaped:escaped=False
+            elif char=='\\':escaped=True
+            elif char=='"':quoted=False
+        elif char=='"':quoted=True
+        elif char in '[{':
+            depth+=1
+            if depth>100:raise ValueError('Слишком глубокая вложенность JSON.')
+        elif char in ']}':depth-=1
     def pairs(items):
         result = {}
         for key, value in items:

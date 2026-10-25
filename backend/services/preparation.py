@@ -108,9 +108,17 @@ class Preparation:
                     raise ValueError('Модель вернула пустой текст.')
                 if not handle.cancel.is_set():
                     self.repo.preparation_progress(jid, narrative, 'saved')
+        except MemoryError:
+            raise
         except Exception as exc:
             if worker_epoch is not None and json.loads(self.repo.preparation_job(jid).get('response_journal') or '{}').get('recovery_epoch',0)!=worker_epoch:return
             if config.get('_draft_task'):
+                from llm import ProviderHTTPError
+                if not isinstance(exc,(ValueError,ProviderHTTPError)):
+                    journal=json.loads(self.repo.preparation_job(jid).get('response_journal') or '{}')
+                    journal.setdefault('internal_errors',[]).append(dict(code='internal_error',type=type(exc).__name__,message=str(exc)))
+                    self.repo.save_response_journal(jid,journal)
+                    exc=RuntimeError('internal_error: внутренняя ошибка обработки; кандидат сохранён, диагностика доступна автору.')
                 narrative=self.repo.preparation_job(jid)['narrative']
             self.repo.preparation_progress(jid, narrative, 'stopped' if handle.cancel.is_set() else 'error', str(exc))
         finally:

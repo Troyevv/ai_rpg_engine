@@ -154,8 +154,8 @@ def apply(raw,reply,paths):
     if paths is None:
         if tokens(raw)!=tokens(reply): raise ValueError('Исправление синтаксиса изменило содержание; ответ отклонён.')
         return reply
-    if not isinstance(repaired,dict) or set(repaired) not in ({'patches'},{'patches','candidate_hash'}) or not isinstance(repaired['patches'],list):
-        raise ValueError('Ожидался объект patches.')
+    from backend.services.draft_protocol import PatchReply,decode
+    repaired=decode(PatchReply,reply,'repair').model_dump(exclude_unset=True)
     value=strict_loads(raw); original=deepcopy(value); used=set(); linked=False; added=[]
     from backend.repositories.drafts import candidate_hash
     if isinstance(paths,RepairScope) and candidate_hash(value)!=paths.candidate_hash:raise ValueError('Кандидат изменился; patch устарел.')
@@ -224,7 +224,7 @@ def apply(raw,reply,paths):
         for path in paths.location_links:
             try:linked_records.append(pointer(value,'/'.join(path.split('/')[:4])))
             except (ValueError,KeyError,IndexError,TypeError):pass
-        if any(not any(isinstance(r,dict) and (r.get('location_id')==lid or r.get('location')==lid or lid in r.get('location_ids',[])) for r in linked_records) for lid in added):
+        if any(not any(isinstance(r,dict) and (r.get('location_id')==lid or r.get('location')==lid or isinstance(r.get('location_ids'),list) and lid in r['location_ids']) for r in linked_records) for lid in added):
             raise ValueError('Новая локация не связана с исправляемой записью.')
     if isinstance(paths,RepairScope):
         from backend.services.draft_completeness import pointer

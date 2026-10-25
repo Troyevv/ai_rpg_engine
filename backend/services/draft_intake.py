@@ -32,10 +32,16 @@ def motivations(state):
 def merge_duplicates(state):
     """Merge compatible directed pairs without interpreting text or averaging."""
     from backend.services.draft_initial import DraftErrors,error,escape
+    from backend.runtime_v3.models import Relationship,Knowledge
+    from pydantic import ValidationError
     for section, fields in [('relationships',('source_id','target_id')),('knowledge',('actor_id','fact_id'))]:
         records=state['world'][section];seen={};problems=[]
         for key,record in list(records.items()):
-            if not isinstance(record,dict) or any(f not in record for f in fields):continue
+            model=Relationship if section=='relationships' else Knowledge
+            try:model.model_validate({k:v for k,v in record.items() if k in model.model_fields} if isinstance(record,dict) else record)
+            except ValidationError as exc:
+                problems.extend(error('/world/'+section+'/'+escape(key)+'/'+ '/'.join(escape(p) for p in e['loc']),e['msg'],e['type']) for e in exc.errors(include_input=False))
+                continue
             pair=tuple(record[f] for f in fields)
             if pair not in seen:seen[pair]=key;continue
             first=seen[pair];merged=deepcopy(records[first]);conflicts=[]

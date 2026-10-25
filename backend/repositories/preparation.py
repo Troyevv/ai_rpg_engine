@@ -89,11 +89,18 @@ class Repository(PresentationStorage, DraftStorage, Storage):
         """Private response transport state; no new checkpoint table or world format."""
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
-            current=db.execute('SELECT response_journal FROM preparation_jobs WHERE id=?',(jid,)).fetchone()
+            current=db.execute('SELECT response_journal,status FROM preparation_jobs WHERE id=?',(jid,)).fetchone()
             if current and json.loads(current[0] or '{}').get('recovery_epoch',0)!=journal.get('recovery_epoch',0):
                 raise ValueError('Устаревший работник генерации: результат не принят.')
+            if current and current['status']!='generating':self.terminal_quality(journal,current['status'])
             db.execute('UPDATE preparation_jobs SET response_journal=? WHERE id=?',
                        (json.dumps(journal,ensure_ascii=False),jid))
+
+    @staticmethod
+    def terminal_quality(journal,status):
+        for record in [journal.get('quality',{}),*journal.get('quality_attempts',{}).values()]:
+            if record.get('status')=='running':
+                record.update(status='cancelled' if status=='stopped' else 'partial',warning='Дополнение прервано; предыдущий проверенный мир сохранён.')
 
     @staticmethod
     def review_exhausted(journal, config):
@@ -225,6 +232,9 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                 parse_summary(narrative)
             db.execute('UPDATE preparation_jobs SET narrative=?,status=?,error=? WHERE id=?', (narrative, status, error, jid))
             if status in ('error','stopped') and job['kind']=='draft_world':
+                journal=json.loads(job['response_journal'] or '{}')
+                self.terminal_quality(journal,status)
+                db.execute('UPDATE preparation_jobs SET response_journal=? WHERE id=?',(json.dumps(journal,ensure_ascii=False),jid))
                 head=self._draft_head(db,job['workspace_id'])
                 if head:
                     content=json.loads(head['content'])

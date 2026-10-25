@@ -27,8 +27,9 @@ def protocol_review(request):
     """Shared browser/API fixture: malformed report, correction, alternate audit."""
     import json
     source=request.get('author_context','')
-    if 'TEST_REVIEW_PROTOCOL' not in source and 'TEST_REVIEW_AUTOMATIC' not in source:return None
+    if not any(marker in source for marker in ('TEST_REVIEW_PROTOCOL','TEST_REVIEW_AUTOMATIC','TEST_RELEASE_NESTED')):return None
     count=_protocol_attempts.get(source,0);_protocol_attempts[source]=count+1
+    if count<2 and 'TEST_RELEASE_NESTED' in source:return '{"issues":[null]}' if count==0 else '{"issues":[{"path":"/campaign/title","message":"x","basis":null}]}'
     if count<2:return '{"issues":[{"path":"/world/world/roles/missing","message":"Неверный корень отчёта"}]}'
     if request.get('strategy')=='scoped_reaudit':
         if count==2 and 'TEST_REVIEW_PROTOCOL' in source:

@@ -112,8 +112,8 @@ def substantive_issues():
     return issues
 
 
-@pytest.mark.parametrize('evidence_number',[3,4])
-def test_e4_candidate366_resume_repair_quality_start_turn_reload_next(api,evidence_number):
+@pytest.mark.parametrize('evidence_number,manual_edit',[(4,False),(4,True),(3,False)])
+def test_e4_candidate366_resume_repair_quality_start_turn_reload_next(api,evidence_number,manual_edit):
     from test_generation_stability import third
     client,app=api;j=evidence() if evidence_number==4 else third();repo=app.state.repository;s=deepcopy(j['candidate_snapshot'])
     wid=client.post('/api/workspaces',json={'name':'E4 exact 366'}).json()['id'];url=f'/api/workspaces/{wid}/draft'
@@ -124,7 +124,10 @@ def test_e4_candidate366_resume_repair_quality_start_turn_reload_next(api,eviden
     repo.save_response_journal(jid,journal);repo.save_draft_candidate(jid,s,[],review=j['recovery']['review']);repo.preparation_progress(jid,'','error')
     d=client.get(url+'?author=true').json();assert d['review']['status']=='failed'
     # A real manual change must survive every subsequent model stage.
-    d=client.patch(url+'/candidate',json={'revision':d['revision'],'path':'/campaign/title','value':'Возвращение — авторская версия'}).json()
+    if manual_edit:d=client.patch(url+'/candidate',json={'revision':d['revision'],'path':'/campaign/title','value':'Возвращение — авторская версия'}).json()
+    else:
+        assert d['candidate']==s
+        assert json.loads(repo.preparation_job(jid)['response_journal'])['candidate_text']==json.dumps(s,ensure_ascii=False)
     assert 'revision' in d,d
     responses=[''.join(p['text'] for p in r['parts']) for k,r in j['responses'].items() if k.startswith('completeness')]
     actual=responses[-1]
@@ -163,14 +166,14 @@ def test_e4_candidate366_resume_repair_quality_start_turn_reload_next(api,eviden
                 i=int(path.split('/')[2]);field=path.split('/')[-1]
                 value={'Внешность':{1:'Каштановые волосы собраны у затылка, мягкий домашний кардиган.',2:'Коротко стрижен, на пальцах въевшиеся следы машинного масла.',4:'Прямые русые волосы, светлый жакет и удобные кеды.',5:'Аккуратная короткая стрижка, рубашка с закатанными рукавами.',6:'Седеющие виски, прямая осанка, простая тёмная рубашка.',7:'Короткие волосы, усталый внимательный взгляд, поношенная куртка.'}}.get(field,{}).get(i,'Перед ответом делает паузу и смотрит собеседнику в глаза.')
             else:raise AssertionError(path)
-            patches.append(dict(path=path,value=value))
+            if not any(p['path']==path for p in patches):patches.append(dict(path=path,value=value))
         yield json.dumps(dict(candidate_hash=payload['candidate_hash'],patches=patches),ensure_ascii=False)
     with patch('backend.services.preparation.chat_stream',side_effect=provider):
         response=client.post(url+'/resume',json={'revision':d['revision'],'api_key':'offline'})
         assert response.status_code==200,response.text
         job=wait_job(client,jid);assert job['status']=='saved',(job.get('error'),client.get(url+'/raw').json().get('review_failures',[])[-1:])
         d=client.get(url+'?author=true').json();ready=d['state'];assert ready
-        assert ready['campaign']['title']=='Возвращение — авторская версия'
+        assert ready['campaign']['title']==('Возвращение — авторская версия' if manual_edit else s['campaign']['title'])
         assert ready['world']['knowledge']==s['world']['knowledge']
         assert ready['world']['relationships']==s['world']['relationships']
         assert ready['world']['facts']['f1']['character_ids']==['c1']
@@ -214,7 +217,7 @@ def test_quality_empty_review_still_completes_and_author_unknown_can_remain():
     def provider(slot,messages,stage):
         calls.append(stage)
         if stage=='draft_world_quality':return json.dumps(dict(patches=[],preserved_unknown=[dict(path=path,author_excerpt=source)]))
-        return '{"issues":[]}'
+        return json.dumps(dict(issues=[],unknown_confirmations=[dict(path=path,actor_id=s['characters'][1]['id'],field='Внешность',decision='preserve',reason='Автор явно оставил внешность второго персонажа неизвестной.')]))
     out,_=quality.complete(s,[],source,journal,provider)
     assert out==s and journal['quality']['status']=='accepted'
     assert calls==['draft_world_quality','draft_world_validation']

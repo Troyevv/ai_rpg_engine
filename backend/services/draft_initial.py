@@ -153,7 +153,7 @@ def normalize(value):
     """Only unambiguous structural defaults; no creative completion or text clipping."""
     if not isinstance(value,dict): raise DraftErrors([error('/','Ожидался объект мира.','object_type')])
     value=deepcopy(value); problems=[]
-    for key,kind in (('characters',list),('campaign',dict),('world',dict),('camera',dict),('world_clock',dict)):
+    for key,kind in (('characters',list),('campaign',dict),('world',dict),('camera',dict),('world_clock',dict),('locations',list)):
         if not isinstance(value.get(key),kind): problems.append(error('/'+key,'Ожидался '+kind.__name__,'type'))
     if problems: raise DraftErrors(problems)
     world=value['world'];value.setdefault('schema_version',1);world.setdefault('version',2)
@@ -167,6 +167,8 @@ def normalize(value):
         if not isinstance(card,dict): raise DraftErrors([error(f'/characters/{index}','Ожидалась карточка.','object_type')])
         card.setdefault('id',identity('character',index,card.get('name','')))
         card.setdefault('fields',{});card.setdefault('aliases',[])
+        if not isinstance(card['id'],str):problems.append(error(f'/characters/{index}/id','Ожидался строковый ID.','string_type'))
+        if not isinstance(card['aliases'],list) or any(not isinstance(a,str) for a in card['aliases']):problems.append(error(f'/characters/{index}/aliases','Ожидался список строк.','list_type'))
         if not isinstance(card.get('name'),str) or not card['name'].strip():
             problems.append(error(f'/characters/{index}/name','Ожидалось непустое имя.','string_type'))
         if not isinstance(card['fields'],dict):
@@ -195,6 +197,17 @@ def normalize(value):
         for key,item in world[section].items():
             if not isinstance(item,dict): problems.append(error('/world/'+section+'/'+key,'Ожидался объект.','object_type'));continue
             if section not in ('relationships','knowledge'): item.setdefault('id',key)
+    if problems:raise DraftErrors(problems)
+    for field in ('scene_id','actor_id'):
+        if value['camera'].get(field) is not None and not isinstance(value['camera'][field],str):problems.append(error('/camera/'+field,'Ожидался строковый ID.','string_type'))
+    for sid,scene in world['scenes'].items():
+        if 'participants' in scene and (not isinstance(scene['participants'],list) or any(not isinstance(cid,str) for cid in scene['participants'])):problems.append(error('/world/scenes/'+escape(sid)+'/participants','Ожидался список ID.','list_type'))
+    for section in ('scenes','events'):
+        for key,row in world[section].items():
+            for field in ('participants','witnesses','fact_ids','event_ids'):
+                if field in row and (not isinstance(row[field],list) or any(not isinstance(ref,str) for ref in row[field])):problems.append(error('/world/'+section+'/'+escape(key)+'/'+field,'Ожидался список строковых ID.','list_type'))
+            if row.get('location') is not None and not isinstance(row['location'],str):problems.append(error('/world/'+section+'/'+escape(key)+'/location','Ожидался строковый ID.','string_type'))
+    if problems:raise DraftErrors(problems)
     # Rename invalid technical character IDs consistently, never edit prose.
     remap={c['id']:identity('character',c['id']) for c in value['characters'] if isinstance(c.get('id'),str) and not re.fullmatch(r'[\w-]{1,100}',c['id'])}
     def references(v,field=''):
@@ -210,6 +223,10 @@ def normalize(value):
         if isinstance(place,dict):
             place.setdefault('id',identity('location',index,place.get('name','')))
             place.setdefault('kind','unknown')  # preserves explicit IDs during existing migration
+            if not isinstance(place['id'],str):problems.append(error(f'/locations/{index}/id','Ожидался строковый ID.','string_type'))
+            if place.get('parent_id') is not None and not isinstance(place['parent_id'],str):problems.append(error(f'/locations/{index}/parent_id','Ожидался строковый ID.','string_type'))
+        else:problems.append(error(f'/locations/{index}','Ожидался объект.','object_type'))
+    if problems:raise DraftErrors(problems)
     from backend.services.draft_relations import merge
     value=merge(value)
     from backend.services.draft_intake import merge_duplicates
@@ -226,10 +243,12 @@ def normalize(value):
 
 def validate_typed(state):
     """Validate before legacy migration's conservative salvage can discard input."""
-    world=state['world']; problems=[]
+    world=state['world']; problems=[];invalid_shape=False
     def check(model,record,path):
+        nonlocal invalid_shape
         try: return model.model_validate(record)
         except ValidationError as exc:
+            invalid_shape=True
             for e in exc.errors(include_url=False,include_input=False):
                 location=e['loc']
                 if model is m.Calendar and not location and e['type']=='value_error':
@@ -240,7 +259,12 @@ def validate_typed(state):
     if state['world_clock'].get('calendar') is not None:
         calendar=check(m.Calendar,state['world_clock']['calendar'],'/world_clock/calendar')
     for section,model in EXTENSIONS.items():
-        for key,record in world.get(section,{}).items(): check(model,record,f'/world/{section}/{escape(key)}')
+        for key,record in world.get(section,{}).items():
+            check(model,record,f'/world/{section}/{escape(key)}')
+            since,until=record.get('since'),record.get('until')
+            if type(since) is int and type(until) is int and until<since:
+                base=f'/world/{section}/{escape(key)}'
+                problems.append(error(base+'/until','Окончание раньше начала.','chronology',related_paths=[base+'/since']))
     for cid,record in world['characters'].items():
         check(m.Character,{k:v for k,v in record.items() if k in m.Character.model_fields},'/world/characters/'+escape(cid))
     for key,record in world['scheduled_events'].items():
@@ -296,6 +320,7 @@ def validate_typed(state):
         check(m.Location,{k:v for k,v in place.items() if k in m.Location.model_fields},f'/locations/{index}')
         if place.get('parent_id') is not None and place['parent_id'] not in locations:
             problems.append(error(f'/locations/{index}/parent_id','Неизвестное родительское место.','reference',allowed=sorted(locations)))
+    if invalid_shape:raise DraftErrors(problems)
     for index,place in enumerate(state['locations']):
         parents={p['id']:p.get('parent_id') for p in state['locations']}
         seen={place['id']};parent=place.get('parent_id')
@@ -405,9 +430,6 @@ def cross_record_errors(state):
                 for effect,v in row.get('effects',{}).items():
                     if v is True:problems.append(error(base+'/effects/'+effect,'Условие ограничивает возможности, но не предоставляет их.','capability',allowed=[False,None]))
             if section in ('objective_relations','roles','residences','organizations','conditions'):
-                since,until=row.get('since'),row.get('until')
-                if isinstance(since,int) and isinstance(until,int) and until<since:
-                    problems.append(error(base+'/until','Окончание раньше начала.','chronology',related_paths=[base+'/since']))
                 if row.get('status','active') in ('active','unknown_outcome'):
                     for field in ('until','until_date','outcome','closure_fact_id'):
                         if row.get(field) not in (None,''):problems.append(error(base+'/'+field,'Активная запись содержит завершение.','chronology',related_paths=[base+'/status'] if 'status' in row else []))

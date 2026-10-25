@@ -233,3 +233,29 @@ test('malformed review automatically reaches a playable draft through alternate 
   await page.getByRole('button',{name:'Начать игру',exact:true}).click();
   await expect(page.locator('.choices button')).toHaveCount(6);
 });
+
+for (const marker of ['TEST_RELEASE_NESTED','TEST_RELEASE_QUALITY']) {
+ test(`release untrusted response ${marker} preserves ready world`,async({page,request},info)=>{
+  const w=await(await request.post('/api/workspaces',{data:{name:'Release protocol'}})).json();const url=`/api/workspaces/${w.id}/draft`;
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),w.id);
+  await page.goto('/');await nav(page,'Создать');
+  await page.getByLabel('Описание мира или текст импорта').fill(`${marker} ${info.project.name}. Соседи разговаривают на кухне.`);
+  await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+  await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('saved');
+  const raw=await(await request.get(url+'/raw')).json();
+  if(marker==='TEST_RELEASE_QUALITY'){
+   expect(raw.quality.status).toBe('partial');
+   await expect(page.getByText(/Некоторые творческие детали модель оставила неполными/)).toBeVisible();
+  }else expect(raw.review_failures.length).toBeGreaterThanOrEqual(2);
+  expect(raw.requests.filter((r:{stage:string})=>r.stage==='draft_world')).toHaveLength(1);
+  await expect(page.getByRole('button',{name:'Повторить проверку',exact:true})).toHaveCount(0);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth));
+  await page.screenshot({path:`test-results/release-${marker}-${info.project.name}.png`,fullPage:true});
+  await page.reload();await nav(page,'Создать');
+  await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
+  await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+  await page.getByRole('button',{name:'Начать игру',exact:true}).click();
+  await expect(page.locator('.choices button')).toHaveCount(6);
+  await page.reload();await expect(page.locator('.choices button')).toHaveCount(6);
+ });
+}

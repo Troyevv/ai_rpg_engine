@@ -1,5 +1,7 @@
 # Итоговый отчёт по Issue #44 / PR #116
 
+Последующий релизный аудит: [issue44-release-acceptance.md](issue44-release-acceptance.md). Числа ниже относятся к предыдущему этапу.
+
 Отчёт следует `acceptance_report_template.md` из итогового архива от 25.10.2026. Числа относятся к выполненным проверкам; replay и controlled continuation не являются измерением качества DeepSeek.
 
 ## 1. Версия и объём

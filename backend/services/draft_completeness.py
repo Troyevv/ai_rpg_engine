@@ -26,7 +26,7 @@ RULES = '''Проверь исходный замысел и уже утверж
 7. controlled_actor_id: начальный образ, эмоции и предысторию можно творчески дополнить. Не выполняй будущие добровольные действия игрока, не предрешай согласие; активные intentions/obligations требуют явного основания в авторском вводе. Черта характера не намерение; не удаляй заданные автором стремления. NPC вправе иметь творчески дополненные цели.
 8. Даты рождения и календарная арифметика проверяются и дополняются кодом; null в старом мире допустим. Поездка, война или присутствие в сцене не закрывают постоянное проживание. sibling симметричен и не требует обратной записи. Для качественного дополнения укажи выбранные слабые поля в patch_paths, severity=recommendation, assertion=optional_detail; оценивай полезность для игры, не длину текста.
 9. Сцена должна сохранять заданные место, состав, время и действия на момент старта; не добавляй уже исполненные решения игрока после начала игры.
-Для утверждения об отсутствии значения используй assertion="missing_value" и точный path поля; для отсутствующей ссылки assertion="missing_reference", path одиночного строкового ID и target_path словаря целей. Для отсутствующей структурированной записи assertion="missing_record", section с именем коллекции и record_match с её идентифицирующими полями (например actor_id и kind), patch_paths конкретного нового ID. Не применяй missing_reference к dict/list и не заменяй коллекцию; необязательное обогащение assertion="optional_detail". Код сверит такие утверждения с кандидатом. Остальные противоречия assertion="semantic": укажи basis из ссылок {path}; значения прочитает сервер несовместимых утверждений и объясни несовместимость в message. Разное текущее место и постоянное жильё совместимы. Неоднозначность требует уточнения, не закрытия проживания. Для явного окончания проживания укажи lifecycle_decision=close и basis со ссылкой на подтверждающее обстоятельство вне самой residence; количество оснований само по себе ничего не доказывает. Для исправления ошибочного закрытия используй lifecycle_decision=correct. Для удаления ошибочной residence отдельно укажи remove_paths; path или patch_paths сами не разрешают удаление.
+Для утверждения об отсутствии значения используй assertion="missing_value" и точный path поля; для отсутствующей ссылки assertion="missing_reference", path одиночного строкового ID и target_path словаря целей. Для отсутствующей структурированной записи assertion="missing_record", section с именем коллекции и record_match с её идентифицирующими полями (например actor_id и kind). Технический ID и patch_paths новой записи определит сервер. Не применяй missing_reference к dict/list и не заменяй коллекцию; необязательное обогащение assertion="optional_detail". Код сверит такие утверждения с кандидатом. Остальные противоречия assertion="semantic": укажи basis из ссылок {path}; значения прочитает сервер несовместимых утверждений и объясни несовместимость в message. Разное текущее место и постоянное жильё совместимы. Неоднозначность требует уточнения, не закрытия проживания. Для явного окончания проживания укажи lifecycle_decision=close и basis со ссылкой на подтверждающее обстоятельство вне самой residence; количество оснований само по себе ничего не доказывает. Для исправления ошибочного закрытия используй lifecycle_decision=correct. Для удаления ошибочной residence отдельно укажи remove_paths; path или patch_paths сами не разрешают удаление.
 path — диагностический JSON Pointer относительно candidate (не обёртки запроса): /world/roles/id, НЕ /candidate/world/roles/id и НЕ /world/world/roles/id. Диагностика может указывать существующую запись целиком, но это НЕ разрешение заменить запись. patch_paths — отдельный список точных полей для исправления; для новой записи разрешён /world/<раздел>/<новый_ID> при существующем родителе. Не заменяй существующие записи, карточки, коллекции или весь мир. Для recommendation допустим path=null и пустой patch_paths. Для blocker уточни patch_paths до конкретных полей; если это невозможно, сохрани замечание без разрешения на patch. related_paths — существующие связанные записи/поля. Не объявляй отсутствие optional ошибкой без смыслового основания. Идея — творческая основа, не перечень разрешённых фактов. Новые непротиворечивые персонажи, секреты, биографии и обстоятельства допустимы и становятся истиной мира. Используй их как основания для roles, objective_relations, residences, facts и knowledge. Отсутствие в исходном тексте не ошибка. Не требуй цитат или согласования дополнений. Необязательное литературное обогащение помечай severity="recommendation"; блокирующие противоречия — severity="blocker". Техническая ошибка самого отчёта не доказывает ошибку мира.'''
 SECTIONS = {'objective_relations','roles','residences','organizations','facts','knowledge','events','scenes','characters','relationships','threads','conditions','possessions','scheduled_events'}
 
@@ -44,8 +44,8 @@ def pointer(value, path):
     return current
 
 
-CONTRACT_VERSION = 6
-RECOVERY_POLICY = 2
+CONTRACT_VERSION = 7
+RECOVERY_POLICY = 3
 
 class ReviewBasis(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
@@ -73,6 +73,9 @@ class ReviewIssue(BaseModel):
 
     @model_validator(mode='after')
     def conditional_shape(self):
+        if self.assertion=='optional_detail' and self.severity=='blocker' and 'severity' in self.model_fields_set:
+            raise ValueError('optional_detail несовместим с явным blocker.')
+        if self.assertion=='optional_detail':self.severity='recommendation'
         if self.assertion=='missing_record':
             # Explicit v1–v5 adapter; new requests use section and server IDs.
             if not self.section and isinstance(self.path,str) and self.path.startswith('/world/') and len(self.path.split('/'))==3:
@@ -91,7 +94,7 @@ class ReviewReport(BaseModel):
 
 class ReportError(ValueError):
     def __init__(self, errors, issues=None):
-        self.errors = errors
+        self.errors = [{'stage':'review','contract_version':CONTRACT_VERSION,'code':'invalid_report',**e} for e in errors]
         self.issues = issues or []
         super().__init__('; '.join(e['report_path']+': '+e['message'] for e in errors))
 
@@ -109,6 +112,15 @@ def report_schema():
             ('missing_record', ['section', 'record_match'], {'section': {'enum': sorted(EXTENSIONS)}, 'record_match': {'type': 'object', 'minProperties': 1}}),
         ]]
     item['allOf'].append({'if':{'properties':{'assertion':{'const':'semantic'},'severity':{'not':{'const':'recommendation'}}}},'then':{'anyOf':[{'required':['path'],'properties':{'path':{'type':'string'}}},{'required':['section','entity_id'],'properties':{'section':{'type':'string'},'entity_id':{'type':'string'}}}]}})
+    item['allOf'].append({'if':{'properties':{'assertion':{'const':'optional_detail'}},'required':['assertion']},'then':{'properties':{'severity':{'const':'recommendation'}}}})
+    return schema
+
+
+def typed_schema(model):
+    schema=model.model_json_schema();definitions=report_schema()['$defs']
+    schema.setdefault('$defs',{}).update(definitions)
+    for node in [schema,*schema['$defs'].values()]:
+        if 'issues' in node.get('properties',{}):node['properties']['issues']['items']={'$ref':'#/$defs/ReviewIssue'}
     return schema
 
 
@@ -258,7 +270,8 @@ def merge_correction(reply, previous, errors):
     report=strict_loads(reply)
     original=strict_loads(previous)
     if isinstance(report,dict) and set(report)=={'replacements'}:
-        replacements=report['replacements']
+        from backend.services.draft_protocol import Correction,decode
+        replacements=decode(Correction,reply,'correction').model_dump()['replacements']
         expected={issue_identity(original['issues'][i]):i for i in indices}
         if not isinstance(replacements,list) or len(replacements)!=len(expected):
             raise ReportError([dict(report_path='/',world_path=None,message='Нужна замена каждого отклонённого issue_id.')])
@@ -296,22 +309,25 @@ def correction(messages, reply, errors):
         rejected_items=[dict(issue_id=issue_identity(rejected['issues'][i]),issue=rejected['issues'][i]) for i in indices]
         for entry in rejected_items:
             item=entry['issue']
-            refs=(item.get('related_paths') or []) + [b.get('path') for b in item.get('basis',[]) if isinstance(b,dict)]
-            for path in (item.get('patch_paths') or []):
+            if not isinstance(item,dict):continue
+            def array(key):return item[key] if isinstance(item.get(key),list) else []
+            refs=[r for r in array('related_paths') if isinstance(r,str)] + [b['path'] for b in array('basis') if isinstance(b,dict) and isinstance(b.get('path'),str)]
+            for path in array('patch_paths'):
                 if isinstance(path,str):refs.append(path.rsplit('/',1)[0])
             for ref in refs:
                 try:context[ref]=pointer(state,ref)
                 except (ValueError,KeyError,IndexError,TypeError):pass
         reply=json.dumps({'issues':[rejected['issues'][i] for i in indices]},ensure_ascii=False)
-    return [messages[0],dict(role='user',content=json.dumps(dict(
-        rejected_items=rejected_items,replacement_contract='Верни replacements: [{issue_id, issues:[исправленные пункты]}]. Можно разделить одно замечание на несколько; нельзя терять соседние замечания. Старый issues по одному на индекс также принимается.',
-        original_indices=indices,reply_scope='Верни только отклонённые пункты, по одному в исходном порядке; остальные сохранены кодом.' if indices is not None else 'Исправь внешнюю структуру отчёта.',
+    from backend.services.draft_protocol import Correction
+    return [dict(role='system',content=MARKER+' Исправь повреждённые пункты отчёта по response_schema. Мир не изменяй.'),dict(role='user',content=json.dumps(dict(
+        response_schema=typed_schema(Correction) if indices is not None else report_schema(),rejected_items=rejected_items,replacement_contract='Верни replacements: [{issue_id, issues:[исправленные пункты]}]. Можно разделить пункт; сохрани соседей.' if indices is not None else 'Верни полный исправленный report с issues.',
+        original_indices=indices,reply_scope='Верни replacements по issue_id; остальные пункты сохранены кодом.' if indices is not None else 'Исправь внешнюю структуру отчёта.',
         instruction='Исправь только отчёт по конкретным ошибкам валидации, не выполняй новый аудит мира. Не меняй мир. Не удаляй замечания ради прохождения проверки. Сохрани корректные замечания и их содержание. Корень JSON Pointer — candidate, без префикса candidate.',
         author_context=payload.get('author_context'),address_guide=payload.get('address_guide',{}),related_context=context,
         rejected_response=reply,validation_errors=errors,report_schema=report_schema()),ensure_ascii=False,separators=(',',':')))]
 
 
-def parse(reply, state):
+def _parse(reply, state):
     try:report=strict_loads(reply)
     except ValueError as exc:raise ReportError([dict(report_path='/',world_path=None,message=str(exc))]) from exc
     try:
@@ -324,7 +340,7 @@ def parse(reply, state):
         base=f'/issues/{i}'
         try:issue=ReviewIssue.model_validate(item)
         except ValidationError as exc:
-            if isinstance(item,dict) and (item.get('severity')=='recommendation' or item.get('assertion')=='optional_detail'):
+            if advisory(item):
                 problems.append(error('',str(item.get('message') or 'Неверное необязательное замечание'),'review_advisory_invalid',severity='recommendation',patch_paths=[],protocol_warnings=[dict(report_path=base,message=e['msg']) for e in exc.errors(include_input=False)],original_issue=item))
                 continue
             errors.extend(dict(report_path=base+'/'+ '/'.join(map(str,e['loc'])),world_path=item.get('path') if isinstance(item,dict) else None,message=e['msg']) for e in exc.errors(include_input=False));continue
@@ -360,9 +376,11 @@ def parse(reply, state):
                         disproved=record_predicate(state,issue)
                     else:
                         if not isinstance(actual,str) or not actual.strip():
-                            raise ValueError('missing_reference требует одиночный непустой строковый ID в path. Для отсутствующей записи используй missing_record, path коллекции, record_match и patch_paths нового ID; коллекцию заменять нельзя.')
+                            raise ValueError('missing_reference требует одиночный непустой строковый ID в path. Для отсутствующей записи используй missing_record, section и record_match; технический ID определит сервер, коллекцию заменять нельзя.')
                         if not issue.target_path:raise ValueError('Для missing_reference нужен target_path.')
-                        target=pointer(state,issue.target_path)
+                        if issue.target_path not in {'/world/'+name for name in SECTIONS}:raise ValueError('target_path должен указывать каноническую коллекцию по ID.')
+                        try:target=pointer(state,issue.target_path)
+                        except KeyError as exc:raise ValueError('Коллекция target_path отсутствует.') from exc
                         if not isinstance(target,dict):raise ValueError('target_path должен указывать словарь записей по ID.')
                         disproved=actual in target
                 except KeyError:disproved=False
@@ -418,5 +436,35 @@ def parse(reply, state):
             warnings+=errors[before:]
             problems.append(error(issue.path or '',issue.message,'semantic_completeness',related_paths=valid_related,severity=issue.severity,patch_paths=safe_paths,remove_paths=issue.remove_paths,lifecycle_decision=issue.lifecycle_decision,basis=verified_basis,assertion=issue.assertion,target_path=issue.target_path,record_match=issue.record_match,original_issue=original,**(dict(protocol_warnings=warnings) if warnings else {})))
     for problem in problems:problem['issue_id']=issue_identity(problem.get('original_issue',problem))
+    if errors:raise ReportError(errors,problems)
+    return problems
+
+
+def advisory(item):
+    if not isinstance(item,dict):return False
+    kind=item.get('assertion','semantic');severity=item.get('severity')
+    if kind not in ('semantic','missing_value','missing_reference','missing_record','optional_detail'):return False
+    return severity=='recommendation' or (kind=='optional_detail' and severity is None)
+
+
+def parse(reply,state):
+    try:report=strict_loads(reply)
+    except ValueError:return _parse(reply,state)
+    if not isinstance(report,dict) or set(report)!={'issues'} or not isinstance(report['issues'],list):return _parse(reply,state)
+    problems=[];errors=[]
+    for i,item in enumerate(report['issues']):
+        def addressed(entries):
+            return [dict(e,report_path=re.sub(r'^/issues/0(?=/|$)',f'/issues/{i}',e['report_path']),issue_id=issue_identity(item)) for e in entries]
+        try:rows=_parse(json.dumps({'issues':[item]},ensure_ascii=False),state)
+        except ReportError as exc:
+            if not advisory(item):
+                errors.extend(addressed(exc.errors));problems.extend(exc.issues);continue
+            rows=[error('',str(item.get('message') or 'Неверный совет'),'review_advisory_invalid',severity='recommendation',original_issue=item,protocol_warnings=addressed(exc.errors))]
+        for row in rows:
+            if row.get('protocol_warnings'):row['protocol_warnings']=addressed(row['protocol_warnings'])
+            if row.get('protocol_warnings') and advisory(item):
+                row.update(patch_paths=[],remove_paths=[],related_paths=[],basis=[],lifecycle_decision=None,original_issue=item)
+            row['issue_id']=issue_identity(item)
+        problems.extend(rows)
     if errors:raise ReportError(errors,problems)
     return problems

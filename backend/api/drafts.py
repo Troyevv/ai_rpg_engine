@@ -79,6 +79,7 @@ def install(app,repo,preparation,credentials,job):
         journal=json.loads(saved.get('response_journal') or '{}')
         # Explicit allowlist: never export config, credentials or authorization headers.
         keys=('responses','pending','errors','review_failures','repair_failures','http_failures','review_recoveries',
+              'quality','quality_attempts','review_strategies','review_resolutions','review_preparation_failures','internal_errors',
               'accepted_reviews','unknown_attempts','recovery_epoch','reserved_tokens','reserved_cost','actual_tokens','actual_cost','fragment_recoveries','binding')
         requests=[{k:r.get(k) for k in ('id','stage','status','finish_reason','usage_json','input_tokens','output_tokens','cost_usd')} for r in repo.request_log(job_id=current['id'])]
         draft=repo.draft(wid,True)

@@ -56,6 +56,8 @@ def stream(**kwargs):
         yield '{"issues":[]}'
         return
     full='\n'.join(m['content'] for m in kwargs['messages'])
+    if kwargs['messages'][0]['content'].startswith('Один необязательный пакет') and 'TEST_RELEASE_QUALITY' in full:
+        yield '{"patches":[],"preserved_unknown":null}';return
     observer='Тип хода: background' in full or 'Режим observer:' in full or 'mode=observer' in full
     if kwargs['messages'][0]['content'].startswith('Select at most ONE optional grounded autonomous remote action.'):
         yield '{"action":null}'
@@ -119,6 +121,7 @@ def stream(**kwargs):
         for card in candidate['characters']:
             for field,text in {'Характер':'Спокоен, внимателен к деталям.','Сильные стороны':'Помнит детали разговора.','Слабости':'Неохотно просит о помощи.','Биография':'Давно живёт в районе и знает соседей.','Внешность':'Короткие волосы, серая куртка.','Стиль общения':'Говорит короткими фразами, уточняет детали.','Привычки':'Записывает договорённости в блокнот.'}.items():
                 if card.get('fields',{}).get(field,'').strip().lower() in ('','неизвестно','не указано','—'):card['fields'][field]=text
+        if 'TEST_RELEASE_QUALITY' in full:candidate['characters'][1]['fields']['Внешность']='неизвестно'
         if 'TEST_CANDIDATE_RECOVERY' in full:candidate['protagonist_id']='missing'
         value=json.dumps(candidate,ensure_ascii=False)
         if 'TEST_FRAGMENT_RECOVERY' in full:
