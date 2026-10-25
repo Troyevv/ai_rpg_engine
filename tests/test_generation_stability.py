@@ -241,3 +241,12 @@ def test_partial_phase_year_cannot_become_invented_january_first():
     updated=json.loads(repair.apply(raw,json.dumps({'patches':[dict(path=date,value=None),dict(path=context,value='Работает с 1370 года; точная дата неизвестна.')]}),scope))
     assert updated['world']['roles']['job']['since_date'] is None
     assert '1370' in updated['world']['roles']['job']['context']
+
+
+def test_schedule_compatibility_flag_is_server_owned():
+    from backend.services.draft_presentation import editor_contract
+    assert 'time_semantics' not in editor_contract()['fields']['scheduled_events']
+    state=rich();state['world']['scheduled_events']['plan']=dict(id='plan',description='План',participants=[],due_minute=None,status='pending',time_semantics='explicit')
+    path='/world/scheduled_events/plan/time_semantics';raw=json.dumps(state)
+    _,scope=repair.request(raw,[dict(path=path,message='Change interpretation')])
+    with pytest.raises(ValueError):repair.apply(raw,json.dumps({'patches':[dict(path=path,value='legacy')]}),scope)

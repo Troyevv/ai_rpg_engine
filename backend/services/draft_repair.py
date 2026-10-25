@@ -149,7 +149,7 @@ def apply(raw,reply,paths):
         raise ValueError('Повторные или пересекающиеся пути patch.')
     for patch in repaired['patches']:
         if isinstance(paths,RepairScope) and (patch['path'].startswith(('/authoring','/creation_settings','/world_clock')) or
-                '/birth_provenance' in patch['path'] or patch['path'].endswith('/birth_date')):
+                '/birth_provenance' in patch['path'] or patch['path'].endswith(('/birth_date','/time_semantics'))):
             from backend.services.draft_completeness import pointer
             if patch.get('op') or pointer(original,patch['path'])!=patch.get('value'):
                 raise ValueError('Календарь и происхождение дат изменяются кодом или автором, не repair.')

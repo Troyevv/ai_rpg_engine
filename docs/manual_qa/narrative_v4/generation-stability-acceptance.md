@@ -45,7 +45,7 @@ The existing E1 exact-candidate recovery still exercises the same saved world th
 
 ## Validation
 
-Local full backend run: **1704 passed in 210.21s**. After the final defensive intake guards and strengthened scenario fixtures: **64 focused tests passed in 14.09s**, including all six fresh-workspace paths. Production build, compileall, dependency consistency and diff whitespace checks passed. Exact published-head CI status is recorded in the PR description. Commands used:
+Local full backend run: **1704 passed in 210.21s**. After the final defensive intake guards and strengthened scenario fixtures: **64 focused tests passed in 14.09s**, including all six fresh-workspace paths. The final follow-up hides/protects the server-owned schedule compatibility flag: **114 focused tests passed in 22.18s**, followed by another successful production build. The published main commit also passed **1704 tests in CI**. Production build, compileall, dependency consistency and diff whitespace checks passed. Exact published-head CI status is recorded in the PR description. Commands used:
 
 ```sh
 HF_HUB_OFFLINE=1 python -m pytest -q

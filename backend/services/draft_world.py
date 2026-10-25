@@ -37,7 +37,7 @@ FIELDS['knowledge'].update({'evidence','replaced_by','source_turn','revision'})
 FIELDS['clock']={'minute','calendar'}
 from backend.runtime_v3.models import ScheduledEvent, Knowledge, Character
 GROUPS['scheduled_events']='scheduled_events'
-FIELDS['scheduled_events']=set(ScheduledEvent.model_fields)-{'id'}
+FIELDS['scheduled_events']=set(ScheduledEvent.model_fields)-{'id','time_semantics'}
 
 
 def prepare(original):
