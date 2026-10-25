@@ -17,14 +17,16 @@ RULES = '''Проверь исходный замысел и уже утверж
 Пустой issues допустим только после проверки всех пунктов. Не возвращай цитаты/spans, планы или новый мир.
 Проверяй значимые обстоятельства, а не заполненность необязательных полей:
 1. Родители/усыновители, братья/сёстры, дружба, коллеги должны иметь objective_relations; эмоциональный relationships не заменяет их. adoptive_parent не parent. Не требуй все пары. Социальный sibling не доказывает биологическое родство. В context/evidence могут быть сохранены несколько описаний одной симметричной активной связи. Разные формулировки и обратный порядок участников сами по себе не противоречие. Проверь согласованность всех описаний с фактами и биографиями; реальное противоречие требует локального patch точных полей, а не закрытия связи ради удаления дубля.
+Отсутствующее неизвестное жильё, неизвестная дата рождения и неполные необязательные dimensions не являются блокерами. Не требуй взаимности чувств, attraction в ответ на любовь, связей каждой пары, обязательных целей/тайн/травм. Работа, текущая локация и город не доказывают проживание в здании; проживание при мастерской допустимо при сюжетном основании. При ошибочном residence разреши локально удалить запись или создать подходящую локацию вместе с привязкой. Не превращай приглашение в переезд или согласие игрока.
 2. Указанные профессии и учёба требуют roles, известное постоянное проживание — residences. Текущее нахождение не означает проживание. Уход из дома не означает новую постоянную прописку.
 3. Отдельные компании группы отражаются organizations и facts.claim(predicate=parent_organization). Направление деятельности/отдел не становится отдельным юридическим лицом без основания.
-4. Сопоставь объективные facts, events, участников, свидетелей и knowledge К НАЧАЛУ игры. «Никто не знал» до раскрытия не означает unknown после него. Знание не распространяется на отсутствовавших. Уточнение автора о событии раскрытия важнее прежнего описания тайны. При неоднозначности выбери согласованную трактовку, сохраняя явные ограничения автора. Для раскрытия добавь событие и source_event_id; не переписывай истинность факта ради знания.
-5. Числовое world_clock.minute авторитетно; строковые проекции не источник времени. Calendar должен соответствовать дате/дню недели/времени автора и сцены. Если только пятница 08:00 — start_date=null, start_weekday=4, время 08:00; календарный anchor может привязать пятницу к существующей минуте. Не назначай дату произвольно. Для обычного современного мира profile.system=gregorian. Для иной эпохи/мира учитывай заданный календарь.
+4. Сопоставь объективные facts, events, участников, свидетелей и knowledge К НАЧАЛУ игры. «Никто не знал» до раскрытия не означает unknown после него. Знание не распространяется на отсутствовавших. Уточнение автора о событии раскрытия важнее прежнего описания тайны. При неоднозначности выбери согласованную трактовку, сохраняя явные ограничения автора. При явно описанном событии раскрытия сохрани событие и его ссылку; source_event_id=null допустим для исходного знания без отдельного события; не переписывай истинность факта ради знания.
+5. Начало игры разрешается кодом из явных настроек, затем авторского начала. Числовой ответ модели не переопределяет эти значения. Календарная арифметика и DOB проверяются кодом; не запрашивай повторные технические исправления корректных значений. Calendar должен соответствовать дате/дню недели/времени автора и сцены. Если только пятница 08:00 — start_date=null, start_weekday=4, время 08:00; календарный anchor может привязать пятницу к существующей минуте. Не назначай дату произвольно. Для обычного современного мира profile.system=gregorian. Для иной эпохи/мира учитывай заданный календарь.
 6. Вчера вечером не час назад сегодняшним утром. Не придумывай точные минуты событий: если точное время неизвестно, minute=null, обстоятельства остаются в text/evidence и source_sequence. История предшествует сцене. Проверь связанные временные поля вместе.
 7. controlled_actor_id: начальный образ, эмоции и предысторию можно творчески дополнить. Не выполняй будущие добровольные действия игрока, не предрешай согласие; активные intentions/obligations требуют явного основания в авторском вводе. Черта характера не намерение; не удаляй заданные автором стремления. NPC вправе иметь творчески дополненные цели.
 8. При новой генерации допустима творчески выбранная дата рождения, согласованная с точным возрастом и текущей датой календаря; авторские даты и запреты сохраняются. Старое birth_date=null не ошибка и не требует заполнения.
 9. Сцена должна сохранять заданные место, состав, время и действия на момент старта; не добавляй уже исполненные решения игрока после начала игры.
+Для утверждения об отсутствии значения используй assertion="missing_value" и точный path поля; для отсутствующей ссылки assertion="missing_reference", path поля ссылки и target_path коллекции целей; необязательное обогащение assertion="optional_detail". Код сверит такие утверждения с кандидатом. Остальные противоречия assertion="semantic".
 path — диагностический JSON Pointer относительно candidate (не обёртки запроса): /world/roles/id, НЕ /candidate/world/roles/id и НЕ /world/world/roles/id. Диагностика может указывать существующую запись целиком, но это НЕ разрешение заменить запись. patch_paths — отдельный список точных полей для исправления; для новой записи разрешён /world/<раздел>/<новый_ID> при существующем родителе. Не заменяй существующие записи, карточки, коллекции или весь мир. Для recommendation допустим path=null и пустой patch_paths. Для blocker уточни patch_paths до конкретных полей; если это невозможно, сохрани замечание без разрешения на patch. related_paths — существующие связанные записи/поля. Не объявляй отсутствие optional ошибкой без смыслового основания. Идея — творческая основа, не перечень разрешённых фактов. Новые непротиворечивые персонажи, секреты, биографии и обстоятельства допустимы и становятся истиной мира. Используй их как основания для roles, objective_relations, residences, facts и knowledge. Отсутствие в исходном тексте не ошибка. Не требуй цитат или согласования дополнений. Необязательное литературное обогащение помечай severity="recommendation"; блокирующие противоречия — severity="blocker". Техническая ошибка самого отчёта не доказывает ошибку мира.'''
 SECTIONS = {'objective_relations','roles','residences','organizations','facts','knowledge','events','scenes','characters','relationships','threads','conditions','possessions','scheduled_events'}
 
@@ -42,7 +44,7 @@ def pointer(value, path):
     return current
 
 
-CONTRACT_VERSION = 3
+CONTRACT_VERSION = 4
 
 class ReviewIssue(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
@@ -51,6 +53,8 @@ class ReviewIssue(BaseModel):
     related_paths: list[str] = Field(default_factory=list)
     severity: Literal['blocker', 'recommendation'] = 'blocker'
     patch_paths: list[str] | None = None
+    assertion: Literal['semantic','missing_value','missing_reference','optional_detail'] = 'semantic'
+    target_path: str | None = None
 
 class ReviewReport(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
@@ -198,6 +202,25 @@ def parse(reply, state):
         except ValidationError as exc:
             errors.extend(dict(report_path=base+'/'+ '/'.join(map(str,e['loc'])),world_path=item.get('path') if isinstance(item,dict) else None,message=e['msg']) for e in exc.errors(include_input=False));continue
         before=len(errors);warnings=[]
+        # Machine-verifiable claims use a typed predicate, never prose matching.
+        if issue.assertion != 'semantic':
+            if issue.assertion == 'optional_detail':
+                issue.severity='recommendation';issue.patch_paths=[]
+            else:
+                try:
+                    actual=pointer(state,issue.path)
+                    if issue.assertion=='missing_value': disproved=actual is not None
+                    else:
+                        if not issue.target_path:raise ValueError('Для missing_reference нужен target_path.')
+                        target=pointer(state,issue.target_path)
+                        disproved=isinstance(target,dict) and actual in target
+                except KeyError:disproved=False
+                except (TypeError,ValueError,IndexError) as exc:
+                    errors.append(dict(report_path=base+'/assertion',world_path=issue.path,message=str(exc)));continue
+                if disproved:
+                    problems.append(error(issue.path,issue.message,'review_disproved',severity='recommendation',patch_paths=[],assertion=issue.assertion))
+                    continue
+
         def invalid(field,path,exc):
             entry=dict(report_path=base+'/'+field,world_path=path,message=str(exc))
             if issue.severity=='recommendation' and field!='message':warnings.append(entry)

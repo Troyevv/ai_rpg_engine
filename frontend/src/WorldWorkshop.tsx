@@ -40,7 +40,8 @@ type DraftState = {
 };
 type Draft = {
     editor?:{fields:Record<string,string[]>;enums:Record<string,Record<string,string[]>>;schemas:Record<string,Record<string,Item>>} | null;
-    presentation?: {clock:{label:string}} | null;
+    creation_settings?: Partial<Creation>;
+    presentation?: {clock:{label:string};notices?:string[]} | null;
     id: string;
     name: string;
     revision: number;
@@ -94,7 +95,8 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
     onWorld: (id: number) => void;
     onGame: (world: number, save: number) => void;
 }) {
-    const [creation, setCreation] = useState<Creation>(defaultCreation);
+    const [creation, setCreation] = useState<Creation>(()=>{try{return {...defaultCreation,...JSON.parse(localStorage.getItem('worldCreationSettings')||'{}')}}catch{return defaultCreation}});
+    useEffect(()=>{localStorage.setItem('worldCreationSettings',JSON.stringify(creation));},[creation]);
     const [candidatePath,setCandidatePath] = useState('');
     const [candidateValue,setCandidateValue] = useState('');
     const [residenceGrouping,setResidenceGrouping] = useState('actor');
@@ -169,6 +171,8 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
         void refresh();
         return () => loadController.current?.abort();
     }, [id, author]);
+    const savedCreation=JSON.stringify(draft?.creation_settings||{});
+    useEffect(()=>{const saved=JSON.parse(savedCreation);if(Object.keys(saved).length)setCreation({...defaultCreation,...saved});},[id,savedCreation]);
     const { job, reconnecting } = useJob(draft?.job, refresh);
     const locked = busy || loading || active(job);
     const phaseStatus: Record<string, [string,string]> = {
@@ -204,6 +208,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
     const resolve = resolver(state || {characters:[],locations:[],world:{}});
     const person = (cid: unknown) => resolve('actor_id',cid) || 'Неизвестно';
     const place = (lid: unknown) => resolve('location',lid) || 'Место не указано';
+    const calendarNotices=draft?.presentation?.notices||[];
     const weekTime = () => draft?.presentation?.clock.label || 'Время не указано';
     const actorCard = characters.find(c => c.id === actor);
     const beginning = state?.world.scenes?.[state.camera.scene_id];
@@ -341,6 +346,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
       </section>}
       <Dialog open={!!deleteDraft} onOpenChange={open => { if (!open) setDeleteDraft(null); }}><DialogContent><DialogHeader><DialogTitle>Удалить «{deleteDraft?.name}»?</DialogTitle><DialogDescription>Черновик переместится в удалённые. Готовые игровые сохранения не затрагиваются.</DialogDescription></DialogHeader><div className="workshop-dialog-actions"><Button variant="ghost" onClick={() => setDeleteDraft(null)}>Отмена</Button><Button disabled={busy} onClick={() => void run(async () => { if (!deleteDraft) return; await api(`/workspaces/${deleteDraft.id}`,{revision:deleteDraft.revision},'DELETE'); setList(await api<WorkspacePick[]>('/workspaces')); setRemoved(await api<WorkspacePick[]>('/workspaces?deleted=true')); if (id === deleteDraft.id) { selectWorkspace(''); } setDeleteDraft(null); toast.success('Черновик перемещён в удалённые'); })}>Удалить</Button></div></DialogContent></Dialog>
       {job?.error && <p className="workshop-error" role="alert">{job.error}</p>}
+      {calendarNotices.map((notice,i)=><p key={i} role="status">{notice}</p>)}
       {state && <section className="workshop-result">
         {job?.status === 'saved' && !!draft?.validation.warnings.length && <p className="workshop-hint">Мир сохранён. Некоторые творческие детали модель оставила неполными — они перечислены в «Проверке мира» и доступны для редактирования.</p>}
         <div className="workshop-result-heading"><div><span className="workshop-step">{previousWorld ? 'ПРЕДЫДУЩИЙ МИР' : '02 · МИР ГОТОВ'}</span><h2>{previousWorld ? 'Ранее сохранённый мир' : 'Посмотри, что получилось'}</h2></div>

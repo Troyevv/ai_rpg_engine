@@ -72,7 +72,10 @@ def test_failed_generation_manual_edit_start_turn_reload(api):
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         jid=client.post(url+'/generate',json={'revision':0,'text':SHORT,'config':REMOTE,'api_key':'test'}).json()['id']
         assert wait_job(client,jid)['status']=='error'
-    d=client.get(url+'?author=true').json();assert {k:v for k,v in d['candidate'].items() if k!='creation_settings'}==initial.normalize(raw)
+    d=client.get(url+'?author=true').json()
+    from backend.services.draft_calendar import complete
+    expected=initial.normalize(complete(raw,SHORT,seed=jid))
+    assert {k:v for k,v in d['candidate'].items() if k!='creation_settings'}==expected
     assert client.get(url).json()['candidate'] is None
     assert client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id']}).status_code==409
     for path in ('/protagonist_id','/controlled_actor_id'):

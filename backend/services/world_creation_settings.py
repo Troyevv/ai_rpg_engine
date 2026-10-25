@@ -1,7 +1,7 @@
 """Optional creation constraints; they never manufacture Runtime life events."""
 from typing import Literal
 from pydantic import Field, model_validator
-from backend.runtime_v3.models import StrictModel, NarrativePacingProfile, NarrativeRiskProfile
+from backend.runtime_v3.models import StrictModel, NarrativePacingProfile, NarrativeRiskProfile, CalendarProfile
 
 Genre = Literal['slice_of_life','family_saga','romance','drama','detective','thriller',
     'science_fiction','fantasy','horror','adventure','post_apocalyptic','historical','custom']
@@ -9,7 +9,27 @@ Expressiveness = Literal['realistic','expressive','hyperbolized']
 CAST_PRESETS = {'small':(3,5),'medium':(6,12),'large':(10,25)}
 
 
+class CalendarStart(StrictModel):
+    mode: Literal['auto','gregorian','custom'] = 'auto'
+    date: str | None = None
+    time: str | None = Field(default=None, pattern=r'^([01]\d|2[0-3]):[0-5]\d$')
+    weekday: int | None = Field(default=None, ge=0, le=13)
+    profile: CalendarProfile | None = None
+
+    @model_validator(mode='after')
+    def valid_start(self):
+        from backend.runtime_v3.calendar import date_parts
+        if self.mode == 'custom' and (not self.profile or self.profile.system != 'custom'):
+            raise ValueError('Свой календарь: задайте месяцы и длины месяцев.')
+        if self.date:
+            date_parts(self.date, self.profile.model_dump() if self.mode == 'custom' else {})
+        if self.weekday is not None and self.weekday >= len((self.profile.weekday_names if self.profile else []) or range(7)):
+            raise ValueError('День недели вне выбранного календаря.')
+        return self
+
+
 class CreationSettings(StrictModel):
+    calendar_start: CalendarStart = Field(default_factory=CalendarStart)
     narrative_pacing: NarrativePacingProfile = Field(default_factory=NarrativePacingProfile)
     narrative_risk: NarrativeRiskProfile = Field(default_factory=NarrativeRiskProfile)
     primary_genre: Genre | None = None

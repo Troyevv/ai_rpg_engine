@@ -2,7 +2,7 @@
 import hashlib
 import json
 from backend.services import draft_world as domain
-from backend.services.draft_presentation import clock_view,editor_contract
+from backend.services.draft_presentation import clock_view,editor_contract,calendar_notices
 from backend.services.draft_relations import plans as relation_plans
 
 
@@ -77,7 +77,8 @@ class DraftStorage:
                 'candidate':raw if candidate and author else None,
                 'relation_merges':relation_plans(raw) if raw and author else [],
                 'editor':editor_contract() if author else None,
-                'presentation':{'clock':clock_view(state['world_clock'])} if state else None,
+                'presentation':{'clock':clock_view(state['world_clock']), 'notices':calendar_notices(state) if author else []} if state else None,
+                'creation_settings':(raw.get('creation_settings',{}) if raw else json.loads(latest['config_json']).get('_creation_settings',{}) if latest else {}) if author else {},
                 'state':state if author or state is None else domain.player_view(state),
                 'validation':report if author or not (record and review_metadata(record)) else {'errors':['Мир пока не готов к запуску. Откройте редактор автора.'] if report['errors'] else [],'warnings':[]},
                 'review':review_metadata(record) if record and author else ({'status':review_metadata(record).get('status')} if record and review_metadata(record) else None),
@@ -124,7 +125,10 @@ class DraftStorage:
             if not head:raise ValueError('Нет кандидата.')
             record=json.loads(head['content'])
             # Exact assignment retains all unknown fields and other errors.
+            old_minute=record['state'].get('world_clock',{}).get('minute')
             record['state']=json.loads(apply(dump(record['state']),dump({'patches':[{'path':path,'value':value}]}),[path]))
+            from backend.services.draft_calendar import manual_edit
+            record['state']=manual_edit(record['state'],path,old_minute)
             record['candidate']=True
             if review_metadata(record):record['review']=dict(review_metadata(record),status='stale',reason='Кандидат изменён. Повторите проверку.')
             record['diagnostics']=[e for e in record.get('diagnostics',[]) if e.get('path')!=path and not e.get('path','').startswith(path+'/')]

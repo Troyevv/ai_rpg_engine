@@ -124,6 +124,8 @@ def test_local_repair_context_keeps_unrelated_biographies_out_of_request():
     errors=[{'path':'/world/knowledge/a~1b/actor_id','category':'reference','allowed':['a'],'message':'Unknown actor'}]
     messages,paths=draft_repair.request(raw,errors)
     payload=json.loads(messages[-1]['content'])
+    from backend.repositories.drafts import candidate_hash
+    assert payload.pop('candidate_hash')==candidate_hash(json.loads(raw))
     assert payload=={'errors':errors,'fragments':{'/world/knowledge/a~1b':{'value':{'actor_id':'missing','fact_id':'f'}}}}
     repaired=draft_repair.apply(raw,json.dumps({'patches':[{'path':paths[0],'value':'a'}]}),paths)
     assert json.loads(repaired)['characters']==json.loads(raw)['characters']

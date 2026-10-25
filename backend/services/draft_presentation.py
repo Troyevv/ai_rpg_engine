@@ -32,3 +32,13 @@ def editor_contract():
             enum=schema.get('enum') or next((part['enum'] for part in schema.get('anyOf',[]) if 'enum' in part),None)
             if enum:enums[kind][key]=enum
     return dict(fields={k:sorted(v) for k,v in FIELDS.items()},enums=enums,schemas=schemas)
+
+
+def calendar_notices(state):
+    metadata=state.get('authoring',{}).get('calendar_completion',{})
+    notices=list(metadata.get('notices',[]))
+    names={c['id']:c['name'] for c in state.get('characters',[])}
+    for cid,record in metadata.get('birth_dates',{}).items():
+        if record.get('notice'):
+            notices.append(f"{names.get(cid,cid)} · дата рождения: {record['notice']} (/world/characters/{cid}/birth_date)")
+    return notices

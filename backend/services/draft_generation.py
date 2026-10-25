@@ -25,7 +25,7 @@ def messages_for(repo,job,config):
         instructions=idea_text(repo,job,config)
         from backend.services.world_creation_settings import CreationSettings
         settings=CreationSettings.model_validate(config.get('_creation_settings',{}))
-        instructions+='\nНастройки мира (не переопределяют явные факты идеи): '+json.dumps(settings.model_dump(),ensure_ascii=False)
+        instructions+='\nНастройки мира (явные поля календаря/начала приоритетны над идеей; остальные не переопределяют факты идеи): '+json.dumps(settings.model_dump(),ensure_ascii=False)
         instructions+='\nЦелевой состав NPC: '+json.dumps(settings.cast_targets([]),ensure_ascii=False)
         instructions+='\nЧисла NPC — ориентир, не квота. Именованные NPC входят в состав. Выразительность меняет подачу, а не характер. Темп и риск не создают предысторию.'
         instructions+='\nНе выводи пустые технические defaults (dependencies, review_required, reviewed_signature) и производные поля, когда схема позволяет их опустить. Непустые метаданные Motivation, факты, биографии и тайны сохраняй полностью.'
@@ -115,6 +115,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     repo.save_response_journal(jid,journal)
     result=response(repo,jid,journal,'world',messages,config,context,generate,handle.cancel)
     if result is None:return
+    recovered_candidate='candidate_text' in journal
     result=journal.get('candidate_text',result)
     epoch=journal.get('recovery_epoch',0)
     patch_failure=None
@@ -123,11 +124,16 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         repo.draft_phase(jid,'validating')
         try:
             raw=strict_loads(result)
-            if isinstance(raw,dict):raw['creation_settings']=config.get('_creation_settings',{})
+            if isinstance(raw,dict):
+                if not recovered_candidate:raw['creation_settings']=config.get('_creation_settings',{})
+                else:raw.setdefault('creation_settings',config.get('_creation_settings',{}))
+                from backend.services.draft_calendar import complete
+                raw=complete(raw, config.get('_draft_source',config.get('_draft_input','')), seed=jid)
             state,report=draft_initial.inspect_candidate(raw)
             errors=report['diagnostics']
             if isinstance(state,dict):
                 result=json.dumps(state,ensure_ascii=False)
+                recovered_candidate=True
                 journal['candidate_text']=result;repo.save_response_journal(jid,journal)
                 repo.save_draft_candidate(jid,state,errors,review=dict(status='not_started',issues=[],contract_version=draft_completeness.CONTRACT_VERSION),epoch=epoch)
         except (ValueError,TypeError,KeyError) as exc:
@@ -221,12 +227,23 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         repair,paths=draft_repair.request(result,errors,author_context=messages[-1]['content'])
         if patch_failure:repair.append(dict(role='user',content=json.dumps(patch_failure,ensure_ascii=False)))
         repo.draft_phase(jid,'retrying');stage='draft_world_repair'
-        slot='repair_'+str(attempt+1)+(f'_resume_{epoch}' if epoch else '')
+        repair_input_hash=hashlib.sha256(result.encode()).hexdigest()
+        repair_signature=hashlib.sha256(json.dumps([draft_completeness.CONTRACT_VERSION,repair_input_hash,repair],ensure_ascii=False,sort_keys=True).encode()).hexdigest()
+        slot=f'repair_{repair_signature}_{epoch}_{attempt}'
+        if any(item.get('input_hash')==repair_input_hash for item in journal.get('no_progress',[])):
+            raise ValueError('Кандидат не изменился после неэффективного исправления. Исправьте указанные поля в редакторе.')
         reply=response(repo,jid,journal,slot,repair,config,context,generate,handle.cancel)
         if reply is None:return
         try:
-            result=draft_repair.apply(result,reply,paths)
+            updated=draft_repair.apply(result,reply,paths)
+            if paths is not None and strict_loads(updated)==strict_loads(result):
+                journal.setdefault('no_progress',[]).append(dict(input_hash=repair_input_hash,slot=slot))
+                repo.save_response_journal(jid,journal)
+                raise draft_repair.NoProgress('Исправление не изменило кандидат. Повтор одинакового запроса остановлен.')
+            result=updated
             journal['candidate_text']=result;repo.save_response_journal(jid,journal)
+        except draft_repair.NoProgress:
+            raise
         except ValueError as invalid_patch:
             patch_failure=dict(rejected_response=reply,error=str(invalid_patch),instruction='Исправь формат patch, сохрани требуемые исправления и разрешённые пути.')
             journal.setdefault('repair_failures',[]).append(dict(slot=slot,**patch_failure))

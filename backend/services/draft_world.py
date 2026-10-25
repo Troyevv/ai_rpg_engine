@@ -369,7 +369,7 @@ def entity(state,kind,eid):
 
 
 def patch(state,kind,eid,field,value):
-    state=deepcopy(state);target=entity(state,kind,eid)
+    state=deepcopy(state);old_minute=state.get('world_clock',{}).get('minute');target=entity(state,kind,eid)
     if kind not in FIELDS:raise ValueError('Неизвестная сущность.')
     if kind=='character' and field.startswith('fields.'):
         key=field[7:]
@@ -397,6 +397,9 @@ def patch(state,kind,eid,field,value):
         state.update(protagonist_id=target['protagonist_id'],controlled_actor_id=target['controlled_actor_id'])
         state['camera']={'scene_id':target['scene_id'],'mode':'actor'}
         state['world_clock']={**state.get('world_clock',{}),'minute':target['minute'],'last_event_time':label(target['minute'])}
+    from backend.services.draft_calendar import manual_edit
+    path='/world_clock' if kind in ('start','clock') else '/world/characters/'+eid+'/birth_date' if kind=='actor' and field=='birth_date' else ''
+    state=manual_edit(state,path,old_minute)
     return sync(state)
 
 

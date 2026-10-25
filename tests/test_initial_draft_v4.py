@@ -276,7 +276,7 @@ def test_calendar_observance_reference_is_localized():
     assert exc.value.errors[0]['allowed']==sorted(c['id'] for c in raw['characters'])
 
 
-def test_saved_calendar_failure_resumes_with_repair_without_regenerating_world(tmp_path):
+def test_saved_calendar_failure_resumes_with_code_without_regenerating_world(tmp_path):
     repo=Repository(tmp_path/'calendar-repair.sqlite3');w=repo.create_workspace('calendar repair')
     config=dict(REMOTE,_draft_task='world',_draft_input=SHORT,_use_idea=False,_creation_settings={})
     jid=repo.begin_preparation(w['id'],'draft_world',SHORT,config,0)
@@ -295,7 +295,7 @@ def test_saved_calendar_failure_resumes_with_repair_without_regenerating_world(t
         assert request['fragments']=={'/world_clock/calendar':{'value':original['world_clock']['calendar']}}
         yield json.dumps({'patches':[{'path':'/world_clock/calendar/start_weekday','value':4}]})
     run(Preparation(repo),jid,config,None,Handle(),None,stream)
-    assert len(calls)==1 and repo.preparation_job(jid)['status']=='saved'
+    assert len(calls)==0 and repo.preparation_job(jid)['status']=='saved'
     saved=repo.draft(w['id'],True)['state']
     assert saved['world']['facts']==original['world']['facts']
     assert saved['characters']==draft_world.prepare(draft_initial.normalize(original))['characters']
