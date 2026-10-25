@@ -75,6 +75,10 @@ class PreservedUnknown(DTO):
 class QualityReply(PatchReply):
     patches: list[Operation]
     preserved_unknown: list[PreservedUnknown] = Field(default_factory=list)
+    @model_validator(mode='after')
+    def nonempty_result(self):
+        if not self.patches and not self.preserved_unknown:raise ValueError('Нужно дополнение или явно сохранённая неизвестность.')
+        return self
 
 class UnknownConfirmation(DTO):
     path: str

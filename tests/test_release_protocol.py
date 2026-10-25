@@ -171,7 +171,7 @@ def test_quality_valid_forms_share_published_schema(mode):
     assert journal['quality']['status']=='accepted'
     assert out['characters'][1]['fields']['Внешность']==('неизвестно' if mode!='patches' else 'Рыжие волосы и веснушки.')
 
-@pytest.mark.parametrize('raw',['[]','null','"bad"','{"patches":null}','{"patches":[null]}','{"patches":[],"preserved_unknown":null}','{"patches":[],"preserved_unknown":[{"path":[],"author_excerpt":"012345678"}]}'])
+@pytest.mark.parametrize('raw',['{"patches":[]}','{"patches":[],"preserved_unknown":[]}','[]','null','"bad"','{"patches":null}','{"patches":[null]}','{"patches":[],"preserved_unknown":null}','{"patches":[],"preserved_unknown":[{"path":[],"author_excerpt":"012345678"}]}'])
 def test_quality_bad_forms_rejected_by_published_schema(raw):
     state=rich();issues=[dict(path='/characters/1/fields/Внешность',message='Дополнить')]
     messages,_=repair.request(json.dumps(state),issues)

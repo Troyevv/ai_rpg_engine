@@ -19,7 +19,7 @@
 | Соседние: regeneration JSON | Реальный decode_result | Использовался permissive json.loads; общий strict decoder, duplicate/nonfinite/depth guard, проверка float overflow и непарного Unicode surrogate | `test_strict_json_for_regeneration_and_depth_limit` |
 | Соседние: quality running после restart, raw export | Реальные SQLite/API/lifespan | Атомарная финализация, защита late write, авторский экспорт diagnostics/raw | terminal/restart/internal-error tests |
 
-Первый красный прогон F1–F3: **13 failed, 4 passed**. Дополнительная матрица соседних обработчиков до исправления: **7 failed, 8 passed**. Дополнительный красный прогон float overflow / Unicode: **5 failed, 1 passed**; корректная surrogate pair и escaped JSON Pointer сохраняются. Это тесты модулей приложения, не isolated_probes.py. Указанные сбои подтверждены; исторические probes повторно не выдаются за доказательство приложения.
+Первый красный прогон F1–F3: **13 failed, 4 passed**. Дополнительная матрица соседних обработчиков до исправления: **7 failed, 8 passed**. Расхождение schema/handler для пустого quality подтверждено отдельным прогоном: **2 failed, 7 passed**; schema и DTO теперь требуют patches либо preserved_unknown. Дополнительный красный прогон float overflow / Unicode: **5 failed, 1 passed**; корректная surrogate pair и escaped JSON Pointer сохраняются. Это тесты модулей приложения, не isolated_probes.py. Указанные сбои подтверждены; исторические probes повторно не выдаются за доказательство приложения.
 
 ### Границы недоверенных данных (A01)
 

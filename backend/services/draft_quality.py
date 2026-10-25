@@ -116,4 +116,6 @@ def quality_schema(repair_schema):
     schema['properties']['patches']['minItems']=0
     schema['properties']['preserved_unknown']=QualityReply.model_json_schema()['properties']['preserved_unknown']
     schema['$defs']=QualityReply.model_json_schema()['$defs']
+    schema['anyOf']=[{'properties':{'patches':{'minItems':1}}},
+                     {'required':['preserved_unknown'],'properties':{'preserved_unknown':{'minItems':1}}}]
     return schema
