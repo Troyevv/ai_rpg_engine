@@ -232,6 +232,9 @@ def test_api_protocol_recovery_to_game_without_manual_world_edit(api,scenario):
     if scenario=='quality_partial':
         assert exported['quality']['status']=='partial' and exported['quality']['response']=='{"patches":[],"preserved_unknown":null}'
         assert d['validation']['warnings']
+        public=client.get(url).json()
+        assert public['quality_status']=='partial'
+        assert public['validation']['warnings']==[] and 'quality' not in public
     assert sum(r['stage']=='draft_world' for r in exported['requests'])==1
     if scenario=='advisory':assert not exported.get('review_failures')
     d=client.get(url+'?author=true').json();confirmed=client.post(url+'/confirm',json=dict(revision=d['revision'],version_id=d['version_id']));assert confirmed.status_code==200,confirmed.text

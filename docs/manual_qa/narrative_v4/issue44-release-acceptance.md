@@ -17,6 +17,7 @@
 | F3 advisory блокирует отчёт | Реальный parse: неверный locator, basis, remove/patch | Изоляция раньше покрывала лишь DTO; единая политика всего пункта, warning и нулевые права записи | `test_bad_advisory_is_isolated`, entire-item matrix и required siblings |
 | Соседние: неверные ID/списки и claims | Реальные normalize/inspect_candidate/merge_duplicates | Typed проверка перед hash, membership и обходом; точные пути; независимая хронология сохраняется | adjacent shape matrix, Knowledge/Relationship matrix |
 | Соседние: regeneration JSON | Реальный decode_result | Использовался permissive json.loads; общий strict decoder, duplicate/nonfinite/depth guard, проверка float overflow и непарного Unicode surrogate | `test_strict_json_for_regeneration_and_depth_limit` |
+| Соседние: публичный quality status | Browser CI: desktop 113 passed / 1 failed; mobile 103 passed / 10 skipped / 1 failed на d9e7783 | Player View правильно скрывал авторские warnings, но поэтому скрывал и общее предупреждение; отдельный безопасный quality_status без raw/reasons | API privacy regression, warning до/после reload в обоих browser projects |
 | Соседние: quality running после restart, raw export | Реальные SQLite/API/lifespan | Атомарная финализация, защита late write, авторский экспорт diagnostics/raw | terminal/restart/internal-error tests |
 
 Первый красный прогон F1–F3: **13 failed, 4 passed**. Дополнительная матрица соседних обработчиков до исправления: **7 failed, 8 passed**. Расхождение schema/handler для пустого quality подтверждено отдельным прогоном: **2 failed, 7 passed**; schema и DTO теперь требуют patches либо preserved_unknown. Дополнительный красный прогон float overflow / Unicode: **5 failed, 1 passed**; корректная surrogate pair и escaped JSON Pointer сохраняются. Это тесты модулей приложения, не isolated_probes.py. Указанные сбои подтверждены; исторические probes повторно не выдаются за доказательство приложения.
@@ -58,7 +59,7 @@
 
 - `HF_HUB_OFFLINE=1 python -m pytest -q tests/test_release_protocol.py tests/test_issue44_final.py tests/test_generation_stability.py tests/test_review_protocol.py` — 349 passed в промежуточном фокусном прогоне; окончательный полный набор включает их все.
 - `HF_HUB_OFFLINE=1 python -m pytest -q` — окончательный результат приведён в PR и CI того же SHA.
-- `npm run build`; `python -m pip check`; `git diff --check` — выполнены. Build: 3.14s, существующее предупреждение Vite о bundle >500 kB.
+- `npm run build`; `python -m pip check`; `git diff --check` — выполнены. Последний локальный build после исправления отображения quality: 3.29s; затронутые API/quality/E4/world tests: **353 passed (33.71s)**. Существующее предупреждение Vite о bundle >500 kB.
 - `npx playwright test --project=desktop --reporter=line` и `--project=mobile` — CI точного SHA; локальный Chromium недоступен из-за `socket() failed: Operation not permitted`.
 - Реальные вызовы DeepSeek: **0**. Изолированные probes не запускались как приёмка.
 

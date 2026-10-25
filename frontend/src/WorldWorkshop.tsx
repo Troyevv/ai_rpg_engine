@@ -49,6 +49,7 @@ type Draft = {
     candidate?: Record<string,unknown> | null;
     relation_merges?: {ids:string[];paths:string[];differences:string[];safe:boolean;records:Item[]}[];
     review?: {status:string;reason?:string;issues?:{message:string;severity:string;protocol_warnings?:unknown[]}[]} | null;
+    quality_status?: 'running' | 'accepted' | 'partial' | 'rejected' | 'cancelled' | null;
     start_block_reason?: string | null;
     state: DraftState | null;
     validation: {
@@ -349,7 +350,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
       {job?.error && <p className="workshop-error" role="alert">{job.error}</p>}
       {calendarNotices.map((notice,i)=><p key={i} role="status">{notice}</p>)}
       {state && <section className="workshop-result">
-        {job?.status === 'saved' && !!draft?.validation.warnings.length && <p className="workshop-hint">Мир сохранён. Некоторые творческие детали модель оставила неполными — они перечислены в «Проверке мира» и доступны для редактирования.</p>}
+        {job?.status === 'saved' && ['partial','rejected'].includes(draft?.quality_status || '') && <p className="workshop-hint" role="status">Мир сохранён. {draft?.quality_status === 'partial' ? 'Некоторые творческие детали модель оставила неполными.' : 'Необязательное дополнение не было принято; проверенные данные сохранены.'} Проверить и дополнить детали можно в режиме «Автор мира».</p>}
         <div className="workshop-result-heading"><div><span className="workshop-step">{previousWorld ? 'ПРЕДЫДУЩИЙ МИР' : '02 · МИР ГОТОВ'}</span><h2>{previousWorld ? 'Ранее сохранённый мир' : 'Посмотри, что получилось'}</h2></div>
           <Button variant="ghost" disabled={locked} onClick={() => {setEditingIdea(true); setText(draft?.source_text || text);}}>Изменить замысел</Button></div>
         <div className="workshop-result-toolbar">

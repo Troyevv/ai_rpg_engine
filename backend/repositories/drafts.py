@@ -76,7 +76,9 @@ class DraftStorage:
             if block and not author:state=None
             history=[dict(r) for r in db.execute("SELECT id,reason,created_at FROM document_versions WHERE kind='world_draft' AND owner=? ORDER BY id DESC",(wid,))]
             latest=db.execute('SELECT * FROM preparation_jobs WHERE workspace_id=? ORDER BY rowid DESC LIMIT 1',(wid,)).fetchone()
-            if author and latest and json.loads(latest['response_journal'] or '{}').get('quality',{}).get('status') in ('rejected','partial'):
+            quality_status=json.loads(latest['response_journal'] or '{}').get('quality',{}).get('status') if latest and record and record.get('origin_job')==latest['id'] else None
+            if quality_status not in ('running','accepted','partial','rejected','cancelled'):quality_status=None
+            if author and quality_status in ('rejected','partial'):
                 report['warnings'].append('Необязательное дополнение не принято или качество не завершено полностью. Проверенные данные сохранены; некоторые поля могут требовать содержательного дополнения.')
             public_job=self.public_job(dict(latest)) if latest else None
             if public_job and record and review_metadata(record) and review_metadata(record).get('status')=='stale' and latest['status'] in ('error','stopped'):
@@ -91,6 +93,7 @@ class DraftStorage:
                 'state':state if author or state is None else domain.player_view(state),
                 'validation':report if author or not (record and review_metadata(record)) else {'errors':['Мир пока не готов к запуску. Откройте редактор автора.'] if report['errors'] else [],'warnings':[]},
                 'review':review_metadata(record) if record and author else ({'status':review_metadata(record).get('status')} if record and review_metadata(record) else None),
+                'quality_status':quality_status,  # Safe summary; raw reasons stay author-only.
                 'start_block_reason':block,
                 'technical_valid':technical_valid,
                 'import_warnings':record.get('warnings',[]) if record and author else [],

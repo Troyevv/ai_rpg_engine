@@ -252,6 +252,7 @@ for (const marker of ['TEST_RELEASE_NESTED','TEST_RELEASE_QUALITY']) {
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth));
   await page.screenshot({path:`test-results/release-${marker}-${info.project.name}.png`,fullPage:true});
   await page.reload();await nav(page,'Создать');
+  if(marker==='TEST_RELEASE_QUALITY')await expect(page.getByText(/Некоторые творческие детали модель оставила неполными/)).toBeVisible();
   await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
   await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
   await page.getByRole('button',{name:'Начать игру',exact:true}).click();
