@@ -399,6 +399,15 @@ def patch(state,kind,eid,field,value):
         state['world_clock']={**state.get('world_clock',{}),'minute':target['minute'],'last_event_time':label(target['minute'])}
     from backend.services.draft_calendar import manual_edit
     path='/world_clock' if kind in ('start','clock') else '/world/characters/'+eid+'/birth_date' if kind=='actor' and field=='birth_date' else ''
+    if not path:
+        from backend.services.draft_initial import escape
+        if kind in ('character','location'):
+            root='characters' if kind=='character' else 'locations'
+            index=next(i for i,r in enumerate(state[root]) if r['id']==eid)
+            path=f'/{root}/{index}/'+('/'.join(escape(part) for part in field.split('.')))
+        elif kind=='campaign':path='/campaign/'+escape(field)
+        elif kind=='actor':path='/world/characters/'+escape(eid)+'/'+escape(field)
+        elif kind in state['world']:path='/world/'+kind+'/'+escape(eid)+'/'+escape(field)
     state=manual_edit(state,path,old_minute)
     return sync(state)
 

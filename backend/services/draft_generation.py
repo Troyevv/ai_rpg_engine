@@ -77,8 +77,8 @@ def decode_result(text,state,config):
 
 
 def review_signature(messages, config):
-    from backend.services.draft_completeness import CONTRACT_VERSION
-    return hashlib.sha256(json.dumps([messages,CONTRACT_VERSION,{k:config.get(k) for k in ('provider','model','max_tokens','context_length')}],ensure_ascii=False,sort_keys=True).encode()).hexdigest()
+    from backend.services.draft_completeness import CONTRACT_VERSION, RECOVERY_POLICY
+    return hashlib.sha256(json.dumps([messages,CONTRACT_VERSION,RECOVERY_POLICY,{k:config.get(k) for k in ('provider','model','max_tokens','context_length')}],ensure_ascii=False,sort_keys=True).encode()).hexdigest()
 
 
 def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
@@ -175,87 +175,16 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             review_messages=draft_completeness.messages(state,messages[-1]['content'])
             signature=review_signature(review_messages,config)
             review_meta['signature']=signature
-            if signature in journal.get('review_no_progress',[]):
-                raise ValueError('Повтор идентичной неудачной коррекции остановлен. Кандидат и корректные замечания сохранены; измените затронутые данные в редакторе.')
-            accepted=journal.setdefault('accepted_reviews',{})
-            if signature in accepted:
-                try:
-                    cached=[{k:v for k,v in e.items() if k in ('path','message','related_paths','severity','patch_paths','assertion','target_path','basis','remove_paths','record_match')} for e in accepted[signature]]
-                    for e in cached:
-                        if not e.get('path'):e['path']=None
-                    draft_completeness.parse(json.dumps({'issues':cached}),state)
-                except (ValueError,TypeError,KeyError,IndexError,AttributeError):
-                    journal.setdefault('invalid_cached_reviews',[]).append(accepted.pop(signature))
-            if signature in accepted:
-                issues=accepted[signature]
-            else:
-                previous_failure=next((f for f in reversed(journal.get('review_failures',[])) if f.get('signature')==signature),None)
-                if not previous_failure:
-                    # Old jobs stored only slot/error; recover the original report from their response journal.
-                    for old in reversed(journal.get('review_failures',[])):
-                        if 'signature' in old:continue
-                        saved=journal.get('responses',{}).get(old.get('slot'),{})
-                        rejected=''.join(p['text'] for p in saved.get('parts',[]))
-                        if rejected:
-                            try:draft_completeness.parse(rejected,state)
-                            except draft_completeness.ReportError as exc:
-                                previous_failure=dict(response=rejected,validation_errors=exc.errors)
-                            break
-                # Reparse a completed report locally before spending another request.
-                if previous_failure:
-                    try:
-                        local=draft_completeness.parse(previous_failure['response'],state)
-                        if any(e.get('severity')=='blocker' and not e.get('patch_paths') for e in local):raise ValueError('Unlocalized blocker')
-                    except (ValueError,TypeError,KeyError,IndexError):pass
-                    else:
-                        accepted[signature]=local
-                        journal.setdefault('review_recoveries',[]).append(dict(signature=signature,result='local_reparse',epoch=epoch))
-                        repo.save_response_journal(jid,journal)
-                if previous_failure:
-                    review_messages=draft_completeness.correction(review_messages,previous_failure['response'],previous_failure['validation_errors'])
-                correction_source=previous_failure
-                # A malformed report is a failed check, never a bad world or a success.
-                for review_attempt in range(0 if signature in accepted else 2):
-                    slot='completeness_'+signature if epoch==0 and review_attempt==0 else f'completeness_{signature}_{epoch}_{review_attempt}'
-                    try:review=response(repo,jid,journal,slot,review_messages,config,context,generate,handle.cancel)
-                    except ValueError as exc:
-                        repo.save_draft_candidate(jid,state,[],review=dict(review_meta,status='failed',reason=str(exc)),epoch=epoch)
-                        raise
-                    if review is None:return
-                    provider_review=review;merge_failed=False
-                    try:
-                        if correction_source:
-                            merge_failed=True
-                            review=draft_completeness.merge_correction(review,correction_source['response'],correction_source['validation_errors'])
-                            merge_failed=False
-                        issues=draft_completeness.parse(review,state)
-                        unresolved=[dict(report_path=f'/issues/{i}/patch_paths',world_path=e['path'],message='Уточните точные поля для исправления противоречия, сохранив замечание.') for i,e in enumerate(issues) if e.get('severity')=='blocker' and not e.get('patch_paths') and not e.get('remove_paths')]
-                        if unresolved:raise draft_completeness.ReportError(unresolved,issues)
-                    except (ValueError,TypeError,KeyError,IndexError) as exc:
-                        details=getattr(exc,'errors',[dict(report_path='/',world_path=None,message=str(exc))])
-                        partial=getattr(exc,'issues',[])
-                        failure=dict(candidate_hash=candidate_hash(state),slot=slot,stage=stage,attempt=review_attempt+1,epoch=epoch,signature=signature,contract_version=draft_completeness.CONTRACT_VERSION,response=review,provider_response=provider_review,error=str(exc),validation_errors=details,partial_issues=partial)
-                        if merge_failed:
-                            failure.update(response=correction_source['response'],validation_errors=correction_source['validation_errors'],correction_format_errors=details,partial_issues=correction_source.get('partial_issues',[]))
-                        def report_key(text):
-                            try:return json.dumps(strict_loads(text),sort_keys=True,ensure_ascii=False)
-                            except ValueError:return text
-                        repeated=any(f.get('signature')==signature and report_key(f.get('response',''))==report_key(failure['response']) for f in journal.get('review_failures',[]))
-                        if repeated and draft_completeness.correction_indices(failure['response'],failure['validation_errors']) is not None:
-                            journal.setdefault('review_no_progress',[]).append(signature)
-                        partial=failure['partial_issues']
-                        journal.setdefault('review_failures',[]).append(failure)
-                        repo.save_draft_candidate(jid,state,[],review=dict(review_meta,status='failed',reason='Получен отчёт неправильного формата.',issues=partial,validation_errors=details),epoch=epoch)
-                        correction_source=failure
-                        review_messages=draft_completeness.correction(draft_completeness.messages(state,messages[-1]['content']),failure['response'],failure['validation_errors'])
-                        repo.draft_phase(jid,'review_format_repair')
-                        repo.save_response_journal(jid,journal)
-                        if repeated or review_attempt==1 or previous_failure and details==previous_failure.get('validation_errors'):raise ValueError('Проверка не завершена: неверный отчёт. Кандидат доступен автору; Resume повторит только проверку.') from exc
-                    else:
-                        accepted[signature]=issues
-                        journal.setdefault('review_recoveries',[]).append(dict(signature=signature,slot=slot,result='completed',epoch=epoch))
-                        repo.save_response_journal(jid,journal);break
-            issues=accepted[signature]
+            from backend.services.draft_review_recovery import obtain
+            def review_call(slot, request_messages):
+                return response(repo,jid,journal,slot,request_messages,config,context,generate,handle.cancel)
+            try:
+                issues=obtain(state,review_messages,signature,journal,review_call,lambda:repo.save_response_journal(jid,journal))
+            except (ValueError,TypeError,KeyError,IndexError) as exc:
+                partial=journal.get('review_failures',[{}])[-1].get('partial_issues',[]) if journal.get('review_failures') else []
+                repo.save_draft_candidate(jid,state,[],review=dict(review_meta,status='failed',reason=str(exc),issues=partial),epoch=epoch)
+                raise
+            if issues is None:return
             errors=[e for e in issues if e.get('severity','blocker')=='blocker']
             if not patch_failure:repo.save_draft_candidate(jid,state,errors,review=dict(review_meta,status='completed',issues=issues),epoch=epoch)
             if not errors:break
@@ -268,8 +197,8 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         repair_input_hash=hashlib.sha256(result.encode()).hexdigest()
         repair_signature=hashlib.sha256(json.dumps([draft_completeness.CONTRACT_VERSION,repair_input_hash,repair],ensure_ascii=False,sort_keys=True).encode()).hexdigest()
         slot=f'repair_{repair_signature}_{epoch}_{attempt}'
-        if any(item.get('input_hash')==repair_input_hash for item in journal.get('no_progress',[])):
-            raise ValueError('Кандидат не изменился после неэффективного исправления. Исправьте указанные поля в редакторе.')
+        if any(item.get('input_hash')==repair_input_hash and item.get('contract_version')==draft_completeness.CONTRACT_VERSION and item.get('policy')==draft_completeness.RECOVERY_POLICY for item in journal.get('no_progress',[])):
+            raise ValueError('Автоматическое исправление не дало прогресса. Кандидат сохранён; стратегия для текущей версии исчерпана.')
         reply=response(repo,jid,journal,slot,repair,config,context,generate,handle.cancel)
         if reply is None:return
         try:
@@ -291,15 +220,23 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
                         return json.dumps(item,sort_keys=True,ensure_ascii=False)
                     before,after=fingerprint(old_value),fingerprint(new_value)
                     if before==after:continue
-                    key=str(epoch)+':'+path
-                    prior=history.get(key,[before])
+                    key=path
+                    prior=history.get(key) or next((v for k,v in history.items() if k.endswith(':'+path)),[before])
                     if after in prior:raise draft_repair.NoProgress('Цикл значений '+path+'; последний принятый кандидат сохранён.')
                     changes.append((key,prior+[after]))
+                if not changes:raise draft_repair.NoProgress('Исправление изменило только оформление; содержательного прогресса нет.')
                 for key,values in changes:history[key]=values
             result=updated
             patch_failure=None
             journal['candidate_text']=result;repo.save_response_journal(jid,journal)
-        except draft_repair.NoProgress:
+        except draft_repair.NoProgress as exc:
+            if attempt==0:
+                patch_failure=dict(rejected_response=reply,error=str(exc),instruction='Предыдущий пакет не дал содержательного прогресса. Исправь именно диагностированное противоречие в прежнем scope; косметические изменения не подходят.')
+                journal.setdefault('repair_failures',[]).append(dict(slot=slot,**patch_failure))
+                repo.save_response_journal(jid,journal)
+                continue
+            journal.setdefault('no_progress',[]).append(dict(input_hash=repair_input_hash,slot=slot,contract_version=draft_completeness.CONTRACT_VERSION,policy=draft_completeness.RECOVERY_POLICY))
+            repo.save_response_journal(jid,journal)
             raise
         except ValueError as invalid_patch:
             patch_failure=dict(rejected_response=reply,error=str(invalid_patch),instruction='Исправь формат patch, сохрани требуемые исправления и разрешённые пути.')
@@ -313,6 +250,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     def quality_call(slot, request_messages, request_stage):
         nonlocal stage
         stage=request_stage
+        repo.draft_phase(jid,'improving' if request_stage=='draft_world_quality' else 'reviewing')
         return response(repo,jid,journal,slot,request_messages,config,context,generate,handle.cancel)
     enhanced, quality_issues=draft_quality.complete(state,issues,messages[-1]['content'],journal,quality_call)
     if handle.cancel.is_set():

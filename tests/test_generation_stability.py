@@ -48,12 +48,17 @@ def test_e2_partial_date_path_and_real_bad_repair_atomic():
     raw=reply(j,'repair_921a4')
     paths=[p['path'] for p in json.loads(raw)['patches']]
     scope=repair.RepairScope(paths,reconstructed,set())
+    # Isolate the typed trial boundary here; a separate assertion below tests
+    # the missing semantic authorization for the recorded closure.
+    scope.close_paths={p for p in paths if p.startswith('/world/residences/res_ilya/')}
     with pytest.raises(repair.RejectedTrial) as exc:repair.apply(json.dumps(reconstructed),raw,scope)
     assert exc.value.details['before_hash']!=exc.value.details['trial_hash']
     assert snapshot==before
     # Actual reviewer response cannot authorize a residence closure from travel.
     issues=review.parse(reply(j,'completeness_9603092f6de281d93802c23fd6c6c8e74ce235c885d7362c5c339e85f1627131_2_1'),reconstructed)
-    with pytest.raises(ValueError,match='Закрытие проживания'):repair.request(json.dumps(reconstructed),issues)
+    _,scope=repair.request(json.dumps(reconstructed),issues)
+    with pytest.raises(ValueError,match='Закрытие проживания'):
+        repair.apply(json.dumps(reconstructed),json.dumps({'patches':[dict(path='/world/residences/res_ilya/status',value='closed')]}),scope)
 
 
 def test_trial_rejects_plain_assignment_and_overlapping_operations():
@@ -144,7 +149,7 @@ def test_missing_record_distinct_from_scalar_reference():
     s=rich();collection='/world/roles'
     issue=dict(path=collection,message='No occupation',assertion='missing_record',record_match={'actor_id':s['controlled_actor_id'],'kind':'occupation'},patch_paths=['/world/roles/new'])
     assert review.parse(json.dumps({'issues':[issue]}),s)[0]['category']=='review_disproved'
-    issue['record_match']['actor_id']='different'
+    issue['record_match']['actor_id']=s['characters'][1]['id']
     parsed=review.parse(json.dumps({'issues':[issue]}),s)[0]
     assert parsed['category']=='semantic_completeness' and parsed['record_match']==issue['record_match']
     for actual in ({},[],1,False,None):
@@ -168,16 +173,17 @@ def test_e3_resume_keeps_candidate_siblings_and_stops_identical_corrections(api)
     calls=[]
     def stream(**kw):
         assert kw['messages'][0]['content'].startswith(review.MARKER), 'world must not regenerate'
-        calls.append(kw);yield actual[len(calls)-1]
+        calls.append(kw);yield actual[min(len(calls)-1,1)]
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         d=client.get(url+'?author=true').json()
         assert client.post(url+'/resume',json={'revision':d['revision'],'api_key':'offline'}).status_code==200
         assert wait_job(client,jid)['status']=='error'
-        assert len(calls)==2
+        assert len(calls)==3
         d=client.get(url+'?author=true').json()
         assert [i['path'] for i in d['review']['issues']]==['/world/facts/f1','/world/facts/f2']
-        assert client.post(url+'/resume',json={'revision':d['revision'],'api_key':'offline'}).status_code==200
-        assert wait_job(client,jid)['status']=='error' and len(calls)==2
+        assert d['review']['status']=='failed' and not d['job']['resumable']
+        assert client.post(url+'/resume',json={'revision':d['revision'],'api_key':'offline'}).status_code==409
+        assert wait_job(client,jid)['status']=='error' and len(calls)==3
     raw=client.get(url+'/raw').json()
     assert raw['responses']['world']==j['responses']['world']
     assert raw['candidate_snapshot']['world']['facts']==j['candidate_snapshot']['world']['facts']
@@ -196,7 +202,8 @@ def test_player_legacy_goal_is_rejected_without_silent_discard():
     before=deepcopy(s)
     with pytest.raises(initial.DraftErrors) as exc:motivations(s)
     assert exc.value.errors[0]['category']=='player_agency' and s==before
-    with pytest.raises(ValueError,match='Автор должен'):repair.request(json.dumps(s),exc.value.errors)
+    _,scope=repair.request(json.dumps(s),exc.value.errors,author_context='Герой ещё не принимал решение.')
+    assert set(scope)=={'/world/characters/'+cid+'/short_goal','/world/characters/'+cid+'/goals'}
 
 
 def test_id_remap_never_rewrites_prose_field_names():

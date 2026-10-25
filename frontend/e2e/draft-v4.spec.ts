@@ -87,7 +87,7 @@ test('review protocol failure survives reload and resumes only review',async({pa
   expect(after.state.world.facts).toEqual(before.candidate.world.facts);
   const requests=await(await request.get(`/api/workspaces/${workspace.id}/requests`)).json();
   expect(requests.filter((r:{stage:string})=>r.stage==='draft_world')).toHaveLength(1);
-  expect(requests.filter((r:{stage:string})=>r.stage==='draft_world_validation')).toHaveLength(3);
+  expect(requests.filter((r:{stage:string})=>r.stage==='draft_world_validation')).toHaveLength(4);
   await expect(page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true})).toBeEnabled();
   await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
   await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
@@ -218,4 +218,18 @@ test('saved symmetric duplicates offer lossless merge after reconnect',async({pa
   expect(merged.review.status).toBe('stale');
   await page.getByRole('button',{name:'Повторить проверку',exact:true}).click();
   await expect(page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true})).toBeEnabled();
+});
+
+
+test('malformed review automatically reaches a playable draft through alternate audit',async({page,request},info)=>{
+  const w=await(await request.post('/api/workspaces',{data:{name:'Automatic report recovery'}})).json();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),w.id);
+  await page.goto('/');await nav(page,'Создать');
+  await page.getByLabel('Описание мира или текст импорта').fill(`TEST_REVIEW_AUTOMATIC ${info.project.name}`);
+  await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+  await expect.poll(async()=> (await(await request.get(`/api/workspaces/${w.id}/draft`)).json()).job?.status).toBe('saved');
+  await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
+  await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+  await page.getByRole('button',{name:'Начать игру',exact:true}).click();
+  await expect(page.locator('.choices button')).toHaveCount(6);
 });

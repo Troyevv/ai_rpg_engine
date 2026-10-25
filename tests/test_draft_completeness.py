@@ -198,12 +198,12 @@ def test_unresolved_semantics_cannot_save_and_repair_budget_is_shared(tmp_path):
         elif 'patches' in kw['messages'][0]['content']:
             yield json.dumps({'patches':[dict(path='/world/characters/c1/intentions',value=['Скрыть своё эмоциональное состояние'])]})
         else:yield REAL_PATH.read_text()
-    with pytest.raises(ValueError,match='Две попытки|Цикл значений'):
+    with pytest.raises(ValueError,match='Две попытки|Цикл значений|не дало прогресса'):
         run(Preparation(repo),jid,cfg,None,Handle(),None,stream)
     assert len(calls)==4  # generation + cached review + 2 repairs, never regeneration
     assert repo.draft(w['id'],True)['state'] is None
     # Replay completed journal after a restart: no extra provider requests.
-    with pytest.raises(ValueError,match='Две попытки|Цикл значений'):
+    with pytest.raises(ValueError,match='Две попытки|Цикл значений|не дало прогресса'):
         run(Preparation(Repository(repo.path)),jid,cfg,None,Handle(),None,lambda **kw:pytest.fail('replayed paid request'))
 
 

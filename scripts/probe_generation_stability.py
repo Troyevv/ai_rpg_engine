@@ -31,11 +31,12 @@ def main():
     from fastapi.testclient import TestClient
     from backend.api.app import create_app
     from backend.services.draft_completeness import CONTRACT_VERSION
-    scenarios=json.loads((ROOT/'tests/fixtures/generation_scenarios/inputs.json').read_text())
+    scenarios=json.loads((ROOT/'tests/fixtures/generation_scenarios/inputs_final.json').read_text())
     cap=args.budget_usd/(len(scenarios)*args.runs)
     config=dict(provider='deepseek',model=args.model,temperature=0.7,max_tokens=16000,context_length=131072)
     metrics=[];app=create_app(args.output/'probe.sqlite3')
     commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
+    (args.output/'inputs.json').write_text(json.dumps(dict(commit=commit,config=config,budget_usd=str(args.budget_usd),runs=args.runs,scenarios=scenarios),ensure_ascii=False,indent=2)+'\n')
     with TestClient(app) as client:
         for scenario in scenarios:
             for run in range(args.runs):
@@ -53,9 +54,30 @@ def main():
                         if job['status'] not in ('queued','generating'):break
                         time.sleep(0.5)
                     exported=client.get(url+'/raw').json()
+                    gameplay=dict(mode='controlled',outcome='not_started')
+                    if job['status']=='saved':
+                        draft=client.get(url+'?author=true').json()
+                        confirmed=client.post(url+'/confirm',json={'revision':draft['revision'],'version_id':draft['version_id']})
+                        if confirmed.status_code==200:
+                            # This verifies integration only, and is never counted as live gameplay.
+                            sys.path.insert(0,str(ROOT/'tests'))
+                            from test_runtime_v3_engine import run as play,raw_for
+                            from test_engine import CONFIG
+                            from backend.repositories.preparation import Repository
+                            repo=app.state.repository;sid=confirmed.json()['save'];steps=[]
+                            for kind in ('start','turn','turn'):
+                                before=repo.get_snapshot(sid)
+                                turn=repo.begin_job(sid,'Осматриваюсь.' if kind=='turn' else '',kind,dict(CONFIG,context_length=262144))
+                                play(repo,turn,raw_for(before))
+                                result=repo.get_job(turn);steps.append(dict(kind=kind,status=result['status']))
+                                persisted=repo.get_snapshot(sid);repo=Repository(repo.path)
+                                if repo.get_snapshot(sid)!=persisted:raise RuntimeError('Reload changed canonical snapshot')
+                                if result['status']!='saved':break
+                            gameplay.update(outcome='saved' if len(steps)==3 and all(s['status']=='saved' for s in steps) else 'failed',steps=steps)
+                        else:gameplay.update(outcome='confirm_failed',http_status=confirmed.status_code)
                     rows=exported.get('requests',[])
                     costs=[r.get('cost_usd') for r in rows]
-                    metrics.append(dict(commit=commit,scenario=scenario['id'],run=run+1,config=config,calendar_start=scenario['start'],review_contract=CONTRACT_VERSION,outcome=job['status'],duration_seconds=round(time.monotonic()-started,3),requests=rows,cost_usd=str(sum(Decimal(str(c)) for c in costs)) if costs and all(c is not None for c in costs) else None,diagnostics=exported.get('current_diagnostics'),generation_contract=exported.get('generation_contract'),scope='generation only; no live gameplay'))
+                    metrics.append(dict(commit=commit,scenario=scenario['id'],run=run+1,config=config,calendar_start=scenario['start'],review_contract=CONTRACT_VERSION,outcome=job['status'],duration_seconds=round(time.monotonic()-started,3),requests=rows,cost_usd=str(sum(Decimal(str(c)) for c in costs)) if costs and all(c is not None for c in costs) else None,diagnostics=exported.get('current_diagnostics'),generation_contract=exported.get('generation_contract'),scope='live generation; controlled editor/confirm/start/turn/reload/next-turn',gameplay=gameplay,review_resolutions=exported.get('review_resolutions',[]),repair_failures=exported.get('repair_failures',[]),quality=exported.get('quality'),ready_to_start=job['status']=='saved'))
                 (args.output/'metrics.json').write_text(json.dumps(metrics,ensure_ascii=False,indent=2,default=str)+'\n')
                 print(scenario['id'],run+1,metrics[-1]['outcome'],flush=True)
 

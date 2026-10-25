@@ -119,7 +119,7 @@ def test_full_volkov_failed_review_resume_edit_play_reload(api):
     assert d['candidate']['creation_settings']['npc_expressiveness']=='hyperbolized'
     assert all(e['path']!='/' for e in d['validation']['diagnostics'])
     raw=client.get(url+'/raw').json()
-    assert len(raw['review_failures'])==2
+    assert len(raw['review_failures'])==3
     assert raw['review_failures'][0]['response']==json.dumps(bad)
     assert raw['review_failures'][0]['candidate_hash']
     assert any(r['usage_json'] for r in raw['requests'])
@@ -145,7 +145,7 @@ def test_full_volkov_failed_review_resume_edit_play_reload(api):
         r=client.post(url+'/resume',json={'revision':d['revision'],'api_key':'do-not-export','context_length':131072})
         assert r.status_code==200,r.text
         job=wait_job(client,jid);assert job['status']=='saved',job
-    assert len(calls)==6  # one world + two malformed + review + local patch + review
+    assert len(calls)==7  # world + three failed strategies + fresh review + repair + review
     d=client.get(url+'?author=true').json()
     assert d['review']['status']=='completed' and d['review']['issues'][0]['severity']=='recommendation'
     started=client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id']});assert started.status_code==200,started.text

@@ -252,7 +252,7 @@ def test_generation_uses_one_world_request_plus_review_and_saves(api):
     assert set(CARD_FIELDS)==set(schema['properties']['characters']['items']['properties']['fields']['required'])
     with app.state.repository.connect() as db:
         stages=[row[0] for row in db.execute('SELECT stage FROM llm_requests')]
-    assert stages==['draft_world','draft_world_validation']
+    assert stages==['draft_world','draft_world_validation','draft_world_quality']
 
 
 def test_deepseek_json_mode_repairs_only_bad_format(api):
@@ -273,7 +273,7 @@ def test_deepseek_json_mode_repairs_only_bad_format(api):
     assert all(c['response_format']=={'type':'json_object'} for c in calls)
     assert 'только синтаксическую' in calls[1]['messages'][0]['content']
     with app.state.repository.connect() as db:
-        assert sorted(r[0] for r in db.execute('SELECT stage FROM llm_requests'))==['draft_world','draft_world_repair','draft_world_validation']
+        assert sorted(r[0] for r in db.execute('SELECT stage FROM llm_requests'))==['draft_world','draft_world_quality','draft_world_repair','draft_world_validation']
 
 
 def test_failed_structural_repair_keeps_previous_version(api):
@@ -344,7 +344,7 @@ def test_scenario_route_stays_separate_from_quick_generation(api):
     assert current['idea'] in calls[1][-1]['content']
     with app.state.repository.connect() as db:
         stages=[row[0] for row in db.execute('SELECT stage FROM llm_requests ORDER BY created_at,id')]
-    assert sorted(stages)==['draft_world','draft_world_validation','idea']
+    assert sorted(stages)==['draft_world','draft_world_quality','draft_world_validation','idea']
 
 
 def test_semantic_warning_and_rename_preserves_directed_relationships(api):
@@ -590,7 +590,7 @@ def test_generation_review_is_advisory_and_import_is_unchanged(api):
     assert not imported.json()['validation']['warnings']
 
 
-def test_sparse_but_structurally_valid_world_saves_without_completion(api):
+def test_sparse_world_retains_valid_data_when_bounded_completion_is_rejected(api):
     from unittest.mock import patch
     client,app=api;path,previous=make(client)
     state=fixture();state['world']['relationships']={};state['world']['threads']={}
@@ -611,7 +611,7 @@ def test_sparse_but_structurally_valid_world_saves_without_completion(api):
     assert any('Внешность описана слишком общо' in note for note in after['validation']['warnings'])
     assert after['state']['world']['threads']=={} and after['state']['world']['relationships']=={}
     with app.state.repository.connect() as db:
-        assert [r[0] for r in db.execute('SELECT stage FROM llm_requests')]==['draft_world','draft_world_validation']
+        assert [r[0] for r in db.execute('SELECT stage FROM llm_requests')]==['draft_world','draft_world_validation','draft_world_quality']
 
 
 def test_shared_secret_does_not_count_as_every_characters_personal_secret():

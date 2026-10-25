@@ -51,6 +51,9 @@ class DraftStorage:
         with self.connect() as db:
             w=self._draft_workspace(db,wid,idle=False);head=self._draft_head(db,wid)
             record=json.loads(head['content']) if head else None
+            latest=db.execute('SELECT * FROM preparation_jobs WHERE workspace_id=? ORDER BY rowid DESC LIMIT 1',(wid,)).fetchone()
+            if record and latest and latest['status']!='generating' and (record.get('review') or {}).get('status')=='running':
+                record['review']=dict(record['review'],status='failed',reason='Проверка прервана; сохранённый результат доступен.')
             candidate=record.get('candidate',False) if record else False
             raw=record['state'] if record else None
             if candidate:
@@ -73,8 +76,12 @@ class DraftStorage:
             if block and not author:state=None
             history=[dict(r) for r in db.execute("SELECT id,reason,created_at FROM document_versions WHERE kind='world_draft' AND owner=? ORDER BY id DESC",(wid,))]
             latest=db.execute('SELECT * FROM preparation_jobs WHERE workspace_id=? ORDER BY rowid DESC LIMIT 1',(wid,)).fetchone()
-            if author and latest and json.loads(latest['response_journal'] or '{}').get('quality',{}).get('status')=='rejected':
-                report['warnings'].append('Необязательное дополнение не принято. Сохранена проверенная версия мира.')
+            if author and latest and json.loads(latest['response_journal'] or '{}').get('quality',{}).get('status') in ('rejected','partial'):
+                report['warnings'].append('Необязательное дополнение не принято или качество не завершено полностью. Проверенные данные сохранены; некоторые поля могут требовать содержательного дополнения.')
+            public_job=self.public_job(dict(latest)) if latest else None
+            if public_job and record and review_metadata(record) and review_metadata(record).get('status')=='stale' and latest['status'] in ('error','stopped'):
+                journal=json.loads(latest['response_journal'] or '{}')
+                if not journal.get('pending') and journal.get('candidate_text') and record['state']!=json.loads(journal['candidate_text']):public_job['resumable']=True
             return {'id':wid,'name':w['name'],'revision':w['revision'],'version_id':head['id'] if head else None,
                 'candidate':raw if candidate and author else None,
                 'relation_merges':relation_plans(raw) if raw and author else [],
@@ -89,7 +96,7 @@ class DraftStorage:
                 'import_warnings':record.get('warnings',[]) if record and author else [],
                 'source_text':record.get('source','') if record and author else '',
                 'outline':record.get('outline','') if record and author else '',
-                'history':history,'job':self.public_job(dict(latest)) if latest else None,'author':author}
+                'history':history,'job':public_job,'author':author}
 
     def _write_draft(self,db,wid,state,reason,source='',warnings=None,source_id=None,outline='',generated=False,review=None,origin_job=None):
         state=domain.prepare(state)

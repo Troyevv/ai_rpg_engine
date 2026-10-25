@@ -13,26 +13,26 @@ from backend.services import draft_completeness as review
 from backend.repositories.preparation import Repository
 from backend.runtime_v3.calendar import age_on,current_time
 
-SCENARIOS=json.loads((Path(__file__).parent/'fixtures/generation_scenarios/inputs.json').read_text())
+SCENARIOS=json.loads((Path(__file__).parent/'fixtures/generation_scenarios/inputs_final.json').read_text())
 
 def controlled_world(scenario):
     s=rich();world=s['world'];ids=[c['id'] for c in s['characters']]
     names={
-        'e2_new':['Илья Волков','Марина Волкова','Тимур Волков','Соня Величкина','Катя Соколова','Юра Яковлев','Сергей Волков','Алексей Волков'],
+        'e4_new':['Илья Волков','Марина Волкова','Тимур Волков','Соня Величкина','Катя Соколова','Юра Яковлев','Сергей Волков','Алексей Волков'],
         'daily':['Нина','Олег'], 'historical':['Мирек','Яна'], 'fantasy':['Элин','Тар'],
         'adoption':['Ася','Павел','Рада'], 'organizations':['Лада','Борис']}[scenario['id']]
     s['campaign'].update(description=scenario['idea'],era=scenario['start']['date'][:4])
     for index,card in enumerate(s['characters']):
         card['name']=names[index] if index<len(names) else 'Житель '+str(index)
         card['aliases']=[]
-        card['fields']={'Возраст':str([25,46,26,25,25,25,54,30][index] if scenario['id']=='e2_new' else 24+index),
+        card['fields']={'Возраст':str([25,46,26,25,25,25,54,30][index] if scenario['id']=='e4_new' else 24+index),
             'Роль':'Житель города','Статус':'Свободен','Внешность':'Тёмные волосы, серые глаза, рабочая одежда.',
             'Характер':'Терпелив в работе, раздражается при пустых обещаниях.',
             'Стиль общения':'Короткие фразы, задаёт прямые вопросы.', 'Привычки':'Перечитывает записки перед встречей.',
             'Сильные стороны':'Помнит подробности разговора.','Слабости':'Трудно просит помощи.',
             'Страхи и уязвимости':'Боится подвести семью.','Биография':'Помогает соседям чинить вещи, хранит письма семьи.'}
-    if scenario['id']=='e2_new':
-        starts=sorted(scenario['idea'].index(name) for name in names)+[scenario['idea'].index('Сейчас 23.10')]
+    if scenario['id']=='e4_new':
+        starts=sorted(scenario['idea'].index(name) for name in names)+[scenario['idea'].index('Сейчас ')]
         for card in s['characters']:
             start=scenario['idea'].index(card['name']);end=next(n for n in starts if n>start)
             card['fields']['Биография']=scenario['idea'][start:end].strip()
@@ -44,7 +44,7 @@ def controlled_world(scenario):
     for cid,actor in world['characters'].items():
         actor.update(goals=[] if cid==s['controlled_actor_id'] else ['Закончить текущую работу'],short_goal='',intentions=[],obligations=[],emotion='',birth_date=None,location='square')
         actor.pop('birth_provenance',None)
-    place='Вокзал' if scenario['id']=='e2_new' else 'Городская площадь'
+    place='Вокзал' if scenario['id']=='e4_new' else 'Городская площадь'
     s['locations']=[dict(id='square',name=place,text='Место встречи.',kind='place')]
     scene=world['scenes'][s['camera']['scene_id']]
     scene.update(location='square',participants=ids[:3],event_ids=[],text='Персонажи встретились и ждут начала разговора.')
@@ -54,8 +54,8 @@ def controlled_world(scenario):
     world['facts']={'keepsake':dict(id='keepsake',text='Письмо хранится у второго участника.',secret=True,character_ids=[ids[1]])}
     world['knowledge']={'knows':dict(actor_id=ids[1],fact_id='keepsake',status='known'),'suspects':dict(actor_id=ids[2],fact_id='keepsake',status='suspected')}
     world['relationships']={'out':dict(source_id=ids[0],target_id=ids[2],context='Давнее знакомство',dimensions={'affection':20}),'back':dict(source_id=ids[2],target_id=ids[0],context='Дорожит дружбой',dimensions={'affection':70})}
-    if scenario['id']=='e2_new':
-        scene.update(participants=[ids[0],ids[4]],text=scenario['idea'].split('Сейчас 23.10.2026, 12:00, пятница. ')[1])
+    if scenario['id']=='e4_new':
+        scene.update(participants=[ids[0],ids[4]],text=scenario['idea'].split('Сейчас ',1)[1])
         for parent in (1,6):
             for child in (0,7):
                 key=f'parent_{parent}_{child}'
@@ -80,10 +80,18 @@ def controlled_world(scenario):
 def test_fresh_generation_editor_start_turn_reload(api,scenario):
     client,app=api;repo=app.state.repository
     wid=client.post('/api/workspaces',json={'name':scenario['id']}).json()['id'];url=f'/api/workspaces/{wid}/draft'
-    generated=controlled_world(scenario);calls=[]
+    generated=controlled_world(scenario);calls=[];review_calls=0
     def stream(**kw):
+        nonlocal review_calls
         calls.append(kw)
-        if kw['messages'][0]['content'].startswith(review.MARKER):yield '{"issues":[]}'
+        if kw['messages'][0]['content'].startswith(review.MARKER):
+            review_calls+=1
+            payload=json.loads(kw['messages'][1]['content'])
+            if payload.get('strategy')=='scoped_reaudit':
+                yield json.dumps({'resolutions':[dict(issue_id=p['issue_id'],resolution='disproved',reason='Коллекция существует; структурированное отсутствие конкретной записи не установлено. Неизвестное жильё допустимо.',basis=[dict(path='/world/residences')]) for p in payload['pending_issues']]})
+            elif review_calls<=2:
+                yield json.dumps({'issues':[dict(path='/world/residences',assertion='missing_reference',message='Recorded malformed collection claim',patch_paths=['/world/residences'])]})
+            else:yield '{"issues":[]}'
         else:
             assert len(calls)==1
             assert scenario['idea'] in kw['messages'][1]['content']
@@ -105,7 +113,7 @@ def test_fresh_generation_editor_start_turn_reload(api,scenario):
     assert w['meta']['calendar']['start_date']==scenario['start']['date']
     assert w['relationships'] and w['knowledge'] and w['facts']
     assert scenario['idea']==before['campaign']['campaign']['description']
-    if scenario['id']=='e2_new':
+    if scenario['id']=='e4_new':
         assert [c['name'] for c in d['state']['characters']]==[c['name'] for c in generated['characters']]
         assert all(c['fields']['Биография']==g['fields']['Биография'] for c,g in zip(d['state']['characters'],generated['characters']))
         pc=generated['controlled_actor_id'];assert not w['characters'][pc]['intentions']
@@ -123,10 +131,12 @@ def test_fresh_generation_editor_start_turn_reload(api,scenario):
         assert w['scheduled_events']['meeting']['location_id']=='square'
     from test_runtime_v3_engine import run as play,raw_for
     from test_engine import CONFIG
-    for kind in ('start','turn'):
+    for kind in ('start','turn','turn'):
         snapshot=repo.get_snapshot(sid)
         turn=repo.begin_job(sid,'Осматриваюсь.' if kind=='turn' else '',kind,CONFIG)
         play(repo,turn,raw_for(snapshot))
+        assert repo.get_job(turn)['status']=='saved'
+        repo=Repository(repo.path)
     after=repo.get_snapshot(sid)
     for section in ('relationships','knowledge','facts','objective_relations','possessions'):
         assert after['world_state'][section]==w[section]

@@ -75,6 +75,7 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                'transport_incomplete':bool(world and not journal.get('candidate_text')),
                'unknown_outcome':bool(journal.get('pending')),
                'resumable':bool(journal and not journal.get('pending') and job.get('status') in ('error','stopped'))}
+        if job['resumable'] and Repository.review_exhausted(journal,json.loads(job.get('config_json') or '{}')):job['resumable']=False
         if assembly_error:job['error']='Не удалось собрать сохранённые части ответа. Диагностика доступна автору.'
         staged = json.loads(job.get('memory_before_json') or '{}').get('_remote_batch')
         if staged and job.get('status') != 'saved':
@@ -94,6 +95,20 @@ class Repository(PresentationStorage, DraftStorage, Storage):
             db.execute('UPDATE preparation_jobs SET response_journal=? WHERE id=?',
                        (json.dumps(journal,ensure_ascii=False),jid))
 
+    @staticmethod
+    def review_exhausted(journal, config):
+        from backend.services.draft_generation import review_signature
+        from backend.services.draft_completeness import messages, CONTRACT_VERSION, RECOVERY_POLICY
+        try:
+            import hashlib
+            fingerprint=hashlib.sha256(journal['candidate_text'].encode()).hexdigest()
+            if any(r.get('input_hash')==fingerprint and r.get('contract_version')==CONTRACT_VERSION and r.get('policy')==RECOVERY_POLICY for r in journal.get('no_progress',[])):return True
+            state=json.loads(journal['candidate_text'])
+            source=journal['messages'][-1]['content']
+            signature=review_signature(messages(state,source),config)
+            return journal.get('review_strategies',{}).get(signature,{}).get('exhausted',False)
+        except (ValueError,KeyError,IndexError,TypeError):return False
+
     def resume_draft_response(self, jid, *, revision=None, config_changes=None, acknowledge_unknown=False, retry_last_fragment=False):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -105,6 +120,9 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                 raise ValueError('Исход прерванного запроса неизвестен. Автоматический повтор запрещён; полученный текст сохранён.')
             self._draft_workspace(db,job['workspace_id'],job['revision'] if revision is None else revision)
             config=json.loads(job['config_json'])
+            proposed=dict(config,**(config_changes or {}))
+            if revision is None or revision==job['revision']:
+                if self.review_exhausted(journal,proposed):raise ValueError('Стратегии проверки этого кандидата исчерпаны. Повтор запроса не разрешён; сохранённые замечания доступны в редакторе.')
             if config_changes:
                 journal.setdefault('config_history',[]).append(config.copy())
                 config.update(config_changes)
@@ -206,6 +224,13 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                 from world_parser import parse_summary
                 parse_summary(narrative)
             db.execute('UPDATE preparation_jobs SET narrative=?,status=?,error=? WHERE id=?', (narrative, status, error, jid))
+            if status in ('error','stopped') and job['kind']=='draft_world':
+                head=self._draft_head(db,job['workspace_id'])
+                if head:
+                    content=json.loads(head['content'])
+                    if content.get('origin_job')==jid and (content.get('review') or {}).get('status')=='running':
+                        content['review'].update(status='failed',reason=error or 'Проверка прервана; результат сохранён.')
+                        self._record_document(db,'world_draft',job['workspace_id'],json.dumps(content,ensure_ascii=False),True,'review_interrupted',None)
             if status in ('saved', 'stopped'):
                 w = db.execute('SELECT * FROM preparation_workspaces WHERE id=?', (job['workspace_id'],)).fetchone()
                 if w['revision'] != job['revision']:

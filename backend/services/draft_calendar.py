@@ -81,7 +81,11 @@ def complete(state, author_text='', seed=None):
     else:
         idea = idea_start(author_text)
         profile = configured.get('profile') or {}
-        if settings.mode == 'gregorian': profile = CalendarProfile().model_dump()
+        if settings.mode == 'gregorian':
+            if profile.get('system','gregorian')!='gregorian' and (len(profile.get('month_names',[])) not in (0,12) or len(profile.get('weekday_names',[])) not in (0,7)):
+                from backend.services.draft_initial import DraftErrors,error
+                raise DraftErrors([error('/world_clock/calendar/profile','Пользовательский календарь несовместим с Gregorian; выберите его явно или исправьте профиль.','calendar_profile')])
+            profile=dict(profile,system='gregorian')
         elif settings.mode == 'custom': profile = settings.profile.model_dump()
         if profile.get('system','gregorian')=='gregorian':profile=dict(profile,month_lengths=[])
         try:profile = CalendarProfile.model_validate(profile).model_dump()
@@ -172,6 +176,8 @@ def fill_birth_dates(state):
 
 
 def manual_edit(state, path, old_minute=None):
+    paths=state.setdefault('authoring',{}).setdefault('manual_paths',[])
+    if path and path not in paths:paths.append(path)
     meta = state.get('authoring', {}).get('calendar_completion')
     if not meta: return state
     if path.startswith('/world/characters/') and path.endswith('/birth_date'):

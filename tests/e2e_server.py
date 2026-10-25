@@ -49,14 +49,10 @@ def stream(**kwargs):
     if kwargs['messages'][0]['content'].startswith(MARKER):
         request=json.loads(kwargs['messages'][1]['content'])
         source=request.get('author_context','')
-        if 'TEST_REVIEW_PROTOCOL' in source:
-            count=review_protocol_attempts.get(source,0);review_protocol_attempts[source]=count+1
-            if count<2:
-                yield '{"issues":[{"path":"/world/world/roles/missing","message":"Неверный корень отчёта"}]}'
-                return
-            # A scoped correction must retain the item, not drop it with issues=[].
-            yield '{"issues":[{"message":"Необязательное уточнение роли", "severity":"recommendation"}]}'
-            return
+        from draft_provider_fixture import protocol_review
+        controlled=protocol_review(request)
+        if controlled is not None:
+            yield controlled;return
         yield '{"issues":[]}'
         return
     full='\n'.join(m['content'] for m in kwargs['messages'])
@@ -120,6 +116,9 @@ def stream(**kwargs):
         if 'TEST_MOTIVATION_OBJECTS' in full:
             from test_draft_motivations import motivated
             candidate,_=motivated()
+        for card in candidate['characters']:
+            for field,text in {'Характер':'Спокоен, внимателен к деталям.','Сильные стороны':'Помнит детали разговора.','Слабости':'Неохотно просит о помощи.','Биография':'Давно живёт в районе и знает соседей.','Внешность':'Короткие волосы, серая куртка.','Стиль общения':'Говорит короткими фразами, уточняет детали.','Привычки':'Записывает договорённости в блокнот.'}.items():
+                if card.get('fields',{}).get(field,'').strip().lower() in ('','неизвестно','не указано','—'):card['fields'][field]=text
         if 'TEST_CANDIDATE_RECOVERY' in full:candidate['protagonist_id']='missing'
         value=json.dumps(candidate,ensure_ascii=False)
         if 'TEST_FRAGMENT_RECOVERY' in full:

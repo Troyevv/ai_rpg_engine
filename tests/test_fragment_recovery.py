@@ -101,11 +101,15 @@ def test_real_saved_response_to_editor_game_and_reload(api):
     j=journal();j.pop('requests');j.pop('recovery');j['recovery_epoch']=0
     repo.save_response_journal(jid,j);calls=[]
     def suffix(**kw):
-        calls.append(kw);yield SYNTHETIC_TAIL if len(calls)==1 else '{"issues":"invalid report"}'
+        calls.append(kw)
+        if len(calls)==4:
+            from llm import ProviderHTTPError
+            raise ProviderHTTPError('Controlled outage before alternate audit',502)
+        yield SYNTHETIC_TAIL if len(calls)==1 else '{"issues":"invalid report"}'
     with patch('backend.services.preparation.chat_stream',side_effect=suffix):
         assert client.post(url+'/resume',json={'revision':0,'api_key':'test'}).status_code==200
         assert wait_job(client,jid)['status']=='error' # report failure retains the automatically coalesced world
-    assert len(calls)==3 and calls[0]['messages'][-2]['content'].endswith('"status": "active",\n        "')
+    assert len(calls)==4 and calls[0]['messages'][-2]['content'].endswith('"status": "active",\n        "')
     d=client.get(url+'?author=true').json();original=deepcopy(d['candidate'])
     assert not any(e['category']=='duplicate' for e in d['validation']['diagnostics'])
     sibling=d['candidate']['world']['objective_relations']['obj_katya_timur']

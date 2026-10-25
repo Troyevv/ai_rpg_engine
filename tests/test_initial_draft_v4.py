@@ -20,6 +20,11 @@ FULL=(Path(__file__).parent/'fixtures/initial_world/volkov_user_brief.txt').read
 
 def rich():
     state=fixture();ids=[c['id'] for c in state['characters']]
+    # This is the healthy transport fixture. Placeholder recovery is exercised
+    # independently with raw E4 and test_issue44_final.
+    for i,card in enumerate(state['characters']):
+        for field,text in {'Характер':'Сдержан.','Сильные стороны':'Наблюдателен.','Слабости':'Упрям.','Биография':'Вырос здесь.','Внешность':f'Носит {("серую куртку","синий шарф","вязаный жилет")[i%3]}.','Стиль общения':('Говорит коротко.','Часто переспрашивает.','Приводит примеры.')[i%3],'Привычки':('Проверяет часы.','Крутит ручку в пальцах.','Делает заметки.')[i%3]}.items():
+            if card.get('fields',{}).get(field,'').strip().lower() in ('','неизвестно','не указано','—'):card['fields'][field]=text
     state['world_clock']['minute']=6240
     state['world_clock']['calendar']={'start_date':'2026-10-23','start_minute':6240,'start_weekday':4}
     scene=state['world']['scenes'][state['camera']['scene_id']]
@@ -63,7 +68,7 @@ def volkov_rich():
 def test_source_settings_continuation_editor_start_reload(api,source):
     client,app=api;workspace=client.post('/api/workspaces',json={'name':'Generation'}).json()
     path=f"/api/workspaces/{workspace['id']}/draft"
-    expected=volkov_rich() if source==FULL else rich();raw=json.dumps(expected,ensure_ascii=False);cut=raw.index('Apex')+2;calls=[]
+    expected=volkov_rich() if source==FULL else rich();raw=json.dumps(expected,ensure_ascii=False,separators=(',',':'));cut=raw.index('Apex')+2;calls=[]
     @accept_semantics_unchecked
     def stream(**kwargs):
         calls.append(kwargs)
@@ -157,7 +162,7 @@ def test_persistent_journal_restart_and_unknown_outcome(tmp_path):
     repo=Repository(tmp_path/'resume.sqlite3');w=repo.create_workspace('resume')
     config=dict(REMOTE,_draft_task='world',_draft_input=SHORT,_use_idea=False,_creation_settings={})
     jid=repo.begin_preparation(w['id'],'draft_world',SHORT,config,0)
-    raw=json.dumps(rich(),ensure_ascii=False);cut=raw.index('Apex')+2;first=raw[:cut]
+    raw=json.dumps(rich(),ensure_ascii=False,separators=(',',':'));cut=raw.index('Apex')+2;first=raw[:cut]
     journal={'pending':None,'responses':{'world':{'complete':False,'parts':[dict(text=first,offset=0,sha256=hashlib.sha256(first.encode()).hexdigest(),finish_reason='length')]}}}
     repo.save_response_journal(jid,journal);repo.preparation_progress(jid,first,'stopped')
     repo=Repository(tmp_path/'resume.sqlite3');config=repo.resume_draft_response(jid);calls=[]
@@ -178,7 +183,7 @@ def test_finish_reason_length_without_exception_and_budget_api(api):
         r=client.post(path+'/generate',json={'revision':0,'text':SHORT,'config':REMOTE,'api_key':'test','budget':{'max_total_tokens':1}})
         result=wait_job(client,r.json()['id']);assert result['status']=='error'
         assert 'бюджет токенов' in result['error'];provider.assert_not_called()
-    raw=json.dumps(rich(),ensure_ascii=False);cut=500;calls=[]
+    raw=json.dumps(rich(),ensure_ascii=False,separators=(',',':'));cut=500;calls=[]
     @accept_semantics_unchecked
     def stream(**kwargs):
         calls.append(kwargs)
@@ -281,7 +286,7 @@ def test_saved_calendar_failure_resumes_with_code_without_regenerating_world(tmp
     config=dict(REMOTE,_draft_task='world',_draft_input=SHORT,_use_idea=False,_creation_settings={})
     jid=repo.begin_preparation(w['id'],'draft_world',SHORT,config,0)
     original=rich();original['world_clock']['calendar']['start_weekday']=14
-    raw=json.dumps(original,ensure_ascii=False)
+    raw=json.dumps(original,ensure_ascii=False,separators=(',',':'))
     repo.save_response_journal(jid,{'pending':None,'errors':[{'path':'/','category':'validation','message':'Некорректная конфигурация календаря.'}],
         'responses':{'world':{'complete':True,'parts':[dict(text=raw,offset=0,sha256=hashlib.sha256(raw.encode()).hexdigest(),finish_reason='stop')]}}})
     repo.preparation_progress(jid,raw,'error')

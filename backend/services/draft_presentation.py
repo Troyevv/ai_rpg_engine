@@ -17,7 +17,11 @@ def clock_view(clock):
             names=profile.get('month_names') if custom else MONTHS
             stamp=f'{d} {names[m-1]} {y}' if names and m<=len(names) else value['date']
         else:stamp=f"день {value['day']} (дата неизвестна)"
-        return dict(value,label=f"{day}, {stamp}, {value['time']}")
+        import calendar
+        year=int(value['date'][:4]) if value.get('date') else None
+        lengths=profile.get('month_lengths',[]) if custom else [calendar.monthrange(year,m)[1] if year else (None if m==2 else calendar.monthrange(2001,m)[1]) for m in range(1,13)]
+        effective=dict(system=profile.get('system','gregorian'),month_names=profile.get('month_names') or ([] if custom else list(MONTHS)),weekday_names=profile.get('weekday_names') or ([] if custom else list(WEEKDAYS)),month_lengths=lengths,year=year,seasons=profile.get('seasons',[]),observances=profile.get('observances',[]))
+        return dict(value,effective=effective,label=f"{day}, {stamp}, {value['time']}")
     except (ValueError,KeyError,IndexError,TypeError):return {'label':'Некорректный календарь — проверьте диагностику'}
 
 

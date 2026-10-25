@@ -5,8 +5,8 @@ one generated world. Its report can authorize only localized assignments.
 """
 import json
 import re
-from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from typing import Literal, Annotated
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, TypeAdapter, model_validator
 from copy import deepcopy
 from backend.services.draft_initial import error, runtime_schema, EXTENSIONS
 from backend.services.draft_response import strict_loads
@@ -26,7 +26,7 @@ RULES = '''Проверь исходный замысел и уже утверж
 7. controlled_actor_id: начальный образ, эмоции и предысторию можно творчески дополнить. Не выполняй будущие добровольные действия игрока, не предрешай согласие; активные intentions/obligations требуют явного основания в авторском вводе. Черта характера не намерение; не удаляй заданные автором стремления. NPC вправе иметь творчески дополненные цели.
 8. Даты рождения и календарная арифметика проверяются и дополняются кодом; null в старом мире допустим. Поездка, война или присутствие в сцене не закрывают постоянное проживание. sibling симметричен и не требует обратной записи. Для качественного дополнения укажи выбранные слабые поля в patch_paths, severity=recommendation, assertion=optional_detail; оценивай полезность для игры, не длину текста.
 9. Сцена должна сохранять заданные место, состав, время и действия на момент старта; не добавляй уже исполненные решения игрока после начала игры.
-Для утверждения об отсутствии значения используй assertion="missing_value" и точный path поля; для отсутствующей ссылки assertion="missing_reference", path одиночного строкового ID и target_path словаря целей. Для отсутствующей структурированной записи assertion="missing_record", path коллекции и record_match с её идентифицирующими полями (например actor_id и kind), patch_paths конкретного нового ID. Не применяй missing_reference к dict/list и не заменяй коллекцию; необязательное обогащение assertion="optional_detail". Код сверит такие утверждения с кандидатом. Остальные противоречия assertion="semantic": укажи basis из точных {path,value} несовместимых утверждений и объясни несовместимость в message. Разное текущее место и постоянное жильё совместимы. Неоднозначность требует уточнения, не закрытия проживания. Для удаления ошибочной residence отдельно укажи remove_paths; path или patch_paths сами не разрешают удаление.
+Для утверждения об отсутствии значения используй assertion="missing_value" и точный path поля; для отсутствующей ссылки assertion="missing_reference", path одиночного строкового ID и target_path словаря целей. Для отсутствующей структурированной записи assertion="missing_record", section с именем коллекции и record_match с её идентифицирующими полями (например actor_id и kind), patch_paths конкретного нового ID. Не применяй missing_reference к dict/list и не заменяй коллекцию; необязательное обогащение assertion="optional_detail". Код сверит такие утверждения с кандидатом. Остальные противоречия assertion="semantic": укажи basis из ссылок {path}; значения прочитает сервер несовместимых утверждений и объясни несовместимость в message. Разное текущее место и постоянное жильё совместимы. Неоднозначность требует уточнения, не закрытия проживания. Для явного окончания проживания укажи lifecycle_decision=close и basis со ссылкой на подтверждающее обстоятельство вне самой residence; количество оснований само по себе ничего не доказывает. Для исправления ошибочного закрытия используй lifecycle_decision=correct. Для удаления ошибочной residence отдельно укажи remove_paths; path или patch_paths сами не разрешают удаление.
 path — диагностический JSON Pointer относительно candidate (не обёртки запроса): /world/roles/id, НЕ /candidate/world/roles/id и НЕ /world/world/roles/id. Диагностика может указывать существующую запись целиком, но это НЕ разрешение заменить запись. patch_paths — отдельный список точных полей для исправления; для новой записи разрешён /world/<раздел>/<новый_ID> при существующем родителе. Не заменяй существующие записи, карточки, коллекции или весь мир. Для recommendation допустим path=null и пустой patch_paths. Для blocker уточни patch_paths до конкретных полей; если это невозможно, сохрани замечание без разрешения на patch. related_paths — существующие связанные записи/поля. Не объявляй отсутствие optional ошибкой без смыслового основания. Идея — творческая основа, не перечень разрешённых фактов. Новые непротиворечивые персонажи, секреты, биографии и обстоятельства допустимы и становятся истиной мира. Используй их как основания для roles, objective_relations, residences, facts и knowledge. Отсутствие в исходном тексте не ошибка. Не требуй цитат или согласования дополнений. Необязательное литературное обогащение помечай severity="recommendation"; блокирующие противоречия — severity="blocker". Техническая ошибка самого отчёта не доказывает ошибку мира.'''
 SECTIONS = {'objective_relations','roles','residences','organizations','facts','knowledge','events','scenes','characters','relationships','threads','conditions','possessions','scheduled_events'}
 
@@ -44,17 +44,22 @@ def pointer(value, path):
     return current
 
 
-CONTRACT_VERSION = 5
+CONTRACT_VERSION = 6
+RECOVERY_POLICY = 2
 
 class ReviewBasis(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     path: str
-    value: object
+    value: object = None
 
 
 class ReviewIssue(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     path: str | None = None
+    section: str | None = None
+    entity_id: str | None = None
+    field: str | None = None
+    issue_id: str | None = None
     message: str = Field(min_length=1)
     related_paths: list[str] = Field(default_factory=list)
     severity: Literal['blocker', 'recommendation'] = 'blocker'
@@ -64,6 +69,21 @@ class ReviewIssue(BaseModel):
     record_match: dict[str, str | int | bool | None] | None = None
     basis: list[ReviewBasis] = Field(default_factory=list)
     remove_paths: list[str] = Field(default_factory=list)
+    lifecycle_decision: Literal['retain','correct','close'] | None = None
+
+    @model_validator(mode='after')
+    def conditional_shape(self):
+        if self.assertion=='missing_record':
+            # Explicit v1–v5 adapter; new requests use section and server IDs.
+            if not self.section and isinstance(self.path,str) and self.path.startswith('/world/') and len(self.path.split('/'))==3:
+                self.section=self.path.split('/')[2]
+            if not self.section or not self.record_match:raise ValueError('missing_record требует section и непустой record_match.')
+        elif self.assertion in ('missing_value','missing_reference'):
+            if not isinstance(self.path,str):raise ValueError('Для утверждения требуется path одиночного поля.')
+            if self.assertion=='missing_reference' and not isinstance(self.target_path,str):raise ValueError('Для missing_reference нужен target_path.')
+        elif self.assertion=='semantic' and self.severity=='blocker':
+            if not isinstance(self.path,str) and not (self.section and self.entity_id):raise ValueError('Для противоречия нужен path или section/entity_id.')
+        return self
 
 class ReviewReport(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
@@ -77,7 +97,19 @@ class ReportError(ValueError):
 
 
 def report_schema():
-    return ReviewReport.model_json_schema()
+    schema = ReviewReport.model_json_schema()
+    item = schema['$defs']['ReviewIssue']
+    # The provider sees the same conditional contract that parse enforces.
+    item['allOf'] = [
+        {'if': {'properties': {'assertion': {'const': kind}}, 'required': ['assertion']},
+         'then': {'required': required, 'properties': properties}}
+        for kind, required, properties in [
+            ('missing_reference', ['path', 'target_path'], {'path': {'type': 'string'}, 'target_path': {'type': 'string'}}),
+            ('missing_value', ['path'], {'path': {'type': 'string'}}),
+            ('missing_record', ['section', 'record_match'], {'section': {'enum': sorted(EXTENSIONS)}, 'record_match': {'type': 'object', 'minProperties': 1}}),
+        ]]
+    item['allOf'].append({'if':{'properties':{'assertion':{'const':'semantic'},'severity':{'not':{'const':'recommendation'}}}},'then':{'anyOf':[{'required':['path'],'properties':{'path':{'type':'string'}}},{'required':['section','entity_id'],'properties':{'section':{'type':'string'},'entity_id':{'type':'string'}}}]}})
+    return schema
 
 
 def patch_allowed(state, path):
@@ -141,12 +173,71 @@ def diagnostic_alias(state, path):
     return valid[0] if len(valid)==1 else None
 
 
+def escape(value):
+    return value.replace('~','~0').replace('/','~1')
+
+
+def issue_identity(item):
+    """Stable across array reordering and recovery epochs; never mutation rights."""
+    import hashlib
+    return hashlib.sha256(json.dumps(item, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:20]
+
+
+def record_predicate(state, issue):
+    section=issue.section or (issue.path.split('/')[2] if isinstance(issue.path,str) and issue.path.startswith('/world/') and len(issue.path.split('/'))==3 else None)
+    if section not in EXTENSIONS:raise ValueError('missing_record требует известный тип коллекции section.')
+    issue.section=section;issue.path='/world/'+section
+    matcher=issue.record_match
+    if not matcher:raise ValueError('Нужен непустой типизированный record_match.')
+    model=EXTENSIONS[section]
+    for key,value in matcher.items():
+        if key not in model.model_fields:raise ValueError('Неизвестное поле matcher: '+key)
+        field=model.model_fields[key]
+        TypeAdapter(Annotated[field.annotation, *field.metadata] if field.metadata else field.annotation).validate_python(value, strict=True)
+    required={'objective_relations':{'source_id','target_id','kind'},'roles':{'actor_id','kind'},'residences':{'actor_id','location_id'},'organizations':{'name'},'possessions':{'name','owner_id'}}.get(section,{'id'})
+    if not required <= matcher.keys():raise ValueError('Matcher должен идентифицировать запись: '+', '.join(sorted(required)))
+    if 'source_id' in matcher and matcher.get('source_id')==matcher.get('target_id'):raise ValueError('Участники связи должны различаться.')
+    for key in ('actor_id','source_id','target_id'):
+        if key in matcher and matcher[key] not in state['world']['characters']:raise ValueError('Неизвестный участник matcher: '+key)
+    if 'location_id' in matcher and matcher['location_id'] not in {r['id'] for r in state['locations']}:raise ValueError('Неизвестная локация matcher.')
+    if len(issue.patch_paths or [])>1:raise ValueError('Один matcher описывает одну запись. Разделите объединённое замечание.')
+    actual=pointer(state,issue.path)
+    if not isinstance(actual,dict):raise ValueError('Ожидалась коллекция записей.')
+    def matches(row, match):return isinstance(row,dict) and all(k in row and type(row[k]) is type(v) and row[k]==v for k,v in match.items())
+    candidates=[matcher]
+    if section=='objective_relations' and matcher['kind'] in ('spouse','partner','engaged','sibling','friend','close_friend','coworker'):
+        candidates.append(dict(matcher,source_id=matcher['target_id'],target_id=matcher['source_id']))
+    # An omitted phase means the requested current record, never a historical one.
+    if 'status' in model.model_fields:
+        candidates=[{'status':'active',**m} for m in candidates]
+    disproved=any(matches(dict(status='active',**row) if 'status' not in row and 'status' in model.model_fields else row,m) for row in actual.values() if isinstance(row,dict) for m in candidates)
+    if not disproved:
+        ident='generated_'+issue_identity({'section':section,'match':matcher})
+        issue.patch_paths=['/world/'+section+'/'+ident]
+    return disproved
+
+
+def resolve_subject(state, issue):
+    if issue.assertion=='missing_record':return
+    if issue.section and issue.entity_id:
+        if issue.section in ('characters','locations'):
+            indexes=[i for i,r in enumerate(state.get(issue.section,[])) if r.get('id')==issue.entity_id]
+            if len(indexes)!=1:raise ValueError('Неоднозначный адрес сущности.')
+            path='/'+issue.section+'/'+str(indexes[0])
+        elif issue.section in SECTIONS:path='/world/'+issue.section+'/'+escape(issue.entity_id)
+        else:raise ValueError('Неизвестный раздел.')
+        if issue.field:path+='/'+escape(issue.field)
+        pointer(state,path)
+        issue.path=path
+        if issue.field and issue.patch_paths is None:issue.patch_paths=[path]
+
+
 def messages(state, author_context):
     candidate={k:deepcopy(state[k]) for k in ('campaign','characters','locations','world','world_clock','camera','controlled_actor_id','protagonist_id')}
     schema={k:runtime_schema(EXTENSIONS[k]) for k in ('objective_relations','roles','residences','organizations')}
     example=ReviewReport(issues=[ReviewIssue(path='/world/roles/new_id',message='Конкретное противоречие',patch_paths=['/world/roles/new_id'])]).model_dump()
     return [dict(role='system',content=MARKER+'\n'+RULES),dict(role='user',content=json.dumps(
-        dict(author_context=author_context,candidate=candidate,address_guide=address_guide(candidate),record_schemas=schema,report_schema=report_schema(),example=example,contract_version=CONTRACT_VERSION),ensure_ascii=False))]
+        dict(author_context=author_context,candidate=candidate,address_guide=address_guide(candidate),record_schemas=schema,report_schema=report_schema(),example=example,contract_version=CONTRACT_VERSION),ensure_ascii=False,separators=(',',':')))]
 
 
 def correction_indices(reply, errors):
@@ -165,6 +256,19 @@ def merge_correction(reply, previous, errors):
     indices=correction_indices(previous,errors)
     if indices is None:return reply
     report=strict_loads(reply)
+    original=strict_loads(previous)
+    if isinstance(report,dict) and set(report)=={'replacements'}:
+        replacements=report['replacements']
+        expected={issue_identity(original['issues'][i]):i for i in indices}
+        if not isinstance(replacements,list) or len(replacements)!=len(expected):
+            raise ReportError([dict(report_path='/',world_path=None,message='Нужна замена каждого отклонённого issue_id.')])
+        changes={}
+        for replacement in replacements:
+            if not isinstance(replacement,dict) or set(replacement)!={'issue_id','issues'} or replacement['issue_id'] not in expected or replacement['issue_id'] in changes or not isinstance(replacement['issues'],list) or not replacement['issues']:
+                raise ReportError([dict(report_path='/',world_path=None,message='Пустая, повторная или неизвестная замена замечания.')])
+            changes[replacement['issue_id']]=replacement['issues']
+        original['issues']=[new for item in original['issues'] for new in changes.get(issue_identity(item),[item])]
+        return json.dumps(original,ensure_ascii=False)
     if not isinstance(report,dict) or set(report)!={'issues'} or not isinstance(report['issues'],list) or len(report['issues'])!=len(indices):
         raise ReportError([dict(report_path='/',world_path=None,message='Коррекция должна вернуть по одному пункту на каждый отклонённый, в том же порядке.')])
     original=strict_loads(previous)
@@ -186,14 +290,25 @@ def correction(messages, reply, errors):
             try:context[ref]=pointer(state,ref)
             except (ValueError,KeyError,IndexError,TypeError):pass
     indices=correction_indices(reply,errors)
+    rejected_items=[]
     if indices is not None:
         rejected=strict_loads(reply)
+        rejected_items=[dict(issue_id=issue_identity(rejected['issues'][i]),issue=rejected['issues'][i]) for i in indices]
+        for entry in rejected_items:
+            item=entry['issue']
+            refs=(item.get('related_paths') or []) + [b.get('path') for b in item.get('basis',[]) if isinstance(b,dict)]
+            for path in (item.get('patch_paths') or []):
+                if isinstance(path,str):refs.append(path.rsplit('/',1)[0])
+            for ref in refs:
+                try:context[ref]=pointer(state,ref)
+                except (ValueError,KeyError,IndexError,TypeError):pass
         reply=json.dumps({'issues':[rejected['issues'][i] for i in indices]},ensure_ascii=False)
     return [messages[0],dict(role='user',content=json.dumps(dict(
+        rejected_items=rejected_items,replacement_contract='Верни replacements: [{issue_id, issues:[исправленные пункты]}]. Можно разделить одно замечание на несколько; нельзя терять соседние замечания. Старый issues по одному на индекс также принимается.',
         original_indices=indices,reply_scope='Верни только отклонённые пункты, по одному в исходном порядке; остальные сохранены кодом.' if indices is not None else 'Исправь внешнюю структуру отчёта.',
         instruction='Исправь только отчёт по конкретным ошибкам валидации, не выполняй новый аудит мира. Не меняй мир. Не удаляй замечания ради прохождения проверки. Сохрани корректные замечания и их содержание. Корень JSON Pointer — candidate, без префикса candidate.',
         author_context=payload.get('author_context'),address_guide=payload.get('address_guide',{}),related_context=context,
-        rejected_response=reply,validation_errors=errors,report_schema=report_schema()),ensure_ascii=False))]
+        rejected_response=reply,validation_errors=errors,report_schema=report_schema()),ensure_ascii=False,separators=(',',':')))]
 
 
 def parse(reply, state):
@@ -209,13 +324,23 @@ def parse(reply, state):
         base=f'/issues/{i}'
         try:issue=ReviewIssue.model_validate(item)
         except ValidationError as exc:
+            if isinstance(item,dict) and (item.get('severity')=='recommendation' or item.get('assertion')=='optional_detail'):
+                problems.append(error('',str(item.get('message') or 'Неверное необязательное замечание'),'review_advisory_invalid',severity='recommendation',patch_paths=[],protocol_warnings=[dict(report_path=base,message=e['msg']) for e in exc.errors(include_input=False)],original_issue=item))
+                continue
             errors.extend(dict(report_path=base+'/'+ '/'.join(map(str,e['loc'])),world_path=item.get('path') if isinstance(item,dict) else None,message=e['msg']) for e in exc.errors(include_input=False));continue
-        before=len(errors);warnings=[]
+        before=len(errors);warnings=[];verified_basis=[]
+        try:resolve_subject(state,issue)
+        except (ValueError,KeyError,IndexError,TypeError) as exc:
+            errors.append(dict(report_path=base+'/section',world_path=issue.path,message=str(exc)));continue
         for j,basis in enumerate(issue.basis):
             try:
-                if pointer(state,basis.path)!=basis.value:raise ValueError('Основание не совпадает с кандидатом.')
+                if 'value' in basis.model_fields_set and pointer(state,basis.path)!=basis.value:raise ValueError('Основание не совпадает с кандидатом.')
+                verified_basis.append(dict(path=basis.path,value=pointer(state,basis.path)))
             except (ValueError,KeyError,IndexError,TypeError) as exc:
-                errors.append(dict(report_path=base+f'/basis/{j}',world_path=basis.path,message=str(exc)))
+                entry=dict(report_path=base+f'/basis/{j}',world_path=basis.path,message=str(exc))
+                if issue.severity=='recommendation' or issue.assertion=='optional_detail':
+                    warnings.append(entry);issue.patch_paths=[];issue.remove_paths=[]
+                else:errors.append(entry)
         for j,path in enumerate(issue.remove_paths):
             try:
                 parts=path.split('/')
@@ -229,12 +354,10 @@ def parse(reply, state):
                 issue.severity='recommendation'
             else:
                 try:
-                    actual=pointer(state,issue.path)
+                    actual=None if issue.assertion=='missing_record' else pointer(state,issue.path)
                     if issue.assertion=='missing_value': disproved=actual is not None and actual != '' and actual != [] and actual != {} and (not isinstance(actual,str) or bool(actual.strip()))
                     elif issue.assertion=='missing_record':
-                        if not isinstance(actual,dict) or not issue.record_match:
-                            raise ValueError('missing_record требует коллекцию записей в path и непустой record_match с идентифицирующими полями.')
-                        disproved=any(isinstance(row,dict) and all(k in row and row[k]==v for k,v in issue.record_match.items()) for row in actual.values())
+                        disproved=record_predicate(state,issue)
                     else:
                         if not isinstance(actual,str) or not actual.strip():
                             raise ValueError('missing_reference требует одиночный непустой строковый ID в path. Для отсутствующей записи используй missing_record, path коллекции, record_match и patch_paths нового ID; коллекцию заменять нельзя.')
@@ -293,6 +416,7 @@ def parse(reply, state):
             except (ValueError,KeyError,IndexError,TypeError) as exc:invalid(f'patch_paths/{j}',path,exc)
         if issue.message.strip():
             warnings+=errors[before:]
-            problems.append(error(issue.path or '',issue.message,'semantic_completeness',related_paths=valid_related,severity=issue.severity,patch_paths=safe_paths,remove_paths=issue.remove_paths,basis=[b.model_dump() for b in issue.basis],assertion=issue.assertion,target_path=issue.target_path,record_match=issue.record_match,original_issue=original,**(dict(protocol_warnings=warnings) if warnings else {})))
+            problems.append(error(issue.path or '',issue.message,'semantic_completeness',related_paths=valid_related,severity=issue.severity,patch_paths=safe_paths,remove_paths=issue.remove_paths,lifecycle_decision=issue.lifecycle_decision,basis=verified_basis,assertion=issue.assertion,target_path=issue.target_path,record_match=issue.record_match,original_issue=original,**(dict(protocol_warnings=warnings) if warnings else {})))
+    for problem in problems:problem['issue_id']=issue_identity(problem.get('original_issue',problem))
     if errors:raise ReportError(errors,problems)
     return problems
