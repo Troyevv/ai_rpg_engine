@@ -228,7 +228,7 @@ def validate(state, *, canonical=True):
         except ValueError:
             require(False,f'Отложенное событие {eid}: некорректные поля договорённости.')
 
-        require(type(e.get('due_minute')) is int and e['due_minute']>=0,f'Отложенное событие {eid}: нужен срок.')
+        require(e.get('due_minute') is None or type(e.get('due_minute')) is int and e['due_minute']>=0,f'Отложенное событие {eid}: нужен срок.')
         require(e.get('status') in ('pending','resolved','cancelled'),f'Отложенное событие {eid}: некорректный статус.')
         require(isinstance(e.get('description'),str),f'Отложенное событие {eid}: нужно описание.')
         require(not e.get('resolved_event_id') or e['resolved_event_id'] in world['events'],f'Отложенное событие {eid}: неизвестное событие завершения.')

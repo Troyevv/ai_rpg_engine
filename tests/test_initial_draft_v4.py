@@ -55,7 +55,7 @@ def volkov_rich():
     scene=world['scenes'][state['camera']['scene_id']]
     scene.update(location='Вход в суд',participants=[ids[0],ids[7]],text='Илья стоит у входа в суд, курит сигарету. Рядом Лиза тоже курит.',event_ids=[])
     for cid in (ids[0],ids[7]):world['characters'][cid]['location']='Вход в суд'
-    world['characters'][ids[0]].update(goals=[],intentions=[],emotion='',situation='Стоит у входа в суд, курит сигарету.')
+    world['characters'][ids[0]].update(goals=[],short_goal='',intentions=[],emotion='',situation='Стоит у входа в суд, курит сигарету.')
     return state
 
 

@@ -24,9 +24,9 @@ RULES = '''Проверь исходный замысел и уже утверж
 5. Начало игры разрешается кодом из явных настроек, затем авторского начала. Числовой ответ модели не переопределяет эти значения. Календарная арифметика и DOB проверяются кодом; не запрашивай повторные технические исправления корректных значений. Calendar должен соответствовать дате/дню недели/времени автора и сцены. Если только пятница 08:00 — start_date=null, start_weekday=4, время 08:00; календарный anchor может привязать пятницу к существующей минуте. Не назначай дату произвольно. Для обычного современного мира profile.system=gregorian. Для иной эпохи/мира учитывай заданный календарь.
 6. Вчера вечером не час назад сегодняшним утром. Не придумывай точные минуты событий: если точное время неизвестно, minute=null, обстоятельства остаются в text/evidence и source_sequence. История предшествует сцене. Проверь связанные временные поля вместе.
 7. controlled_actor_id: начальный образ, эмоции и предысторию можно творчески дополнить. Не выполняй будущие добровольные действия игрока, не предрешай согласие; активные intentions/obligations требуют явного основания в авторском вводе. Черта характера не намерение; не удаляй заданные автором стремления. NPC вправе иметь творчески дополненные цели.
-8. При новой генерации допустима творчески выбранная дата рождения, согласованная с точным возрастом и текущей датой календаря; авторские даты и запреты сохраняются. Старое birth_date=null не ошибка и не требует заполнения.
+8. Даты рождения и календарная арифметика проверяются и дополняются кодом; null в старом мире допустим. Поездка, война или присутствие в сцене не закрывают постоянное проживание. sibling симметричен и не требует обратной записи. Для качественного дополнения укажи выбранные слабые поля в patch_paths, severity=recommendation, assertion=optional_detail; оценивай полезность для игры, не длину текста.
 9. Сцена должна сохранять заданные место, состав, время и действия на момент старта; не добавляй уже исполненные решения игрока после начала игры.
-Для утверждения об отсутствии значения используй assertion="missing_value" и точный path поля; для отсутствующей ссылки assertion="missing_reference", path поля ссылки и target_path коллекции целей; необязательное обогащение assertion="optional_detail". Код сверит такие утверждения с кандидатом. Остальные противоречия assertion="semantic".
+Для утверждения об отсутствии значения используй assertion="missing_value" и точный path поля; для отсутствующей ссылки assertion="missing_reference", path одиночного строкового ID и target_path словаря целей. Для отсутствующей структурированной записи assertion="missing_record", path коллекции и record_match с её идентифицирующими полями (например actor_id и kind), patch_paths конкретного нового ID. Не применяй missing_reference к dict/list и не заменяй коллекцию; необязательное обогащение assertion="optional_detail". Код сверит такие утверждения с кандидатом. Остальные противоречия assertion="semantic": укажи basis из точных {path,value} несовместимых утверждений и объясни несовместимость в message. Разное текущее место и постоянное жильё совместимы. Неоднозначность требует уточнения, не закрытия проживания. Для удаления ошибочной residence отдельно укажи remove_paths; path или patch_paths сами не разрешают удаление.
 path — диагностический JSON Pointer относительно candidate (не обёртки запроса): /world/roles/id, НЕ /candidate/world/roles/id и НЕ /world/world/roles/id. Диагностика может указывать существующую запись целиком, но это НЕ разрешение заменить запись. patch_paths — отдельный список точных полей для исправления; для новой записи разрешён /world/<раздел>/<новый_ID> при существующем родителе. Не заменяй существующие записи, карточки, коллекции или весь мир. Для recommendation допустим path=null и пустой patch_paths. Для blocker уточни patch_paths до конкретных полей; если это невозможно, сохрани замечание без разрешения на patch. related_paths — существующие связанные записи/поля. Не объявляй отсутствие optional ошибкой без смыслового основания. Идея — творческая основа, не перечень разрешённых фактов. Новые непротиворечивые персонажи, секреты, биографии и обстоятельства допустимы и становятся истиной мира. Используй их как основания для roles, objective_relations, residences, facts и knowledge. Отсутствие в исходном тексте не ошибка. Не требуй цитат или согласования дополнений. Необязательное литературное обогащение помечай severity="recommendation"; блокирующие противоречия — severity="blocker". Техническая ошибка самого отчёта не доказывает ошибку мира.'''
 SECTIONS = {'objective_relations','roles','residences','organizations','facts','knowledge','events','scenes','characters','relationships','threads','conditions','possessions','scheduled_events'}
 
@@ -44,7 +44,13 @@ def pointer(value, path):
     return current
 
 
-CONTRACT_VERSION = 4
+CONTRACT_VERSION = 5
+
+class ReviewBasis(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    path: str
+    value: object
+
 
 class ReviewIssue(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
@@ -53,8 +59,11 @@ class ReviewIssue(BaseModel):
     related_paths: list[str] = Field(default_factory=list)
     severity: Literal['blocker', 'recommendation'] = 'blocker'
     patch_paths: list[str] | None = None
-    assertion: Literal['semantic','missing_value','missing_reference','optional_detail'] = 'semantic'
+    assertion: Literal['semantic','missing_value','missing_reference','missing_record','optional_detail'] = 'semantic'
     target_path: str | None = None
+    record_match: dict[str, str | int | bool | None] | None = None
+    basis: list[ReviewBasis] = Field(default_factory=list)
+    remove_paths: list[str] = Field(default_factory=list)
 
 class ReviewReport(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
@@ -202,23 +211,42 @@ def parse(reply, state):
         except ValidationError as exc:
             errors.extend(dict(report_path=base+'/'+ '/'.join(map(str,e['loc'])),world_path=item.get('path') if isinstance(item,dict) else None,message=e['msg']) for e in exc.errors(include_input=False));continue
         before=len(errors);warnings=[]
+        for j,basis in enumerate(issue.basis):
+            try:
+                if pointer(state,basis.path)!=basis.value:raise ValueError('Основание не совпадает с кандидатом.')
+            except (ValueError,KeyError,IndexError,TypeError) as exc:
+                errors.append(dict(report_path=base+f'/basis/{j}',world_path=basis.path,message=str(exc)))
+        for j,path in enumerate(issue.remove_paths):
+            try:
+                parts=path.split('/')
+                if len(parts)!=4 or parts[1:3]!=['world','residences'] or not isinstance(pointer(state,path),dict):
+                    raise ValueError('Удаление требует точного адреса существующего проживания.')
+            except (ValueError,KeyError,IndexError,TypeError) as exc:
+                errors.append(dict(report_path=base+f'/remove_paths/{j}',world_path=path,message=str(exc)))
         # Machine-verifiable claims use a typed predicate, never prose matching.
         if issue.assertion != 'semantic':
             if issue.assertion == 'optional_detail':
-                issue.severity='recommendation';issue.patch_paths=[]
+                issue.severity='recommendation'
             else:
                 try:
                     actual=pointer(state,issue.path)
-                    if issue.assertion=='missing_value': disproved=actual is not None
+                    if issue.assertion=='missing_value': disproved=actual is not None and actual != '' and actual != [] and actual != {} and (not isinstance(actual,str) or bool(actual.strip()))
+                    elif issue.assertion=='missing_record':
+                        if not isinstance(actual,dict) or not issue.record_match:
+                            raise ValueError('missing_record требует коллекцию записей в path и непустой record_match с идентифицирующими полями.')
+                        disproved=any(isinstance(row,dict) and all(k in row and row[k]==v for k,v in issue.record_match.items()) for row in actual.values())
                     else:
+                        if not isinstance(actual,str) or not actual.strip():
+                            raise ValueError('missing_reference требует одиночный непустой строковый ID в path. Для отсутствующей записи используй missing_record, path коллекции, record_match и patch_paths нового ID; коллекцию заменять нельзя.')
                         if not issue.target_path:raise ValueError('Для missing_reference нужен target_path.')
                         target=pointer(state,issue.target_path)
-                        disproved=isinstance(target,dict) and actual in target
+                        if not isinstance(target,dict):raise ValueError('target_path должен указывать словарь записей по ID.')
+                        disproved=actual in target
                 except KeyError:disproved=False
                 except (TypeError,ValueError,IndexError) as exc:
                     errors.append(dict(report_path=base+'/assertion',world_path=issue.path,message=str(exc)));continue
                 if disproved:
-                    problems.append(error(issue.path,issue.message,'review_disproved',severity='recommendation',patch_paths=[],assertion=issue.assertion))
+                    problems.append(error(issue.path,issue.message,'review_disproved',severity='recommendation',patch_paths=[],assertion=issue.assertion,target_path=issue.target_path,record_match=issue.record_match,original_issue=item,server_verification='disproved'))
                     continue
 
         def invalid(field,path,exc):
@@ -265,6 +293,6 @@ def parse(reply, state):
             except (ValueError,KeyError,IndexError,TypeError) as exc:invalid(f'patch_paths/{j}',path,exc)
         if issue.message.strip():
             warnings+=errors[before:]
-            problems.append(error(issue.path or '',issue.message,'semantic_completeness',related_paths=valid_related,severity=issue.severity,patch_paths=safe_paths,**(dict(protocol_warnings=warnings,original_issue=original) if warnings else {})))
+            problems.append(error(issue.path or '',issue.message,'semantic_completeness',related_paths=valid_related,severity=issue.severity,patch_paths=safe_paths,remove_paths=issue.remove_paths,basis=[b.model_dump() for b in issue.basis],assertion=issue.assertion,target_path=issue.target_path,record_match=issue.record_match,original_issue=original,**(dict(protocol_warnings=warnings) if warnings else {})))
     if errors:raise ReportError(errors,problems)
     return problems

@@ -166,7 +166,8 @@ def scheduled_time(state, event):
     if reference is None: reference = (state['meta'].get('calendar') or {}).get('start_minute',state['meta']['world_time'])
     temporal = dict(event.get('temporal') or {})
     due = event.get('due_minute')
-    if not temporal and (due is None or due == 0):
+    explicit=event.get('time_semantics')=='explicit'
+    if not temporal and not explicit and (due is None or due == 0):
         text = event.get('condition','').casefold()
         if re.search(r'\b(?:не|not|или|or|после|after|до|before)\b',text): text = ''
         weekdays = [i for i,pattern in enumerate(_WEEKDAY_PATTERN) if re.search(r'\b(?:'+pattern+r'\w*|'+WEEKDAYS[i]+r')\b',text)]
@@ -179,7 +180,7 @@ def scheduled_time(state, event):
             if re.search(r'\b(?:'+pattern+r')\b',text): temporal['day_period']=period
         clock = re.search(r'\b([01]?\d|2[0-3]):([0-5]\d)\b',text)
         if clock: temporal['time']=f'{int(clock[1]):02d}:{clock[2]}'
-    resolved = due if type(due) is int and due > 0 else None
+    resolved = due if type(due) is int and (due >= 0 if explicit else due > 0) else None
     if temporal:
         base = current_time(state, reference); offset = None
         if temporal.get('date') and base['date']:

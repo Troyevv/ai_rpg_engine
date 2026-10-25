@@ -159,7 +159,7 @@ def migrate_v2(original):
     for eid, e in world.get('scheduled_events', {}).items():
         state['scheduled_events'][eid] = ScheduledEvent(id=eid, description=e['description'],
             character_ids=[cid for cid in e.get('participants',[]) if cid in actors], due_minute=e.get('due_minute'), status=e.get('status','pending'),
-            condition=e.get('condition',''), type=e.get('type','event'),
+            condition=e.get('condition',''), type=e.get('type','event'), location_id=e.get('location_id'), time_semantics=e.get('time_semantics','legacy'),
             temporal=e.get('temporal'), time_reference_minute=e.get('time_reference_minute',state['meta']['world_time'])).model_dump()
         state['scheduled_events'][eid].update({k:deepcopy(e[k]) for k in ('commitment','end_temporal','depends_on','started_minute','outcome','evidence','source_turn','interrupts') if k in e})
     if 'reproduction_policy' in world: state['reproduction_policy'] = deepcopy(world['reproduction_policy'])

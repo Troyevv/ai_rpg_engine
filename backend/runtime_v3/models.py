@@ -509,6 +509,7 @@ class Thread(StrictModel):
 
 class ScheduledEvent(StrictModel):
     id: str
+    time_semantics: Literal['legacy', 'explicit'] = 'legacy'
     description: str
     character_ids: list[str] = Field(default_factory=list)
     due_minute: int | None = Field(default=None, ge=0)

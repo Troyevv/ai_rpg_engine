@@ -136,7 +136,8 @@ def test_same_candidate_resume_editor_start_turn_save_reload(api):
             assert s['world']['relationships']['r3']['dimensions']['attraction']==40
             assert s['world']['relationships']['r4']['dimensions']['attraction']==85
             issues=[i for i in residence_issues(s) if i['path'].split('/')[-1] in s['world']['residences']]
-            yield json.dumps({'issues':[{k:v for k,v in i.items() if k in ('path','message','severity','patch_paths','related_paths')} for i in issues]})
+            issues=[dict(i,remove_paths=[i['path']]) for i in issues]  # Explicit controlled adjudication grants deletion.
+            yield json.dumps({'issues':[{k:v for k,v in i.items() if k in ('path','message','severity','patch_paths','related_paths','remove_paths')} for i in issues]})
         else:
             request=json.loads(kw['messages'][1]['content'])
             assert request['residence_operations']

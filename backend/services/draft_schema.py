@@ -82,7 +82,7 @@ def world_state_schema():
                  'evidence':{'type':'string'},'source_sequence':{'type':'integer','minimum':0},
                  'player_observed':{'type':'boolean'}},('id','text','participants','witnesses','minute','scene_id','fact_ids','player_observed'))
     scheduled = obj({'id':ID,'description':text('Отложенное событие при наличии причин и сроков.'),
-                     'due_minute':MINUTE,'participants':IDS,'status':{'type':'string','enum':['pending','resolved','cancelled']},
+                     'due_minute':OPTIONAL_MINUTE,'participants':IDS,'status':{'type':'string','enum':['pending','resolved','cancelled']},
                      'resolved_event_id':OPTIONAL_ID},('id','description','due_minute','participants','status'))
     from backend.runtime_v3.models import TemporalValue
     temporal_schema = TemporalValue.model_json_schema()
@@ -92,7 +92,7 @@ def world_state_schema():
         temporal=temporal_schema, end_temporal=temporal_schema,
         commitment={'type':'boolean'}, depends_on=IDS,
         type={'type':'string'}, condition={'type':'string'}, interrupts={'type':'boolean'},
-        started_minute=OPTIONAL_MINUTE, evidence={'type':'string'},
+        started_minute=OPTIONAL_MINUTE, time_reference_minute=OPTIONAL_MINUTE, location_id=OPTIONAL_ID, evidence={'type':'string'},
         source_turn={'type':['integer','null'],'minimum':0},
         outcome={'enum':['','fulfilled','blocked','missed','cancelled','dependency_cancelled']})
     world = obj({'version':{'const':2},'characters':entries(actor,'Ключ — тот же ID, что в characters.'),

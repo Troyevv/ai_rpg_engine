@@ -67,7 +67,9 @@ def complete(state, author_text='', seed=None):
     previous = meta.get('resolved')
     notices = []
     if previous:
-        # Editor changes are authoritative; generation input is never reapplied.
+        # Only manual_edit may update this server-owned resolution.
+        old = previous['minute']
+        configured = deepcopy(previous['calendar'])
         try:cal = Calendar.model_validate(configured).model_dump()
         except ValidationError as exc:
             from backend.services.draft_initial import DraftErrors,error
@@ -177,6 +179,8 @@ def manual_edit(state, path, old_minute=None):
         meta.setdefault('birth_dates', {})[cid] = dict(source='manual', value=state['world']['characters'][cid].get('birth_date'))
         state['world']['characters'][cid]['birth_provenance'] = {'source':'manual'}
     if path.startswith('/world_clock'):
+        meta['resolved']['minute']=state['world_clock']['minute']
+        meta['resolved']['calendar']=deepcopy(state['world_clock']['calendar'])
         meta['resolved']['sources'] = {'calendar':'manual','date':'manual','time':'manual','weekday':'manual'}
         if old_minute is not None:
             synchronize(state, old_minute, state['world_clock']['minute'], state['world_clock']['calendar'])

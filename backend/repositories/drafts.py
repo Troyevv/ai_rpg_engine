@@ -73,6 +73,8 @@ class DraftStorage:
             if block and not author:state=None
             history=[dict(r) for r in db.execute("SELECT id,reason,created_at FROM document_versions WHERE kind='world_draft' AND owner=? ORDER BY id DESC",(wid,))]
             latest=db.execute('SELECT * FROM preparation_jobs WHERE workspace_id=? ORDER BY rowid DESC LIMIT 1',(wid,)).fetchone()
+            if author and latest and json.loads(latest['response_journal'] or '{}').get('quality',{}).get('status')=='rejected':
+                report['warnings'].append('Необязательное дополнение не принято. Сохранена проверенная версия мира.')
             return {'id':wid,'name':w['name'],'revision':w['revision'],'version_id':head['id'] if head else None,
                 'candidate':raw if candidate and author else None,
                 'relation_merges':relation_plans(raw) if raw and author else [],

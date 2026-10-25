@@ -199,7 +199,7 @@ def normalize(value):
     remap={c['id']:identity('character',c['id']) for c in value['characters'] if isinstance(c.get('id'),str) and not re.fullmatch(r'[\w-]{1,100}',c['id'])}
     def references(v,field=''):
         if isinstance(v,dict):
-            return {remap.get(k,k):references(x,k) for k,x in v.items()}
+            return {(remap.get(k,k) if field=='characters' else k):references(x,k) for k,x in v.items()}
         if isinstance(v,list): return [references(x,field) for x in v]
         if isinstance(v,str) and (field=='id' or field.endswith('_id') or field.endswith('_ids') or field in ('participants','witnesses')):
             return remap.get(v,v)
@@ -211,7 +211,9 @@ def normalize(value):
             place.setdefault('id',identity('location',index,place.get('name','')))
             place.setdefault('kind','unknown')  # preserves explicit IDs during existing migration
     from backend.services.draft_relations import merge
-    value=merge(value);world=value['world']
+    value=merge(value)
+    from backend.services.draft_intake import merge_duplicates
+    value=merge_duplicates(value);world=value['world']
     scene=world['scenes'].get(value['camera'].get('scene_id'),{})
     if isinstance(scene,dict) and isinstance(scene.get('location'),str):
         for cid in scene.get('participants',[]):
@@ -241,6 +243,8 @@ def validate_typed(state):
         for key,record in world.get(section,{}).items(): check(model,record,f'/world/{section}/{escape(key)}')
     for cid,record in world['characters'].items():
         check(m.Character,{k:v for k,v in record.items() if k in m.Character.model_fields},'/world/characters/'+escape(cid))
+    for key,record in world['scheduled_events'].items():
+        check(m.ScheduledEvent,{k:v for k,v in dict(record,character_ids=record.get('participants',[])).items() if k in m.ScheduledEvent.model_fields},'/world/scheduled_events/'+escape(key))
     for key,record in world['knowledge'].items():
         check(m.Knowledge,{k:v for k,v in record.items() if k in m.Knowledge.model_fields},'/world/knowledge/'+escape(key))
     for key,record in world['facts'].items():
@@ -255,6 +259,24 @@ def validate_typed(state):
     if calendar or state['world_clock'].get('calendar') is None:
         from backend.runtime_v3.calendar import date_parts
         profile=calendar.profile.model_dump() if calendar else {}
+        # These fields are deliberately strings in Runtime (custom calendars).
+        # Check them before legacy validation can collapse the error to '/'.
+        for section in EXTENSIONS:
+            for key, record in world.get(section, {}).items():
+                for field in ('since_date', 'until_date'):
+                    if record.get(field) is None:continue
+                    try:date_parts(record[field], profile)
+                    except (ValueError, TypeError, KeyError) as exc:
+                        problems.append(error(f'/world/{section}/{escape(key)}/{field}',
+                            str(exc), 'calendar_date', expected='YYYY-MM-DD or null'))
+        from backend.runtime_v3.calendar import ordinal
+        for section in ('residences','roles','organizations','objective_relations'):
+            for key,record in world.get(section,{}).items():
+                if record.get('since_date') and record.get('until_date'):
+                    try:
+                        if ordinal(record['until_date'],profile)<ordinal(record['since_date'],profile):
+                            problems.append(error(f'/world/{section}/{escape(key)}/until_date','Конец предшествует началу.','chronology'))
+                    except (ValueError,TypeError,KeyError):pass  # Exact date diagnostics collected above.
         for cid,record in world['characters'].items():
             if record.get('birth_date') is not None:
                 try:
@@ -361,6 +383,9 @@ def canonical_check(state):
         expected=m.Knowledge.model_validate({k:v for k,v in record.items() if k in m.Knowledge.model_fields}).model_dump()
         if canonical['knowledge'].get(record['actor_id']+':'+record['fact_id'])!=expected:
             differences(expected,canonical['knowledge'].get(record['actor_id']+':'+record['fact_id']),'/world/knowledge/'+escape(key))
+    for key,record in state['world']['relationships'].items():
+        expected=m.Relationship.model_validate({k:v for k,v in record.items() if k in m.Relationship.model_fields}).model_dump()
+        differences(expected,canonical['relationships'].get(record['source_id']+':'+record['target_id']),'/world/relationships/'+escape(key))
     if problems:raise DraftErrors(problems)
     return result
 

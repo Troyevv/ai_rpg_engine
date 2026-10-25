@@ -105,6 +105,9 @@ def test_local_repair_retains_cards_relationships_and_unaffected_secrets():
     assert sent['author_context']==DINNER
     assert sent['related']['/world/events/e1']==s['world']['events']['e1']
     assert '/characters/1' not in sent['related']
+    # Calendar arithmetic is owned by code; semantic repair cannot alter it.
+    s['world_clock']['calendar']['start_weekday']=4
+    _,paths=draft_repair.request(json.dumps(s),findings(),author_context=DINNER)
     repaired=json.loads(draft_repair.apply(json.dumps(s),json.dumps({'patches':corrections()}),paths))
     assert repaired['characters']==s['characters']
     assert repaired['world']['relationships']==s['world']['relationships']
@@ -195,12 +198,12 @@ def test_unresolved_semantics_cannot_save_and_repair_budget_is_shared(tmp_path):
         elif 'patches' in kw['messages'][0]['content']:
             yield json.dumps({'patches':[dict(path='/world/characters/c1/intentions',value=['Скрыть своё эмоциональное состояние'])]})
         else:yield REAL_PATH.read_text()
-    with pytest.raises(ValueError,match='Две попытки'):
+    with pytest.raises(ValueError,match='Две попытки|Цикл значений'):
         run(Preparation(repo),jid,cfg,None,Handle(),None,stream)
     assert len(calls)==4  # generation + cached review + 2 repairs, never regeneration
     assert repo.draft(w['id'],True)['state'] is None
     # Replay completed journal after a restart: no extra provider requests.
-    with pytest.raises(ValueError,match='Две попытки'):
+    with pytest.raises(ValueError,match='Две попытки|Цикл значений'):
         run(Preparation(Repository(repo.path)),jid,cfg,None,Handle(),None,lambda **kw:pytest.fail('replayed paid request'))
 
 

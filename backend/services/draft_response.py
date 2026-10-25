@@ -172,6 +172,15 @@ def join_fragments(parts, manifest=None, *, schema=None, terminal=False):
     return result
 
 
+def stage_output_limit(slot, messages, config):
+    stage='world' if slot=='world' else 'review' if slot.startswith(('completeness','quality_review')) else 'quality' if slot.startswith('quality') else 'repair'
+    # Output size follows candidate/scope size, bounded by the user's ceiling.
+    size=estimate(messages)
+    target=config['max_tokens'] if stage=='world' else max(1024,int(size*({'review':0.30,'repair':0.75,'quality':0.90}[stage])))
+    override=config.get('_draft_stage_output_limits',{}).get(stage)
+    return min(config['max_tokens'],target if override is None else override)
+
+
 def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
     # Provider capability is distinct from the app's intentionally smaller context.
     # Official model catalog, checked 2026-10-24: api-docs.deepseek.com/api/list-models/
@@ -179,8 +188,9 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
     if config.get('provider')=='deepseek' and config.get('model') in ('deepseek-flash','deepseek-v4-flash','deepseek-v4-flash-vision-exp','deepseek-v4-pro'):
         capabilities=dict(context_window=1048576,max_output_tokens=393216)
     context=min(context,capabilities.get('context_window',context))
-    output_limit=min(config['max_tokens'],capabilities.get('max_output_tokens',config['max_tokens']))
+    output_limit=min(stage_output_limit(slot,messages,config),capabilities.get('max_output_tokens',config['max_tokens']))
     record = journal.setdefault('responses',{}).setdefault(slot,{'parts':[],'complete':False})
+    if not record['complete']:record['output_limit']=output_limit
     schema=None
     if slot=='world':
         from backend.services.draft_initial import prompt_schema
