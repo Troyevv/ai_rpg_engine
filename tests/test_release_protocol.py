@@ -354,3 +354,29 @@ def test_cast_bound_contract_budget_and_preservation(api,settings,count):
     repo=app.state.repository;snap=repo.get_snapshot(out.json()['save'])
     assert len(snap['world_state']['characters'])==count
     assert Repository(repo.path).get_snapshot(out.json()['save'])==snap
+
+
+@pytest.mark.parametrize('raw',['1e999','{"x":-1e999}','"\\ud800"','{"\\udfff":1}','{"x":["\\udc00"]}'])
+def test_json_numeric_overflow_and_unpaired_unicode_are_domain_errors(raw):
+    from backend.services.draft_response import strict_loads
+    with pytest.raises(ValueError):strict_loads(raw)
+    with pytest.raises(review.ReportError):review.parse('{"issues":[{"message":'+raw+'}]}',rich())
+
+
+def test_json_paired_unicode_and_escaped_pointer_are_preserved():
+    from backend.services.draft_response import strict_loads
+    assert strict_loads('"\\ud83d\\ude80"')=='🚀'
+    state=rich();state['campaign']['а/б~🚀']='данные'
+    item=dict(path='/campaign/а~1б~0🚀',message='Уточнить данные',patch_paths=['/campaign/а~1б~0🚀'])
+    rows=review.parse(json.dumps({'issues':[item]},ensure_ascii=True),state)
+    assert rows[0]['path']==item['path'] and rows[0]['patch_paths']==item['patch_paths']
+
+
+def test_transport_memory_error_is_not_malformed_reply_and_keeps_reservation():
+    from threading import Event
+    from backend.services.draft_response import response
+    from test_draft_response_v4 import JournalRepo,CONFIG,MESSAGES
+    repo=JournalRepo();journal={}
+    def exhausted(*args):raise MemoryError('test resource failure')
+    with pytest.raises(MemoryError):response(repo,'j',journal,'world',MESSAGES,CONFIG,32768,exhausted,Event())
+    assert repo.journal['pending'] and repo.journal['reserved_tokens']>0

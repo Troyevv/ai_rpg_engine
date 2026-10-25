@@ -7,6 +7,7 @@ from copy import deepcopy
 from decimal import Decimal
 import hashlib
 import json
+import math
 import re
 from context_builder import estimate
 from llm import OutputLimitReached, ProviderHTTPError
@@ -131,7 +132,21 @@ def strict_loads(text):
             result[key] = value
         return result
     def constant(value): raise ValueError('Недопустимое JSON-число: '+value)
-    return json.loads(text,object_pairs_hook=pairs,parse_constant=constant)
+    def finite(value):
+        number=float(value)
+        if not math.isfinite(number):raise ValueError('JSON-число вне конечного диапазона.')
+        return number
+    result=json.loads(text,object_pairs_hook=pairs,parse_constant=constant,parse_float=finite)
+    # JSON escape syntax permits lone surrogates; UTF-8 storage/hashing does not.
+    # Reject them at decoding rather than failing after a checkpoint or ID lookup.
+    pending=[result]
+    while pending:
+        value=pending.pop()
+        if isinstance(value,str):
+            if any(0xD800<=ord(char)<=0xDFFF for char in value):raise ValueError('Непарный Unicode surrogate в JSON-строке.')
+        elif isinstance(value,dict):pending.extend(value);pending.extend(value.values())
+        elif isinstance(value,list):pending.extend(value)
+    return result
 
 
 ASSEMBLY_VERSION = 1
@@ -299,6 +314,8 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
                 if cancel.wait(min(2**retries,4)):return None
                 continue
             raise TransportError(f'Провайдер отклонил запрос: HTTP {exc.status_code}. Ответ сохранён.') from None
+        except MemoryError:
+            raise
         except Exception:
             # Network errors and cancellation have unknown billing/output, even
             # if no visible characters arrived. Do not turn them into a retry.

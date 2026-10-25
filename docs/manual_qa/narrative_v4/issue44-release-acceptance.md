@@ -16,10 +16,10 @@
 | F2 quality теряет готовый результат | Реальный quality.complete с root array/null/string, null collections | Разные контракт и обработчик; отдельные DTO/schema для patches/preserved/mixed, атомарный trial/re-review и terminal partial | `test_quality_invalid_reply_preserves_checked_world`, valid forms, rollback, API quality_partial |
 | F3 advisory блокирует отчёт | Реальный parse: неверный locator, basis, remove/patch | Изоляция раньше покрывала лишь DTO; единая политика всего пункта, warning и нулевые права записи | `test_bad_advisory_is_isolated`, entire-item matrix и required siblings |
 | Соседние: неверные ID/списки и claims | Реальные normalize/inspect_candidate/merge_duplicates | Typed проверка перед hash, membership и обходом; точные пути; независимая хронология сохраняется | adjacent shape matrix, Knowledge/Relationship matrix |
-| Соседние: regeneration JSON | Реальный decode_result | Использовался permissive json.loads; общий strict decoder, duplicate/nonfinite/depth guard | `test_strict_json_for_regeneration_and_depth_limit` |
+| Соседние: regeneration JSON | Реальный decode_result | Использовался permissive json.loads; общий strict decoder, duplicate/nonfinite/depth guard, проверка float overflow и непарного Unicode surrogate | `test_strict_json_for_regeneration_and_depth_limit` |
 | Соседние: quality running после restart, raw export | Реальные SQLite/API/lifespan | Атомарная финализация, защита late write, авторский экспорт diagnostics/raw | terminal/restart/internal-error tests |
 
-Первый красный прогон F1–F3: **13 failed, 4 passed**. Дополнительная матрица соседних обработчиков до исправления: **7 failed, 8 passed**. Это тесты модулей приложения, не isolated_probes.py. Указанные сбои подтверждены; исторические probes повторно не выдаются за доказательство приложения.
+Первый красный прогон F1–F3: **13 failed, 4 passed**. Дополнительная матрица соседних обработчиков до исправления: **7 failed, 8 passed**. Дополнительный красный прогон float overflow / Unicode: **5 failed, 1 passed**; корректная surrogate pair и escaped JSON Pointer сохраняются. Это тесты модулей приложения, не isolated_probes.py. Указанные сбои подтверждены; исторические probes повторно не выдаются за доказательство приложения.
 
 ### Границы недоверенных данных (A01)
 
