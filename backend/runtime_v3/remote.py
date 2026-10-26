@@ -598,6 +598,10 @@ def projection(snapshot):
         row["content"] = (
             e["content"] if e["sender_id"] == actor or actor in e["read_by"] else None
         )
+        # Message authors and call counterparties are different identities. Derive
+        # both through the owner's authorized contacts; never expose raw sender_id.
+        if e["channel"] == "TEXT_MESSAGE":
+            row["sender"] = subject(e["sender_id"])
         row["subject"] = subject(
             e["sender_id"]
             if e["sender_id"] != actor

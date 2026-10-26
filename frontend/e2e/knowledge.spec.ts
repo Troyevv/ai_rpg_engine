@@ -12,6 +12,7 @@ test('grounded correction shows current and old beliefs after reload without gos
   await page.locator('.panel-tabs').getByRole('button',{name:'Персонажи',exact:true}).click();
   await page.getByLabel('Персонаж',{exact:true}).selectOption('qa_kirill');
   const panel=page.locator('.character-profile');
+  await panel.getByRole('tab',{name:'История',exact:true}).click();
   await panel.locator('summary').filter({hasText:/^Знания и подозрения/}).click();
   await panel.getByText('Прежние убеждения · 1',{exact:true}).click();
   const retired=panel.locator('details').filter({has:page.locator('summary').getByText('Исправлено',{exact:true})}).last();

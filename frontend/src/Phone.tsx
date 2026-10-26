@@ -41,6 +41,7 @@ type Event = {
   content: string | null;
   label: string;
   subject: PortraitSubject;
+  sender?: PortraitSubject;
   destination: string;
 };
 export type PhoneState = {
@@ -71,11 +72,13 @@ export function Phone({
   save,
   disabled,
   onCommit,
+  onBusyChange,
   config, apiKey, onJob, job,
 }: {
   save: Save;
   disabled: boolean;
   onCommit: (save: Save) => void;
+  onBusyChange: (busy: boolean) => void;
   config: ModelConfig;
   apiKey: string;
   onJob: (job: Job) => void;
@@ -98,6 +101,7 @@ export function Phone({
   const screen = useRef<HTMLDivElement>(null);
   const drafts = useRef<Record<string, string>>({});
   const requestLock = useRef(false);
+  const autoReadAttempt = useRef<string | null>(null);
   const currentOwner = useRef(ownerKey); currentOwner.current = ownerKey;
   const [diagnostics, setDiagnostics] = useState<{key:string;value:unknown}|null>(null);
   const [detail, setDetail] = useState<string | null>(null);
@@ -114,6 +118,12 @@ export function Phone({
   const [text, setText] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  // Phone mutations share the save revision with turns and control changes.
+  // Keep the parent locked even when the phone is closed before a response arrives.
+  useLayoutEffect(() => {
+    onBusyChange(busy);
+    return () => onBusyChange(false);
+  }, [busy, onBusyChange]);
   const [editContact, setEditContact] = useState<string | null>(null),
     [contactKind, setContactKind] = useState("person");
   const [label, setLabel] = useState(""),
@@ -169,13 +179,18 @@ export function Phone({
     setGroupName("");
   }, [save.id, phone?.actor_id]);
   useEffect(() => {
-    if (!open || tab !== 'messages' || !conversation || disabled || busy || requestLock.current || !phone?.events.some(e=>e.conversation_id===conversation&&e.unread)) return;
+    if (!open) {autoReadAttempt.current=null;return;}
+    if (tab !== 'messages' || !conversation || disabled || busy || requestLock.current || !phone?.events.some(e=>e.conversation_id===conversation&&e.unread)) return;
+    const attempt=`${ownerKey}:${conversation}:${save.revision}`;
+    if(autoReadAttempt.current===attempt)return;
+    autoReadAttempt.current=attempt;
     const owner = ownerKey;
     requestLock.current = true;
+    setBusy(true);
     api<Save>(`/saves/${save.id}/phone`, {revision:save.revision, command:{action:'read',conversation_id:conversation,operation_id:crypto.randomUUID()}})
       .then(next=>{if(currentOwner.current===owner)onCommit(next)})
       .catch(e=>{if(currentOwner.current===owner)setError(e.message)})
-      .finally(()=>{requestLock.current=false});
+      .finally(()=>{requestLock.current=false;setBusy(false)});
   }, [save.revision, open, tab, conversation, disabled, busy]);
   useLayoutEffect(()=>{const el=messages.current;if(el){const position=reading.current[messageKey];el.scrollTop=position&&!position.pinned?position.top:el.scrollHeight}},[conversation,tab,open,phone?.events.length,save.revision]);
   if (!phone || owner !== ownerKey) return null;
@@ -210,7 +225,7 @@ export function Phone({
       if(currentOwner.current===owner)setError((e as Error).message);
     } finally {
       requestLock.current = false;
-      if(currentOwner.current===owner)setBusy(false);
+      setBusy(false);
     }
   };
   const call = phone.events.find(
@@ -262,7 +277,7 @@ export function Phone({
       const result=await api<{job:Job;save:Save}>(`/saves/${save.id}/phone/dispatch`,{revision:save.revision,config,api_key:apiKey,continuation:{source_event_id:event.id,owner_id:phone.actor_id,request_id:requestId}});
       sessionStorage.removeItem(key);
       if(currentOwner.current===ownerKey){onJob(result.job);onCommit(result.save)}
-    }catch(e){if(currentOwner.current===ownerKey)setError((e as Error).message)}finally{requestLock.current=false;if(currentOwner.current===ownerKey)setBusy(false)}
+    }catch(e){if(currentOwner.current===ownerKey)setError((e as Error).message)}finally{requestLock.current=false;setBusy(false)}
   };
   const latestOutgoing = phone.events.filter(e=>e.outgoing&&e.channel==='TEXT_MESSAGE'&&e.conversation_id===conversation).at(-1);
   const hasReply = !!latestOutgoing && phone.events.slice(phone.events.findIndex(e=>e.id===latestOutgoing.id)+1).some(e=>!e.outgoing&&e.conversation_id===conversation);
@@ -275,7 +290,7 @@ export function Phone({
       if(active(job))await api(`/jobs/${job.id}/stop`,{});
       const next=await api<Save>(`/saves/${save.id}/phone`,{revision:save.revision,command:{action:'end',event_id:call.id,operation_id:crypto.randomUUID()}});
       if(currentOwner.current===ownerKey){onJob({...job,status:'stopped'});onCommit(next)}
-    }catch(e){if(currentOwner.current===ownerKey)setError((e as Error).message)}finally{requestLock.current=false;if(currentOwner.current===ownerKey)setBusy(false)}
+    }catch(e){if(currentOwner.current===ownerKey)setError((e as Error).message)}finally{requestLock.current=false;setBusy(false)}
   };
   return (
     <div
@@ -746,10 +761,10 @@ export function Phone({
                                 : "phone-message"
                             }
                           >
-                            {avatar(e.subject)}
+                            {avatar(e.sender ?? {id:"",name:"Неизвестный участник",silhouette:"neutral"})}
                             <div>
                               <small title={formatDateLabel(e.time_label)}>
-                                {e.outgoing ? "Ты" : e.label} · {e.time_label.match(/\d{2}:\d{2}/)?.[0] || formatDateLabel(e.time_label)}
+                                {e.outgoing ? "Ты" : e.sender?.name ?? "Неизвестный участник"} · {e.time_label.match(/\d{2}:\d{2}/)?.[0] || formatDateLabel(e.time_label)}
                               </small>
                               <p>{e.content ?? "Непрочитанное сообщение"}</p>
                               <small>

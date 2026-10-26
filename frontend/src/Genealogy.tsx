@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, memo } from "react";
 import {
   ReactFlow,
   Background,
@@ -6,12 +6,14 @@ import {
   EdgeLabelRenderer,
   type EdgeProps,
   Controls,
+  ControlButton,
   Handle,
   Position,
   useReactFlow,
   useNodesInitialized,
   type NodeProps,
 } from "@xyflow/react";
+import { Maximize } from "lucide-react";
 import dagre from "@dagrejs/dagre";
 import "@xyflow/react/dist/style.css";
 import { useReducedMotion } from "framer-motion";
@@ -21,8 +23,8 @@ import type { Genealogy as Graph, Save } from "./types";
 import { CharacterAvatar } from "./Portrait";
 import { socialLabel, lifeLabel } from "./lib/social";
 const nodeTypes = {
-  person: ({ data }: NodeProps) => (
-    <div className="family-node">
+  person: memo(({ data }: NodeProps) => (
+    <div className={`family-node ${data.root?'family-root':''} ${data.status==='dead'?'family-deceased':''}`}>
       <Handle id="top" type="target" position={Position.Top} />
       <Handle id="top-source" type="source" position={Position.Top} />
       <Handle id="left-source" type="source" position={Position.Left} />
@@ -32,15 +34,16 @@ const nodeTypes = {
       <CharacterAvatar
         subject={data.subject as any}
         saveId={data.saveId as number}
+        size={64}
       />
-      <strong>{String(data.label)}</strong>
+      <strong title={String(data.label)}>{String(data.label)}</strong>
       <small>{lifeLabel(String(data.status))}</small>
       {(data.subject as any).birth_date && (
         <small>{calendarDate((data.subject as any).birth_date, "short")}</small>
       )}
       <Handle id="bottom" type="source" position={Position.Bottom} />
     </div>
-  ),
+  )),
 };
 // Non-adjacent partners route above their generation instead of through a person.
 const edgeTypes = {
@@ -51,28 +54,35 @@ const edgeTypes = {
   },
 };
 const relationLabel = (e: Graph['edges'][number]) => `${({ parent: "Родитель", adoptive_parent: "Усыновление", guardian: "Опека" } as Record<string, string>)[e.kind] || socialLabel(e.kind)}${e.certainty === "suspected" ? " ?" : ""}${e.status === "closed" ? ` · ${socialLabel(e.outcome)}` : ""}`;
-function Fit({ version }: { version: string }) {
+function Fit({ version, arcMargin }: { version: string; arcMargin:number }) {
   const flow = useReactFlow();
   const initialized = useNodesInitialized();
   const reduced = useReducedMotion();
+  const fit=()=>{
+    const bounds=flow.getNodesBounds(flow.getNodes());
+    return flow.fitBounds({...bounds,y:bounds.y-arcMargin,height:bounds.height+arcMargin},{padding:0.15,duration:reduced?0:240});
+  };
   useEffect(() => {
     if (!initialized) return;
     const id = requestAnimationFrame(
-      () => void flow.fitView({ padding: 0.15, duration: reduced ? 0 : 240 }),
+      () => void fit(),
     );
     return () => cancelAnimationFrame(id);
-  }, [version, initialized]);
-  return null;
+  }, [version, initialized, arcMargin]);
+  return <Controls showInteractive={false} showFitView={false}><ControlButton title="Вся семья" aria-label="Вся семья" onClick={()=>void fit()}><Maximize/></ControlButton></Controls>;
 }
-export function Genealogy({ save, rootId }: { save: Save; rootId?: string }) {
+export function Genealogy({ save, rootId, onCharacter }: { save: Save; rootId?: string; onCharacter?:(id:string)=>void }) {
+  const [retry,setRetry]=useState(0);
+  const [rootsError,setRootsError]=useState('');
   const dataKey=`${save.id}:${save.revision}:${save.state.controlled_actor_id}`;
   const [rootData,setRootData]=useState<{key:string;items:{id:string;name:string}[]}>({key:"",items:[]});
   const roots=rootData.key===dataKey?rootData.items:[];
   const setRoots=(items:{id:string;name:string}[])=>setRootData({key:dataKey,items});
-  useEffect(()=>{let live=true;setRoots([]);api<{id:string;name:string}[]>(`/saves/${save.id}/genealogy-roots`).then(r=>{if(live)setRoots(r)}).catch(e=>{if(live)setError(e.message)});return()=>{live=false}},[save.id,save.revision,save.state.controlled_actor_id]);
+  useEffect(()=>{let live=true;setRootsError('');setRoots([]);api<{id:string;name:string}[]>(`/saves/${save.id}/genealogy-roots`).then(r=>{if(live)setRoots(r)}).catch(e=>{if(live)setRootsError(e.message)});return()=>{live=false}},[save.id,save.revision,save.state.controlled_actor_id,retry]);
   const [search,setSearch]=useState("");
+  const [view,setView]=useState<'graph'|'list'>('graph');
   const [root, setRoot] = useState(
-      rootId || save.state.controlled_actor_id || "",
+      rootId || save.state.controlled_actor_id || save.state.protagonist_id || save.state.characters[0]?.id || "",
     ),
     [depth, setDepth] = useState(3),
     [graphData, setGraphData] = useState<{key:string;value:Graph|null}>({key:"",value:null}),
@@ -83,7 +93,7 @@ export function Genealogy({ save, rootId }: { save: Save; rootId?: string }) {
   const graph=graphData.key===graphKey?graphData.value:null;
   const setGraph=(value:Graph|null)=>setGraphData({key:graphKey,value});
   useEffect(() => {
-    setRoot(rootId || save.state.controlled_actor_id || "");
+    setRoot(rootId || save.state.controlled_actor_id || save.state.protagonist_id || save.state.characters[0]?.id || "");
     setGraph(null);
   }, [rootId, save.id, save.state.controlled_actor_id]);
   useEffect(() => {
@@ -101,46 +111,33 @@ export function Genealogy({ save, rootId }: { save: Save; rootId?: string }) {
     return () => {
       live = false;
     };
-  }, [root, depth, save.id, save.revision, save.state.controlled_actor_id]);
+  }, [root, depth, save.id, save.revision, save.state.controlled_actor_id,retry]);
   const layout = useMemo(() => {
     if (!graph) return { nodes: [], edges: [] };
-    // Layout-only partner components keep marriages on the same generation.
-    // Every visible edge below is still an original authorized canonical relation.
-    const partners = new dagre.graphlib.Graph({ directed: false });
-    graph.nodes.forEach((n) => partners.setNode(n.id, {}));
-    graph.edges
-      .filter((e) =>
-        ["spouse", "partner", "engaged", "sibling"].includes(e.kind),
-      )
-      .forEach((e) => partners.setEdge(e.source_id, e.target_id));
-    const groups = dagre.graphlib.alg
-      .components(partners)
-      .map((ids) => ids.sort());
-    const groupOf = new Map<string, string>();
-    const g = new dagre.graphlib.Graph({ multigraph: true })
-      .setGraph({ rankdir: "TB", nodesep: 50, ranksep: 100 })
-      .setDefaultEdgeLabel(() => ({}));
-    groups.forEach((ids, i) => {
-      const key = String(i);
-      g.setNode(key, { width: ids.length * 280 - 120, height: 125 });
-      ids.forEach((id) => groupOf.set(id, key));
-    });
-    graph.edges.forEach((e) => {
-      const a = groupOf.get(e.source_id)!,
-        b = groupOf.get(e.target_id)!;
-      if (a !== b) g.setEdge(a, b, { minlen: 1, width: 130, height: 24 }, e.id);
-    });
+    // Presentation groups only. Never collapse an established ancestor into the
+    // same generation through a chain of marriages/siblings.
+    const lateral = new Set(['spouse','partner','engaged','sibling']);
+    const descendants = new Map<string,Set<string>>();
+    for(const n of graph.nodes){
+      const seen=new Set<string>(),todo=[n.id];
+      while(todo.length){const id=todo.pop()!;for(const e of graph.edges){if(!lateral.has(e.kind)&&e.source_id===id&&!seen.has(e.target_id)){seen.add(e.target_id);todo.push(e.target_id)}}}
+      descendants.set(n.id,seen);
+    }
+    let groups=graph.nodes.map(n=>[n.id]);
+    for(const e of [...graph.edges].sort((a,b)=>a.id.localeCompare(b.id))){
+      if(!lateral.has(e.kind))continue;
+      const a=groups.find(g=>g.includes(e.source_id))!,b=groups.find(g=>g.includes(e.target_id))!;
+      if(a===b||a.some(x=>b.some(y=>descendants.get(x)?.has(y)||descendants.get(y)?.has(x))))continue;
+      groups=groups.filter(g=>g!==a&&g!==b);groups.push([...a,...b].sort());
+    }
+    groups.sort((a,b)=>a[0].localeCompare(b[0]));
+    const groupOf=new Map<string,string>();
+    const g=new dagre.graphlib.Graph({multigraph:true}).setGraph({rankdir:'TB',nodesep:64,ranksep:160}).setDefaultEdgeLabel(()=>({}));
+    groups.forEach((ids,i)=>{const key=String(i);g.setNode(key,{width:ids.length*304-120,height:176});ids.forEach(id=>groupOf.set(id,key))});
+    graph.edges.forEach(e=>{const a=groupOf.get(e.source_id)!,b=groupOf.get(e.target_id)!;if(a!==b)g.setEdge(a,b,{minlen:1,width:130,height:24},e.id)});
     dagre.layout(g);
-    const positions = new Map<string, { x: number; y: number }>();
-    groups.forEach((ids, i) => {
-      const n = g.node(String(i));
-      ids.forEach((id, index) =>
-        positions.set(id, {
-          x: n.x - (ids.length * 280 - 120) / 2 + index * 280,
-          y: n.y - 62,
-        }),
-      );
-    });
+    const positions=new Map<string,{x:number;y:number}>();
+    groups.forEach((ids,i)=>{const n=g.node(String(i));ids.forEach((id,index)=>positions.set(id,{x:n.x-(ids.length*304-120)/2+index*304,y:n.y-88}))});
     return {
       nodes: graph.nodes.map((n) => ({
         id: n.id,
@@ -151,18 +148,20 @@ export function Genealogy({ save, rootId }: { save: Save; rootId?: string }) {
           subject: n,
           status: n.life_status,
           saveId: save.id,
+          root: n.id===root,
         },
+        width:184,height:176,ariaLabel:n.name,
       })),
       edges: graph.edges.map((e, index) => {
         const sameGeneration = ['spouse','partner','engaged','sibling'].includes(e.kind);
         const a = positions.get(e.source_id)!, b = positions.get(e.target_id)!;
-        const arc = sameGeneration && Math.abs(a.x-b.x)>281;
+        const arc = sameGeneration && Math.abs(a.x-b.x)>305;
         return ({
         id: e.id,
         source: e.source_id,
         target: e.target_id,
-        type: arc ? 'familyArc' : 'default',
-        data: {offset:44+(index%3)*24},
+        type: arc ? 'familyArc' : sameGeneration?'default':'smoothstep',
+        data: {offset:36+index*18},
         sourceHandle: arc ? 'top-source' : sameGeneration ? (a.x<b.x?'right-source':'left-source') : 'bottom',
         targetHandle: arc ? 'top' : sameGeneration ? (a.x<b.x?'left-target':'right-target') : 'top',
         label: relationLabel(e),
@@ -177,14 +176,14 @@ export function Genealogy({ save, rootId }: { save: Save; rootId?: string }) {
         labelBgStyle: { fill: "var(--surface-1)" },
       })}),
     };
-  }, [graph, save.id]);
+  }, [graph, save.id, root]);
   return (
     <section aria-label="Родословная"><div className="family-toolbar"><label>Найти персонажа<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Имя персонажа"/></label><label>Семья персонажа<select value={matchingRoots.some(c=>c.id===root)?root:""} onChange={e=>{setGraph(null);setSelected(null);setRoot(e.target.value)}}><option value="" disabled>{matchingRoots.length?"Выбери персонажа":"Персонаж не найден"}</option>{matchingRoots.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label></div>
       <details className="family-legend"><summary>Семейные связи · обозначения</summary><p className="muted">
         Канонические семейные связи всех персонажей. Пунктир отличает
         предположения и небиологические связи; смысл указан на линии.
       </p></details>
-      <label>
+      <div className="family-view-tools"><div className="family-view-toggle" role="group" aria-label="Вид родословной"><button aria-pressed={view==='graph'} onClick={()=>setView('graph')}>Дерево</button><button aria-pressed={view==='list'} onClick={()=>setView('list')}>Список</button></div><label>
         Глубина ветвей{" "}
         <input
           aria-label="Глубина родословной"
@@ -195,16 +194,16 @@ export function Genealogy({ save, rootId }: { save: Save; rootId?: string }) {
           onChange={(e) => setDepth(+e.target.value)}
         />
         {depth}
-      </label>
-      {error ? (
-        <p role="alert">{error}</p>
+      </label></div>
+      {error||rootsError ? (
+        <div role="alert"><p>{error||rootsError}</p><button onClick={()=>setRetry(n=>n+1)}>Повторить загрузку</button></div>
       ) : !graph ? (
         <p role="status">Загрузка родословной…</p>
       ) : graph.nodes.length === 0 ? (
         <p>Семейные связи не указаны.</p>
       ) : (
         <>
-          {graph.edges.length===0&&<p>Семейные связи не указаны.</p>}<div className="family-graph">
+          {graph.edges.length===0&&<p>Семейные связи не указаны.</p>}{view==='graph'&&<div className="family-graph" onKeyDownCapture={e=>{const id=(e.target as HTMLElement).closest('.react-flow__node')?.getAttribute('data-id');if(id&&(e.key==='Enter'||e.key===' ')){e.preventDefault();e.stopPropagation();setSelected(id);if(save.state.characters.some(c=>c.id===id))onCharacter?.(id)}}}>
             <ReactFlow
               nodes={layout.nodes}
               edges={layout.edges}
@@ -216,8 +215,8 @@ export function Genealogy({ save, rootId }: { save: Save; rootId?: string }) {
               proOptions={{ hideAttribution: true }}
               nodesDraggable={false}
               nodesConnectable={false}
-              onNodeClick={(_, n) => setSelected(n.id)}
-              minZoom={0.2}
+              onNodeClick={(_, n) => {setSelected(n.id);if(save.state.characters.some(c=>c.id===n.id))onCharacter?.(n.id)}}
+              minZoom={0.01}
               maxZoom={2}
               ariaLabelConfig={{
                 "node.a11yDescription.default":
@@ -233,11 +232,10 @@ export function Genealogy({ save, rootId }: { save: Save; rootId?: string }) {
                 "controls.fitView.ariaLabel": "Вся семья",
               }}
             >
-              <Fit version={`${root}:${depth}:${save.revision}`} />
+              <Fit version={`${root}:${depth}:${save.revision}`} arcMargin={Math.max(0,...layout.edges.filter(e=>e.type==='familyArc').map(e=>e.data.offset+24))} />
               <Background />
-              <Controls showInteractive={false} />
             </ReactFlow>
-          </div>
+          </div>}
           {selected && graph.nodes.find((n) => n.id === selected) && (
             <div className="family-preview">
               <CharacterAvatar
@@ -252,7 +250,7 @@ export function Genealogy({ save, rootId }: { save: Save; rootId?: string }) {
               </button>
             </div>
           )}
-          <details>
+          <details className="family-accessible-list" open={view==='list'?true:undefined}>
             <summary>Доступный список связей</summary>
             {graph.edges.map((e) => (
               <p key={e.id}>
@@ -262,9 +260,7 @@ export function Genealogy({ save, rootId }: { save: Save; rootId?: string }) {
               </p>
             ))}
             {graph.nodes.map((n) => (
-              <button key={n.id} onClick={() => setRoot(n.id)}>
-                {n.name}
-              </button>
+              <div className="family-list-person" key={n.id}><CharacterAvatar subject={n} saveId={save.id} size={40}/><button onClick={() => {setRoot(n.id);setSelected(null)}}>{n.name}</button>{onCharacter&&save.state.characters.some(c=>c.id===n.id)&&<button aria-label={`Открыть досье: ${n.name}`} onClick={()=>onCharacter(n.id)}>Досье</button>}</div>
             ))}
           </details>
         </>

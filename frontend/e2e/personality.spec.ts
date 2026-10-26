@@ -10,7 +10,7 @@ test('sparse child card shows established preference and survives reload',async(
  await page.getByLabel('Персонаж',{exact:true}).selectOption('qa_asya');
  const panel=page.locator('.character-profile');
  await expect(panel.getByRole('heading',{name:'Ася Ларина',exact:true})).toBeVisible();
- await panel.getByText('Предпочтения',{exact:true}).first().click();
+ await panel.getByRole('tab',{name:'Личность',exact:true}).click();
  await expect(panel).toContainText('Любит рисовать.');
  const before=await(await request.get(`/api/saves/${selection.save}`)).json();
  const child=before.state.characters.find((c:{id:string})=>c.id==='qa_asya');
@@ -21,7 +21,7 @@ test('sparse child card shows established preference and survives reload',async(
  await page.reload();await nav(page,'Мир');
  await page.locator('.panel-tabs').getByRole('button',{name:'Персонажи',exact:true}).click();
  await page.getByLabel('Персонаж',{exact:true}).selectOption('qa_asya');
- await panel.getByText('Предпочтения',{exact:true}).first().click();
+ await panel.getByRole('tab',{name:'Личность',exact:true}).click();
  await expect(panel).toContainText('Любит рисовать.');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width);
  expect(errors).toEqual([]);

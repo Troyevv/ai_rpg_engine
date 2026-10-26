@@ -19,17 +19,31 @@ function cropStyle(p:PortraitRef):CSSProperties {
  const rw=w/Math.min(w,h)*c.zoom, rh=h/Math.min(w,h)*c.zoom;
  return {width:`${rw*100}%`,height:`${rh*100}%`,maxWidth:'none',left:`${-(rw-1)*c.x*100}%`,top:`${-(rh-1)*c.y*100}%`};
 }
-export function CharacterAvatar({subject,saveId,onClick,size=48}:{subject:PortraitSubject;saveId?:number;onClick?:()=>void;size?:number}) {
- const [failed,setFailed]=useState(false);const p=subject.portrait;
- useEffect(()=>setFailed(false),[p?.asset_id,saveId]);
- const initials=subject.name.trim().split(/\s+/).slice(0,2).map(s=>s[0]).join('').toUpperCase()||'?';
- const content=p&&saveId&&!failed?<img alt="" src={portraitUrl(saveId,subject.id,p)} style={cropStyle(p)} onError={()=>setFailed(true)}/>:<>
-  <svg viewBox="0 0 100 100" aria-hidden="true" data-silhouette={subject.silhouette||'neutral'}>
-   {subject.silhouette==='female'?<path d="M25 62 Q18 15 50 13 Q82 15 75 62Z"/>:null}
-   <circle cx="50" cy="36" r={subject.silhouette==='male'?19:17}/>
-   <path d={subject.silhouette==='female'?'M25 90 Q25 56 50 57 Q75 56 75 90Z':subject.silhouette==='male'?'M12 90 Q10 58 50 58 Q90 58 88 90Z':'M18 90 Q18 60 50 60 Q82 60 82 90Z'}/>
-  </svg><span className="portrait-initials" style={{fontSize:Math.max(9,Math.min(18,size*.22))}}>{initials}</span></>;
- return onClick&&p&&!failed?<button type="button" className="character-avatar" style={{width:size,height:size}} onClick={onClick} aria-label={`Открыть портрет: ${subject.name}`}>{content}</button>:<span className="character-avatar" style={{width:size,height:size}} role="img" aria-label={`Портрет: ${subject.name}`}>{content}</span>;
+export function CharacterAvatar({subject,saveId,onClick,size=48}:{subject:PortraitSubject;saveId?:number;onClick?:()=>void;size?:number|string}) {
+ const p=subject.portrait;
+ // Keep failed requests tied to their identity: a late error cannot hide a new owner's image.
+ const imageKey=`${saveId}:${subject.id}:${p?.asset_id}`;
+ const [failedKey,setFailedKey]=useState<string|null>(null);
+ useEffect(()=>setFailedKey(null),[imageKey]);
+ const hasImage=!!(p&&saveId&&failedKey!==imageKey);
+ const silhouette=subject.silhouette==='male'||subject.silhouette==='female'?subject.silhouette:'neutral';
+ const initials=subject.name.trim().split(/\s+/).slice(0,2).map(s=>Array.from(s)[0]).join('').toUpperCase()||'?';
+ const style={'--avatar-size':typeof size==='number'?`${size}px`:size} as CSSProperties;
+ const content=hasImage?<img key={imageKey} alt="" loading="lazy" decoding="async" src={portraitUrl(saveId!,subject.id,p!)} style={cropStyle(p!)} onError={()=>setFailedKey(imageKey)}/>:<>
+  <svg viewBox="0 0 100 100" aria-hidden="true" data-silhouette={silhouette}>
+   {silhouette==='female'?<>
+    <path d="M67 27 C92 20 84 47 91 57 C77 59 69 49 73 35Z"/>
+    <path d="M29 34 C24 8 66 5 70 29 L65 43 L33 43Z"/>
+    <ellipse cx="49" cy="34" rx="16" ry="20"/>
+    <path d="M44 51 L56 51 L59 60 Q76 62 79 96 H19 Q22 62 39 60Z"/>
+   </>:silhouette==='male'?<>
+    <path d="M29 29 L31 16 Q50 8 69 18 L71 31 L65 24 L35 24Z"/>
+    <path d="M32 26 H68 L65 45 L56 54 H44 L35 45Z"/>
+    <path d="M43 52 H57 L60 59 Q82 60 89 77 L93 96 H7 L11 77 Q18 60 40 59Z"/>
+   </>:<><circle cx="50" cy="32" r="18"/><path d="M18 96 V82 A32 27 0 0 1 82 82 V96Z"/></>}
+  </svg><span className="portrait-initials">{initials}</span></>;
+ const className=`character-avatar${hasImage?'':` avatar-fallback avatar-${silhouette}`}`;
+ return onClick&&hasImage?<button type="button" className={className} style={style} onClick={onClick} aria-label={`Открыть портрет: ${subject.name}`}>{content}</button>:<span className={className} style={style} role="img" aria-label={`Портрет: ${subject.name}`}>{content}</span>;
 }
 function OriginalViewer({p,sid,cid,onClose}:{p:PortraitRef;sid:number;cid:string;onClose:()=>void}) {
  const [zoom,setZoom]=useState(1);const pane=useRef<HTMLDivElement>(null);const drag=useRef<{x:number;y:number;l:number;t:number}|null>(null);
@@ -67,10 +81,11 @@ export function PortraitControl({card,save,refresh}:{card:Character;save:Save;re
  const source=preview||(selected?portraitUrl(save.id,card.id,selected):'');
  const loadFile=(f:File|undefined)=>{if(!f)return;setError('');if(f.size>10*1024*1024||!['image/png','image/jpeg','image/webp'].includes(f.type)){setError('Нужен PNG, JPEG или WebP до 10 MiB.');return}setFile(f);setCrop(cropDefault)};
  return <div className="portrait-control">
-  <CharacterAvatar subject={card} saveId={save.id} size={88} onClick={()=>{if(card.portrait){setSelected(card.portrait);setMode('view')}}}/>
-  <button type="button" className="portrait-pencil" aria-label="Редактировать портрет" onClick={()=>void open()}><Pencil size={18}/></button>
+  <CharacterAvatar subject={card} saveId={save.id} size="var(--dossier-portrait-size)" onClick={()=>{if(card.portrait){setSelected(card.portrait);setMode('view')}}}/>
+  <button type="button" className="portrait-pencil" aria-label="Редактировать портрет" onClick={()=>void open()}><span className="portrait-pencil-face"><Pencil size={16}/></span></button>
   {mode==='view'&&selected&&<OriginalViewer p={selected} sid={save.id} cid={card.id} onClose={()=>setMode(null)}/>}
   <Dialog open={mode==='edit'} onOpenChange={v=>{if(!v&&!busy)setMode(null)}}><DialogContent className="portrait-dialog"><DialogTitle>Портрет персонажа</DialogTitle><DialogDescription>PNG, JPEG или WebP · до 10 MiB · Размер автоматически приводится к 256–4096 px по каждой стороне без обрезки и искажения. Рекомендуется 3:4.</DialogDescription>
+   {!data&&!error&&<p role="status">Загрузка портретов…</p>}
    {error&&<p role="alert">{error}</p>}
    {data&&<><div className="portrait-actions"><button type="button" onClick={()=>{choose(null);fileInput.current?.click()}}>Загрузить новый портрет</button><button type="button" disabled={!selected} onClick={()=>document.querySelector<HTMLInputElement>('[aria-label="Масштаб кадрирования"]')?.focus()}>Изменить кадрирование</button><button type="button" onClick={()=>setShowHistory(!showHistory)}>История портретов</button></div><div hidden={!showHistory} className="portrait-history" aria-label="История портретов"><button type="button" onClick={()=>choose(null)}>Новый портрет</button>{data.portraits.map(p=><button type="button" key={p.id} aria-pressed={selected?.id===p.id} onClick={()=>choose(p)}><CharacterAvatar subject={{...card,portrait:p}} saveId={save.id}/><span>{p.label||'Портрет'}{p.id===data.portrait?.id?' · текущий':' · исторический'}</span></button>)}</div>
     {file&&Math.min(dims.width,dims.height)<256&&<p role="status">Маленькое изображение будет увеличено. Возможны размытость и ухудшение качества.</p>}

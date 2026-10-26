@@ -267,7 +267,7 @@ export default function App() {
           /></div>
         )}
       </div>
-      {workspace&&save&&<section className="save-workspace" aria-label={workspace==='calendar'?'Календарь':'Родословная'}><header><button onClick={closeWorkspace}><ArrowLeft size={18}/>Вернуться в историю</button><h1>{workspace==='calendar'?'Календарь':'Родословная'}</h1></header><Suspense fallback={<p role="status">Загрузка…</p>}>{workspace==='calendar'?<GameCalendar key={`${save.id}:${save.state.controlled_actor_id}`} save={save}/>:<Genealogy key={`${save.id}:${save.state.controlled_actor_id}`} save={save} rootId={familyRoot}/>}</Suspense></section>}
+      {workspace&&save&&<section className="save-workspace" aria-label={workspace==='calendar'?'Календарь':'Родословная'}><header><button onClick={closeWorkspace}><ArrowLeft size={18}/>Вернуться в историю</button><h1>{workspace==='calendar'?'Календарь':'Родословная'}</h1></header><Suspense fallback={<p role="status">Загрузка…</p>}>{workspace==='calendar'?<GameCalendar key={`${save.id}:${save.state.controlled_actor_id}`} save={save}/>:<Genealogy key={`${save.id}:${save.state.controlled_actor_id}`} save={save} rootId={familyRoot} onCharacter={id=>{setCharacter(id);setPanel("Персонажи");setInspector(true)}}/>}</Suspense></section>}
       <Dialog open={branches} onOpenChange={setBranches}><DialogContent className={mobile?'mobile-sheet':''}><DialogHeader><DialogTitle>Ветки истории</DialogTitle><DialogDescription>Варианты ответов доступны под сценами. Смена старого варианта требует отката зависимых ходов. Именованные ветки пока не реализованы.</DialogDescription></DialogHeader></DialogContent></Dialog>
       <Settings
         open={settings}

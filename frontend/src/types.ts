@@ -31,6 +31,7 @@ export interface Preferences {
   link_names: boolean;
 }
 export interface Character {
+  dossier?: {sex:string; restrictions:string[]; conditions:{id:string;description:string;status:string;duration:string;since:number|null;until:number|null;restrictions:string[];evidence:string}[]};
   appearance_history?:{before?:string|null;after?:string|null;minute:number}[];
   portrait?:import("./Portrait").PortraitRef|null;
   silhouette?:string;
@@ -57,7 +58,7 @@ export interface SocialRelation {
   certainty:'known'|'suspected';outcome:string;since?:number|null;since_date?:string|null;until?:number|null;until_date?:string|null;
 }
 export interface Genealogy {
-  nodes:{id:string;name:string;life_status:string;portrait?:import("./Portrait").PortraitRef|null;silhouette?:string}[];
+  nodes:{id:string;name:string;life_status:string;birth_date?:string|null;portrait?:import("./Portrait").PortraitRef|null;silhouette?:string}[];
   edges:SocialRelation[];
   kinship:{source_id:string;target_id:string;kind:string;lineage:string;generations?:number}[];
   truncated:boolean;
@@ -78,7 +79,7 @@ export interface State {
   protagonist_required?:boolean;
   protagonist_id?: string;
   controlled_actor_id?: string|null;
-  camera?: {scene_id:string;mode:'actor'|'observer';scope?:'world'|'scene'};
+  camera?: {scene_id:string;mode:'actor'|'observer';scope?:'world'|'scene';subject_id?:string|null;pov_actor_id?:string|null};
   notifications?:RuntimeNotice[];
   last_long_term_advance?: {actual_target:number;requested_target:number;llm_calls:number;max_llm_calls:number;interruption:{kind:string}|null;decisions:{id:string;context:string;kind:string;domains?:string[]}[];accepted:{summaries:string[]}[];unresolved:{id:string;reason:string}[]}|null;
   last_time_skip?:{requested_duration:number;elapsed_minutes:number;interrupted:boolean;background_candidates:number;simulated_candidates?:number;skipped_candidates?:number;merged_candidates?:number;living_world_llm_calls?:number};

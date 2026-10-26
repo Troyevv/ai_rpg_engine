@@ -23,6 +23,7 @@ test('portrait upload crop history original and deletion remain usable',async({p
  await fallback.click();await expect(page.getByRole('heading',{name:'Портрет в полном размере'})).toBeVisible();
  const full=page.getByAltText('Полный портрет');await expect(full).toBeVisible();
  expect(await full.evaluate((e:HTMLImageElement)=>[e.naturalWidth,e.naturalHeight])).toEqual([256,384]);
+ await page.screenshot({animations:'disabled',path:test.info().outputPath('portrait-viewer.png')});
  await page.getByLabel('Масштаб просмотра').fill('3');
  const pane=page.getByLabel('Оригинал портрета',{exact:true});const box=(await pane.boundingBox())!;await page.mouse.move(box.x+box.width*.7,box.y+box.height*.7);await page.mouse.down();await page.mouse.move(box.x+box.width*.3,box.y+box.height*.3);await page.mouse.up();expect(await pane.evaluate(e=>e.scrollTop)).toBeGreaterThan(0);
  await page.getByRole('dialog').last().getByRole('button',{name:'Закрыть',exact:true}).click();

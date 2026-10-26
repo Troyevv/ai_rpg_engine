@@ -40,7 +40,7 @@ for(const width of [360,390,412,430,1440])test(`inspector layout ${width}px`,asy
    }
   }
   if(tab==='Персонажи'){
-   const appearance=dialog.locator('.character-profile > details').filter({has:page.locator('summary',{hasText:/^Внешность$/})});
+   const appearance=dialog.locator('.dossier-card').filter({has:page.getByRole('heading',{name:'Внешность',exact:true})});
    await expect(appearance.locator('.prose')).not.toBeVisible();
    await appearance.locator('summary').click();await expect(appearance).toContainText(full.trim());
    await appearance.locator('summary').click();

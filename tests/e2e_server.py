@@ -386,14 +386,14 @@ if __name__ == '__main__':
         return {'world':result['world'],'save':result['save']}
 
     @app.post('/test/phone-seed')
-    def phone_seed(unread: bool = False, incoming: bool = True, decision: str = "silent"):
+    def phone_seed(unread: bool = False, incoming: bool = True, decision: str = "silent", polish: bool = False, hidden: bool = False):
         global phone_mode
         phone_mode=decision
         from devtools.narrative_test_world import load_fixture
         from test_narrative_test_world import CONFIG
         from backend.runtime_v3.remote import apply
         from backend.runtime_v3.repository import append_history
-        result=load_fixture(app.state.repository,'phone')
+        result=load_fixture(app.state.repository,'ui-portrait-polish' if polish else 'phone')
         repo=app.state.repository;sid=result['save']
         job=repo.begin_job(sid,'','start',CONFIG)
         engine.run_job(repo.path,job,engine.Worker())
@@ -401,6 +401,20 @@ if __name__ == '__main__':
         snap=repo.get_snapshot(sid)
         from backend.runtime_v3.models import WorldHistoryV3
         batch=WorldHistoryV3().to_dict()
+        if polish:
+            if hidden:
+                for contact in snap['world_state']['contacts'].values():
+                    if contact['owner_id']=='qa_kirill' and contact['character_id']=='qa_timur':
+                        contact['identity_visible']=False
+            for index, (author, extra) in enumerate([
+                ('qa_kirill', {'contact_id':'phone-qa_kirill-qa-vera'}),
+                ('qa_vera', {'contact_id':'phone-qa_vera-qa-kirill'}),
+                *[(a, {'conversation_id':'qa-group'}) for a in ('qa_kirill','qa_vera','qa_timur')],
+            ]):
+                snap, message_batch = apply(snap, dict(action='send', operation_id=f'polish-{index}',
+                    content=f'Сообщение {index + 1}: встречаемся у архива.', **extra), actor_id=author, autonomous=author!='qa_kirill')
+                for section, rows in message_batch.items():
+                    batch.setdefault(section, []).extend(rows)
         if incoming:
             snap,batch=apply(snap,dict(action='call',operation_id='qa-incoming-call',contact_id='phone-qa_vera-qa-kirill'),actor_id='qa_vera',autonomous=True)
         if unread:
@@ -416,7 +430,7 @@ if __name__ == '__main__':
     def ui_completion_seed(checkpoint: str = 'ui-calendar'):
         from devtools.narrative_test_world import load_fixture
         from test_narrative_test_world import ordinary_job
-        if checkpoint not in ('ui-calendar','ui-calendar-custom','ui-family','ui-family-dense','ui-public-directory'):
+        if checkpoint not in ('ui-calendar','ui-calendar-custom','ui-family','ui-family-dense','ui-public-directory','ui-dossier'):
             raise ValueError('Unknown UI checkpoint')
         result=load_fixture(app.state.repository,checkpoint)
         if checkpoint.startswith('ui-family') or checkpoint=='ui-public-directory':

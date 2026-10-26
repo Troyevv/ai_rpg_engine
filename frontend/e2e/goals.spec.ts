@@ -11,11 +11,11 @@ test('completed intention stays historical; goal and value survive reload',async
   await page.locator('.panel-tabs').getByRole('button',{name:'Персонажи',exact:true}).click();
   await page.getByLabel('Персонаж',{exact:true}).selectOption('qa_ilya');
   const panel=page.locator('.character-profile');
-  await panel.getByText('Цели, намерения и обязательства',{exact:true}).click();
+  await panel.getByRole('tab',{name:'Личность',exact:true}).click();
   await expect(panel.locator('.motivation-editor')).toContainText('Развивать отношения с Соней.');
   await expect(panel.locator('.motivation-editor')).not.toContainText('После «Критического успеха»');
   await panel.getByText('История целей и намерений',{exact:true}).click();
-  await expect(panel).toContainText('✓ · После «Критического успеха» встретиться с Соней');
+  await expect(panel).toContainText('Завершено · После «Критического успеха» встретиться с Соней');
   await panel.getByText('Ценности',{exact:true}).first().click();
   await expect(panel).toContainText('Ценит честность в близких отношениях.');
   const saved=await(await request.get(`/api/saves/${selection.save}`)).json();

@@ -32,7 +32,9 @@ def ui_view(snapshot, history=None):
         if len(rows)>=24 or not visible_appearance(state,cid,dict(source_event_id=True,fact_id=change.get('fact_id')),camera['controlled_actor_id']): continue
         old=change.get('before') or {};new=change.get('after') or {}
         rows.append(dict(before=old.get('text') if visible_appearance(state,cid,old,camera['controlled_actor_id']) else None,after=new.get('text'),minute=change['minute']))
+    from backend.runtime_v3.dossier import details as dossier_details
     for card in cards:
+        card['dossier'] = dossier_details(state, card['id'])
         card['appearance_history']=appearance_history[card['id']]
     for card in cards: card['is_player'] = card['id'] == state['meta']['current_protagonist_id']
     names={c['id']:c['name'] for c in cards}
@@ -145,7 +147,7 @@ def ui_view(snapshot, history=None):
         if rows: world['characters'][cid]['value_history']=rows
     result['life_state'] = ({'life_status':state['characters'][camera['controlled_actor_id']]['life_status'],
         'conditions':[dict(id=c['id'],description=c['description'],status=c['status'],duration=c['duration'])
-                      for c in state['conditions'].values() if c['actor_id']==camera['controlled_actor_id']],
+                      for c in dossier_details(state,camera['controlled_actor_id'])['conditions']],
         'names':[dict(previous=n['previous'],current=n['current'],date=n['date'],minute=n['minute'])
                  for n in state['characters'][camera['controlled_actor_id']]['name_history']]}
         if camera['controlled_actor_id'] else None)
@@ -176,6 +178,10 @@ def ui_view(snapshot, history=None):
         for key in ('birth_provenance','birth_date_provenance','biological_sex','identity_components','reproductive_capability'):
             actor.pop(key,None)
     protected=private_fact_ids(state)
+    # The dossier's condition gate must also apply to its existing Knowledge
+    # subview, otherwise a hidden condition resurfaces through fact text/counts.
+    # This deliberately does not change the public family directory.
+    protected |= {c['fact_id'] for c in state.get('conditions',{}).values() if c.get('fact_id')}
     protected |= {identity('communicated_text',e['id']) for e in state.get('remote_events',{}).values() if e['channel']=='TEXT_MESSAGE' and observer != e['sender_id']}
     hidden_facts={fid for fid in protected if state['knowledge'].get(str(observer)+':'+fid,{}).get('status')!='known'}
     world['facts']={k:v for k,v in world['facts'].items() if k not in hidden_facts}

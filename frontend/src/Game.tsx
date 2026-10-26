@@ -78,10 +78,11 @@ export function Game({
   const [draft, setDraft] = useState("");
   const draftRef=useRef(draft);draftRef.current=draft;
   const [requestBusy, setBusy] = useState(false);
+  const [phoneBusy, setPhoneBusy] = useState(false);
   const [controlCommit,setControlCommit]=useState<{saveId:number;revision:number}|null>(null);
   // A committed control command is not ready for another action until its
   // revision has reached the parent projection. refresh() itself is asynchronous.
-  const busy=requestBusy||!!(controlCommit&&save?.id===controlCommit.saveId&&save.revision<controlCommit.revision);
+  const busy=requestBusy||phoneBusy||!!(controlCommit&&save?.id===controlCommit.saveId&&save.revision<controlCommit.revision);
   const refreshControl=(after:Save)=>{setControlCommit({saveId:after.id,revision:after.revision});refresh()};
   const [submitted, setSubmitted] = useState<Job | null>(null);
   const scroll = useRef<HTMLDivElement>(null);
@@ -455,7 +456,7 @@ export function Game({
       </div>
       {save && (
         <div className="composer">
-          <Phone save={save} disabled={busy||pending} onCommit={refreshControl} config={prefs.game} apiKey={apiKey} onJob={setSubmitted} job={job}/>
+          <Phone save={save} onBusyChange={setPhoneBusy} disabled={busy||pending} onCommit={refreshControl} config={prefs.game} apiKey={apiKey} onJob={setSubmitted} job={job}/>
           <div className="composer-inner">
             <Textarea
               ref={input}
