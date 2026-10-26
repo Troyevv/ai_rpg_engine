@@ -62,6 +62,25 @@ class Preparation:
                     pass
             threading.Thread(target=close, daemon=True).start()
 
+    def signal_stopped(self, jid, epoch):
+        """Signal the exact worker already cancelled by the confirmation transaction.
+
+        Do not write job status here: a later job/resume may already be running.
+        Repeated confirmation must never cancel a newer handle or preparation.
+        """
+        with self.lock:
+            handle = self.handles.get(jid)
+            if not handle or handle.epoch != epoch:
+                return
+            handle.cancel.set()
+        if handle.stream:
+            def close():
+                try:
+                    handle.stream.close()
+                except Exception:
+                    pass
+            threading.Thread(target=close, daemon=True).start()
+
     def run(self, jid, config, api_key, handle):
         narrative = ''
         worker_epoch=handle.epoch if config.get('_draft_task')=='world' else None

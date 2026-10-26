@@ -80,6 +80,30 @@ def test_warning_ack_cannot_bypass_runtime(api,mutation):
         repo.confirm_draft(wid,d['revision'],d['version_id'],True,True)
     assert repo.preparation_job(jid)['status']=='generating'
 
+
+def test_confirmation_signals_only_transaction_selected_worker(api):
+    from backend.services.preparation import Handle
+    client,app=api;repo=app.state.repository;service=app.state.preparation
+    wid,jid,_,_=install(client,repo,True)
+    old=Handle(epoch=0);service.handles[jid]=old
+    d=repo.draft(wid,True);confirm=repo.confirm_draft;new_jobs=[]
+    def concurrent_confirmation(*args,**kwargs):
+        result=confirm(*args,**kwargs)
+        new_jobs.append(repo.begin_preparation(wid,'draft_world','new author request',REMOTE,d['revision']))
+        return result
+    data=dict(revision=d['revision'],version_id=d['version_id'],accept_warnings=True,stop_review=True)
+    url=f'/api/workspaces/{wid}/draft/confirm'
+    with patch.object(repo,'confirm_draft',side_effect=concurrent_confirmation):
+        response=client.post(url,json=data)
+    assert response.status_code==200,response.text
+    assert old.cancel.is_set()
+    assert repo.preparation_job(new_jobs[0])['status']=='generating'
+    # Even reuse of the original job ID with a newer worker epoch is protected.
+    newer=Handle(epoch=1);service.handles[jid]=newer
+    assert client.post(url,json=data).json()==response.json()
+    assert not newer.cancel.is_set()
+    assert repo.preparation_job(new_jobs[0])['status']=='generating'
+
 @pytest.mark.parametrize('country',list(presets.COUNTRIES))
 def test_country_catalog_and_independent_new_year_control(country):
     regional=dict(country=country,version=presets.VERSION,observed=False)

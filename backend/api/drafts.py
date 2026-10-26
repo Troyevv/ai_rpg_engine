@@ -176,9 +176,8 @@ def install(app,repo,preparation,credentials,job):
     @app.post('/api/workspaces/{wid}/draft/confirm')
     def confirm(wid:str,body:Confirm):
         result=repo.confirm_draft(wid,body.revision,body.version_id,body.accept_warnings,body.stop_review)
-        if body.stop_review:
-            current=repo.draft(wid,True).get('job')
-            if current:preparation.stop(current['id'])
+        for stopped in result.get('start_decision',{}).get('stopped_jobs',[]):
+            preparation.signal_stopped(stopped['id'],stopped['epoch'])
         return result
 
     @app.get('/api/workspaces/{wid}/draft/export')

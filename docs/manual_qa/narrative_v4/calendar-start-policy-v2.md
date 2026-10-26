@@ -18,6 +18,8 @@ evidence; warning-start is not successful model review or successful live genera
   Immutable `draft_save` records bind decision/hash/revision and enforce idempotency.
   Pending requests/reservations remain unknown, not free. Late results cannot write
   a candidate or begin another paid stage under the old epoch.
+  Post-commit stream cancellation targets the transaction-selected job ID and worker
+  epoch only; repeated confirmation cannot stop a concurrent new job or resumed worker.
 - Calendar arithmetic remains the existing Gregorian/custom Runtime calendar.
   `CalendarProfile.regional` selects a pure bounded projection through the existing
   `calendar_range`, `nearby_calendar` and narrative Context Builder. It does not

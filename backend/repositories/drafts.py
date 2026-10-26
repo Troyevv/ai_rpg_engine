@@ -279,10 +279,12 @@ class DraftStorage:
             if (warning or report.get('semantic_warnings')) and not accept_warnings:raise ValueError('Выберите запуск с предупреждениями для этой версии.')
             # Cancel atomically with snapshot selection. Late workers retain accounting,
             # but status/epoch guards prohibit candidate writes and new model stages.
+            stopped_jobs=[]
             for job in running:
                 if record.get('origin_job')!=job['id'] or job['kind']!='draft_world':
                     raise ValueError('Первичная генерация ещё не дала выбранный полный снимок.')
                 journal=json.loads(job['response_journal'] or '{}')
+                stopped_jobs.append({'id':job['id'],'epoch':journal.get('recovery_epoch',0)})
                 journal['recovery_epoch']=journal.get('recovery_epoch',0)+1
                 self.terminal_quality(journal,'stopped')
                 db.execute("UPDATE preparation_jobs SET status='stopped',response_journal=? WHERE id=?",(dump(journal),job['id']))
@@ -301,5 +303,6 @@ class DraftStorage:
             sid=db.execute('INSERT INTO saves(world_id,name,state_json) VALUES(?,?,?)',(world_id,'Новое прохождение',dump(state))).lastrowid
             project(db,sid,state)
             result={'world':world_id,'save':sid,'version_id':version_id,'start_decision':{'candidate_hash':candidate_hash(record['state']),'revision':revision,'accepted_warnings':accept_warnings,'stopped_review':bool(running),'review_status':(review_metadata(record) or {}).get('status','unreviewed')}}
+            result['start_decision']['stopped_jobs']=stopped_jobs
             self._record_document(db,'draft_save',owner,dump(result),True,'confirmed')
             return result
