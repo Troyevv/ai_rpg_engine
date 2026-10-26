@@ -85,6 +85,9 @@ def stream(**kwargs):
         if phone_mode=='error_once' and action=='send':
             phone_mode='answer'
             raise RuntimeError('Deterministic phone provider outage')
+        if phone_mode=='malformed_once':
+            phone_mode='answer'
+            yield '{"action":"answer"}';return
         if phone_mode=='decline' and action=='answer':action='decline'
         p=dict(actor_id=o['actor_id'],action=action,basis_ids=o['basis_ids'])
         if 'event_id' in o:p['event_id']=o['event_id']
@@ -413,10 +416,10 @@ if __name__ == '__main__':
     def ui_completion_seed(checkpoint: str = 'ui-calendar'):
         from devtools.narrative_test_world import load_fixture
         from test_narrative_test_world import ordinary_job
-        if checkpoint not in ('ui-calendar','ui-calendar-custom','ui-family','ui-family-dense'):
+        if checkpoint not in ('ui-calendar','ui-calendar-custom','ui-family','ui-family-dense','ui-public-directory'):
             raise ValueError('Unknown UI checkpoint')
         result=load_fixture(app.state.repository,checkpoint)
-        if checkpoint.startswith('ui-family'):
+        if checkpoint.startswith('ui-family') or checkpoint=='ui-public-directory':
             ordinary_job(app.state.repository,result['save'],'start')
         return {'world':result['world'],'save':result['save']}
 

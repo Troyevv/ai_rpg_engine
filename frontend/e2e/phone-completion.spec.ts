@@ -145,3 +145,28 @@ test('T14 T17 T25 incoming call preserves physical turn and phone draft in two s
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:info.outputPath('phone-keyboard-after.png'),animations:'disabled'});
 });
+
+test('technical call failure preserves canonical time and ringing; Retry uses original call',async({page,request},info)=>{
+ if(info.project.name==='mobile')await page.setViewportSize({width:360,height:800});
+ await page.emulateMedia({reducedMotion:'reduce'});
+ for(const skin of ['graphite','parchment']){
+ const s=await seed(page,request,'incoming=false&decision=malformed_once');
+ await request.put(`/api/worlds/${s.world}/presentation`,{data:{theme_id:skin}});await page.goto('/');await openContact(page);
+ const before=await(await request.get(`/api/saves/${s.save}`)).json();
+ await screen(page).getByRole('button',{name:'Позвонить',exact:true}).click();
+ await expect(screen(page).getByText('Не удалось обработать вызов. Это техническая ошибка, а не отказ собеседника.')).toBeVisible();
+ const failed=await(await request.get(`/api/saves/${s.save}`)).json();
+ expect(failed.state.world_clock.minute).toBe(before.state.world_clock.minute);
+ expect(failed.turns.length).toBe(before.turns.length);
+ expect(failed.state.phone.events[0].status).toBe('ringing');
+ await page.screenshot({path:info.outputPath(`technical-error-${skin}.png`),animations:'disabled'});
+ await screen(page).getByText('Технические подробности',{exact:true}).click();
+ await expect(screen(page).locator('pre')).toContainText('remote-decision/1');
+ await screen(page).getByText('Технические подробности',{exact:true}).click();
+ await screen(page).getByRole('button',{name:'Повторить обработку',exact:true}).click();
+ await expect(screen(page).getByRole('button',{name:'Перейти к разговору'})).toBeVisible();
+ const after=await(await request.get(`/api/saves/${s.save}`)).json();expect(after.state.phone.events).toHaveLength(1);
+ await expect(page.locator('[data-sonner-toast]')).toHaveCount(0,{timeout:10000});
+ await page.screenshot({path:info.outputPath(`retry-answered-${skin}.png`),animations:'disabled'});
+ }
+});

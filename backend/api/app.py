@@ -357,7 +357,7 @@ def create_app(db_path=None, recover=True):
             raise ValueError('Нужны обе границы диапазона календаря.')
         if start_date is not None:
             from backend.runtime_v3.player_calendar import player_calendar
-            return player_calendar(state, start_date, end_date)
+            return player_calendar(state, start_date, end_date, {c['id']:c['name'] for c in snapshot.get('character_cards',[])})
         now = state['meta']['world_time']
         if minute is not None and not max(0,now-10080) <= minute <= now+10080:
             raise ValueError('Предпросмотр времени ограничен семью сутками.')

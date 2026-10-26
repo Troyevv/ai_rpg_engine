@@ -4,6 +4,7 @@ Four decisions TOTAL, including group recipients/endpoint identification. Silenc
 ends the cycle. No polling, repair requests, ordinary turns or forced NPC speech.
 """
 import json
+from backend.runtime_v3.remote_decision import parse as parse_decision
 from copy import deepcopy
 from pydantic import BaseModel, ConfigDict, Field
 from backend.runtime_v3.models import WorldHistoryV3, assert_world_state_v3_invariants
@@ -67,7 +68,7 @@ def options_for(snapshot, source_id, replied):
     return result[:4]
 
 
-def run(snapshot, request, generate, cancelled):
+def run(snapshot, request, generate, cancelled, checkpoint=None):
     r = validate(snapshot, request)
     after = deepcopy(snapshot)
     batch = WorldHistoryV3().to_dict()
@@ -86,14 +87,17 @@ def run(snapshot, request, generate, cancelled):
         raw = generate(index, messages)
         report["decisions"] += 1
         try:
-            proposal = json.loads(raw)["action"]
+            proposal, diagnostic = parse_decision(raw)
+            report.setdefault("parser", []).append(diagnostic)
             if proposal is None:
+                if checkpoint: checkpoint(index, True)
                 report["no_action"] = True
                 break
             updated, delta = accept(after, proposal, options, f"{r.request_id}:{index}")
         except (ValueError, KeyError, TypeError) as exc:
-            report["rejected"].append(str(exc)[:300])
-            break  # One rejected decision is diagnostic, never a retry-until-answer.
+            if checkpoint: checkpoint(index, False, exc)
+            raise ValueError("Ответ модели не прошёл проверку связи. Подробности доступны в диагностике.") from exc
+        if checkpoint: checkpoint(index, True)
         after = updated
         for section, rows in delta.items():
             batch[section].extend(rows)

@@ -109,7 +109,7 @@ def ui_view(snapshot, history=None):
         protagonist_required=state['meta']['protagonist_required'], protagonist_periods=state['meta']['protagonist_periods'],
         protagonist_id=state['meta']['current_protagonist_id'] or campaign.get('protagonist_id') or next((c['id'] for c in cards if c.get('is_player')),None),
         camera=dict(scene_id=sid,mode=camera['mode'],scope='scene',subject_id=camera.get('subject_id'),pov_actor_id=camera.get('pov_actor_id')),scene=camera['situation'],scene_meta=metadata,
-        world_clock=dict(minute=now,last_event_time=label(now),calendar=calendar_state['meta'].get('calendar'),projection=current_time(state),nearby=nearby_calendar(calendar_state,set(camera['present_character_ids']))),memory=deepcopy(snapshot.get('memory',{})),
+        world_clock=dict(minute=now,last_event_time=label(now),calendar=calendar_state['meta'].get('calendar'),projection=current_time(state),nearby=nearby_calendar(calendar_state,None)),memory=deepcopy(snapshot.get('memory',{})),
         sections=dict(campaign.get('sections',{}),scene=camera['situation']),
         relationships=[dict(r,text=r['context'],target_name=names.get(r['target_id'],'')) for r in world['relationships'].values()],
         facts=[dict(f,known_by=[k['actor_id'] for k in state['knowledge'].values() if k['fact_id']==f['id'] and k['status']=='known']) for f in state['facts'].values()],

@@ -1,3 +1,5 @@
+> Updated phone contract and **public DOB/family policy**: [current acceptance report](phone-contract-public-family.md). Conflicting historical visibility expectations below are superseded.
+
 # Issue 45 implementation and preservation plan
 
 **Текущий результат: [итоговая приёмка PR #120](#pr120-final-acceptance).** Более ранние прогоны ниже сохранены как история; итоговая матрица заменяет промежуточный статус и прежние ограничения телефона.

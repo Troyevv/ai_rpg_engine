@@ -24,7 +24,7 @@ def test_calendar_filters_before_events_markers_and_counts():
     before=deepcopy(s)
     assert not ui_view(snapshot(s))['world_clock']['calendar']['profile']['observances']
     view=player_calendar(s,'2026-10-01','2026-10-31')
-    assert not view['events'] and not view['scheduled']['items']
+    assert len(view['events'])==1 and view['events'][0]['kind']=='birthday' and not view['scheduled']['items']
     assert 'Secret plan' not in json.dumps(view)
     assert s==before
     for fid,subject,predicate in [('dob','sonya','birth_date'),('plan','secret','scheduled_event')]:
@@ -34,7 +34,7 @@ def test_calendar_filters_before_events_markers_and_counts():
     assert len(view['events'])==len(view['scheduled']['items'])==1
     s['camera']['controlled_actor_id']=None
     view=player_calendar(s,'2026-10-01','2026-10-31')
-    assert not view['events'] and not view['scheduled']['items']
+    assert len(view['events'])==1 and view['events'][0]['kind']=='birthday' and not view['scheduled']['items']
 
 
 def test_calendar_status_reschedule_and_cancellation_are_live():

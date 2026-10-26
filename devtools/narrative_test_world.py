@@ -744,7 +744,7 @@ def _ui_family(state):
     relation('ui-partner','partner','qa_timur','qa_elena')
     relation('ui-adoption','adoptive_parent','qa_timur','qa_roman')
     relation('ui-guardian','guardian','qa_marina','qa_roman',certainty='suspected')
-    # Oleg is known but has no known relatives; Zoya remains undisclosed.
+    # Oleg has no relatives; Zoya tests the public directory without Knowledge.
     fid='ui-known-oleg'
     world['facts'][fid]=dict(id=fid,text='Кирилл знаком с Олегом.',secret=False,character_ids=['qa_oleg'],evidence=['QA'])
     world['knowledge'][ACTOR_ID+':'+fid]=dict(actor_id=ACTOR_ID,fact_id=fid,status='known')
@@ -786,3 +786,13 @@ def _seed_long_term(repository, save_id):
     with repository.connect() as db:
         db.execute('UPDATE saves SET state_json=? WHERE id=?', (json.dumps(snapshot, ensure_ascii=False), save_id))
     _seed_reproduction(repository, save_id, 'newborn')
+
+
+def _ui_public_directory(state):
+    state=_ui_family(state)
+    state['world']['knowledge']={}
+    state['world']['contacts']={}
+    state['world']['characters']['qa_zoya']['birth_date']='2000-10-09'
+    return state
+
+CHECKPOINTS['ui-public-directory']=_ui_public_directory

@@ -390,3 +390,5 @@ button.phone-row {flex-wrap:wrap;gap:6px;text-align:left;}
  .phone-composer>button {min-height:36px;padding:6px;font-size:12px;}
  .phone-composer>small {font-size:10px;line-height:14px;}
 }
+
+.phone-progress{max-height:35%;overflow:auto}

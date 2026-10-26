@@ -179,9 +179,9 @@ export function Genealogy({ save, rootId }: { save: Save; rootId?: string }) {
     };
   }, [graph, save.id]);
   return (
-    <section aria-label="Родословная"><div className="family-toolbar"><label>Найти персонажа<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Имя персонажа"/></label><label>Семья персонажа<select value={matchingRoots.some(c=>c.id===root)?root:""} onChange={e=>{setGraph(null);setSelected(null);setRoot(e.target.value)}}><option value="" disabled>{matchingRoots.length?"Выбери персонажа":"Известный персонаж не найден"}</option>{matchingRoots.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label></div>
-      <details className="family-legend"><summary>Известные связи · обозначения</summary><p className="muted">
-        Только связи, известные управляемому персонажу. Пунктир отличает
+    <section aria-label="Родословная"><div className="family-toolbar"><label>Найти персонажа<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Имя персонажа"/></label><label>Семья персонажа<select value={matchingRoots.some(c=>c.id===root)?root:""} onChange={e=>{setGraph(null);setSelected(null);setRoot(e.target.value)}}><option value="" disabled>{matchingRoots.length?"Выбери персонажа":"Персонаж не найден"}</option>{matchingRoots.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label></div>
+      <details className="family-legend"><summary>Семейные связи · обозначения</summary><p className="muted">
+        Канонические семейные связи всех персонажей. Пунктир отличает
         предположения и небиологические связи; смысл указан на линии.
       </p></details>
       <label>
@@ -201,10 +201,10 @@ export function Genealogy({ save, rootId }: { save: Save; rootId?: string }) {
       ) : !graph ? (
         <p role="status">Загрузка родословной…</p>
       ) : graph.nodes.length === 0 ? (
-        <p>Известных семейных связей пока нет.</p>
+        <p>Семейные связи не указаны.</p>
       ) : (
         <>
-          {graph.edges.length===0&&<p>Известных семейных связей пока нет.</p>}<div className="family-graph">
+          {graph.edges.length===0&&<p>Семейные связи не указаны.</p>}<div className="family-graph">
             <ReactFlow
               nodes={layout.nodes}
               edges={layout.edges}

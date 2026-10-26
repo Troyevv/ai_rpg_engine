@@ -100,7 +100,7 @@ export function GameCalendar({ save }: { save: Save }) {
     : calendarDate(month + "-01", "month");
   const itemName = (e: Item) =>
     e.kind === "birthday"
-      ? `День рождения: ${e.character_ids.map((id) => save.state.characters.find((c) => c.id === id)?.name || "Персонаж").join(", ")}`
+      ? `День рождения: ${e.name || e.character_ids.map((id) => save.state.characters.find((c) => c.id === id)?.name || "Персонаж").join(", ")}`
       : e.name || "Дата";
   return (
     <section className="game-calendar" aria-label="Календарь игры">

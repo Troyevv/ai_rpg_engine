@@ -99,6 +99,7 @@ export function Phone({
   const drafts = useRef<Record<string, string>>({});
   const requestLock = useRef(false);
   const currentOwner = useRef(ownerKey); currentOwner.current = ownerKey;
+  const [diagnostics, setDiagnostics] = useState<{key:string;value:unknown}|null>(null);
   const [detail, setDetail] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [entry, setEntry] = useState(true);
@@ -341,7 +342,7 @@ export function Phone({
           {error && <p role="alert">{error}</p>}
           {job?.kind==='communication'&&active(job)&&<p className="phone-progress" role="status">Ожидаем решение собеседника… Не более 4 решений за цикл.</p>}
           {tab==='calls'&&job?.kind==='communication'&&job.status==='saved'&&<p className="phone-progress" role="status">{job.narrative}</p>}
-          {job?.kind==='communication'&&['error','stopped'].includes(job.status)&&job.revision===save.revision&&<div role="alert" className="phone-progress"><p>Действие сохранено. Обработка не завершена.</p><button disabled={busy} onClick={async()=>{try{onJob(await api<Job>(`/jobs/${job.id}/retry`,{config,api_key:apiKey}))}catch(e){setError((e as Error).message)}}}>Повторить обработку</button></div>}
+          {job?.kind==='communication'&&['error','stopped'].includes(job.status)&&job.revision===save.revision&&<div role="alert" className="phone-progress"><p>{call?"Не удалось обработать вызов. Это техническая ошибка, а не отказ собеседника.":"Сообщение отправлено. Не удалось обработать реакцию собеседника."}</p><details onToggle={e=>{if(e.currentTarget.open){const key=`${ownerKey}:${job.id}`;void api(`/saves/${save.id}/phone/diagnostics/${job.id}`).then(value=>setDiagnostics({key,value})).catch(e=>setDiagnostics({key,value:{error:(e as Error).message}}))}}}><summary>Технические подробности</summary><p>{job.error}</p><small>Операция {job.id}</small>{diagnostics?.key===`${ownerKey}:${job.id}`&&<pre style={{maxHeight:240,overflow:'auto',whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(diagnostics.value,null,2)}</pre>}</details><button disabled={busy} onClick={async()=>{try{onJob(await api<Job>(`/jobs/${job.id}/retry`,{config,api_key:apiKey}))}catch(e){setError((e as Error).message)}}}>Повторить обработку</button></div>}
           {call&&tab==='messages'&&(conversation||contact)&&<button className="phone-call-link" onClick={()=>setTab('calls')}>{call.status==='ringing'?'Вызов':'Разговор'} · {call.label} →</button>}
           {call && !(tab==='messages'&&(conversation||contact)) && (
             <section className="phone-call" aria-label="Текущий звонок">

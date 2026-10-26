@@ -1,3 +1,5 @@
+> Updated phone contract and **public DOB/family policy**: [current acceptance report](phone-contract-public-family.md). Conflicting historical visibility expectations below are superseded.
+
 # #70 — Связь и телефон
 
 ## Подготовка

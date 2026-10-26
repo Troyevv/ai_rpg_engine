@@ -293,6 +293,7 @@ export function Game({
                   animate="visible"
                   variants={turnMotion}
                 >
+                  {t.kind==='communication'&&!!t.changes?.communication?.rejected?.length&&<div role="alert"><strong>Старая ошибочная обработка связи</strong><p>Этот результат был сохранён прежней версией. «Ещё вариант» повторит обработку от исходного события без повторной отправки. При наличии следующих ходов потребуется их откат в архив. Исходный вариант останется доступен.</p></div>}
                   {t.kind==='pov'&&<motion.div className="pov-divider" variants={povMotion}><span>Другая точка зрения</span><strong>{save.state.characters.find(c=>c.id===t.pov_actor_id)?.name}</strong></motion.div>}
                   {t.kind==='background'&&<div className="narrative-divider">Тем временем</div>}
                   {t.user_text && (

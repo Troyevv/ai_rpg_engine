@@ -123,6 +123,7 @@ export interface Choice {
   speech: string;
 }
 export interface Turn {
+  changes?: {communication?: {rejected?: string[]}};
   pov_actor_id?: string|null;
   audience_json?: string;
   node_id: string;
@@ -138,6 +139,7 @@ export interface Turn {
   timing?: Record<string,number>|null;
 }
 export interface Job {
+  attempt_epoch?: number;
   resumable?: boolean;
   replaces_id?:number|null;
   phase?: "scenario" | "world" | "retrying" | "validating" | "saving" | "editing" | "";

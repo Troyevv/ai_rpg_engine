@@ -33,6 +33,20 @@ def install(app, repo):
 
 
 def install_jobs(app, repo, credentials, public_job):
+    @app.get('/api/saves/{sid}/phone/diagnostics/{jid}')
+    def communication_diagnostics(sid: int, jid: str):
+        import json
+        repo.get_snapshot(sid)
+        job = repo.get_job(jid)
+        if job['save_id'] != sid or job['kind'] != 'communication':
+            raise ValueError('Операция связи недоступна в этом прохождении.')
+        config = json.loads(job['config_json'])
+        return dict(job_id=jid, source=config.get('communication'),
+                    attempt_epoch=job['attempt_epoch'], status=job['status'],
+                    frames=json.loads(job['context_json'] or '[]'),
+                    requests=[{k: row.get(k) for k in ('id','stage','status','model','input_tokens','output_tokens','cached_input_tokens','cost_usd','duration','finish_reason')}
+                              for row in repo.request_log(job_id=jid)])
+
     @app.post('/api/saves/{sid}/phone/dispatch')
     def dispatch(sid: int, body: Dispatch):
         settings = dict(body.config.model_dump(), expected_revision=body.revision)

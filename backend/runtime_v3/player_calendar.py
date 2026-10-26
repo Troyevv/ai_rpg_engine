@@ -14,9 +14,6 @@ def known_claim(state, observer, subject, predicates):
 def visible_calendar_state(state):
     view = deepcopy(state)
     observer = state['camera']['controlled_actor_id']
-    for cid, character in view['characters'].items():
-        if cid != observer and not known_claim(state, observer, cid, {'birth_date', 'birthday'}):
-            character['birth_date'] = None
     # Personal observances require the observer's participation. Public calendar
     # observances remain visible, but cannot disclose private participant lists.
     profile = (view['meta'].get('calendar') or {}).get('profile') or {}
@@ -33,7 +30,7 @@ def visible_calendar_state(state):
     return view
 
 
-def player_calendar(state, start_date, end_date):
+def player_calendar(state, start_date, end_date, names=None):
     result = calendar_range(visible_calendar_state(state), start_date, end_date)
     from backend.runtime_v3.calendar import ordinal, profile_of
     from backend.runtime_v3.weather import weather_at
@@ -44,4 +41,8 @@ def player_calendar(state, start_date, end_date):
             minute = cal['start_minute']//1440*1440 + (ordinal(day['date'],profile_of(state))-origin)*1440
             if minute//1440 == state['meta']['world_time']//1440: minute=state['meta']['world_time']
             day['weather'] = weather_at(state, minute=minute)
+    for event in result['events']:
+        if event['kind']=='birthday':
+            cid=event['character_ids'][0]
+            event['name']=state['characters'][cid].get('display_name') or (names or {}).get(cid) or cid
     return result

@@ -1,6 +1,7 @@
 """Communication continuation inside the existing job/usage/variant pipeline."""
 import json
 from backend.runtime_v3.communication import run
+from backend.runtime_v3.remote_decision import parse as parse_decision, VERSION
 from backend.services.usage import tracked_stream
 from context_builder import describe_context, estimate
 
@@ -32,18 +33,29 @@ def execute(storage, job, handle, chat_stream):
                 raise ValueError('Контекст связи не помещается в выбранное окно модели.')
             messages[1]['content'] = json.dumps(data,ensure_ascii=False)
         old = frames[index] if index < len(frames) else None
-        if old and not job["replaces_id"] and old.get("messages") == messages and "response" in old:
+        reusable = False
+        if old and "response" in old:
+            try:
+                proposal, diagnostic = parse_decision(old['response'])
+                # Replay eligibility is not inferred from the existence of raw text.
+                # Runtime validation is repeated by run against staged state.
+                reusable = old.get('accepted') is not False
+            except ValueError:
+                reusable = False
+        if old and not job["replaces_id"] and old.get("messages", [None,None])[1:] == messages[1:] and reusable:
             captured.append(old)
             return old["response"]  # Retry replays accepted work without another call.
         if index == 0 and old:
-            messages = old["messages"]  # Original source-bound context for regenerate.
+            messages = [messages[0], old["messages"][1]]  # Original source-bound context for regenerate.
         if estimate(messages)>budget:
             raise ValueError('Для исходного контекста связи нужно прежнее или большее окно модели.')
         def on_stream(stream):
             handle.stream = stream
             if handle.cancelled.is_set():
                 stream.close()
-        frame = dict(stage="communication", messages=messages)
+        frame = dict(stage="communication", messages=messages, contract=VERSION)
+        if old:
+            frame["previous_attempt"] = old
         captured.append(frame)
         storage.save_communication_context(job["id"], captured, before)
         response = "".join(tracked_stream(
@@ -58,7 +70,18 @@ def execute(storage, job, handle, chat_stream):
         storage.save_communication_context(job["id"], captured, before)
         return response
 
-    output = run(before, config["communication"], generate, handle.cancelled)
+    def checkpoint(index, accepted, error=None):
+        captured[index]['accepted'] = accepted
+        captured[index]['validation_contract'] = VERSION
+        if accepted:
+            _, captured[index]['parser'] = parse_decision(captured[index]['response'])
+        if error is not None:
+            captured[index]['error'] = str(error)
+            captured[index]['category'] = 'schema' if hasattr(error,'errors') else 'json' if isinstance(error,json.JSONDecodeError) else 'runtime'
+            if hasattr(error,'errors'):
+                captured[index]['validation_errors'] = json.loads(error.json(include_url=False))
+        storage.save_communication_context(job['id'], captured, before)
+    output = run(before, config["communication"], generate, handle.cancelled, checkpoint=checkpoint)
     if output is None or handle.cancelled.is_set():
         return
     after, batch, report = output
