@@ -1,6 +1,6 @@
 import {Versions} from "./Versions";
 import {Diagnostics} from "./Diagnostics";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Download, Send, Plus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { api, download } from "./api";
@@ -29,11 +29,13 @@ export function Preparation({
   apiKey,
   onWorld,
   onDraft,
+  worldSettings,
 }: {
   prefs: Preferences;
   apiKey: string;
   onWorld: (id: number) => void;
   onDraft?: (id: string) => void;
+  worldSettings?: ReactNode;
 }) {
   const [list, setList] = useState<{ id: string; name: string }[]>([]);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -138,6 +140,7 @@ export function Preparation({
       </div>
       {workspace&&<Versions kind={versionKind||"summary"} owner={workspace.id} open={!!versionKind} close={()=>setVersionKind(null)} changed={refresh}/>}
       <details><summary>Удалённые сценарии</summary><Button variant="ghost" onClick={()=>void api<typeof removed>("/workspaces?deleted=true").then(setRemoved).catch(e=>toast.error(e.message))}>Обновить корзину</Button>{removed.map(w=><div key={w.id}>{w.name}<Button size="sm" onClick={()=>void run(async()=>{await api(`/workspaces/${w.id}/restore`,{revision:w.revision});setList(await api("/workspaces"));setRemoved(await api("/workspaces?deleted=true"));setId(w.id)})}>Восстановить</Button></div>)}</details>
+      {worldSettings}
       {workspace && onDraft && <Button disabled={busy || active(job) || !workspace.idea} onClick={()=>onDraft(workspace.id)}>Продолжить в редакторе мира</Button>}
       {workspace ? (
         <>

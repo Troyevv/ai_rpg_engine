@@ -145,15 +145,32 @@ def test_existing_database_migrates_snapshots_once(tmp_path):
         assert db.execute('PRAGMA foreign_key_check').fetchall()==[]
 
 
-def test_local_model_management_and_lock(api):
+@pytest.mark.parametrize('context_length',[32768,262144])
+def test_local_model_management_and_lock(api,context_length):
     c,_=api
     from backend.services.coordinator import LOCAL_MODEL_LOCK
     with patch('llm.get_available_models',return_value=['local']),patch('llm.get_loaded_models',return_value=[]),patch('llm.load_model') as load,patch('llm.unload_all_models'):
         assert c.post('/api/models/list',json={'provider':'local'}).json()['models']==['local']
-        assert c.post('/api/models/load',json={'model':'local','context_length':32768,'eval_batch_size':1024,'flash_attention':False,'offload_kv_cache_to_gpu':False}).status_code==200
+        assert c.post('/api/models/load',json={'model':'local','context_length':context_length,'eval_batch_size':1024,'flash_attention':False,'offload_kv_cache_to_gpu':False}).status_code==200
         assert load.call_args.kwargs['eval_batch_size']==1024
+        assert load.call_args.kwargs['context_length']==context_length
         with LOCAL_MODEL_LOCK:
             assert c.post('/api/models/unload').status_code==409
+
+
+def test_large_context_preferences_round_trip(api):
+    client,_=api
+    settings=dict(idea=dict(REMOTE,context_length=65536),
+                  summary=dict(REMOTE,context_length=262144),
+                  game=dict(REMOTE,context_length=524288),
+                  local=dict(model='local',context_length=1048576))
+    saved=client.put('/api/settings/large-context',json=settings)
+    assert saved.status_code==200,saved.text
+    restored=client.get('/api/settings/large-context').json()
+    for key in ('idea','summary','game','local'):
+        assert restored[key]['context_length']==settings[key]['context_length']
+    settings['summary']['context_length']=8191
+    assert client.put('/api/settings/large-context',json=settings).status_code==422
 
 
 def test_restart_recovers_jobs(tmp_path):

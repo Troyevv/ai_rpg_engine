@@ -73,7 +73,8 @@ def prepare(snapshot, payload, operation_id, history=None):
     actor=draft.character.model_dump()
     if actor['life_status'] not in ('alive','unknown'): raise ValueError('character.life_status: новый ГГ должен быть жив.')
     # New identity cannot import another identity's evolution/provenance or portrait assets.
-    if any(actor[k] for k in ('name_history','birth_provenance','portraits','life_fact_id','parentage_complete_fact_id')):
+    from backend.runtime_v3.birth_identity import game_metadata
+    if game_metadata(actor) or any(actor[k] for k in ('name_history','portraits','life_fact_id','parentage_complete_fact_id')):
         raise ValueError('character: история и ссылки на происхождение создаются Runtime.')
     actor.update(display_name=draft.card.name,situation=draft.starting_scene)
     s['characters'][cid]=actor

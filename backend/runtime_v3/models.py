@@ -3,7 +3,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from hashlib import sha256
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator, model_serializer
 from backend.services.relation_dimensions import RELATION_DIMENSIONS
 from backend.services.world_delta_errors import StructuralDeltaError
 
@@ -30,6 +30,30 @@ class Season(StrictModel):
     day: int = Field(ge=1, le=99)
 
 
+class HolidayOverride(StrictModel):
+    """One concrete occurrence, never an implicit rule for all future years."""
+    id: str
+    removed: bool = False
+    name: str | None = None
+    date: str | None = None
+
+    @model_validator(mode='after')
+    def valid_date(self):
+        if self.date:
+            from datetime import date
+            date.fromisoformat(self.date)
+        return self
+
+
+class RegionalCalendar(StrictModel):
+    country: str
+    subdivision: str | None = None
+    version: str
+    language: str = 'en_US'
+    observed: bool = False
+    overrides: list[HolidayOverride] = Field(default_factory=list, max_length=512)
+
+
 class CalendarProfile(StrictModel):
     id: str = 'gregorian'
     system: Literal['gregorian', 'custom'] = 'gregorian'
@@ -38,6 +62,17 @@ class CalendarProfile(StrictModel):
     weekday_names: list[str] = Field(default_factory=list, max_length=14)
     observances: list[Observance] = Field(default_factory=list, max_length=128)
     seasons: list[Season] = Field(default_factory=list, max_length=24)
+    seasons_enabled: bool = True
+    regional: RegionalCalendar | None = None
+    regional_overrides: list[HolidayOverride] = Field(default_factory=list,max_length=512)
+
+    @model_serializer(mode='wrap')
+    def serialize_profile(self,handler):
+        value=handler(self)
+        if self.seasons_enabled:value.pop('seasons_enabled',None)
+        if self.regional is None:value.pop('regional',None)
+        if not self.regional_overrides:value.pop('regional_overrides',None)
+        return value
 
     @model_validator(mode='after')
     def valid_profile(self):
@@ -132,6 +167,7 @@ from backend.runtime_v3.remote_models import CommunicationCapabilities, Contact,
 
 
 class Meta(StrictModel):
+    npc_expressiveness: Literal["realistic", "expressive", "hyperbolized"] = "realistic"
     communication: CommunicationCapabilities = Field(default_factory=CommunicationCapabilities)
     interaction_focus: Literal["physical", "call"] = "physical"
     narrative_pacing: NarrativePacingProfile = Field(default_factory=NarrativePacingProfile)
@@ -390,6 +426,7 @@ class Character(StrictModel):
     biological_sex: Literal['female', 'male'] | None = None
     identity_components: dict[str, str] = Field(default_factory=dict)
     birth_provenance: dict[str, str | int | None] = Field(default_factory=dict)
+    birth_date_provenance: dict[str, str | int | None] = Field(default_factory=dict)
     appearance: AppearanceProfile = Field(default_factory=AppearanceProfile)
     portraits: list[PortraitReference] = Field(default_factory=list, max_length=128)
     personality: PersonalityProfile | None = None
@@ -407,6 +444,7 @@ class Character(StrictModel):
         if not isinstance(value, dict): return value
         value = deepcopy(value)
         for field in ('goals', 'intentions', 'obligations'):
+            if not isinstance(value.get(field, []), list):continue  # Let Pydantic report the container's exact field.
             value[field] = [dict(id=identity(field, value.get('id'), i, item), text=item)
                 if isinstance(item, str) else item for i, item in enumerate(value.get(field, []))]
         return value
@@ -507,6 +545,7 @@ class Thread(StrictModel):
 
 class ScheduledEvent(StrictModel):
     id: str
+    time_semantics: Literal['legacy', 'explicit'] = 'legacy'
     description: str
     character_ids: list[str] = Field(default_factory=list)
     due_minute: int | None = Field(default=None, ge=0)
@@ -575,6 +614,8 @@ def fatal(message, code='current_state_invalid', repairable=False, **path):
 
 
 def assert_world_state_v3_invariants(state, before=None):
+    from backend.runtime_v3.birth_identity import compatible_state
+    state = compatible_state(state)
     from backend.runtime_v3.knowledge import salvage, slot
     state = salvage(state)
     state = salvage_calendar_data(state)

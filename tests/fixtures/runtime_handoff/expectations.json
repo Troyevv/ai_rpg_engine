@@ -1,0 +1,817 @@
+{
+  "kind": "derived_expectations_not_test_results",
+  "source_file": "evidence/world(1).json",
+  "source_sha256": "c01b7f16ceac3a650c85c960428b12ab57ac3884e0c786818abd31b431e0e98a",
+  "note": "Контрольные данные извлечены из исходного Draft, не получены запуском приложения. До первого принятого хода сохранять значения; после ходов учитывать только доказанные изменения controlled сценария. Изменения формата/ключей миграции проверять по смыслу.",
+  "counts": {
+    "cards": 19,
+    "actors": 19,
+    "locations": 9,
+    "relationships": 18,
+    "objective_relations": 23,
+    "facts": 19,
+    "knowledge": 37,
+    "threads": 4,
+    "organizations": 10,
+    "residences": 7,
+    "roles": 19,
+    "possessions": 3,
+    "contacts": 8,
+    "pregnancies": 0,
+    "reproductive_events": 0,
+    "naming_decisions": 0
+  },
+  "protagonist_id": "ilya",
+  "controlled_actor_id": "ilya",
+  "camera": {
+    "scene_id": "scene_start",
+    "mode": "actor"
+  },
+  "initial_scene": {
+    "id": "scene_start",
+    "location": "ilya_cabinet",
+    "participants": [
+      "ilya"
+    ],
+    "text": "Илья сидит в своей подсобке-кабинете после возвращения из суда. На столе — бумаги, на стационарном телефоне ни одного сообщения, в почте — письма банков о просроченных кредитах. За дверью слышно, как в салоне готовятся закрываться.",
+    "start_minute": 1080,
+    "end_minute": 1080,
+    "status": "active",
+    "event_ids": [
+      "ev_returned_court"
+    ]
+  },
+  "initial_clock": {
+    "calendar": {
+      "start_minute": 1080,
+      "start_weekday": 4,
+      "start_date": "2026-10-23",
+      "profile": {
+        "id": "gregorian",
+        "system": "gregorian",
+        "month_lengths": [],
+        "month_names": [],
+        "weekday_names": [],
+        "observances": [],
+        "seasons": []
+      }
+    },
+    "minute": 1080,
+    "last_event_time": "День 1 · 2026-10-23 · Пт · 18:00"
+  },
+  "identities": [
+    {
+      "id": "ilya",
+      "name": "Илья Александров",
+      "aliases": [
+        "Илья",
+        "Илюха"
+      ],
+      "is_player": true,
+      "birth_date": "2001-08-10",
+      "initial_location": "ilya_cabinet",
+      "life_status": "alive",
+      "birth_provenance_before_fix": {
+        "source": "authoring_automatic",
+        "input_signature": "6a7a32d6989428b2ceb7b5aeca06a581259e0cea06e9c1311b04df1e4e1d8756"
+      }
+    },
+    {
+      "id": "marina_volkova",
+      "name": "Марина Волкова",
+      "aliases": [
+        "Марина",
+        "мама Марина"
+      ],
+      "is_player": false,
+      "birth_date": "1980-01-25",
+      "initial_location": "volkov_estate",
+      "life_status": "alive",
+      "birth_provenance_before_fix": {
+        "source": "authoring_automatic",
+        "input_signature": "ea2a0480f94a6890b5721ef5991a23c27d8a022a383db08c53455d7edc2ec3b3"
+      }
+    },
+    {
+      "id": "sergey_volkov",
+      "name": "Сергей Волков",
+      "aliases": [
+        "Сергей",
+        "Сергей Николаевич"
+      ],
+      "is_player": false,
+      "birth_date": "1972-07-19",
+      "initial_location": "apex_tower",
+      "life_status": "alive",
+      "birth_provenance_before_fix": {
+        "source": "authoring_automatic",
+        "input_signature": "f5a12cb7e27cb446225dc3522c619b7b51eee829c831d6e4b23c8e521549c497"
+      }
+    },
+    {
+      "id": "timur_volkov",
+      "name": "Тимур Волков",
+      "aliases": [
+        "Тимур",
+        "Тим"
+      ],
+      "is_player": false,
+      "birth_date": "2000-02-05",
+      "initial_location": "bar_gvozd",
+      "life_status": "alive",
+      "birth_provenance_before_fix": {
+        "source": "authoring_automatic",
+        "input_signature": "f8504d8e0fe6d9eb3074dc14e335eb44a3d93f161f2af29649b1235584bf24bd"
+      }
+    },
+    {
+      "id": "sonya_velichkina",
+      "name": "Соня Величкина",
+      "aliases": [
+        "Соня",
+        "Софья Волкова"
+      ],
+      "is_player": false,
+      "birth_date": "2001-07-11",
+      "initial_location": "nii_bio",
+      "life_status": "alive",
+      "birth_provenance_before_fix": {
+        "source": "manual"
+      }
+    },
+    {
+      "id": "katya_volkova",
+      "name": "Катя Волкова",
+      "aliases": [
+        "Катя",
+        "Екатерина"
+      ],
+      "is_player": false,
+      "birth_date": "2001-07-11",
+      "initial_location": "apex_tower",
+      "life_status": "alive",
+      "birth_provenance_before_fix": {
+        "source": "authoring_automatic",
+        "input_signature": "6a7a32d6989428b2ceb7b5aeca06a581259e0cea06e9c1311b04df1e4e1d8756"
+      }
+    },
+    {
+      "id": "yura_yakovlev",
+      "name": "Юра Яковлев",
+      "aliases": [
+        "Юра",
+        "Юрий"
+      ],
+      "is_player": false,
+      "birth_date": "2001-06-23",
+      "initial_location": "prosecutor_office",
+      "life_status": "alive",
+      "birth_provenance_before_fix": {
+        "source": "authoring_automatic",
+        "input_signature": "6a7a32d6989428b2ceb7b5aeca06a581259e0cea06e9c1311b04df1e4e1d8756"
+      }
+    },
+    {
+      "id": "zoya_markina",
+      "name": "Зоя Маркина",
+      "aliases": [
+        "Зоя Петровна"
+      ],
+      "is_player": false,
+      "birth_date": "1958-10-06",
+      "initial_location": "moscow",
+      "life_status": "alive",
+      "birth_provenance_before_fix": {
+        "source": "authoring_automatic",
+        "input_signature": "423bf056caf3b24e8a49d6ff5d402f307fc1714fb988aaa4b009bd96cc9940ea"
+      }
+    },
+    {
+      "id": "roman_beketov",
+      "name": "Роман Бекетов",
+      "aliases": [
+        "Роман",
+        "Роман Андреевич"
+      ],
+      "is_player": false,
+      "birth_date": "1984-11-20",
+      "initial_location": "apex_tower",
+      "life_status": "alive",
+      "birth_provenance_before_fix": {
+        "source": "authoring_automatic",
+        "input_signature": "f673bae26e8d4685726a197fdfc87877b59a37d7287ca38e6752d7ac0835d06d"
+      }
+    },
+    {
+      "id": "arkady_melnik",
+      "name": "Аркадий Мельник",
+      "aliases": [
+        "Аркадий",
+        "Аркадий Игоревич"
+      ],
+      "is_player": false,
+      "birth_date": "1978-10-01",
+      "initial_location": "apex_tower",
+      "life_status": "alive",
+      "birth_provenance_before_fix": {
+        "source": "authoring_automatic",
+        "input_signature": "96246db8e791af83abeca0f12362c091e2756fa7443ca76bd0e5058904f46d16"
+      }
+    },
+    {
+      "id": "viktoria_solovyova",
+      "name": "Виктория Соловьёва",
+      "aliases": [
+        "Вика",
+        "Виктория Андреевна"
+      ],
+      "is_player": false,
+      "birth_date": "1991-11-04",
+      "initial_location": "salon_lak",
+      "life_status": "alive",
+      "birth_provenance_before_fix": {
+        "source": "authoring_automatic",
+        "input_signature": "bffaa30a9a07a3c031b8736e7fff75fdc82e97e9bae1a2d9846e0e6ce97a818f"
+      }
+    },
+    {
+      "id": "grisha_pankratov",
+      "name": "Гриша Панкратов",
+      "aliases": [
+        "Гриша",
+        "Григорий"
+      ],
+      "is_player": false,
+      "birth_date": "1999-10-18",
+      "initial_location": "salon_lak",
+      "life_status": "alive",
+      "birth_provenance_before_fix": {
+        "source": "authoring_automatic",
+        "input_signature": "f6ca9845188c4f029c278b542490f9b0876cccf7c9723b9b76d57a5b1a2cd3c2"
+      }
+    },
+    {
+      "id": "anna_kim",
+      "name": "Анна Ким",
+      "aliases": [
+        "Анна",
+        "Аня"
+      ],
+      "is_player": false,
+      "birth_date": "1997-09-04",
+      "initial_location": "apex_tower",
+      "life_status": "alive",
+      "birth_provenance_before_fix": {
+        "source": "authoring_automatic",
+        "input_signature": "a63f4deacd98cf993186d2e50a34e2db44fe96c942a6c68c1a25f08fba59b901"
+      }
+    },
+    {
+      "id": "kirill_dorokhov",
+      "name": "Кирилл Дорохов",
+      "aliases": [
+        "Кир",
+        "Кирилл"
+      ],
+      "is_player": false,
+      "birth_date": "2001-07-10",
+      "initial_location": "moscow",
+      "life_status": "alive",
+      "birth_provenance_before_fix": {
+        "source": "authoring_automatic",
+        "input_signature": "6a7a32d6989428b2ceb7b5aeca06a581259e0cea06e9c1311b04df1e4e1d8756"
+      }
+    },
+    {
+      "id": "alla_gromova",
+      "name": "Алла Громова",
+      "aliases": [
+        "Алла Викторовна",
+        "судья Громова"
+      ],
+      "is_player": false,
+      "birth_date": "1971-06-24",
+      "initial_location": "presnensky_court",
+      "life_status": "alive",
+      "birth_provenance_before_fix": {
+        "source": "authoring_automatic",
+        "input_signature": "44e63486d27783e25efc58a5fdb4356d18d285cf93564d8fea2183c86bc9678c"
+      }
+    },
+    {
+      "id": "petr_gavrilov",
+      "name": "Пётр Гаврилов",
+      "aliases": [
+        "Пётр Иванович"
+      ],
+      "is_player": false,
+      "birth_date": "1975-11-30",
+      "initial_location": "prosecutor_office",
+      "life_status": "alive",
+      "birth_provenance_before_fix": {
+        "source": "authoring_automatic",
+        "input_signature": "6856ffaa348c64d35d735ed031b37625d2663000fe641a69968fae6eef18c3d9"
+      }
+    },
+    {
+      "id": "daniil_krylov",
+      "name": "Даниил Крылов",
+      "aliases": [
+        "Даня",
+        "Даниил"
+      ],
+      "is_player": false,
+      "birth_date": "2002-02-09",
+      "initial_location": "apex_tower",
+      "life_status": "alive",
+      "birth_provenance_before_fix": {
+        "source": "authoring_automatic",
+        "input_signature": "3e4c5a0b3c9f717515392ca944f1283d0a8fc67c3d1c339ad7d0a7084c7013c8"
+      }
+    },
+    {
+      "id": "nina_petrovna",
+      "name": "Нина Петровна",
+      "aliases": [
+        "Нина",
+        "домработница"
+      ],
+      "is_player": false,
+      "birth_date": "1966-09-20",
+      "initial_location": "volkov_estate",
+      "life_status": "alive",
+      "birth_provenance_before_fix": {
+        "source": "authoring_automatic",
+        "input_signature": "b3eaca4f8aa268510c1a3be34de7392367ef9229ad7b33ebaf0df147baf1786f"
+      }
+    },
+    {
+      "id": "alexander_matveev",
+      "name": "Александр Матвеев",
+      "aliases": [
+        "Матвеев",
+        "Александр"
+      ],
+      "is_player": false,
+      "birth_date": "1988-03-12",
+      "initial_location": "apex_tower",
+      "life_status": "alive",
+      "birth_provenance_before_fix": {
+        "source": "authoring_automatic",
+        "input_signature": "b2cd887000127a06d849bce7f48901f3ee8a39e9e4f54b7b8adc4aa8e32f31d0"
+      }
+    }
+  ],
+  "birth_source_counts": {
+    "authoring_automatic": 18,
+    "manual": 1
+  },
+  "relationships": [
+    {
+      "source_id": "ilya",
+      "target_id": "marina_volkova",
+      "context": "Считает Марину второй матерью, но не любит чувствовать себя обязанным.",
+      "dimensions": {
+        "trust": 80,
+        "affection": 75,
+        "respect": 70
+      }
+    },
+    {
+      "source_id": "marina_volkova",
+      "target_id": "ilya",
+      "context": "Любит Илью как родного сына и хочет, чтобы он был счастлив.",
+      "dimensions": {
+        "trust": 90,
+        "affection": 90,
+        "respect": 75
+      }
+    },
+    {
+      "source_id": "ilya",
+      "target_id": "sergey_volkov",
+      "context": "Уважает Сергея, но тяготится его попытками устроить его в Apex.",
+      "dimensions": {
+        "trust": 70,
+        "affection": 65,
+        "respect": 80,
+        "irritation": 20
+      }
+    },
+    {
+      "source_id": "sergey_volkov",
+      "target_id": "ilya",
+      "context": "Считает Илью почти сыном и хочет дать ему место в корпорации.",
+      "dimensions": {
+        "trust": 85,
+        "affection": 80,
+        "respect": 75
+      }
+    },
+    {
+      "source_id": "ilya",
+      "target_id": "timur_volkov",
+      "context": "Друг детства; любит его, но устаёт от его инфантильности и хвастовства.",
+      "dimensions": {
+        "trust": 85,
+        "affection": 80,
+        "irritation": 25
+      }
+    },
+    {
+      "source_id": "timur_volkov",
+      "target_id": "ilya",
+      "context": "Предан Илье и боится, что тот однажды отдалится.",
+      "dimensions": {
+        "trust": 90,
+        "affection": 85,
+        "jealousy": 10,
+        "respect": 70
+      }
+    },
+    {
+      "source_id": "ilya",
+      "target_id": "sonya_velichkina",
+      "context": "Ценит её ум, но её контроль и язвительность его настораживают.",
+      "dimensions": {
+        "trust": 60,
+        "affection": 55,
+        "irritation": 20,
+        "respect": 55
+      }
+    },
+    {
+      "source_id": "sonya_velichkina",
+      "target_id": "ilya",
+      "context": "Давно влюблена и ревнует его к Кате, хотя не признаётся в этом.",
+      "dimensions": {
+        "trust": 70,
+        "affection": 90,
+        "attraction": 85,
+        "jealousy": 30
+      }
+    },
+    {
+      "source_id": "ilya",
+      "target_id": "katya_volkova",
+      "context": "Близость с детства переросла в тайную связь, которая его одновременно держит и пугает.",
+      "dimensions": {
+        "trust": 80,
+        "affection": 85,
+        "attraction": 90,
+        "fear": 20
+      }
+    },
+    {
+      "source_id": "katya_volkova",
+      "target_id": "ilya",
+      "context": "Для неё Илья целый мир; она любит его и боится потерять.",
+      "dimensions": {
+        "trust": 80,
+        "affection": 95,
+        "attraction": 95,
+        "jealousy": 40,
+        "fear": 30
+      }
+    },
+    {
+      "source_id": "ilya",
+      "target_id": "yura_yakovlev",
+      "context": "Приятель по судебным делам; Илья подшучивает над его ворчливостью.",
+      "dimensions": {
+        "trust": 55,
+        "affection": 40,
+        "irritation": 25,
+        "respect": 60
+      }
+    },
+    {
+      "source_id": "yura_yakovlev",
+      "target_id": "ilya",
+      "context": "Считает Илью способным, но слишком рискующим и несерьёзным.",
+      "dimensions": {
+        "trust": 45,
+        "affection": 35,
+        "irritation": 40,
+        "respect": 55,
+        "jealousy": 20
+      }
+    },
+    {
+      "source_id": "zoya_markina",
+      "target_id": "ilya",
+      "context": "Доверяет Илье как адвокату, хотя побаивается, что он слишком молод.",
+      "dimensions": {
+        "trust": 70,
+        "affection": 50,
+        "respect": 60
+      }
+    },
+    {
+      "source_id": "ilya",
+      "target_id": "zoya_markina",
+      "context": "Уважает её упрямство и понимает, что дело может стоить ему отношений с Волковыми.",
+      "dimensions": {
+        "trust": 60,
+        "affection": 45,
+        "respect": 70
+      }
+    },
+    {
+      "source_id": "roman_beketov",
+      "target_id": "arkady_melnik",
+      "context": "Нуждается в нём, но раздражается от его методов и боится подставиться.",
+      "dimensions": {
+        "trust": 40,
+        "affection": 20,
+        "irritation": 50,
+        "fear": 30
+      }
+    },
+    {
+      "source_id": "arkady_melnik",
+      "target_id": "roman_beketov",
+      "context": "Считает Романа мягким и полезным, пока тот приносит деньги.",
+      "dimensions": {
+        "trust": 30,
+        "affection": 10,
+        "irritation": 40,
+        "respect": 35
+      }
+    },
+    {
+      "source_id": "sergey_volkov",
+      "target_id": "roman_beketov",
+      "context": "Доверяет ему строительный бизнес, но ждёт результатов без скандалов.",
+      "dimensions": {
+        "trust": 60,
+        "respect": 65
+      }
+    },
+    {
+      "source_id": "roman_beketov",
+      "target_id": "sergey_volkov",
+      "context": "Боится разочаровать Сергея и потерять место.",
+      "dimensions": {
+        "trust": 60,
+        "fear": 50,
+        "respect": 70
+      }
+    }
+  ],
+  "knowledge": [
+    {
+      "actor_id": "ilya",
+      "fact_id": "fact_apex_ownership",
+      "status": "known"
+    },
+    {
+      "actor_id": "marina_volkova",
+      "fact_id": "fact_apex_ownership",
+      "status": "known"
+    },
+    {
+      "actor_id": "sergey_volkov",
+      "fact_id": "fact_apex_ownership",
+      "status": "known"
+    },
+    {
+      "actor_id": "timur_volkov",
+      "fact_id": "fact_apex_ownership",
+      "status": "known"
+    },
+    {
+      "actor_id": "sonya_velichkina",
+      "fact_id": "fact_apex_ownership",
+      "status": "known"
+    },
+    {
+      "actor_id": "katya_volkova",
+      "fact_id": "fact_apex_ownership",
+      "status": "known"
+    },
+    {
+      "actor_id": "ilya",
+      "fact_id": "fact_ilya_orphan",
+      "status": "known"
+    },
+    {
+      "actor_id": "marina_volkova",
+      "fact_id": "fact_ilya_orphan",
+      "status": "known"
+    },
+    {
+      "actor_id": "sergey_volkov",
+      "fact_id": "fact_ilya_orphan",
+      "status": "known"
+    },
+    {
+      "actor_id": "timur_volkov",
+      "fact_id": "fact_ilya_orphan",
+      "status": "known"
+    },
+    {
+      "actor_id": "katya_volkova",
+      "fact_id": "fact_ilya_orphan",
+      "status": "known"
+    },
+    {
+      "actor_id": "sonya_velichkina",
+      "fact_id": "fact_ilya_orphan",
+      "status": "known"
+    },
+    {
+      "actor_id": "ilya",
+      "fact_id": "fact_ilya_finance",
+      "status": "known"
+    },
+    {
+      "actor_id": "ilya",
+      "fact_id": "fact_ilya_represents_zoya",
+      "status": "known"
+    },
+    {
+      "actor_id": "zoya_markina",
+      "fact_id": "fact_ilya_represents_zoya",
+      "status": "known"
+    },
+    {
+      "actor_id": "alla_gromova",
+      "fact_id": "fact_ilya_represents_zoya",
+      "status": "known"
+    },
+    {
+      "actor_id": "alexander_matveev",
+      "fact_id": "fact_ilya_represents_zoya",
+      "status": "known"
+    },
+    {
+      "actor_id": "roman_beketov",
+      "fact_id": "fact_ilya_represents_zoya",
+      "status": "known"
+    },
+    {
+      "actor_id": "katya_volkova",
+      "fact_id": "fact_katya_ilya_secret",
+      "status": "known"
+    },
+    {
+      "actor_id": "ilya",
+      "fact_id": "fact_katya_ilya_secret",
+      "status": "known"
+    },
+    {
+      "actor_id": "sonya_velichkina",
+      "fact_id": "fact_sonya_love",
+      "status": "known"
+    },
+    {
+      "actor_id": "katya_volkova",
+      "fact_id": "fact_sonya_love",
+      "status": "suspected"
+    },
+    {
+      "actor_id": "timur_volkov",
+      "fact_id": "fact_timur_debt",
+      "status": "known"
+    },
+    {
+      "actor_id": "kirill_dorokhov",
+      "fact_id": "fact_timur_debt",
+      "status": "known"
+    },
+    {
+      "actor_id": "roman_beketov",
+      "fact_id": "fact_roman_arkady_pressure",
+      "status": "known"
+    },
+    {
+      "actor_id": "arkady_melnik",
+      "fact_id": "fact_roman_arkady_pressure",
+      "status": "known"
+    },
+    {
+      "actor_id": "daniil_krylov",
+      "fact_id": "fact_daniil_saw_edits",
+      "status": "known"
+    },
+    {
+      "actor_id": "ilya",
+      "fact_id": "fact_sergey_wants_ilya",
+      "status": "known"
+    },
+    {
+      "actor_id": "sergey_volkov",
+      "fact_id": "fact_sergey_wants_ilya",
+      "status": "known"
+    },
+    {
+      "actor_id": "marina_volkova",
+      "fact_id": "fact_sergey_wants_ilya",
+      "status": "known"
+    },
+    {
+      "actor_id": "ilya",
+      "fact_id": "fact_court_two_cases",
+      "status": "known"
+    },
+    {
+      "actor_id": "zoya_markina",
+      "fact_id": "fact_zoya_damage",
+      "status": "known"
+    },
+    {
+      "actor_id": "ilya",
+      "fact_id": "fact_zoya_damage",
+      "status": "known"
+    },
+    {
+      "actor_id": "roman_beketov",
+      "fact_id": "fact_zoya_damage",
+      "status": "known"
+    },
+    {
+      "actor_id": "arkady_melnik",
+      "fact_id": "fact_zoya_damage",
+      "status": "known"
+    },
+    {
+      "actor_id": "alexander_matveev",
+      "fact_id": "fact_zoya_damage",
+      "status": "known"
+    },
+    {
+      "actor_id": "alla_gromova",
+      "fact_id": "fact_zoya_damage",
+      "status": "known"
+    }
+  ],
+  "thread_participants": {
+    "thread_zoya": [
+      "ilya",
+      "zoya_markina",
+      "roman_beketov",
+      "arkady_melnik",
+      "alexander_matveev",
+      "alla_gromova"
+    ],
+    "thread_katya": [
+      "ilya",
+      "katya_volkova",
+      "sonya_velichkina"
+    ],
+    "thread_timur_debt": [
+      "timur_volkov",
+      "kirill_dorokhov",
+      "ilya"
+    ],
+    "thread_apex_succession": [
+      "sergey_volkov",
+      "marina_volkova",
+      "ilya",
+      "katya_volkova",
+      "timur_volkov"
+    ]
+  },
+  "location_parents": {
+    "moscow": null,
+    "volkov_estate": "moscow",
+    "apex_tower": "moscow",
+    "salon_lak": "moscow",
+    "ilya_cabinet": "salon_lak",
+    "presnensky_court": "moscow",
+    "prosecutor_office": "moscow",
+    "nii_bio": "moscow",
+    "bar_gvozd": "moscow"
+  },
+  "manual_paths": [
+    "/world/characters/sonya_velichkina/birth_date",
+    "/characters/1/fields/Биография"
+  ],
+  "manual_values": {
+    "/world/characters/sonya_velichkina/birth_date": "2001-07-11",
+    "/characters/1/fields/Биография": "Вышла за Сергея в 19 лет, отказалась от карьеры филолога ради семьи. Вырастила троих детей, приняла в дом Илью как родного. Знает про мужа больше, чем говорит, и давно научилась не задавать вопросов о его делах."
+  },
+  "original_cast_set_must_be_preserved": [
+    "alexander_matveev",
+    "alla_gromova",
+    "anna_kim",
+    "arkady_melnik",
+    "daniil_krylov",
+    "grisha_pankratov",
+    "ilya",
+    "katya_volkova",
+    "kirill_dorokhov",
+    "marina_volkova",
+    "nina_petrovna",
+    "petr_gavrilov",
+    "roman_beketov",
+    "sergey_volkov",
+    "sonya_velichkina",
+    "timur_volkov",
+    "viktoria_solovyova",
+    "yura_yakovlev",
+    "zoya_markina"
+  ],
+  "do_not_forge_birth_or_knowledge_to_pass": true
+}

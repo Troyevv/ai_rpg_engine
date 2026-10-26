@@ -26,6 +26,8 @@ class EngineStorage:
                 narrative TEXT NOT NULL DEFAULT '', narrative_complete INTEGER NOT NULL DEFAULT 0,
                 error TEXT NOT NULL DEFAULT '', config_json TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))''')
+            columns={r['name'] for r in db.execute('PRAGMA table_info(game_jobs)')}
+            if 'attempt_epoch' not in columns: db.execute('ALTER TABLE game_jobs ADD COLUMN attempt_epoch INTEGER NOT NULL DEFAULT 0')
             db.execute("CREATE UNIQUE INDEX IF NOT EXISTS active_game_job ON game_jobs(save_id) WHERE status IN ('generating','extracting','validating')")
             db.execute('''CREATE TABLE IF NOT EXISTS archived_turns (
                 id INTEGER PRIMARY KEY, save_id INTEGER NOT NULL, reason TEXT NOT NULL, payload TEXT NOT NULL)''')
@@ -58,6 +60,9 @@ class EngineStorage:
                 raise ValueError('Игра уже начата.')
             if kind not in ('start','pov') and last is None:
                 raise ValueError('Сначала начни игру.')
+            pending=db.execute("SELECT 1 FROM game_jobs WHERE save_id=? AND revision=? AND narrative_complete=1 AND status IN ('error','stopped')",(save_id,save['revision'])).fetchone()
+            if pending and kind!='regenerate':
+                raise ValueError('Текст сцены уже сохранён, состояние ещё не применено. Повтори обработку состояния.')
             before, replaces = save['state_json'], None
             if kind=='pov':
                 from backend.runtime_v3.camera import transition
@@ -142,8 +147,8 @@ class EngineStorage:
         with self.connect() as db:
             db.execute("""UPDATE game_jobs SET status=?, narrative=COALESCE(?,narrative),
                         narrative_complete=MAX(narrative_complete,?), error=?
-                        WHERE id=? AND status IN ('generating','extracting','validating')""",
-                       (status, narrative, int(complete), error, job_id))
+                        WHERE id=? AND status IN ('generating','extracting','validating') AND (? IS NULL OR attempt_epoch=?)""",
+                       (status, narrative, int(complete), error, job_id, getattr(self,'worker_epoch',None),getattr(self,'worker_epoch',None)))
 
     def retry_job(self, job_id, config=None):
         with self.connect() as db:
@@ -159,13 +164,13 @@ class EngineStorage:
             if config:
                 settings.update({k:v for k,v in config.items() if k not in ('target_turn_id','rollback_following','expected_revision','_prompts','actor_id','source_turn_id','source_node_id')})
             session_id = self.ensure_session(db, job['save_id'])
-            db.execute("UPDATE game_jobs SET status='extracting',error='',warnings_json='[]',config_json=?,session_id=? WHERE id=?", (json.dumps(settings),session_id,job_id))
+            db.execute("UPDATE game_jobs SET status='extracting',attempt_epoch=attempt_epoch+1,error='',warnings_json='[]',config_json=?,session_id=? WHERE id=?", (json.dumps(settings),session_id,job_id))
 
     def commit_job(self, job_id, state, choices, changes, timing=None, history_batch=None):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             job = db.execute('SELECT * FROM game_jobs WHERE id=?', (job_id,)).fetchone()
-            if job is None or job['status'] != 'validating':
+            if job is None or job['status'] != 'validating' or (getattr(self,'worker_epoch',None) is not None and self.worker_epoch!=job['attempt_epoch']):
                 raise ValueError('Ход остановлен или уже сохранён.')
             save = db.execute('SELECT revision FROM saves WHERE id=?', (job['save_id'],)).fetchone()
             if save['revision'] != job['revision']:

@@ -41,8 +41,36 @@ def runtime_v3_request(messages):
     return any('RawTurnResult v3' in message['content'] for message in messages)
 
 
+review_protocol_attempts={}
+fragment_attempts={}
+handoff_provider=None
+
 def stream(**kwargs):
+    from backend.services.draft_completeness import MARKER
+    if kwargs['messages'][0]['content'].startswith(MARKER):
+        request=json.loads(kwargs['messages'][1]['content'])
+        source=request.get('author_context','')
+        from draft_provider_fixture import protocol_review
+        controlled=protocol_review(request)
+        if controlled is not None:
+            yield controlled;return
+        yield '{"issues":[]}'
+        return
     full='\n'.join(m['content'] for m in kwargs['messages'])
+    if handoff_provider is not None and 'ilya_cabinet' in full:
+        from test_runtime_handoff import NARRATIVE as entry,provider_payload
+        if kwargs.get('response_format'):
+            handoff_provider['extractions']+=1
+            raw=provider_payload(kwargs)
+            raw['choices']=[dict(action='Ждать ответа',speech='')]
+            if handoff_provider['extractions']<=2:raw.pop('movements')
+            yield json.dumps(raw,ensure_ascii=False)
+        else:
+            handoff_provider['narratives']+=1
+            yield entry if handoff_provider['narratives']==1 else 'Виктория Соловьёва отвечает: «Скоро закончу».'
+        return
+    if kwargs['messages'][0]['content'].startswith('Один необязательный пакет') and 'TEST_RELEASE_QUALITY' in full:
+        yield '{"patches":[],"preserved_unknown":null}';return
     observer='Тип хода: background' in full or 'Режим observer:' in full or 'mode=observer' in full
     if kwargs['messages'][0]['content'].startswith('Select at most ONE optional grounded autonomous remote action.'):
         yield '{"action":null}'
@@ -95,9 +123,37 @@ def stream(**kwargs):
             value['character']['location_id']=task['context']['locations'][0]['id']
             value['starting_scene']='У входа в дом.'
         value=json.dumps({'value':value},ensure_ascii=False)
+    elif 'TEST_CANDIDATE_RECOVERY' in full and 'patches' in kwargs['messages'][0]['content']:
+        value='{"patches":[]}'
     elif 'Каноническая JSON Schema WorldState' in full:
         from test_draft_world import fixture
-        value=json.dumps(fixture(),ensure_ascii=False)
+        candidate=fixture()
+        if 'TEST_MOTIVATION_OBJECTS' in full:
+            from test_draft_motivations import motivated
+            candidate,_=motivated()
+        for card in candidate['characters']:
+            for field,text in {'Характер':'Спокоен, внимателен к деталям.','Сильные стороны':'Помнит детали разговора.','Слабости':'Неохотно просит о помощи.','Биография':'Давно живёт в районе и знает соседей.','Внешность':'Короткие волосы, серая куртка.','Стиль общения':'Говорит короткими фразами, уточняет детали.','Привычки':'Записывает договорённости в блокнот.'}.items():
+                if card.get('fields',{}).get(field,'').strip().lower() in ('','неизвестно','не указано','—'):card['fields'][field]=text
+        if 'TEST_RELEASE_QUALITY' in full:candidate['characters'][1]['fields']['Внешность']='неизвестно'
+        if 'TEST_CANDIDATE_RECOVERY' in full:candidate['protagonist_id']='missing'
+        value=json.dumps(candidate,ensure_ascii=False)
+        if 'TEST_FRAGMENT_RECOVERY' in full:
+            key=kwargs['messages'][1]['content'];count=fragment_attempts.get(key,0);fragment_attempts[key]=count+1
+            cut=value.index('"world":')+len('"world":')
+            if count<2:
+                from llm import OutputLimitReached
+                yield value[:cut] if count==0 else 'INVALID CONTINUATION'
+                if kwargs.get('on_finish'):kwargs['on_finish']('length')
+                raise OutputLimitReached()
+            value=value[cut:]
+        if 'TEST_JSON_CONTINUATION' in full:
+            cut=len(value)//2
+            if not any(m['role']=='assistant' for m in kwargs['messages']):
+                from llm import OutputLimitReached
+                yield value[:cut]
+                if kwargs.get('on_finish'):kwargs['on_finish']('length')
+                raise OutputLimitReached()
+            value=value[cut:]
     elif 'Ты редактор RPG' in full:
         value=json.dumps({'value':'Обновлённая внешность'},ensure_ascii=False)
     elif kwargs.get('response_format') and runtime_v3_request(kwargs['messages']):
@@ -216,7 +272,7 @@ def preparation_stream(**kwargs):
             hold=False
 
 preparation.chat_stream = preparation_stream
-engine.find_loaded_model = preparation.find_loaded_model = lambda _: {'config': {'context_length':32768}}
+engine.find_loaded_model = preparation.find_loaded_model = lambda model: {'config': {'context_length':131072 if model=='handoff-test' else 32768}}
 def authoring_stream(**kwargs):
     if any('Ты редактор черновика Character' in m['content'] for m in kwargs['messages']):
         yield from stream(**kwargs)
@@ -245,6 +301,27 @@ if __name__ == '__main__':
     dice=BrowserDice()
     app.state.tabletop_runtime.dice=dice
     app.state.tabletop_runtime.combat.dice=dice
+    @app.post('/test/runtime-handoff-provider')
+    def runtime_handoff_provider(enabled: bool=True):
+        global handoff_provider
+        previous=handoff_provider
+        handoff_provider={'narratives':0,'extractions':0} if enabled else None
+        return previous or {}
+
+    @app.post('/test/calendar-policy-e5')
+    def calendar_policy_e5():
+        from test_calendar_start_policy import evidence
+        from test_api import REMOTE
+        j=evidence();s=j['candidate_snapshot'];repo=app.state.repository
+        w=repo.create_workspace('E5 calendar policy')
+        jid=repo.begin_preparation(w['id'],'draft_world',j['author_input']['text'],dict(REMOTE,_draft_task='world',_draft_input=j['author_input']['text']),0)
+        journal={k:v for k,v in j.items() if k not in ('requests','recovery','binding','candidate_snapshot','candidate_version','current_diagnostics','current_start_block_reason','author_input')}
+        journal.update(recovery_epoch=0,candidate_text=json.dumps(s,ensure_ascii=False))
+        repo.save_response_journal(jid,journal)
+        repo.save_draft_candidate(jid,s,[],review=j['recovery']['review'])
+        repo.preparation_progress(jid,'','stopped')
+        return {'id':w['id']}
+
     @app.post('/test/hold-preparation')
     def hold_preparation():
         global hold_next_preparation

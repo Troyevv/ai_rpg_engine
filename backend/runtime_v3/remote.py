@@ -542,8 +542,10 @@ def projection(snapshot):
         return None
     from backend.runtime_v3.portraits import projection as portrait
 
-    names = {c["id"]: c["name"] for c in snapshot["character_cards"]}
-    own = [c for c in state["contacts"].values() if c["owner_id"] == actor]
+    from backend.runtime_v3.kinship import visible_name
+    from backend.runtime_v3.reproduction import known_birth
+    names = {c["id"]: visible_name(state,c["id"],actor,c["name"]) for c in snapshot["character_cards"] if known_birth(state,c["id"],actor)}
+    own = [c for c in state["contacts"].values() if c["owner_id"] == actor and (not c["character_id"] or known_birth(state,c["character_id"],actor))]
     known = {
         c["character_id"]: c for c in own if c["identity_visible"] and c["character_id"]
     }

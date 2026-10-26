@@ -194,3 +194,11 @@ reload/rollback: [relations.md](relations.md).
 Checkpoint `initiative` и [протокол инициативы](initiative.md) проверяют самостоятельное
 начало/изменение/завершение общения, взрослые предложения, отказ, EXTERNAL, смену
 управления, наблюдение и совместимость с pacing без отдельного LLM-вызова.
+
+Генерация и восстановление #44/#116: [master-generator.md](master-generator.md),
+раздел «Stabilization and editable recovery». Проверяет сохранение невалидного
+кандидата, последовательные правки, Resume и обычные ходы после save/reload.
+
+#116 runtime handoff: [DOB identity, original export and first-scene recovery](runtime_handoff.md).
+The [acceptance report](acceptance_report_template.md) distinguishes the immutable
+user evidence from controlled provider responses and baseline save replicas.

@@ -8,14 +8,16 @@ create locations[] with canonical ID/name/evidence and use that ID in final_scen
 Choose the final stop, not intermediate travel. Reuse known places/aliases (Гвоздь,
 кофейня Гвоздь, кафе Гвоздь); mention/plan alone never moves the camera.
 Present_character_ids: only physically present at the end; remove departures, include
-arrivals who stayed. Messages/memories are not presence. Supply departed actors'
-movements only when their destination is established. A redundant movement for a
+arrivals who stayed. Messages/memories are not presence.
+Movements require established destinations. New arrivals need completed_arrival,
+origin and actor/place anchors inside evidence. Future/negated/remote/ambiguous is
+NOT arrival; situation_evidence cannot authorize it. A movement for a
 final_scene participant must end at final_scene.location_id. Situation is current
 objective state, not emotion; situation_evidence grounds it. Update affected NPC
 situations via evidenced character_changes. Promote only significant recurring NPCs
 with full card/evidence, not incidental passers-by; a promoted present NPC uses the
 same ID in final_scene. Mention does not mean arrival. No scene_id/last_event_id/
-from_location/StatePatch. Elapsed_minutes is actual narrated duration, no arbitrary skip.
+StatePatch. Elapsed_minutes is actual narrated duration, no arbitrary skip.
 Lifecycle semantics belong to Extraction, not a verb dictionary: completed result ->
 completed; failure -> failed; lost context -> expired; explicit cancellation -> cancelled;
 replacement -> superseded. Use *_updates, stable IDs and current evidence. A joke may

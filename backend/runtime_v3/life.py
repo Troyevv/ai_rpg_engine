@@ -3,6 +3,7 @@
 No biography inference, legal simulator, emotion thresholds, or second graph store.
 Graph validation uses stdlib graphlib; projections use bounded deque traversal.
 """
+from backend.runtime_v3.birth_identity import is_game_birth
 from copy import deepcopy
 from graphlib import TopologicalSorter, CycleError
 from pydantic import ValidationError
@@ -169,7 +170,7 @@ def apply_life(resolver, raw):
                         if old['life_status'] == 'dead' and item['life_status'] != 'dead':
                             raise ValueError('death cannot be undone by ordinary extraction; use rollback')
                         actor['life_fact_id'] = item.get('fact_id')
-                    if old.get('birth_provenance') and any(k in item for k in ('identity_components','display_name')):
+                    if is_game_birth(s,key) and any(k in item for k in ('identity_components','display_name')):
                         raise ValueError('birth identity changes require the structured naming lifecycle')
                     if 'identity_components' in item and key == controlled and not _proof(resolver,item):
                         raise ValueError('identity choice needs player evidence')

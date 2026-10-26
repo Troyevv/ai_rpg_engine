@@ -1,0 +1,821 @@
+{
+  "schema_version": 1,
+  "sections": {
+    "scene": "### Где сейчас ГГ:\nПонедельник, 18:20. Кухня. Все собрались.",
+    "tone": "Современная драмеди.",
+    "characters": "👤 Персонаж 0 (ГГ)\n\n· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.\n\n---\n👤 Персонаж 1\n\n· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.\n\n---\n👤 Персонаж 2\n\n· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.\n\n---\n👤 Персонаж 3\n\n· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.\n\n---\n👤 Персонаж 4\n\n· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.\n\n---\n👤 Персонаж 5\n\n· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.\n\n---\n👤 Персонаж 6\n\n· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.\n\n---\n👤 Персонаж 7\n\n· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.",
+    "knowledge": "## 🟢 ОБЩЕИЗВЕСТНО\nВсе живут вместе.\n## 🔴 ТАЙНЫ\nПерсонаж 1 планирует переезд.",
+    "locations": "## Город\nНебольшой город.\n## Кухня\nБольшой стол.",
+    "rules": "Переезд ещё не решён."
+  },
+  "characters": [
+    {
+      "id": "character_1",
+      "name": "Анна",
+      "is_player": true,
+      "text": "· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.\n\n---",
+      "fields": {
+        "Возраст": "",
+        "Роль": "",
+        "Статус": "Живёт в городе.",
+        "Внешность": "Рыжие волосы.",
+        "Характер": "Подробный характер.\nВторая строка характера.",
+        "Стиль общения": "",
+        "Привычки": "",
+        "Сильные стороны": "",
+        "Слабости": "",
+        "Страхи и уязвимости": "",
+        "Биография": "",
+        "Сейчас": "На кухне.",
+        "Отношение к Персонаж 1": "Знакомы с детства.",
+        "Чего хочет": "Приготовить ужин.",
+        "Намерения": ""
+      },
+      "aliases": []
+    },
+    {
+      "id": "character_2",
+      "name": "Борис",
+      "is_player": false,
+      "text": "· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.\n\n---",
+      "fields": {
+        "Возраст": "",
+        "Роль": "",
+        "Статус": "Живёт в городе.",
+        "Внешность": "Рыжие волосы.",
+        "Характер": "Подробный характер.\nВторая строка характера.",
+        "Стиль общения": "",
+        "Привычки": "",
+        "Сильные стороны": "",
+        "Слабости": "",
+        "Страхи и уязвимости": "",
+        "Биография": "",
+        "Сейчас": "На кухне.",
+        "Отношение к Персонаж 1": "Знакомы с детства.",
+        "Чего хочет": "Приготовить ужин.",
+        "Намерения": ""
+      },
+      "aliases": []
+    },
+    {
+      "id": "character_3",
+      "name": "Персонаж 2",
+      "is_player": false,
+      "text": "· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.\n\n---",
+      "fields": {
+        "Возраст": "",
+        "Роль": "",
+        "Статус": "Живёт в городе.",
+        "Внешность": "Рыжие волосы.",
+        "Характер": "Подробный характер.\nВторая строка характера.",
+        "Стиль общения": "",
+        "Привычки": "",
+        "Сильные стороны": "",
+        "Слабости": "",
+        "Страхи и уязвимости": "",
+        "Биография": "",
+        "Сейчас": "На кухне.",
+        "Отношение к Персонаж 1": "Знакомы с детства.",
+        "Чего хочет": "Приготовить ужин.",
+        "Намерения": ""
+      },
+      "aliases": []
+    },
+    {
+      "id": "character_4",
+      "name": "Персонаж 3",
+      "is_player": false,
+      "text": "· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.\n\n---",
+      "fields": {
+        "Возраст": "",
+        "Роль": "",
+        "Статус": "Живёт в городе.",
+        "Внешность": "Рыжие волосы.",
+        "Характер": "Подробный характер.\nВторая строка характера.",
+        "Стиль общения": "",
+        "Привычки": "",
+        "Сильные стороны": "",
+        "Слабости": "",
+        "Страхи и уязвимости": "",
+        "Биография": "",
+        "Сейчас": "На кухне.",
+        "Отношение к Персонаж 1": "Знакомы с детства.",
+        "Чего хочет": "Приготовить ужин.",
+        "Намерения": ""
+      },
+      "aliases": []
+    },
+    {
+      "id": "character_5",
+      "name": "Персонаж 4",
+      "is_player": false,
+      "text": "· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.\n\n---",
+      "fields": {
+        "Возраст": "",
+        "Роль": "",
+        "Статус": "Живёт в городе.",
+        "Внешность": "Рыжие волосы.",
+        "Характер": "Подробный характер.\nВторая строка характера.",
+        "Стиль общения": "",
+        "Привычки": "",
+        "Сильные стороны": "",
+        "Слабости": "",
+        "Страхи и уязвимости": "",
+        "Биография": "",
+        "Сейчас": "На кухне.",
+        "Отношение к Персонаж 1": "Знакомы с детства.",
+        "Чего хочет": "Приготовить ужин.",
+        "Намерения": ""
+      },
+      "aliases": []
+    },
+    {
+      "id": "character_6",
+      "name": "Персонаж 5",
+      "is_player": false,
+      "text": "· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.\n\n---",
+      "fields": {
+        "Возраст": "",
+        "Роль": "",
+        "Статус": "Живёт в городе.",
+        "Внешность": "Рыжие волосы.",
+        "Характер": "Подробный характер.\nВторая строка характера.",
+        "Стиль общения": "",
+        "Привычки": "",
+        "Сильные стороны": "",
+        "Слабости": "",
+        "Страхи и уязвимости": "",
+        "Биография": "",
+        "Сейчас": "На кухне.",
+        "Отношение к Персонаж 1": "Знакомы с детства.",
+        "Чего хочет": "Приготовить ужин.",
+        "Намерения": ""
+      },
+      "aliases": []
+    },
+    {
+      "id": "character_7",
+      "name": "Персонаж 6",
+      "is_player": false,
+      "text": "· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.\n\n---",
+      "fields": {
+        "Возраст": "",
+        "Роль": "",
+        "Статус": "Живёт в городе.",
+        "Внешность": "Рыжие волосы.",
+        "Характер": "Подробный характер.\nВторая строка характера.",
+        "Стиль общения": "",
+        "Привычки": "",
+        "Сильные стороны": "",
+        "Слабости": "",
+        "Страхи и уязвимости": "",
+        "Биография": "",
+        "Сейчас": "На кухне.",
+        "Отношение к Персонаж 1": "Знакомы с детства.",
+        "Чего хочет": "Приготовить ужин.",
+        "Намерения": ""
+      },
+      "aliases": []
+    },
+    {
+      "id": "character_8",
+      "name": "Персонаж 7",
+      "is_player": false,
+      "text": "· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.",
+      "fields": {
+        "Возраст": "",
+        "Роль": "",
+        "Статус": "Живёт в городе.",
+        "Внешность": "Рыжие волосы.",
+        "Характер": "Подробный характер.\nВторая строка характера.",
+        "Стиль общения": "",
+        "Привычки": "",
+        "Сильные стороны": "",
+        "Слабости": "",
+        "Страхи и уязвимости": "",
+        "Биография": "",
+        "Сейчас": "На кухне.",
+        "Отношение к Персонаж 1": "Знакомы с детства.",
+        "Чего хочет": "Приготовить ужин.",
+        "Намерения": ""
+      },
+      "aliases": []
+    }
+  ],
+  "relationships": [
+    {
+      "source_id": "character_1",
+      "target_id": "character_2",
+      "text": "Знакомы с детства."
+    },
+    {
+      "source_id": "character_2",
+      "target_id": "character_2",
+      "text": "Знакомы с детства."
+    },
+    {
+      "source_id": "character_3",
+      "target_id": "character_2",
+      "text": "Недоверие"
+    },
+    {
+      "source_id": "character_4",
+      "target_id": "character_2",
+      "text": "Знакомы с детства."
+    },
+    {
+      "source_id": "character_5",
+      "target_id": "character_2",
+      "text": "Знакомы с детства."
+    },
+    {
+      "source_id": "character_6",
+      "target_id": "character_2",
+      "text": "Знакомы с детства."
+    },
+    {
+      "source_id": "character_7",
+      "target_id": "character_2",
+      "text": "Знакомы с детства."
+    },
+    {
+      "source_id": "character_8",
+      "target_id": "character_2",
+      "text": "Знакомы с детства."
+    },
+    {
+      "source_id": "character_2",
+      "target_id": "character_3",
+      "text": "Любовь"
+    }
+  ],
+  "locations": [
+    {
+      "name": "Дом у реки",
+      "text": "Небольшой город.",
+      "id": "location_1",
+      "kind": "unknown"
+    },
+    {
+      "name": "Кухня",
+      "text": "Большой стол.",
+      "id": "location_2",
+      "kind": "unknown"
+    }
+  ],
+  "knowledge": [
+    {
+      "name": "🟢 ОБЩЕИЗВЕСТНО",
+      "text": "Все живут вместе."
+    },
+    {
+      "name": "🔴 ТАЙНЫ",
+      "text": "Персонаж 1 планирует переезд."
+    }
+  ],
+  "scene": "### Где сейчас ГГ:\nПонедельник, 18:20. Кухня. Все собрались.",
+  "story_notes": "Переезд ещё не решён.",
+  "world": {
+    "version": 2,
+    "characters": {
+      "character_1": {
+        "id": "character_1",
+        "location": "Кухня",
+        "situation": "На кухне.",
+        "short_goal": "Приготовить ужин.",
+        "goals": [
+          {
+            "id": "goals_02326ab53551bf7b8a08",
+            "text": "Приготовить ужин.",
+            "status": "active",
+            "source_sequence": null,
+            "evidence": "",
+            "due_minute": null,
+            "revision": 0,
+            "source_event_id": null,
+            "dependencies": {},
+            "review_required": [],
+            "reviewed_signature": ""
+          }
+        ],
+        "intentions": [],
+        "emotion": "",
+        "obligations": [],
+        "last_event_id": null,
+        "minute": null,
+        "scene_id": null,
+        "physical_state": "Устал после рабочего дня.",
+        "life_status": "alive",
+        "developmental_stage": "adult",
+        "capabilities": {
+          "conscious": true,
+          "can_act": true,
+          "can_perceive": null,
+          "can_move": false,
+          "can_speak": true
+        },
+        "appearance": {
+          "items": {
+            "hair": {
+              "category": "presentation",
+              "kind": "hairstyle",
+              "text": "Короткие волосы"
+            }
+          }
+        },
+        "personality": {
+          "items": {
+            "habit": {
+              "field": "habits",
+              "text": "Смотрит в окно перед ответом"
+            }
+          }
+        }
+      },
+      "character_2": {
+        "id": "character_2",
+        "location": "Кухня",
+        "situation": "На кухне.",
+        "short_goal": "Приготовить ужин.",
+        "goals": [
+          {
+            "id": "goals_34f1036eb7f64a1f988e",
+            "text": "Приготовить ужин.",
+            "status": "active",
+            "source_sequence": null,
+            "evidence": "",
+            "due_minute": null,
+            "revision": 0,
+            "source_event_id": null,
+            "dependencies": {},
+            "review_required": [],
+            "reviewed_signature": ""
+          }
+        ],
+        "intentions": [],
+        "emotion": "",
+        "obligations": [],
+        "last_event_id": null,
+        "minute": null,
+        "scene_id": null
+      },
+      "character_3": {
+        "id": "character_3",
+        "location": "Кухня",
+        "situation": "На кухне.",
+        "short_goal": "Приготовить ужин.",
+        "goals": [
+          {
+            "id": "goals_0654c46dad054267d5db",
+            "text": "Приготовить ужин.",
+            "status": "active",
+            "source_sequence": null,
+            "evidence": "",
+            "due_minute": null,
+            "revision": 0,
+            "source_event_id": null,
+            "dependencies": {},
+            "review_required": [],
+            "reviewed_signature": ""
+          }
+        ],
+        "intentions": [],
+        "emotion": "",
+        "obligations": [],
+        "last_event_id": null,
+        "minute": null,
+        "scene_id": null
+      },
+      "character_4": {
+        "id": "character_4",
+        "location": null,
+        "situation": "На кухне.",
+        "short_goal": "Приготовить ужин.",
+        "goals": [
+          {
+            "id": "goals_2562347b4f4ff334fa05",
+            "text": "Приготовить ужин.",
+            "status": "active",
+            "source_sequence": null,
+            "evidence": "",
+            "due_minute": null,
+            "revision": 0,
+            "source_event_id": null,
+            "dependencies": {},
+            "review_required": [],
+            "reviewed_signature": ""
+          }
+        ],
+        "intentions": [],
+        "emotion": "",
+        "obligations": [],
+        "last_event_id": null,
+        "minute": null,
+        "scene_id": null
+      },
+      "character_5": {
+        "id": "character_5",
+        "location": null,
+        "situation": "На кухне.",
+        "short_goal": "Приготовить ужин.",
+        "goals": [
+          {
+            "id": "goals_f50a05304247bf41c616",
+            "text": "Приготовить ужин.",
+            "status": "active",
+            "source_sequence": null,
+            "evidence": "",
+            "due_minute": null,
+            "revision": 0,
+            "source_event_id": null,
+            "dependencies": {},
+            "review_required": [],
+            "reviewed_signature": ""
+          }
+        ],
+        "intentions": [],
+        "emotion": "",
+        "obligations": [],
+        "last_event_id": null,
+        "minute": null,
+        "scene_id": null
+      },
+      "character_6": {
+        "id": "character_6",
+        "location": null,
+        "situation": "На кухне.",
+        "short_goal": "Приготовить ужин.",
+        "goals": [
+          {
+            "id": "goals_04408297a9beed61f58c",
+            "text": "Приготовить ужин.",
+            "status": "active",
+            "source_sequence": null,
+            "evidence": "",
+            "due_minute": null,
+            "revision": 0,
+            "source_event_id": null,
+            "dependencies": {},
+            "review_required": [],
+            "reviewed_signature": ""
+          }
+        ],
+        "intentions": [],
+        "emotion": "",
+        "obligations": [],
+        "last_event_id": null,
+        "minute": null,
+        "scene_id": null
+      },
+      "character_7": {
+        "id": "character_7",
+        "location": null,
+        "situation": "На кухне.",
+        "short_goal": "Приготовить ужин.",
+        "goals": [
+          {
+            "id": "goals_1a9cd5538f727204276b",
+            "text": "Приготовить ужин.",
+            "status": "active",
+            "source_sequence": null,
+            "evidence": "",
+            "due_minute": null,
+            "revision": 0,
+            "source_event_id": null,
+            "dependencies": {},
+            "review_required": [],
+            "reviewed_signature": ""
+          }
+        ],
+        "intentions": [],
+        "emotion": "",
+        "obligations": [],
+        "last_event_id": null,
+        "minute": null,
+        "scene_id": null
+      },
+      "character_8": {
+        "id": "character_8",
+        "location": null,
+        "situation": "На кухне.",
+        "short_goal": "Приготовить ужин.",
+        "goals": [
+          {
+            "id": "goals_be616a678e7990bf481f",
+            "text": "Приготовить ужин.",
+            "status": "active",
+            "source_sequence": null,
+            "evidence": "",
+            "due_minute": null,
+            "revision": 0,
+            "source_event_id": null,
+            "dependencies": {},
+            "review_required": [],
+            "reviewed_signature": ""
+          }
+        ],
+        "intentions": [],
+        "emotion": "",
+        "obligations": [],
+        "last_event_id": null,
+        "minute": null,
+        "scene_id": null
+      }
+    },
+    "facts": {
+      "meeting": {
+        "id": "meeting",
+        "text": "Тайная встреча у маяка",
+        "secret": true,
+        "character_ids": [
+          "character_2",
+          "character_3"
+        ],
+        "evidence": [
+          "Записка"
+        ]
+      },
+      "ownership": {
+        "id": "ownership",
+        "text": "Банк входит в Apex Group Inc.",
+        "secret": false,
+        "character_ids": [],
+        "claim": {
+          "subject_id": "bank",
+          "predicate": "parent_organization",
+          "value": "apex"
+        }
+      }
+    },
+    "knowledge": {
+      "character_2:meeting": {
+        "actor_id": "character_2",
+        "fact_id": "meeting",
+        "status": "known",
+        "source_event_id": null
+      },
+      "character_3:meeting": {
+        "actor_id": "character_3",
+        "fact_id": "meeting",
+        "status": "suspected",
+        "source_event_id": null
+      }
+    },
+    "relationships": {
+      "character_1:character_2": {
+        "source_id": "character_1",
+        "target_id": "character_2",
+        "context": "Знакомы с детства.",
+        "dimensions": {}
+      },
+      "character_2:character_2": {
+        "source_id": "character_2",
+        "target_id": "character_2",
+        "context": "Знакомы с детства.",
+        "dimensions": {}
+      },
+      "character_3:character_2": {
+        "source_id": "character_3",
+        "target_id": "character_2",
+        "context": "Недоверие",
+        "dimensions": {
+          "trust": -20
+        }
+      },
+      "character_4:character_2": {
+        "source_id": "character_4",
+        "target_id": "character_2",
+        "context": "Знакомы с детства.",
+        "dimensions": {}
+      },
+      "character_5:character_2": {
+        "source_id": "character_5",
+        "target_id": "character_2",
+        "context": "Знакомы с детства.",
+        "dimensions": {}
+      },
+      "character_6:character_2": {
+        "source_id": "character_6",
+        "target_id": "character_2",
+        "context": "Знакомы с детства.",
+        "dimensions": {}
+      },
+      "character_7:character_2": {
+        "source_id": "character_7",
+        "target_id": "character_2",
+        "context": "Знакомы с детства.",
+        "dimensions": {}
+      },
+      "character_8:character_2": {
+        "source_id": "character_8",
+        "target_id": "character_2",
+        "context": "Знакомы с детства.",
+        "dimensions": {}
+      },
+      "character_2:character_3": {
+        "source_id": "character_2",
+        "target_id": "character_3",
+        "context": "Любовь",
+        "dimensions": {
+          "trust": 35
+        }
+      }
+    },
+    "threads": {},
+    "scenes": {
+      "scene_f370acc9d8b734d907d1": {
+        "id": "scene_f370acc9d8b734d907d1",
+        "participants": [
+          "character_1",
+          "character_2",
+          "character_3"
+        ],
+        "location": "Кухня",
+        "start_minute": 6240,
+        "end_minute": 6240,
+        "text": "### Где сейчас ГГ:\nПонедельник, 18:20. Кухня. Все собрались.",
+        "status": "active",
+        "event_ids": []
+      }
+    },
+    "events": {},
+    "scheduled_events": {},
+    "scene_records": {},
+    "organizations": {
+      "apex": {
+        "id": "apex",
+        "name": "Apex Group Inc."
+      },
+      "bank": {
+        "id": "bank",
+        "name": "Банк"
+      },
+      "it": {
+        "id": "it",
+        "name": "IT"
+      },
+      "insurance": {
+        "id": "insurance",
+        "name": "Страхование"
+      },
+      "build": {
+        "id": "build",
+        "name": "Строительство"
+      },
+      "legal": {
+        "id": "legal",
+        "name": "Юридическая фирма"
+      }
+    },
+    "objective_relations": {
+      "adoption": {
+        "id": "adoption",
+        "source_id": "character_2",
+        "target_id": "character_1",
+        "kind": "adoptive_parent"
+      }
+    },
+    "roles": {
+      "job": {
+        "id": "job",
+        "actor_id": "character_1",
+        "kind": "occupation",
+        "title": "Юрист",
+        "organization_id": "legal"
+      }
+    },
+    "residences": {
+      "home_a": {
+        "id": "home_a",
+        "status": "active",
+        "since": null,
+        "until": null,
+        "since_date": null,
+        "until_date": null,
+        "context": "Живёт у реки.",
+        "evidence": "",
+        "source_turn": null,
+        "fact_id": null,
+        "closure_fact_id": null,
+        "outcome": "",
+        "actor_id": "character_1",
+        "location_id": "location_1"
+      },
+      "home_b": {
+        "id": "home_b",
+        "status": "closed",
+        "since": 0,
+        "until": 100,
+        "since_date": null,
+        "until_date": null,
+        "context": "Прежнее жильё.",
+        "evidence": "",
+        "source_turn": null,
+        "fact_id": null,
+        "closure_fact_id": null,
+        "outcome": "",
+        "actor_id": "character_2",
+        "location_id": "location_1"
+      }
+    },
+    "contacts": {
+      "contact_b": {
+        "id": "contact_b",
+        "owner_id": "character_1",
+        "character_id": "character_2",
+        "label": "Друг",
+        "address": "local-b",
+        "kind": "person",
+        "blocked": false,
+        "available": true,
+        "identity_visible": false,
+        "provenance": "Введён автором",
+        "created_at": 0
+      }
+    },
+    "conditions": {
+      "condition_a": {
+        "id": "condition_a",
+        "actor_id": "character_1",
+        "description": "Повреждение ноги",
+        "status": "active",
+        "duration": "unknown",
+        "effects": {
+          "conscious": null,
+          "can_perceive": null,
+          "can_act": null,
+          "can_speak": null,
+          "can_move": false
+        },
+        "since": null,
+        "until": null,
+        "evidence": "Указано автором",
+        "source_turn": null,
+        "fact_id": null
+      }
+    },
+    "possessions": {
+      "watch": {
+        "id": "watch",
+        "name": "Старинные часы",
+        "kind": "heirloom",
+        "owner_id": "character_1",
+        "holder_id": "character_2",
+        "location_id": "location_1",
+        "status": "available",
+        "revision": 0,
+        "fact_id": null,
+        "field_facts": {},
+        "source_event_id": null,
+        "source_turn": null,
+        "applied": {}
+      }
+    },
+    "pregnancies": {},
+    "reproductive_events": {},
+    "naming_decisions": {}
+  },
+  "protagonist_id": "character_1",
+  "controlled_actor_id": "character_1",
+  "camera": {
+    "scene_id": "scene_f370acc9d8b734d907d1",
+    "mode": "actor"
+  },
+  "world_clock": {
+    "minute": 6240,
+    "last_event_time": "День 1 · 2026-10-23 · Пт · 08:00",
+    "calendar": {
+      "start_minute": 6240,
+      "start_weekday": 4,
+      "start_date": "2026-10-23",
+      "profile": {
+        "id": "gregorian",
+        "system": "gregorian",
+        "month_lengths": [],
+        "month_names": [],
+        "weekday_names": [],
+        "observances": [],
+        "seasons": []
+      }
+    }
+  },
+  "campaign": {
+    "title": "Синтетический мир представления",
+    "setting": "",
+    "era": "",
+    "genre": "",
+    "tone": "Современная драмеди.",
+    "description": "",
+    "rules": "Переезд ещё не решён."
+  },
+  "scene_meta": {
+    "time": "День 1 · 2026-10-23 · Пт · 08:00",
+    "location": "Кухня",
+    "present_ids": [
+      "character_1",
+      "character_2",
+      "character_3"
+    ]
+  },
+  "draft_contract": 4
+}

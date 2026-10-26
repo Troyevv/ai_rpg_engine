@@ -1,4 +1,5 @@
 """Disposable read projections. None of these scene IDs may enter WorldStateV3."""
+from backend.runtime_v3.birth_identity import is_game_birth
 from copy import deepcopy
 from backend.runtime_v3.models import identity
 from backend.runtime_v3.calendar import calendar_label, current_time, nearby_calendar, age_on, profile_of, commitment_view
@@ -39,7 +40,7 @@ def ui_view(snapshot, history=None):
     scenes={}
     groups={}
     for cid,c in state['characters'].items():
-        if c['location_id'] is not None and c.get('life_status') != 'dead':groups.setdefault(c['location_id'],[]).append(cid)
+        if cid in names and c['location_id'] is not None and c.get('life_status') != 'dead':groups.setdefault(c['location_id'],[]).append(cid)
     for lid,present in groups.items():
         sid='view:'+lid
         scenes[sid]=dict(id=sid,location=place(lid),participants=sorted(present),start_minute=now,end_minute=now,
@@ -155,10 +156,21 @@ def ui_view(snapshot, history=None):
     if reproductive: result['reproduction']=reproductive
     hidden={cid for cid in state['characters'] if not known_birth(state,cid,observer)}
     for cid in hidden: world['characters'].pop(cid,None)
+    # A hidden birth must not reappear via a cheap ID/name fallback elsewhere.
+    def exposed(row):
+        refs=set(row.get('character_ids',[]))|set(row.get('participants',[]))|set(row.get('witnesses',[]))
+        refs.update(row.get(k) for k in ('actor_id','source_id','target_id'))
+        return not refs & hidden
+    for section in ('relationships','threads','scheduled_events','events','scene_records','facts','knowledge'):
+        world[section]={k:v for k,v in world[section].items() if exposed(v)}
+    for section in ('relationships','plans','events','facts'):
+        result[section]=[row for row in result[section] if exposed(row)]
+    metadata['present_ids']=[cid for cid in metadata['present_ids'] if cid not in hidden]
+
     for actor in world['characters'].values():
-        if state['characters'][actor['id']].get('birth_provenance'):
+        if is_game_birth(state,actor['id']):
             actor['display_name']=names.get(actor['id'])
-        for key in ('birth_provenance','biological_sex','identity_components','reproductive_capability'):
+        for key in ('birth_provenance','birth_date_provenance','biological_sex','identity_components','reproductive_capability'):
             actor.pop(key,None)
     protected=private_fact_ids(state)
     protected |= {identity('communicated_text',e['id']) for e in state.get('remote_events',{}).values() if e['channel']=='TEXT_MESSAGE' and observer != e['sender_id']}

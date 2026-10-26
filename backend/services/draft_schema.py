@@ -82,15 +82,17 @@ def world_state_schema():
                  'evidence':{'type':'string'},'source_sequence':{'type':'integer','minimum':0},
                  'player_observed':{'type':'boolean'}},('id','text','participants','witnesses','minute','scene_id','fact_ids','player_observed'))
     scheduled = obj({'id':ID,'description':text('Отложенное событие при наличии причин и сроков.'),
-                     'due_minute':MINUTE,'participants':IDS,'status':{'type':'string','enum':['pending','resolved','cancelled']},
+                     'due_minute':OPTIONAL_MINUTE,'participants':IDS,'status':{'type':'string','enum':['pending','resolved','cancelled']},
                      'resolved_event_id':OPTIONAL_ID},('id','description','due_minute','participants','status'))
     from backend.runtime_v3.models import TemporalValue
     temporal_schema = TemporalValue.model_json_schema()
+    temporal_schema['oneOf']=[{'required':[key], 'properties':{key:{'not':{'type':'null'}},**{other:{'type':'null'} for other in ('date','weekday','day_offset') if other!=key}}} for key in ('date','weekday','day_offset')]
+    temporal_schema['not']={'required':['time','day_period'],'properties':{'time':{'type':'string'},'day_period':{'type':'string'}}}
     scheduled['properties'].update(
         temporal=temporal_schema, end_temporal=temporal_schema,
         commitment={'type':'boolean'}, depends_on=IDS,
         type={'type':'string'}, condition={'type':'string'}, interrupts={'type':'boolean'},
-        started_minute=OPTIONAL_MINUTE, evidence={'type':'string'},
+        started_minute=OPTIONAL_MINUTE, time_reference_minute=OPTIONAL_MINUTE, location_id=OPTIONAL_ID, evidence={'type':'string'},
         source_turn={'type':['integer','null'],'minimum':0},
         outcome={'enum':['','fulfilled','blocked','missed','cancelled','dependency_cancelled']})
     world = obj({'version':{'const':2},'characters':entries(actor,'Ключ — тот же ID, что в characters.'),
@@ -110,7 +112,7 @@ def world_state_schema():
         'description':'Подробная концепция мира, включая закрытые вводные.',
         'public_description':'Краткое описание без спойлеров.','rules':'Правила авторского повествования.'}.items()},
         ('title','setting','era','genre','tone','description','public_description','rules'))
-    return {'$schema':'https://json-schema.org/draft/2020-12/schema','title':'WorldState',
+    schema = {'$schema':'https://json-schema.org/draft/2020-12/schema','title':'WorldState',
             'description':'Один готовый к игре мир; пользовательская идея — канон, остальные детали придумываются творчески.',
             **obj({'schema_version':{'const':1},'campaign':campaign,'sections':obj({}),
                    'story_notes':{'type':'string'},
@@ -121,6 +123,9 @@ def world_state_schema():
                    'world_clock':obj({'calendar':calendar_schema(),'minute':MINUTE,'last_event_time':text('День N (день недели) HH:MM, согласован с minute.')},('minute','last_event_time')),
                    'world':world},('schema_version','campaign','locations','characters','protagonist_id',
                                   'controlled_actor_id','camera','world_clock','world'))}
+
+    from backend.services.draft_initial import extend_schema
+    return extend_schema(schema)
 
 
 def calendar_schema():

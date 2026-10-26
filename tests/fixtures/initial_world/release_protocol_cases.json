@@ -1,0 +1,219 @@
+{
+  "purpose": "Synthetic inputs and expected behaviors to implement as repository tests; not executed test results, not real provider evidence.",
+  "audit_base": "e17a7b90d2491a2a66fb67d726f6561a78ca73db",
+  "instructions": [
+    "Use real repository modules and a validated fixture; inject external replies only.",
+    "Positive/negative meaning depends on fixture_setup; do not label a made-up blocker as true without the described author constraint.",
+    "Expand to the parameterized/type and transition matrix in the main specification.",
+    "Do not hardcode fixture names, IDs or paths in production recovery."
+  ],
+  "cases": [
+    {
+      "id": "review_item_null",
+      "stage": "review_correction",
+      "source": "latest_review_F1",
+      "response_text": "{\"issues\":[null]}",
+      "expected_behavior": "Report contract error; correction construction is safe; bounded re-audit can recover. Never convert to a successful empty audit."
+    },
+    {
+      "id": "review_basis_null",
+      "stage": "review_correction",
+      "source": "latest_review_F1",
+      "response_text": "{\"issues\":[{\"message\":\"x\",\"path\":\"/campaign/title\",\"basis\":null}]}",
+      "expected_behavior": "No TypeError during context construction; local correction or bounded alternative."
+    },
+    {
+      "id": "review_item_string",
+      "stage": "review_correction",
+      "source": "proposed_coverage",
+      "response_text": "{\"issues\":[\"bad item\"]}",
+      "expected_behavior": "Unresolved required protocol scope; no raw type exception; controlled recovery or bounded failure."
+    },
+    {
+      "id": "review_item_int",
+      "stage": "review_correction",
+      "source": "proposed_coverage",
+      "response_text": "{\"issues\":[7]}",
+      "expected_behavior": "Unresolved required protocol scope; no raw type exception; controlled recovery or bounded failure."
+    },
+    {
+      "id": "review_item_bool",
+      "stage": "review_correction",
+      "source": "proposed_coverage",
+      "response_text": "{\"issues\":[false]}",
+      "expected_behavior": "Unresolved required protocol scope; no raw type exception; controlled recovery or bounded failure."
+    },
+    {
+      "id": "review_item_array",
+      "stage": "review_correction",
+      "source": "proposed_coverage",
+      "response_text": "{\"issues\":[[]]}",
+      "expected_behavior": "Unresolved required protocol scope; no raw type exception; controlled recovery or bounded failure."
+    },
+    {
+      "id": "review_related_paths_object",
+      "stage": "review_correction",
+      "source": "proposed_coverage",
+      "response_text": "{\"issues\":[{\"path\":\"/campaign/title\",\"message\":\"x\",\"related_paths\":{\"unexpected\":\"/world\"}}]}",
+      "expected_behavior": "Do not iterate object keys as if they were a validated path list; explicit contract diagnosis."
+    },
+    {
+      "id": "review_patch_paths_string",
+      "stage": "review_correction",
+      "source": "proposed_coverage",
+      "response_text": "{\"issues\":[{\"path\":\"/campaign/title\",\"message\":\"x\",\"patch_paths\":\"/world\"}]}",
+      "expected_behavior": "No character-wise iteration; no whole-world mutation permissions; controlled protocol recovery."
+    },
+    {
+      "id": "review_basis_list_bad_items",
+      "stage": "review_correction",
+      "source": "proposed_coverage",
+      "response_text": "{\"issues\":[{\"path\":\"/campaign/title\",\"message\":\"x\",\"basis\":[null,5,\"/world\"]}]}",
+      "expected_behavior": "Validate each basis element; preserve raw reply and other valid findings."
+    },
+    {
+      "id": "correction_replacements_null",
+      "stage": "correction",
+      "source": "proposed_coverage",
+      "response_text": "{\"replacements\":null}",
+      "expected_behavior": "Contract failure without losing outstanding remarks or valid siblings."
+    },
+    {
+      "id": "correction_replacement_null",
+      "stage": "correction",
+      "source": "proposed_coverage",
+      "response_text": "{\"replacements\":[null]}",
+      "expected_behavior": "No unhandled item access; use remaining bounded strategy."
+    },
+    {
+      "id": "correction_empty",
+      "stage": "correction",
+      "source": "proposed_coverage",
+      "response_text": "{\"issues\":[]}",
+      "expected_behavior": "Must not erase unresolved required findings; preserve scope."
+    },
+    {
+      "id": "reaudit_resolution_null",
+      "stage": "reaudit",
+      "source": "proposed_coverage",
+      "response_text": "{\"resolutions\":[null]}",
+      "expected_behavior": "Typed error; no lost pending issues and no false success."
+    },
+    {
+      "id": "reaudit_unknown_id",
+      "stage": "reaudit",
+      "source": "proposed_coverage",
+      "response_text": "{\"resolutions\":[{\"issue_id\":\"not-in-pending\",\"resolution\":\"disproved\",\"reason\":\"Все верно\",\"basis\":[{\"path\":\"/campaign/title\"}]}]}",
+      "expected_behavior": "Reject unknown issue identity; no implicit removal of actual pending items."
+    },
+    {
+      "id": "quality_unknown_null",
+      "stage": "quality",
+      "source": "latest_review_F2",
+      "response_text": "{\"patches\":[],\"preserved_unknown\":null}",
+      "expected_behavior": "Invalid typed reply; bounded response correction or terminal partial with prior validated world preserved."
+    },
+    {
+      "id": "quality_root_array",
+      "stage": "quality",
+      "source": "latest_review_F2",
+      "response_text": "[]",
+      "expected_behavior": "No unchecked pop/get; terminal partial/rejected or bounded correction; previous validated candidate remains available."
+    },
+    {
+      "id": "quality_root_null",
+      "stage": "quality",
+      "source": "proposed_coverage",
+      "response_text": "null",
+      "expected_behavior": "Typed envelope error, not AttributeError/TypeError; no false acceptance."
+    },
+    {
+      "id": "quality_patches_null",
+      "stage": "quality",
+      "source": "proposed_coverage",
+      "response_text": "{\"patches\":null}",
+      "expected_behavior": "Do not treat null as successful patches; no lost validated state."
+    },
+    {
+      "id": "quality_unknown_bad_element",
+      "stage": "quality",
+      "source": "proposed_coverage",
+      "response_text": "{\"patches\":[],\"preserved_unknown\":[null]}",
+      "expected_behavior": "Validate elements before field access; preserve diagnostics and terminal status."
+    },
+    {
+      "id": "quality_patch_bad_element",
+      "stage": "quality",
+      "source": "proposed_coverage",
+      "response_text": "{\"patches\":[null]}",
+      "expected_behavior": "Reject trial atomically; no partial mutation."
+    },
+    {
+      "id": "quality_both_empty",
+      "stage": "quality",
+      "source": "proposed_coverage",
+      "response_text": "{\"patches\":[],\"preserved_unknown\":[]}",
+      "expected_behavior": "Not completed enrichment; partial/no-change outcome with prior validated state."
+    },
+    {
+      "id": "quality_valid_preserved_only",
+      "stage": "quality",
+      "source": "proposed_coverage",
+      "response_text": "{\"patches\":[],\"preserved_unknown\":[{\"path\":\"/characters/1/fields/Внешность\",\"author_excerpt\":\"Внешность Лады намеренно оставь неизвестной.\"}]}",
+      "expected_behavior": "Published quality schema and handler both permit preserved-only; keep field; use actual validation policy without inventing a change.",
+      "fixture_setup": "In the valid fixture, characters[1] is Lada, this appearance field is an eligible placeholder, and author_context includes this exact explicit sentence. This is a synthetic positive example, not historical evidence."
+    },
+    {
+      "id": "quality_conflicting_preserve_patch",
+      "stage": "quality",
+      "source": "proposed_coverage",
+      "response_text": "{\"patches\":[{\"path\":\"/characters/1/fields/Внешность\",\"value\":\"Рыжие волосы и светлые глаза.\"}],\"preserved_unknown\":[{\"path\":\"/characters/1/fields/Внешность\",\"author_excerpt\":\"Внешность Лады намеренно оставь неизвестной.\"}]}",
+      "expected_behavior": "Reject changing and preserving the same field; protected unknown remains unchanged.",
+      "fixture_setup": "In the valid fixture, characters[1] is Lada, this appearance field is an eligible placeholder, and author_context includes this exact explicit sentence. This is a synthetic positive example, not historical evidence."
+    },
+    {
+      "id": "quality_wrong_owner_excerpt",
+      "stage": "quality",
+      "source": "proposed_coverage",
+      "response_text": "{\"patches\":[],\"preserved_unknown\":[{\"path\":\"/characters/1/fields/Внешность\",\"author_excerpt\":\"Внешность Лады намеренно оставь неизвестной.\"}]}",
+      "expected_behavior": "A literal source match about Lada must not establish intentional unknown for a different character.",
+      "fixture_setup": "characters[1] is not Lada; only the sentence about Lada is present in author_context. Other fixture state valid."
+    },
+    {
+      "id": "advisory_unknown_entity",
+      "stage": "review",
+      "source": "latest_review_F3",
+      "response_text": "{\"issues\":[{\"section\":\"characters\",\"entity_id\":\"missing\",\"field\":\"name\",\"severity\":\"recommendation\",\"assertion\":\"optional_detail\",\"message\":\"Optional suggestion\"}]}",
+      "expected_behavior": "Isolated advisory protocol warning; no mutation rights; no required recovery solely for this advice."
+    },
+    {
+      "id": "advisory_with_real_blocker",
+      "stage": "review",
+      "source": "proposed_coverage",
+      "response_text": "{\"issues\":[{\"section\":\"characters\",\"entity_id\":\"missing\",\"field\":\"name\",\"severity\":\"recommendation\",\"assertion\":\"optional_detail\",\"message\":\"Optional suggestion\"},{\"path\":\"/campaign/title\",\"message\":\"Название расходится с явным требованием автора.\",\"severity\":\"blocker\",\"assertion\":\"semantic\",\"patch_paths\":[\"/campaign/title\"]}]}",
+      "expected_behavior": "Ignore invalid advice for mandatory recovery; retain and locally repair the valid blocker.",
+      "fixture_setup": "Provide an explicit author title constraint and a differing generated title; the blocker is real in this fixture."
+    },
+    {
+      "id": "advisory_and_unreadable_required",
+      "stage": "review",
+      "source": "proposed_coverage",
+      "response_text": "{\"issues\":[{\"section\":\"characters\",\"entity_id\":\"missing\",\"field\":\"name\",\"severity\":\"recommendation\",\"assertion\":\"optional_detail\",\"message\":\"Optional suggestion\"},null]}",
+      "expected_behavior": "Invalid advice is isolated, but unreadable remaining scope still requires report recovery; no false ready."
+    },
+    {
+      "id": "advisory_invalid_removal",
+      "stage": "review",
+      "source": "proposed_coverage",
+      "response_text": "{\"issues\":[{\"path\":\"/campaign/title\",\"message\":\"Optional suggestion\",\"severity\":\"recommendation\",\"assertion\":\"optional_detail\",\"remove_paths\":[\"/world\"]}]}",
+      "expected_behavior": "Isolate invalid advice completely, including removal rights; do not spend required review recovery solely for it."
+    },
+    {
+      "id": "quality_rereview_broken",
+      "stage": "quality_rereview",
+      "source": "proposed_coverage",
+      "response_text": "{\"issues\":[null]}",
+      "expected_behavior": "Do not accept enriched trial using old review signature; discard/recover within bounded quality policy, retain previous validated candidate."
+    }
+  ]
+}

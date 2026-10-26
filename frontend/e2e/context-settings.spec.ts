@@ -1,0 +1,45 @@
+import {test,expect} from '@playwright/test';
+import {nav} from './navigation';
+
+test('large per-task contexts persist and resume a world rejected before the first request',async({page,request})=>{
+  const workspace=await(await request.post('/api/workspaces',{data:{name:'Large context recovery'}})).json();
+  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),workspace.id);
+  await page.goto('/');await nav(page,'Настройки');
+  await page.getByLabel('Провайдер summary').selectOption('deepseek');
+  await page.getByLabel('API-ключ DeepSeek').fill('fixture-key');
+  await page.getByLabel('Контекст idea',{exact:true}).fill('262144');
+  await page.getByLabel('Контекст summary',{exact:true}).fill('32768');
+  await page.getByLabel('Контекст game',{exact:true}).fill('524288');
+  await page.getByLabel('Контекст загрузки локальной модели',{exact:true}).fill('1048576');
+  await page.getByRole('button',{name:'Сохранить настройки',exact:true}).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await nav(page,'Создать');
+  await page.getByLabel('Описание мира или текст импорта').fill('Соседи на кухне.\n'+'Подробность. '.repeat(2500));
+  await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+  const resume=page.getByRole('button',{name:'Продолжить сохранённую генерацию',exact:true});
+  await expect(resume).toBeVisible();
+  const url=`/api/workspaces/${workspace.id}/draft`;
+  const failed=await(await request.get(url+'?author=true')).json();
+  expect(failed.job.error).toContain('Контекст 32768');
+  expect(await(await request.get(`/api/workspaces/${workspace.id}/requests`)).json()).toHaveLength(0);
+  await nav(page,'Настройки');
+  await page.getByLabel('Контекст summary',{exact:true}).fill('262144');
+  await page.getByRole('button',{name:'Сохранить настройки',exact:true}).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.reload();await nav(page,'Настройки');
+  for(const [key,value] of [['idea','262144'],['summary','262144'],['game','524288']])
+    await expect(page.getByLabel(`Контекст ${key}`,{exact:true})).toHaveValue(value);
+  await expect(page.getByLabel('Контекст загрузки локальной модели',{exact:true})).toHaveValue('1048576');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth));
+  await page.screenshot({path:`test-results/context-settings-${page.viewportSize()?.width}.png`,fullPage:true});
+  await page.getByRole('button',{name:'Сохранить настройки',exact:true}).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await nav(page,'Создать');
+  const sent=page.waitForRequest(r=>r.url().endsWith('/draft/resume'));
+  await resume.click();
+  expect((await sent).postDataJSON().context_length).toBe(262144);
+  await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
+  const completed=await(await request.get(url)).json();
+  expect(completed.job.id).toBe(failed.job.id);
+  expect(completed.validation.errors).toEqual([]);
+});

@@ -59,6 +59,7 @@ def tracked_stream(storage, stream_fn, job_id, stage, config, messages, diagnost
         for chunk in stream_fn(messages=messages, thinking=effective['thinking'], on_usage=received, on_finish=finished, **kwargs):
             if response is not None:response.append(chunk)
             yield chunk
+        if finish_reason == 'length': raise OutputLimitReached('Достигнут лимит ответа.')
         status = 'complete'
     except OutputLimitReached:
         status = 'length'

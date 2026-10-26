@@ -1,0 +1,983 @@
+{
+  "schema_version": 1,
+  "campaign": {
+    "title": "Волковы: своя дорога",
+    "setting": "Современный мегаполис, родовая усадьба Волковых, корпорация Apex Group Inc.",
+    "era": "Наши дни",
+    "genre": "slice_of_life, семейная сага, драма, романтика",
+    "tone": "Реалистичный, эмоциональный, с горьким юмором и напряжением",
+    "description": "Илья Волков вырос в богатейшей семье, но всегда отказывался от её благ. Вчера он узнал, что приёмный и был усыновлён как будущий муж Кати. Он ушёл из поместья, оставив ключи. Теперь он строит свою жизнь сам.",
+    "public_description": "Семья Волковых владеет корпорацией Apex Group Inc. Илья, младший сын, работает государственным адвокатом и снимает кабинет в маникюрном салоне. Он только что узнал шокирующую правду о своём происхождении и ушёл из дома.",
+    "rules": "Реалистичный мир, без сверхъестественных элементов. Персонажи действуют согласно своим характерам и знаниям. Скрытая информация раскрывается только через взаимодействие."
+  },
+  "sections": {
+    "tone": "Реалистичный, эмоциональный, с горьким юмором и напряжением"
+  },
+  "story_notes": "Реалистичный мир, без сверхъестественных элементов. Персонажи действуют согласно своим характерам и знаниям. Скрытая информация раскрывается только через взаимодействие.",
+  "locations": [
+    {
+      "id": "l1",
+      "name": "Родовое поместье Волковых",
+      "text": "Большой особняк в закрытом посёлке, окружённый ухоженным парком. Внутри — роскошь, но атмосфера давящая.",
+      "kind": "резиденция"
+    },
+    {
+      "id": "l2",
+      "name": "Здание суда",
+      "text": "Городской суд, серое бетонное здание с колоннами. У входа курилка, где часто стоят юристы и адвокаты.",
+      "kind": "общественное здание"
+    },
+    {
+      "id": "l3",
+      "name": "Маникюрный салон «Глянец»",
+      "text": "Небольшой салон в спальном районе. Илья снимает здесь кабинет и иногда ночует.",
+      "kind": "коммерческое помещение"
+    },
+    {
+      "id": "l4",
+      "name": "Офис Apex Group Inc.",
+      "text": "Стеклянный небоскрёб в деловом центре. Здесь находятся банк, IT-компания, страховая, строительная и юридическая фирмы.",
+      "kind": "корпоративный офис"
+    }
+  ],
+  "characters": [
+    {
+      "id": "c1",
+      "name": "Илья Волков",
+      "is_player": true,
+      "aliases": [],
+      "fields": {
+        "Возраст": "20",
+        "Роль": "Государственный адвокат",
+        "Статус": "Приёмный сын Волковых, ушёл из семьи",
+        "Внешность": "Короткие тёмные волосы, зелёные яркие глаза, руки и шея в татуировках. Одевается в карго, олимпийки, зипки, клетчатые рубашки, белые кеды. Подтянутое, жилистое тело.",
+        "Характер": "Харизматичный, остроумный, находчивый, предприимчивый, бунтарский. Склонен к манипуляциям и риску. За самоуверенностью скрывает ранимость и потребность в любви.",
+        "Стиль общения": "Шутки, сарказм, розыгрыши, импровизация. Умеет убеждать.",
+        "Привычки": "Отшучиваться в тяжёлых ситуациях, уходить в деятельность.",
+        "Сильные стороны": "Общительность, находчивость, убеждение, импровизация.",
+        "Слабости": "Импульсивность, нежелание признавать ошибки, самооправдание.",
+        "Страхи и уязвимости": "Неуверенность в собственной ценности, страх быть нелюбимым.",
+        "Биография": "Сирота, усыновлён Волковыми в детстве как будущий муж Кати. Всегда отказывался от благ семьи, получил юридическую лицензию на свои деньги, работает государственным адвокатом. Вчера узнал правду о своём усыновлении и ушёл из поместья.",
+        "Чего хочет": "Построить жизнь самостоятельно\n\nРазобраться в себе после шокирующей новости",
+        "Сейчас": "Курит у входа в суд, рядом Лиза.",
+        "Намерения": "Скрыть своё эмоциональное состояние"
+      }
+    },
+    {
+      "id": "c2",
+      "name": "Марина Волкова",
+      "is_player": false,
+      "aliases": [],
+      "fields": {
+        "Возраст": "46",
+        "Роль": "Мать семейства",
+        "Статус": "Жена Сергея, мать Тимура и Кати, приёмная мать Ильи",
+        "Внешность": "Ухоженная женщина, часто в домашней одежде, тёплая улыбка.",
+        "Характер": "Домашняя, заботливая, любящая. Любит Илью как родного сына.",
+        "Стиль общения": "Мягкий, заботливый.",
+        "Привычки": "Заботиться о семье, готовить.",
+        "Сильные стороны": "Эмпатия, преданность семье.",
+        "Слабости": "Возможно, склонна закрывать глаза на проблемы.",
+        "Страхи и уязвимости": "Боится потерять детей.",
+        "Биография": "Живёт в родовом поместье, замужем за Сергеем. Воспитывала Илью как родного.",
+        "Чего хочет": "Сохранить семью",
+        "Сейчас": "Дома, вероятно, переживает уход Ильи.",
+        "Намерения": ""
+      }
+    },
+    {
+      "id": "c3",
+      "name": "Тимур Волков",
+      "is_player": false,
+      "aliases": [],
+      "fields": {
+        "Возраст": "26",
+        "Роль": "Старший брат",
+        "Статус": "Сын Волковых",
+        "Внешность": "Стильный, ухоженный, часто с ироничной ухмылкой.",
+        "Характер": "Общительный, остроумный, артистичный, самоуверенный напоказ, пошловатый, инфантильный, хвастливый, эмоциональный, ранимый, преданный близким.",
+        "Стиль общения": "Шутливый, иногда пошлый, эмоциональный.",
+        "Привычки": "Хвастаться, шутить.",
+        "Сильные стороны": "Артистизм, общительность.",
+        "Слабости": "Инфантильность, ранимость.",
+        "Страхи и уязвимости": "Боится быть отвергнутым.",
+        "Биография": "Старший сын Волковых, живёт в поместье.",
+        "Чего хочет": "Понять, что произошло",
+        "Сейчас": "Дома, возможно, обсуждает ситуацию с Ильёй.",
+        "Намерения": ""
+      }
+    },
+    {
+      "id": "c4",
+      "name": "Соня Величкина",
+      "is_player": false,
+      "aliases": [],
+      "fields": {
+        "Возраст": "20",
+        "Роль": "Студентка-биолог, лучшая подруга Кати",
+        "Статус": "Подруга Кати",
+        "Внешность": "Светлые волосы, всегда с двумя косичками, маленькая, высокий детский голос.",
+        "Характер": "Милая с виду, волевая, амбициозная, прагматичная, властная, вспыльчивая, язвительная, конкурентная, заботливая, склонная всё контролировать.",
+        "Стиль общения": "Язвительный, прямой.",
+        "Привычки": "Контролировать всё.",
+        "Сильные стороны": "Амбициозность, прагматизм.",
+        "Слабости": "Вспыльчивость, властность.",
+        "Страхи и уязвимости": "Боится потерять контроль.",
+        "Биография": "Знает Илью с детства, считает его классным и засматривается на него.",
+        "Чего хочет": "",
+        "Сейчас": "Неизвестно",
+        "Намерения": ""
+      }
+    },
+    {
+      "id": "c5",
+      "name": "Катя Волкова",
+      "is_player": false,
+      "aliases": [],
+      "fields": {
+        "Возраст": "20",
+        "Роль": "Сестра Ильи, студентка-юрист",
+        "Статус": "Дочь Волковых",
+        "Внешность": "Привлекательная, ухоженная.",
+        "Характер": "Общительная, харизматичная, эмоциональная, уверенная, саркастичная, практичная, импульсивная, прямолинейная, заботливая, социально проницательная.",
+        "Стиль общения": "Прямой, саркастичный.",
+        "Привычки": "Быть в центре внимания.",
+        "Сильные стороны": "Харизма, проницательность.",
+        "Слабости": "Импульсивность.",
+        "Страхи и уязвимости": "Боится предательства.",
+        "Биография": "С Ильёй очень близка с детства, эмоционально и физически. Не знает, что Илья приёмный (по крайней мере, так считалось).",
+        "Чего хочет": "Понять, почему Илья ушёл",
+        "Сейчас": "Дома, вероятно, переживает уход Ильи.",
+        "Намерения": ""
+      }
+    },
+    {
+      "id": "c6",
+      "name": "Юра Яковлев",
+      "is_player": false,
+      "aliases": [],
+      "fields": {
+        "Возраст": "20",
+        "Роль": "Помощник прокурора",
+        "Статус": "Приятель Ильи",
+        "Внешность": "Аккуратный, в очках, с усталым выражением лица.",
+        "Характер": "Практичный, рассудительный, циничный, ворчливый, с сухим чувством юмора. Прямолинейный, ироничный, язвительный, снисходительный. Амбициозен, но не любит риск.",
+        "Стиль общения": "Саркастичный, усталый.",
+        "Привычки": "Ворчать, вздыхать.",
+        "Сильные стороны": "Профессиональная хватка, острый язык.",
+        "Слабости": "Завистливость, раздражительность.",
+        "Страхи и уязвимости": "Боится неуважения к своей работе.",
+        "Биография": "Постоянно пересекается с Ильёй в суде.",
+        "Чего хочет": "",
+        "Сейчас": "Неизвестно",
+        "Намерения": ""
+      }
+    },
+    {
+      "id": "c7",
+      "name": "Сергей Волков",
+      "is_player": false,
+      "aliases": [],
+      "fields": {
+        "Возраст": "54",
+        "Роль": "Глава семьи, владелец Apex Group Inc.",
+        "Статус": "Отец Ильи, Кати и Тимура",
+        "Внешность": "Солидный мужчина в дорогих костюмах.",
+        "Характер": "С родными мягкий, справедливый, спокойный. Любит Илью как родного сына.",
+        "Стиль общения": "Спокойный, уверенный.",
+        "Привычки": "Руководить корпорацией.",
+        "Сильные стороны": "Умение вести дела.",
+        "Слабости": "Возможно, чрезмерный контроль.",
+        "Страхи и уязвимости": "Боится потерять семью.",
+        "Биография": "Владелец корпорации Apex Group Inc. Всегда отказывал Илье в работе в корпорации без объяснения причин.",
+        "Чего хочет": "Сохранить контроль над ситуацией",
+        "Сейчас": "Дома, вероятно, обсуждает ситуацию с Ильёй.",
+        "Намерения": ""
+      }
+    },
+    {
+      "id": "c8",
+      "name": "Лиза Островская",
+      "is_player": false,
+      "aliases": [],
+      "fields": {
+        "Возраст": "22",
+        "Роль": "Юрист в Apex Group Inc.",
+        "Статус": "Коллега, знакомая Ильи",
+        "Внешность": "Сдержанная, элегантная, часто в деловом костюме.",
+        "Характер": "Умная, целеустремлённая, дисциплинированная, независимая. Внешне спокойна, сдержанна, рациональна. Скрывает эмоциональную глубину, азарт и тягу к нарушению правил. Упряма, самоуверенна, но преданна в близких отношениях.",
+        "Стиль общения": "Сухой юмор, сдержанный.",
+        "Привычки": "Трудоголизм.",
+        "Сильные стороны": "Хладнокровие, решительность.",
+        "Слабости": "Упрямство, самоуверенность.",
+        "Страхи и уязвимости": "Не любит демонстрировать слабость.",
+        "Биография": "Работает юристом в Apex Group. С Ильёй дружеские и уважительные отношения.",
+        "Чего хочет": "Выполнить работу",
+        "Сейчас": "Курит рядом с Ильёй.",
+        "Намерения": ""
+      }
+    }
+  ],
+  "protagonist_id": "c1",
+  "controlled_actor_id": "c1",
+  "camera": {
+    "scene_id": "s1",
+    "mode": "actor"
+  },
+  "world_clock": {
+    "minute": 4800,
+    "last_event_time": "День 5 (Пт) 08:00"
+  },
+  "scene": "Пятница, 8:00. Илья стоит у входа в здание суда и курит. Рядом Лиза Островская тоже курит.",
+  "scene_meta": {
+    "time": "День 4 (Чт) 08:00",
+    "location": "Здание суда",
+    "present_ids": [
+      "c1",
+      "c8"
+    ]
+  },
+  "world": {
+    "version": 2,
+    "characters": {
+      "c1": {
+        "id": "c1",
+        "location": "Здание суда",
+        "situation": "Курит у входа в суд, рядом Лиза.",
+        "goals": [
+          "Построить жизнь самостоятельно",
+          "Разобраться в себе после шокирующей новости"
+        ],
+        "short_goal": "Построить жизнь самостоятельно\n\nРазобраться в себе после шокирующей новости",
+        "intentions": [
+          "Скрыть своё эмоциональное состояние"
+        ],
+        "obligations": [],
+        "emotion": "Напряжён, подавлен, но старается держаться",
+        "minute": 4800,
+        "scene_id": "s1",
+        "last_event_id": "e2",
+        "life_status": "alive",
+        "biological_sex": "male",
+        "physical_state": "normal",
+        "capabilities": {
+          "conscious": true,
+          "can_perceive": true,
+          "can_act": true,
+          "can_speak": true,
+          "can_move": true
+        },
+        "developmental_stage": "adult",
+        "name_history": [],
+        "reproductive_capability": "can_impregnate",
+        "life_fact_id": null,
+        "parentage_complete_fact_id": null
+      },
+      "c2": {
+        "id": "c2",
+        "location": "Родовое поместье Волковых",
+        "situation": "Дома, вероятно, переживает уход Ильи.",
+        "goals": [
+          "Сохранить семью"
+        ],
+        "short_goal": "Сохранить семью",
+        "intentions": [],
+        "obligations": [],
+        "emotion": "Тревога",
+        "minute": 4800,
+        "scene_id": null,
+        "last_event_id": "e2",
+        "life_status": "alive",
+        "biological_sex": "female",
+        "physical_state": "normal",
+        "capabilities": {
+          "conscious": true,
+          "can_perceive": true,
+          "can_act": true,
+          "can_speak": true,
+          "can_move": true
+        },
+        "developmental_stage": "adult",
+        "name_history": [],
+        "reproductive_capability": "neither",
+        "life_fact_id": null,
+        "parentage_complete_fact_id": null
+      },
+      "c3": {
+        "id": "c3",
+        "location": "Родовое поместье Волковых",
+        "situation": "Дома, возможно, обсуждает ситуацию с Ильёй.",
+        "goals": [
+          "Понять, что произошло"
+        ],
+        "short_goal": "Понять, что произошло",
+        "intentions": [],
+        "obligations": [],
+        "emotion": "Растерянность",
+        "minute": 4800,
+        "scene_id": null,
+        "last_event_id": "e2",
+        "life_status": "alive",
+        "biological_sex": "male",
+        "physical_state": "normal",
+        "capabilities": {
+          "conscious": true,
+          "can_perceive": true,
+          "can_act": true,
+          "can_speak": true,
+          "can_move": true
+        },
+        "developmental_stage": "adult",
+        "name_history": [],
+        "reproductive_capability": "can_impregnate",
+        "life_fact_id": null,
+        "parentage_complete_fact_id": null
+      },
+      "c4": {
+        "id": "c4",
+        "location": null,
+        "situation": "Неизвестно",
+        "goals": [],
+        "short_goal": "",
+        "intentions": [],
+        "obligations": [],
+        "emotion": "",
+        "minute": null,
+        "scene_id": null,
+        "last_event_id": null,
+        "life_status": "alive",
+        "biological_sex": "female",
+        "physical_state": "normal",
+        "capabilities": {
+          "conscious": true,
+          "can_perceive": true,
+          "can_act": true,
+          "can_speak": true,
+          "can_move": true
+        },
+        "developmental_stage": "adult",
+        "name_history": [],
+        "reproductive_capability": "can_become_pregnant",
+        "life_fact_id": null,
+        "parentage_complete_fact_id": null
+      },
+      "c5": {
+        "id": "c5",
+        "location": "Родовое поместье Волковых",
+        "situation": "Дома, вероятно, переживает уход Ильи.",
+        "goals": [
+          "Понять, почему Илья ушёл"
+        ],
+        "short_goal": "Понять, почему Илья ушёл",
+        "intentions": [],
+        "obligations": [],
+        "emotion": "Тревога",
+        "minute": 4800,
+        "scene_id": null,
+        "last_event_id": "e2",
+        "life_status": "alive",
+        "biological_sex": "female",
+        "physical_state": "normal",
+        "capabilities": {
+          "conscious": true,
+          "can_perceive": true,
+          "can_act": true,
+          "can_speak": true,
+          "can_move": true
+        },
+        "developmental_stage": "adult",
+        "name_history": [],
+        "reproductive_capability": "can_become_pregnant",
+        "life_fact_id": null,
+        "parentage_complete_fact_id": null
+      },
+      "c6": {
+        "id": "c6",
+        "location": null,
+        "situation": "Неизвестно",
+        "goals": [],
+        "short_goal": "",
+        "intentions": [],
+        "obligations": [],
+        "emotion": "",
+        "minute": null,
+        "scene_id": null,
+        "last_event_id": null,
+        "life_status": "alive",
+        "biological_sex": "male",
+        "physical_state": "normal",
+        "capabilities": {
+          "conscious": true,
+          "can_perceive": true,
+          "can_act": true,
+          "can_speak": true,
+          "can_move": true
+        },
+        "developmental_stage": "adult",
+        "name_history": [],
+        "reproductive_capability": "can_impregnate",
+        "life_fact_id": null,
+        "parentage_complete_fact_id": null
+      },
+      "c7": {
+        "id": "c7",
+        "location": "Родовое поместье Волковых",
+        "situation": "Дома, вероятно, обсуждает ситуацию с Ильёй.",
+        "goals": [
+          "Сохранить контроль над ситуацией"
+        ],
+        "short_goal": "Сохранить контроль над ситуацией",
+        "intentions": [],
+        "obligations": [],
+        "emotion": "Обеспокоен",
+        "minute": 4800,
+        "scene_id": null,
+        "last_event_id": "e2",
+        "life_status": "alive",
+        "biological_sex": "male",
+        "physical_state": "normal",
+        "capabilities": {
+          "conscious": true,
+          "can_perceive": true,
+          "can_act": true,
+          "can_speak": true,
+          "can_move": true
+        },
+        "developmental_stage": "adult",
+        "name_history": [],
+        "reproductive_capability": "can_impregnate",
+        "life_fact_id": null,
+        "parentage_complete_fact_id": null
+      },
+      "c8": {
+        "id": "c8",
+        "location": "Здание суда",
+        "situation": "Курит рядом с Ильёй.",
+        "goals": [
+          "Выполнить работу"
+        ],
+        "short_goal": "Выполнить работу",
+        "intentions": [],
+        "obligations": [],
+        "emotion": "Спокойна, сдержанна",
+        "minute": 4800,
+        "scene_id": "s1",
+        "last_event_id": null,
+        "life_status": "alive",
+        "biological_sex": "female",
+        "physical_state": "normal",
+        "capabilities": {
+          "conscious": true,
+          "can_perceive": true,
+          "can_act": true,
+          "can_speak": true,
+          "can_move": true
+        },
+        "developmental_stage": "adult",
+        "name_history": [],
+        "reproductive_capability": "can_become_pregnant",
+        "life_fact_id": null,
+        "parentage_complete_fact_id": null
+      }
+    },
+    "relationships": {
+      "r1": {
+        "source_id": "c1",
+        "target_id": "c8",
+        "context": "Дружеские и уважительные отношения",
+        "dimensions": {
+          "trust": 60,
+          "respect": 70,
+          "affection": 40
+        }
+      },
+      "r2": {
+        "source_id": "c8",
+        "target_id": "c1",
+        "context": "Дружеские и уважительные отношения",
+        "dimensions": {
+          "trust": 60,
+          "respect": 70,
+          "affection": 40
+        }
+      },
+      "r3": {
+        "source_id": "c1",
+        "target_id": "c2",
+        "context": "Мать (приёмная), любила его как родного",
+        "dimensions": {
+          "trust": 10,
+          "affection": 30,
+          "respect": 20
+        }
+      },
+      "r4": {
+        "source_id": "c2",
+        "target_id": "c1",
+        "context": "Любит как родного сына",
+        "dimensions": {
+          "trust": 90,
+          "affection": 95,
+          "respect": 80
+        }
+      },
+      "r5": {
+        "source_id": "c1",
+        "target_id": "c3",
+        "context": "Брат, сложные отношения после ухода",
+        "dimensions": {
+          "trust": 20,
+          "affection": 10,
+          "respect": 15
+        }
+      },
+      "r6": {
+        "source_id": "c3",
+        "target_id": "c1",
+        "context": "Брат, предан близким",
+        "dimensions": {
+          "trust": 70,
+          "affection": 80,
+          "respect": 50
+        }
+      },
+      "r7": {
+        "source_id": "c1",
+        "target_id": "c5",
+        "context": "Сестра, очень близки с детства",
+        "dimensions": {
+          "trust": 5,
+          "affection": 20,
+          "respect": 10
+        }
+      },
+      "r8": {
+        "source_id": "c5",
+        "target_id": "c1",
+        "context": "Очень близка с Ильёй",
+        "dimensions": {
+          "trust": 95,
+          "affection": 95,
+          "respect": 70
+        }
+      },
+      "r9": {
+        "source_id": "c1",
+        "target_id": "c7",
+        "context": "Отец (приёмный), отказывал в работе",
+        "dimensions": {
+          "trust": 5,
+          "affection": 10,
+          "respect": 5
+        }
+      },
+      "r10": {
+        "source_id": "c7",
+        "target_id": "c1",
+        "context": "Любит как родного сына, но скрывал правду",
+        "dimensions": {
+          "trust": 90,
+          "affection": 85,
+          "respect": 80
+        }
+      },
+      "r11": {
+        "source_id": "c1",
+        "target_id": "c4",
+        "context": "Знакомы с детства, Соня засматривается на Илью",
+        "dimensions": {
+          "trust": 30,
+          "affection": 20,
+          "respect": 40
+        }
+      },
+      "r12": {
+        "source_id": "c4",
+        "target_id": "c1",
+        "context": "Считает его классным, засматривается",
+        "dimensions": {
+          "trust": 50,
+          "affection": 70,
+          "attraction": 60,
+          "respect": 60
+        }
+      },
+      "r13": {
+        "source_id": "c1",
+        "target_id": "c6",
+        "context": "Приятель, пересекаются в суде",
+        "dimensions": {
+          "trust": 40,
+          "affection": 30,
+          "respect": 50
+        }
+      },
+      "r14": {
+        "source_id": "c6",
+        "target_id": "c1",
+        "context": "Приятель, профессиональная солидарность",
+        "dimensions": {
+          "trust": 40,
+          "affection": 30,
+          "respect": 50
+        }
+      }
+    },
+    "facts": {
+      "f1": {
+        "id": "f1",
+        "text": "Илья Волков — приёмный сын, усыновлён как будущий муж Кати.",
+        "secret": true,
+        "character_ids": [
+          "c1",
+          "c2",
+          "c7"
+        ],
+        "evidence": [
+          "Илья узнал об этом вчера",
+          "Сергей и Марина знали"
+        ]
+      },
+      "f2": {
+        "id": "f2",
+        "text": "Илья ушёл из родового поместья, оставив ключи.",
+        "secret": false,
+        "character_ids": [
+          "c1",
+          "c2",
+          "c3",
+          "c5",
+          "c7"
+        ],
+        "evidence": [
+          "Илья собрал вещи и ушёл"
+        ]
+      }
+    },
+    "knowledge": {
+      "k1": {
+        "actor_id": "c1",
+        "fact_id": "f1",
+        "status": "known",
+        "source_event_id": "e1"
+      },
+      "k2": {
+        "actor_id": "c2",
+        "fact_id": "f1",
+        "status": "known",
+        "source_event_id": null
+      },
+      "k3": {
+        "actor_id": "c7",
+        "fact_id": "f1",
+        "status": "known",
+        "source_event_id": null
+      },
+      "k4": {
+        "actor_id": "c3",
+        "fact_id": "f1",
+        "status": "unknown",
+        "source_event_id": null
+      },
+      "k5": {
+        "actor_id": "c5",
+        "fact_id": "f1",
+        "status": "unknown",
+        "source_event_id": null
+      },
+      "k6": {
+        "actor_id": "c8",
+        "fact_id": "f1",
+        "status": "unknown",
+        "source_event_id": null
+      },
+      "k7": {
+        "actor_id": "c4",
+        "fact_id": "f1",
+        "status": "unknown",
+        "source_event_id": null
+      },
+      "k8": {
+        "actor_id": "c6",
+        "fact_id": "f1",
+        "status": "unknown",
+        "source_event_id": null
+      },
+      "k9": {
+        "actor_id": "c1",
+        "fact_id": "f2",
+        "status": "known",
+        "source_event_id": "e2"
+      },
+      "k10": {
+        "actor_id": "c2",
+        "fact_id": "f2",
+        "status": "known",
+        "source_event_id": "e2"
+      },
+      "k11": {
+        "actor_id": "c3",
+        "fact_id": "f2",
+        "status": "known",
+        "source_event_id": "e2"
+      },
+      "k12": {
+        "actor_id": "c5",
+        "fact_id": "f2",
+        "status": "known",
+        "source_event_id": "e2"
+      },
+      "k13": {
+        "actor_id": "c7",
+        "fact_id": "f2",
+        "status": "known",
+        "source_event_id": "e2"
+      }
+    },
+    "threads": {
+      "t1": {
+        "id": "t1",
+        "description": "Илья узнал, что он приёмный и был усыновлён как муж Кати. Он ушёл из дома.",
+        "state": "Илья ушёл, семья в поместье",
+        "status": "active",
+        "character_ids": [
+          "c1",
+          "c2",
+          "c3",
+          "c5",
+          "c7"
+        ],
+        "relevance": 0.9,
+        "last_event_id": "e2"
+      },
+      "t2": {
+        "id": "t2",
+        "description": "Илья курит с Лизой у суда.",
+        "state": "Идёт разговор или молчание",
+        "status": "active",
+        "character_ids": [
+          "c1",
+          "c8"
+        ],
+        "relevance": 0.6,
+        "last_event_id": null
+      }
+    },
+    "events": {
+      "e1": {
+        "id": "e1",
+        "text": "Илья узнал, что он приёмный и был усыновлён как муж Кати.",
+        "participants": [
+          "c1"
+        ],
+        "witnesses": [
+          "c1"
+        ],
+        "minute": 4740,
+        "scene_id": null,
+        "fact_ids": [
+          "f1"
+        ],
+        "medium": "initial",
+        "evidence": "Событие произошло вчера вечером",
+        "source_sequence": 0,
+        "player_observed": true
+      },
+      "e2": {
+        "id": "e2",
+        "text": "Илья собрал вещи, оставил ключи и ушёл из поместья.",
+        "participants": [
+          "c1"
+        ],
+        "witnesses": [
+          "c2",
+          "c3",
+          "c5",
+          "c7"
+        ],
+        "minute": 4750,
+        "scene_id": null,
+        "fact_ids": [
+          "f2"
+        ],
+        "medium": "initial",
+        "evidence": "Илья ушёл навсегда",
+        "source_sequence": 1,
+        "player_observed": true
+      }
+    },
+    "scheduled_events": {},
+    "scenes": {
+      "s1": {
+        "id": "s1",
+        "location": "Здание суда",
+        "participants": [
+          "c1",
+          "c8"
+        ],
+        "text": "Пятница, 8:00. Илья стоит у входа в здание суда и курит. Рядом Лиза Островская тоже курит.",
+        "start_minute": 4800,
+        "end_minute": 4800,
+        "status": "active",
+        "event_ids": []
+      }
+    },
+    "scene_records": {},
+    "objective_relations": {},
+    "conditions": {},
+    "organizations": {
+      "o1": {
+        "id": "o1",
+        "name": "Apex Group Inc.",
+        "kind": "корпорация",
+        "status": "active",
+        "since": null,
+        "until": null,
+        "since_date": null,
+        "until_date": null,
+        "context": "Владелец — Сергей Волков",
+        "evidence": "Семейный бизнес",
+        "fact_id": null,
+        "closure_fact_id": null,
+        "outcome": "",
+        "aliases": [],
+        "location_ids": [
+          "l4"
+        ],
+        "name_history": []
+      }
+    },
+    "residences": {},
+    "roles": {},
+    "possessions": {},
+    "contacts": {},
+    "pregnancies": {},
+    "reproductive_events": {},
+    "naming_decisions": {},
+    "communication": {
+      "text_message": true,
+      "voice_call": true,
+      "presentation": "phone",
+      "region": "RU",
+      "ring_timeout_minutes": 5,
+      "emergency_numbers": {
+        "medical": "103",
+        "police": "102",
+        "fire": "101"
+      }
+    }
+  },
+  "draft_contract": 4,
+  "relationships": [
+    {
+      "source_id": "c1",
+      "target_id": "c8",
+      "text": "Дружеские и уважительные отношения"
+    },
+    {
+      "source_id": "c8",
+      "target_id": "c1",
+      "text": "Дружеские и уважительные отношения"
+    },
+    {
+      "source_id": "c1",
+      "target_id": "c2",
+      "text": "Мать (приёмная), любила его как родного"
+    },
+    {
+      "source_id": "c2",
+      "target_id": "c1",
+      "text": "Любит как родного сына"
+    },
+    {
+      "source_id": "c1",
+      "target_id": "c3",
+      "text": "Брат, сложные отношения после ухода"
+    },
+    {
+      "source_id": "c3",
+      "target_id": "c1",
+      "text": "Брат, предан близким"
+    },
+    {
+      "source_id": "c1",
+      "target_id": "c5",
+      "text": "Сестра, очень близки с детства"
+    },
+    {
+      "source_id": "c5",
+      "target_id": "c1",
+      "text": "Очень близка с Ильёй"
+    },
+    {
+      "source_id": "c1",
+      "target_id": "c7",
+      "text": "Отец (приёмный), отказывал в работе"
+    },
+    {
+      "source_id": "c7",
+      "target_id": "c1",
+      "text": "Любит как родного сына, но скрывал правду"
+    },
+    {
+      "source_id": "c1",
+      "target_id": "c4",
+      "text": "Знакомы с детства, Соня засматривается на Илью"
+    },
+    {
+      "source_id": "c4",
+      "target_id": "c1",
+      "text": "Считает его классным, засматривается"
+    },
+    {
+      "source_id": "c1",
+      "target_id": "c6",
+      "text": "Приятель, пересекаются в суде"
+    },
+    {
+      "source_id": "c6",
+      "target_id": "c1",
+      "text": "Приятель, профессиональная солидарность"
+    }
+  ],
+  "creation_settings": {
+    "narrative_pacing": {
+      "preset": "moderate",
+      "intensity": 0.45,
+      "quiet_minutes": 360,
+      "pressure_limit": 1.5,
+      "disruption": 0.3,
+      "escalation": 0.4,
+      "thread_cap": 4,
+      "candidate_budget": 2,
+      "relevance_floor": 0.6,
+      "extra_llm_calls": 0
+    },
+    "narrative_risk": {
+      "preset": "realistic",
+      "minor_illness": true,
+      "serious_illness": true,
+      "injury": true,
+      "permanent_injury": false,
+      "relationship_loss": true,
+      "career_loss": true,
+      "life_role_loss": true,
+      "major_accident": true,
+      "npc_death": true,
+      "protagonist_death": false
+    },
+    "primary_genre": "slice_of_life",
+    "secondary_genres": [
+      "family_saga",
+      "romance",
+      "drama"
+    ],
+    "custom_genre": "",
+    "npc_expressiveness": "expressive",
+    "cast_preset": "medium",
+    "core_npcs": 6,
+    "secondary_npcs": 12,
+    "world_type": "real_world",
+    "geography": ""
+  }
+}

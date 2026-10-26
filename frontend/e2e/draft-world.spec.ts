@@ -37,6 +37,8 @@ for(const width of [360,390,412,430,1280,1440,1920]){
   expect(geometry.workshop,JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.client!+1);
   await page.screenshot({path:`test-results/draft-${width}.png`,fullPage:false});
   await page.reload();await nav(page,'Создать');
+  await expect(page.getByRole('heading',{name:'Смысловая проверка не завершена'})).toBeVisible();
+  await page.getByRole('button',{name:'Повторить проверку',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
   await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
   await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
