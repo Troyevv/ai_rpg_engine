@@ -90,6 +90,18 @@ class RuntimeStorage:
                 config['_context_selection'] = selection
                 db.execute('UPDATE game_jobs SET config_json=? WHERE id=?', (dump(config), job_id))
 
+    def save_communication_context(self, job_id, frames, before):
+        """Checkpoint bounded provider decisions, guarded against stopped/stale workers.
+
+        The original before snapshot is immutable. Only this job's captured
+        frame responses grow; retries replay them and variants record the result.
+        """
+        with self.connect() as db:
+            db.execute("""UPDATE game_jobs SET context_json=?,memory_before_json=COALESCE(memory_before_json,?)
+                WHERE id=? AND kind='communication' AND status IN ('generating','extracting')
+                AND (? IS NULL OR attempt_epoch=?)""",
+                (dump(frames),dump(before),job_id,getattr(self,'worker_epoch',None),getattr(self,'worker_epoch',None)))
+
     def record_repair(self, job_id, diagnostic):
         with self.connect() as db:
             records=json.loads(db.execute('SELECT repair_diagnostics_json FROM game_jobs WHERE id=?',(job_id,)).fetchone()[0] or '[]')
@@ -307,11 +319,25 @@ class RuntimeStorage:
             return after
 
     def update_narrative_policy(self, save_id, revision, policy):
-        from copy import deepcopy
         from backend.services.narrative_policy import PolicyUpdate
+        validated=PolicyUpdate.model_validate(dict(policy,revision=revision)).model_dump(exclude={'revision'})
+        self._update_game_policy(save_id, revision, validated, 'narrative_policy_changed')
+
+    def configure_weather(self, save_id, revision, profile):
+        from backend.runtime_v3.models import WeatherProfile
+        snapshot=self.get_snapshot(save_id)
+        state=snapshot['world_state']
+        if state['meta'].get('weather') is not None:
+            raise ValueError('Климат уже установлен. Его история сохраняется.')
+        if not set(profile['regions']) <= set(state['locations']):
+            raise ValueError('Регион погоды отсутствует в мире.')
+        value=WeatherProfile.model_validate(dict(profile,since_minute=state['meta']['world_time'])).model_dump()
+        self._update_game_policy(save_id, revision, {'weather':value}, 'weather_configured')
+
+    def _update_game_policy(self, save_id, revision, validated, kind):
+        from copy import deepcopy
         from backend.runtime_v3.repository import append_history, migrate_snapshot
         from backend.repositories.living_world import project
-        validated=PolicyUpdate.model_validate(dict(policy,revision=revision)).model_dump(exclude={'revision'})
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             self._assert_idle(db,save_id)
@@ -326,7 +352,7 @@ class RuntimeStorage:
             previous={k:meta[k] for k in validated}
             if previous==validated:return
             meta.update(validated)
-            batch=dict(state_changes=[dict(kind='narrative_policy_changed',before=previous,after=validated,
+            batch=dict(state_changes=[dict(kind=kind,before=previous,after=validated,
                 turn_id=meta['turn_id'],minute=meta['world_time'])])
             after['history_head']=append_history(db,prior.get('history_head'),batch)
             parent=db.execute('SELECT active_variant_id FROM turns WHERE save_id=? ORDER BY sequence DESC LIMIT 1',(save_id,)).fetchone()
@@ -336,6 +362,12 @@ class RuntimeStorage:
             db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?',(dump(after),save_id))
 
     def remote_action(self, save_id, revision, command):
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            return self._remote_action(db, save_id, revision, command)
+
+    def _remote_action(self, db, save_id, revision, command):
+        """Shared transaction boundary for controls and dispatch + continuation."""
         from backend.runtime_v3.remote import apply
         from backend.runtime_v3.remote_models import RemoteCommand
         from backend.runtime_v3.repository import append_history, migrate_snapshot
@@ -343,31 +375,29 @@ class RuntimeStorage:
         from backend.repositories.living_world import project
         command = RemoteCommand.model_validate(command).model_dump()
         digest = stable_id('remote_command', command)
-        with self.connect() as db:
-            db.execute('BEGIN IMMEDIATE')
-            self._assert_idle(db, save_id)
-            row = db.execute('SELECT * FROM saves WHERE id=?', (save_id,)).fetchone()
-            if not row: raise ValueError('Прохождение не найдено.')
-            source = json.loads(row['state_json'])
-            if source.get('mode')=='tabletop' or source.get('runtime')=='tabletop':
-                raise ValueError('Телефон доступен только в Narrative.')
-            prior, _ = migrate_snapshot(db, source)
-            receipt = db.execute("""WITH RECURSIVE lineage(id,parent_id,payload_json) AS (
-                SELECT id,parent_id,payload_json FROM world_history_v3 WHERE id=?
-                UNION ALL SELECT h.id,h.parent_id,h.payload_json FROM world_history_v3 h JOIN lineage l ON h.id=l.parent_id)
-                SELECT j.value FROM lineage,json_each(lineage.payload_json,'$.state_changes') j
-                WHERE json_extract(j.value,'$.operation_id')=? AND json_extract(j.value,'$.kind')='remote_receipt' LIMIT 1""",
-                (prior.get('history_head'), command['operation_id'])).fetchone()
-            if receipt:
-                if json.loads(receipt[0])['command_digest'] != digest: raise ValueError('ID операции уже использован с другими данными.')
-                return prior
-            if row['revision'] != revision: raise ValueError('Сейв изменился. Обнови телефон.')
-            after, batch = apply(prior, command)
-            batch['state_changes'].append(dict(kind='remote_receipt', operation_id=command['operation_id'],command_digest=digest))
-            after['history_head'] = append_history(db, prior.get('history_head'), batch)
-            parent = db.execute('SELECT active_variant_id FROM turns WHERE save_id=? ORDER BY sequence DESC LIMIT 1',(save_id,)).fetchone()
-            db.execute('INSERT INTO actor_switches(save_id,revision,before_json,after_json,parent_variant_id) VALUES(?,?,?,?,?)',
-                (save_id, revision, dump(prior), dump(after), parent[0] if parent else None))
-            project(db, save_id, after)
-            db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?', (dump(after),save_id))
-            return after
+        row = db.execute('SELECT * FROM saves WHERE id=?', (save_id,)).fetchone()
+        if not row: raise ValueError('Прохождение не найдено.')
+        source = json.loads(row['state_json'])
+        if source.get('mode')=='tabletop' or source.get('runtime')=='tabletop':
+            raise ValueError('Телефон доступен только в Narrative.')
+        prior, _ = migrate_snapshot(db, source)
+        receipt = db.execute("""WITH RECURSIVE lineage(id,parent_id,payload_json) AS (
+            SELECT id,parent_id,payload_json FROM world_history_v3 WHERE id=?
+            UNION ALL SELECT h.id,h.parent_id,h.payload_json FROM world_history_v3 h JOIN lineage l ON h.id=l.parent_id)
+            SELECT j.value FROM lineage,json_each(lineage.payload_json,'$.state_changes') j
+            WHERE json_extract(j.value,'$.operation_id')=? AND json_extract(j.value,'$.kind')='remote_receipt' LIMIT 1""",
+            (prior.get('history_head'), command['operation_id'])).fetchone()
+        if receipt:
+            if json.loads(receipt[0])['command_digest'] != digest: raise ValueError('ID операции уже использован с другими данными.')
+            return prior
+        self._assert_idle(db, save_id)
+        if row['revision'] != revision: raise ValueError('Сейв изменился. Обнови телефон.')
+        after, batch = apply(prior, command)
+        batch['state_changes'].append(dict(kind='remote_receipt', operation_id=command['operation_id'],command_digest=digest))
+        after['history_head'] = append_history(db, prior.get('history_head'), batch)
+        parent = db.execute('SELECT active_variant_id FROM turns WHERE save_id=? ORDER BY sequence DESC LIMIT 1',(save_id,)).fetchone()
+        db.execute('INSERT INTO actor_switches(save_id,revision,before_json,after_json,parent_variant_id) VALUES(?,?,?,?,?)',
+            (save_id, revision, dump(prior), dump(after), parent[0] if parent else None))
+        project(db, save_id, after)
+        db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?', (dump(after),save_id))
+        return after

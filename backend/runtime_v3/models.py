@@ -166,7 +166,22 @@ from backend.runtime_v3.narrative_policy_models import (NarrativePacingProfile, 
 from backend.runtime_v3.remote_models import CommunicationCapabilities, Contact, Conversation, RemoteEvent
 
 
+class WeatherRegion(StrictModel):
+    climate: Literal['temperate', 'tropical', 'arid', 'polar']
+    hemisphere: Literal['north', 'south'] | None = None
+
+
+class WeatherProfile(StrictModel):
+    since_minute: int = Field(default=0, ge=0)
+    version: Literal[1] = 1
+    enabled: bool = True
+    seed: str = Field(min_length=1, max_length=100)
+    temperature_unit: Literal['C', 'F'] = 'C'
+    regions: dict[str, WeatherRegion] = Field(default_factory=dict, max_length=100)
+
+
 class Meta(StrictModel):
+    weather: WeatherProfile | None = None
     npc_expressiveness: Literal["realistic", "expressive", "hyperbolized"] = "realistic"
     communication: CommunicationCapabilities = Field(default_factory=CommunicationCapabilities)
     interaction_focus: Literal["physical", "call"] = "physical"

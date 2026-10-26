@@ -27,6 +27,6 @@ export function useJob(initial: Job | null | undefined, completed: () => void) {
       }
     });
     return () => stream.close();
-  }, [id, running]);
+  }, [id, running, initial?.attempt_epoch]);
   return { job, reconnecting };
 }

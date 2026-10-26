@@ -1,3 +1,4 @@
+import {formatDateLabel,calendarDate} from './gameDate';
 import {useEffect, useState} from 'react';
 import {api} from './api';
 import {Button} from './components/ui/button';
@@ -7,8 +8,8 @@ import type {Save} from './types';
 export type AdvanceRequest = {amount:number;unit:'weeks'|'months'|'years';max_llm_calls:number;reason:string};
 type Preview = {revision:number;label:string;interruption:{kind:string}|null;candidate_count:number;decisions:{id:string;context:string;kind:string}[]};
 
-export function LongTermAdvance({save,disabled,submit}:{save:Save;disabled:boolean;submit:(request:AdvanceRequest)=>void}) {
-  const [open,setOpen]=useState(false);
+export function LongTermAdvance({save,disabled,submit,open,onOpenChange:setOpen}:{save:Save;disabled:boolean;open:boolean;onOpenChange:(open:boolean)=>void;submit:(request:AdvanceRequest)=>void}) {
+
   const [request,setRequest]=useState<AdvanceRequest>({amount:1,unit:'years',max_llm_calls:4,reason:''});
   const [preview,setPreview]=useState<Preview|null>(null);
   const [error,setError]=useState('');
@@ -19,7 +20,7 @@ export function LongTermAdvance({save,disabled,submit}:{save:Save;disabled:boole
       .then(setPreview).catch(e=>{if(!controller.signal.aborted)setError(e.message)});
     return ()=>controller.abort();
   },[open,request,save.id,save.revision]);
-  return <><Button variant="ghost" disabled={disabled} onClick={()=>setOpen(true)}>Длительный переход</Button>
+  return <>
     <Dialog open={open} onOpenChange={setOpen}><DialogContent className="time-skip-sheet"><DialogHeader>
       <DialogTitle>Длительный переход</DialogTitle>
       <DialogDescription>Недели, месяцы или годы. Обязательства могут прервать переход. Возможности не становятся событиями без подтверждённого исхода; решения героя остаются за тобой.</DialogDescription>
@@ -32,7 +33,7 @@ export function LongTermAdvance({save,disabled,submit}:{save:Save;disabled:boole
     <p>Одна группа исходов требует двух обращений. При нулевом лимите выполняются только определённые переходы, остальные причины остаются нерешёнными.</p>
     <label>Причина<input value={request.reason} maxLength={1000} onChange={e=>setRequest({...request,reason:e.target.value})}/></label>
     {error&&<p role="alert">{error}</p>}
-    {preview&&<div aria-live="polite"><strong>{preview.label}</strong>{preview.interruption&&<p>Переход остановится для решения игрока.</p>}<p>Причин для рассмотрения: {preview.candidate_count}. Возможностей для героя: {preview.decisions.length}.</p></div>}
+    {preview&&<div aria-live="polite"><strong>{formatDateLabel(preview.label)}</strong>{preview.interruption&&<p>Переход остановится для решения игрока.</p>}<p>Причин для рассмотрения: {preview.candidate_count}. Возможностей для героя: {preview.decisions.length}.</p></div>}
     <Button disabled={disabled||!preview||preview.revision!==save.revision} onClick={()=>{submit(request);setOpen(false)}}>Подтвердить длительный переход</Button>
     </DialogContent></Dialog></>;
 }

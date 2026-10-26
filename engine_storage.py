@@ -6,6 +6,11 @@ import uuid
 ACTIVE = ('generating', 'extracting', 'validating')
 
 
+class ExistingJob(Exception):
+    def __init__(self, job_id):
+        self.job_id = job_id
+
+
 class EngineStorage:
     def init_engine(self):
         with self.connect() as db:
@@ -45,14 +50,58 @@ class EngineStorage:
             return dict(row)
 
     def begin_job(self, save_id, user_text, kind, config):
-        if kind not in ('start', 'turn', 'regenerate','background','pov','long_term'):
+        if kind not in ('start', 'turn', 'regenerate','background','pov','long_term','communication'):
             raise ValueError('Неизвестный тип хода.')
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
-            self._assert_idle(db, save_id)
             save = db.execute('SELECT * FROM saves WHERE id=?', (save_id,)).fetchone()
             if save is None:
                 raise ValueError('Прохождение не найдено.')
+            if kind == 'communication':
+                from backend.runtime_v3.communication import Continuation
+                config = dict(config)
+                command = config.pop('remote_command', None)
+                command_created = False
+                if command:
+                    if command['action'] not in ('send', 'call'):
+                        raise ValueError('Продолжение доступно для отправки сообщения или вызова.')
+                    is_duplicate = any(e['operation_id']==command['operation_id'] for e in json.loads(save['state_json'])['world_state']['remote_events'].values())
+                    if not is_duplicate and db.execute("SELECT 1 FROM game_jobs WHERE save_id=? AND revision=? AND narrative_complete=1 AND status IN ('error','stopped')",(save_id,save['revision'])).fetchone():
+                        raise ValueError('Предыдущее действие ещё не обработано. Повтори его обработку.')
+                    # Command + registration are atomic; provider work happens after commit.
+                    prior_revision = save['revision']
+                    snap = self._remote_action(db, save_id, config.get('expected_revision'), command)
+                    event = next(e for e in snap['world_state']['remote_events'].values() if e['operation_id'] == command['operation_id'])
+                    config['communication'] = dict(source_event_id=event['id'], owner_id=event['sender_id'], request_id=command['operation_id'])
+                    save = db.execute('SELECT * FROM saves WHERE id=?', (save_id,)).fetchone()
+                    command_created = save['revision'] != prior_revision
+                r = Continuation.model_validate(config.get('communication', {}))
+                snap = json.loads(save['state_json'])
+                if snap['world_state']['camera']['controlled_actor_id'] != r.owner_id:
+                    raise ValueError('Владелец телефона изменился.')
+                receipt = db.execute("""WITH RECURSIVE lineage(id,parent_id,payload_json) AS (
+                    SELECT id,parent_id,payload_json FROM world_history_v3 WHERE id=?
+                    UNION ALL SELECT h.id,h.parent_id,h.payload_json FROM world_history_v3 h JOIN lineage l ON h.id=l.parent_id)
+                    SELECT j.value FROM lineage,json_each(lineage.payload_json,'$.state_changes') j
+                    WHERE json_extract(j.value,'$.kind')='communication_receipt' AND json_extract(j.value,'$.request_id')=? LIMIT 1""", (snap.get('history_head'),r.request_id)).fetchone()
+                if receipt:
+                    previous_id = json.loads(receipt[0])['job_id']
+                    previous = db.execute('SELECT config_json FROM game_jobs WHERE id=?',(previous_id,)).fetchone()
+                    if not previous or json.loads(previous[0]).get('communication') != r.model_dump():
+                        raise ValueError('ID продолжения уже использован с другими данными.')
+                    raise ExistingJob(previous_id)
+                existing = db.execute("SELECT id,config_json FROM game_jobs WHERE save_id=? AND revision=? AND kind='communication' ORDER BY rowid DESC", (save_id,save['revision'])).fetchall()
+                for old in existing:
+                    previous = json.loads(old['config_json']).get('communication', {})
+                    if previous == r.model_dump():
+                        raise ExistingJob(old['id'])
+                    if previous.get('request_id') == r.request_id:
+                        raise ValueError('ID продолжения уже использован с другими данными.')
+                if command:
+                    if not command_created:
+                        raise ValueError('Исходный запрос уже обработан в другой ветке. Для нового ожидания используй явное продолжение связи.')
+                    config['expected_revision'] = save['revision']
+            self._assert_idle(db, save_id)
             if config.get('expected_revision', save['revision']) != save['revision']:
                 raise ValueError('Сейв уже изменился. Обнови страницу перед следующим действием.')
             last = db.execute('SELECT * FROM turns WHERE save_id=? ORDER BY sequence DESC LIMIT 1', (save_id,)).fetchone()
@@ -89,7 +138,7 @@ class EngineStorage:
                     original=db.execute('SELECT config_json FROM game_jobs WHERE id=?',(v['job_id'],)).fetchone()
                     if original and '_prompts' in json.loads(original[0]):
                         config=dict(config,_prompts=json.loads(original[0])['_prompts'])
-                        for key in ('_context_selection','long_term_advance','time_skip','actor_id','source_turn_id','source_node_id','camera_actor_id','camera_scene_id','camera_direct'):
+                        for key in ('_context_selection','long_term_advance','communication','time_skip','actor_id','source_turn_id','source_node_id','camera_actor_id','camera_scene_id','camera_direct'):
                             if key in json.loads(original[0]):config[key]=json.loads(original[0])[key]
                 if context_json is None:
                     raise ValueError('У старого хода нет снимка исходного контекста. Точная перегенерация недоступна.')
@@ -110,6 +159,9 @@ class EngineStorage:
             if kind == 'long_term':
                 from backend.runtime_v3.long_term import plan
                 plan(before_snapshot, config.get('long_term_advance', {}))
+            if kind == 'communication':
+                from backend.runtime_v3.communication import validate
+                validate(before_snapshot, config.get('communication', {}))
             from backend.runtime_v3.camera import controlled
             if kind == 'turn' and controlled(json.loads(before)) is None and not config.get('time_skip'):
                 raise ValueError('Камера наблюдает мир. Выбери персонажа для управления или продолжи наблюдение.')
@@ -134,6 +186,8 @@ class EngineStorage:
             session_id = self.ensure_session(db, save_id)
             db.execute('UPDATE game_jobs SET context_json=?,memory_before_json=?,session_id=? WHERE id=?', (context_json,memory_before,session_id,job_id))
             db.execute('UPDATE game_jobs SET pov_actor_id=? WHERE id=?',(None if kind=='background' else config.get('actor_id') if kind=='pov' else controlled(json.loads(before)),job_id))
+            if kind == 'communication':
+                db.execute('UPDATE game_jobs SET narrative_complete=1 WHERE id=?',(job_id,))
         return job_id
 
     @staticmethod
@@ -162,7 +216,7 @@ class EngineStorage:
                 raise ValueError('Сейв изменился. Этот черновик устарел.')
             settings = json.loads(job['config_json'])
             if config:
-                settings.update({k:v for k,v in config.items() if k not in ('target_turn_id','rollback_following','expected_revision','_prompts','actor_id','source_turn_id','source_node_id')})
+                settings.update({k:v for k,v in config.items() if k not in ('target_turn_id','rollback_following','expected_revision','_prompts','actor_id','source_turn_id','source_node_id','communication','remote_command')})
             session_id = self.ensure_session(db, job['save_id'])
             db.execute("UPDATE game_jobs SET status='extracting',attempt_epoch=attempt_epoch+1,error='',warnings_json='[]',config_json=?,session_id=? WHERE id=?", (json.dumps(settings),session_id,job_id))
 

@@ -134,6 +134,8 @@ def _calendar_evening(state):
     scene.update(start_minute=clock,end_minute=clock,text='Вечер в доме Лариных. Кирилл, Вера и Тимур рассматривают карту.')
     for actor in state['world']['characters'].values(): actor['minute']=clock
     state['world']['characters']['qa_vera']['birth_date']='1993-10-09'
+    state['world']['facts']['qa_vera_birthday']=dict(id='qa_vera_birthday',text='Вера сообщила Кириллу дату рождения: 9 октября 1993 года.',secret=False,character_ids=['qa_vera'],claim=dict(subject_id='qa_vera',predicate='birth_date',value='1993-10-09'),evidence=[])
+    state['world']['knowledge'][ACTOR_ID+':qa_vera_birthday']=dict(actor_id=ACTOR_ID,fact_id='qa_vera_birthday',status='known')
     state['world']['scheduled_events']['qa_friday_trip'] = dict(id='qa_friday_trip',description='Поездка в сад в пятницу вечером.',
         participants=[ACTOR_ID,'qa_elena'],due_minute=0,status='pending',condition='В пятницу вечером')
     return state
@@ -155,6 +157,8 @@ def _commitments(state):
     events = state['world']['scheduled_events']
     events['qa_friday_trip'].update(commitment=True, temporal=dict(weekday=4,day_period='evening'),
         condition='После работы', evidence='Кирилл и Елена договорились о поездке.', source_turn=0)
+    state['world']['facts']['qa_school_calendar']=dict(id='qa_school_calendar',text='Кирилл прочитал школьный календарь каникул.',secret=False,character_ids=[ACTOR_ID],claim=dict(subject_id='qa_school_break',predicate='scheduled_event',value='known'),evidence=[])
+    state['world']['knowledge'][ACTOR_ID+':qa_school_calendar']=dict(actor_id=ACTOR_ID,fact_id='qa_school_calendar',status='known')
     events['qa_sunday_return'] = dict(id='qa_sunday_return', description='Возвращение из сада домой.',
         participants=[ACTOR_ID], due_minute=0, status='pending', commitment=True,
         temporal=dict(weekday=6,day_period='evening'), depends_on=['qa_friday_trip'],
@@ -709,6 +713,63 @@ def _phone(state):
 CHECKPOINTS['phone'] = _phone
 
 
+def _ui_calendar(state):
+    state = _commitments(state)
+    state['world_clock']['calendar']['profile']['observances'] += [
+        dict(id='private-date',name='Скрытая личная дата',month=10,day=8,character_ids=['qa_oleg']),
+        dict(id='own-date',name='Годовщина первой восстановленной карты',month=10,day=8,character_ids=[ACTOR_ID]),
+    ]
+    for i,status in enumerate(('pending','resolved','cancelled')):
+        state['world']['scheduled_events'][f'qa_ui_{i}']=dict(id=f'qa_ui_{i}',description=['Встреча реставраторов и обсуждение очень длинного названия выставки','Получение архивных материалов','Отменённая поездка на пристань'][i],participants=[ACTOR_ID],due_minute=0,status=status,commitment=True,temporal=dict(date='2026-10-08',time='10:00'),evidence='Исходный план QA.',source_turn=0)
+    return state
+
+
+def _ui_custom_calendar(state):
+    for actor in state['world']['characters'].values():
+        actor.pop('birth_date',None)
+    state['world_clock']['calendar']=dict(start_minute=START_MINUTE,start_date='0042-02-25',start_weekday=4,profile=dict(id='qa-custom',system='custom',month_lengths=[20,25],month_names=['Свет','Тень'],weekday_names=['Первый','Второй','Третий','Четвёртый','Пятый'],observances=[dict(id='oath',name='Годовщина клятвы',month=2,day=25)]))
+    return state
+
+
+def _ui_family(state):
+    from backend.runtime_v3.models import ObjectiveRelation
+    state=_family(state);world=state['world']
+    def relation(rid,kind,a,b,status='active',certainty='known',outcome=''):
+        fid=rid+'-fact'
+        world['facts'][fid]=dict(id=fid,text=f'Семейная связь {a}, {b}.',secret=True,character_ids=[a,b],evidence=['QA'])
+        world['knowledge'][ACTOR_ID+':'+fid]=dict(actor_id=ACTOR_ID,fact_id=fid,status=certainty)
+        if kind in ('spouse','partner'):a,b=sorted((a,b))
+        world['objective_relations'][rid]=ObjectiveRelation(id=rid,kind=kind,source_id=a,target_id=b,fact_id=fid,status=status,outcome=outcome,since=0,until=1 if status=='closed' else None,closure_fact_id=fid if status=='closed' else None,evidence='QA',source_turn=0).model_dump()
+    relation('ui-ex','spouse','qa_timur','qa_marina','closed',outcome='divorced')
+    relation('ui-partner','partner','qa_timur','qa_elena')
+    relation('ui-adoption','adoptive_parent','qa_timur','qa_roman')
+    relation('ui-guardian','guardian','qa_marina','qa_roman',certainty='suspected')
+    # Oleg has no relatives; Zoya tests the public directory without Knowledge.
+    fid='ui-known-oleg'
+    world['facts'][fid]=dict(id=fid,text='Кирилл знаком с Олегом.',secret=False,character_ids=['qa_oleg'],evidence=['QA'])
+    world['knowledge'][ACTOR_ID+':'+fid]=dict(actor_id=ACTOR_ID,fact_id=fid,status='known')
+    return state
+
+
+def _ui_dense_family(state):
+    state=_ui_family(state);world=state['world']
+    from backend.runtime_v3.models import ObjectiveRelation
+    for i in range(100):
+        cid=f'qa_family_{i}'
+        card=deepcopy(state['characters'][1]);card.update(id=cid,name=f'Родственник {i+1} с длинным именем',is_player=False)
+        state['characters'].append(card)
+        world['characters'][cid]=deepcopy(world['characters']['qa_roman']);world['characters'][cid]['id']=cid
+        parent='qa_timur' if i<10 else f'qa_family_{i//10-1}'
+        fid=f'ui-dense-{i}'
+        world['facts'][fid]=dict(id=fid,text=f'Известное родство {parent} и {cid}.',secret=True,character_ids=[parent,cid],evidence=['QA'])
+        world['knowledge'][ACTOR_ID+':'+fid]=dict(actor_id=ACTOR_ID,fact_id=fid,status='known')
+        world['objective_relations'][fid]=ObjectiveRelation(id=fid,kind='parent',source_id=parent,target_id=cid,fact_id=fid,evidence='QA',source_turn=0).model_dump()
+    return state
+
+
+CHECKPOINTS.update({'ui-calendar':_ui_calendar,'ui-calendar-custom':_ui_custom_calendar,'ui-family':_ui_family,'ui-family-dense':_ui_dense_family})
+
+
 # #43 extends the same #78 fixture; original checkpoints stay unchanged.
 CHECKPOINTS['long-term'] = _pregnancy
 
@@ -725,3 +786,13 @@ def _seed_long_term(repository, save_id):
     with repository.connect() as db:
         db.execute('UPDATE saves SET state_json=? WHERE id=?', (json.dumps(snapshot, ensure_ascii=False), save_id))
     _seed_reproduction(repository, save_id, 'newborn')
+
+
+def _ui_public_directory(state):
+    state=_ui_family(state)
+    state['world']['knowledge']={}
+    state['world']['contacts']={}
+    state['world']['characters']['qa_zoya']['birth_date']='2000-10-09'
+    return state
+
+CHECKPOINTS['ui-public-directory']=_ui_public_directory

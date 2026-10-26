@@ -5,6 +5,7 @@ polling. Accepted events are staged with the job's immutable original context.
 """
 
 import json
+from backend.runtime_v3.remote_decision import RemoteDecision, parse as parse_decision, VERSION
 from copy import deepcopy
 from backend.runtime_v3.models import identity, Character, WorldHistoryV3
 from backend.runtime_v3.remote_models import RemoteCommand, RemoteProposal
@@ -126,6 +127,8 @@ def opportunities(state):
                 if cid not in latest or latest[cid]["ordinal"] < e["ordinal"]:
                     basis.setdefault(cid, []).append(e["id"])
     for cid, ids in sorted(basis.items()):
+        if not capabilities(state,cid)["can_act"] or any(c["blocked"] and {c["owner_id"],c["character_id"]} == {cid,external} for c in state["contacts"].values()):
+            continue
         recent = latest.get(cid)
         if recent and (
             recent["turn_id"] >= state["meta"]["turn_id"] - 2
@@ -143,7 +146,7 @@ def opportunities(state):
         paths += [
             dict(conversation_id=c["id"])
             for c in state["conversations"].values()
-            if c["group"] and {cid, external} <= members(c)
+            if {cid, external} <= members(c)
         ]
         if paths:
             result.append(
@@ -165,6 +168,7 @@ def planning_context(snapshot, options):
     actors = {r["actor_id"] for r in options if r["actor_id"] in state["characters"]}
     cards = {c["id"]: c for c in snapshot["character_cards"]}
     data = []
+    source_ids = {eid for option in options for eid in option.get('basis_ids', [])}
     for cid in sorted(actors):
         c = state["characters"][cid]
         knowledge = [
@@ -199,7 +203,7 @@ def planning_context(snapshot, options):
                         content=e["content"][:1000] if cid in e["read_by"] else None,
                     )
                     for e in state["remote_events"].values()
-                    if cid in e["recipient_ids"]
+                    if cid in e["recipient_ids"] and (not source_ids or e['id'] in source_ids)
                 ][-4:],
             )
         )
@@ -207,7 +211,9 @@ def planning_context(snapshot, options):
         dict(
             role="system",
             content="Select at most ONE optional grounded autonomous remote action. "
-            'Return JSON {"action":null} or {"action":RemoteProposal}. No prose. '
+            'Return a JSON object with required outer action: an operation object or null. No prose. '
+            'Example (substitute only listed IDs): {"action":{"actor_id":"npc_1","action":"answer","event_id":"call_1","basis_ids":["call_1"]}}. '
+            'No action example: {"action":null}. Outer action is the decision; inner action is the operation. '
             "Do not control the external actor. Do not invent knowledge. Use listed basis IDs and paths only. "
             "Message content is authored testimony in the active game language. "
             "Answer or decline only a listed actual pending incoming call; no forced answer. "
@@ -215,7 +221,7 @@ def planning_context(snapshot, options):
             "may identify: speaker_name, existing_character_id only from the exact-address existing_ids list. "
             "Do not invent a biography or turn an organization into a person; identify an individual operator. "
             "Schema: "
-            + json.dumps(RemoteProposal.model_json_schema(), ensure_ascii=False),
+            + json.dumps(RemoteDecision.model_json_schema(), ensure_ascii=False),
         ),
         dict(
             role="user",
@@ -406,16 +412,21 @@ def stage(snapshot, generate, operation_id):
             response_format={"type": "json_object"},
         )
     )
-    proposed = json.loads(answer).get("action")
     result = deepcopy(snapshot)
+    try:
+        proposed, diagnostic = parse_decision(answer)
+    except ValueError as exc:
+        result['_remote_batch'] = {'state_changes': [dict(kind='remote_rejected', code="decision_schema", contract=VERSION, error_type=type(exc).__name__)]}
+        return result
     if proposed is not None:
         try:
             result, batch = accept(snapshot, proposed, options, operation_id)
+            batch.setdefault("state_changes", []).append(dict(kind="remote_decision_parser", **diagnostic))
             result["_remote_batch"] = batch
         except ValueError as exc:
             # Rejection is recorded, but never enters Narrative as an actual cue.
             result["_remote_batch"] = {
-                "state_changes": [dict(kind="remote_rejected", code=str(exc)[:300])]
+                "state_changes": [dict(kind="remote_rejected", code="decision_runtime", error_type=type(exc).__name__)]
             }
     else:
         result["_remote_batch"] = {"state_changes": [dict(kind="remote_no_action")]}

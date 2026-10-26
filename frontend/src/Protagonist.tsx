@@ -622,7 +622,7 @@ export function Protagonist({
     <Dialog
       open={open}
       onOpenChange={(v) => {
-        if (!busy) onOpenChange(v);
+        if (!busy && (v || !save.state.protagonist_required)) onOpenChange(v);
       }}
     >
       <DialogContent className="protagonist-dialog mobile-sheet">
@@ -748,7 +748,7 @@ export function Protagonist({
         <div className="protagonist-actions">
           <Button
             variant="ghost"
-            disabled={busy}
+            disabled={busy || !!save.state.protagonist_required}
             onClick={() => onOpenChange(false)}
           >
             Отмена

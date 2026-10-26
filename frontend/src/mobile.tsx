@@ -1,5 +1,6 @@
+import {SceneClock} from './SceneClock';
 import {useEffect,useState} from 'react';
-import {BookOpen,Globe,Users,Brain,GitBranch,Menu,Settings2,Feather,Eye,EyeOff} from 'lucide-react';
+import {CalendarDays,BookOpen,Globe,Users,Brain,GitBranch,Menu,Settings2,Feather,Eye,EyeOff} from 'lucide-react';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from './components/ui/dialog';
 import {Button} from './components/ui/button';
 import type {Save,Scene} from './types';
@@ -23,7 +24,7 @@ export function useMobileViewport(mobile:boolean){
   return()=>{vv?.removeEventListener('resize',update);vv?.removeEventListener('scroll',update);window.removeEventListener('resize',update);document.removeEventListener('focusin',update);document.removeEventListener('focusout',update);document.documentElement.classList.remove('keyboard-open')};
  },[mobile]);
 }
-export function MobileNavigation({open,setOpen,world,go,inspect,settings,reading,toggleReading,branches}:{open:boolean;setOpen:(v:boolean)=>void;world:boolean;go:(v:'game'|'prepare')=>void;inspect:(v:'Мир'|'Персонажи'|'Память')=>void;settings:()=>void;reading:boolean;toggleReading:()=>void;branches:()=>void}){
+export function MobileNavigation({workspace,open,setOpen,world,go,inspect,settings,reading,toggleReading,branches}:{workspace:(section:"calendar"|"family")=>void;open:boolean;setOpen:(v:boolean)=>void;world:boolean;go:(v:'game'|'prepare')=>void;inspect:(v:'Мир'|'Персонажи'|'Память')=>void;settings:()=>void;reading:boolean;toggleReading:()=>void;branches:()=>void}){
  const act=(fn:()=>void)=>{setOpen(false);fn()};
  return <><Button size="icon" variant="ghost" aria-label="Меню игры" onClick={()=>setOpen(true)}><Menu/></Button>
  <Dialog open={open} onOpenChange={setOpen}><DialogContent className="mobile-sheet"><DialogHeader><DialogTitle>Меню игры</DialogTitle><DialogDescription>История, мир и инструменты</DialogDescription></DialogHeader>
@@ -32,6 +33,7 @@ export function MobileNavigation({open,setOpen,world,go,inspect,settings,reading
  <button disabled={!world} onClick={()=>act(()=>inspect('Мир'))}><Globe/>Мир</button>
  <button disabled={!world} onClick={()=>act(()=>inspect('Персонажи'))}><Users/>NPC</button>
  <button disabled={!world} onClick={()=>act(()=>inspect('Память'))}><Brain/>Память</button>
+ <button disabled={!world} onClick={()=>act(()=>workspace("calendar"))}><CalendarDays/>Календарь</button><button disabled={!world} onClick={()=>act(()=>workspace("family"))}><GitBranch/>Родословная</button>
  <button disabled={!world} onClick={()=>act(branches)}><GitBranch/>Ветки</button>
  </nav><div className="mobile-menu-tools">
  <Button variant="ghost" onClick={()=>act(()=>go('prepare'))}><Feather/>Создать</Button>
@@ -47,8 +49,8 @@ export function MobileScene({save,meta,busy,switchActor,background,openCharacter
  const nearby=meta?.present_ids.filter(id=>id!==actor)||[];
  return <div className="mobile-context">
  <div className="mobile-pov"><button disabled={busy} onClick={()=>setSheet('pov')}>{actor===null?"Наблюдение":name(actor)} ▾</button><button disabled={busy||!save.turns.length} onClick={background}>Мир без ГГ</button><button aria-label="Камера и журнал мира" onClick={openCamera}>◎</button></div>
- <button className="mobile-scene-line" onClick={()=>setSheet('scene')}>{meta?.time||'Время не задано'} · {meta?.location||'Место не задано'}{nearby.length?` · ${nearby.map(name).join(', ')}`:''} ▾</button>
+ <button className="mobile-scene-line" onClick={()=>setSheet('scene')}><SceneClock save={save} fallback={meta?.time}/> · {meta?.location||'Место не задано'}{nearby.length?` · ${nearby.map(name).join(', ')}`:''} ▾</button>
  <Dialog open={!!sheet} onOpenChange={v=>{if(!v)setSheet(null)}}><DialogContent className="mobile-sheet"><DialogHeader><DialogTitle>{sheet==='pov'?'За кого играть':'Текущая сцена'}</DialogTitle><DialogDescription>{sheet==='pov'?'Переход откроет сцену персонажа и варианты действий.':`${meta?.time||''} · ${meta?.location||''}`}</DialogDescription></DialogHeader>
- {sheet==='pov'?<div className="actor-list">{actor!==main&&<Button disabled={busy} onClick={()=>{setSheet(null);switchActor(main!)}}>Вернуться к {name(main)}</Button>}{save.state.characters.map(c=><button key={c.id} disabled={busy||c.id===actor} onClick={()=>{setSheet(null);switchActor(c.id)}}>{name(c.id)}{c.id===main?' (ГГ)':''}{c.id===actor?' · сейчас':''}</button>)}</div>:<><p>{save.state.scene}</p><div className="actor-list">{nearby.map(id=><button key={id} onClick={()=>{setSheet(null);openCharacter(id)}}>{name(id)}</button>)}</div></>}
+ {sheet==='pov'?<div className="actor-list">{actor!==main&&<Button disabled={busy} onClick={()=>{setSheet(null);switchActor(main!)}}>Вернуться к {name(main)}</Button>}{save.state.characters.map(c=><button key={c.id} disabled={busy||c.id===actor} onClick={()=>{setSheet(null);switchActor(c.id)}}>{name(c.id)}{c.id===main?' (ГГ)':''}{c.id===actor?' · сейчас':''}</button>)}</div>:<><Button onClick={()=>{setSheet(null);window.dispatchEvent(new CustomEvent('save-workspace',{detail:{section:'calendar'}}))}}>Открыть календарь</Button><p>{save.state.scene}</p><div className="actor-list">{nearby.map(id=><button key={id} onClick={()=>{setSheet(null);openCharacter(id)}}>{name(id)}</button>)}</div></>}
  </DialogContent></Dialog></div>;
 }

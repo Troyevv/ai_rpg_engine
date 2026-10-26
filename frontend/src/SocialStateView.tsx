@@ -11,8 +11,8 @@ export function SocialStateView({state,actor,saveId}:{state:State;actor?:string;
  const life=(!actor||actor===state.controlled_actor_id)?state.life_state:null;
  const residences=(state.residence_roles?.residences||[]).filter(r=>!actor||r.actor_id===actor);
  const roles=(state.residence_roles?.roles||[]).filter(r=>!actor||r.actor_id===actor);
- if(!links.length&&!derived.length&&!life&&!residences.length&&!roles.length)return null;
- return <section aria-label="Семья и социальные связи"><h3>Семья и социальные связи</h3>
+
+ return <section aria-label="Семья и социальные связи"><h3>Семья и социальные связи</h3>{saveId&&<button onClick={()=>{window.dispatchEvent(new CustomEvent('save-workspace',{detail:{section:'family',root:actor}}))}}>Открыть родословную</button>}
   <p className="muted small">Известно управляемому персонажу. Неизвестные связи не показаны.</p>
   {life&&<><p>Состояние персонажа: {lifeLabel(life.life_status)}</p>
    {life.conditions.map(c=><p key={c.id}>{c.description} · {{active:'Действует',resolved:'Завершено',cancelled:'Отменено',unknown_outcome:'Исход неизвестен'}[c.status]}{c.duration==='persistent'?' · длительное ограничение':''}</p>)}

@@ -1,0 +1,54 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+Running 38 tests using 1 worker
+
+(node:33) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [desktop] › e2e/completion-matrix.spec.ts:8:1 › T04-T08 calendar agenda, empty dates, private observance and two skins (3.4s)
+  ✓   2 [desktop] › e2e/completion-matrix.spec.ts:30:1 › T06 custom calendar has two months, five weekdays and a real year boundary (1.0s)
+[WebServer] Semantic retrieval unavailable (ModuleNotFoundError); structural fallback
+  ✓   3 [desktop] › e2e/completion-matrix.spec.ts:42:1 › T10-T13 separate family, known empty family, secrecy and accessible graph (2.7s)
+  ✓   4 [desktop] › e2e/completion-matrix.spec.ts:57:1 › T12 dense family is bounded and can be recentered from accessible list (3.7s)
+  ✓   5 [desktop] › e2e/completion-matrix.spec.ts:68:1 › T03 T11 contextual date and empty character card open the shared workspace (2.3s)
+  ✓   6 [desktop] › e2e/completion-matrix.spec.ts:86:1 › public family and birthday directory works without Knowledge or contacts (1.9s)
+  ✓   7 [desktop] › e2e/phone-completion.spec.ts:16:1 › T15 T18 outgoing call and automatic read reply through real jobs (5.8s)
+  ✓   8 [desktop] › e2e/phone-completion.spec.ts:61:2 › T16 decline completes without a manual turn (2.0s)
+  ✓   9 [desktop] › e2e/phone-completion.spec.ts:61:2 › T16 silent completes without a manual turn (1.9s)
+  ✓  10 [desktop] › e2e/phone-completion.spec.ts:71:1 › T19 read without reply stops and explicit wait is bounded (3.1s)
+  ✓  11 [desktop] › e2e/phone-completion.spec.ts:87:1 › T22 provider failure retains send, retry/reload does not resend (4.6s)
+  ✓  12 [desktop] › e2e/phone-completion.spec.ts:105:1 › T14 T17 T25 incoming call preserves physical turn and phone draft in two skins (6.6s)
+  ✓  13 [desktop] › e2e/phone-completion.spec.ts:149:1 › technical call failure preserves canonical time and ringing; Retry uses original call (2.8s)
+(node:490) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  14 [desktop] › e2e/runtime-handoff.spec.ts:6:1 › original export identities and rejected opening recover through real API then turn reload turn (7.6s)
+  ✓  15 [desktop] › e2e/tabletop.spec.ts:28:1 › generated campaign, quest, combat, loot, expansion and real server restart (15.4s)
+  ✓  16 [desktop] › e2e/tabletop.spec.ts:284:1 › invalid generated draft shows all diagnostics and requires explicit correction (1.2s)
+  ✓  17 [desktop] › e2e/tabletop.spec.ts:339:1 › AI DM check and choice have durable mechanical controls (3.8s)
+  ✓  18 [desktop] › e2e/tabletop.spec.ts:403:1 › point buy and AI portrait are reviewed before character creation (2.2s)
+  ✓  19 [desktop] › e2e/tabletop.spec.ts:456:1 › wizard creator and spellbook keep casting pending across reload (4.0s)
+(node:666) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  20 [mobile] › e2e/completion-matrix.spec.ts:8:1 › T04-T08 calendar agenda, empty dates, private observance and two skins (4.1s)
+  ✓  21 [mobile] › e2e/completion-matrix.spec.ts:30:1 › T06 custom calendar has two months, five weekdays and a real year boundary (1.5s)
+[WebServer] Semantic retrieval unavailable (ModuleNotFoundError); structural fallback
+  ✓  22 [mobile] › e2e/completion-matrix.spec.ts:42:1 › T10-T13 separate family, known empty family, secrecy and accessible graph (3.3s)
+  ✓  23 [mobile] › e2e/completion-matrix.spec.ts:57:1 › T12 dense family is bounded and can be recentered from accessible list (3.5s)
+  ✓  24 [mobile] › e2e/completion-matrix.spec.ts:68:1 › T03 T11 contextual date and empty character card open the shared workspace (2.8s)
+  ✓  25 [mobile] › e2e/completion-matrix.spec.ts:86:1 › public family and birthday directory works without Knowledge or contacts (2.5s)
+  ✓  26 [mobile] › e2e/phone-completion.spec.ts:16:1 › T15 T18 outgoing call and automatic read reply through real jobs (6.2s)
+  ✓  27 [mobile] › e2e/phone-completion.spec.ts:61:2 › T16 decline completes without a manual turn (2.3s)
+  ✓  28 [mobile] › e2e/phone-completion.spec.ts:61:2 › T16 silent completes without a manual turn (2.5s)
+  ✓  29 [mobile] › e2e/phone-completion.spec.ts:71:1 › T19 read without reply stops and explicit wait is bounded (2.8s)
+  ✓  30 [mobile] › e2e/phone-completion.spec.ts:87:1 › T22 provider failure retains send, retry/reload does not resend (3.8s)
+  ✓  31 [mobile] › e2e/phone-completion.spec.ts:105:1 › T14 T17 T25 incoming call preserves physical turn and phone draft in two skins (7.0s)
+  ✓  32 [mobile] › e2e/phone-completion.spec.ts:149:1 › technical call failure preserves canonical time and ringing; Retry uses original call (3.0s)
+(node:1107) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  33 [mobile] › e2e/runtime-handoff.spec.ts:6:1 › original export identities and rejected opening recover through real API then turn reload turn (7.5s)
+  ✓  34 [mobile] › e2e/tabletop.spec.ts:28:1 › generated campaign, quest, combat, loot, expansion and real server restart (15.4s)
+  ✓  35 [mobile] › e2e/tabletop.spec.ts:284:1 › invalid generated draft shows all diagnostics and requires explicit correction (1.1s)
+  ✓  36 [mobile] › e2e/tabletop.spec.ts:339:1 › AI DM check and choice have durable mechanical controls (4.1s)
+  ✓  37 [mobile] › e2e/tabletop.spec.ts:403:1 › point buy and AI portrait are reviewed before character creation (2.1s)
+  ✓  38 [mobile] › e2e/tabletop.spec.ts:456:1 › wizard creator and spellbook keep casting pending across reload (4.7s)
+
+  38 passed (2.7m)

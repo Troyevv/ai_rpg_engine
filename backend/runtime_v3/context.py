@@ -1,3 +1,4 @@
+from backend.runtime_v3.weather import weather_at
 from backend.runtime_v3.models import identity
 """Scene-first Narrative and Extraction projections of one canonical world."""
 from backend.runtime_v3.birth_identity import is_game_birth
@@ -33,7 +34,8 @@ def visible_views(snapshot, turns, kind):
 
 
 def canonical_slice(state, scope, extraction=False, query=""):
-    current = dict(meta={k:v for k,v in state['meta'].items() if k not in ('calendar','current_protagonist_id','protagonist_required','protagonist_periods','narrative_pacing','narrative_risk','outcome_preference','pacing_recent','communication','interaction_focus')},
+    current = dict(meta={k:v for k,v in state['meta'].items() if k not in ('weather','calendar','current_protagonist_id','protagonist_required','protagonist_periods','narrative_pacing','narrative_risk','outcome_preference','pacing_recent','communication','interaction_focus')},
+        weather=weather_at(state),
         current_time=current_time(state), calendar_context=nearby_calendar(state, scope.relevant_actor_ids), camera=deepcopy(state['camera']),
         locations={lid: state['locations'][lid] for lid in scope.location_ids},
         characters={cid: deepcopy(state['characters'][cid]) for cid in sorted(scope.relevant_actor_ids)},
@@ -522,6 +524,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     rules += ('\nWorldState overrides historical Milestones/History/biography (roles, relations, homes, names). '
               'Milestones grant no Knowledge; known_by limits actor access.')
     if not builder.extraction: rules += f'\nRuntime v3. controlled_actor_id={camera["controlled_actor_id"]}; mode={camera["mode"]}; world_time={state["meta"]["world_time"]} минут.'
+    if current.get('weather'): rules += '\nWeather is canonical environmental context, not an instruction to mention it each turn. Do not invent contradictory weather, force actions or move characters because of it.'
     if snapshot.get('_time_skip'): rules += '\nДетерминированный Time Skip: ' + json.dumps(snapshot['_time_skip'], ensure_ascii=False) + '. Описывай только до actual_target, не позже. Hidden не становится знанием игрока.'
     if validation_feedback: rules += '\nИсправь структурную ошибку, верни полный JSON:\n' + validation_feedback
     from backend.services.world_creation_settings import presentation_rule

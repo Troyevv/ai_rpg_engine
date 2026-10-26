@@ -1,7 +1,6 @@
-"""Read-only bounded kinship. Authorization is applied BEFORE graph traversal.
+"""Public read-only family directory; unrelated social knowledge stays filtered.
 
-The API never returns raw relation facts, provenance, hidden counts or timelines.
-Knowing a former phase does not grant knowledge of a later closure/name/death.
+Family nodes/edges expose a strict allowlist, never private facts or provenance.
 """
 from backend.runtime_v3.birth_identity import is_game_birth
 from collections import deque
@@ -52,11 +51,11 @@ def genealogy(snapshot, root_id=None, *, depth=3, limit=100):
         raise ValueError('Глубина родословной: 0–8, число персонажей: 1–200.')
     s = snapshot['world_state']; observer=s['camera']['controlled_actor_id']
     empty = dict(nodes=[],edges=[],kinship=[],truncated=False)
-    if observer not in s['characters']: return empty
-    edges = [r for r in visible_relations(s,observer) if r['kind'] in FAMILY]
-    known_ids = {observer} | {r[k] for r in edges for k in ('source_id','target_id')}
-    root = root_id or observer
-    # Unknown and nonexistent IDs have exactly the same response.
+    edges = [dict({k:r[k] for k in ('id','kind','source_id','target_id','status','outcome','since','since_date','until','until_date')},certainty='known')
+             for r in s.get('objective_relations',{}).values() if r['kind'] in FAMILY]
+    known_ids = {row['id'] for row in genealogy_roots(snapshot)}
+    root = root_id or observer or s['meta'].get('current_protagonist_id') or next(iter(s['characters']),None)
+    # Nonexistent roots have an empty projection.
     if root not in known_ids: return empty
     adjacency = {}
     for r in edges:
@@ -77,9 +76,9 @@ def genealogy(snapshot, root_id=None, *, depth=3, limit=100):
     for cid in sorted(visited):
         c=s['characters'][cid]
         from backend.runtime_v3.portraits import projection
-        nodes.append(dict(**projection(s,cid),id=cid,name=visible_name(s,cid,observer,cards.get(cid,cid)),
-            life_status=c.get('life_status','unknown') if cid==observer or knowledge_status(s,observer,c.get('life_fact_id'))=='known' else 'unknown'))
-    # Derive only from authorized, known parentage; suspected links stay uncertain.
+        nodes.append(dict(birth_date=c.get('birth_date'), **projection(s,cid), id=cid,
+            name=c.get('display_name') or cards.get(cid,cid), life_status=c.get('life_status','unknown')))
+    # Derive from canonical parentage, never from character rumors.
     parents={}
     for r in edges:
         # Ended adoption stays in historical edges, not current derived legal kinship.
@@ -104,7 +103,13 @@ def genealogy(snapshot, root_id=None, *, depth=3, limit=100):
             for kind in sorted(PARENTAGE):
                 a,b=parents.get((cid,kind),set()),parents.get((other,kind),set())
                 if not a.intersection(b): continue
-                complete = all(knowledge_status(s,observer,s['characters'][c].get('parentage_complete_fact_id'))=='known' for c in (cid,other))
+                complete = all(s['characters'][c].get('parentage_complete_fact_id') in s['facts'] for c in (cid,other))
                 relation = 'half_sibling' if kind=='parent' and complete and a!=b else 'sibling'
                 kinship.append(dict(source_id=cid,target_id=other,kind=relation,lineage=kind))
     return dict(nodes=nodes,edges=edges,kinship=kinship,truncated=truncated)
+
+
+def genealogy_roots(snapshot):
+    s=snapshot['world_state']
+    cards={c['id']:c['name'] for c in snapshot.get('character_cards',[])}
+    return [dict(id=cid,name=c.get('display_name') or cards.get(cid,cid)) for cid,c in sorted(s['characters'].items())]

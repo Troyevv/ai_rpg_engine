@@ -72,6 +72,7 @@ export interface State {
   residence_roles?:{residences:ResidenceRoleView[];roles:ResidenceRoleView[]};
   life_state?:{life_status:string;conditions:{id:string;description:string;status:string;duration:string}[];names:{previous:string;current:string;date:string|null;minute:number}[]}|null;
   genealogy?:Genealogy;
+  protagonist_periods?:{actor_id:string;since:number;until:number|null}[];
   objective_relations?:SocialRelation[];
   actor_capabilities?:{can_act:boolean;can_speak:boolean;can_move:boolean;conscious:boolean;can_perceive:boolean}|null;
   protagonist_required?:boolean;
@@ -89,7 +90,7 @@ export interface State {
   sections: Record<string, string>;
   characters: Character[];
   relationships: Relation[];
-  locations: { name: string; text: string }[];
+  locations: { id?:string; name: string; text: string }[];
   story_notes: string;
   facts?: { text: string; known_by: string[]; turn: number }[];
   plans?: { text: string; status: string }[];
@@ -122,6 +123,7 @@ export interface Choice {
   speech: string;
 }
 export interface Turn {
+  changes?: {communication?: {rejected?: string[]}};
   pov_actor_id?: string|null;
   audience_json?: string;
   node_id: string;
@@ -137,6 +139,7 @@ export interface Turn {
   timing?: Record<string,number>|null;
 }
 export interface Job {
+  attempt_epoch?: number;
   resumable?: boolean;
   replaces_id?:number|null;
   phase?: "scenario" | "world" | "retrying" | "validating" | "saving" | "editing" | "";

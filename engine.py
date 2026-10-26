@@ -55,7 +55,11 @@ def submit(storage, save_id, user_text='', kind='turn', config=None, api_key=Non
     check_config(config)
     if config.get('provider') == 'deepseek':
         api_key = deepseek_key(api_key)
-    job_id = storage.begin_job(save_id, user_text, kind, config)
+    from engine_storage import ExistingJob
+    try:
+        job_id = storage.begin_job(save_id, user_text, kind, config)
+    except ExistingJob as existing:
+        return existing.job_id
     if config.get('provider') == 'deepseek':
         launch(storage.path, job_id, api_key=api_key)
     else:
@@ -116,6 +120,10 @@ def run_job(path, job_id, handle):
             if job['status'] not in ('generating', 'extracting'):
                 return
             config = json.loads(job['config_json'])
+            if job['kind'] == 'communication':
+                from backend.services.communication import execute
+                execute(storage, job, handle, chat_stream)
+                return
             if job['kind'] == 'long_term':
                 from backend.services.long_term_advance import execute
                 execute(storage, job, handle, chat_stream)

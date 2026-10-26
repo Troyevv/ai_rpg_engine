@@ -39,11 +39,11 @@ export function JobView({
             ) : (
               <span className="status-dot" />
             )}
-            {job.kind === "background" && job.status === "extracting" ? "Обновляет последствия закулисной сцены" : labels[job.status] || job.status}
+            {job.kind==='communication'&&active(job)?'Обрабатывает связь…':job.kind === "background" && job.status === "extracting" ? "Обновляет последствия закулисной сцены" : labels[job.status] || job.status}
           </span>
           <span className="muted">Свернуть / раскрыть</span>
         </summary>
-        {active(job)&&<ol className="generation-stages" aria-label="Продолжение истории">{[['generating','Создаёт сцену'],['extracting','Обновляет мир'],['validating','Завершает ход']].map(([stage,label])=><li key={stage} aria-current={job.status===stage?'step':undefined}><span aria-hidden="true">{job.status===stage?'●':'○'}</span> {label}</li>)}</ol>}
+        {active(job)&&<ol className="generation-stages" aria-label="Продолжение истории">{(job.kind==='communication'?[['generating','Решение собеседника'],['validating','Сохраняет результат']]:[['generating','Создаёт сцену'],['extracting','Обновляет мир'],['validating','Завершает ход']]).map(([stage,label])=><li key={stage} aria-current={job.status===stage?'step':undefined}><span aria-hidden="true">{job.status===stage?'●':'○'}</span> {label}</li>)}</ol>}
         {job.user_text && <div className="player-action"><span className="eyebrow">Твоё действие</span><Markdown text={job.user_text}/></div>}
         {job.narrative && (
           <Markdown

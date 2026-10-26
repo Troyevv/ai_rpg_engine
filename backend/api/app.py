@@ -195,6 +195,8 @@ def create_app(db_path=None, recover=True):
 
     from backend.api.long_term import install as install_long_term
     install_long_term(app, repo, credentials, job)
+    from backend.api.remote import install_jobs as install_phone_jobs
+    install_phone_jobs(app, repo, credentials, job)
 
     @app.post('/api/saves/{sid}/rollback')
     def rollback(sid: int, body: Revision):
@@ -341,6 +343,11 @@ def create_app(db_path=None, recover=True):
             start_minute=start_minute,end_minute=end_minute,start_date=start_date,end_date=end_date,
             limit=limit,offset=offset)
 
+    @app.get('/api/saves/{sid}/genealogy-roots')
+    def genealogy_roots(sid: int):
+        from backend.runtime_v3.kinship import genealogy_roots
+        return genealogy_roots(repo.get_snapshot(sid))
+
     @app.get('/api/saves/{sid}/calendar')
     def calendar_projection(sid: int, start_date: str | None = None, end_date: str | None = None, minute: int | None = None):
         from backend.runtime_v3.calendar import calendar_range, current_time, calendar_label
@@ -349,7 +356,8 @@ def create_app(db_path=None, recover=True):
         if (start_date is None) != (end_date is None):
             raise ValueError('Нужны обе границы диапазона календаря.')
         if start_date is not None:
-            return calendar_range(state, start_date, end_date)
+            from backend.runtime_v3.player_calendar import player_calendar
+            return player_calendar(state, start_date, end_date, {c['id']:c['name'] for c in snapshot.get('character_cards',[])})
         now = state['meta']['world_time']
         if minute is not None and not max(0,now-10080) <= minute <= now+10080:
             raise ValueError('Предпросмотр времени ограничен семью сутками.')
