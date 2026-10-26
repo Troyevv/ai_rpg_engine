@@ -1,20 +1,41 @@
-import {CharacterView} from './CharacterDossier';
-import {dossierText as t,type DossierTab} from './lib/dossier';
-import {CharacterAvatar} from "./Portrait";
-import {SectionTabs} from "./components/ui/section-tabs";
-import {ThemeSelector} from "./ThemeProvider";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  ArrowLeft,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Download,
-  Maximize2, Minimize2,
+  Maximize2,
+  Minimize2,
+  Settings2,
+  MapPin,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api, download } from "./api";
-import { type World, type Save, type Scene, active } from "./types";
-import {localDate} from "./dates";
-import {WorldView,SceneOverview,RelationsView,SecretsView,ThreadsView,MemoryView,Reveal} from "./InspectorViews";
+import { type World, type Save, type State, type Scene, active } from "./types";
+import { localDate } from "./dates";
+import { ThemeSelector } from "./ThemeProvider";
+import { CharacterView } from "./CharacterDossier";
+import { CharacterAvatar } from "./Portrait";
+import { type DossierTab } from "./lib/dossier";
+import { it, panelLabel, inspectorSections, type Panel } from "./lib/inspector";
+import { Reveal } from "./InspectorViews";
+import {
+  WorldSection,
+  SceneSection,
+  RelationsSection,
+  SecretsSection,
+  ThreadsSection,
+  MemorySection,
+  InspectorCard,
+} from "./InspectorSections";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import {
@@ -24,8 +45,200 @@ import {
   DialogTitle,
   DialogDescription,
 } from "./components/ui/dialog";
-export type Panel =
-  "Мир" | "Сцена" | "Персонажи" | "Отношения" | "Тайны" | "Сюжет" | "Память";
+import "./styles/inspector-workspace.css";
+export type { Panel } from "./lib/inspector";
+
+export function CharacterPicker({
+  state,
+  meta,
+  save,
+  character,
+  setCharacter,
+  query,
+  setQuery,
+  near,
+  setNear,
+}: {
+  state: State;
+  meta?: Scene;
+  save: Save | null;
+  character: string;
+  setCharacter: (v: string) => void;
+  query: string;
+  setQuery: (v: string) => void;
+  near: boolean;
+  setNear: (v: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [cursor, setCursor] = useState(0);
+  const root = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const cards = state.characters.filter(
+    (c) =>
+      (!near || meta?.present_ids.includes(c.id)) &&
+      [c.name, ...(c.aliases || [])]
+        .join(" ")
+        .toLocaleLowerCase()
+        .includes(query.toLocaleLowerCase()),
+  );
+  const selected = state.characters.find((c) => c.id === character);
+  const index = cards.findIndex((c) => c.id === character);
+  useEffect(() => {
+    if (open) {
+      setCursor(Math.max(0, index));
+      input.current?.focus();
+    }
+  }, [open]);
+  useEffect(() => {
+    setCursor(0);
+  }, [query, near]);
+  useEffect(() => {
+    const click = (e: PointerEvent) => {
+      if (!root.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", click);
+    return () => document.removeEventListener("pointerdown", click);
+  }, []);
+  const choose = (id: string) => {
+    setCharacter(id);
+    setOpen(false);
+    button.current?.focus({ preventScroll: true });
+  };
+  return (
+    <div
+      className="inspector-character-toolbar"
+      ref={root}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && open) {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen(false);
+          button.current?.focus();
+        }
+      }}
+    >
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label={it("previous")}
+        disabled={!cards.length}
+        onClick={() =>
+          setCharacter(cards[(index - 1 + cards.length) % cards.length].id)
+        }
+      >
+        <ChevronLeft />
+      </Button>
+      <div className="inspector-combo-wrap">
+        <button
+          ref={button}
+          className="inspector-combo"
+          role="combobox"
+          data-value={character}
+          aria-label={it("selector")}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-controls={open ? "inspector-character-options" : undefined}
+          onClick={() => setOpen(!open)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+              e.preventDefault();
+              setOpen(true);
+            }
+          }}
+        >
+          {selected && (
+            <CharacterAvatar subject={selected} saveId={save?.id} size={30} />
+          )}
+          <span>{selected?.name || it("noCharacters")}</span>
+          <ChevronDown size={15} />
+        </button>
+        {open && (
+          <div className="inspector-combo-popup">
+            <Input
+              ref={input}
+              aria-label={it("searchCharacters")}
+              placeholder={it("nameAlias")}
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded="true"
+              aria-controls="inspector-character-options"
+              aria-activedescendant={
+                cards[cursor] ? `inspector-option-${cursor}` : undefined
+              }
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                  e.preventDefault();
+                  const next = Math.max(
+                    0,
+                    Math.min(
+                      cards.length - 1,
+                      cursor + (e.key === "ArrowDown" ? 1 : -1),
+                    ),
+                  );
+                  setCursor(next);
+                  document
+                    .getElementById(`inspector-option-${next}`)
+                    ?.scrollIntoView({ block: "nearest" });
+                }
+                if (e.key === "Enter" && cards[cursor]) {
+                  e.preventDefault();
+                  choose(cards[cursor].id);
+                }
+              }}
+            />
+            <div
+              id="inspector-character-options"
+              role="listbox"
+              aria-label={it("selector")}
+            >
+              {cards.map((c, i) => (
+                <button
+                  id={`inspector-option-${i}`}
+                  role="option"
+                  data-character-id={c.id}
+                  aria-selected={character === c.id}
+                  className={cursor === i ? "focused" : ""}
+                  key={c.id}
+                  tabIndex={-1}
+                  onClick={() => choose(c.id)}
+                >
+                  <CharacterAvatar subject={c} saveId={save?.id} size={32} />
+                  <span>{c.name}</span>
+                </button>
+              ))}
+            </div>
+            {!cards.length && <p role="status">{it("noMatch")}</p>}
+          </div>
+        )}
+      </div>
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label={it("next")}
+        disabled={!cards.length}
+        onClick={() => setCharacter(cards[(index + 1) % cards.length].id)}
+      >
+        <ChevronRight />
+      </Button>
+      <label className="inspector-near">
+        <input
+          type="checkbox"
+          checked={near}
+          onChange={(e) => setNear(e.target.checked)}
+        />
+        <MapPin size={14} />
+        {it("near")}
+      </label>
+      <span className="inspector-counter" aria-live="polite">
+        {index < 0 ? 0 : index + 1} / {cards.length}
+      </span>
+    </div>
+  );
+}
+
 export function Inspector({
   world,
   save,
@@ -36,6 +249,10 @@ export function Inspector({
   character,
   setCharacter,
   refresh,
+  onPhone,
+  navigation,
+  infoOpen,
+  setInfoOpen,
 }: {
   world: World | null;
   save: Save | null;
@@ -46,216 +263,419 @@ export function Inspector({
   character: string;
   setCharacter: (v: string) => void;
   refresh: () => void;
+  onPhone: () => void;
+  navigation?: ReactNode;
+  infoOpen: boolean;
+  setInfoOpen: (v: boolean) => void;
 }) {
-  const [dossierTab,setDossierTab]=useState<DossierTab>('overview');
-  const [expanded,setExpanded]=useState(()=>sessionStorage.getItem('dossier-expanded')==='yes');
-  const scrolls=useRef(new Map<string,number>());
-  const dialogRef=useRef<HTMLDivElement>(null);
-  const [query, setQuery] = useState("");
-  const [near, setNear] = useState(false);
-  const [scene, setScene] = useState<Scene>({
-    time: "",
-    location: "",
-    present_ids: [],
-  });
-  const [busy, setBusy] = useState(false);
   const state = save?.state ?? world?.state;
   const meta = save?.scene_meta ?? world?.scene_meta;
+  const [dossierTab, setDossierTab] = useState<DossierTab>("overview");
+  const [expanded, setExpanded] = useState(
+    () => sessionStorage.getItem("dossier-expanded") !== "no",
+  );
+  const [query, setQuery] = useState("");
+  const [near, setNear] = useState(false);
+  const [sceneEditing, setSceneEditing] = useState(false);
+  const [visited, setVisited] = useState<Set<Panel>>(new Set([panel]));
+  const [origin, setOrigin] = useState<{
+    panel: Panel;
+    focus: HTMLElement | null;
+  } | null>(null);
+  const scrolls = useRef(new Map<string, number>());
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const key = `${panel}:${panel === "Персонажи" ? `${character}:${dossierTab}` : ""}`;
+  useLayoutEffect(() => {
+    if (open && scrollRef.current) {
+      scrollRef.current.scrollTop = scrolls.current.get(key) || 0;
+    }
+  }, [open, key]);
   useEffect(() => {
-    setScene(meta ?? { time: "", location: "", present_ids: [] });
-  }, [meta]);
+    if (open) heading.current?.focus({ preventScroll: true });
+  }, [open, panel]);
   useEffect(() => {
+    if (open) setVisited((v) => new Set([...v, panel]));
+  }, [open, panel]);
+  useEffect(() => {
+    if (panel !== "Персонажи") setOrigin(null);
+  }, [panel]);
+  const cards = (state?.characters || []).filter(
+    (c) =>
+      (!near || meta?.present_ids.includes(c.id)) &&
+      [c.name, ...(c.aliases || [])]
+        .join(" ")
+        .toLocaleLowerCase()
+        .includes(query.toLocaleLowerCase()),
+  );
+  const selected = cards.find((c) => c.id === character) || cards[0];
+  useEffect(() => {
+    if (open && panel === "Персонажи" && selected && selected.id !== character)
+      setCharacter(selected.id);
+  }, [open, panel, selected?.id, character, setCharacter]);
+  const openCharacter = (id: string) => {
+    if (panel !== "Персонажи")
+      setOrigin({ panel, focus: document.activeElement as HTMLElement });
     setQuery("");
     setNear(false);
-  }, [open, world?.id]);
-  const cards = (state?.characters||[]).filter(
-    (c) =>
-      (!query ||
-        [c.name, ...(c.aliases ?? [])]
-          .join(" ")
-          .toLocaleLowerCase()
-          .includes(query.toLocaleLowerCase())) &&
-      (!near || meta?.present_ids.includes(c.id)),
-  );
-  const selected = cards.find((c) => c.id === character) ?? cards[0];
-  const scrollKey=`${save?.id||world?.id}:${state?.controlled_actor_id}:${selected?.id}:${panel}:${dossierTab}`;
-  useLayoutEffect(()=>{const el=dialogRef.current;if(open&&el)el.scrollTop=scrolls.current.get(scrollKey)||0},[open,scrollKey]);
-  useEffect(()=>{if(open&&panel==='Персонажи'&&selected&&selected.id!==character)setCharacter(selected.id)},[open,panel,selected?.id,character,setCharacter]);
+    setCharacter(id);
+    setPanel("Персонажи");
+  };
+  const back = () => {
+    if (origin) {
+      const from = origin;
+      setOrigin(null);
+      setPanel(from.panel);
+      requestAnimationFrame(
+        () =>
+          from.focus?.isConnected && from.focus.focus({ preventScroll: true }),
+      );
+    } else close();
+  };
+  const backRef = useRef(back);
+  backRef.current = back;
+  useEffect(() => {
+    if (!open) return;
+    const back = () => backRef.current();
+    window.addEventListener("inspector-back", back);
+    return () => window.removeEventListener("inspector-back", back);
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const escape = (e: KeyboardEvent) => {
+      if (
+        e.key === "Escape" &&
+        !e.defaultPrevented &&
+        !document.querySelector('[role="dialog"]')
+      ) {
+        e.preventDefault();
+        backRef.current();
+      }
+    };
+    window.addEventListener("keydown", escape);
+    return () => window.removeEventListener("keydown", escape);
+  }, [open]);
   if (!world || !state) return null;
+  const props = {
+    state,
+    meta,
+    save,
+    onCharacter: openCharacter,
+    onPanel: setPanel,
+    onPhone,
+  };
+  const section = inspectorSections.find((s) => s.id === panel)!;
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && close()}>
-      <DialogContent ref={dialogRef} onOpenAutoFocus={e=>{if(panel==='Персонажи'){e.preventDefault();requestAnimationFrame(()=>{const el=dialogRef.current;if(el){el.querySelector<HTMLButtonElement>('.dossier-tabs [aria-selected="true"]')?.focus({preventScroll:true});el.scrollTop=scrolls.current.get(scrollKey)||0}})}}} onScroll={e=>scrolls.current.set(scrollKey,e.currentTarget.scrollTop)} className={`inspector-dialog ${panel==='Персонажи'?'dossier-inspector':''} ${expanded&&panel==='Персонажи'?'dossier-expanded':''}`}>
-        {panel==='Персонажи'&&<button className="dossier-width-toggle" aria-label={t(expanded?'collapse':'expand')} aria-pressed={expanded} onClick={()=>{setExpanded(!expanded);sessionStorage.setItem('dossier-expanded',!expanded?'yes':'no')}}>{expanded?<Minimize2 size={18}/>:<Maximize2 size={18}/>}</button>}
-        <DialogHeader>
-          <DialogTitle title={world.name}>{world.name}</DialogTitle>
-          <DialogDescription>
-            Основа v{world.version} · {save ? save.name : "Исходный мир"}
-          </DialogDescription>
-        </DialogHeader>
-        <details className="theme-disclosure"><summary>Тема мира</summary><ThemeSelector/></details>
-        <details className="metadata">
-          <summary>О мире и сохранении</summary>
-          <p>Мир создан: {localDate(world.created_at)}</p>
-          {save && (
-            <>
-              <p>Прохождение #{save.id}</p>
-              <p>Обновлено: {localDate(save.updated_at)}</p>
-            </>
-          )}
-          <Reveal title="Правила повествования / Стиль" text={state.sections.tone} preview={false}/><Reveal title="Особенности и правила истории" text={state.story_notes} preview={false}/>
+    <>
+      <section
+        className="inspector-workspace"
+        hidden={!open}
+        aria-label={panelLabel(panel)}
+      >
+        <header className="inspector-topbar">
+          {navigation}
+          <div className="inspector-breadcrumb">
+            <span title={world.name}>{world.name}</span>
+            <span>/</span>
+            <strong>{panelLabel(panel)}</strong>
+          </div>
+          <span className="inspector-scope">{it("gm")}</span>
           <Button
-            size="sm"
-            variant="outline"
-            onClick={() => download(world.source_md, `world_${world.id}.md`)}
+            variant="ghost"
+            size="icon"
+            className="inspector-width"
+            aria-label={it(expanded ? "collapse" : "expand")}
+            aria-pressed={expanded}
+            onClick={() => {
+              setExpanded(!expanded);
+              sessionStorage.setItem(
+                "dossier-expanded",
+                expanded ? "no" : "yes",
+              );
+            }}
           >
-            <Download size={14} />
-            Исходная выжимка
+            {expanded ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
           </Button>
-        </details>
-        <SectionTabs className="panel-tabs" label="Разделы справочника" value={panel} onChange={setPanel} items={(["Мир","Сцена","Персонажи","Отношения","Тайны","Сюжет","Память"] as Panel[]).map(id=>({id,label:id}))}/>
-        {panel === "Мир" && <WorldView saveId={save?.id} state={state} meta={meta}/>}
-        {panel === "Сцена" && (
-          <>
-            <SceneOverview state={state} meta={meta}/>
-            {save && (
-              <details className="inspect-reveal"><summary><span className="inspect-title">Уточнить строку сцены</span></summary><fieldset>
-                <legend>Уточнить строку сцены</legend>
-                <label>
-                  Время
-                  <Input
-                    value={scene.time}
-                    onChange={(e) =>
-                      setScene((s) => ({ ...s, time: e.target.value }))
-                    }
-                  />
-                </label>
-                <label>
-                  Место
-                  <Input
-                    value={scene.location}
-                    onChange={(e) =>
-                      setScene((s) => ({ ...s, location: e.target.value }))
-                    }
-                  />
-                </label>
-                <p className="muted small">Присутствующие, включая ГГ</p>
-                {state.characters.map((c) => (
-                  <label className="check" key={c.id}>
-                    <input
-                      type="checkbox"
-                      checked={scene.present_ids.includes(c.id)}
-                      onChange={(e) =>
-                        setScene((s) => ({
-                          ...s,
-                          present_ids: e.target.checked
-                            ? [...s.present_ids, c.id]
-                            : s.present_ids.filter((id) => id !== c.id),
-                        }))
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={it("settings")}
+            onClick={() => setInfoOpen(true)}
+          >
+            <Settings2 size={18} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={it("close")}
+            onClick={back}
+          >
+            <ArrowLeft size={17} />
+            <span>
+              {origin ? it("backTo") + panelLabel(origin.panel) : it("back")}
+            </span>
+          </Button>
+        </header>
+        <div
+          ref={scrollRef}
+          className={`inspector-scroll ${expanded ? "dossier-expanded" : "inspector-compact"}`}
+          onScroll={(e) => {
+            if (open) scrolls.current.set(key, e.currentTarget.scrollTop);
+          }}
+        >
+          <div className="inspector-page">
+            {panel !== "Персонажи" ? (
+              <div className="inspector-page-heading">
+                <div>
+                  <span className="eyebrow">
+                    {it(panel === "Мир" ? "overview" : section.group)}
+                  </span>
+                  <h1 ref={heading} tabIndex={-1}>
+                    {it(
+                      panel === "Сцена"
+                        ? "sceneTitle"
+                        : panel === "Сюжет"
+                          ? "threadsTitle"
+                          : section.key,
+                    )}
+                  </h1>
+                  <p>{it(`${section.key}Sub` as "worldSub")}</p>
+                </div>
+                {panel === "Сцена" && save && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={active(save.job) || sceneEditing}
+                    aria-expanded={sceneEditing}
+                    onClick={() => setSceneEditing(true)}
+                  >
+                    <Pencil size={15} />
+                    {it("editScene")}
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <h1 ref={heading} tabIndex={-1} className="sr-only">
+                {it("characters")}
+              </h1>
+            )}
+            {inspectorSections
+              .filter((s) => visited.has(s.id) || s.id === panel)
+              .map(({ id }) => (
+                <div key={id} hidden={id !== panel}>
+                  {id === "Мир" && <WorldSection {...props} world={world} />}
+                  {id === "Сцена" && (
+                    <SceneSection
+                      {...props}
+                      editor={
+                        save && (
+                          <SceneEditor
+                            key={save.id}
+                            save={save}
+                            edit={sceneEditing}
+                            setEdit={setSceneEditing}
+                            meta={meta}
+                            refresh={refresh}
+                          />
+                        )
                       }
                     />
-                    {c.name}
-                  </label>
-                ))}
-                <Button
-                  disabled={busy || active(save.job)}
-                  onClick={async () => {
-                    setBusy(true);
-                    try {
-                      await api(
-                        `/saves/${save.id}/scene`,
-                        { ...scene, revision: save.revision },
-                        "PATCH",
-                      );
-                      refresh();
-                      toast.success("Сцена обновлена");
-                    } catch (e) {
-                      toast.error((e as Error).message);
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                >
-                  Сохранить строку сцены
-                </Button>
-              </fieldset></details>
+                  )}
+                  {id === "Персонажи" && (
+                    <>
+                      <CharacterPicker
+                        {...{
+                          state,
+                          meta,
+                          save,
+                          character,
+                          setCharacter,
+                          query,
+                          setQuery,
+                          near,
+                          setNear,
+                        }}
+                      />
+                      {selected ? (
+                        <CharacterView
+                          state={state}
+                          card={selected}
+                          save={save}
+                          refresh={refresh}
+                          tab={dossierTab}
+                          setTab={setDossierTab}
+                          onCharacter={openCharacter}
+                        />
+                      ) : (
+                        <p role="status" className="inspector-empty">
+                          {it("noCharacters")}
+                        </p>
+                      )}
+                    </>
+                  )}
+                  {id === "Отношения" && (
+                    <RelationsSection {...props} refresh={refresh} />
+                  )}
+                  {id === "Тайны" && <SecretsSection {...props} />}
+                  {id === "Сюжет" && <ThreadsSection {...props} />}
+                  {id === "Память" && <MemorySection {...props} />}
+                </div>
+              ))}
+          </div>
+        </div>
+      </section>
+      <Dialog open={infoOpen} onOpenChange={setInfoOpen}>
+        <DialogContent className="inspector-settings">
+          <DialogHeader>
+            <DialogTitle>{it("settings")}</DialogTitle>
+            <DialogDescription>
+              {world.name} · {it("baseline")} v{world.version} ·{" "}
+              {save?.name || it("original")}
+            </DialogDescription>
+          </DialogHeader>
+          <ThemeSelector />
+          <div className="metadata">
+            <p>
+              {it("created")}: {localDate(world.created_at)}
+            </p>
+            {save && (
+              <>
+                <p>
+                  {it("save")} #{save.id}
+                </p>
+                <p>
+                  {it("updated")}: {localDate(save.updated_at)}
+                </p>
+              </>
             )}
-          </>
-        )}
-        {panel === "Персонажи" && (
-          <>
-            <Input
-              aria-label="Найти персонажа"
-              placeholder="Имя или прозвище"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
+            <Reveal
+              title={it("tone")}
+              text={state.sections.tone}
+              preview={false}
             />
-            <label className="check">
+            <Reveal
+              title={it("rules")}
+              text={state.story_notes}
+              preview={false}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => download(world.source_md, `world_${world.id}.md`)}
+            >
+              <Download size={14} />
+              {it("export")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+function SceneEditor({
+  edit,
+  setEdit,
+  save,
+  meta,
+  refresh,
+}: {
+  save: Save;
+  meta?: Scene;
+  refresh: () => void;
+  edit: boolean;
+  setEdit: (value: boolean) => void;
+}) {
+  const [scene, setScene] = useState<Scene>(
+    meta ?? { time: "", location: "", present_ids: [] },
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!edit) setScene(meta ?? { time: "", location: "", present_ids: [] });
+  }, [meta, edit]);
+  const blocked = busy || active(save.job);
+  if (!edit) return null;
+  return (
+    <InspectorCard title={it("editScene")}>
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (blocked) return;
+          setBusy(true);
+          setError("");
+          try {
+            await api(
+              `/saves/${save.id}/scene`,
+              {
+                // Empty time tells the existing API to retain the canonical minute.
+                // Display labels may be campaign-relative; do not re-parse an unchanged label.
+                time: scene.time === meta?.time ? "" : scene.time,
+                location: scene.location,
+                present_ids: scene.present_ids,
+                revision: save.revision,
+              },
+              "PATCH",
+            );
+            refresh();
+            setEdit(false);
+            toast.success(it("sceneSaved"));
+          } catch (e) {
+            setError((e as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <fieldset disabled={blocked}>
+          <label>
+            {it("time")}
+            <Input
+              value={scene.time}
+              onChange={(e) =>
+                setScene((s) => ({ ...s, time: e.target.value }))
+              }
+            />
+          </label>
+          <label>
+            {it("location")}
+            <Input
+              value={scene.location}
+              onChange={(e) =>
+                setScene((s) => ({ ...s, location: e.target.value }))
+              }
+            />
+          </label>
+          <p className="muted small">{it("presentLabel")}</p>
+          {save.state.characters.map((c) => (
+            <label className="check" key={c.id}>
               <input
                 type="checkbox"
-                checked={near}
-                onChange={(e) => setNear(e.target.checked)}
+                checked={scene.present_ids.includes(c.id)}
+                onChange={(e) =>
+                  setScene((s) => ({
+                    ...s,
+                    present_ids: e.target.checked
+                      ? [...s.present_ids, c.id]
+                      : s.present_ids.filter((id) => id !== c.id),
+                  }))
+                }
               />
-              Только рядом
+              {c.name}
             </label>
-            {selected ? (
-              <>
-                <div className="character-nav">
-                  <Button
-                    aria-label="Предыдущий персонаж"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() =>
-                      setCharacter(
-                        cards[
-                          (cards.indexOf(selected) - 1 + cards.length) %
-                            cards.length
-                        ].id,
-                      )
-                    }
-                  >
-                    <ChevronLeft />
-                  </Button>
-                  <CharacterAvatar subject={selected} saveId={save?.id} size={32}/>
-                  <select
-                    aria-label="Персонаж"
-                    value={selected.id}
-                    onChange={(e) => setCharacter(e.target.value)}
-                  >
-                    {cards.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                  <Button
-                    aria-label="Следующий персонаж"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() =>
-                      setCharacter(
-                        cards[(cards.indexOf(selected) + 1) % cards.length].id,
-                      )
-                    }
-                  >
-                    <ChevronRight />
-                  </Button>
-                </div>
-                <p className="eyebrow character-index">
-                  {cards.indexOf(selected) + 1} / {cards.length} · Карточка
-                  ведущего
-                </p>
-                <CharacterView state={state} card={selected} save={save} refresh={refresh} tab={dossierTab} setTab={setDossierTab} onCharacter={id=>{setQuery('');setNear(false);setCharacter(id)}}/>
-              </>
-            ) : (
-              <p className="muted">Персонажи не найдены.</p>
-            )}
-          </>
-        )}
-        {panel === "Отношения" && <RelationsView state={state} save={save} refresh={refresh}/>}
-        {panel === "Тайны" && <SecretsView state={state}/>}
-        {panel === "Сюжет" && <ThreadsView state={state}/>}
-        {panel === "Память" && <MemoryView state={state}/>}
-      </DialogContent>
-    </Dialog>
+          ))}
+          {error && <p role="alert">{error}</p>}
+          <div className="actions">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setEdit(false)}
+            >
+              {it("cancel")}
+            </Button>
+            <Button type="submit">{it("saveScene")}</Button>
+          </div>
+        </fieldset>
+      </form>
+    </InspectorCard>
   );
 }

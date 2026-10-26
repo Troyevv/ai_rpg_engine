@@ -27,3 +27,14 @@ export async function gameAction(page:Page,name:string){
  await menu.getByRole('navigation',{name:'Разделы текущей игры'}).getByRole('button',{name:section,exact:true}).click();
  await menu.getByRole('button',{name,exact:true}).click();
 }
+
+export async function pickCharacter(page:Page,id:string){
+ await page.getByRole('combobox',{name:'Персонаж',exact:true}).click();
+ await page.getByLabel('Найти персонажа').fill('');
+ await page.locator(`[role="option"][data-character-id="${id}"]`).click();
+}
+export async function searchCharacter(page:Page,query:string){
+ await page.getByRole('combobox',{name:'Персонаж',exact:true}).click();
+ await page.getByLabel('Найти персонажа').fill(query);
+ await page.getByLabel('Найти персонажа').press('Enter');
+}

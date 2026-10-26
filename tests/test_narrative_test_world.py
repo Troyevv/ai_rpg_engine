@@ -178,3 +178,12 @@ def test_reset_reload_sequences_preserve_canonical_state_and_older_saves(operati
                 ordinary_job(repo, sid, 'turn' if repo.list_turns(sid) else 'start')
             for old_sid, snapshot in preserved.items():
                 assert repo.get_snapshot(old_sid) == snapshot
+
+
+def test_inspector_checkpoint_uses_supported_projection(tmp_path):
+    repo = Repository(str(tmp_path / 'inspector.db'))
+    result = load_fixture(repo, 'ui-inspector')
+    saved = repo.get_save(result['save'])
+    assert saved['state']['world']['threads']['qa_inspector_dormant']['status'] == 'dormant'
+    assert saved['state']['world']['threads']['qa_inspector_resolved']['status'] == 'resolved'
+    assert saved['state']['world']['relationships']['qa_vera:qa_kirill']['dimensions']['trust'] == -20

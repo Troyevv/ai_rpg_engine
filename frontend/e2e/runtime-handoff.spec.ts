@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {defaults} from '../src/types';
-import {nav} from './navigation';
+import {nav,searchCharacter} from './navigation';
 
 test('original export identities and rejected opening recover through real API then turn reload turn',async({page,request},info)=>{
  const source=JSON.parse(readFileSync(new URL('../../tests/fixtures/runtime_handoff/world.json',import.meta.url),'utf8'));
@@ -17,21 +17,20 @@ test('original export identities and rejected opening recover through real API t
  const first=await view();
  expect(Object.fromEntries(first.state.characters.map((c:{id:string,name:string})=>[c.id,c.name]))).toEqual(Object.fromEntries(source.characters.map((c:{id:string,name:string})=>[c.id,c.name])));
  expect(first.state.scene_meta.present_ids).toEqual(['ilya']);
- await page.goto('/');await nav(page,'Мир');await page.locator('.panel-tabs').getByRole('button',{name:'Персонажи',exact:true}).click();
+ await page.goto('/');await nav(page,'Мир');await nav(page,'Персонажи');
  await page.getByLabel('Только рядом').uncheck();
- await page.getByLabel('Найти персонажа').fill('Виктория');
+ await searchCharacter(page,'Виктория');
  await expect(page.getByRole('heading',{name:'Виктория Соловьёва',exact:true})).toBeVisible();
- await page.getByLabel('Найти персонажа').fill('');
- await expect(page.getByLabel('Персонаж',{exact:true}).locator('option')).toHaveCount(19);
+ await page.getByRole('combobox',{name:'Персонаж',exact:true}).click();await page.getByLabel('Найти персонажа').fill('');await expect(page.getByRole('option')).toHaveCount(19);await page.getByLabel('Найти персонажа').press('Escape');
  await page.screenshot({path:`test-results/handoff-identities-${info.project.name}.png`,fullPage:true,animations:'disabled'});
- await page.locator('.panel-tabs').getByRole('button',{name:'Отношения',exact:true}).click();
- await expect(page.locator('.inspector-dialog')).toContainText('Марина Волкова');
- await expect(page.locator('.inspector-dialog')).not.toContainText('marina_volkova');
- await page.locator('.panel-tabs').getByRole('button',{name:'Сюжет',exact:true}).click();
- await page.locator('.inspector-dialog summary').filter({hasText:'Дело Зои Маркиной против Apex Stroy'}).click();
- await expect(page.locator('.inspect-detail')).toContainText('Илья Александров');
- await expect(page.locator('.inspect-detail')).toContainText('Зоя Маркина');
- await expect(page.locator('.inspector-dialog')).not.toContainText('marina_volkova');
+ await nav(page,'Отношения');
+ await expect(page.locator('.inspector-workspace')).toContainText('Марина Волкова');
+ await expect(page.locator('.inspector-workspace')).not.toContainText('marina_volkova');
+ await nav(page,'Сюжет');
+ await page.locator('.inspector-thread').filter({hasText:'Дело Зои Маркиной против Apex Stroy'}).getByText('Развитие линии',{exact:true}).click();
+ await expect(page.locator('.inspector-thread').filter({hasText:'Дело Зои Маркиной против Apex Stroy'})).toContainText('Илья Александров');
+ await expect(page.locator('.inspector-thread').filter({hasText:'Дело Зои Маркиной против Apex Stroy'})).toContainText('Зоя Маркина');
+ await expect(page.locator('.inspector-workspace')).not.toContainText('marina_volkova');
  // Close the inspector using the normal game navigation on both layouts.
  await page.keyboard.press('Escape');
  await page.getByRole('button',{name:info.project.name==='mobile'?'Камера и журнал мира':'Камера · Журнал',exact:true}).click();

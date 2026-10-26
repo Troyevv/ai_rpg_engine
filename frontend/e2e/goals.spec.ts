@@ -1,5 +1,5 @@
 import {test,expect} from '@playwright/test';
-import {nav} from './navigation';
+import {nav,pickCharacter} from './navigation';
 
 test('completed intention stays historical; goal and value survive reload',async({page,request})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
@@ -8,8 +8,8 @@ test('completed intention stays historical; goal and value survive reload',async
  await page.goto('/');
  for(let n=0;n<2;n++){
   await nav(page,'Мир');
-  await page.locator('.panel-tabs').getByRole('button',{name:'Персонажи',exact:true}).click();
-  await page.getByLabel('Персонаж',{exact:true}).selectOption('qa_ilya');
+  await nav(page,'Персонажи');
+  await pickCharacter(page,'qa_ilya');
   const panel=page.locator('.character-profile');
   await panel.getByRole('tab',{name:'Личность',exact:true}).click();
   await expect(panel.locator('.motivation-editor')).toContainText('Развивать отношения с Соней.');

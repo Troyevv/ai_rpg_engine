@@ -1,5 +1,5 @@
 import {test,expect,type Page} from '@playwright/test';
-import {nav} from './navigation';
+import {nav,pickCharacter,searchCharacter} from './navigation';
 import {writeFile} from 'node:fs/promises';
 test.use({video:'on'});
 const evidence=process.env.DOSSIER_EVIDENCE||'../docs/manual_qa/narrative_v4/issue83-evidence';
@@ -11,7 +11,7 @@ async function expectFitted(page:Page){
  })).toBe(true);
  await page.locator('.save-workspace').evaluate(el=>el.scrollTop=0);
 }
-async function open(page:Page){await nav(page,'Мир');await page.locator('.panel-tabs').getByRole('button',{name:'Персонажи',exact:true}).click()}
+async function open(page:Page){await nav(page,'Мир');await nav(page,'Персонажи')}
 for(const width of [360,393,768,1440])test(`five tabs, widths, two skins and preservation ${width}`,async({page,request},info)=>{
  test.skip(info.project.name!=='desktop');test.setTimeout(120000);
  await page.setViewportSize({width,height:900});
@@ -20,13 +20,13 @@ for(const width of [360,393,768,1440])test(`five tabs, widths, two skins and pre
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
  for(const skin of ['graphite','parchment']){
  await request.put(`/api/worlds/${s.world}/presentation`,{data:{theme_id:skin}});await page.goto('/');await open(page);
- const d=page.locator('.inspector-dialog');
+ const d=page.locator('.inspector-workspace');
  await expect(d.getByRole('tab')).toHaveCount(5);
  await expect(d.getByRole('img',{name:'Мужской пол',exact:true})).toBeVisible();
  await expect(d.locator('.character-header')).toContainText('Кирилл Ларин');
  const header=await d.locator('.dossier-header').boundingBox();expect(header!.y+header!.height).toBeLessThan(900);
  await expect(d).toContainText('Повреждение ноги');await expect(d).toContainText('Устал после дороги');
- if(width>=768){await d.getByRole('button',{name:'Расширить досье'}).click();await expect(d).toHaveClass(/dossier-expanded/)}
+ if(width>=768){if(await d.getByRole('button',{name:'Расширить панель',exact:true}).isVisible())await d.getByRole('button',{name:'Расширить панель',exact:true}).click();await expect(d.locator('.inspector-scroll')).toHaveClass(/dossier-expanded/)}
  for(let i=0;i<tabs.length;i++){
  await d.getByRole('tab',{name:tabs[i],exact:true}).click();await expect(d.getByRole('tab',{name:tabs[i],exact:true})).toHaveAttribute('aria-selected','true');
  await expect(d.getByRole('tabpanel')).toBeVisible();
@@ -34,16 +34,16 @@ for(const width of [360,393,768,1440])test(`five tabs, widths, two skins and pre
  if(i===1)await expect(d.locator('.motivation-editor')).toBeVisible();
  if(i===2)await expect(d.getByRole('button',{name:'+ Добавить отношение',exact:true})).toBeVisible();
  if(i===3)await expect(d.getByRole('button',{name:'Открыть родословную',exact:true})).toBeVisible();
- await d.evaluate(el=>el.scrollTop=0);
+ await d.locator('.inspector-scroll').evaluate(el=>el.scrollTop=0);
  await page.screenshot({path:`${evidence}/after-${width}-${skin}-${i}.png`,animations:'disabled'});
  }
  // Arrow keys and restoration after close/reopen; width changes do not remount editors.
  await d.getByRole('tab',{name:'История',exact:true}).press('Home');await expect(d.getByRole('tab',{name:'Обзор',exact:true})).toBeFocused();
  await d.getByRole('tab',{name:'Обзор',exact:true}).press('ArrowRight');
  await d.getByRole('button',{name:'Закрыть',exact:true}).click();await open(page);await expect(d.getByRole('tab',{name:'Личность',exact:true})).toHaveAttribute('aria-selected','true');
- await d.getByLabel('Персонаж',{exact:true}).selectOption('qa_vera');await d.getByRole('tab',{name:'Обзор',exact:true}).click();
+ await pickCharacter(page,'qa_vera');await d.getByRole('tab',{name:'Обзор',exact:true}).click();
  await expect(d.getByRole('img',{name:'Женский пол',exact:true})).toBeVisible();await expect(d).not.toContainText('PRIVATE');await expect(d).toContainText('Нет данных');
- if(width>=768){await d.getByRole('button',{name:'Сузить досье'}).click();await expect.poll(async()=>Math.round((await d.boundingBox())!.width)).toBe(440);await page.screenshot({path:`${evidence}/after-${width}-${skin}-compact.png`,animations:'disabled'})}
+ if(width>=768){await d.getByRole('button',{name:'Компактная панель'}).click();await expect(d.locator('.inspector-scroll')).toHaveClass(/inspector-compact/);expect((await d.locator('.inspector-page').boundingBox())!.width).toBeLessThanOrEqual(680);await page.screenshot({path:`${evidence}/after-${width}-${skin}-compact.png`,animations:'disabled'})}
  }
  expect(errors).toEqual([]);
 });
@@ -119,12 +119,12 @@ test('family gestures, two skins, reduced motion and unchanged game state',async
 
 test('search selection and local dossier scroll survive close, resize and reopen',async({page,request},info)=>{
  const s=await(await request.post('/test/ui-completion-seed?checkpoint=ui-dossier')).json();await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),s);
- await page.goto('/');await open(page);const d=page.locator('.inspector-dialog');
- await d.getByLabel('Найти персонажа').fill('Вера');await expect(d.getByRole('heading',{name:'Вера Ларина',exact:true})).toBeVisible();
- await page.keyboard.press('Escape');await open(page);await expect(d.getByLabel('Персонаж',{exact:true})).toHaveValue('qa_vera');
- await d.getByLabel('Персонаж',{exact:true}).selectOption('qa_kirill');await d.getByRole('tab',{name:'Обзор',exact:true}).click();
- await d.evaluate(el=>el.scrollTop=250);await expect.poll(()=>d.evaluate(el=>el.scrollTop)).toBe(250);await page.keyboard.press('Escape');await open(page);await expect.poll(()=>d.evaluate(el=>el.scrollTop)).toBe(250);
- await page.setViewportSize({width:info.project.name==='mobile'?393:1000,height:850});await expect(d.getByLabel('Персонаж',{exact:true})).toHaveValue('qa_kirill');
+ await page.goto('/');await open(page);const d=page.locator('.inspector-workspace');
+ await searchCharacter(page,'Вера');await expect(d.getByRole('heading',{name:'Вера Ларина',exact:true})).toBeVisible();
+ await page.keyboard.press('Escape');await open(page);await expect(d.getByLabel('Персонаж',{exact:true})).toHaveAttribute('data-value','qa_vera');
+ await pickCharacter(page,'qa_kirill');await d.getByRole('tab',{name:'Обзор',exact:true}).click();
+ await page.setViewportSize({width:info.project.name==='mobile'?360:1000,height:600});const scroll=d.locator('.inspector-scroll');const position=await scroll.evaluate(el=>{el.scrollTop=250;return el.scrollTop});expect(position).toBeGreaterThan(0);await expect.poll(()=>scroll.evaluate(el=>el.scrollTop)).toBe(position);await page.keyboard.press('Escape');await open(page);await expect.poll(()=>scroll.evaluate(el=>el.scrollTop)).toBe(position);
+ await page.setViewportSize({width:info.project.name==='mobile'?393:1000,height:850});await expect(d.getByLabel('Персонаж',{exact:true})).toHaveAttribute('data-value','qa_kirill');
  await page.keyboard.press('Escape');
  let failed=false;await page.route('**/genealogy?*',async route=>{if(!failed&&route.request().url().includes('root_id=qa_timur')){failed=true;await route.fulfill({status:503,json:{detail:'QA temporary failure'}})}else await route.continue()});
  await nav(page,'Родословная');await page.locator('.save-workspace').getByLabel('Семья персонажа').selectOption('qa_timur');await page.getByRole('button',{name:'Повторить загрузку',exact:true}).click();await expect(page.locator('.react-flow__node')).toHaveCount(5);

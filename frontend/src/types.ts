@@ -49,6 +49,7 @@ export interface Relation {
   change?: { direction: "up" | "down"; reason: string; turn?: number };
 }
 export interface Scene {
+  weather?: import("./SceneClock").Weather|null;
   time: string;
   location: string;
   present_ids: string[];
@@ -69,6 +70,9 @@ export interface ResidenceRoleView {
   since:number|null;until:number|null;since_date:string|null;until_date:string|null;
 }
 export interface State {
+  campaign?: {title?:string;setting?:string;era?:string;genre?:string;description?:string;public_description?:string};
+  world_summary?:string;
+  summary?:string;
   phone?: import('./Phone').PhoneState|null;
   residence_roles?:{residences:ResidenceRoleView[];roles:ResidenceRoleView[]};
   life_state?:{life_status:string;conditions:{id:string;description:string;status:string;duration:string}[];names:{previous:string;current:string;date:string|null;minute:number}[]}|null;
@@ -91,7 +95,7 @@ export interface State {
   sections: Record<string, string>;
   characters: Character[];
   relationships: Relation[];
-  locations: { id?:string; name: string; text: string }[];
+  locations: { id?:string; name: string; text: string; parent_id?:string|null }[];
   story_notes: string;
   facts?: { text: string; known_by: string[]; turn: number }[];
   plans?: { text: string; status: string }[];
@@ -206,7 +210,7 @@ export const active = (job: Job | null | undefined) =>
 
 export interface WorldFact {id:string;text:string;secret:boolean;character_ids:string[];evidence?:string[]}
 export interface Knowledge {actor_id:string;fact_id:string;status:string;source_event_id?:string|null;evidence?:string;revision?:number;replaced_by?:string|null}
-export interface Thread {id:string;description:string;state:string;status:string;character_ids:string[];relevance:number;last_event_id?:string|null}
+export interface Thread {id:string;description:string;state:string;status:string;character_ids:string[];relevance:number;last_event_id?:string|null;source_event_id?:string|null}
 export interface WorldEvent {id:string;text:string;participants:string[];witnesses:string[];minute:number|null;source_sequence:number;player_observed:boolean;fact_ids:string[]}
 export interface WorldRelation {source_id:string;target_id:string;context:string;dimensions:Record<string,number|{direction:string;reason:string}>}
 
@@ -215,6 +219,6 @@ export interface ScheduledCommitment {
   status:'pending'|'resolved'|'cancelled'; outcome:string;
   context_category:string; interval_state:string|null; condition:string;
   start_label:string|null; end_label:string|null;
-  temporal_projection:{precision:string; relevance:string};
+  temporal_projection:{precision:string; relevance:string; start_minute?:number|null; end_minute?:number|null};
   evidence:string; depends_on:string[];
 }

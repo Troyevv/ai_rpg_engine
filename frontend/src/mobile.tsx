@@ -1,6 +1,7 @@
+import {inspectorSections,it,panelLabel,type Panel} from './lib/inspector';
 import {SceneClock} from './SceneClock';
 import {useEffect,useState} from 'react';
-import {CalendarDays,BookOpen,Globe,Users,Brain,GitBranch,Menu,Settings2,Feather,Eye,EyeOff} from 'lucide-react';
+import {CalendarDays,BookOpen,GitBranch,Menu,Settings2,Feather,Eye,EyeOff} from 'lucide-react';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from './components/ui/dialog';
 import {Button} from './components/ui/button';
 import type {Save,Scene} from './types';
@@ -24,15 +25,13 @@ export function useMobileViewport(mobile:boolean){
   return()=>{vv?.removeEventListener('resize',update);vv?.removeEventListener('scroll',update);window.removeEventListener('resize',update);document.removeEventListener('focusin',update);document.removeEventListener('focusout',update);document.documentElement.classList.remove('keyboard-open')};
  },[mobile]);
 }
-export function MobileNavigation({workspace,open,setOpen,world,go,inspect,settings,reading,toggleReading,branches}:{workspace:(section:"calendar"|"family")=>void;open:boolean;setOpen:(v:boolean)=>void;world:boolean;go:(v:'game'|'prepare')=>void;inspect:(v:'Мир'|'Персонажи'|'Память')=>void;settings:()=>void;reading:boolean;toggleReading:()=>void;branches:()=>void}){
+export function MobileNavigation({activePanel,workspace,open,setOpen,world,go,inspect,settings,reading,toggleReading,branches}:{activePanel?:Panel;workspace:(section:"calendar"|"family")=>void;open:boolean;setOpen:(v:boolean)=>void;world:boolean;go:(v:'game'|'prepare')=>void;inspect:(v:Panel)=>void;settings:()=>void;reading:boolean;toggleReading:()=>void;branches:()=>void}){
  const act=(fn:()=>void)=>{setOpen(false);fn()};
  return <><Button size="icon" variant="ghost" aria-label="Меню игры" onClick={()=>setOpen(true)}><Menu/></Button>
  <Dialog open={open} onOpenChange={setOpen}><DialogContent className="mobile-sheet"><DialogHeader><DialogTitle>Меню игры</DialogTitle><DialogDescription>История, мир и инструменты</DialogDescription></DialogHeader>
  <nav className="mobile-nav" aria-label="Мобильная навигация">
  <button onClick={()=>act(()=>go('game'))}><BookOpen/>Игра</button>
- <button disabled={!world} onClick={()=>act(()=>inspect('Мир'))}><Globe/>Мир</button>
- <button disabled={!world} onClick={()=>act(()=>inspect('Персонажи'))}><Users/>NPC</button>
- <button disabled={!world} onClick={()=>act(()=>inspect('Память'))}><Brain/>Память</button>
+ {(['worldGroup','storyGroup'] as const).map(group=><div className="inspector-mobile-group" key={group}><p>{it(group)}</p>{inspectorSections.filter(s=>s.group===group).map(({id,icon:Icon})=><button key={id} disabled={!world} aria-current={activePanel===id?"page":undefined} className={activePanel===id?"current":""} onClick={()=>act(()=>inspect(id))}><Icon/>{panelLabel(id)}</button>)}</div>)}
  <button disabled={!world} onClick={()=>act(()=>workspace("calendar"))}><CalendarDays/>Календарь</button><button disabled={!world} onClick={()=>act(()=>workspace("family"))}><GitBranch/>Родословная</button>
  <button disabled={!world} onClick={()=>act(branches)}><GitBranch/>Ветки</button>
  </nav><div className="mobile-menu-tools">

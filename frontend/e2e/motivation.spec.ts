@@ -3,8 +3,8 @@ import {nav} from './navigation';
 test('edit motivation within character card and persist after reload',async({page,request})=>{
  const selection=await(await request.post('/test/seed')).json();
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selection);
- await page.goto('/');await nav(page,'Мир');await page.locator('.panel-tabs').getByRole('button',{name:'Персонажи',exact:true}).click();
- const panel=page.locator('.inspector-dialog');
+ await page.goto('/');await nav(page,'Мир');await nav(page,'Персонажи');
+ const panel=page.locator('.inspector-workspace');
  await panel.getByRole('tab',{name:'Личность',exact:true}).click();
  await panel.getByRole('button',{name:'+ Добавить цель',exact:true}).click();
  const goalDialog=page.getByRole('dialog').filter({has:page.getByRole('heading',{name:'Цель персонажа',exact:true})});
@@ -20,7 +20,7 @@ test('edit motivation within character card and persist after reload',async({pag
  await editor.getByLabel('Текст цели или намерения').fill('Поговорить со смотрителем маяка');
  await editor.getByRole('button',{name:'Сохранить',exact:true}).click();
  await expect(editor).toHaveCount(0);await expect(panel.locator('.motivation-row')).toContainText(['Поговорить со смотрителем маяка']);
- await page.reload();await nav(page,'Мир');await page.locator('.panel-tabs').getByRole('button',{name:'Персонажи',exact:true}).click();await panel.getByRole('tab',{name:'Личность',exact:true}).click();
+ await page.reload();await nav(page,'Мир');await nav(page,'Персонажи');await panel.getByRole('tab',{name:'Личность',exact:true}).click();
  await expect(panel.locator('.motivation-editor')).toContainText('Поговорить со смотрителем маяка');
  await panel.getByLabel('Действия с намерением 1').click();await panel.getByRole('button',{name:'Удалить',exact:true}).click();
  const confirm=page.getByRole('dialog').filter({has:page.getByRole('heading',{name:'Удалить запись?',exact:true})});

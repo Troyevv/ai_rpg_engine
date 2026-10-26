@@ -11,9 +11,9 @@ test('general relationships support CRUD and follow POV without LLM for edits',a
  }
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selection);
  await page.goto('/');
- const open=async()=>{await nav(page,'Мир');await page.locator('.panel-tabs').getByRole('button',{name:'Отношения',exact:true}).click()};
+ const open=async()=>{await nav(page,'Мир');await nav(page,'Отношения');await page.locator('.inspector-editor-disclosure > summary').click()};
  await open();
- const panel=page.locator('.inspector-dialog');
+ const panel=page.locator('.inspector-workspace');
  await panel.getByRole('button',{name:'+ Добавить отношение',exact:true}).click();
  const editor=page.getByRole('dialog').filter({has:page.getByRole('heading',{name:'Отношение персонажа',exact:true})});
  await editor.getByLabel('Персонаж-адресат').selectOption('character_2');
@@ -34,7 +34,7 @@ test('general relationships support CRUD and follow POV without LLM for edits',a
  await actor(page,'character_2',targetName);await expect(page.locator('.turn')).toHaveCount(1);
  await open();
  await expect(panel.locator('.motivation-editor')).not.toContainText('Теперь сомневается');
- await expect(panel).toContainText('Теперь сомневается');
+ await panel.getByRole('button',{name:'От других',exact:true}).click();await expect(panel).toContainText('Теперь сомневается');
  await panel.getByRole('button',{name:'Закрыть',exact:true}).click();
  await actor(page,'character_1',actorName);await expect(page.locator('.turn')).toHaveCount(1);
  await open();await expect(panel.locator('.motivation-editor')).toContainText('Теперь сомневается');
