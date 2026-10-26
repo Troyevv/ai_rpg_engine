@@ -1,6 +1,7 @@
+import {CalendarPresets,defaultPresets,type Presets} from './CalendarPresets';
 import {useEffect,useState} from 'react';
-export type CalendarStart={mode:string;date:string|null;time:string|null;weekday:number|null;profile:{id:string;system:string;month_lengths:number[];month_names:string[];weekday_names:string[]}|null};
-export const defaultCalendarStart:CalendarStart={mode:'auto',date:null,time:null,weekday:null,profile:null};
+export type CalendarStart={presets?:Presets;mode:string;date:string|null;time:string|null;weekday:number|null;profile:{id:string;system:string;month_lengths:number[];month_names:string[];weekday_names:string[]}|null};
+export const defaultCalendarStart:CalendarStart={presets:defaultPresets,mode:'auto',date:null,time:null,weekday:null,profile:null};
 export function CalendarStartSettings({value,onChange}:{value:CalendarStart;onChange:(v:CalendarStart)=>void}){
  const change=(p:Partial<CalendarStart>)=>onChange({...value,...p});
  const profile=value.profile||{id:'custom',system:'custom',month_lengths:[30],month_names:['Первый'],weekday_names:['Первый','Второй','Третий']};
@@ -27,6 +28,7 @@ export function CalendarStartSettings({value,onChange}:{value:CalendarStart;onCh
  <label>Первый день недели<select aria-label="Первый день недели" value={value.weekday??''} onChange={e=>change({weekday:e.target.value===''?null:Number(e.target.value)})}><option value="">Из идеи мира</option>{profile.weekday_names.map((name,i)=><option key={i} value={i}>{name}</option>)}</select></label>
  </>:<label>Дата начала<input aria-label="Дата начала" type="date" min="0001-01-01" max="9999-12-31" value={value.date||''} onChange={e=>change({date:e.target.value||null})}/></label>}
  <label>Время начала<input aria-label="Время начала" type="time" value={value.time||''} onChange={e=>change({time:e.target.value||null})}/></label>
+ <CalendarPresets value={value.presets||defaultPresets} onChange={presets=>change({presets})}/>
  <p>Если не заполнено, используем дату и время из идеи мира</p>
  </fieldset>;
 }

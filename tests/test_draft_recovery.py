@@ -74,7 +74,9 @@ def test_failed_generation_manual_edit_start_turn_reload(api):
         assert wait_job(client,jid)['status']=='error'
     d=client.get(url+'?author=true').json()
     from backend.services.draft_calendar import complete
-    expected=initial.normalize(complete(raw,SHORT,seed=jid))
+    raw_with_settings=dict(raw,creation_settings=d['candidate']['creation_settings'])
+    expected=initial.normalize(complete(raw_with_settings,SHORT,seed=jid))
+    expected.pop('creation_settings',None)
     assert {k:v for k,v in d['candidate'].items() if k!='creation_settings'}==expected
     assert client.get(url).json()['candidate'] is None
     assert client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id']}).status_code==409
@@ -112,7 +114,8 @@ def test_malformed_review_resume_does_not_regenerate(api):
         jid=client.post(url+'/generate',json={'revision':0,'text':SHORT,'config':REMOTE,'api_key':'test'}).json()['id']
         assert wait_job(client,jid)['status']=='error'
     d=client.get(url+'?author=true').json()
-    assert d['candidate'] and any('не завершена' in e for e in d['validation']['errors'])
+    assert d['candidate'] and d['technical_valid'] and d['start_warning']
+    assert d['review']['status']=='failed' # v2: failure remains truthful, now advisory
     def correct(**kw):
         assert kw['messages'][0]['content'].startswith(review.MARKER)
         yield '{"issues":[]}'

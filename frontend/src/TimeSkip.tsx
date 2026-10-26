@@ -12,6 +12,8 @@ export function TimeSkip({save,disabled,submit}:{save:Save;disabled:boolean;subm
  const target=now+duration;
  const [preview,setPreview]=useState<{minute:number;label:string}|null>(null);
  const [previewError,setPreviewError]=useState(false);
+ const [calendar,setCalendar]=useState<{current:{season:string|null};regional:{id:string;date:string;name:string;observed:boolean}[];notices:string[]}|null>(null);
+ useEffect(()=>{if(open)api<typeof calendar>(`/saves/${save.id}/calendar`).then(setCalendar).catch(()=>setCalendar(null));},[open,save.id,now]);
  useEffect(()=>{
   if(!open)return;
   const controller=new AbortController();setPreview(null);setPreviewError(false);
@@ -21,7 +23,7 @@ export function TimeSkip({save,disabled,submit}:{save:Save;disabled:boolean;subm
   return ()=>controller.abort();
  },[open,save.id,target]);
  return <><Button variant="ghost" disabled={disabled} onClick={()=>setOpen(true)}>Пропустить время</Button><Dialog open={open} onOpenChange={setOpen}><DialogContent className="time-skip-sheet"><DialogHeader><DialogTitle>Пропустить время</DialogTitle><DialogDescription>Мир продолжит жить. Событие, требующее твоего участия, может прервать ожидание.</DialogDescription></DialogHeader>
- <p className="eyebrow">Сейчас</p><strong>{label(now)}</strong>
+ <p className="eyebrow">Сейчас</p>{calendar&&<details><summary>Календарь · {calendar.current.season||"сезон не задан"}</summary>{calendar.notices.map(n=><p key={n}>{n}</p>)}{calendar.regional.map(e=><p key={e.id}>{e.date} · {e.name}{e.observed?" (перенесённая дата)":""}</p>)}</details>}<strong>{label(now)}</strong>
  <input aria-label="Длительность пропуска времени" type="range" min={1} max={1440} value={Math.min(duration,1440)} onChange={e=>setDuration(Number(e.target.value))}/>
  <div className="skip-presets">{[[10,'+10 мин'],[60,'+1 час']].map(([n,text])=><Button key={n} variant="outline" onClick={()=>setDuration(Number(n))}>{text}</Button>)}<Button variant="outline" onClick={()=>until(1080)}>До вечера</Button><Button variant="outline" onClick={()=>until(0)}>До полуночи</Button><Button variant="outline" onClick={()=>until(420)}>До утра</Button></div>
  <div className="skip-time-fields"><label>Дней вперёд<input type="number" aria-label="Дней вперёд" min={0} max={7} value={Math.floor(target/1440)-Math.floor(now/1440)} onChange={e=>setDuration(Math.max(1,Math.min(10080,Number(e.target.value)*1440+target%1440-now%1440)))}/></label><label>Конечное время<input type="time" aria-label="Конечное время" value={`${String(Math.floor(target%1440/60)).padStart(2,'0')}:${String(target%60).padStart(2,'0')}`} onChange={e=>{const [h,m]=e.target.value.split(':').map(Number);if(Number.isFinite(h)&&Number.isFinite(m)){let d=Math.floor(target/1440)*1440+h*60+m-now;if(d<=0)d+=1440;setDuration(Math.min(10080,d))}}}/></label></div>

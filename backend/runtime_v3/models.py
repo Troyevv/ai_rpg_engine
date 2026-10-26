@@ -3,7 +3,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from hashlib import sha256
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator, model_serializer
 from backend.services.relation_dimensions import RELATION_DIMENSIONS
 from backend.services.world_delta_errors import StructuralDeltaError
 
@@ -30,6 +30,30 @@ class Season(StrictModel):
     day: int = Field(ge=1, le=99)
 
 
+class HolidayOverride(StrictModel):
+    """One concrete occurrence, never an implicit rule for all future years."""
+    id: str
+    removed: bool = False
+    name: str | None = None
+    date: str | None = None
+
+    @model_validator(mode='after')
+    def valid_date(self):
+        if self.date:
+            from datetime import date
+            date.fromisoformat(self.date)
+        return self
+
+
+class RegionalCalendar(StrictModel):
+    country: str
+    subdivision: str | None = None
+    version: str
+    language: str = 'en_US'
+    observed: bool = False
+    overrides: list[HolidayOverride] = Field(default_factory=list, max_length=512)
+
+
 class CalendarProfile(StrictModel):
     id: str = 'gregorian'
     system: Literal['gregorian', 'custom'] = 'gregorian'
@@ -38,6 +62,17 @@ class CalendarProfile(StrictModel):
     weekday_names: list[str] = Field(default_factory=list, max_length=14)
     observances: list[Observance] = Field(default_factory=list, max_length=128)
     seasons: list[Season] = Field(default_factory=list, max_length=24)
+    seasons_enabled: bool = True
+    regional: RegionalCalendar | None = None
+    regional_overrides: list[HolidayOverride] = Field(default_factory=list,max_length=512)
+
+    @model_serializer(mode='wrap')
+    def serialize_profile(self,handler):
+        value=handler(self)
+        if self.seasons_enabled:value.pop('seasons_enabled',None)
+        if self.regional is None:value.pop('regional',None)
+        if not self.regional_overrides:value.pop('regional_overrides',None)
+        return value
 
     @model_validator(mode='after')
     def valid_profile(self):

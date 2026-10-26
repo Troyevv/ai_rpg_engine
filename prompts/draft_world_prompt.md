@@ -30,3 +30,10 @@ since_date и until_date — полная дата по календарю ил�
 Проживание необязательно: город, работа или текущая локация не означают жильё в конкретном здании. Неизвестное жильё — отсутствие residence, а не бездомность. Можешь творчески создать совместимую жилую локацию и residence с корректной ссылкой; номер квартиры не обязателен. Приглашение пожить вместе не означает принятого приглашения.
 
 Планы без точного срока: due_minute=null, сохрани temporal, end_temporal, depends_on и evidence, если они известны. Ноль означает реальную минуту, не неизвестность. goals — единственное представление целей NPC; не дублируй их в short_goal.
+
+Regional calendar ownership: standard real-country holidays and explicitly selected
+north/south three-month season profiles are computed by the server, never by you.
+Do not fill regional source/version/overrides or duplicate public holidays in
+observances. Preserve explicit author-created cultural/personal dates and fictional
+seasons when compatible. Holidays, seasons, calendar arithmetic, start date and
+birth dates are separate choices; do not change one to satisfy another.

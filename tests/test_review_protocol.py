@@ -148,7 +148,7 @@ def test_full_volkov_failed_review_resume_edit_play_reload(api):
     assert len(calls)==7  # world + three failed strategies + fresh review + repair + review
     d=client.get(url+'?author=true').json()
     assert d['review']['status']=='completed' and d['review']['issues'][0]['severity']=='recommendation'
-    started=client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id']});assert started.status_code==200,started.text
+    started=client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id'],'accept_warnings':True});assert started.status_code==200,started.text
     sid=started.json()['save'];repo=app.state.repository
     from test_runtime_v3_engine import run as play,raw_for
     from test_engine import CONFIG

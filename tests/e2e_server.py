@@ -288,6 +288,20 @@ if __name__ == '__main__':
     dice=BrowserDice()
     app.state.tabletop_runtime.dice=dice
     app.state.tabletop_runtime.combat.dice=dice
+    @app.post('/test/calendar-policy-e5')
+    def calendar_policy_e5():
+        from test_calendar_start_policy import evidence
+        from test_api import REMOTE
+        j=evidence();s=j['candidate_snapshot'];repo=app.state.repository
+        w=repo.create_workspace('E5 calendar policy')
+        jid=repo.begin_preparation(w['id'],'draft_world',j['author_input']['text'],dict(REMOTE,_draft_task='world',_draft_input=j['author_input']['text']),0)
+        journal={k:v for k,v in j.items() if k not in ('requests','recovery','binding','candidate_snapshot','candidate_version','current_diagnostics','current_start_block_reason','author_input')}
+        journal.update(recovery_epoch=0,candidate_text=json.dumps(s,ensure_ascii=False))
+        repo.save_response_journal(jid,journal)
+        repo.save_draft_candidate(jid,s,[],review=j['recovery']['review'])
+        repo.preparation_progress(jid,'','stopped')
+        return {'id':w['id']}
+
     @app.post('/test/hold-preparation')
     def hold_preparation():
         global hold_next_preparation

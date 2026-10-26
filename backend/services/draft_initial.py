@@ -146,6 +146,9 @@ def prompt_schema():
         if not isinstance(v,dict):return v
         return {k:({name:compact(part) for name,part in x.items()} if k=='properties' else compact(x)) for k,x in v.items() if k not in ('description','title','$schema') and not (k=='additionalProperties' and x is True) and not (k=='required' and not x)}
     schema=compact(world_state_schema())
+    profile=schema['properties']['world_clock']['properties']['calendar']['properties']['profile']
+    for field in ('regional','regional_overrides','seasons_enabled'):
+        profile['properties'].pop(field,None) # Server-owned presets never consume primary generation context.
     return schema
 
 
@@ -241,7 +244,7 @@ def normalize(value):
     return normalize_motivations(value)
 
 
-def validate_typed(state):
+def validate_typed(state, *, advisory_age=False):
     """Validate before legacy migration's conservative salvage can discard input."""
     world=state['world']; problems=[];invalid_shape=False
     def check(model,record,path):
@@ -376,11 +379,14 @@ def validate_typed(state):
             for index,ref in enumerate(record.get(field,[])):
                 if not isinstance(ref,str) or ref not in valid:problems.append(error(f'/world/events/{escape(key)}/{field}/{index}','Ссылка события не существует.','reference',allowed=sorted(valid)))
     problems.extend(cross_record_errors(state))
+    advisories=[e for e in problems if advisory_age and e['category']=='age_conflict']
+    problems=[e for e in problems if e not in advisories]
     if problems: raise DraftErrors(problems)
+    return advisories
 
 
-def canonical_check(state):
-    validate_typed(state)
+def canonical_check(state, *, advisory_age=False):
+    validate_typed(state,advisory_age=advisory_age)
     from backend.runtime_v3.migration import migrate_v2
     result=migrate_v2(state)
     canonical=result.snapshot['world_state'];problems=[]
@@ -483,20 +489,21 @@ def cross_record_errors(state):
     return problems
 
 
-def inspect_candidate(raw):
+def inspect_candidate(raw, *, for_start=False):
     """Author data stays editable even when normalization/validation cannot finish."""
     from backend.services import draft_world
     state=raw
     try:
         state=normalize(raw)
         # Typed checking precedes legacy preparation, which otherwise hides paths.
-        validate_typed(state)
+        advisories=validate_typed(state,advisory_age=for_start)
         state=draft_world.prepare(state)
         report=draft_world.validate(state,canonical=False)
         if report['errors']:
             return state,dict(report,diagnostics=[error('/',e,'validation') for e in report['errors']])
-        canonical_check(state)
-        return state,dict(report,diagnostics=[])
+        canonical_check(state,advisory_age=for_start)
+        report['warnings'].extend(e['path']+': '+e['message'] for e in advisories)
+        return state,dict(report,diagnostics=[],semantic_warnings=advisories)
     except (ValueError,TypeError,KeyError,IndexError,AttributeError) as exc:
         diagnostics=exc.errors if isinstance(exc,DraftErrors) else [error('/',str(exc),'validation_incomplete')]
         return state,dict(errors=[e['path']+': '+e['message'] for e in diagnostics],warnings=[],diagnostics=diagnostics)

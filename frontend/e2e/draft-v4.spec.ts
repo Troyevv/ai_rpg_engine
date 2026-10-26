@@ -73,7 +73,8 @@ test('review protocol failure survives reload and resumes only review',async({pa
   await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('error');
   await page.reload();await nav(page,'Создать');
   await expect(page.getByRole('heading',{name:'Смысловая проверка не завершена'})).toBeVisible();
-  await page.getByRole('button',{name:'Открыть результат в редакторе автора'}).click();
+  await expect(page.getByRole('button',{name:'Начать с предупреждениями',exact:true})).toBeEnabled();
+  await page.getByRole('button',{name:'Автор мира',exact:true}).click();
   await page.getByRole('button',{name:'Показать всё',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByLabel('Путь поля кандидата')).toHaveCount(0);

@@ -140,7 +140,7 @@ def test_complete_saved_world_local_recovery_repair_edit_start_reload(api):
     assert raw['candidate_snapshot'] and raw['author_input']['text']==source
     assert raw['responses']['world']['parts']==saved()['responses']['world']['parts']
     assert raw['actual_tokens']>=saved()['actual_tokens']
-    start=client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id']});assert start.status_code==200,start.text
+    start=client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id'],'accept_warnings':True});assert start.status_code==200,start.text
     from test_runtime_v3_engine import run as play,raw_for
     from test_engine import CONFIG
     from backend.repositories.preparation import Repository

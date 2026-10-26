@@ -1,3 +1,6 @@
+import {useState} from 'react';
+import {api} from './api';
+import {PresetPreview,type Preview} from './CalendarPresets';
 import {CalendarStartSettings,defaultCalendarStart} from './CalendarStartSettings';
 import {Textarea} from './components/ui/textarea';
 export const defaultCreation={calendar_start:defaultCalendarStart,primary_genre:null as string|null,secondary_genres:[] as string[],custom_genre:'',npc_expressiveness:'expressive',cast_preset:'medium',core_npcs:6,secondary_npcs:12,world_type:'unspecified',geography:'',narrative_pacing:{preset:'moderate'},narrative_risk:{preset:'realistic'}};
@@ -23,6 +26,7 @@ const expressions:Record<string,string>={
  expressive:'Живые, правдоподобные реакции. Например: NPC улыбается, оживлённо благодарит и уточняет детали.',
  hyperbolized:'Театральная или комедийная подача, если она подходит персонажу. Например: NPC драматично хватается за сердце от приятного удивления.'};
 export function WorldCreationSettings({value,onChange,disabled=false}:{value:Creation;onChange:(value:Creation)=>void;disabled?:boolean}){
+ const [preview,setPreview]=useState<Preview|null>(null);const [previewError,setPreviewError]=useState('');
  const counts=castCounts(value);
  const change=(patch:Partial<Creation>)=>onChange({...value,...patch});
  return <details className="workshop-detail"><summary>Настройки генератора</summary><fieldset disabled={disabled}>
@@ -38,7 +42,7 @@ export function WorldCreationSettings({value,onChange,disabled=false}:{value:Cre
  {value.cast_preset==='custom'&&<><label>Важные NPC<input type="number" min={1} max={15} value={value.core_npcs} onChange={e=>change({core_npcs:Number(e.target.value)})}/></label><label>Второстепенные NPC<input type="number" min={0} max={40} value={value.secondary_npcs} onChange={e=>change({secondary_npcs:Number(e.target.value)})}/></label></>}
  <label>Тип мира<select aria-label="Тип мира" value={value.world_type} onChange={e=>change({world_type:e.target.value})}><option value="unspecified">Из описания</option><option value="real_world">Реальный мир</option><option value="fictional">Вымышленный мир</option><option value="alternate">Альтернативная реальность</option></select></label>
  <label>География<Textarea value={value.geography} maxLength={5000} placeholder="Страна, город, районы, расстояния и важные места" onChange={e=>change({geography:e.target.value})}/></label>
- <CalendarStartSettings value={value.calendar_start||defaultCalendarStart} onChange={calendar_start=>change({calendar_start})}/>
+ <CalendarStartSettings value={value.calendar_start||defaultCalendarStart} onChange={calendar_start=>change({calendar_start})}/><button type="button" onClick={()=>{setPreviewError('');api<Preview>('/calendar/preview',value).then(setPreview).catch(e=>setPreviewError(e.message));}}>Предпросмотр календаря</button>{previewError&&<p role="alert">{previewError}</p>}<PresetPreview value={preview}/>
  <label>Темп истории<select aria-label="Темп истории" value={value.narrative_pacing.preset} onChange={e=>change({narrative_pacing:{preset:e.target.value}})}>{Object.entries({calm:'Спокойный',moderate:'Умеренный',dynamic:'Динамичный',intense:'Интенсивный'}).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label>
  <label>Риск последствий<select aria-label="Риск последствий" value={value.narrative_risk.preset} onChange={e=>change({narrative_risk:{preset:e.target.value}})}>{Object.entries({safe:'Безопасный',realistic:'Реалистичный',harsh:'Суровый',unrestricted:'Без ограничений'}).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label><p>Темп и риск задают правила будущей игры. Они не создают события предыстории.</p>
  </fieldset></details>;

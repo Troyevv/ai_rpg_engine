@@ -20,10 +20,10 @@ def review_metadata(record):
 
 def review_block(record):
     review=review_metadata(record)
-    if not review:return None  # Historical/manual imports keep their technical-only contract.
+    if not review:return 'Смысловая проверка не выполнена.' if record.get('origin_job') or record.get('generated') else None  # Manual imports retain their technical contract.
     if review.get('status')!='completed':return 'Смысловая проверка не завершена: '+review.get('reason','повторите проверку.')
     if review.get('candidate_hash')!=candidate_hash(record['state']):return 'Смысловая проверка устарела. Повторите проверку.'
-    if any(e.get('severity','blocker')=='blocker' for e in review.get('issues',[])):return 'Смысловая проверка обнаружила противоречия. Исправьте их и повторите проверку.'
+    if review.get('issues'):return 'Смысловая проверка обнаружила противоречия. Исправьте их и повторите проверку.'
     return None
 
 
@@ -58,22 +58,24 @@ class DraftStorage:
             raw=record['state'] if record else None
             if candidate:
                 from backend.services.draft_initial import inspect_candidate
-                checked,report=inspect_candidate(raw)
+                checked,report=inspect_candidate(raw,for_start=True)
                 try:state=domain.prepare(checked)
                 except (ValueError,TypeError,KeyError,AttributeError):state=None
                 saved_errors=record.get('diagnostics',[])
                 semantic=[e for e in saved_errors if e.get('category') in ('semantic_completeness',)]
                 report['diagnostics'].extend(semantic)
-                report['errors'].extend(e['path']+': '+e['message'] for e in semantic)
+                report['warnings'].extend(e['path']+': '+e['message'] for e in semantic)
                 if report['errors']:state=None  # Never expose a partial world to Player View.
             else:
                 state=domain.prepare(raw) if record else None
-                report=domain.validate(state) if state else {'errors':[],'warnings':[]}
+                if state and state.get('draft_contract')==4:
+                    from backend.services.draft_initial import inspect_candidate
+                    state,report=inspect_candidate(state,for_start=True)
+                else:report=domain.validate(state) if state else {'errors':[],'warnings':[]}
             if state and record.get('generated'):report['warnings'].extend(domain.review_initial(state,record.get('source','')))
             technical_valid=not report['errors'] if not candidate else not any(e.get('category')!='semantic_completeness' for e in report.get('diagnostics',[]))
-            block=review_block(record) if record else None
-            if block:report['errors'].append(block)
-            if block and not author:state=None
+            block=(review_block(record) if record else None) or ('Возраст в карточке не совпадает с датой рождения.' if report.get('semantic_warnings') else None)
+            if block and author:report['warnings'].append(block)
             history=[dict(r) for r in db.execute("SELECT id,reason,created_at FROM document_versions WHERE kind='world_draft' AND owner=? ORDER BY id DESC",(wid,))]
             latest=db.execute('SELECT * FROM preparation_jobs WHERE workspace_id=? ORDER BY rowid DESC LIMIT 1',(wid,)).fetchone()
             quality_status=json.loads(latest['response_journal'] or '{}').get('quality',{}).get('status') if latest and record and record.get('origin_job')==latest['id'] else None
@@ -84,6 +86,8 @@ class DraftStorage:
             if public_job and record and review_metadata(record) and review_metadata(record).get('status')=='stale' and latest['status'] in ('error','stopped'):
                 journal=json.loads(latest['response_journal'] or '{}')
                 if not journal.get('pending') and journal.get('candidate_text') and record['state']!=json.loads(journal['candidate_text']):public_job['resumable']=True
+            if public_job and not author and public_job.get('error'):
+                public_job['error']='Проверка или генерация завершилась с замечанием. Подробности доступны автору.'
             return {'id':wid,'name':w['name'],'revision':w['revision'],'version_id':head['id'] if head else None,
                 'candidate':raw if candidate and author else None,
                 'relation_merges':relation_plans(raw) if raw and author else [],
@@ -91,10 +95,11 @@ class DraftStorage:
                 'presentation':{'clock':clock_view(state['world_clock']), 'notices':calendar_notices(state) if author else []} if state else None,
                 'creation_settings':(raw.get('creation_settings',{}) if raw else json.loads(latest['config_json']).get('_creation_settings',{}) if latest else {}) if author else {},
                 'state':state if author or state is None else domain.player_view(state),
-                'validation':report if author or not (record and review_metadata(record)) else {'errors':['Мир пока не готов к запуску. Откройте редактор автора.'] if report['errors'] else [],'warnings':[]},
+                'validation':report if author or not (record and (record.get('origin_job') or review_metadata(record))) else {'errors':['Мир пока не готов к запуску. Откройте редактор автора.'] if report['errors'] else [],'warnings':[]},
                 'review':review_metadata(record) if record and author else ({'status':review_metadata(record).get('status')} if record and review_metadata(record) else None),
                 'quality_status':quality_status,  # Safe summary; raw reasons stay author-only.
-                'start_block_reason':block,
+                'start_block_reason':None,
+                'start_warning':('Согласованность сюжета не подтверждена.' if block else None),
                 'technical_valid':technical_valid,
                 'import_warnings':record.get('warnings',[]) if record and author else [],
                 'source_text':record.get('source','') if record and author else '',
@@ -235,7 +240,24 @@ class DraftStorage:
             self._write_draft(db,job['workspace_id'],state,job['kind'],config.get('_draft_source',config.get('_draft_input','')) if config['_draft_task']=='world' else record.get('source',''),record.get('warnings',[]),outline=outline if config['_draft_task']=='world' else record.get('outline',''),generated=config['_draft_task']=='world' or record.get('generated',False),origin_job=jid if config['_draft_task']=='world' else record.get('origin_job'),review=review_metadata(record) if config['_draft_task']=='world' else (dict(review_metadata(record),status='stale',reason='Кандидат изменён.') if review_metadata(record) else None))
             db.execute("UPDATE preparation_jobs SET status='saved' WHERE id=?",(jid,))
 
-    def confirm_draft(self,wid,revision,version_id):
+    def apply_calendar_presets(self,wid,revision,choice):
+        from backend.services.calendar_presets import apply
+        from backend.services.draft_initial import inspect_candidate
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            self._draft_workspace(db,wid,revision)
+            head=self._draft_head(db,wid)
+            if not head:raise ValueError('Сначала создайте мир.')
+            record=json.loads(head['content'])
+            changed=apply(record['state'],choice,explicit=True)
+            _,report=inspect_candidate(changed,for_start=True)
+            if report['errors']:raise ValueError('Набор не применён: '+'; '.join(report['errors']))
+            record['state']=changed
+            if review_metadata(record):record['review']=dict(review_metadata(record),status='stale',reason='Календарь изменён автором.')
+            self._record_document(db,'world_draft',wid,dump(record),True,'calendar_presets',None)
+            db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))
+
+    def confirm_draft(self,wid,revision,version_id,accept_warnings=False,stop_review=False):
         from backend.repositories.living_world import project
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -243,16 +265,27 @@ class DraftStorage:
             owner=f'{wid}:{version_id}'
             done=db.execute("SELECT v.content FROM document_heads h JOIN document_versions v ON v.id=h.version_id WHERE h.kind='draft_save' AND h.owner=?",(owner,)).fetchone()
             if done:return json.loads(done[0])
-            w=self._draft_workspace(db,wid,revision);head=self._draft_head(db,wid)
+            w=self._draft_workspace(db,wid,revision,idle=False);head=self._draft_head(db,wid)
             if not head or head['id']!=version_id:raise ValueError('Подтверждённая версия устарела.')
             record=json.loads(head['content'])
-            if review_block(record):raise ValueError('Нельзя начать игру: '+review_block(record))
-            if record.get('candidate'):
+            warning=review_block(record)
+            running=db.execute("SELECT * FROM preparation_jobs WHERE workspace_id=? AND status='generating'",(wid,)).fetchall()
+            if running and not stop_review:raise ValueError('Остановите проверку перед запуском.')
+            if record.get('candidate') or record['state'].get('draft_contract')==4:
                 from backend.services.draft_initial import inspect_candidate
-                state,report=inspect_candidate(record['state'])
-                report['errors'].extend(e['path']+': '+e['message'] for e in record.get('diagnostics',[]) if e.get('category') in ('semantic_completeness',))
+                state,report=inspect_candidate(record['state'],for_start=True)
             else:state=domain.prepare(record['state']);report=domain.validate(state)
             if report['errors']:raise ValueError('Нельзя начать игру: '+'; '.join(report['errors']))
+            if (warning or report.get('semantic_warnings')) and not accept_warnings:raise ValueError('Выберите запуск с предупреждениями для этой версии.')
+            # Cancel atomically with snapshot selection. Late workers retain accounting,
+            # but status/epoch guards prohibit candidate writes and new model stages.
+            for job in running:
+                if record.get('origin_job')!=job['id'] or job['kind']!='draft_world':
+                    raise ValueError('Первичная генерация ещё не дала выбранный полный снимок.')
+                journal=json.loads(job['response_journal'] or '{}')
+                journal['recovery_epoch']=journal.get('recovery_epoch',0)+1
+                self.terminal_quality(journal,'stopped')
+                db.execute("UPDATE preparation_jobs SET status='stopped',response_journal=? WHERE id=?",(dump(journal),job['id']))
             name=state['campaign']['title'].strip() or w['name'];source=domain.export_markdown(state)
             digest=hashlib.sha256(dump(state).encode()).hexdigest()
             existing=db.execute('SELECT id FROM worlds WHERE name_key=? AND digest=?',(name.casefold(),digest)).fetchone()
@@ -262,9 +295,11 @@ class DraftStorage:
                 world_id=db.execute('INSERT INTO worlds(name,name_key,version,source_md,digest) VALUES(?,?,?,?,?)',(name,name.casefold(),version,source,digest)).lastrowid
                 db.executemany('INSERT INTO world_parts VALUES(?,?,?)',[(world_id,k,dump(v)) for k,v in state.items()])
             from backend.runtime_v3.repository import migrate_snapshot
+            authoring=state.get('authoring')
             state,_=migrate_snapshot(db,state)
+            if authoring is not None:state['authoring']=json.loads(dump(authoring))
             sid=db.execute('INSERT INTO saves(world_id,name,state_json) VALUES(?,?,?)',(world_id,'Новое прохождение',dump(state))).lastrowid
             project(db,sid,state)
-            result={'world':world_id,'save':sid,'version_id':version_id}
+            result={'world':world_id,'save':sid,'version_id':version_id,'start_decision':{'candidate_hash':candidate_hash(record['state']),'revision':revision,'accepted_warnings':accept_warnings,'stopped_review':bool(running),'review_status':(review_metadata(record) or {}).get('status','unreviewed')}}
             self._record_document(db,'draft_save',owner,dump(result),True,'confirmed')
             return result

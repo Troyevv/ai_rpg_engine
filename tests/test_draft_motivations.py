@@ -128,7 +128,7 @@ def test_saved_candidate_resume_editor_export_start_reload(api):
         assert wait_job(client,jid)['status']=='saved'
         assert provider.call_count==1
     d=client.get(url+'?author=true').json()
-    started=client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id']})
+    started=client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id'],'accept_warnings':True})
     assert started.status_code==200,started.text
     sid=started.json()['save']
     for repository in (repo,Repository(repo.path)):

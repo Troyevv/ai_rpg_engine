@@ -10,3 +10,6 @@ cryptography>=44,<47
 sentence-transformers>=3,<6
 
 Pillow>=11.3,<13
+
+# Pinned rules keep saved regional calendars reproducible.
+holidays==0.87

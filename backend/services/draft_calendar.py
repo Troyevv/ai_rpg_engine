@@ -129,50 +129,82 @@ def complete(state, author_text='', seed=None):
     if notices: meta['notices'] = notices
     synchronize(state, old, minute, cal)
     fill_birth_dates(state)
+    if settings.presets is not None and not state['authoring'].get('calendar_presets'):
+        from backend.services.calendar_presets import apply, CoverageError
+        try:state=apply(state,settings.presets.model_dump())
+        except CoverageError as exc:meta.setdefault('notices',[]).append(str(exc))
     return state
 
 
 def fill_birth_dates(state):
-    meta = state['authoring']['calendar_completion']
-    cal = state['world_clock']['calendar']; profile = cal['profile']; today = cal.get('start_date')
-    if not today: return
-    y, _, _ = date_parts(today, profile)
-    records = meta.setdefault('birth_dates', {})
-    for card in state['characters']:
-        cid = card['id']; actor = state['world']['characters'].get(cid)
-        if not actor: continue
-        match = re.fullmatch(r'(\d{1,4})(?:\s+(?:лет|год|года))?', str(card.get('fields', {}).get('Возраст', '')).strip())
-        prior = records.get(cid, {})
-        if prior.get('source') == 'manual' or actor.get('birth_provenance', {}).get('source') == 'unknown': continue
-        if not match: continue
-        age = int(match[1]); birth = actor.get('birth_date')
-        if birth and (prior.get('value') != birth or prior.get('source') != 'automatic'): continue
-        if birth and age_on(birth, today, profile) == age: continue
-        # At most two calendar years; exact Runtime age predicate handles leap policy.
-        candidates = []
-        for year in (y-age-1, y-age):
-            if not 1 <= year <= 9999: continue
-            first = ordinal(f'{year:04d}-01-01', profile)
-            last = ordinal(f'{year+1:04d}-01-01', profile)-1 if year < 9999 else (9999*sum(profile['month_lengths']) if profile['system']=='custom' else ordinal('9999-12-31', profile))
-            for n in range(first, last+1):
-                value = from_ordinal(n, profile)
-                if age_on(value, today, profile) == age: candidates.append(value)
-        if not candidates:
-            if prior.get('source')=='automatic':actor['birth_date']=None
-            records[cid] = dict(source='automatic', value=None, notice='Дата рождения вне поддерживаемого диапазона лет 1–9999.')
-            continue
-        group=actor.get('birth_provenance',{}).get('twin_group')
+    meta=state['authoring']['calendar_completion']
+    cal=state['world_clock']['calendar'];profile=cal['profile'];today=cal.get('start_date')
+    if not today:return
+    y,_,_=date_parts(today,profile)
+    records=meta.setdefault('birth_dates',{})
+    actors=state['world']['characters']
+    parents={cid:cid for cid in actors}
+    def root(cid):
+        while parents[cid]!=cid:cid=parents[cid]
+        return cid
+    def union(a,b):
+        parents[root(b)]=root(a)
+    explicit_groups={}
+    for cid,a in actors.items():
+        group=(a.get('birth_provenance') or {}).get('twin_group')
         if group:
-            established={a['birth_date'] for a in state['world']['characters'].values() if a.get('birth_date') and a.get('birth_provenance',{}).get('twin_group')==group}
-            if established:
-                candidates=[d for d in candidates if d in established] if len(established)==1 else []
-                if not candidates:
-                    records[cid]=dict(source='automatic',value=None,notice='Даты близнецов противоречат заданному возрасту; требуется уточнение.')
-                    continue
-        chosen = candidates[int(signature([meta['seed'], group or cid]), 16)%len(candidates)]
-        actor['birth_date'] = chosen
-        records[cid] = dict(source='automatic', value=chosen, input_signature=signature([age,today,profile]))
-        actor['birth_provenance'] = dict(actor.get('birth_provenance') or {}, source='authoring_automatic', input_signature=records[cid]['input_signature'])
+            if group in explicit_groups:union(explicit_groups[group],cid)
+            else:explicit_groups[group]=cid
+    # Established ID-linked sibling evidence, never a match on names alone.
+    biographies={c['id']:str(c.get('fields',{}).get('Биография','')) for c in state['characters']}
+    for r in state['world'].get('objective_relations',{}).values():
+        if not isinstance(r,dict) or not isinstance(r.get('context',''),str):continue
+        a,b=r.get('source_id'),r.get('target_id');context=r.get('context','')
+        if (r.get('kind')=='sibling' and a in actors and b in actors
+            and re.search(r'\b(?:близнец\w*|двойня\w*|twins?)\b',context,re.I)
+            and not re.search(r'не близне|not twins|возможно|предполож|maybe|possibly',context,re.I)
+            and not re.search(r'полноч|разн\w* (?:дни|дат)|midnight|different dates',context+' '+biographies.get(a,'')+' '+biographies.get(b,''),re.I)):
+            union(a,b)
+    ages={}
+    for card in state['characters']:
+        m=re.fullmatch(r'(\d{1,4})(?:\s+(?:лет|год|года))?',str(card.get('fields',{}).get('Возраст','')).strip())
+        if m:ages[card['id']]=int(m[1])
+    groups={}
+    for cid in actors:groups.setdefault(root(cid),[]).append(cid)
+    def options(age):
+        values=set()
+        for year in (y-age-1,y-age):
+            if not 1<=year<=9999:continue
+            first=ordinal(f'{year:04d}-01-01',profile)
+            last=ordinal(f'{year+1:04d}-01-01',profile)-1 if year<9999 else (9999*sum(profile['month_lengths']) if profile['system']=='custom' else ordinal('9999-12-31',profile))
+            for n in range(first,last+1):
+                d=from_ordinal(n,profile)
+                if age_on(d,today,profile)==age:values.add(d)
+        return values
+    for members in groups.values():
+        writable=[];established=set();candidates=None
+        for cid in members:
+            actor=actors[cid];prior=records.get(cid,{})
+            birth=actor.get('birth_date');source=(actor.get('birth_provenance') or {}).get('source')
+            automatic=prior.get('source')=='automatic' and prior.get('value')==birth
+            if birth and not automatic:established.add(birth)
+            if cid not in ages or prior.get('source')=='manual' or source in ('manual','unknown') or birth and not automatic:continue
+            writable.append(cid)
+            permitted=options(ages[cid]);candidates=permitted if candidates is None else candidates & permitted
+        if not writable:continue
+        if established:candidates=(candidates & established) if len(established)==1 else set()
+        if not candidates:
+            for cid in writable:
+                records.setdefault(cid,{}).update(notice='Совместимые даты рождения не определены; авторские даты сохранены.')
+            continue
+        # Preserve a valid previous automatic choice; resolve inconsistent automatic
+        # twins together before review rather than asking the LLM to patch protected dates.
+        existing={actors[cid].get('birth_date') for cid in writable}
+        chosen=next(iter(existing)) if len(existing)==1 and existing<=candidates else sorted(candidates)[int(signature([meta['seed'],sorted(members)]),16)%len(candidates)]
+        for cid in writable:
+            actors[cid]['birth_date']=chosen
+            records[cid]=dict(source='automatic',value=chosen,input_signature=signature([ages[cid],today,profile]))
+            actors[cid]['birth_provenance']=dict(actors[cid].get('birth_provenance') or {},source='authoring_automatic',input_signature=records[cid]['input_signature'])
 
 
 def manual_edit(state, path, old_minute=None):

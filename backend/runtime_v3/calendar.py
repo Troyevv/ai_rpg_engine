@@ -77,7 +77,7 @@ def current_time(state, minute=None):
                   day_period=day_period(clock), season=None)
     if value:
         _, m, d = date_parts(value, profile)
-        seasons = sorted(profile.get('seasons', []), key=lambda s:(s['month'],s['day']))
+        seasons = sorted(profile.get('seasons', []) if profile.get('seasons_enabled',True) else [], key=lambda s:(s['month'],s['day']))
         if seasons:
             result['season'] = next((s['name'] for s in reversed(seasons) if (s['month'],s['day']) <= (m,d)), seasons[-1]['name'])
     result['summary'] = f"Day {result['day']} / {value or 'date unknown'} / {result['weekday_name']} / {result['time']} / {result['day_period']}"
@@ -139,7 +139,13 @@ def calendar_range(state, start_date, end_date, relevant_ids=None):
             if (rule['month'],rule['day']) == (m,d) and y >= rule.get('since_year',1):
                 events.append(dict(id=f"{rule['id']}:{value}", date=value, kind=rule['kind'],
                                    name=rule['name'], character_ids=rule.get('character_ids',[])))
-    return dict(current=current, start_date=start_date, end_date=end_date, days=days, events=events,
+    notices=[]
+    if profile.get('regional') and profile.get('system','gregorian')=='gregorian':
+        from backend.services.calendar_presets import occurrences, CoverageError
+        try:events.extend(occurrences(profile['regional'],start_date,end_date))
+        except CoverageError as exc:notices.append(str(exc))
+    events.sort(key=lambda e:(e['date'],e['id']))
+    return dict(notices=notices,current=current, start_date=start_date, end_date=end_date, days=days, events=events,
                 scheduled=scheduled_range(state, start_date, end_date, relevant_ids),
                 profile={k:profile.get(k) for k in ('id','system','month_names','weekday_names')})
 

@@ -353,7 +353,17 @@ def create_app(db_path=None, recover=True):
         now = state['meta']['world_time']
         if minute is not None and not max(0,now-10080) <= minute <= now+10080:
             raise ValueError('Предпросмотр времени ограничен семью сутками.')
-        return dict(current=current_time(state,minute), label=calendar_label(state,minute))
+        current=current_time(state,minute)
+        regional=[];notices=[]
+        profile=(state['meta'].get('calendar') or {}).get('profile') or {}
+        if current['date'] and profile.get('regional') and profile.get('system','gregorian')=='gregorian':
+            from backend.services.calendar_presets import occurrences,CoverageError
+            from datetime import date,timedelta
+            try:
+                end=min(date.max,date.fromisoformat(current['date'])+timedelta(days=min(30,(date.max-date.fromisoformat(current['date'])).days)))
+                regional=occurrences(profile['regional'],current['date'],end.isoformat())
+            except CoverageError as exc:notices.append(str(exc))
+        return dict(current=current, label=calendar_label(state,minute),regional=regional,notices=notices)
 
     @app.get('/api/saves/{sid}/scene-records/{record_id}')
     def scene_record(sid: int, record_id: str):

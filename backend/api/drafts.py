@@ -21,7 +21,10 @@ class Change(Revision):
     source_id: int | None = None
     warnings_ack: bool = False
 
-from backend.services.world_creation_settings import CreationSettings
+from backend.services.world_creation_settings import CreationSettings, CalendarPresets
+
+class ApplyPresets(Revision):
+    presets: CalendarPresets
 
 class ResponseBudget(DTO):
     max_total_tokens: int | None = Field(default=None,ge=1)
@@ -55,9 +58,47 @@ class MergeRelations(Revision):
 
 class Confirm(Revision):
     version_id: int
+    accept_warnings: bool = False
+    stop_review: bool = False
 
 
 def install(app,repo,preparation,credentials,job):
+    @app.post('/api/calendar/preview')
+    def creation_calendar_preview(body:CreationSettings):
+        from backend.services.calendar_presets import apply, preview
+        from backend.runtime_v3.models import Calendar
+        settings=body.model_dump();start=body.calendar_start
+        cal=Calendar(start_minute=0,start_weekday=start.weekday or 0,start_date=start.date,
+                     profile=start.profile or {}).model_dump()
+        state={'creation_settings':settings,'world_clock':{'minute':0,'calendar':cal}}
+        return preview(apply(state,(start.presets or CalendarPresets()).model_dump()))
+
+    @app.post('/api/workspaces/{wid}/draft/calendar-preview')
+    def proposed_calendar_preview(wid:str,body:CalendarPresets):
+        from backend.services.calendar_presets import apply,preview
+        value=repo.draft(wid,True)
+        state=value.get('candidate') or value.get('state')
+        if not state:raise ValueError('Сначала создайте мир.')
+        return preview(apply(state,body.model_dump(),explicit=True))
+
+    @app.get('/api/calendar/presets')
+    def preset_catalog():
+        from backend.services.calendar_presets import catalog
+        return catalog()
+
+    @app.post('/api/workspaces/{wid}/draft/calendar-presets')
+    def apply_presets(wid:str,body:ApplyPresets):
+        repo.apply_calendar_presets(wid,body.revision,body.presets.model_dump())
+        return repo.draft(wid,True)
+
+    @app.get('/api/workspaces/{wid}/draft/calendar-preview')
+    def calendar_preview(wid:str):
+        from backend.services.calendar_presets import preview
+        value=repo.draft(wid,True)
+        state=value.get('candidate') or value.get('state')
+        if not state:raise ValueError('Сначала создайте мир.')
+        return preview(state)
+
     @app.get('/api/workspaces/{wid}/draft')
     def draft(wid:str,author:bool=False):return repo.draft(wid,author)
 
@@ -112,6 +153,8 @@ def install(app,repo,preparation,credentials,job):
             domain.entity(state,body.kind,body.entity_id)
             if body.task=='character' and body.kind!='character':raise ValueError('Нужна карточка персонажа.')
             if body.task=='field' and body.field not in domain.FIELDS.get(body.kind,set()) and not(body.kind=='character' and body.field.startswith('fields.')):raise ValueError('Поле недоступно.')
+        if body.task=='world' and body.creation_settings.calendar_start.presets is None:
+            body.creation_settings.calendar_start.presets=CalendarPresets()
         config={**body.config.model_dump(),'_draft_task':body.task,'_draft_input':body.text,'_use_idea':body.use_idea,
                 '_creation_settings':body.creation_settings.model_dump(), '_warnings_ack':body.warnings_ack,'_draft_target':{'kind':body.kind,'id':body.entity_id,'field':body.field}}
         if body.budget.max_total_tokens is not None:config['_draft_token_budget']=body.budget.max_total_tokens
@@ -131,7 +174,12 @@ def install(app,repo,preparation,credentials,job):
         return job(current['id'])
 
     @app.post('/api/workspaces/{wid}/draft/confirm')
-    def confirm(wid:str,body:Confirm):return repo.confirm_draft(wid,body.revision,body.version_id)
+    def confirm(wid:str,body:Confirm):
+        result=repo.confirm_draft(wid,body.revision,body.version_id,body.accept_warnings,body.stop_review)
+        if body.stop_review:
+            current=repo.draft(wid,True).get('job')
+            if current:preparation.stop(current['id'])
+        return result
 
     @app.get('/api/workspaces/{wid}/draft/export')
     def export(wid:str,version_id:int,format:Literal['md','txt','json']='md'):

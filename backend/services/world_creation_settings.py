@@ -9,7 +9,16 @@ Expressiveness = Literal['realistic','expressive','hyperbolized']
 CAST_PRESETS = {'small':(3,5),'medium':(6,12),'large':(10,25)}
 
 
+class CalendarPresets(StrictModel):
+    holidays: Literal['auto','country','none','custom'] = 'auto'
+    country: str | None = None
+    subdivision: str | None = None
+    observed: bool = False
+    seasons: Literal['auto','north','south','none','custom'] = 'auto'
+
+
 class CalendarStart(StrictModel):
+    presets: CalendarPresets | None = None
     mode: Literal['auto','gregorian','custom'] = 'auto'
     date: str | None = None
     time: str | None = Field(default=None, pattern=r'^([01]\d|2[0-3]):[0-5]\d$')
