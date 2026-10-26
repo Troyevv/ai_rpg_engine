@@ -108,6 +108,7 @@ test("one phone device preserves unsent chat drafts across collapse and modal", 
   });
   await page.getByRole("button", { name: /^Телефон/ }).click();
   const phone = page.getByRole("region", { name: "Телефон персонажа" });
+  await phone.getByRole("button",{name:"Вера работа",exact:true}).click();
   await phone
     .locator(".phone-row")
     .filter({ hasText: "Вера работа" })

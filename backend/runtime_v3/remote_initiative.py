@@ -167,6 +167,7 @@ def planning_context(snapshot, options):
     actors = {r["actor_id"] for r in options if r["actor_id"] in state["characters"]}
     cards = {c["id"]: c for c in snapshot["character_cards"]}
     data = []
+    source_ids = {eid for option in options for eid in option.get('basis_ids', [])}
     for cid in sorted(actors):
         c = state["characters"][cid]
         knowledge = [
@@ -201,7 +202,7 @@ def planning_context(snapshot, options):
                         content=e["content"][:1000] if cid in e["read_by"] else None,
                     )
                     for e in state["remote_events"].values()
-                    if cid in e["recipient_ids"]
+                    if cid in e["recipient_ids"] and (not source_ids or e['id'] in source_ids)
                 ][-4:],
             )
         )

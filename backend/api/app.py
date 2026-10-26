@@ -195,6 +195,8 @@ def create_app(db_path=None, recover=True):
 
     from backend.api.long_term import install as install_long_term
     install_long_term(app, repo, credentials, job)
+    from backend.api.remote import install_jobs as install_phone_jobs
+    install_phone_jobs(app, repo, credentials, job)
 
     @app.post('/api/saves/{sid}/rollback')
     def rollback(sid: int, body: Revision):

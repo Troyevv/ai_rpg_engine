@@ -26,29 +26,30 @@ test("phone controls, freeform text, reload and physical scene", async ({
   await expect(dialog.getByText("Входящий", { exact: false })).toBeVisible();
   await dialog.getByRole("button", { name: "Ответить", exact: true }).click();
   await expect(
-    dialog.getByRole("button", { name: "Завершить звонок", exact: true }),
+    dialog.getByRole("button", { name: "Завершить разговор", exact: true }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(
     page.locator(".choices button").filter({ hasText: "Посмотреть в окно" }),
   ).toHaveCount(0);
-  await page.getByLabel("Адресация действий").selectOption("physical");
+  await page.getByLabel("Канал действия").selectOption("physical");
   await expect(
     page.locator(".choices button").filter({ hasText: "Посмотреть в окно" }),
   ).toBeVisible();
-  await page.getByLabel("Адресация действий").selectOption("call");
+  await page.getByLabel("Канал действия").selectOption("call");
   await page.reload();
   await page
     .getByRole("button", { name: /^Телефон/ })
     .click();
   await dialog
-    .getByRole("button", { name: "Завершить звонок", exact: true })
+    .getByRole("button", { name: "Завершить разговор", exact: true })
     .click();
   await expect(
-    dialog.getByRole("button", { name: "Завершить звонок", exact: true }),
+    dialog.getByRole("button", { name: "Завершить разговор", exact: true }),
   ).toHaveCount(0);
   const after = await (await request.get(`/api/saves/${selected.save}`)).json();
   expect(after.state.scene).toEqual(before.state.scene);
+  await dialog.getByRole("button", { name: "Вера работа", exact: true }).click();
   await dialog
     .getByRole("button", { name: "Написать", exact: true })
     .first()
@@ -98,9 +99,7 @@ test("decline and configured in-game emergency log", async ({
   await dialog
     .getByRole("button", { name: "Позвонить: Скорая помощь", exact: true })
     .click();
-  await expect(
-    dialog.getByRole("button", { name: "Завершить звонок", exact: true }),
-  ).toBeVisible();
+  await expect(dialog.getByText(/Исходящий · Пропущен/)).toBeVisible();
   await expect(dialog.locator('a[href^="tel:"]')).toHaveCount(0);
 });
 
@@ -143,6 +142,7 @@ test("group membership and protagonist-owned contacts", async ({
   await expect(
     dialog.getByText("Только участникам группы.", { exact: true }),
   ).toBeVisible();
+  await dialog.locator("details summary").filter({hasText:"Управление участниками"}).click();
   await dialog
     .getByRole("button", { name: "Удалить: Вера работа", exact: true })
     .click();
@@ -227,6 +227,7 @@ test("unread text and shared portrait projection", async ({
   await expect(
     dialog.getByLabel("Текущий звонок").locator("img"),
   ).toHaveAttribute("src", portrait!);
+  await contact.getByRole("button", { name: "Вера работа", exact: true }).click();
   await contact.getByRole("button", { name: "Написать", exact: true }).click();
   await expect(
     dialog.getByText("Прочти, когда будет удобно.", { exact: true }),

@@ -1,5 +1,5 @@
 import { formatDateLabel } from "./gameDate";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import {
   Phone as PhoneIcon,
   MessageCircle,
@@ -7,7 +7,7 @@ import {
   X,
 } from "lucide-react";
 import { api } from "./api";
-import type { Save } from "./types";
+import { active, type Save, type Job, type ModelConfig } from "./types";
 import { CharacterAvatar, type PortraitSubject } from "./Portrait";
 import "./styles/phone.css";
 
@@ -45,7 +45,7 @@ type Event = {
 };
 export type PhoneState = {
   actor_id: string;
-  capabilities: { text_message: boolean; voice_call: boolean };
+  capabilities: { text_message: boolean; voice_call: boolean; ring_timeout_minutes: number };
   contacts: Contact[];
   conversations: Conversation[];
   events: Event[];
@@ -71,10 +71,15 @@ export function Phone({
   save,
   disabled,
   onCommit,
+  config, apiKey, onJob, job,
 }: {
   save: Save;
   disabled: boolean;
   onCommit: (save: Save) => void;
+  config: ModelConfig;
+  apiKey: string;
+  onJob: (job: Job) => void;
+  job: Job | null;
 }) {
   const phone = save.state.phone;
   const ownerKey = `${save.id}:${phone?.actor_id}`;
@@ -92,6 +97,13 @@ export function Phone({
   }, [ownerKey]);
   const screen = useRef<HTMLDivElement>(null);
   const drafts = useRef<Record<string, string>>({});
+  const requestLock = useRef(false);
+  const currentOwner = useRef(ownerKey); currentOwner.current = ownerKey;
+  const [detail, setDetail] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [entry, setEntry] = useState(true);
+  const messages = useRef<HTMLDivElement>(null);
+  const reading = useRef<Record<string,{top:number;pinned:boolean}>>({});
 
   useEffect(()=>{const close=()=>setOpen(false);window.addEventListener("save-workspace-opened",close);return()=>window.removeEventListener("save-workspace-opened",close)},[]);
   const [open, setOpen] = useState(false),
@@ -110,8 +122,9 @@ export function Phone({
   const [groupMembers, setGroupMembers] = useState<string[]>([]),
     [groupName, setGroupName] = useState("");
   const messageKey = `${save.id}:${phone?.actor_id}:${conversation || contact || ""}`;
+  const currentMessage = useRef(messageKey); currentMessage.current = messageKey;
   useEffect(() => {
-    setText(drafts.current[messageKey] || "");
+    setText(drafts.current[messageKey] || sessionStorage.getItem(`phone-draft:${messageKey}`) || "");
   }, [messageKey]);
   const close = () => {
     setOpen(false);
@@ -138,6 +151,7 @@ export function Phone({
   }, [open]);
   useEffect(() => {
     setOwner(ownerKey);
+    setDetail(null); setSearch(""); setEntry(true);
     setOpen(false);
     setContact(null);
     setConversation(null);
@@ -153,23 +167,49 @@ export function Phone({
     setGroupMembers([]);
     setGroupName("");
   }, [save.id, phone?.actor_id]);
+  useEffect(() => {
+    if (!open || tab !== 'messages' || !conversation || disabled || busy || requestLock.current || !phone?.events.some(e=>e.conversation_id===conversation&&e.unread)) return;
+    const owner = ownerKey;
+    requestLock.current = true;
+    api<Save>(`/saves/${save.id}/phone`, {revision:save.revision, command:{action:'read',conversation_id:conversation,operation_id:crypto.randomUUID()}})
+      .then(next=>{if(currentOwner.current===owner)onCommit(next)})
+      .catch(e=>{if(currentOwner.current===owner)setError(e.message)})
+      .finally(()=>{requestLock.current=false});
+  }, [save.revision, open, tab, conversation, disabled, busy]);
+  useLayoutEffect(()=>{const el=messages.current;if(el){const position=reading.current[messageKey];el.scrollTop=position&&!position.pinned?position.top:el.scrollHeight}},[conversation,tab,open,phone?.events.length,save.revision]);
   if (!phone || owner !== ownerKey) return null;
-  const locked = busy || disabled;
+  const locked = busy || disabled || save.state.actor_capabilities?.can_act===false || !!save.state.protagonist_required;
   const perform = async (command: Record<string, unknown>) => {
-    if (locked) return;
+    if (locked || requestLock.current) return;
+    requestLock.current = true;
     setBusy(true);
     setError("");
+    const owner = ownerKey;
+    const key = `phone-request:${owner}`;
+    const previous = sessionStorage.getItem(key);
+    const intent = JSON.stringify(command);
+    const saved = previous ? JSON.parse(previous) : null;
+    const payload = saved?.intent === intent ? saved.command : {operation_id:crypto.randomUUID(), ...command};
+    sessionStorage.setItem(key, JSON.stringify({intent,command:payload}));
     try {
-      const next = await api<Save>(`/saves/${save.id}/phone`, {
+      const automatic = ['send','call'].includes(String(command.action));
+      const response = await api<Save | {save:Save;job:Job}>(`/saves/${save.id}/phone${automatic?'/dispatch':''}`, {
         revision: save.revision,
-        command: { operation_id: crypto.randomUUID(), ...command },
+        command: payload,
+        ...(automatic ? {config,api_key:apiKey} : {}),
       });
+      sessionStorage.removeItem(key);
+      if(currentOwner.current!==owner)return;
+      const next = 'save' in response ? response.save : response;
+      if('job' in response && 'save' in response)onJob(response.job);
       onCommit(next);
+      if(command.action==='call'){setTab('calls');setEntry(false)}
       return next;
     } catch (e) {
-      setError((e as Error).message);
+      if(currentOwner.current===owner)setError((e as Error).message);
     } finally {
-      setBusy(false);
+      requestLock.current = false;
+      if(currentOwner.current===owner)setBusy(false);
     }
   };
   const call = phone.events.find(
@@ -183,6 +223,7 @@ export function Phone({
     setConversation(c.id);
     setContact(null);
     setTab("messages");
+    setEntry(false);
     if (phone.events.some((e) => e.conversation_id === c.id && e.unread))
       await perform({ action: "read", conversation_id: c.id });
   };
@@ -196,6 +237,8 @@ export function Phone({
     });
     if (next) {
       drafts.current[messageKey] = "";
+      sessionStorage.removeItem(`phone-draft:${messageKey}`);
+      if(currentMessage.current!==messageKey)return;
       setText("");
       const last = next.state.phone?.events
         .filter((e) => e.channel === "TEXT_MESSAGE" && e.outgoing)
@@ -209,6 +252,30 @@ export function Phone({
   const avatar = (subject: PortraitSubject) => (
     <CharacterAvatar subject={subject} saveId={save.id} size={36} />
   );
+  const continueMessage = async (event: Event) => {
+    if(locked||requestLock.current)return;
+    requestLock.current=true;setBusy(true);setError('');
+    const key=`phone-wait:${ownerKey}:${event.id}`;
+    const requestId=sessionStorage.getItem(key)||crypto.randomUUID();sessionStorage.setItem(key,requestId);
+    try {
+      const result=await api<{job:Job;save:Save}>(`/saves/${save.id}/phone/dispatch`,{revision:save.revision,config,api_key:apiKey,continuation:{source_event_id:event.id,owner_id:phone.actor_id,request_id:requestId}});
+      sessionStorage.removeItem(key);
+      if(currentOwner.current===ownerKey){onJob(result.job);onCommit(result.save)}
+    }catch(e){if(currentOwner.current===ownerKey)setError((e as Error).message)}finally{requestLock.current=false;if(currentOwner.current===ownerKey)setBusy(false)}
+  };
+  const latestOutgoing = phone.events.filter(e=>e.outgoing&&e.channel==='TEXT_MESSAGE'&&e.conversation_id===conversation).at(-1);
+  const hasReply = !!latestOutgoing && phone.events.slice(phone.events.findIndex(e=>e.id===latestOutgoing.id)+1).some(e=>!e.outgoing&&e.conversation_id===conversation);
+  const currentContact = phone.contacts.find(c=>c.id===detail);
+  const endCall = async () => {
+    if(!call||busy||requestLock.current)return;
+    if(job?.kind!=='communication'||job.revision!==save.revision){await perform({action:'end',event_id:call.id});return}
+    requestLock.current=true;setBusy(true);
+    try {
+      if(active(job))await api(`/jobs/${job.id}/stop`,{});
+      const next=await api<Save>(`/saves/${save.id}/phone`,{revision:save.revision,command:{action:'end',event_id:call.id,operation_id:crypto.randomUUID()}});
+      if(currentOwner.current===ownerKey){onJob({...job,status:'stopped'});onCommit(next)}
+    }catch(e){if(currentOwner.current===ownerKey)setError((e as Error).message)}finally{requestLock.current=false;if(currentOwner.current===ownerKey)setBusy(false)}
+  };
   return (
     <div
       className="phone-affordance"
@@ -216,17 +283,17 @@ export function Phone({
     >
       {call?.status === "answered" && (
         <label>
-          Адресация действий
+          Разговор с {call.label}
           <select
-            aria-label="Адресация действий"
+            aria-label="Канал действия"
             value={phone.focus}
             disabled={locked}
             onChange={(e) =>
               void perform({ action: "focus", focus: e.target.value })
             }
           >
-            <option value="call">Разговор по телефону</option>
-            <option value="physical">Физическая сцена</option>
+            <option value="call">По телефону</option>
+            <option value="physical">Рядом · физическая сцена</option>
           </select>
         </label>
       )}
@@ -270,9 +337,13 @@ export function Phone({
               <X size={18} />
             </button>
           </header>
-          <p className="muted small">Внутриигровая связь</p>
+          <p className="muted small">Внутриигровая связь · {tab==='contacts'?'Контакты':tab==='messages'?'Переписки':'Звонки'}</p>
           {error && <p role="alert">{error}</p>}
-          {call && (
+          {job?.kind==='communication'&&active(job)&&<p className="phone-progress" role="status">Ожидаем решение собеседника… Не более 4 решений за цикл.</p>}
+          {tab==='calls'&&job?.kind==='communication'&&job.status==='saved'&&<p className="phone-progress" role="status">{job.narrative}</p>}
+          {job?.kind==='communication'&&['error','stopped'].includes(job.status)&&job.revision===save.revision&&<div role="alert" className="phone-progress"><p>Действие сохранено. Обработка не завершена.</p><button disabled={busy} onClick={async()=>{try{onJob(await api<Job>(`/jobs/${job.id}/retry`,{config,api_key:apiKey}))}catch(e){setError((e as Error).message)}}}>Повторить обработку</button></div>}
+          {call&&tab==='messages'&&(conversation||contact)&&<button className="phone-call-link" onClick={()=>setTab('calls')}>{call.status==='ringing'?'Вызов':'Разговор'} · {call.label} →</button>}
+          {call && !(tab==='messages'&&(conversation||contact)) && (
             <section className="phone-call" aria-label="Текущий звонок">
               {avatar(call.subject)}
               <strong>{call.label}</strong>
@@ -280,6 +351,7 @@ export function Phone({
                 {status[call.status]} ·{" "}
                 {call.outgoing ? "Исходящий" : "Входящий"}
               </span>
+              {call.status==='answered'&&<button onClick={()=>{close();document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus()}}>Перейти к разговору</button>}
               {!call.outgoing && call.status === "ringing" ? (
                 <div>
                   {[
@@ -300,20 +372,21 @@ export function Phone({
                 </div>
               ) : (
                 <button
-                  disabled={locked}
-                  onClick={() =>
-                    void perform({ action: "end", event_id: call.id })
-                  }
+                  disabled={busy || (disabled && !(job?.kind==='communication'&&job.revision===save.revision))}
+                  onClick={() => void endCall()}
                 >
-                  Завершить звонок
+                  {call.status==='ringing'?'Отменить вызов':'Завершить разговор'}
                 </button>
               )}
             </section>
           )}
-          <div className="phone-body">
+          <div className={`phone-body ${tab==='messages'&&(conversation||contact)?'phone-chat':''}`}>
+            {entry&&unread>0&&<section className="phone-notifications"><h3>Новые сообщения · {unread}</h3>{phone.conversations.filter(c=>phone.events.some(e=>e.conversation_id===c.id&&e.unread)).map(c=><button key={c.id} onClick={()=>void openChat(c)}>{c.title}<small>Открыть сообщение</small></button>)}</section>}
             {tab === "contacts" && (
               <>
-                <button
+                {!detail&&<label className="phone-search">Поиск контакта<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Имя или номер"/></label>}
+                {currentContact&&<button onClick={()=>setDetail(null)}>К контактам</button>}
+                {!detail&&<button
                   onClick={() => {
                     setEditContact(null);
                     setLabel("");
@@ -323,7 +396,7 @@ export function Phone({
                   }}
                 >
                   Добавить контакт
-                </button>
+                </button>}
                 {adding && (
                   <form
                     onSubmit={(e) => {
@@ -387,11 +460,11 @@ export function Phone({
                 {phone.contacts.length === 0 && (
                   <p>Сохранённых контактов нет.</p>
                 )}
-                {phone.contacts.map((c) => (
-                  <article className="phone-row" key={c.id}>
+                {phone.contacts.filter(c=>detail?c.id===detail:(c.label+' '+c.address).toLocaleLowerCase().includes(search.toLocaleLowerCase())).map((c) => (
+                  <article className={`phone-row ${detail?'phone-contact-detail':''}`} key={c.id}>
                     {avatar(c.subject)}
                     <div>
-                      <strong>{c.label}</strong>
+                      <button className="phone-contact-name" onClick={()=>{setDetail(c.id);setEntry(false)}}><strong>{c.label}</strong></button>
                       <small>
                         {c.address}
                         {c.blocked
@@ -401,7 +474,7 @@ export function Phone({
                             : ""}
                       </small>
                     </div>
-                    <div>
+                    {detail===c.id&&<div className="phone-contact-actions">
                       {phone.capabilities.text_message && (
                         <button
                           disabled={locked || c.blocked || !c.available}
@@ -440,7 +513,7 @@ export function Phone({
                           Позвонить
                         </button>
                       )}
-                      <button
+                      <details className="phone-contact-manage"><summary>Управление контактом</summary><button
                         disabled={locked}
                         onClick={() => {
                           setEditContact(c.id);
@@ -461,12 +534,12 @@ export function Phone({
                         }
                       >
                         {c.blocked ? "Разблокировать" : "Блокировать"}
-                      </button>
-                    </div>
+                      </button></details>
+                    </div>}
                   </article>
                 ))}
-                <h3>Экстренные службы · в игре</h3>
-                {phone.emergency.map((e) => (
+                {!detail&&<h3>Экстренные службы · в игре</h3>}
+                {!detail&&phone.emergency.map((e) => (
                   <div className="phone-row" key={e.service}>
                     <span>
                       {services[e.service]} · {e.number || "Номер не настроен"}
@@ -549,7 +622,6 @@ export function Phone({
                       <button
                         className="phone-row"
                         key={c.id}
-                        disabled={locked}
                         onClick={() => void openChat(c)}
                       >
                         <span className="phone-avatars">
@@ -558,6 +630,7 @@ export function Phone({
                           ))}
                         </span>
                         <strong>{c.title}</strong>
+                        <small className="phone-preview">{phone.events.filter(e=>e.conversation_id===c.id).at(-1)?.content?.slice(0,90)||'Непрочитанное сообщение'}</small>
                         {phone.events.some(
                           (e) => e.conversation_id === c.id && e.unread,
                         ) && <span>Новое</span>}
@@ -594,7 +667,7 @@ export function Phone({
                       ))}
                     </div>
                     {selected?.group && selected.active && (
-                      <fieldset>
+                      <details><summary>Управление участниками</summary><fieldset>
                         <legend>Управление участниками</legend>
                         {selected.participants
                           .filter((p) => p.id && p.id !== phone.actor_id)
@@ -638,7 +711,7 @@ export function Phone({
                               Добавить: {c.label}
                             </button>
                           ))}
-                      </fieldset>
+                      </fieldset></details>
                     )}
                     {selected?.group && selected.active && (
                       <button
@@ -655,7 +728,7 @@ export function Phone({
                         Выйти из группы
                       </button>
                     )}
-                    <div className="phone-messages" aria-label="Сообщения">
+                    <div ref={messages} className="phone-messages" aria-label="Сообщения" onScroll={e=>{const el=e.currentTarget;reading.current[messageKey]={top:el.scrollTop,pinned:el.scrollHeight-el.scrollTop-el.clientHeight<32}}}>
                       {phone.events
                         .filter(
                           (e) =>
@@ -674,8 +747,8 @@ export function Phone({
                           >
                             {avatar(e.subject)}
                             <div>
-                              <small>
-                                {e.outgoing ? "Ты" : e.label} · {formatDateLabel(e.time_label)}
+                              <small title={formatDateLabel(e.time_label)}>
+                                {e.outgoing ? "Ты" : e.label} · {e.time_label.match(/\d{2}:\d{2}/)?.[0] || formatDateLabel(e.time_label)}
                               </small>
                               <p>{e.content ?? "Непрочитанное сообщение"}</p>
                               <small>
@@ -702,7 +775,7 @@ export function Phone({
                     </div>
                     {phone.capabilities.text_message &&
                       (!selected || selected.active) && (
-                        <form
+                        <form className="phone-composer"
                           onSubmit={(e) => {
                             e.preventDefault();
                             void send();
@@ -716,6 +789,7 @@ export function Phone({
                               onChange={(e) => {
                                 setText(e.target.value);
                                 drafts.current[messageKey] = e.target.value;
+                                sessionStorage.setItem(`phone-draft:${messageKey}`,e.target.value);
                               }}
                               maxLength={4000}
                             />
@@ -723,6 +797,8 @@ export function Phone({
                           <button disabled={locked || !text.trim()}>
                             Отправить сообщение
                           </button>
+                          <small className="muted">1 игровая минута · ответ не гарантирован</small>
+                          {latestOutgoing&&!hasReply&&!active(job)&&<button type="button" disabled={locked} onClick={()=>void continueMessage(latestOutgoing)}>Подождать ещё · 1 мин</button>}
                         </form>
                       )}
                   </>
@@ -732,6 +808,8 @@ export function Phone({
             {tab === "calls" && (
               <>
                 <h3>История звонков</h3>
+                <p className="muted small">Ответ / отказ: 1 минута. Без ответа — до {phone.capabilities.ring_timeout_minutes} мин. игрового времени. Дополнительное ожидание только по твоему действию.</p>
+                {!phone.events.some(e=>e.channel==='VOICE_CALL')&&<p>Звонков пока нет. Выбери контакт, чтобы позвонить.</p>}
                 {phone.events
                   .filter((e) => e.channel === "VOICE_CALL")
                   .slice()
@@ -764,7 +842,7 @@ export function Phone({
                 aria-label={label}
                 title={label}
                 aria-pressed={tab === key}
-                onClick={() => setTab(key)}
+                onClick={() => {setTab(key);setEntry(false)}}
               >
                 <Icon size={23} />
                 {key === "messages" && unread > 0 && <small>{unread}</small>}

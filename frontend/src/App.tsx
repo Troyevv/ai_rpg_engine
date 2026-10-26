@@ -1,8 +1,6 @@
-import { GameCalendar } from "./GameCalendar";
-import { Genealogy } from "./Genealogy";
 import "./styles/current-game.css";
 import {ThemeProvider, useTheme} from "./ThemeProvider";
-import { useCallback, useEffect, useState, useRef } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState, useRef } from "react";
 import {
   CalendarDays, GitBranch, ArrowLeft,
   BookOpen,
@@ -29,6 +27,8 @@ import { Tabletop } from "./Tabletop";
 
 import {useMobile,useMobileViewport,MobileNavigation} from './mobile';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from './components/ui/dialog';
+const GameCalendar=lazy(()=>import('./GameCalendar').then(m=>({default:m.GameCalendar})));
+const Genealogy=lazy(()=>import('./Genealogy').then(m=>({default:m.Genealogy})));
 export default function App() {
   const [gameMode,setGameMode]=useState(()=>localStorage.getItem('game-mode')||'narrative');
   const changeMode=(mode:string)=>{setGameMode(mode);localStorage.setItem('game-mode',mode);};
@@ -40,7 +40,7 @@ export default function App() {
   const closeWorkspace=()=>{setWorkspace(null);requestAnimationFrame(()=>{const target=workspaceTrigger.current?.isConnected?workspaceTrigger.current:document.querySelector<HTMLElement>(".current-game-entry button");target?.focus()})};
   const openWorkspace=(section:"calendar"|"family",root?:string)=>{workspaceTrigger.current=document.activeElement as HTMLElement;setInspector(false);setView("game");setFamilyRoot(root);setWorkspace(section);window.dispatchEvent(new Event("save-workspace-opened"))};
   useEffect(()=>{const open=(e:Event)=>{const d=(e as CustomEvent).detail;openWorkspace(d.section,d.root)};window.addEventListener('save-workspace',open);return()=>window.removeEventListener('save-workspace',open)},[]);
-  useEffect(()=>{if(!workspace)return;const key=(e:KeyboardEvent)=>{if(e.key==='Escape'){e.preventDefault();closeWorkspace()}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)},[workspace]);
+  useEffect(()=>{if(!workspace)return;requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('.save-workspace header button')?.focus());const key=(e:KeyboardEvent)=>{if(e.key==='Escape'&&!e.defaultPrevented&&!document.querySelector('[role="dialog"]')){e.preventDefault();closeWorkspace()}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)},[workspace]);
   const [branches,setBranches]=useState(false);
   const [view, setView] = useState<"game" | "prepare">("game");
   const [library, setLibrary] = useState(false);
@@ -128,11 +128,13 @@ export default function App() {
     return () => c.abort();
   }, [selection]);
   const choose = (world: number, save?: number) => {
+    setWorkspace(null);
     setSelection({ world, save });
     setView("game");
     setInspector(false);
   };
   const inspect = (p: Panel) => {
+    setWorkspace(null);
     setPanel(p);
     setInspector(true);
   };
@@ -162,7 +164,7 @@ export default function App() {
           </button>
           <button
             className={view === "prepare" ? "current" : ""}
-            onClick={() => setView("prepare")}
+            onClick={() => {setWorkspace(null);setView("prepare")}}
           >
             <Feather />
             <span>Создать</span>
@@ -199,7 +201,7 @@ export default function App() {
             </span>
             <span className="muted">⌄</span>
           </button>
-          {mobile?<MobileNavigation workspace={openWorkspace} open={mobileMenu} setOpen={setMobileMenu} world={!!world} go={setView} inspect={inspect} settings={()=>setSettings(true)} reading={reading} toggleReading={()=>setReading(!reading)} branches={()=>setBranches(true)}/>:<div className="topbar-actions">
+          {mobile?<MobileNavigation workspace={openWorkspace} open={mobileMenu} setOpen={setMobileMenu} world={!!world} go={v=>{setWorkspace(null);setView(v)}} inspect={inspect} settings={()=>setSettings(true)} reading={reading} toggleReading={()=>setReading(!reading)} branches={()=>setBranches(true)}/>:<div className="topbar-actions">
             {view === "game" && (
               <Button
                 variant="ghost"
@@ -252,7 +254,7 @@ export default function App() {
             <p className="muted">Открываем историю…</p>
           </div>
         ) : (
-          <Game
+          <div className="game-preserved" inert={!!workspace} aria-hidden={!!workspace}><Game
             key={`${selection.world}-${selection.save}`}
             world={world}
             save={save}
@@ -262,10 +264,10 @@ export default function App() {
             openCharacter={openCharacter}
             prefs={prefs}
             apiKey={apiKey}
-          />
+          /></div>
         )}
       </div>
-      {workspace&&save&&<section className="save-workspace" aria-label={workspace==='calendar'?'Календарь':'Родословная'}><header><button onClick={closeWorkspace}><ArrowLeft size={18}/>Вернуться в историю</button><h1>{workspace==='calendar'?'Календарь':'Родословная'}</h1><p>Сведения текущего прохождения</p></header>{workspace==='calendar'?<GameCalendar key={`${save.id}:${save.state.controlled_actor_id}`} save={save}/>:<Genealogy key={`${save.id}:${save.state.controlled_actor_id}`} save={save} rootId={familyRoot}/>}</section>}
+      {workspace&&save&&<section className="save-workspace" aria-label={workspace==='calendar'?'Календарь':'Родословная'}><header><button onClick={closeWorkspace}><ArrowLeft size={18}/>Вернуться в историю</button><h1>{workspace==='calendar'?'Календарь':'Родословная'}</h1></header><Suspense fallback={<p role="status">Загрузка…</p>}>{workspace==='calendar'?<GameCalendar key={`${save.id}:${save.state.controlled_actor_id}`} save={save}/>:<Genealogy key={`${save.id}:${save.state.controlled_actor_id}`} save={save} rootId={familyRoot}/>}</Suspense></section>}
       <Dialog open={branches} onOpenChange={setBranches}><DialogContent className={mobile?'mobile-sheet':''}><DialogHeader><DialogTitle>Ветки истории</DialogTitle><DialogDescription>Варианты ответов доступны под сценами. Смена старого варианта требует отката зависимых ходов. Именованные ветки пока не реализованы.</DialogDescription></DialogHeader></DialogContent></Dialog>
       <Settings
         open={settings}

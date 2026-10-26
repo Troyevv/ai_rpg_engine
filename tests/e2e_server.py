@@ -44,8 +44,10 @@ def runtime_v3_request(messages):
 review_protocol_attempts={}
 fragment_attempts={}
 handoff_provider=None
+phone_mode="silent"
 
 def stream(**kwargs):
+    global phone_mode
     from backend.services.draft_completeness import MARKER
     if kwargs['messages'][0]['content'].startswith(MARKER):
         request=json.loads(kwargs['messages'][1]['content'])
@@ -73,15 +75,33 @@ def stream(**kwargs):
         yield '{"patches":[],"preserved_unknown":null}';return
     observer='Тип хода: background' in full or 'Режим observer:' in full or 'mode=observer' in full
     if kwargs['messages'][0]['content'].startswith('Select at most ONE optional grounded autonomous remote action.'):
-        yield '{"action":null}'
+        options=json.loads(kwargs['messages'][1]['content'])['options']
+        if phone_mode=='silent' or not options:
+            yield '{"action":null}';return
+        time.sleep(0.15)
+        o=options[0];action=o['actions'][0]
+        if phone_mode=='read_only' and action=='send':
+            yield '{"action":null}';return
+        if phone_mode=='error_once' and action=='send':
+            phone_mode='answer'
+            raise RuntimeError('Deterministic phone provider outage')
+        if phone_mode=='decline' and action=='answer':action='decline'
+        p=dict(actor_id=o['actor_id'],action=action,basis_ids=o['basis_ids'])
+        if 'event_id' in o:p['event_id']=o['event_id']
+        if action=='send':p.update(o['paths'][0],content='Да, увидимся завтра. Напиши, когда освободишься.')
+        if action=='identify':p.update(speaker_name='Дежурный оператор')
+        yield json.dumps(dict(action=p),ensure_ascii=False)
         return
     current_message=next((m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only\n')),None)
     current_phone=json.loads(current_message.split('\n',1)[1]) if current_message else {}
     if current_phone.get('communication'):
         camera=current_phone['camera']
+        voice=current_phone['communication'].get('focus')=='call'
+        text='Вера отвечает по телефону: «Да, слышу тебя. Давай встретимся завтра».' if voice else 'В комнате тихо. За окном шелестят листья.'
         if kwargs.get('response_format'):
-            yield json.dumps(dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),choices=[dict(action='Посмотреть в окно',speech='')]),ensure_ascii=False)
-        else: yield 'В комнате тихо. За окном шелестят листья.'
+            events=[dict(id='phone-dialogue',text=text,evidence=text,participants=current_phone['communication']['participants'],witnesses=current_phone['communication']['participants'],medium='conversation',interaction_channel='call')] if voice else []
+            yield json.dumps(dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),events=events,choices=[dict(action='Посмотреть в окно',speech='',interaction_channel='physical')]),ensure_ascii=False)
+        else: yield text
         return
     if 'qa_meeting' in full:
         current=json.loads(next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only\n')).split('\n',1)[1])
@@ -363,7 +383,9 @@ if __name__ == '__main__':
         return {'world':result['world'],'save':result['save']}
 
     @app.post('/test/phone-seed')
-    def phone_seed(unread: bool = False):
+    def phone_seed(unread: bool = False, incoming: bool = True, decision: str = "silent"):
+        global phone_mode
+        phone_mode=decision
         from devtools.narrative_test_world import load_fixture
         from test_narrative_test_world import CONFIG
         from backend.runtime_v3.remote import apply
@@ -374,7 +396,10 @@ if __name__ == '__main__':
         engine.run_job(repo.path,job,engine.Worker())
         assert repo.get_job(job)['status']=='saved', repo.get_job(job)['error']
         snap=repo.get_snapshot(sid)
-        snap,batch=apply(snap,dict(action='call',operation_id='qa-incoming-call',contact_id='phone-qa_vera-qa-kirill'),actor_id='qa_vera',autonomous=True)
+        from backend.runtime_v3.models import WorldHistoryV3
+        batch=WorldHistoryV3().to_dict()
+        if incoming:
+            snap,batch=apply(snap,dict(action='call',operation_id='qa-incoming-call',contact_id='phone-qa_vera-qa-kirill'),actor_id='qa_vera',autonomous=True)
         if unread:
             snap, message_batch = apply(snap, dict(action='send', operation_id='qa-incoming-message', contact_id='phone-qa_vera-qa-kirill', content='Прочти, когда будет удобно.'), actor_id='qa_vera', autonomous=True)
             for section, rows in message_batch.items():
@@ -383,6 +408,17 @@ if __name__ == '__main__':
             snap['history_head']=append_history(db,snap.get('history_head'),batch)
             db.execute('UPDATE saves SET state_json=?,revision=revision+1 WHERE id=?',(json.dumps(snap,ensure_ascii=False),sid))
         return {'world':result['world'],'save':sid}
+
+    @app.post('/test/ui-completion-seed')
+    def ui_completion_seed(checkpoint: str = 'ui-calendar'):
+        from devtools.narrative_test_world import load_fixture
+        from test_narrative_test_world import ordinary_job
+        if checkpoint not in ('ui-calendar','ui-calendar-custom','ui-family','ui-family-dense'):
+            raise ValueError('Unknown UI checkpoint')
+        result=load_fixture(app.state.repository,checkpoint)
+        if checkpoint.startswith('ui-family'):
+            ordinary_job(app.state.repository,result['save'],'start')
+        return {'world':result['world'],'save':result['save']}
 
     @app.post('/test/initiative-seed')
     def initiative_seed():

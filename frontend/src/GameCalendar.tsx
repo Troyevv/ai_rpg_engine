@@ -4,7 +4,7 @@ import { ru, enUS } from "react-day-picker/locale";
 import "react-day-picker/style.css";
 import { api } from "./api";
 import type { Save } from "./types";
-import { calendarDate, gameLocale } from "./gameDate";
+import { calendarDate, profileDate, gameLocale } from "./gameDate";
 import { WeatherBadge, type Weather } from "./SceneClock";
 type Item = {
   id: string;
@@ -46,8 +46,11 @@ export function GameCalendar({ save }: { save: Save }) {
   const [month, setMonth] = useState(today?.slice(0, 7) || ""),
     [selected, setSelected] = useState(today || ""),
     [yearView, setYearView] = useState(false);
-  const [data, setData] = useState<Projection | null>(null),
+  const dataKey=`${save.id}:${save.revision}:${save.state.controlled_actor_id}:${month}`;
+  const [record, setRecord] = useState<{key:string;value:Projection|null}>({key:"",value:null}),
     [error, setError] = useState("");
+  const data=record.key===dataKey?record.value:null;
+  const setData=(value:Projection|null)=>setRecord({key:dataKey,value});
   const profile = (save.state.world_clock?.calendar as any)?.profile;
   const custom = profile?.system === "custom";
   const monthCount = custom ? profile.month_lengths.length : 12;
@@ -128,7 +131,7 @@ export function GameCalendar({ save }: { save: Save }) {
         </button>
       </div>
       {yearView ? (
-        <CalendarYear save={save} year={year} profile={profile} today={today} choose={(date)=>{setMonth(date.slice(0,7));setSelected(date);setYearView(false)}}/>
+        <CalendarYear key={`${save.id}:${save.revision}:${save.state.controlled_actor_id}:${year}`} save={save} year={year} profile={profile} today={today} choose={(date)=>{setMonth(date.slice(0,7));setSelected(date);setYearView(false)}}/>
       ) : (
         <div className="calendar-layout">
           {error ? (
@@ -177,7 +180,7 @@ export function GameCalendar({ save }: { save: Save }) {
             <DayPicker
               mode="single"
               month={parse(month + "-01")}
-              onMonthChange={(d) => setMonth(iso(d).slice(0, 7))}
+              onMonthChange={(d) => {setMonth(iso(d).slice(0, 7));setSelected(iso(d).slice(0,7)+"-01")}}
               selected={parse(selected)}
               onSelect={(d) => d && setSelected(iso(d))}
               today={parse(today)}
@@ -206,7 +209,7 @@ export function GameCalendar({ save }: { save: Save }) {
             />
           )}
           <section className="calendar-detail" aria-label="События дня">
-            <h4>{custom ? selected : calendarDate(selected, "weekday")}</h4>
+            <h4>{profileDate(selected, profile, "weekday")}</h4>
             <WeatherBadge
               weather={data?.days.find((d) => d.date === selected)?.weather}
             />
@@ -215,7 +218,7 @@ export function GameCalendar({ save }: { save: Save }) {
             )}
             {onDay(selected).map((e) => (
               <article key={e.id} data-status={e.status || "date"}>
-                <strong>{itemName(e)}</strong>
+                <small className="calendar-category">{({birthday:"День рождения",observance:"Памятная дата",commitment:"Договорённость",scheduled_event:"План",interval:"Период"} as Record<string,string>)[e.kind]||"Событие"}</small><strong>{itemName(e)}</strong>{e.end_date&&e.end_date!==e.date&&<p>{profileDate(e.date,profile)} → {profileDate(e.end_date,profile)}</p>}
                 {e.status && (
                   <p>
                     {{

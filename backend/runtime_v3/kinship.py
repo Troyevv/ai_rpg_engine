@@ -115,5 +115,14 @@ def genealogy_roots(snapshot):
     s=snapshot['world_state'];observer=s['camera']['controlled_actor_id']
     if observer not in s['characters']:return []
     ids={observer}|{r[k] for r in visible_relations(s,observer) for k in ('source_id','target_id')}
+    # A known person need not have any known relatives. Use explicit authorized
+    # evidence of identity/presence, never the unrestricted Character roster.
+    ids.update(s['camera']['present_character_ids'])
+    ids.update(c['character_id'] for c in s['contacts'].values() if c['owner_id']==observer and c['identity_visible'] and c['character_id'])
+    for k in s['knowledge'].values():
+        if k['actor_id']==observer and k['status'] in ('known','suspected'):
+            ids.update(s['facts'].get(k['fact_id'],{}).get('character_ids',[]))
+    from backend.runtime_v3.reproduction import known_birth
+    ids={cid for cid in ids if cid in s['characters'] and known_birth(s,cid,observer)}
     cards={c['id']:c['name'] for c in snapshot.get('character_cards',[])}
     return [dict(id=cid,name=visible_name(s,cid,observer,cards.get(cid,cid))) for cid in sorted(ids)]

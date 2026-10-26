@@ -207,10 +207,10 @@ export function Game({
         <Button variant="outline" size="sm" disabled={busy||pending||!save.turns.length} onClick={()=>void turn("background","")}>Мир без ГГ</Button>
       </div>}
       <div className="scene-bar">
-        <span>
+        <button className="scene-calendar-entry" aria-label="Открыть календарь" disabled={!save} onClick={()=>window.dispatchEvent(new CustomEvent('save-workspace',{detail:{section:'calendar'}}))}>
           <Clock size={14} />
           <SceneClock save={save} fallback={meta?.time}/>
-        </span>
+        </button>
         <span>
           <MapPin size={14} />
           {meta?.location || "Место не указано"}
@@ -357,7 +357,7 @@ export function Game({
                   })
                 }
               />
-              {unapplied && <p role="status">Текст сцены сохранён, состояние ещё не применено. Повтори обработку состояния.</p>}
+              {unapplied && <p role="status">{job?.kind==='communication'?'Действие связи сохранено. Повтори обработку, чтобы завершить цикл.':'Текст сцены сохранён, состояние ещё не применено. Повтори обработку состояния.'}</p>}
               {job &&
                 ["error", "stopped"].includes(job.status) &&
                 job.narrative_complete &&
@@ -454,7 +454,7 @@ export function Game({
       </div>
       {save && (
         <div className="composer">
-          <Phone save={save} disabled={busy||pending} onCommit={refreshControl}/>
+          <Phone save={save} disabled={busy||pending} onCommit={refreshControl} config={prefs.game} apiKey={apiKey} onJob={setSubmitted} job={job}/>
           <div className="composer-inner">
             <Textarea
               ref={input}

@@ -1,5 +1,5 @@
 import { WeatherSettings } from "./WeatherSettings";
-import { lazy, Suspense, useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   Settings2,
   Clock,
@@ -21,12 +21,6 @@ import { SceneClock } from "./SceneClock";
 import { api } from "./api";
 import type { Save } from "./types";
 import "./styles/current-game.css";
-const GameCalendar = lazy(() =>
-  import("./GameCalendar").then((m) => ({ default: m.GameCalendar })),
-);
-const Genealogy = lazy(() =>
-  import("./Genealogy").then((m) => ({ default: m.Genealogy })),
-);
 function Chronology({ save }: { save: Save }) {
   const [data, setData] = useState<any>(null),
     [error, setError] = useState("");
@@ -145,7 +139,7 @@ export function CurrentGame({
             ))}
           </nav>
           <div className="current-game-content">
-            <Suspense fallback={<p role="status">Загрузка…</p>}>
+
               {tab === "time" && (
                 <section>
                   <h3>Время мира</h3>
@@ -178,13 +172,7 @@ export function CurrentGame({
                   </p>
                 </section>
               )}
-              {tab === "calendar" && <GameCalendar save={save} />}
-              {tab === "family" && (
-                <Genealogy
-                  key={`${save.id}:${save.state.controlled_actor_id}`}
-                  save={save}
-                />
-              )}
+
               {tab === "history" && <Chronology save={save} />}
               {tab === "settings" && (
                 <section>
@@ -237,7 +225,7 @@ export function CurrentGame({
                   </div>
                 </section>
               )}
-            </Suspense>
+
           </div>
         </DialogContent>
       </Dialog>

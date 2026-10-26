@@ -1,5 +1,7 @@
 # Issue 45 implementation and preservation plan
 
+**Текущий результат: [итоговая приёмка PR #120](#pr120-final-acceptance).** Более ранние прогоны ниже сохранены как история; итоговая матрица заменяет промежуточный статус и прежние ограничения телефона.
+
 Base: master 318a8f1, includes merged #116 (ffddf3f) and completed #44.
 
 ## Navigation and ownership
@@ -87,49 +89,110 @@ Full exploratory browser run (started before the UI fixes): **226 passed, 10 fai
 
 Final server confidentiality check also removes private observance definitions from `world_clock.calendar`, not only its event markers. The final targeted backend command, `python -m pytest -q tests/test_current_game_ui.py tests/test_narrative_pacing.py tests/test_calendar_v2.py tests/test_commitments.py`, passed **152 tests** (13.14 s).
 
-## PR120 completion specification — intermediate update, not acceptance
+## PR120 final acceptance
 
-Audit base and latest remote HEAD were both `8a6c181`; master remains `318a8f1` with #44/#116 integrated. No later changes were discarded. Existing seven Inspector views, Game, Phone and canonical APIs retain ownership. Calendar/family now share a direct desktop rail/mobile-menu workspace, preserving mounted Game; character-card entry uses that same workspace. Global settings remain separate. No new dependencies or SQL migration.
+Доработка по `codex_pr120_ui_completion_spec.md`, 2026-10-26. Прочитаны AGENTS.md, #45, Epic #36, #70 и применимые границы #83/#86. Начальная версия этой доработки — **3bc9e4a970a51d2585770bf33bfb782b8e813472**, потомок базы аудита `8a6c181`. Все изменения между ними сохранены. Актуальный master — `318a8f1`, интеграция #44 и #116 сохранена. Обновляется только существующая ветка PR #120; merge не выполнялся.
 
-Implemented in this update: direct navigation, month/agenda composition, miniature year grids, selected-date/range consistency, server-side authorized family root choices, permanent card entry, B02 direct reply path, B05 filtered calendar labels, and B06 valid Observance regression. Calendar/profile remain canonical. The year view requests one bounded month per configured month; no History loading.
+### Владельцы экранов и границы
 
-Validation: production build passed; `pytest -q tests/test_current_game_ui.py tests/test_remote_communication.py tests/test_life_social.py` **77 passed**. Browser `phone`, `runtime-handoff`, `pr120-completion` **12 passed** including Start → ordinary turn → reload → next ordinary turn on desktop/mobile. Updated `current-game` + `pr120-completion`: **16 passed**. Final visual/navigation rerun: **2 passed**. These are targeted runs, not a full-suite claim.
+Существующий `App` владеет общей рабочей областью календаря/родословной и прямыми входами desktop/mobile. Контекстные входы открывают те же `GameCalendar` и `Genealogy`. Смонтированный `Game` сохраняет текст и позицию истории; скрытая область inert. Escape отдаётся верхнему диалогу, затем рабочей области; возвращается фокус. `CurrentGame` сохраняет настройки прохождения, отдельные Time Skip/LTA и переходы управления. Семь Inspector views и глобальные настройки остаются прежними.
 
-Visual inspection caught unequal calendar columns (percentage day width); fixed with equal fixed-layout columns and recaptured. [Desktop month](pr120-completion-evidence/desktop-calendar-after.png), [mobile month](pr120-completion-evidence/mobile-calendar-after.png), [desktop year](pr120-completion-evidence/desktop-year-after.png), [mobile family](pr120-completion-evidence/mobile-family-after.png). [Desktop transitions](pr120-completion-evidence/desktop-video.webm), [mobile transitions](pr120-completion-evidence/mobile-video.webm). Before captures remain in issue45-evidence above. Videos cover navigation/month/year/family/return, **not** a completed outgoing phone conversation. Chromium emulation, no physical Android check.
+`Phone` — одно устройство с тремя экранами, локальными черновиками/scroll по save/owner/chat. Черновики теперь переживают reload в той же вкладке через sessionStorage; это не каноническое хранилище сообщений и не синхронизация между устройствами. Канон, доставка, контакты, вызовы и история остаются в #70. Контакты имеют компактный список и отдельные детали; переименование/блокировка вынесены в раскрываемые дополнительные действия. Чат держит composer видимым, история прокручивается независимо. Открытие устройства показывает уведомления, но не читает inbox; чтение происходит при открытии беседы.
 
-| Requirement | Status in this update |
-|---|---|
-| R01 | Direct desktop/mobile entrances and shared workspace implemented; draft/return verified |
-| R02 | Partial: calendar composition improved; complete visual system/phone review remains |
-| R03 | Month/agenda and real year grids implemented; custom-year acceptance still pending |
-| R04 | B04–B06 fixed, valid canonical fixture and projection checks pass |
-| R05 | Authorized roots/search and permanent card entry implemented; independent-family and large-graph acceptance pending |
-| R06 | Not complete: phone screen redesign remains |
-| R07–R08 | Not complete: automatic bounded dial/read→optional-reply job cycle remains |
-| R09 | Direct-conversation reply without reverse contact fixed and tested through planner/accept/delivery |
-| R10 | Not complete: new continuation orchestration/idempotency/lineage acceptance remains |
-| R11 | Targeted preservation tests pass; complete requested matrix remains |
+### Контракт обработки связи
 
-| Tests | Evidence / remaining work |
-|---|---|
-| T01–T03 | Passed runtime-handoff and direct-navigation E2E |
-| T04 | Partial: calendar screenshot; dense multi-event/long-title review remains |
-| T05 | Passed selected day follows browsed month, revision unchanged |
-| T06 | Gregorian year passed; custom-year/boundary checks pending |
-| T07 | Existing backend lifecycle tests retained; full UI status matrix pending |
-| T08 | Valid private Observance canonical fixture and filtered UI projection pass |
-| T09 | Existing weather/reload tests pass; full switch/rollback matrix pending |
-| T10–T12 | Not fully verified: independent family, known isolated NPC, complex large graph |
-| T13 | Hidden root name regression caught and fixed; full matrix pending |
-| T14 | Existing phone draft/read/reload tests pass; redesign/motion acceptance pending |
-| T15–T16 | Not implemented end-to-end automatic continuation |
-| T17 | Existing phone routing tests pass; new complete interaction video pending |
-| T18–T19 | Not implemented end-to-end automatic read/reply cycle |
-| T20 | Planner candidate → accepted direct reply → original conversation delivery passes without reciprocal contact |
-| T21 | Existing remote communication tests pass |
-| T22–T23 | New continuation retry/reconnect/lineage checks pending |
-| T24 | Existing protagonist/incapacitation/death E2E retained and passing |
-| T25 | Narrow viewport/draft/focus tests pass; full physical keyboard and visual matrix pending |
-| T26 | Full requested preservation rerun pending; no Tabletop code changes |
+`POST /phone/dispatch` принимает **либо** существующую типизированную send/call-команду, **либо** Continuation(source_event_id, owner_id, request_id). Команда и регистрация job выполняются в одной транзакции; модель запускается после commit. Это ограниченный orchestration поверх существующих jobs, proposals, accept, remote.apply, snapshots и commit_job, без второго Runtime.
 
-G1 is implemented; G2/G3/G6/G7 are partial. G4/G5 are **not met**. This update does not complete the attached specification and must not be treated as merge-ready or as closing #45.
+- Общий предел — **4 решения модели на весь цикл**, включая группу и установление неизвестного адресата. Максимум ответа модели — min(1200, update_tokens). Контекст укладывается в выбранное окно; необязательные Knowledge/кандидаты сокращаются до обращения к провайдеру. Если исходный контекст не помещается, возникает явная ошибка.
+- Каждый запрос связан только с исходным событием. После принятого read возможен следующий optional reply. Null, отклонённое решение, отказ, недоступность или отправленный ответ прекращают цикл. Нет обхода всего списка контактов, обязательного ответа каждого участника, LLM polling или retry-until-reply.
+- Отправка/ответ/отказ и явное дополнительное ожидание расходуют **1 игровую минуту**. Неотвеченный вызов доходит только до канонического ring_timeout_minutes (профиль 1–60, по умолчанию 2); это суммарный предел дозвона, а не четыре обычных хода. UI показывает настроенный срок. Просмотр, анимация и status polling не двигают время и не вызывают модель. Time Skip и LTA сохраняют отдельные контракты.
+- Провайдер может ошибиться после read: отправленное сообщение уже сохранено, промежуточная реакция не публикуется частично. Явный Retry переиспользует записанные завершённые решения и продолжает оставшуюся работу. Нет автоматического технического retry. Usage/ошибки/попытки идут через tracked_stream; итог содержит decisions, accepted/rejected, elapsed_minutes и outcome.
+- Receipt по действующей history lineage, revision, owner и request id предотвращает повтор отправки/времени. Один request id с другим намерением отклоняется. Regenerate использует записанный исходный контекст, создаёт новый допустимый вариант; дальнейший контекст обусловлен его собственными принятыми решениями. Выбор варианта/rollback восстанавливает соответствующий звонок и время. Старый command после смены ветки не запускает новую обработку; stopped worker не может записать результат.
+- После answer выбран канал «По телефону» и доступен переход к основному composer. Никакой реплики за игрока не создаётся. «Рядом» — явный физический канал. Входящий вызов не принимается физическим действием. Завершение убирает call channel; удалённый собеседник не перемещается в сцену.
+
+### R01–R11
+
+| ID | Реализация и доказательство |
+| --- | --- |
+| R01 | Отдельные пункты существующей левой навигации и mobile menu; общая рабочая область, draft/focus/scroll сохраняются. `pr120-completion`, `current-game`; запись workspace. |
+| R02 | Общие skin tokens, круглые портреты, focus/reduced-motion, компактные mobile headers, состояния загрузки/ошибки/пустых данных. Снимки двух контрастных скинов; остальные скины проверены `narrative-skins`. |
+| R03 | Основная сетка месяца + agenda справа, mobile agenda ниже; статусы, интервалы и участники. Мини-календари года, custom профиль 2 месяца/5 дней недели. `completion-matrix`, `calendar`. |
+| R04 | B04–B06 сохранены и перепроверены: диапазон согласован с выбранной датой, labels не возвращают сырой профиль, приватная Observance валидна и остаётся в каноне. Данные помечены revision/owner/range, старый ответ не отображается. `test_current_game_ui`, T04–T09. |
+| R05 | Разрешённые корни включают известного человека без родственников и отдельную семью. Поиск не выдаёт полный roster. Один граф, bounded 80 nodes/depth 1–6, fit/pan/zoom, карточка узла, доступный список. Развод, партнёрство, усыновление, подозреваемая опека различимы; длинные партнёрские связи обходят карточки сверху. |
+| R06 | Контакты → детали, переписки → чат, журнал/текущий вызов; единый корпус/нижняя навигация, отдельные unread/read, сохранённые группы и службы. `phone`, `phone-completion`; before/after и записи. |
+| R07 | Автоматический bounded дозвон через job: answer/decline/null/unavailable. Канал, переход к разговору, отмена/завершение. T15–T17 через действующий сервер/Runtime. |
+| R08 | Точный send → read → optional reply в исходном чате; error/retry, явное ожидание, no-action и групповой общий предел. Черновики и scroll по беседе. T18/T19/T22. |
+| R09 | Сохранён и проверен B02: NPC отвечает в существующий direct conversation без обратного контакта. Membership, блокировки, доступность и каналы проверяются перед применением. `test_remote_communication`, `test_communication_cycle`. |
+| R10 | Типизированное продолжение, atomic registration, receipt/lineage, revision/owner/epoch, checkpoints/retry/regenerate, bounded model/time, штатная диагностика. T20–T24. |
+| R11 | Handoff #116, ordinary turns, Time Skip, LTA, pacing/risk/outcomes, notices, weather, portraits, управление/наблюдение/death и Tabletop проверены перечисленными ниже наборами. Нет SQL-миграций, переписывания истории, новых production dependencies или отдельного Inspector. |
+
+### T01–T26
+
+Все строки выполнены на указанном уровне. Детерминированный провайдер выдаёт решения в настоящие обработчики; исходящие answered/reply не подставляются заранее. Входящий вызов/непрочитанное сообщение в seed — исходные условия сценария.
+
+| ID | Проверка и результат |
+| --- | --- |
+| T01 | `runtime-handoff`: Start Game → обычный ход → сохранённый reload → следующий обычный ход, desktop/mobile. Пройдено. |
+| T02 | Тот же тест использует original export #116 и recovery отклонённой первой сцены; backend legacy/save tests и `test_phone_ordinary_cycle_and_legacy_disabled`. Пройдено. |
+| T03 | `pr120-completion`, `current-game`: прямые/контекстные входы, смена месяца/семьи, Escape, возврат с draft и фокусом. Пройдено. |
+| T04 | `completion-matrix`: длинные русские названия, несколько событий дня, пустой месяц, Graphite/Parchment. Снимки просмотрены; заголовок/участники разделены, mobile без overflow. |
+| T05 | Следующий месяц и назад, согласованная выбранная дата, revision/world_clock неизменны. Пройдено. |
+| T06 | Год из 12 мини-календарей; отдельный custom profile 20/25 дней, 5 weekdays, переход 42 → 43. Пройдено. |
+| T07 | Pending/overdue/resolved/cancelled видны в UI; backend проверяет перенос без старой копии и известный/неизвестный birthday. Пройдено. |
+| T08 | Валидная private Observance, сохранность канона, filtered save/calendar/markers; свои даты сохранены. Backend + UI. Пройдено. |
+| T09 | Backend visibility/observer и одинаковая weather projection; UI climate/reload, Time Skip/rollback, смена управления; revision/owner cache guards. Пройдено на этих уровнях. |
+| T10 | Выбор Тимура из несвязанной семьи; проверка неизменных revision/controlled_actor. Пройдено. |
+| T11 | Известный Олег без родства: разрешён в общем выборе, корректное пустое состояние; постоянный контекстный вход не зависит от social rows. `completion-matrix` также открывает пустую семью непосредственно из досье, desktop/mobile. |
+| T12 | Развод/новое партнёрство/усыновление/опека; 100 дополнительных родственников → максимум 80 nodes, fit/zoom/recenter/list. Скриншоты и render metrics. Пройдено. |
+| T13 | Зоя отсутствует в поиске/графе; backend hidden/known/suspected/name-history/adoption и временный observer проверены `test_life_social`. Пройдено. |
+| T14 | Resting/unread/open/chat/close, две темы, точное сохранение draft; прочтение только при открытии беседы. Пройдено и записано. |
+| T15 | Contact → call → model answer → точная реплика игрока в Narrative → ответ → end. Проверены физическая сцена и каналы, desktop/mobile. Пройдено и записано. |
+| T16 | Decline и bounded no-action в UI; unavailable (0 model calls) через настоящий runtime cycle. Пройдено; вечного ringing/spinner нет. |
+| T17 | Incoming → обычное физическое действие без answer → answer → физический/телефонный каналы → end, draft сохранён. Пройдено и записано. |
+| T18 | Send → actual read/send decisions → ответ в той же canonical conversation; reload сохраняет сообщения и новый draft. Пройдено. |
+| T19 | Read-only/null завершаются, явное ожидание создаёт ровно один commit; backend доказывает 1 минуту и общий group budget с остановкой после reply. Пройдено. |
+| T20 | Удалён обратный контакт, planner/accept/delivery дают ответ в исходную direct conversation; новый контакт не синтезируется. Пройдено. |
+| T21 | Existing #70 tests: blocked contacts, бывший/новый участник, unread restrictions, неизвестные endpoints, организации/службы. UI groups/emergency сохранены. Пройдено. |
+| T22 | Повтор идентичного HTTP dispatch, provider error после read, reload/Retry, checkpoint replay; один outgoing, один ответ, один advance. Pending duplicate и cancel защищены backend. Пройдено. |
+| T23 | Reload активного/завершённого канала, regeneration answer→decline, исходный variant, rollback к ringing; stale retry/command/worker отклонены. Пройдено. |
+| T24 | `phone`/`protagonist`/`current-game`: временный владелец, observer, incapacitated button/shortcut/submit guard, death-required переход, permanent/generated/manual protagonist. Пройдено. |
+| T25 | Desktop 1440×1000; mobile 360/393 и 390/412/430; tablet 820; text 125%; 393×500 с reduced motion и доступной кнопкой отправки; Escape/focus/draft/scroll. Chromium viewport/touch emulation; физический Android/OS keyboard не заявляется. |
+| T26 | Calendar/Time Skip/rollback, LTA preview/commit/reload, pacing/risk/outcomes, notices, portrait crop/history/delete, все основные скины; 5 Tabletop сценариев на каждом project. Пройдено. |
+
+### Выполненные команды
+
+Из корня репозитория: `python -m pytest -q` — **2123 passed (317.58 s)**. После изменений ядра целевой набор `tests/test_communication_cycle.py tests/test_remote_communication.py tests/test_engine.py tests/test_current_game_ui.py tests/test_narrative_test_world.py` — **72 passed**. `npm --prefix frontend run build` — TypeScript/Vite успешно; сохранено предупреждение о main chunk >500 kB, календарь/родословная загружаются лениво.
+
+Из `frontend`, с `PLAYWRIGHT_EXECUTABLE_PATH=/root/.cache/ms-playwright/chromium_headless_shell-1193/chrome-linux/headless_shell`:
+
+```sh
+npx playwright test phone-completion.spec.ts completion-matrix.spec.ts pr120-completion.spec.ts current-game.spec.ts phone.spec.ts calendar.spec.ts long-term.spec.ts narrative-pacing.spec.ts narrative-skins.spec.ts portraits.spec.ts protagonist.spec.ts runtime-handoff.spec.ts tabletop.spec.ts
+```
+
+Итог этого применимого acceptance набора — **74 passed (5.5 min)**. Это не полный E2E репозитория. После добавления контекстного входа из даты сцены и проверки пустого досье: `npx playwright test completion-matrix.spec.ts runtime-handoff.spec.ts` — **12 passed (45.8 s)**, включая повтор обязательного smoke. Последняя фиксация телефонного evidence ожидает фактический read перед снимком: `phone-completion.spec.ts` — **12 passed (52.4 s)**. [Логи](pr120-final-evidence/README.md#логи-проверок). Ранее целевой прогон 34 passed и отдельный 22 passed не суммируются с ним. В ходе проверки исправлены локальное затенение `time` в тестовом провайдере и гонка теста ожидания commit (ожидание реальной revision вместо мгновенного чтения; timeout не увеличен). Исторические проблемы generator suite из предыдущего раздела этим набором не сертифицируются и не объявляются исправленными.
+
+### Визуальная приёмка и evidence
+
+[Индекс before/after, экранов и записей](pr120-final-evidence/README.md). Before — неизменённый **3bc9e4a**, after — текущая доработка. Сравнения используют одинаковые размеры и fixtures: `family-seed` для calendar/year/family, `phone-seed?unread=true` для входящего/контактов/чата. Новые насыщенные/пустые сценарии сняты отдельно и не выдаются за идентичные before данные.
+
+Просмотрены реальные browser captures. Исправлены тесные mobile заголовки, наложение линии партнёрства на карточки, слитные подписи календаря, scroll после read и clipping send при уменьшенной высоте. На desktop сетка занимает рабочую область, agenda читается отдельно; mobile сохраняет последовательность сетка → детали. В телефоне composer и нижняя навигация остаются достижимы, последние ответы читаются, длинная история прокручивается. Записи охватывают открытие/сворачивание, смену экранов, исходящий разговор, read/reply, входящий вызов, смену семьи и возврат к Narrative. Reduced-motion проверен; инструментального GPU/fps аудита не проводилось.
+
+Новые воспроизводимые checkpoints #78: `ui-calendar`, `ui-calendar-custom`, `ui-family`, `ui-family-dense` в существующем loader, например:
+
+```sh
+RPG_DEV_TOOLS=1 python scripts/narrative_test_world.py --checkpoint ui-family --db data/dev-ui.sqlite3
+```
+
+### G1–G7 и ограничения
+
+| Gate | Итог |
+| --- | --- |
+| G1 | Выполнен: прямые общие входы desktop/mobile и сохранение контекста (R01/T03). |
+| G2 | Выполнен: месяц/год/custom profile, details/statuses и B04–B06 (R03–R04/T04–T09). |
+| G3 | Выполнен: отдельная/пустая/большая семья с авторизацией наблюдателя (R05/T10–T13). |
+| G4 | Выполнен: три законченных экрана одного телефона, notification/read и composer (R06/T14/T25). |
+| G5 | Выполнен: автоматический исходящий разговор и read→optional reply, допустимые отказ/молчание и bounded budgets (R07–R09/T15–T21). |
+| G6 | Выполнен: серверная фильтрация, idempotency/owner/revision/lineage и сохранения (R04/R10/T08/T13/T22–T24). |
+| G7 | Выполнен в описанной среде: обязательный smoke и применимая T01–T26 матрица; ограничения ниже не скрыты. |
+
+Физическое устройство Android, настоящая экранная клавиатура/OS Back, GPU timing и платный live LLM не проверялись: выполнены Chromium emulation, reduced viewport и настоящие API/Runtime/jobs с детерминированным провайдером. Причина молчания в конкретном пользовательском save не исследовалась; B02 доказан на валидных синтетических мирах. Dense graph — ограниченная навигация с 80 nodes и recenter, а не обещание одновременной читаемости всех 100+ родственников. Погода остаётся прежней ограниченной детерминированной дневной моделью. Полный browser suite не объявляется зелёным. Эти результаты заменяют прежний незавершённый статус PR; новых задач #83/#86 целиком и следующих задач эпика здесь нет.
