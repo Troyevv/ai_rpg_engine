@@ -17,9 +17,14 @@ test('E5 starts with warnings in Player View without new review',async({page,req
  const d=await(await request.get(`/api/workspaces/${w.id}/draft?author=true`)).json();
  expect(d.review.status).toBe('failed');
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();
- await expect(page.locator('.choices button')).toHaveCount(6);
+ // E5 has communication state, so the existing phone fixture offers one action.
+ await expect(page.locator('.choices button')).toHaveCount(1);
+ await expect(page.locator('.choices button')).toContainText('Посмотреть в окно');
+ await page.locator('.choices button').click();
+ await expect(page.locator('.turn')).toHaveCount(2);
  await page.reload();
- await expect(page.locator('.choices button')).toHaveCount(6);
+ await expect(page.locator('.turn')).toHaveCount(2);
+ await expect(page.locator('.choices button')).toHaveCount(1);
 });
 
 test('regional presets preview apply and custom edit preserve E5 authorship',async({page,request},info)=>{

@@ -92,7 +92,7 @@ def resolve(settings, choice):
     if season=='auto':
         # Country alone is not proof of a climate. These named temperate cities are
         # sufficient to suggest a visible, overridable three-month GAME convention.
-        geography=settings.get('geography','') if settings.get('world_type')=='real_world' else ''
+        geography=settings.get('geography','') if settings.get('world_type')=='real_world' and len(geographic)==1 else ''
         if re.search(r'\b(?:москва|moscow|берлин|berlin|париж|paris|лондон|london|рим|rome|мадрид|madrid|варшава|warsaw|оттава|ottawa|нью-йорк|new york)\b',geography,re.I):season='north'
         elif re.search(r'\b(?:буэнос-айрес|buenos aires)\b',geography,re.I):season='south'
         else:season=None

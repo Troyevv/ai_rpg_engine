@@ -19,7 +19,7 @@ test('large per-task contexts persist and resume a world rejected before the fir
   const resume=page.getByRole('button',{name:'Продолжить сохранённую генерацию',exact:true});
   await expect(resume).toBeVisible();
   const url=`/api/workspaces/${workspace.id}/draft`;
-  const failed=await(await request.get(url)).json();
+  const failed=await(await request.get(url+'?author=true')).json();
   expect(failed.job.error).toContain('Контекст 32768');
   expect(await(await request.get(`/api/workspaces/${workspace.id}/requests`)).json()).toHaveLength(0);
   await nav(page,'Настройки');

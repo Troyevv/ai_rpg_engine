@@ -89,8 +89,8 @@ test('review protocol failure survives reload and resumes only review',async({pa
   const requests=await(await request.get(`/api/workspaces/${workspace.id}/requests`)).json();
   expect(requests.filter((r:{stage:string})=>r.stage==='draft_world')).toHaveLength(1);
   expect(requests.filter((r:{stage:string})=>r.stage==='draft_world_validation')).toHaveLength(4);
-  await expect(page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true})).toBeEnabled();
-  await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Начать с предупреждениями',exact:true})).toBeEnabled();
+  await page.getByRole('button',{name:'Начать с предупреждениями',exact:true}).click();
   await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
   await page.getByRole('button',{name:'Начать игру',exact:true}).click();
   await expect(page.locator('.choices button')).toHaveCount(6);
@@ -204,7 +204,7 @@ test('saved symmetric duplicates offer lossless merge after reconnect',async({pa
   const relation={id:'a',kind:'sibling',source_id:a,target_id:b,context:'Брат и сестра'};
   await request.patch(url+'/candidate',{data:{revision:d.revision,path:'/world/objective_relations',value:{a:relation,b:{...relation,id:'b',source_id:b,target_id:a,context:'Сестра и брат'}}}});
   await page.reload();await nav(page,'Создать');
-  await page.getByRole('button',{name:'Открыть результат в редакторе автора',exact:true}).click();
+  await page.getByRole('button',{name:'Автор мира',exact:true}).click();
   await page.getByRole('button',{name:'Показать всё',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Две записи одной связи'})).toBeVisible();
   await expect(page.getByText('/world/objective_relations/a',{exact:true})).toBeVisible();
@@ -218,7 +218,7 @@ test('saved symmetric duplicates offer lossless merge after reconnect',async({pa
   expect(merged.candidate.world.objective_relations.a.context).toBe('Брат и сестра\nСестра и брат');
   expect(merged.review.status).toBe('stale');
   await page.getByRole('button',{name:'Повторить проверку',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true})).toBeEnabled();
+  await expect(page.getByRole('button',{name:'Начать с предупреждениями',exact:true})).toBeEnabled();
 });
 
 
@@ -229,7 +229,7 @@ test('malformed review automatically reaches a playable draft through alternate 
   await page.getByLabel('Описание мира или текст импорта').fill(`TEST_REVIEW_AUTOMATIC ${info.project.name}`);
   await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
   await expect.poll(async()=> (await(await request.get(`/api/workspaces/${w.id}/draft`)).json()).job?.status).toBe('saved');
-  await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
+  await page.getByRole('button',{name:'Начать с предупреждениями',exact:true}).click();
   await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
   await page.getByRole('button',{name:'Начать игру',exact:true}).click();
   await expect(page.locator('.choices button')).toHaveCount(6);
@@ -254,7 +254,7 @@ for (const marker of ['TEST_RELEASE_NESTED','TEST_RELEASE_QUALITY']) {
   await page.screenshot({path:`test-results/release-${marker}-${info.project.name}.png`,fullPage:true});
   await page.reload();await nav(page,'Создать');
   if(marker==='TEST_RELEASE_QUALITY')await expect(page.getByText(/Некоторые творческие детали модель оставила неполными/)).toBeVisible();
-  await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
+  await page.getByRole('button',{name:marker==='TEST_RELEASE_NESTED'?'Начать с предупреждениями':'Подтвердить мир и начать игру',exact:true}).click();
   await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
   await page.getByRole('button',{name:'Начать игру',exact:true}).click();
   await expect(page.locator('.choices button')).toHaveCount(6);

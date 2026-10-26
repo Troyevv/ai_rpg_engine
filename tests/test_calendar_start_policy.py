@@ -146,6 +146,8 @@ def test_overrides_deletion_reload_none_custom_unknown_and_versions():
         assert presets.resolve(dict(world_type='real_world',geography=geography),{'holidays':'auto','seasons':'auto'})[0] is None
     assert presets.resolve(dict(world_type='alternate',geography='Москва'),{'holidays':'auto','seasons':'auto'})==(None,None)
     assert presets.resolve(dict(world_type='real_world',geography='Бразилия'),{'holidays':'auto','seasons':'auto'})==('BR',None)
+    for geography in ('Москва и Буэнос-Айрес','Россия, Москва и Бразилия'):
+        assert presets.resolve(dict(world_type='real_world',geography=geography),{'holidays':'auto','seasons':'auto'})==(None,None)
 
 
 def test_e5_twins_joint_dates_without_rewriting_manual_values():
@@ -265,3 +267,25 @@ def test_author_age_disagreement_warns_but_invalid_date_still_blocks(api):
     assert repo.confirm_draft(wid,d['revision'],d['version_id'],True)['save']
     s['world']['characters'][cid]['birth_date']='2026-02-30'
     assert inspect_candidate(s,for_start=True)[1]['errors']
+
+
+def test_existing_78_calendar_checkpoint_preserves_presets_through_turn_reload_rollback(tmp_path):
+    from devtools.narrative_test_world import build_fixture
+    from backend.repositories.preparation import Repository
+    from test_runtime_v3_engine import run as play,raw_for
+    from test_engine import CONFIG
+    state=build_fixture('calendar-evening');original=deepcopy(state)
+    state=presets.apply(state,{'holidays':'country','country':'RU','seasons':'north'},True)
+    repo=Repository(tmp_path/'qa78.sqlite');w=repo.create_workspace('QA78 calendar presets')
+    repo.import_draft(w['id'],json.dumps(state,ensure_ascii=False),w['revision'],format='json')
+    d=repo.draft(w['id'],True);sid=repo.confirm_draft(w['id'],d['revision'],d['version_id'])['save']
+    profile=repo.get_snapshot(sid)['world_state']['meta']['calendar']['profile']
+    for kind in ('start','turn','turn'):
+        before=repo.get_snapshot(sid)
+        jid=repo.begin_job(sid,'Осматриваюсь.' if kind=='turn' else '',kind,dict(CONFIG,context_length=262144))
+        play(repo,jid,raw_for(before));assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)
+        repo=Repository(repo.path)
+        assert repo.get_snapshot(sid)['world_state']['meta']['calendar']['profile']==profile
+    repo.rollback_last(sid)
+    assert Repository(repo.path).get_snapshot(sid)['world_state']['meta']['calendar']['profile']==profile
+    assert build_fixture('calendar-evening')==original
