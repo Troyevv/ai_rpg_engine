@@ -62,7 +62,7 @@
 | R10 | PASS | failed_extraction_retry; epoch/stale/repeated retry guards | No original gameplay-log replay |
 | R11 | PASS | precise author diagnostics; safe player repairs + pending message | No original gameplay-log replay |
 | R12 | PASS | calendar/start-policy/reproduction/Knowledge regressions | No original gameplay-log replay |
-| R13 | PASS | 2 real baseline reds; provider-only new integration tests | No original gameplay-log replay |
+| R13 | PASS | 2 real baseline reds; 40 focused tests, provider-only new integration tests | No original gameplay-log replay |
 | R14 | NOT RUN | local tests/build passed; final CI/browser pending | No original gameplay-log replay |
 
 | Тест | Статус | Red / Green / фактическое доказательство |
@@ -84,7 +84,7 @@
 | T15 | PASS | nonfixture_identity renamed synthetic copy |
 | T16 | PASS | real_start_repair_turn_reopen_next_turn A01 |
 | T17 | PASS | same narrative first missing claim then bounded repair |
-| T18 | PASS | arrival assertion negatives (future/negated/remote) and anchors; semantic classification remains extraction responsibility |
+| T18 | PASS | archive_negative_narratives: actual A03/A04/A05 prose → real API → rejected presence → repair → one commit; assertion/anchor matrix. Semantic classification remains extraction responsibility |
 | T19 | PASS | wrong actor red→green; wrong destination/evidence/origin/conflict matrix |
 | T20 | PASS | parent/independent × elapsed 0/1 matrix; real start/turn |
 | T21 | PASS | failed_extraction_retry after Repository reopen |
@@ -153,3 +153,7 @@
 - DOB/old-cache/birth/context focused checks: **78 passed in 22.75s**; два appearance-adapter checks — **2 passed**.
 - Browser test discovery: **236 tests / 38 files** (118 per viewport); no browser execution claimed by discovery.
 - Initial published `f332879` verify: **2100 passed**, build success. Mobile: **108 passed, 10 skipped**, 9.6m. Three handoff screenshots inspected: 19-card selector and Ilya name; rejected text with retry and no Start; committed minute 18:03 with Ilya/Viktoria scene. [Mobile artifact](https://github.com/Troyevv/ai_rpg_engine/actions/runs/40299902387/artifacts/12640582249). Desktop first attempt hit the unchanged 20-minute job limit after a slow Chromium install; a job retry was requested. Final refinement SHA attestation is recorded in PR #116 after CI completes.
+
+- Final handoff suite including archive A03/A04/A05 API repair: `python -m pytest -q tests/test_runtime_handoff.py` — **40 passed in 19.27s** (`/tmp/handoff-all-final.log`).
+
+- `9b19b4e` CI: backend **2103 passed in 326.50s**, build PASS. Browser: desktop **117 passed / 1 failed**, mobile **107 passed / 10 skipped / 1 failed**. New test searched a full participant name before opening the collapsed thread. The test now opens the actual thread detail before asserting names; expected names and timeouts are unchanged. This failed run is not claimed as acceptance.

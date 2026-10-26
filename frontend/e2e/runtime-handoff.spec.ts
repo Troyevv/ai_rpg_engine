@@ -28,7 +28,9 @@ test('original export identities and rejected opening recover through real API t
  await expect(page.locator('.inspector-dialog')).toContainText('Марина Волкова');
  await expect(page.locator('.inspector-dialog')).not.toContainText('marina_volkova');
  await page.locator('.panel-tabs').getByRole('button',{name:'Сюжет',exact:true}).click();
- await expect(page.locator('.inspector-dialog')).toContainText('Илья Александров');
+ await page.locator('.inspector-dialog summary').filter({hasText:'Дело Зои Маркиной против Apex Stroy'}).click();
+ await expect(page.locator('.inspect-detail')).toContainText('Илья Александров');
+ await expect(page.locator('.inspect-detail')).toContainText('Зоя Маркина');
  await expect(page.locator('.inspector-dialog')).not.toContainText('marina_volkova');
  // Close the inspector using the normal game navigation on both layouts.
  await page.keyboard.press('Escape');

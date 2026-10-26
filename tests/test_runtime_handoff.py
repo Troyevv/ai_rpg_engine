@@ -444,3 +444,43 @@ def test_old_migration_cache_is_interpreted_without_rewriting_it(api):
         assert first==second
         assert {c['id']:c['name'] for c in ui_view(first)['characters']}=={c['id']:c['name'] for c in old['character_cards']}
         assert list(db.iterdump())==before
+
+
+@pytest.mark.parametrize('case_id',['A03_will_arrive_not_arrived','A04_person_mentioned_outside','A05_no_entry'])
+def test_archive_negative_narratives_repair_without_inventing_presence(api,case_id):
+    """Synthetic archive prose, real context/extraction/repair/commit pipeline."""
+    client,app=api;sid=imported(client);repo=app.state.repository
+    before=repo.get_snapshot(sid)
+    case=next(c for c in json.loads((ROOT/'arrival_scenarios.json').read_text())['cases'] if c['id']==case_id)
+    narrative=case['narrative'];calls=[]
+    def provider(**kw):
+        calls.append(kw)
+        if not kw.get('response_format'):
+            yield narrative
+            return
+        if case_id=='A04_person_mentioned_outside':
+            raw=arrival(evidence=narrative)
+            raw['movements'][0]['actor_evidence']='Виктория'
+            if sum(bool(c.get('response_format')) for c in calls)==1:
+                # An outside unnamed man must not acquire an unrelated known ID.
+                raw['final_scene']['present_character_ids'].append('sergey_volkov')
+        else:
+            raw=dict(final_scene=dict(location_id='ilya_cabinet',present_character_ids=['ilya'],elapsed_minutes=1))
+            if sum(bool(c.get('response_format')) for c in calls)==1:
+                raw['final_scene'].update(present_character_ids=['ilya','viktoria_solovyova'],situation_evidence=narrative)
+        yield json.dumps(raw,ensure_ascii=False)
+    with patch('engine.chat_stream',side_effect=provider):
+        jid=submit(client,sid);job=wait_job(client,jid)
+    assert job['status']=='saved',job.get('error')
+    assert len(calls)==3 and sum(not c.get('response_format') for c in calls)==1
+    assert repo.get_job(jid)['narrative']==narrative
+    after=repo.get_snapshot(sid)
+    expected=['ilya','viktoria_solovyova'] if case_id=='A04_person_mentioned_outside' else ['ilya']
+    assert after['world_state']['camera']['present_character_ids']==expected
+    for cid,actor in before['world_state']['characters'].items():
+        if cid=='viktoria_solovyova' and len(expected)==2:continue
+        assert after['world_state']['characters'][cid]['location_id']==actor['location_id']
+    assert after['world_state']['knowledge']==before['world_state']['knowledge']
+    assert set(after['world_state']['characters'])==set(before['world_state']['characters'])
+    assert after['world_state']['meta']['world_time']==before['world_state']['meta']['world_time']+1
+    assert len(repo.list_turns(sid))==1
