@@ -1,9 +1,15 @@
+import {useState,lazy,Suspense} from 'react';
+import {Dialog,DialogContent,DialogTitle,DialogDescription} from './components/ui/dialog';
+import {api} from './api';
+import type {Save} from './types';
+const Genealogy=lazy(()=>import('./Genealogy').then(m=>({default:m.Genealogy})));
 import {CharacterAvatar} from "./Portrait";
 import type {State} from './types';
 import {socialLabel, lifeLabel, phaseLabel} from './lib/social';
 
 /** Uses only the server-authorized projection, never reconstructs hidden links. */
 export function SocialStateView({state,actor,saveId}:{state:State;actor?:string;saveId?:number}) {
+ const [familySave,setFamilySave]=useState<Save|null>(null);const [familyError,setFamilyError]=useState('');
  const graph=state.genealogy;
  const names=new Map(graph?.nodes.map(n=>[n.id,n.name])||[]);
  const links=(state.objective_relations||[]).filter(r=>!actor||r.source_id===actor||r.target_id===actor);
@@ -12,7 +18,7 @@ export function SocialStateView({state,actor,saveId}:{state:State;actor?:string;
  const residences=(state.residence_roles?.residences||[]).filter(r=>!actor||r.actor_id===actor);
  const roles=(state.residence_roles?.roles||[]).filter(r=>!actor||r.actor_id===actor);
  if(!links.length&&!derived.length&&!life&&!residences.length&&!roles.length)return null;
- return <section aria-label="Семья и социальные связи"><h3>Семья и социальные связи</h3>
+ return <section aria-label="Семья и социальные связи"><h3>Семья и социальные связи</h3>{saveId&&<button onClick={()=>{setFamilyError('');api<Save>(`/saves/${saveId}`).then(setFamilySave).catch(e=>setFamilyError(e.message))}}>Открыть родословную</button>}{familyError&&<p role="alert">{familyError}</p>}<Dialog open={!!familySave} onOpenChange={v=>!v&&setFamilySave(null)}><DialogContent className="current-game-panel"><DialogTitle>Родословная</DialogTitle><DialogDescription>Известные семейные связи</DialogDescription>{familySave&&<Suspense fallback={<p>Загрузка…</p>}><Genealogy key={`${saveId}:${state.controlled_actor_id}`} save={{...familySave,state,revision:familySave.revision}} rootId={actor}/></Suspense>}</DialogContent></Dialog>
   <p className="muted small">Известно управляемому персонажу. Неизвестные связи не показаны.</p>
   {life&&<><p>Состояние персонажа: {lifeLabel(life.life_status)}</p>
    {life.conditions.map(c=><p key={c.id}>{c.description} · {{active:'Действует',resolved:'Завершено',cancelled:'Отменено',unknown_outcome:'Исход неизвестен'}[c.status]}{c.duration==='persistent'?' · длительное ограничение':''}</p>)}

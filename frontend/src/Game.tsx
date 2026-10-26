@@ -1,3 +1,6 @@
+import {CurrentGame} from './CurrentGame';
+import {SceneClock} from './SceneClock';
+import {calendarDate} from './gameDate';
 import {advanceDomainLabel} from './lib/longTerm';
 import {LongTermAdvance} from './LongTermAdvance';
 import {SkinHeader} from './ThemeDecorationLayer';
@@ -65,6 +68,8 @@ export function Game({
   const mainActor=save?.state.protagonist_id||save?.state.characters.find(c=>c.is_player)?.id;
   const actorId=save?.state.controlled_actor_id===undefined?mainActor:save.state.controlled_actor_id;
   const [policyOpen,setPolicyOpen]=useState(false);
+  const [timeSkipOpen,setTimeSkipOpen]=useState(false);
+  const [longTermOpen,setLongTermOpen]=useState(false);
   const [protagonistOpen,setProtagonistOpen]=useState(false);
   const [cameraOpen,setCameraOpen]=useState(false);
   const draftKey=`draft-${save?.id}-${actorId}`;
@@ -101,6 +106,9 @@ export function Game({
   const unapplied = !!job && ['error','stopped'].includes(job.status) && !!job.narrative_complete && job.revision === save?.revision;
   const running = active(job)||!!awaitingCommit;
   const pending = running||unapplied;
+  const canAct = !!save && !!actorId && !save.state.protagonist_required && save.state.actor_capabilities?.can_act!==false;
+  const canSubmit = canAct && !busy && !pending && !!save?.turns.length;
+  useEffect(()=>{if(save?.state.protagonist_required)setProtagonistOpen(true)},[save?.id,save?.state.protagonist_required]);
 
   useEffect(() => {
     const id = requestAnimationFrame(() => {
@@ -122,7 +130,7 @@ export function Game({
   };
   const turn = (kind: "start" | "turn" | "regenerate" | "background", text = draft, target?:number, rollback=false, timeSkip?:{duration:number;reason:string}) =>
     run(async () => {
-      if (!save) return;
+      if (!save || (kind === "turn" && !timeSkip && !canSubmit)) return;
       const j = await api<Job>(`/saves/${save.id}/turns`, {
         kind,
         text,
@@ -180,9 +188,16 @@ export function Game({
     );
   return (
     <main className="game">
+      {save&&<CurrentGame refresh={refreshControl} save={save} disabled={busy||pending} notices={notices} onNotices={v=>{setNotices(v);localStorage.setItem('relationship-notices',v?'on':'off')}} policy={()=>setPolicyOpen(true)} protagonist={()=>setProtagonistOpen(true)} camera={()=>setCameraOpen(true)} openCharacter={openCharacter} timeSkip={()=>setTimeSkipOpen(true)} longTerm={()=>setLongTermOpen(true)}/>}
+      {save&&<> <LongTermAdvance open={longTermOpen} onOpenChange={setLongTermOpen} save={save} disabled={busy||pending||!save.turns.length||!!save.state.protagonist_required} submit={request=>void run(async()=>{
+                      const j=await api<Job>(`/saves/${save.id}/long-term`,{request,config:prefs.game,revision:save.revision,api_key:apiKey});
+                      setSubmitted(j);pinned.current=true;
+                    })}/>
+                    <TimeSkip open={timeSkipOpen} onOpenChange={setTimeSkipOpen} save={save} disabled={busy||pending||!save.turns.length||!!save.state.protagonist_required} submit={(duration,reason)=>void turn('turn',actorId===null||save.state.actor_capabilities?.can_act===false?'':`Жду ${duration} минут.${reason?' '+reason:''}`,undefined,false,{duration,reason})}/>
+</>}
       <RuntimeNotifications save={save} job={submitted?job:null} enabled={notices}/>
-      {save&&<><Button variant="outline" disabled={busy||pending} onClick={()=>setProtagonistOpen(true)}>Сменить главного героя</Button>{save.state.protagonist_required&&<p role="alert">Главный герой умер. История продолжается: выбери или создай нового героя.</p>}<Protagonist save={save} open={protagonistOpen} onOpenChange={setProtagonistOpen} refresh={refreshControl} prefs={prefs} apiKey={apiKey}/></>}
-      {save&&<><Button variant="outline" disabled={busy||pending} onClick={()=>setPolicyOpen(true)}>Политика истории</Button><NarrativePolicy save={save} open={policyOpen} onOpenChange={setPolicyOpen} refresh={refreshControl}/></>}
+      {save&&<>{save.state.protagonist_required&&<p role="alert">Главный герой умер. История продолжается: выбери или создай нового героя.</p>}<Protagonist save={save} open={protagonistOpen} onOpenChange={setProtagonistOpen} refresh={refreshControl} prefs={prefs} apiKey={apiKey}/></>}
+      {save&&<><NarrativePolicy save={save} open={policyOpen} onOpenChange={setPolicyOpen} refresh={refreshControl}/></>}
       {save&&<WorldCamera save={save} open={cameraOpen} onOpenChange={setCameraOpen} busy={busy||pending} observe={observe} control={switchActor}/>}
       {save&&<Diagnostics saveId={save.id} jobId={diagnosticJob} open={diagnostics} onOpenChange={setDiagnostics}/>}
       {mobile&&save?<MobileScene save={save} meta={meta} busy={busy||pending} switchActor={switchActor} background={()=>void turn("background","")} openCharacter={openCharacter} openCamera={()=>setCameraOpen(true)}/>:<>{save&&<div className="pov-controls">
@@ -194,7 +209,7 @@ export function Game({
       <div className="scene-bar">
         <span>
           <Clock size={14} />
-          {meta?.time || "Время не указано"}
+          <SceneClock save={save} fallback={meta?.time}/>
         </span>
         <span>
           <MapPin size={14} />
@@ -213,7 +228,7 @@ export function Game({
         </div>
       </div>
       </>}
-      {!!save?.state.world_clock?.nearby?.length&&<details className="skip-diagnostics"><summary>Ближайшие даты</summary><p className="muted small">Дата в календаре не означает, что запланировано празднование.</p>{save.state.world_clock.nearby.map(e=><p key={e.id}>{e.date} · {e.kind==='birthday'?`День рождения: ${e.character_ids.map(id=>save.state.characters.find(c=>c.id===id)?.name||id).join(', ')}`:e.name}</p>)}</details>}
+      {!!save?.state.world_clock?.nearby?.length&&<details className="skip-diagnostics"><summary>Ближайшие даты</summary><p className="muted small">Дата в календаре не означает, что запланировано празднование.</p>{save.state.world_clock.nearby.map(e=><p key={e.id}>{calendarDate(e.date)} · {e.kind==='birthday'?`День рождения: ${e.character_ids.map(id=>save.state.characters.find(c=>c.id===id)?.name||id).join(', ')}`:e.name}</p>)}</details>}
       {save?.state.last_long_term_advance&&<details className="skip-diagnostics" open><summary>Длительный переход{save.state.last_long_term_advance.interruption?' · прерван':''}</summary>
         <p>Обращений к модели: {save.state.last_long_term_advance.llm_calls} / {save.state.last_long_term_advance.max_llm_calls}. Нерешённых причин: {save.state.last_long_term_advance.unresolved.length}.</p>
         {save.state.last_long_term_advance.accepted.length>0&&<><strong>События вне сцены — сведения для игрока</strong><p>Герой не узнаёт эти сведения автоматически.</p><ul>{save.state.last_long_term_advance.accepted.flatMap(g=>g.summaries).map((text,i)=><li key={i}>{text}</li>)}</ul></>}
@@ -375,14 +390,14 @@ export function Game({
                     <Button disabled={busy} onClick={()=>switchActor(mainActor!)}>Вернуться к {save.state.characters.find(c=>c.id===mainActor)?.name.replace(' (ГГ)','')}</Button>
                     <label>Продолжить за персонажа…<select aria-label="Участник фоновой сцены" value="" disabled={busy} onChange={e=>switchActor(e.target.value,save.turns.at(-1)!.id)}><option value="">Выбрать участника</option>{save.state.characters.filter(c=>JSON.parse(save.turns.at(-1)?.audience_json||'[]').includes(c.id)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
                   </div>}
-                  {save.state.actor_capabilities?.can_act===false&&<p role="status">Персонаж сейчас не может действовать. Можно продолжить течение времени или наблюдать за миром.</p>}
+                  {save.state.actor_capabilities?.can_act===false&&<div><p role="status">Персонаж сейчас не может действовать. Можно продолжить течение времени или наблюдать за миром.</p>{actorId&&<Button disabled={busy||pending} onClick={()=>observe(actorId)}>Продолжить наблюдать за героем</Button>}</div>}
                   <motion.div className="choices" key={save.turns.at(-1)?.active_variant_id} variants={choicesMotion} initial={initialChoice.current===save.turns.at(-1)?.active_variant_id?false:"hidden"} animate="visible">
                     {(save.state.actor_capabilities?.can_act!==false&&save.turns.at(-1)?.kind!=="background"&&(save.turns.at(-1)?.pov_actor_id||mainActor)===actorId?save.turns.at(-1)?.choices:[])?.filter(c=>!save.state.phone||(c.interaction_channel||"physical")===save.state.phone.focus).map((c, i) => (
                       <motion.button
                         variants={choiceMotion}
                         className={selectedChoice===i?"choice-selected":""}
                         key={i}
-                        disabled={busy}
+                        disabled={!canSubmit}
                         onClick={() => {
                           setSelectedChoice(i); void turn(
                             "turn",
@@ -399,12 +414,6 @@ export function Game({
                     ))}
                   </motion.div>
                   <div className="turn-actions">
-                    <LongTermAdvance save={save} disabled={busy||pending||!!save.state.protagonist_required} submit={request=>void run(async()=>{
-                      const j=await api<Job>(`/saves/${save.id}/long-term`,{request,config:prefs.game,revision:save.revision,api_key:apiKey});
-                      setSubmitted(j);pinned.current=true;
-                    })}/>
-                    <TimeSkip save={save} disabled={busy||pending||!!save.state.protagonist_required} submit={(duration,reason)=>void turn('turn',actorId===null||save.state.actor_capabilities?.can_act===false?'':`Жду ${duration} минут.${reason?' '+reason:''}`,undefined,false,{duration,reason})}/>
-                    <label className="small"><input type="checkbox" checked={notices} onChange={e=>{setNotices(e.target.checked);localStorage.setItem('relationship-notices',e.target.checked?'on':'off')}}/> Показывать изменения отношений</label>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -456,16 +465,13 @@ export function Game({
                 setDraft(e.target.value);
                 sessionStorage.setItem(draftKey, e.target.value);
               }}
-              disabled={actorId===null}
+              disabled={!canAct}
               placeholder={actorId===null?"Камера наблюдает мир — выбери персонажа для управления":"Что ты делаешь или говоришь?"}
               onKeyDown={(e) => {
                 if (
                   e.key === "Enter" &&
                   (e.ctrlKey || e.metaKey) &&
-                  actorId !== null &&
-                  !pending &&
-                  !busy &&
-                  save.turns.length &&
+                  canSubmit &&
                   draft.trim()
                 ) {
                   e.preventDefault();
@@ -476,7 +482,7 @@ export function Game({
             <Button
               aria-label="Отправить действие"
               size="icon"
-              disabled={save.state.actor_capabilities?.can_act===false || actorId===null || busy || pending || !save.turns.length || !draft.trim()}
+              disabled={!canSubmit || !draft.trim()}
               onClick={() => turn("turn")}
             >
               <Send size={19} />

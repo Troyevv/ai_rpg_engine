@@ -134,6 +134,8 @@ def _calendar_evening(state):
     scene.update(start_minute=clock,end_minute=clock,text='Вечер в доме Лариных. Кирилл, Вера и Тимур рассматривают карту.')
     for actor in state['world']['characters'].values(): actor['minute']=clock
     state['world']['characters']['qa_vera']['birth_date']='1993-10-09'
+    state['world']['facts']['qa_vera_birthday']=dict(id='qa_vera_birthday',text='Вера сообщила Кириллу дату рождения: 9 октября 1993 года.',secret=False,character_ids=['qa_vera'],claim=dict(subject_id='qa_vera',predicate='birth_date',value='1993-10-09'),evidence=[])
+    state['world']['knowledge'][ACTOR_ID+':qa_vera_birthday']=dict(actor_id=ACTOR_ID,fact_id='qa_vera_birthday',status='known')
     state['world']['scheduled_events']['qa_friday_trip'] = dict(id='qa_friday_trip',description='Поездка в сад в пятницу вечером.',
         participants=[ACTOR_ID,'qa_elena'],due_minute=0,status='pending',condition='В пятницу вечером')
     return state
@@ -155,6 +157,8 @@ def _commitments(state):
     events = state['world']['scheduled_events']
     events['qa_friday_trip'].update(commitment=True, temporal=dict(weekday=4,day_period='evening'),
         condition='После работы', evidence='Кирилл и Елена договорились о поездке.', source_turn=0)
+    state['world']['facts']['qa_school_calendar']=dict(id='qa_school_calendar',text='Кирилл прочитал школьный календарь каникул.',secret=False,character_ids=[ACTOR_ID],claim=dict(subject_id='qa_school_break',predicate='scheduled_event',value='known'),evidence=[])
+    state['world']['knowledge'][ACTOR_ID+':qa_school_calendar']=dict(actor_id=ACTOR_ID,fact_id='qa_school_calendar',status='known')
     events['qa_sunday_return'] = dict(id='qa_sunday_return', description='Возвращение из сада домой.',
         participants=[ACTOR_ID], due_minute=0, status='pending', commitment=True,
         temporal=dict(weekday=6,day_period='evening'), depends_on=['qa_friday_trip'],

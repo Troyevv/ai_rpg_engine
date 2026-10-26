@@ -1,3 +1,4 @@
+import {gameAction} from './navigation';
 import {test,expect} from '@playwright/test';
 import {themes} from '../src/lib/skins';
 test('all skins, four mobile widths, time skip and rollback',async({page,request},info)=>{
@@ -16,18 +17,18 @@ test('all skins, four mobile widths, time skip and rollback',async({page,request
   for(const width of info.project.name==='mobile'?[360,390,412,430]:[1440]){
    await page.setViewportSize({width,height:900});
    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-   await page.getByRole('button',{name:'Пропустить время',exact:true}).click();
-   await expect(page.getByRole('dialog')).toBeVisible();
-   expect(await page.getByRole('dialog').evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
+   await gameAction(page,'Пропустить время');
+   await expect(page.getByRole('dialog').last()).toBeVisible();
+   expect(await page.getByRole('dialog').last().evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
    if(width===390||width===1440){
-    fingerprints.add(await page.getByRole('dialog').evaluate(el=>{const c=getComputedStyle(el);return [c.borderRadius,c.borderWidth,c.borderStyle,c.backgroundImage,getComputedStyle(document.querySelector('h1')!).fontFamily].join('|')}));
+    fingerprints.add(await page.getByRole('dialog').last().evaluate(el=>{const c=getComputedStyle(el);return [c.borderRadius,c.borderWidth,c.borderStyle,c.backgroundImage,getComputedStyle(document.querySelector('h1')!).fontFamily].join('|')}));
     if(['industrial','parchment','cyberpunk','biotech'].includes(theme.id))await page.screenshot({path:info.outputPath(`${theme.id}-${width}.png`),animations:'disabled'});
    }
-   await page.getByRole('button',{name:'Закрыть',exact:true}).click();
+   await page.getByRole('dialog').last().getByRole('button',{name:'Закрыть',exact:true}).click();
   }
  }
  expect(fingerprints.size).toBeGreaterThanOrEqual(9);
- await page.getByRole('button',{name:'Пропустить время',exact:true}).click();
+ await gameAction(page,'Пропустить время');
  await page.getByRole('button',{name:'+10 мин',exact:true}).click();
  await page.getByRole('button',{name:'Пропустить 0 ч 10 мин',exact:true}).click();
  await expect(page.locator('.turn')).toHaveCount(2);await expect(page.locator('.choices button')).toHaveCount(6);
@@ -73,9 +74,9 @@ test('skin artwork is visible, distinct and outside the reading surface',async({
   await page.getByRole('textbox',{name:'Своё действие или реплика'}).fill('Осматриваюсь');
   await expect(page.getByRole('button',{name:'Отправить действие'})).toBeEnabled();
   await page.screenshot({path:info.outputPath(`skin-${id}.png`),animations:'disabled'});
-  await page.getByRole('button',{name:'Пропустить время',exact:true}).click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByRole('button',{name:'Закрыть',exact:true}).click();
+  await gameAction(page,'Пропустить время');
+  await expect(page.getByRole('dialog').last()).toBeVisible();
+  await page.getByRole('dialog').last().getByRole('button',{name:'Закрыть',exact:true}).click();
  }
  expect(drawings.size).toBe(5);
 });

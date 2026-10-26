@@ -307,11 +307,25 @@ class RuntimeStorage:
             return after
 
     def update_narrative_policy(self, save_id, revision, policy):
-        from copy import deepcopy
         from backend.services.narrative_policy import PolicyUpdate
+        validated=PolicyUpdate.model_validate(dict(policy,revision=revision)).model_dump(exclude={'revision'})
+        self._update_game_policy(save_id, revision, validated, 'narrative_policy_changed')
+
+    def configure_weather(self, save_id, revision, profile):
+        from backend.runtime_v3.models import WeatherProfile
+        snapshot=self.get_snapshot(save_id)
+        state=snapshot['world_state']
+        if state['meta'].get('weather') is not None:
+            raise ValueError('Климат уже установлен. Его история сохраняется.')
+        if not set(profile['regions']) <= set(state['locations']):
+            raise ValueError('Регион погоды отсутствует в мире.')
+        value=WeatherProfile.model_validate(dict(profile,since_minute=state['meta']['world_time'])).model_dump()
+        self._update_game_policy(save_id, revision, {'weather':value}, 'weather_configured')
+
+    def _update_game_policy(self, save_id, revision, validated, kind):
+        from copy import deepcopy
         from backend.runtime_v3.repository import append_history, migrate_snapshot
         from backend.repositories.living_world import project
-        validated=PolicyUpdate.model_validate(dict(policy,revision=revision)).model_dump(exclude={'revision'})
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             self._assert_idle(db,save_id)
@@ -326,7 +340,7 @@ class RuntimeStorage:
             previous={k:meta[k] for k in validated}
             if previous==validated:return
             meta.update(validated)
-            batch=dict(state_changes=[dict(kind='narrative_policy_changed',before=previous,after=validated,
+            batch=dict(state_changes=[dict(kind=kind,before=previous,after=validated,
                 turn_id=meta['turn_id'],minute=meta['world_time'])])
             after['history_head']=append_history(db,prior.get('history_head'),batch)
             parent=db.execute('SELECT active_variant_id FROM turns WHERE save_id=? ORDER BY sequence DESC LIMIT 1',(save_id,)).fetchone()

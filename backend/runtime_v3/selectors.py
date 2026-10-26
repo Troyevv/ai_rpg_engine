@@ -1,3 +1,4 @@
+from backend.runtime_v3.player_calendar import visible_calendar_state
 """Disposable read projections. None of these scene IDs may enter WorldStateV3."""
 from backend.runtime_v3.birth_identity import is_game_birth
 from copy import deepcopy
@@ -99,14 +100,16 @@ def ui_view(snapshot, history=None):
         age = age_on(c.get('birth_date'),current_time(state)['date'],profile_of(state))
         if age is not None: card['fields']['Возраст'] = str(age)
         card['fields'].update({'Сейчас':c['situation'],'Чего хочет':'\n'.join(active_texts(c['goals'])),'Намерения':'\n'.join(active_texts(c['intentions']))})
-    metadata=dict(time=label(now),location=place(camera['location_id']),present_ids=list(camera['present_character_ids']))
+    from backend.runtime_v3.weather import weather_at
+    calendar_state=visible_calendar_state(state)
+    metadata=dict(weather=weather_at(state),time=label(now),location=place(camera['location_id']),present_ids=list(camera['present_character_ids']))
     campaign=deepcopy(snapshot.get('campaign',{}))
     result=dict(campaign,characters=cards,world=world,controlled_actor_id=camera['controlled_actor_id'],
         narrative_policy={k:deepcopy(state['meta'][k]) for k in ('narrative_pacing','narrative_risk','outcome_preference')},
         protagonist_required=state['meta']['protagonist_required'], protagonist_periods=state['meta']['protagonist_periods'],
         protagonist_id=state['meta']['current_protagonist_id'] or campaign.get('protagonist_id') or next((c['id'] for c in cards if c.get('is_player')),None),
         camera=dict(scene_id=sid,mode=camera['mode'],scope='scene',subject_id=camera.get('subject_id'),pov_actor_id=camera.get('pov_actor_id')),scene=camera['situation'],scene_meta=metadata,
-        world_clock=dict(minute=now,last_event_time=label(now),calendar=state['meta'].get('calendar'),projection=current_time(state),nearby=nearby_calendar(state,set(camera['present_character_ids']))),memory=deepcopy(snapshot.get('memory',{})),
+        world_clock=dict(minute=now,last_event_time=label(now),calendar=calendar_state['meta'].get('calendar'),projection=current_time(state),nearby=nearby_calendar(calendar_state,set(camera['present_character_ids']))),memory=deepcopy(snapshot.get('memory',{})),
         sections=dict(campaign.get('sections',{}),scene=camera['situation']),
         relationships=[dict(r,text=r['context'],target_name=names.get(r['target_id'],'')) for r in world['relationships'].values()],
         facts=[dict(f,known_by=[k['actor_id'] for k in state['knowledge'].values() if k['fact_id']==f['id'] and k['status']=='known']) for f in state['facts'].values()],

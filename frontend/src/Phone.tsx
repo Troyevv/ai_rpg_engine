@@ -1,14 +1,14 @@
-import { useEffect, useState } from "react";
-import { Phone as PhoneIcon, MessageCircle } from "lucide-react";
+import { formatDateLabel } from "./gameDate";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  Phone as PhoneIcon,
+  MessageCircle,
+  ContactRound,
+  X,
+} from "lucide-react";
 import { api } from "./api";
 import type { Save } from "./types";
 import { CharacterAvatar, type PortraitSubject } from "./Portrait";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "./components/ui/dialog";
 import "./styles/phone.css";
 
 type Contact = {
@@ -77,6 +77,22 @@ export function Phone({
   onCommit: (save: Save) => void;
 }) {
   const phone = save.state.phone;
+  const ownerKey = `${save.id}:${phone?.actor_id}`;
+  const [owner, setOwner] = useState(ownerKey);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [dock, setDock] = useState(110);
+  useEffect(() => {
+    const composer = trigger.current?.closest(".composer");
+    if (!composer) return;
+    const observer = new ResizeObserver(() =>
+      setDock(Math.ceil(composer.getBoundingClientRect().height) + 8),
+    );
+    observer.observe(composer);
+    return () => observer.disconnect();
+  }, [ownerKey]);
+  const screen = useRef<HTMLDivElement>(null);
+  const drafts = useRef<Record<string, string>>({});
+
   const [open, setOpen] = useState(false),
     [tab, setTab] = useState("contacts");
   const [conversation, setConversation] = useState<string | null>(null),
@@ -92,7 +108,35 @@ export function Phone({
     [grouping, setGrouping] = useState(false);
   const [groupMembers, setGroupMembers] = useState<string[]>([]),
     [groupName, setGroupName] = useState("");
+  const messageKey = `${save.id}:${phone?.actor_id}:${conversation || contact || ""}`;
   useEffect(() => {
+    setText(drafts.current[messageKey] || "");
+  }, [messageKey]);
+  const close = () => {
+    setOpen(false);
+    trigger.current?.focus();
+  };
+  useEffect(() => {
+    if (!open) return;
+    screen.current?.focus();
+    const escape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        close();
+      }
+    };
+    const modal = new MutationObserver(() => {
+      if (document.querySelector('[role="dialog"]')) setOpen(false);
+    });
+    modal.observe(document.body, { childList: true, subtree: true });
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("keydown", escape);
+      modal.disconnect();
+    };
+  }, [open]);
+  useEffect(() => {
+    setOwner(ownerKey);
     setOpen(false);
     setContact(null);
     setConversation(null);
@@ -108,7 +152,7 @@ export function Phone({
     setGroupMembers([]);
     setGroupName("");
   }, [save.id, phone?.actor_id]);
-  if (!phone) return null;
+  if (!phone || owner !== ownerKey) return null;
   const locked = busy || disabled;
   const perform = async (command: Record<string, unknown>) => {
     if (locked) return;
@@ -138,7 +182,6 @@ export function Phone({
     setConversation(c.id);
     setContact(null);
     setTab("messages");
-    setText("");
     if (phone.events.some((e) => e.conversation_id === c.id && e.unread))
       await perform({ action: "read", conversation_id: c.id });
   };
@@ -151,6 +194,7 @@ export function Phone({
         : { contact_id: contact }),
     });
     if (next) {
+      drafts.current[messageKey] = "";
       setText("");
       const last = next.state.phone?.events
         .filter((e) => e.channel === "TEXT_MESSAGE" && e.outgoing)
@@ -165,27 +209,10 @@ export function Phone({
     <CharacterAvatar subject={subject} saveId={save.id} size={36} />
   );
   return (
-    <div className="phone-affordance">
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label={`Телефон${unread ? `, непрочитано: ${unread}` : ""}`}
-      >
-        <PhoneIcon size={17} /> Телефон {unread > 0 && <span>{unread}</span>}
-      </button>
-      {call && (
-        <span role="status">
-          {avatar(call.subject)}
-          {call.label} · {status[call.status]}
-          <button onClick={() => setOpen(true)}>Открыть звонок</button>
-        </span>
-      )}
-      {!call && unread > 0 && (
-        <span role="status">
-          {avatar(phone.events.filter((e) => e.unread).at(-1)!.subject)}
-          <MessageCircle size={16} /> Новые сообщения
-        </span>
-      )}
+    <div
+      className="phone-affordance"
+      style={{ "--phone-dock-bottom": `${dock}px` } as CSSProperties}
+    >
       {call?.status === "answered" && (
         <label>
           Адресация действий
@@ -202,30 +229,48 @@ export function Phone({
           </select>
         </label>
       )}
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="phone-dialog">
-          <DialogTitle>Телефон</DialogTitle>
-          <DialogDescription>
-            Внутриигровая связь. Реальные звонки и обращения в службы не
-            выполняются.
-          </DialogDescription>
+      <div
+        className={`phone-device ${open ? "is-open" : ""} ${call?.status === "ringing" ? "is-ringing" : ""}`}
+        data-testid="phone-device"
+      >
+        <button
+          ref={trigger}
+          className="phone-peek"
+          aria-label={`Телефон${unread ? `, непрочитано: ${unread}` : ""}`}
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
+          <span className="phone-camera" />
+          <PhoneIcon size={18} />
+          <span>Телефон</span>
+          {(unread > 0 || call) && (
+            <span
+              className="phone-led"
+              aria-label={
+                call ? "Входящий или активный звонок" : "Новые сообщения"
+              }
+            />
+          )}
+        </button>
+        <div
+          className="phone-screen"
+          ref={screen}
+          role="region"
+          aria-label="Телефон персонажа"
+          tabIndex={-1}
+          inert={!open}
+          aria-hidden={!open}
+        >
+          <header className="phone-top">
+            <strong>
+              {save.state.characters.find((c) => c.id === phone.actor_id)?.name}
+            </strong>
+            <button aria-label="Свернуть телефон" onClick={close}>
+              <X size={18} />
+            </button>
+          </header>
+          <p className="muted small">Внутриигровая связь</p>
           {error && <p role="alert">{error}</p>}
-          <nav aria-label="Разделы телефона">
-            {[
-              ["contacts", "Контакты"],
-              ["messages", "Переписки"],
-              ["calls", "Звонки"],
-            ].map(([key, name]) => (
-              <button
-                type="button"
-                key={key}
-                aria-pressed={tab === key}
-                onClick={() => setTab(key)}
-              >
-                {name}
-              </button>
-            ))}
-          </nav>
           {call && (
             <section className="phone-call" aria-label="Текущий звонок">
               {avatar(call.subject)}
@@ -418,6 +463,22 @@ export function Phone({
                       </button>
                     </div>
                   </article>
+                ))}
+                <h3>Экстренные службы · в игре</h3>
+                {phone.emergency.map((e) => (
+                  <div className="phone-row" key={e.service}>
+                    <span>
+                      {services[e.service]} · {e.number || "Номер не настроен"}
+                    </span>
+                    <button
+                      disabled={locked || !!call || !e.number}
+                      onClick={() =>
+                        void perform({ action: "call", service: e.service })
+                      }
+                    >
+                      Позвонить: {services[e.service]}
+                    </button>
+                  </div>
                 ))}
               </>
             )}
@@ -613,7 +674,7 @@ export function Phone({
                             {avatar(e.subject)}
                             <div>
                               <small>
-                                {e.outgoing ? "Ты" : e.label} · {e.time_label}
+                                {e.outgoing ? "Ты" : e.label} · {formatDateLabel(e.time_label)}
                               </small>
                               <p>{e.content ?? "Непрочитанное сообщение"}</p>
                               <small>
@@ -651,7 +712,10 @@ export function Phone({
                             <textarea
                               aria-label="Сообщение в телефоне"
                               value={text}
-                              onChange={(e) => setText(e.target.value)}
+                              onChange={(e) => {
+                                setText(e.target.value);
+                                drafts.current[messageKey] = e.target.value;
+                              }}
                               maxLength={4000}
                             />
                           </label>
@@ -666,22 +730,6 @@ export function Phone({
             )}
             {tab === "calls" && (
               <>
-                <h3>Экстренные службы · в игре</h3>
-                {phone.emergency.map((e) => (
-                  <div className="phone-row" key={e.service}>
-                    <span>
-                      {services[e.service]} · {e.number || "Номер не настроен"}
-                    </span>
-                    <button
-                      disabled={locked || !!call || !e.number}
-                      onClick={() =>
-                        void perform({ action: "call", service: e.service })
-                      }
-                    >
-                      Позвонить: {services[e.service]}
-                    </button>
-                  </div>
-                ))}
                 <h3>История звонков</h3>
                 {phone.events
                   .filter((e) => e.channel === "VOICE_CALL")
@@ -694,7 +742,7 @@ export function Phone({
                         <strong>{e.label}</strong>
                         <small>
                           {e.outgoing ? "Исходящий" : "Входящий"} ·{" "}
-                          {status[e.status]} · {e.time_label}
+                          {status[e.status]} · {formatDateLabel(e.time_label)}
                         </small>
                       </div>
                     </article>
@@ -702,8 +750,28 @@ export function Phone({
               </>
             )}
           </div>
-        </DialogContent>
-      </Dialog>
+          <nav className="phone-bottom" aria-label="Разделы телефона">
+            {(
+              [
+                ["calls", "Звонки", PhoneIcon],
+                ["messages", "Переписки", MessageCircle],
+                ["contacts", "Контакты", ContactRound],
+              ] as const
+            ).map(([key, label, Icon]) => (
+              <button
+                key={key}
+                aria-label={label}
+                title={label}
+                aria-pressed={tab === key}
+                onClick={() => setTab(key)}
+              >
+                <Icon size={23} />
+                {key === "messages" && unread > 0 && <small>{unread}</small>}
+              </button>
+            ))}
+          </nav>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import {SceneClock} from './SceneClock';
 import {useEffect,useState} from 'react';
 import {BookOpen,Globe,Users,Brain,GitBranch,Menu,Settings2,Feather,Eye,EyeOff} from 'lucide-react';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from './components/ui/dialog';
@@ -47,7 +48,7 @@ export function MobileScene({save,meta,busy,switchActor,background,openCharacter
  const nearby=meta?.present_ids.filter(id=>id!==actor)||[];
  return <div className="mobile-context">
  <div className="mobile-pov"><button disabled={busy} onClick={()=>setSheet('pov')}>{actor===null?"Наблюдение":name(actor)} ▾</button><button disabled={busy||!save.turns.length} onClick={background}>Мир без ГГ</button><button aria-label="Камера и журнал мира" onClick={openCamera}>◎</button></div>
- <button className="mobile-scene-line" onClick={()=>setSheet('scene')}>{meta?.time||'Время не задано'} · {meta?.location||'Место не задано'}{nearby.length?` · ${nearby.map(name).join(', ')}`:''} ▾</button>
+ <button className="mobile-scene-line" onClick={()=>setSheet('scene')}><SceneClock save={save} fallback={meta?.time}/> · {meta?.location||'Место не задано'}{nearby.length?` · ${nearby.map(name).join(', ')}`:''} ▾</button>
  <Dialog open={!!sheet} onOpenChange={v=>{if(!v)setSheet(null)}}><DialogContent className="mobile-sheet"><DialogHeader><DialogTitle>{sheet==='pov'?'За кого играть':'Текущая сцена'}</DialogTitle><DialogDescription>{sheet==='pov'?'Переход откроет сцену персонажа и варианты действий.':`${meta?.time||''} · ${meta?.location||''}`}</DialogDescription></DialogHeader>
  {sheet==='pov'?<div className="actor-list">{actor!==main&&<Button disabled={busy} onClick={()=>{setSheet(null);switchActor(main!)}}>Вернуться к {name(main)}</Button>}{save.state.characters.map(c=><button key={c.id} disabled={busy||c.id===actor} onClick={()=>{setSheet(null);switchActor(c.id)}}>{name(c.id)}{c.id===main?' (ГГ)':''}{c.id===actor?' · сейчас':''}</button>)}</div>:<><p>{save.state.scene}</p><div className="actor-list">{nearby.map(id=><button key={id} onClick={()=>{setSheet(null);openCharacter(id)}}>{name(id)}</button>)}</div></>}
  </DialogContent></Dialog></div>;

@@ -1,3 +1,4 @@
+import {gameAction} from './navigation';
 import { test, expect } from "@playwright/test";
 
 test("phone controls, freeform text, reload and physical scene", async ({
@@ -19,9 +20,9 @@ test("phone controls, freeform text, reload and physical scene", async ({
     page.locator(".choices button").filter({ hasText: "Посмотреть в окно" }),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Открыть звонок", exact: true })
+    .getByRole("button", { name: /^Телефон/ })
     .click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByRole("region", {name:"Телефон персонажа"});
   await expect(dialog.getByText("Входящий", { exact: false })).toBeVisible();
   await dialog.getByRole("button", { name: "Ответить", exact: true }).click();
   await expect(
@@ -38,7 +39,7 @@ test("phone controls, freeform text, reload and physical scene", async ({
   await page.getByLabel("Адресация действий").selectOption("call");
   await page.reload();
   await page
-    .getByRole("button", { name: "Открыть звонок", exact: true })
+    .getByRole("button", { name: /^Телефон/ })
     .click();
   await dialog
     .getByRole("button", { name: "Завершить звонок", exact: true })
@@ -87,12 +88,13 @@ test("decline and configured in-game emergency log", async ({
   );
   await page.goto("/");
   await page
-    .getByRole("button", { name: "Открыть звонок", exact: true })
+    .getByRole("button", { name: /^Телефон/ })
     .click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByRole("region", {name:"Телефон персонажа"});
   await dialog.getByRole("button", { name: "Отклонить", exact: true }).click();
   await dialog.getByRole("button", { name: "Звонки", exact: true }).click();
   await expect(dialog.getByText(/Входящий · Отклонён/)).toBeVisible();
+  await dialog.getByRole("button", {name:"Контакты",exact:true}).click();
   await dialog
     .getByRole("button", { name: "Позвонить: Скорая помощь", exact: true })
     .click();
@@ -113,9 +115,9 @@ test("group membership and protagonist-owned contacts", async ({
   );
   await page.goto("/");
   await page
-    .getByRole("button", { name: "Открыть звонок", exact: true })
+    .getByRole("button", { name: /^Телефон/ })
     .click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByRole("region", {name:"Телефон персонажа"});
   await dialog
     .getByRole("button", { name: "Игнорировать", exact: true })
     .click();
@@ -154,13 +156,11 @@ test("group membership and protagonist-owned contacts", async ({
     dialog.getByRole("button", { name: "Удалить: Вера работа", exact: true }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
-  await page
-    .getByRole("button", { name: "Сменить главного героя", exact: true })
-    .click();
-  await dialog.getByLabel("Новый главный герой").selectOption("qa_vera");
-  await dialog.getByRole("button", { name: "Проверить и посмотреть" }).click();
-  await dialog.getByRole("button", { name: "Подтвердить смену" }).click();
-  await expect(dialog).toBeHidden();
+  await gameAction(page,'Сменить главного героя');
+  await page.getByRole("dialog").getByLabel("Новый главный герой").selectOption("qa_vera");
+  await page.getByRole("dialog").getByRole("button", { name: "Проверить и посмотреть" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Подтвердить смену" }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
   await page.getByRole("button", { name: /^Телефон/ }).click();
   await expect(dialog.getByText("Кирилл", { exact: true })).toBeVisible();
   await expect(dialog.getByText("Мастерская", { exact: true })).toHaveCount(0);
@@ -188,7 +188,7 @@ test("unread text and shared portrait projection", async ({
     page.getByText("Прочти, когда будет удобно.", { exact: true }),
   ).toHaveCount(0);
   await page.getByRole("button", { name: /^Телефон/ }).click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByRole("region", {name:"Телефон персонажа"});
   const contact = dialog
     .locator("article.phone-row")
     .filter({ hasText: "Вера работа" });

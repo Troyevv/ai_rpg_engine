@@ -443,12 +443,22 @@ if __name__ == '__main__':
         return {'world':result['world'],'save':result['save']}
 
     @app.post('/test/family-seed')
-    def family_seed():
+    def family_seed(checkpoint: str = 'family', dead: bool = False):
         from devtools.narrative_test_world import load_fixture
         from test_narrative_test_world import ordinary_job
         repo=app.state.repository
-        result=load_fixture(repo,'family')
+        if checkpoint not in ('family','family-incapacitated'): raise ValueError('Unknown test checkpoint')
+        result=load_fixture(repo,checkpoint)
         ordinary_job(repo,result['save'],'start')
+        if dead:
+            snap=repo.get_snapshot(result['save']);state=snap['world_state'];cid=state['meta']['current_protagonist_id']
+            state['characters'][cid]['life_status']='dead';state['meta']['protagonist_required']=True
+            for rel in state['objective_relations'].values():
+                if rel['status']=='active' and cid in (rel['source_id'],rel['target_id']) and rel['kind'] in ('spouse','partner','engaged'):
+                    rel.update(status='closed',until=state['meta']['world_time'],outcome='widowed' if rel['kind']=='spouse' else 'ended')
+            state['camera']['controlled_actor_id']=None;state['camera']['mode']='observer'
+            state['camera']['present_character_ids']=[x for x in state['camera']['present_character_ids'] if x!=cid]
+            with repo.connect() as db:db.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(snap),result['save']))
         return {'world':result['world'],'save':result['save']}
 
     @app.post('/test/commitments-seed')
