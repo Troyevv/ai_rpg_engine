@@ -32,6 +32,8 @@ import { SocialStateView } from "./SocialStateView";
 import { RelationshipEditor } from "./RelationshipEditor";
 import { relationshipLabel } from "./lib/relationships";
 import { worldTime } from "./lib/worldTime";
+import { socialLabel } from "./lib/social";
+import { gameLocale } from "./gameDate";
 import { formatDateLabel } from "./gameDate";
 import { it, type InspectorText, type Panel } from "./lib/inspector";
 
@@ -49,6 +51,19 @@ const actorOf = (s: State) =>
     : s.controlled_actor_id;
 const nameOf = (s: State, id: string) =>
   s.characters.find((c) => c.id === id)?.name || id;
+const factHeading = (s: State, f: WorldFact) => {
+  const relation = Object.values(s.world?.objective_relations || {}).find(r => r.fact_id === f.id)
+    || s.objective_relations?.find(r => f.character_ids.includes(r.source_id) && f.character_ids.includes(r.target_id) && [
+      `Установленная связь: ${r.kind}, ${r.source_id}, ${r.target_id}.`,
+      `Установленная связь: ${r.kind}, ${r.target_id}, ${r.source_id}.`,
+    ].includes(f.text));
+  if (!relation) return null;
+  const a = s.characters.find(c => c.id === relation.source_id);
+  const b = s.characters.find(c => c.id === relation.target_id);
+  if (!a || !b) return null;
+  const label = gameLocale().startsWith("en") ? relation.kind.replaceAll("_", " ") : socialLabel(relation.kind);
+  return `${label}: ${a.name} → ${b.name}`;
+};
 const allFacts = (s: State): WorldFact[] =>
   s.world?.facts
     ? Object.values(s.world.facts)
@@ -296,8 +311,8 @@ function Facts({
           )}
           {secret ? (
             <>
-              <h2>{brief(f.text, 85)}</h2>
-              <Markdown text={f.text} />
+              <h2>{factHeading(state, f) || brief(f.text, 85)}</h2>
+              {!factHeading(state, f) && brief(f.text, 85) !== f.text && <Markdown text={f.text} />}
             </>
           ) : (
             <>
@@ -332,6 +347,7 @@ function Facts({
             </div>
           )}
           <Reveal title={it("evidence")} preview={false}>
+            {factHeading(state, f) && <Markdown text={f.text} />}
             {!secret && (
               <>
                 <People
@@ -825,7 +841,7 @@ export function RelationsSection(props: Props & { refresh: () => void }) {
               </div>
               <div className="inspector-metrics">
                 {Object.entries(r.dimensions).map(([key, value]) => (
-                  <div key={key} className="inspector-metric">
+                  <div key={key} data-dimension={key} className="inspector-metric">
                     <div>
                       <span>{relationshipLabel(key)}</span>
                       <strong>
@@ -987,7 +1003,7 @@ export function ThreadsSection(props: Props) {
                   )}
                 </div>
                 <h2>{brief(r.description, 100)}</h2>
-                <Markdown text={r.description} />
+                {brief(r.description, 100) !== r.description && <Markdown text={r.description} />}
                 <People {...props} ids={r.character_ids} />
                 <Reveal
                   title={it("development")}
@@ -1177,7 +1193,7 @@ export function MemorySection(props: Props) {
                       </span>
                       <div className="inspector-card">
                         <h2>{brief(e.text, 85)}</h2>
-                        <Markdown text={e.text} />
+                        {brief(e.text, 85) !== e.text && <Markdown text={e.text} />}
                         <footer className="inspector-card-footer">
                           <People {...props} ids={e.participants} />
                           <small>

@@ -33,7 +33,7 @@ test('world themes persist across reload and devices; portals inherit theme; all
  for(const id of palette){
   await themeControl(page);await page.locator('.theme-selector select').selectOption(id);
   await expect(page.locator('html')).toHaveAttribute('data-theme',id);
-  expect(await page.getByRole('dialog').evaluate(el=>getComputedStyle(el).getPropertyValue('--bg').trim())).toBe(await page.locator('html').evaluate(el=>getComputedStyle(el).getPropertyValue('--bg').trim()));
+  expect(await page.getByRole('dialog').evaluate(el=>getComputedStyle(el).getPropertyValue('--bg').trim())).toBe(await page.locator('.inspector-workspace').evaluate(el=>getComputedStyle(el).getPropertyValue('--bg').trim()));
   const contrast=await page.locator('html').evaluate(el=>{
    const css=getComputedStyle(el);
    const luminance=(token:string)=>{

@@ -240,7 +240,7 @@
 }
 .inspector-card .prose {
   font: 17px/1.62 var(--story-font);
-  color: var(--text-secondary);
+  color: var(--text);
 }
 .inspector-card .prose p {
   margin: 0 0 12px;
@@ -618,18 +618,17 @@
   background: var(--surface-3);
   border: 0;
 }
-.inspector-metric meter::-webkit-meter-optimum-value {
-  background: var(--dossier-overview);
-}
-.inspector-metric:nth-child(2n) meter::-webkit-meter-optimum-value {
-  background: var(--dossier-relationships);
-}
-.inspector-metric:nth-child(3n) meter::-webkit-meter-optimum-value {
-  background: var(--dossier-family);
-}
+/* Stable semantic colors, independent of object iteration order. */
+.inspector-metric { --metric-color: var(--dossier-overview); }
+.inspector-metric[data-dimension="affection"], .inspector-metric[data-dimension="attraction"] { --metric-color: var(--dossier-relationships); }
+.inspector-metric[data-dimension="respect"] { --metric-color: var(--dossier-family); }
+.inspector-metric[data-dimension="fear"], .inspector-metric[data-dimension="jealousy"] { --metric-color: var(--dossier-personality); }
+.inspector-metric[data-dimension="irritation"] { --metric-color: var(--warning); }
+.inspector-metric meter::-webkit-meter-optimum-value { background: var(--metric-color); }
+.inspector-metric meter::-moz-meter-bar { background: var(--metric-color); }
 .inspector-metric p {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text);
 }
 .inspector-editor-disclosure {
   margin: 20px 0;
@@ -1134,7 +1133,7 @@
 .inspector-fact-text {
   font: 13px/1.6 var(--ui-font);
   margin: 10px 0;
-  color: var(--text-secondary);
+  color: var(--text);
 }
 
 /* Compact desktop retains the reference's side-by-side relationship metrics. */
@@ -1142,4 +1141,55 @@
   .inspector-relation {
     grid-template-columns: 1fr;
   }
+}
+
+/* Workspace palette: inherit every skin unless this preset supplies an approved override.
+   Never applied to Game, Phone, Tabletop or the document root. */
+html[data-theme="graphite"] :is(.inspector-workspace, .inspector-settings, .inspector-mobile-palette, .inspector-open > .nav-rail) {
+  --bg: #1c1e21;
+  --surface-1: #202226;
+  --surface-2: #25272b;
+  --surface-3: #303237;
+  --surface-elevated: #25272b;
+  --border: #3a3c40;
+  --border-strong: #858a91;
+  --text: #eeede9;
+  --text-secondary: #aaadb2;
+  --text-muted: #aaadb2;
+  --text-subtle: #858a91;
+  --accent: #dfb979;
+  --accent-soft: #3b3429;
+  --success: #8ecab0;
+  --warning: #dfb979;
+  --dossier-overview: #8cbbec;
+  --dossier-personality: #bca5e8;
+  --dossier-relationships: #ec9eae;
+  --dossier-family: #8ecab0;
+  color: var(--text);
+}
+html[data-theme="graphite"] .inspector-open > .nav-rail { background: #17191c; }
+html[data-theme="graphite"] .inspector-topbar { border-color: #303236; }
+html[data-theme="parchment"] .inspector-workspace {
+  --text-secondary: #6e6252;
+  --text-muted: #6e6252;
+  --border: #d5c8b3;
+  --accent-soft: #e8d9bc;
+}
+.inspector-workspace .inspector-card-footer,
+.inspector-workspace .inspector-knowledge { border-color: color-mix(in srgb, var(--border) 65%, var(--surface-1)); }
+.inspector-workspace .thread-dormant { border-left-color: var(--dossier-personality); }
+.inspector-workspace .thread-active .pill,
+.inspector-workspace .thread-developing .pill,
+.inspector-workspace .knowledge-known { color: var(--dossier-family); }
+.inspector-workspace .knowledge-suspected,
+.inspector-workspace .inspector-secret > .inspector-row > .pill { color: var(--dossier-personality); }
+.inspector-workspace .inspector-card-heading > .pill { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+.inspector-workspace .inspector-card .inspect-reveal > summary { color: var(--accent); font-weight: 500; }
+/* Selection must retain its warm identity when the pointer remains after a click. */
+.narrative-shell.inspector-open .nav-links button.current,
+.narrative-shell.inspector-open .nav-links button.current:hover,
+.inspector-mobile-palette .mobile-nav button.current,
+.inspector-mobile-palette .mobile-nav button.current:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
 }

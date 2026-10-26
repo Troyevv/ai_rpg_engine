@@ -28,7 +28,7 @@ export function useMobileViewport(mobile:boolean){
 export function MobileNavigation({activePanel,workspace,open,setOpen,world,go,inspect,settings,reading,toggleReading,branches}:{activePanel?:Panel;workspace:(section:"calendar"|"family")=>void;open:boolean;setOpen:(v:boolean)=>void;world:boolean;go:(v:'game'|'prepare')=>void;inspect:(v:Panel)=>void;settings:()=>void;reading:boolean;toggleReading:()=>void;branches:()=>void}){
  const act=(fn:()=>void)=>{setOpen(false);fn()};
  return <><Button size="icon" variant="ghost" aria-label="Меню игры" onClick={()=>setOpen(true)}><Menu/></Button>
- <Dialog open={open} onOpenChange={setOpen}><DialogContent className="mobile-sheet"><DialogHeader><DialogTitle>Меню игры</DialogTitle><DialogDescription>История, мир и инструменты</DialogDescription></DialogHeader>
+ <Dialog open={open} onOpenChange={setOpen}><DialogContent className={`mobile-sheet ${activePanel ? "inspector-mobile-palette" : ""}`}><DialogHeader><DialogTitle>Меню игры</DialogTitle><DialogDescription>История, мир и инструменты</DialogDescription></DialogHeader>
  <nav className="mobile-nav" aria-label="Мобильная навигация">
  <button onClick={()=>act(()=>go('game'))}><BookOpen/>Игра</button>
  {(['worldGroup','storyGroup'] as const).map(group=><div className="inspector-mobile-group" key={group}><p>{it(group)}</p>{inspectorSections.filter(s=>s.group===group).map(({id,icon:Icon})=><button key={id} disabled={!world} aria-current={activePanel===id?"page":undefined} className={activePanel===id?"current":""} onClick={()=>act(()=>inspect(id))}><Icon/>{panelLabel(id)}</button>)}</div>)}

@@ -1,8 +1,8 @@
 # Inspector #86 — design acceptance
 
-final result: passed
+final result: passed (PR #123 color finishing pass)
 
-Final recapture and side-by-side review completed. No actionable P0/P1/P2 findings remain within the explicit Skin System, real-data and unchanged #83 constraints recorded below.
+The earlier pass below was rejected by visual review: treating the darker Graphite palette as an intentional difference was incorrect. PR #123 finishing-pass evidence and acceptance are recorded in [the new report](docs/manual_qa/narrative_v4/pr123-polish/README.md). The new report supersedes the original color assessment; baseline evidence below remains available for history.
 
 ## Source, baseline and comparison method
 
@@ -16,7 +16,7 @@ Final recapture and side-by-side review completed. No actionable P0/P1/P2 findin
 - Default section/filter states match. The source's fictional Apex records and the application's canonical Two Shores records differ in text, length, counts, available weather, calls and portraits. Content-dependent height differences are called out rather than filled with invented records.
 - [Focused Graphite dossier comparison](docs/manual_qa/narrative_v4/issue86-evidence/detail-dossier-graphite.png) and [Parchment comparison](docs/manual_qa/narrative_v4/issue86-evidence/detail-dossier-parchment.png) use unscaled 900×380 crops from both originals. The mobile pairs are also readable at 1:1 for controls, text wrapping and spacing.
 
-## Findings and correction history
+## Original implementation findings and correction history
 
 | Priority | Earlier finding | Fix and post-fix evidence |
 | --- | --- | --- |
@@ -39,7 +39,7 @@ The last two findings are interaction/data-preservation regressions, not reasons
 | --- | --- |
 | Fonts and typography | Hierarchy, compact uppercase eyebrows, restrained sans UI, serif narrative prose, title weights, wrapping and tab density compared in full images and focused crops. Existing `--ui-font`, narrative and Skin heading fonts remain authoritative. Parchment retains its established serif UI rather than copying the standalone prototype's sans UI. Long-name, enlarged-text and reduced-motion regressions are included. |
 | Spacing and layout | Desktop 214 px navigation, compact topbar, bounded centered content, independent card stacks, horizontal directions/filters, single-column phones and scrollable dossier tabs. Compact/expanded use one persisted preference. No whole-document horizontal overflow at the matrix sizes; long content stays within its scroll surface. Extra original application destinations remain reachable in the scrolling navigation. |
-| Colors and tokens | Semantic Skin tokens drive background, card surfaces, border, accent, text, relationship meters and knowledge states. Graphite is darker and Parchment warmer/textured than the standalone HTML: preserving the existing Skin System is an explicit requirement. No global palette or skin replacement. |
+| Colors and tokens | Semantic Skin tokens drive background, card surfaces, border, accent, text, relationship meters and knowledge states. The finishing pass restores the approved Graphite tonal values through scoped Skin tokens. Parchment retains its warm paper treatment. No global palette or skin replacement. |
 | Image quality and assets | Existing #83 uploaded portraits, circular crop, fallback silhouettes and portrait editor are retained. No copied demo character photograph, generated substitute or handwritten icon set. Existing Lucide icons replace the prototype's standard icon-font glyphs with the same meanings. Dedicated portrait regressions cover 36–144 px, uploaded/cropped/original/history/error states and hidden senders. |
 | Copy and content | Section titles/actions and RU/EN labels use the localization helper. Real canonical descriptions, names, evidence, directed dimensions and timestamps populate cards. Where the API supplies only prose, the heading is a shortened excerpt, so short records can repeat it. No invented separate title, chronology, numeric feeling, weather or demonstration role switch. |
 

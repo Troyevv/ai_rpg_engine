@@ -1,0 +1,67 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> ai-rpg-frontend@2.0.0 test:e2e
+> playwright test e2e/inspector86.spec.ts e2e/presentation.spec.ts e2e/runtime-handoff.spec.ts e2e/completion-matrix.spec.ts
+
+
+Running 44 tests using 1 worker
+
+(node:87) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [desktop] › e2e/completion-matrix.spec.ts:8:1 › T04-T08 calendar agenda, empty dates, private observance and two skins (2.9s)
+  ✓   2 [desktop] › e2e/completion-matrix.spec.ts:30:1 › T06 custom calendar has two months, five weekdays and a real year boundary (1.0s)
+[WebServer] Semantic retrieval unavailable (OSError); structural fallback
+  ✓   3 [desktop] › e2e/completion-matrix.spec.ts:42:1 › T10-T13 separate family, known empty family, secrecy and accessible graph (7.8s)
+  ✓   4 [desktop] › e2e/completion-matrix.spec.ts:57:1 › T12 dense family is bounded and can be recentered from accessible list (4.7s)
+  ✓   5 [desktop] › e2e/completion-matrix.spec.ts:68:1 › T03 T11 contextual date and empty character card open the shared workspace (2.2s)
+  ✓   6 [desktop] › e2e/completion-matrix.spec.ts:87:1 › public family and birthday directory works without Knowledge or contacts (2.0s)
+  ✓   7 [desktop] › e2e/inspector86.spec.ts:15:3 › seven sections, skins, widths 1440 (8.8s)
+  ✓   8 [desktop] › e2e/inspector86.spec.ts:15:3 › seven sections, skins, widths 768 (8.0s)
+  ✓   9 [desktop] › e2e/inspector86.spec.ts:15:3 › seven sections, skins, widths 393 (18.9s)
+  ✓  10 [desktop] › e2e/inspector86.spec.ts:15:3 › seven sections, skins, widths 360 (18.5s)
+  ✓  11 [desktop] › e2e/inspector86.spec.ts:101:1 › selector keyboard, filters, section return, scene editor and metadata (2.4s)
+  ✓  12 [desktop] › e2e/inspector86.spec.ts:163:1 › real directed filters, thread statuses, memory search and scene save retry (2.1s)
+[WebServer] Semantic retrieval unavailable (OSError); structural fallback
+  ✓  13 [desktop] › e2e/inspector86.spec.ts:264:1 › phone projection stays remote and returns to the existing device (2.6s)
+  ✓  14 [desktop] › e2e/inspector86.spec.ts:305:1 › browser Back closes settings, source dossier, then workspace without losing draft (1.2s)
+  ✓  15 [desktop] › e2e/inspector86.spec.ts:336:1 › approved Graphite tonal roles stay scoped to Inspector (677ms)
+(node:5586) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  16 [desktop] › e2e/presentation.spec.ts:25:1 › world themes persist across reload and devices; portals inherit theme; all palettes remain playable (12.6s)
+  ✓  17 [desktop] › e2e/presentation.spec.ts:71:1 › legacy world defaults, auto selection, keyboard tabs and reduced motion retain POV and camera (3.4s)
+  ✓  18 [desktop] › e2e/presentation.spec.ts:105:2 › long content smoke 1920 (3.5s)
+  ✓  19 [desktop] › e2e/presentation.spec.ts:105:2 › long content smoke 1366 (3.3s)
+  ✓  20 [desktop] › e2e/presentation.spec.ts:105:2 › long content smoke 360 (4.7s)
+  ✓  21 [desktop] › e2e/presentation.spec.ts:105:2 › long content smoke 430 (4.5s)
+  ✓  22 [desktop] › e2e/runtime-handoff.spec.ts:6:1 › original export identities and rejected opening recover through real API then turn reload turn (8.2s)
+(node:5787) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  23 [mobile] › e2e/completion-matrix.spec.ts:8:1 › T04-T08 calendar agenda, empty dates, private observance and two skins (4.6s)
+  ✓  24 [mobile] › e2e/completion-matrix.spec.ts:30:1 › T06 custom calendar has two months, five weekdays and a real year boundary (1.4s)
+  ✓  25 [mobile] › e2e/completion-matrix.spec.ts:42:1 › T10-T13 separate family, known empty family, secrecy and accessible graph (3.4s)
+  ✓  26 [mobile] › e2e/completion-matrix.spec.ts:57:1 › T12 dense family is bounded and can be recentered from accessible list (4.5s)
+[WebServer] Semantic retrieval unavailable (OSError); structural fallback
+  ✓  27 [mobile] › e2e/completion-matrix.spec.ts:68:1 › T03 T11 contextual date and empty character card open the shared workspace (3.9s)
+  ✓  28 [mobile] › e2e/completion-matrix.spec.ts:87:1 › public family and birthday directory works without Knowledge or contacts (3.2s)
+  -  29 [mobile] › e2e/inspector86.spec.ts:15:3 › seven sections, skins, widths 1440
+  -  30 [mobile] › e2e/inspector86.spec.ts:15:3 › seven sections, skins, widths 768
+  -  31 [mobile] › e2e/inspector86.spec.ts:15:3 › seven sections, skins, widths 393
+  -  32 [mobile] › e2e/inspector86.spec.ts:15:3 › seven sections, skins, widths 360
+  ✓  33 [mobile] › e2e/inspector86.spec.ts:101:1 › selector keyboard, filters, section return, scene editor and metadata (4.1s)
+  ✓  34 [mobile] › e2e/inspector86.spec.ts:163:1 › real directed filters, thread statuses, memory search and scene save retry (5.8s)
+  ✓  35 [mobile] › e2e/inspector86.spec.ts:264:1 › phone projection stays remote and returns to the existing device (2.8s)
+  ✓  36 [mobile] › e2e/inspector86.spec.ts:305:1 › browser Back closes settings, source dossier, then workspace without losing draft (1.3s)
+  -  37 [mobile] › e2e/inspector86.spec.ts:336:1 › approved Graphite tonal roles stay scoped to Inspector
+(node:6177) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  38 [mobile] › e2e/presentation.spec.ts:25:1 › world themes persist across reload and devices; portals inherit theme; all palettes remain playable (14.2s)
+  ✓  39 [mobile] › e2e/presentation.spec.ts:71:1 › legacy world defaults, auto selection, keyboard tabs and reduced motion retain POV and camera (3.5s)
+  ✓  40 [mobile] › e2e/presentation.spec.ts:105:2 › long content smoke 1920 (6.5s)
+  ✓  41 [mobile] › e2e/presentation.spec.ts:105:2 › long content smoke 1366 (5.0s)
+  ✓  42 [mobile] › e2e/presentation.spec.ts:105:2 › long content smoke 360 (5.0s)
+  ✓  43 [mobile] › e2e/presentation.spec.ts:105:2 › long content smoke 430 (5.1s)
+[WebServer] Semantic retrieval unavailable (OSError); structural fallback
+  ✓  44 [mobile] › e2e/runtime-handoff.spec.ts:6:1 › original export identities and rejected opening recover through real API then turn reload turn (9.6s)
+
+  5 skipped
+  39 passed (3.6m)

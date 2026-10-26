@@ -9,7 +9,7 @@ const sections = [
   "Память",
   "Тайны",
 ];
-const out = "../docs/manual_qa/narrative_v4/issue86-evidence";
+const out = process.env.INSPECTOR_EVIDENCE_DIR || "../docs/manual_qa/narrative_v4/issue86-evidence";
 test.use({ video: "on" });
 for (const width of [1440, 768, 393, 360])
   test(`seven sections, skins, widths ${width}`, async ({
@@ -331,4 +331,22 @@ test("browser Back closes settings, source dossier, then workspace without losin
   await expect(page.getByLabel("Своё действие или реплика")).toHaveValue(
     "Android Back",
   );
+});
+
+test('approved Graphite tonal roles stay scoped to Inspector', async ({page,request},info)=>{
+ test.skip(info.project.name!=='desktop');
+ const s=await(await request.post('/test/ui-completion-seed?checkpoint=ui-inspector')).json();
+ await request.put(`/api/worlds/${s.world}/presentation`, {data:{theme_id:'graphite'}});
+ await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),s);
+ await page.goto('/');
+ const rootBefore=await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--bg'));
+ await nav(page,'Мир');
+ const colors=await page.evaluate(()=>{
+  const css=(q:string)=>getComputedStyle(document.querySelector(q)!);
+  return {background:css('.inspector-workspace').backgroundColor,nav:css('.nav-rail').backgroundColor,hero:css('.inspector-world-hero').backgroundColor,card:css('.inspector-columns .inspector-card').backgroundColor,border:css('.inspector-columns .inspector-card').borderTopColor,prose:css('.inspector-card .prose').color,secondary:css('.inspector-page-heading p').color,selected:css('.nav-links button.current').backgroundColor};
+ });
+ expect(colors).toEqual({background:'rgb(28, 30, 33)',nav:'rgb(23, 25, 28)',hero:'rgb(37, 39, 43)',card:'rgb(32, 34, 38)',border:'rgb(58, 60, 64)',prose:'rgb(238, 237, 233)',secondary:'rgb(170, 173, 178)',selected:'rgb(59, 52, 41)'});
+ expect(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--bg'))).toBe(rootBefore);
+ await nav(page,'Тайны');
+ await expect(page.getByRole('heading', {name: /Брак:.*Кирилл/})).toBeVisible();
 });
