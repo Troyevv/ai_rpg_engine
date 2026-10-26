@@ -23,7 +23,7 @@ test('original export identities and rejected opening recover through real API t
  await expect(page.getByRole('heading',{name:'Виктория Соловьёва',exact:true})).toBeVisible();
  await page.getByLabel('Найти персонажа').fill('');
  await expect(page.getByLabel('Персонаж',{exact:true}).locator('option')).toHaveCount(19);
- await page.screenshot({path:`test-results/handoff-identities-${info.project.name}.png`,fullPage:true});
+ await page.screenshot({path:`test-results/handoff-identities-${info.project.name}.png`,fullPage:true,animations:'disabled'});
  await page.locator('.panel-tabs').getByRole('button',{name:'Отношения',exact:true}).click();
  await expect(page.locator('.inspector-dialog')).toContainText('Марина Волкова');
  await expect(page.locator('.inspector-dialog')).not.toContainText('marina_volkova');
@@ -38,7 +38,7 @@ test('original export identities and rejected opening recover through real API t
  await expect(page.locator('.camera-cast article')).toHaveCount(19);
  await expect(page.locator('.camera-cast')).toContainText('Виктория Соловьёва');
  await expect(page.locator('.camera-cast')).not.toContainText('Без имени');
- await page.screenshot({path:`test-results/handoff-camera-${info.project.name}.png`,fullPage:true});
+ await page.screenshot({path:`test-results/handoff-camera-${info.project.name}.png`,fullPage:true,animations:'disabled'});
  await page.keyboard.press('Escape');
  if(info.project.name==='desktop')await expect(page.getByLabel('Управляемый персонаж')).toHaveValue('ilya');
  await request.post('/test/runtime-handoff-provider');
@@ -47,7 +47,7 @@ test('original export identities and rejected opening recover through real API t
   await expect(page.getByRole('button',{name:'Повторить обработку состояния',exact:true})).toBeEnabled();
   await expect(page.getByRole('button',{name:'Начать игру',exact:true})).toHaveCount(0);
   expect((await view()).turns).toHaveLength(0);
-  await page.screenshot({path:`test-results/handoff-rejected-${info.project.name}.png`,fullPage:true});
+  await page.screenshot({path:`test-results/handoff-rejected-${info.project.name}.png`,fullPage:true,animations:'disabled'});
   await page.reload();
   await page.getByRole('button',{name:'Повторить обработку состояния',exact:true}).click();
   await expect(page.locator('.turn')).toHaveCount(1);
@@ -60,7 +60,7 @@ test('original export identities and rejected opening recover through real API t
   await expect(page.locator('.turn')).toHaveCount(3);
   const last=await view();expect(last.state.characters).toHaveLength(19);
   expect(last.state.world_clock.minute).toBe(first.state.world_clock.minute+3);
-  await page.screenshot({path:`test-results/handoff-played-${info.project.name}.png`,fullPage:true});
+  await page.screenshot({path:`test-results/handoff-played-${info.project.name}.png`,fullPage:true,animations:'disabled'});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width);
  } finally {
   const calls=await(await request.post('/test/runtime-handoff-provider?enabled=false')).json();

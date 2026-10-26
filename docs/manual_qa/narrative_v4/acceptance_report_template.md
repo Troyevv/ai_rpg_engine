@@ -1,13 +1,13 @@
 # Приёмка PR #116 — identity / Runtime handoff / opening scene
 
-> Отчёт по единому ТЗ runtime_handoff_and_start. Контролируемые ответы ниже синтетические; оригинальный пользовательский extraction отсутствует. Это снимок доказательств при публикации дерева. Итоговая аттестация этого же отчёта (SHA/tree, jobs, R14/T11/T24/G3/G5 и screenshots) находится в описании [PR #116](https://github.com/Troyevv/ai_rpg_engine/pull/116) и заполняется только после завершения CI, без нового коммита, меняющего проверяемый SHA.
+> Отчёт по единому ТЗ runtime_handoff_and_start. Контролируемые ответы ниже синтетические; оригинальный пользовательский extraction отсутствует. Приёмка кода завершена на 8931928b2a6b249c2bed675354f8dbf74b39dea6. Точный SHA/tree доставки этого отчёта и повторный полный CI последнего SHA аттестуются в описании [PR #116](https://github.com/Troyevv/ai_rpg_engine/pull/116) после завершения jobs: собственный SHA невозможно встроить в содержимое коммита. Последняя поставка меняет только этот отчёт и отключает анимацию в screenshot-командах теста.
 
 ## 1. Версия
 
 - Исходный HEAD: 58c8e2967470b5c9f461d887016387f2f29d2142 (проверен повторно перед публикацией).
-- Итоговый опубликованный HEAD / tree: Точный опубликованный SHA/tree и ссылки на jobs — в итоговой записи PR #116; SHA не встраивается в собственное содержимое коммита.
-- Изменения после 58c8e29 сохранены: Да. Перед первой публикацией свежий remote HEAD равнялся базе; перед уточнениями — f3328793ba49860d2f4bc12ca3e7aba778ee27c2. Обе публикации fast-forward с expected_sha, без force.
-- Итоговый CI, jobs verify / desktop / mobile: NOT RUN — ожидает публикации этого дерева; окончательный статус см. итоговую запись PR #116.
+- Проверенный код HEAD / tree: `8931928b2a6b249c2bed675354f8dbf74b39dea6` / `084e05330536e035ef6520772af53a45ca50711e`. Итоговый SHA/tree доставки отчёта и его CI — в аттестации PR #116.
+- Изменения после 58c8e29 сохранены: Да. Перед первой публикацией свежий remote HEAD равнялся базе; перед уточнениями — f3328793ba49860d2f4bc12ca3e7aba778ee27c2. Все последующие публикации также fast-forward с expected_sha, без force; 9b19b4e и 8931928 сохранены в цепочке.
+- CI проверенного кода: **PASS**, [run 40307123750](https://github.com/Troyevv/ai_rpg_engine/actions/runs/40307123750). verify `121518878143`: 2106 passed + build; desktop `121521723565`: 118 passed; mobile `121521723611`: 108 passed, 10 существующих desktop-only skipped. Полный CI последнего SHA доставки отчёта — в итоговой записи PR #116.
 - Локальная среда и ограничения: Linux, Python 3.12, Node; pytest и npm build доступны. Playwright CDN вернул повреждённый архив Chromium; browser acceptance выполняется в GitHub Actions.
 
 ## 2. Причины и доказательства
@@ -38,11 +38,11 @@
 | Миграция | 19 actors + 19 cards | та же камера | 23 objective, 19 facts, 4 threads | exact baseline comparison |
 | SQLite save | все ID/поля равны baseline | те же места | граф не урезан | saves.state_json + read-only dump test |
 | Игровой API | 19 точных имён, не Без имени | ilya / ilya_cabinet | target_name восстановлены | original_export API test |
-| UI desktop/mobile | mobile f332879 PASS; desktop / final attestation в PR | реальные API, не page.route | 19 имён проверены | runtime-handoff.spec.ts |
+| UI desktop/mobile | PASS на 8931928, desktop и mobile | реальные API, не page.route | 19 имён проверены | runtime-handoff.spec.ts |
 | Narrative context | 1 полная карточка + ограниченный индекс | Ilya один | POV Knowledge не расширен | context_retains_bounded test |
 | Extraction context | Viktoria по существующему ID/имени | origin=salon_lak | типизированный arrival contract | context_retains_bounded test |
 | Успешный первый commit | 19 прежних ID | Ilya+Viktoria в кабинете | Knowledge прежний | real_start_repair test |
-| Turn → reopen/reload → next turn | 19 прежних ID | три commits, +3 минуты | остальные NPC не перемещены | API cycle + mobile f332879 PASS; final attestation в PR |
+| Turn → reopen/reload → next turn | 19 прежних ID | три commits, +3 минуты | остальные NPC не перемещены | API cycle + desktop/mobile 8931928 PASS |
 
 ## 5. Прогон требований и тестов
 
@@ -53,7 +53,7 @@
 | R01 | PASS | red original_export; exact_handoff; API/context trace | No original gameplay-log replay |
 | R02 | PASS | birth_identity + DOB writes; metadata matrix | No original gameplay-log replay |
 | R03 | PASS | known_birth/visible_name/portraits/context/life/phone; full regression | No original gameplay-log replay |
-| R04 | PASS | exact API names + hidden birth pruning; browser pending | Browser visual acceptance pending |
+| R04 | PASS | exact API names + hidden birth pruning; desktop/mobile real API | Original user gameplay log absent |
 | R05 | PASS | context_retains_bounded_identity; scope/full-card limits | No original gameplay-log replay |
 | R06 | PASS | imported real API + exact_handoff; pre-confirm guard | No original gameplay-log replay |
 | R07 | PASS | legacy read-only + old_save_restore_regenerate_variant_rollback | No original gameplay-log replay |
@@ -63,7 +63,7 @@
 | R11 | PASS | precise author diagnostics; safe player repairs + pending message | No original gameplay-log replay |
 | R12 | PASS | calendar/start-policy/reproduction/Knowledge regressions | No original gameplay-log replay |
 | R13 | PASS | 2 real baseline reds; 40 focused tests, provider-only new integration tests | No original gameplay-log replay |
-| R14 | NOT RUN | local tests/build passed; final CI/browser pending | No original gameplay-log replay |
+| R14 | PASS | Full code-SHA CI, 2106 backend + 118 desktop + 108 mobile; last delivery SHA attested in PR | No original gameplay-log replay |
 
 | Тест | Статус | Red / Green / фактическое доказательство |
 |---|---|---|
@@ -77,7 +77,7 @@
 | T08 | PASS | manual_dob_keeps_game_birth_metadata + compatibility recovery |
 | T09 | PASS | malformed_real_birth_reference; mixed source/process; unknown fail-closed |
 | T10 | PASS | context_retains_bounded_identity + legacy_context |
-| T11 | NOT RUN | API exact identity; browser test pending |
+| T11 | PASS | API exact identity; browser cards, relations, expanded thread participant names, camera, controlled actor |
 | T12 | PASS | reproduction/portraits/kinship regression; common discriminator |
 | T13 | PASS | actual baseline legacy_snapshot + read-only restore |
 | T14 | PASS | old_save_restore_regenerate_variant_rollback + migration idempotence |
@@ -90,9 +90,9 @@
 | T21 | PASS | failed_extraction_retry after Repository reopen |
 | T22 | PASS | epoch/stale/duplicate retry guards; cancellation blocks commit |
 | T23 | PASS | saves bytes/revision/history unchanged on failure |
-| T24 | NOT RUN | runtime-handoff.spec.ts desktop/mobile pending CI |
+| T24 | PASS | runtime-handoff.spec.ts desktop/mobile: real import→confirm→identity views→rejected opening→retry→accepted scene |
 | T25 | PASS | real API start→turn→reopen→next turn |
-| T26 | PASS | 2103 local full-suite PASS; final SHA CI attestation in PR #116 |
+| T26 | PASS | 2106 full-suite CI PASS on 8931928; final delivery SHA CI attestation in PR #116 |
 
 ## 6. Retry и транзакционность
 
@@ -110,7 +110,7 @@
 | Анализ оригинальных файлов | world SHA verified, E5 read, 5 original screenshots viewed | PASS |
 | Production unit/schema/projection | actual production functions; no replacement of resolver/migration/repo | PASS |
 | API с controlled provider | real import/generate/confirm/jobs/retry/turn/reopen | PASS |
-| Browser с реальными API/проекциями | mobile f332879: 108 passed / 10 skipped, screenshots просмотрены; desktop и final attestation в PR | Частично выполнен на момент записи |
+| Browser с реальными API/проекциями | 8931928: desktop 118 passed; mobile 108 passed / 10 skipped; all eight handoff screenshots inspected | PASS |
 | User gameplay-log replay, если предоставлен | Not provided. E5 is generation-only. | NOT RUN |
 | Синтетический негативный extraction | wrong actor/destination/origin/quote/assertion, no partial commit | PASS |
 | Live DeepSeek | No key/budget; no paid calls | NOT RUN |
@@ -125,16 +125,16 @@
 |---|---|---|
 | G1 Контракт identity | PASS | See production/API tests and provenance above |
 | G2 Передача мира | PASS | See production/API tests and provenance above |
-| G3 Первая сцена и восстановление | NOT RUN | API PASS; desktop/mobile acceptance pending |
+| G3 Первая сцена и восстановление | PASS | API and both browser viewports: saved narrative retry, one first commit, ordinary turn, reload, next turn |
 | G4 Старое прохождение | PASS | See production/API tests and provenance above |
-| G5 CI / инженерная приёмка | NOT RUN | Final published SHA required |
+| G5 CI / инженерная приёмка | PASS | Full code-SHA CI 8931928; exact final report-delivery SHA and repeated CI attestation in PR #116 |
 | G6 Честное разделение доказательств | PASS | See production/API tests and provenance above |
 
-- Оставшиеся обязательные блокеры этого задания: Итоговые desktop/mobile screenshots и CI этого опубликованного SHA пока NOT RUN.
+- Оставшиеся функциональные блокеры: не выявлены. CI последнего SHA доставки отчёта аттестуется отдельно в PR; зелёный CI предыдущего SHA не выдаётся за его результат.
 - Отдельные ограничения прежней live-приёмки #44: Этот отчёт не объявляет live DeepSeek качество/стоимость подтверждёнными и не заменяет отсутствующий пользовательский gameplay-log.
 - Новый PR / merge / закрытие issue не выполнялись: Да: обновляется только существующий #116; merge и закрытие #44 не выполняются.
 
-Формулировать вывод по реально выполненным проверкам. Не заменять принятую первую сцену открытием экрана или показом текста.
+Вывод: исходные персонажи доступны через игровой API/UI; после отклонённой первой обработки тот же текст успешно принят, затем приняты два обычных хода через reload. Время 18:00→18:03, 3 commits, 19 прежних ID; непричастные NPC и Knowledge сохранены. Только видимый текст не использовался как критерий успеха.
 
 ## Команды и артефакты
 
@@ -157,3 +157,14 @@
 - Final handoff suite including archive A03/A04/A05 API repair: `python -m pytest -q tests/test_runtime_handoff.py` — **40 passed in 19.27s** (`/tmp/handoff-all-final.log`).
 
 - `9b19b4e` CI: backend **2103 passed in 326.50s**, build PASS. Browser: desktop **117 passed / 1 failed**, mobile **107 passed / 10 skipped / 1 failed**. New test searched a full participant name before opening the collapsed thread. The test now opens the actual thread detail before asserting names; expected names and timeouts are unchanged. This failed run is not claimed as acceptance.
+
+- `8931928b2a6b249c2bed675354f8dbf74b39dea6` verify CI: **2106 passed in 302.65s**, frontend build PASS. [Run 40307123750](https://github.com/Troyevv/ai_rpg_engine/actions/runs/40307123750).
+
+## Завершённая браузерная приёмка кода
+
+- `npx playwright test --project=desktop --reporter=line`: **118 passed (7.8m)**.
+- `npx playwright test --project=mobile --reporter=line`: **108 passed, 10 skipped (9.8m)**. Пропуски — прежние desktop-only сценарии; новых skip нет.
+- [Desktop screenshots](https://github.com/Troyevv/ai_rpg_engine/actions/runs/40307123750/artifacts/12644290283), [mobile screenshots](https://github.com/Troyevv/ai_rpg_engine/actions/runs/40307123750/artifacts/12644620388).
+- Просмотрены `handoff-identities`, `handoff-camera`, `handoff-rejected`, `handoff-played` на обоих viewport. Имена/19-card selector сохранены; неприменённая сцена явно помечена, retry доступен, Start отсутствует; после принятого цикла часы показывают 18:03. Мобильный заголовок сцены использует штатное многоточие; horizontal overflow отсутствует.
+- Кадр камеры попал на fade-in. В финальной поставке только screenshot-команды используют `animations: 'disabled'`, чтобы последний CI сохранил стабильные кадры; анимации приложения, тестовые ожидания и timeout не изменены.
+- Финальная аттестация последнего SHA и его скриншотов публикуется в PR #116 после повторного полного CI.
