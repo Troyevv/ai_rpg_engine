@@ -1,6 +1,6 @@
 import {test,expect,type Page,type APIRequestContext} from '@playwright/test';
 import {nav,actor} from './navigation';
-const evidence='../docs/manual_qa/narrative_v4/pr121-polish-evidence';
+const evidence=process.env.PORTRAIT_EVIDENCE||'../docs/manual_qa/narrative_v4/pr121-polish-evidence';
 const phase=process.env.PR121_BEFORE?'before':'after';
 test.use({video:'on'});
 async function seed(page:Page,request:APIRequestContext,hidden=false){
@@ -101,11 +101,37 @@ test('temporary phone owner and real outgoing API use its portrait',async({page,
  const switched=await request.post(`/api/saves/${s.save}/protagonist`,{data:{revision:save.revision,operation_id:'polish-temporary',operation:'temporary',actor_id:'qa_vera'}});expect(switched.ok(),await switched.text()).toBeTruthy();save=await switched.json();
  const sent=await request.post(`/api/saves/${s.save}/phone`,{data:{revision:save.revision,command:{action:'send',operation_id:'polish-owner-send',contact_id:'phone-qa_vera-qa-kirill',content:'Я временный владелец телефона.'}}});expect(sent.ok(),await sent.text()).toBeTruthy();
  const data=await sent.json();const row=data.state.phone.events.at(-1);expect(row.sender.id).toBe('qa_vera');expect(row.subject.id).toBe('qa_kirill');
+ // Commit read on the real server, but hold its response and the subsequent
+ // projection independently. This reproduces the CI 409 without timing sleeps.
+ let releaseRead!:()=>void, readArrived!:()=>void, releaseView!:()=>void, viewArrived!:()=>void;
+ const readGate=new Promise<void>(r=>releaseRead=r), readReady=new Promise<void>(r=>readArrived=r);
+ const viewGate=new Promise<void>(r=>releaseView=r), viewReady=new Promise<void>(r=>viewArrived=r);
+ let readRevision=Infinity;
+ await page.route(`**/api/saves/${s.save}/phone`,async route=>{
+  if(route.request().postDataJSON()?.command?.action!=='read'){await route.continue();return;}
+  const response=await route.fetch();expect(response.ok()).toBeTruthy();readRevision=(await response.json()).revision;readArrived();await readGate;await route.fulfill({response});
+ });
+ await page.route(`**/api/saves/${s.save}`,async route=>{
+  const response=await route.fetch();const value=await response.json();
+  if(value.revision>=readRevision){viewArrived();await viewGate;}
+  await route.fulfill({response});
+ });
  await page.reload();await page.getByRole('button',{name:/^Телефон/}).click();const phone=page.getByRole('region',{name:'Телефон персонажа'});await phone.getByRole('button',{name:'Переписки',exact:true}).click();await phone.locator('button.phone-row').filter({hasText:'Кирилл Ларин'}).click();
  const message=phone.locator('.phone-message').filter({hasText:'Я временный владелец телефона.'});await expect(message).toContainText('Ты');await expect(message.locator('img')).toHaveAttribute('src',/\/qa_vera\//);
  await expect.poll(()=>message.locator('img').evaluate((e:HTMLImageElement)=>e.complete&&e.naturalWidth>0)).toBe(true);
  await page.screenshot({path:`${evidence}/after-${info.project.name}-temporary-owner.png`});
- await page.keyboard.press('Escape');
+ await readReady;
+ try {
+  await page.keyboard.press('Escape');
+  const control=info.project.name==='mobile'?page.locator('.mobile-pov button').first():page.getByLabel('Управляемый персонаж',{exact:true});
+  await expect(control).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Мир без ГГ',exact:true})).toBeDisabled();
+  releaseRead();await viewReady;
+  await expect(control).toBeDisabled();
+  await expect(page.getByRole('button',{name:'Мир без ГГ',exact:true})).toBeDisabled();
+ } finally {releaseRead();releaseView();}
+ await page.unrouteAll({behavior:'wait'});
+ await expect(page.getByRole('button',{name:'Мир без ГГ',exact:true})).toBeEnabled();
  for(const [id,name] of [['qa_timur','Тимур Серов'],['qa_kirill','Кирилл Ларин (ГГ)']]) await actor(page,id,name);
  await page.getByRole('button',{name:/^Телефон/}).click();await phone.getByRole('button',{name:'Переписки',exact:true}).click();await phone.locator('button.phone-row').filter({hasText:'Вера Ларина'}).click();await expect(phone.locator('.phone-message.outgoing img').first()).toHaveAttribute('src',/qa_kirill/);
 });

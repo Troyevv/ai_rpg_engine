@@ -8,8 +8,13 @@ export async function actor(page:Page,id:string,name:string){
  const committed=page.waitForResponse(r=>r.url().endsWith('/protagonist')&&r.request().method()==='POST');
  if(await page.getByLabel('Управляемый персонаж').isVisible())await page.getByLabel('Управляемый персонаж').selectOption(id);
  else {await page.locator('.mobile-pov button').first().click();await page.getByRole('dialog').getByRole('button',{name,exact:true}).click()}
- expect((await committed).ok()).toBe(true);
- await expect(page.locator('.current-game-entry button')).toBeEnabled();
+ const response=await committed;
+ expect(response.ok(),await response.text()).toBe(true);
+ const after=await response.json();
+ expect(after.state.controlled_actor_id).toBe(id);
+ if(await page.getByLabel('Управляемый персонаж').isVisible())await expect(page.getByLabel('Управляемый персонаж')).toHaveValue(id);
+ else await expect(page.locator('.mobile-pov button').first()).toHaveText(after.state.characters.find((c:{id:string})=>c.id===id).name.replace(' (ГГ)','')+' ▾');
+ await expect(page.getByLabel('Управляемый персонаж').or(page.locator('.mobile-pov button').first())).toBeEnabled();
 }
 export async function diagnostics(page:Page){
  if(await page.locator('.mobile-story-tools').isVisible() && await page.locator('.mobile-story-tools').getAttribute('open')===null)await page.locator('.mobile-story-tools summary').click();
