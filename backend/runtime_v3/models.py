@@ -426,6 +426,7 @@ class Character(StrictModel):
     biological_sex: Literal['female', 'male'] | None = None
     identity_components: dict[str, str] = Field(default_factory=dict)
     birth_provenance: dict[str, str | int | None] = Field(default_factory=dict)
+    birth_date_provenance: dict[str, str | int | None] = Field(default_factory=dict)
     appearance: AppearanceProfile = Field(default_factory=AppearanceProfile)
     portraits: list[PortraitReference] = Field(default_factory=list, max_length=128)
     personality: PersonalityProfile | None = None
@@ -613,6 +614,8 @@ def fatal(message, code='current_state_invalid', repairable=False, **path):
 
 
 def assert_world_state_v3_invariants(state, before=None):
+    from backend.runtime_v3.birth_identity import compatible_state
+    state = compatible_state(state)
     from backend.runtime_v3.knowledge import salvage, slot
     state = salvage(state)
     state = salvage_calendar_data(state)

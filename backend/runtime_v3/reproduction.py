@@ -346,6 +346,10 @@ def appearance_adapter(snapshot, child_id):
 def validate_reproduction(state):
     """Persisted cross-entity integrity; never erase a corrupt process and reroll."""
     actors=state['characters'];pregnancies=state['pregnancies'];events=state['reproductive_events']
+    for cid,actor in actors.items():
+        pid=actor.get('birth_provenance',{}).get('pregnancy_id')
+        if pid is not None and (pid not in pregnancies or pregnancies[pid]['status']!='born' or cid not in {c['id'] for c in pregnancies[pid]['children']}):
+            raise ValueError('birth provenance points to a missing or incompatible pregnancy/child')
     active=set();children=set()
     for eid,e in events.items():
         if eid!=e['id'] or set(e['participants'])!={e['gestational_actor_id'],e['impregnating_actor_id']} or len(e['participants'])!=2:
@@ -384,8 +388,9 @@ def validate_reproduction(state):
 
 
 def known_birth(state, cid, observer):
+    from backend.runtime_v3.birth_identity import is_game_birth
     actor=state['characters'][cid]
-    return (not actor.get('birth_provenance') or cid==observer or
+    return (not is_game_birth(state,cid) or cid==observer or
         state['knowledge'].get(str(observer)+':'+str(actor.get('life_fact_id')),{}).get('status')=='known')
 
 

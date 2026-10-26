@@ -1,4 +1,5 @@
 """Explicit authoring-time completion. Never called by imports or running saves."""
+from backend.runtime_v3.birth_identity import dob_metadata
 from copy import deepcopy
 import hashlib
 import json
@@ -151,7 +152,7 @@ def fill_birth_dates(state):
         parents[root(b)]=root(a)
     explicit_groups={}
     for cid,a in actors.items():
-        group=(a.get('birth_provenance') or {}).get('twin_group')
+        group=dob_metadata(a).get('twin_group')
         if group:
             if group in explicit_groups:union(explicit_groups[group],cid)
             else:explicit_groups[group]=cid
@@ -185,7 +186,7 @@ def fill_birth_dates(state):
         writable=[];established=set();candidates=None
         for cid in members:
             actor=actors[cid];prior=records.get(cid,{})
-            birth=actor.get('birth_date');source=(actor.get('birth_provenance') or {}).get('source')
+            birth=actor.get('birth_date');source=dob_metadata(actor).get('source')
             automatic=prior.get('source')=='automatic' and prior.get('value')==birth
             if birth and not automatic:established.add(birth)
             if cid not in ages or prior.get('source')=='manual' or source in ('manual','unknown') or birth and not automatic:continue
@@ -204,18 +205,18 @@ def fill_birth_dates(state):
         for cid in writable:
             actors[cid]['birth_date']=chosen
             records[cid]=dict(source='automatic',value=chosen,input_signature=signature([ages[cid],today,profile]))
-            actors[cid]['birth_provenance']=dict(actors[cid].get('birth_provenance') or {},source='authoring_automatic',input_signature=records[cid]['input_signature'])
+            actors[cid]['birth_date_provenance']=dict(dob_metadata(actors[cid]),source='authoring_automatic',input_signature=records[cid]['input_signature'])
 
 
 def manual_edit(state, path, old_minute=None):
     paths=state.setdefault('authoring',{}).setdefault('manual_paths',[])
     if path and path not in paths:paths.append(path)
     meta = state.get('authoring', {}).get('calendar_completion')
-    if not meta: return state
     if path.startswith('/world/characters/') and path.endswith('/birth_date'):
         cid = path.split('/')[3].replace('~1','/').replace('~0','~')
-        meta.setdefault('birth_dates', {})[cid] = dict(source='manual', value=state['world']['characters'][cid].get('birth_date'))
-        state['world']['characters'][cid]['birth_provenance'] = {'source':'manual'}
+        if meta: meta.setdefault('birth_dates', {})[cid] = dict(source='manual', value=state['world']['characters'][cid].get('birth_date'))
+        state['world']['characters'][cid]['birth_date_provenance'] = dict(dob_metadata(state['world']['characters'][cid]),source='manual')
+    if not meta: return state
     if path.startswith('/world_clock'):
         meta['resolved']['minute']=state['world_clock']['minute']
         meta['resolved']['calendar']=deepcopy(state['world_clock']['calendar'])

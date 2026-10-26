@@ -24,6 +24,7 @@ WORKERS = {}
 
 @dataclass
 class Worker:
+    epoch: int | None = None
     cancelled: threading.Event = field(default_factory=threading.Event)
     stream: object = None
     api_key: str | None = field(default=None, repr=False)
@@ -76,7 +77,7 @@ def retry(storage, job_id, config, api_key=None):
 
 
 def launch(path, job_id, api_key=None):
-    handle = Worker(api_key=api_key)
+    handle = Worker(api_key=api_key,epoch=Storage(path).get_job(job_id)['attempt_epoch'])
     with REGISTRY_LOCK:
         WORKERS[job_id] = handle
     threading.Thread(target=run_job, args=(path, job_id, handle), daemon=True, name=f'rpg-{job_id[:8]}').start()
@@ -100,11 +101,13 @@ def stop(storage, job_id):
 
 def run_job(path, job_id, handle):
     storage = Storage(path)
+    storage.worker_epoch=handle.epoch
     narrative = ''
     job_started=time.perf_counter()
     timings={}
     try:
         initial = storage.get_job(job_id)
+        if handle.epoch is not None and initial['attempt_epoch']!=handle.epoch: return
         provider = json.loads(initial['config_json']).get('provider', 'local')
         with model_lease(provider):
             if handle.cancelled.is_set():
@@ -263,9 +266,11 @@ def run_job(path, job_id, handle):
                             db.execute('UPDATE game_jobs SET warnings_json=? WHERE id=?', (json.dumps(previous+warnings,ensure_ascii=False),job_id))
                     break
                 except StructuralDeltaError as exc:
-                    if attempt == 1 or not exc.repairable:raise
-                    diagnostic=exc.diagnostic('extraction_repair')
+                    if not exc.repairable or attempt==1 and exc.code!='scene_arrival_unsupported': raise
+                    diagnostic=exc.diagnostic('extraction_repair' if attempt==0 and exc.repairable else 'validation_failed')
+                    diagnostic.update(attempt=attempt,attempt_epoch=job['attempt_epoch'],revision=job['revision'])
                     storage.record_repair(job_id,diagnostic)
+                    if attempt == 1 or not exc.repairable:raise
                     feedback = repair_feedback(diagnostic, result, before['world_state'])
                 finally:
                     timings['validation_apply']=timings.get('validation_apply',0)+time.perf_counter()-stage_started
@@ -308,4 +313,4 @@ def run_job(path, job_id, handle):
             with storage.connect() as db:
                 db.execute("UPDATE game_jobs SET narrative=? WHERE id=? AND status='stopped' AND narrative_complete=0", (narrative, job_id))
         with REGISTRY_LOCK:
-            WORKERS.pop(job_id, None)
+            if WORKERS.get(job_id) is handle: WORKERS.pop(job_id, None)

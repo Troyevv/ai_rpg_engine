@@ -300,6 +300,15 @@ class DraftStorage:
             authoring=state.get('authoring')
             state,_=migrate_snapshot(db,state)
             if authoring is not None:state['authoring']=json.loads(dump(authoring))
+            # Validate the actual disposable game projection before committing any save.
+            from backend.runtime_v3.selectors import ui_view
+            from backend.runtime_v3.reproduction import known_birth
+            from backend.runtime_v3.kinship import visible_name
+            view=ui_view(state)
+            runtime=state['world_state'];observer=runtime['camera']['controlled_actor_id']
+            expected={c['id']:visible_name(runtime,c['id'],observer,c['name']) for c in state['character_cards'] if known_birth(runtime,c['id'],observer)}
+            if {c['id']:c['name'] for c in view['characters']}!=expected or set(expected)!=set(view['world']['characters']):
+                raise ValueError('Runtime handoff: карточки и игровые идентичности расходятся.')
             sid=db.execute('INSERT INTO saves(world_id,name,state_json) VALUES(?,?,?)',(world_id,'Новое прохождение',dump(state))).lastrowid
             project(db,sid,state)
             result={'world':world_id,'save':sid,'version_id':version_id,'start_decision':{'candidate_hash':candidate_hash(record['state']),'revision':revision,'accepted_warnings':accept_warnings,'stopped_review':bool(running),'review_status':(review_metadata(record) or {}).get('status','unreviewed')}}

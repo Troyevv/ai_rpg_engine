@@ -142,6 +142,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
                     raw.pop('authoring',None)  # Model cannot mint server provenance.
                     actors=raw.get('world',{}).get('characters',{}) if isinstance(raw.get('world'),dict) else {}
                     for actor in (actors.values() if isinstance(actors,dict) else []):
+                        if isinstance(actor,dict):actor.pop('birth_date_provenance',None)
                         if isinstance(actor,dict) and isinstance(actor.get('birth_provenance'),dict) and actor['birth_provenance'].get('source') in ('manual','authoring_automatic'):
                             actor['birth_provenance'].pop('source')
                     from backend.services.draft_intake import motivations

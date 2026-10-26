@@ -87,6 +87,26 @@ class StateResolver:
                     seen.add(key)
                 yield i, item
 
+    def arrival_supported(self, item, cid, origin, target):
+        """Validate extraction's semantic assertion and its explicit identity anchors.
+
+        No verb matching or inference of movement from narrative. Ambiguous,
+        future, negated and remote actions must not be asserted as completed.
+        """
+        if not self.supported(item) or item.get('assertion')!='completed_arrival' or item.get('from_location_id')!=origin:
+            return False
+        def fold(value): return normalized(value).casefold().replace('ё','е')
+        quote=fold(item['evidence'])
+        subject=item.get('actor_evidence');destination=item.get('destination_evidence')
+        if not isinstance(subject,str) or not subject.strip() or not isinstance(destination,str) or not destination.strip(): return False
+        subject=fold(subject);destination=fold(destination)
+        name=self.actor_names.get(cid) or self.before['characters'][cid].get('display_name') or ''
+        # Explicit subject anchor: a full canonical name or its first given name.
+        names={fold(name),fold(name.split()[0])} if name.strip() else {fold(cid)}
+        place=self.state['locations'][target]
+        places={fold(v) for v in [place['name'],*place.get('aliases',[])] if v.strip()}
+        return subject in names and subject in quote and destination in places and destination in quote
+
     def remote_commitment_supported(self, record):
         from backend.runtime_v3.remote import commitment_sources
         quote=record.get('evidence')
@@ -217,13 +237,18 @@ class StateResolver:
             s['characters'][cid]['location_id'] = origin
         for cid in present:
             origin = s['characters'][cid]['location_id']
-            # #64 final_scene still owns the endpoint. For an off-camera actor
-            # in a structured geography require evidence of joining this scene;
-            # residence/affiliation alone cannot supply that movement evidence.
-            geography = any(s['locations'].get(p,{}).get('parent_id') for p in (origin,lid))
-            if (cid not in self.before['camera']['present_character_ids'] and origin != lid and geography
-                    and cid not in moves and not self.supported({'evidence':scene.get('situation_evidence')})):
-                fatal('появление персонажа требует основания перемещения', 'scene_arrival_unsupported', repairable=True, entity=cid)
+            # A new physical participant needs an actor-bound completed arrival,
+            # even for independent locations. A generic situation quote is not a route.
+            if cid in self.before['characters'] and cid not in self.before['camera']['present_character_ids'] and (origin is not None or s['locations'].get(lid,{}).get('parent_id')) and origin != lid:
+                candidates=[item for item in raw.records['movements'] if isinstance(item,dict) and item.get('actor_id')==cid and item.get('to_location_id')==lid]
+                if cid not in moves or not any(self.arrival_supported(item,cid,origin,lid) for item in candidates):
+                    fatal('Повествование сохранено, но приход участника не подтверждён. Повтори обработку состояния.',
+                          'scene_arrival_unsupported', repairable=True, entity=cid,
+                          from_location_id=origin,to_location_id=lid,
+                          previous_present=self.before['camera']['present_character_ids'], final_present=present,
+                          movements=candidates, evidence_requirement='completed_arrival + actor_evidence + destination_evidence + matching origin',
+                          before_hash=sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest(),
+                          contract_version='physical-arrival-v1')
 
             if origin != lid:
                 self.history.movements.append(dict(actor_id=cid,from_location_id=origin,to_location_id=lid,

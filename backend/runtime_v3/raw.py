@@ -82,7 +82,7 @@ def extraction_schema():
             assertion={'enum':['grounded_feelings']},rationale=string,
             player_evidence=string,player_assertion={'enum':['explicit_directed_feelings']},
             dimensions=obj({d:{'type':'number','minimum':-100,'maximum':100} for d in RELATION_DIMENSIONS})), ('source_id','target_id','evidence')),
-        'movements':record(dict(actor_id=string,to_location_id=string,order={'type':'integer','minimum':0}), ('actor_id','to_location_id','evidence')),
+        'movements':record(dict(actor_id=string,to_location_id=string,from_location_id={'type':['string','null']},assertion={'enum':['completed_arrival']},actor_evidence=string,destination_evidence=string,order={'type':'integer','minimum':0}), ('actor_id','to_location_id','evidence')),
         'thread_changes':record(dict(id=string,description=string,character_ids=strings,status={'enum':['active','developing','dormant','resolved','paused']},state=string,relevance={'type':'number','minimum':0,'maximum':1}), ('id','evidence')),
         'scheduled_event_changes':record(dict(id=string,description=string,character_ids=strings,due_minute={'type':'integer','minimum':0},temporal=obj(dict(date=string,weekday={'type':'integer','minimum':0,'maximum':13},day_offset={'type':'integer','minimum':-366,'maximum':366},time=string,day_period={'enum':['night','morning','afternoon','evening']})),status={'enum':['pending','resolved','cancelled']},condition=string,type=string), ('id','evidence')),
     }
@@ -189,8 +189,8 @@ def extraction_schema():
         compression=Compression.model_json_schema(),situation=string,situation_evidence=evidence,elapsed_minutes={'type':'integer','minimum':0,'maximum':10080}), ('location_id','present_character_ids')),
         choices={'type':'array','items':obj(dict(action=string,speech=string,basis_ids=strings,kind={'enum':['question','proposal','information','decision','opportunity']}),('action','speech'))}, **{key:{'type':'array','items':value} for key,value in definitions.items()}), ('final_scene',))
     schema['description'] = ('RawTurnResult: только наблюдения и подтверждённые изменения. Не создавай StatePatch. '
-        'Final scene задаёт конечное положение участников; movements нужны только для остальных. '
-        'Не копируй from_location, scene_id, last_event_id. Не придумывай время Event. '
+        'Final scene задаёт конечное положение участников. Новому участнику из другого места нужен movements с completed_arrival, from_location_id и точными actor_evidence/destination_evidence. '
+        'Не копируй scene_id, last_event_id. Не придумывай время Event. '
         'Dimensions — закрытый набор; непредставимый смысл сохраняй в context.')
     return schema
 
@@ -261,4 +261,4 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
 def repair_feedback(diagnostic, payload, before):
     """Retry-only context: never infer scene semantics from prose in Python."""
     return json.dumps(dict(diagnostic=diagnostic, original_extraction=payload,
-        previous_camera=before['camera'], known_locations=before['locations']), ensure_ascii=False)
+        previous_camera=before['camera'], known_locations=before['locations'], arrival_contract='physical-arrival-v1: для нового физического участника из другого места нужны movements: actor_id, from_location_id, to_location_id, assertion=completed_arrival, evidence, actor_evidence (точное имя или первое имя из карточки), destination_evidence (точное название или alias места). Все evidence — цитаты того же narrative. Обещание, отрицание, сообщение и упоминание не являются приходом. Не подтверждённого narrative участника исключи из final_scene; не сочиняй события.'), ensure_ascii=False)

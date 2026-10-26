@@ -83,7 +83,9 @@ class Repository(PresentationStorage, DraftStorage, Storage):
         if job.get('kind','').startswith('draft_'):
             job={**job,'narrative':'','progress_chars':len(job.get('narrative',''))}
             if job.get('error','').startswith('Две попытки'):job['error']='Две попытки исправления исчерпаны. Мир сохранён; подробности доступны автору.'
-        return {k: v for k, v in job.items() if k not in ('config_json', 'before_json', 'context_json', 'memory_before_json', 'warnings_json', 'response_journal')}
+        if 'repairs' in job:
+            job['repairs']=[{k:v for k,v in row.items() if k in ('repair_error_code','repair_error_type','stage','attempt','attempt_epoch','revision')} for row in job['repairs']]
+        return {k: v for k, v in job.items() if k not in ('config_json', 'before_json', 'context_json', 'memory_before_json', 'warnings_json', 'response_journal', 'repair_diagnostics_json')}
 
     def save_response_journal(self, jid, journal):
         """Private response transport state; no new checkpoint table or world format."""

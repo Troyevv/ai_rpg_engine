@@ -140,9 +140,12 @@ def test_hierarchy_forward_parents_cycles_broken_refs_dynamic_aliases():
 def test_new_scene_arrival_requires_movement_evidence_not_residence_or_job():
     s=run(state(),'residence_changes',[residence('remote','b','home')]).state
     s=run(s,'role_changes',[role('remote_job','b')]).state
-    with pytest.raises(StructuralDeltaError,match='основания'):
+    with pytest.raises(StructuralDeltaError,match='не подтверждён'):
         run(s,scene=dict(location_id='home',present_character_ids=['a','b']))
-    r=run(s,scene=dict(location_id='home',present_character_ids=['a','b'],situation_evidence=TEXT))
+    with pytest.raises(StructuralDeltaError):
+        run(s,scene=dict(location_id='home',present_character_ids=['a','b'],situation_evidence=TEXT))
+    text='b arrived at home.'
+    r=StateResolver(s,text,'').resolve(dict(final_scene=dict(location_id='home',present_character_ids=['a','b']),movements=[dict(actor_id='b',from_location_id='south',to_location_id='home',assertion='completed_arrival',actor_evidence='b',destination_evidence='home',evidence=text)]))
     assert r.state['characters']['b']['location_id']=='home'
     assert r.state['residences']==s['residences']
 

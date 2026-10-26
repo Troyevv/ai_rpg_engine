@@ -14,7 +14,13 @@ evidence из completed_narrative/player_input и укажи этот ID в fina
 Present_character_ids — только физически присутствующие в конце: ушедших исключи,
 пришедших и оставшихся включи; сообщения/воспоминания не означают присутствия.
 Для ушедших передай movements с конечным местом, только если оно установлено.
-Movements описывают конечные перемещения остальных персонажей; если всё же передаёшь
+Movements также обязательны для пришедшего из другого места нового участника final_scene.
+Дай assertion=completed_arrival, from_location_id из исходного состояния, actor_evidence
+(точная цитата имени или первого имени из карточки), destination_evidence (название или alias
+места в цитате), evidence завершённого физического перехода и to_location_id.
+Не утверждай completed_arrival для обещания, отрицания, телефона, человека за дверью
+или неоднозначного субъекта. situation_evidence не заменяет доказательство прибытия.
+Если передаёшь
 маршрут участника final_scene, его последняя точка должна совпадать с final_scene.location_id.
 Situation описывает конечную объективную ситуацию с situation_evidence, не старое место;
 индивидуальные situation затронутых NPC обнови через character_changes с evidence.
@@ -26,7 +32,7 @@ Situation описывает конечную объективную ситуа�
 - character_changes: только изменившиеся текущие поля; отсутствие поля означает NO CHANGE.
 - events: подтверждённые события хода, без обязательной микроскопической хронологии.
 - movements: подтверждённые перемещения вне конечной камеры. Для её участников
-  положение выводит Runtime из final_scene. Не повторяй from_location.
+  положение выводит Runtime из final_scene, но новым участникам нужен описанный выше arrival claim.
 - locations: новые реальные места с устойчивыми ID и подтверждением из хода.
 - facts, knowledge_gained, relationship_changes, thread_changes,
   scheduled_event_changes, promotions: независимые подтверждённые изменения.

@@ -97,7 +97,7 @@ def migrate_v2(original):
         actors[cid] = Character(id=cid, location_id=lid,
             **{key:deepcopy(entry[key]) for key in ('situation','emotion','goals','intentions','obligations') if key in entry}).model_dump()
         actors[cid]['birth_date'] = deepcopy(entry.get('birth_date'))
-        for field in ('birth_provenance','life_status','life_fact_id','capabilities','developmental_stage','name_history','display_name','parentage_complete_fact_id','reproductive_capability','identity_components','biological_sex','appearance','personality','values','physical_state'):
+        for field in ('birth_provenance','birth_date_provenance','life_status','life_fact_id','capabilities','developmental_stage','name_history','display_name','parentage_complete_fact_id','reproductive_capability','identity_components','biological_sex','appearance','personality','values','physical_state'):
             if field in entry: actors[cid][field] = deepcopy(entry[field])
         actors[cid]['display_name'] = actors[cid].get('display_name') or next((c['name'] for c in old['characters'] if c['id']==cid), None)
     actor = old.get('controlled_actor_id')

@@ -410,7 +410,8 @@ def load_fixture(repository, checkpoint='base'):
     if checkpoint=='protagonist-infant':
         _seed_reproduction(repository,result['save'],'newborn')
         snapshot=repository.get_snapshot(result['save'])
-        child=next(cid for cid,c in snapshot['world_state']['characters'].items() if c.get('birth_provenance'))
+        from backend.runtime_v3.birth_identity import is_game_birth
+        child=next(cid for cid in snapshot['world_state']['characters'] if is_game_birth(snapshot['world_state'],cid))
         repository.transition_protagonist(result['save'],repository.get_save(result['save'])['revision'],
             'qa-infant-protagonist','permanent',actor_id=child)
     return dict(result, workspace=workspace['id'], fixture_version=FIXTURE_VERSION, checkpoint=checkpoint)

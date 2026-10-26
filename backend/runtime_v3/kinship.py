@@ -3,6 +3,7 @@
 The API never returns raw relation facts, provenance, hidden counts or timelines.
 Knowing a former phase does not grant knowledge of a later closure/name/death.
 """
+from backend.runtime_v3.birth_identity import is_game_birth
 from collections import deque
 from backend.runtime_v3.life import FAMILY, PARENTAGE
 
@@ -35,7 +36,7 @@ def visible_relations(state, observer):
 
 def visible_name(state, cid, observer, fallback):
     c = state['characters'][cid]
-    if c.get('birth_provenance'):
+    if is_game_birth(state,cid):
         from backend.runtime_v3.reproduction import birth_name
         return birth_name(state,cid,observer) or 'Без имени'
     history = c.get('name_history', [])

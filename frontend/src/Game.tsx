@@ -98,7 +98,8 @@ export function Game({
   }, [save?.id,actorId]);
   const { job, reconnecting } = useJob(submitted ?? save?.job, refresh);
   const awaitingCommit=job?.status==='saved'&&job.revision===save?.revision&&!save?.turns.some(t=>t.variants?.some(v=>v.job_id===job.id));
-  const pending = active(job)||!!awaitingCommit;
+  const unapplied = !!job && ['error','stopped'].includes(job.status) && !!job.narrative_complete && job.revision === save?.revision;
+  const pending = active(job)||!!awaitingCommit||unapplied;
 
   useEffect(() => {
     const id = requestAnimationFrame(() => {
@@ -340,6 +341,7 @@ export function Game({
                   })
                 }
               />
+              {unapplied && <p role="status">Текст сцены сохранён, состояние ещё не применено. Повтори обработку состояния.</p>}
               {job &&
                 ["error", "stopped"].includes(job.status) &&
                 job.narrative_complete &&

@@ -43,6 +43,7 @@ def runtime_v3_request(messages):
 
 review_protocol_attempts={}
 fragment_attempts={}
+handoff_provider=None
 
 def stream(**kwargs):
     from backend.services.draft_completeness import MARKER
@@ -56,6 +57,18 @@ def stream(**kwargs):
         yield '{"issues":[]}'
         return
     full='\n'.join(m['content'] for m in kwargs['messages'])
+    if handoff_provider is not None and 'ilya_cabinet' in full:
+        from test_runtime_handoff import NARRATIVE as entry,arrival
+        if kwargs.get('response_format'):
+            handoff_provider['extractions']+=1
+            raw=arrival()
+            raw['choices']=[dict(action='Ждать ответа',speech='')]
+            if handoff_provider['extractions']<=2:raw.pop('movements')
+            yield json.dumps(raw,ensure_ascii=False)
+        else:
+            handoff_provider['narratives']+=1
+            yield entry
+        return
     if kwargs['messages'][0]['content'].startswith('Один необязательный пакет') and 'TEST_RELEASE_QUALITY' in full:
         yield '{"patches":[],"preserved_unknown":null}';return
     observer='Тип хода: background' in full or 'Режим observer:' in full or 'mode=observer' in full
@@ -259,7 +272,7 @@ def preparation_stream(**kwargs):
             hold=False
 
 preparation.chat_stream = preparation_stream
-engine.find_loaded_model = preparation.find_loaded_model = lambda _: {'config': {'context_length':32768}}
+engine.find_loaded_model = preparation.find_loaded_model = lambda model: {'config': {'context_length':131072 if model=='handoff-test' else 32768}}
 def authoring_stream(**kwargs):
     if any('Ты редактор черновика Character' in m['content'] for m in kwargs['messages']):
         yield from stream(**kwargs)
@@ -288,6 +301,13 @@ if __name__ == '__main__':
     dice=BrowserDice()
     app.state.tabletop_runtime.dice=dice
     app.state.tabletop_runtime.combat.dice=dice
+    @app.post('/test/runtime-handoff-provider')
+    def runtime_handoff_provider(enabled: bool=True):
+        global handoff_provider
+        previous=handoff_provider
+        handoff_provider={'narratives':0,'extractions':0} if enabled else None
+        return previous or {}
+
     @app.post('/test/calendar-policy-e5')
     def calendar_policy_e5():
         from test_calendar_start_policy import evidence

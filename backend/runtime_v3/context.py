@@ -1,5 +1,6 @@
 from backend.runtime_v3.models import identity
 """Scene-first Narrative and Extraction projections of one canonical world."""
+from backend.runtime_v3.birth_identity import is_game_birth
 from backend.runtime_v3.knowledge import context_rows
 from copy import deepcopy
 from pathlib import Path
@@ -164,6 +165,11 @@ def canonical_slice(state, scope, extraction=False, query=""):
         hidden_births={cid for cid in current['characters'] if not known_birth(state,cid,scope.pov_actor_id or scope.controlled_actor_id)}
         current['characters']={cid:c for cid,c in current['characters'].items() if cid not in hidden_births}
         current['objective_relations']=[r for r in current['objective_relations'] if not {r['source_id'],r['target_id']}&hidden_births]
+        current['relationships']=[r for r in current['relationships'] if not {r['source_id'],r['target_id']}&hidden_births]
+        for section in ('threads','scheduled_events'):
+            current[section]=[r for r in current[section] if not set(r.get('character_ids',[]))&hidden_births]
+        current['camera']['present_character_ids']=[cid for cid in current['camera']['present_character_ids'] if cid not in hidden_births]
+
         from backend.runtime_v3.possessions import private_fact_ids as possession_facts
         protected = private_fact_ids(state) | possession_facts(state)
         allowed = {k['fact_id'] for k in state['knowledge'].values()
@@ -174,12 +180,16 @@ def canonical_slice(state, scope, extraction=False, query=""):
         current['facts'] = {k:v for k,v in current['facts'].items() if k not in protected or k in allowed | possession_beliefs}
         current['knowledge'] = [k for k in current['knowledge'] if k['fact_id'] in current['facts']]
     for actor in current['characters'].values():
-        if not extraction and actor.get('birth_provenance'):
+        actor.pop('birth_date_provenance',None)
+        if not extraction and state['characters'][actor['id']].get('name_history') and not is_game_birth(state,actor['id']):
+            from backend.runtime_v3.kinship import visible_name
+            actor['display_name']=visible_name(state,actor['id'],scope.pov_actor_id or scope.controlled_actor_id,'')
+        if not extraction and is_game_birth(state,actor['id']):
             from backend.runtime_v3.reproduction import birth_name
             actor.pop('display_name', None)
             name = birth_name(state, actor['id'], scope.pov_actor_id or scope.controlled_actor_id)
             if name: actor['display_name'] = name
-        for key in ('birth_provenance','identity_components','biological_sex','reproductive_capability'):
+        for key in ('birth_provenance','birth_date_provenance','identity_components','biological_sex','reproductive_capability'):
             if not extraction or not actor.get(key) or actor.get(key)=='unknown': actor.pop(key,None)
         if extraction and current.get('pregnancies'):
             # Empty defaults carry no assertions. Immutable birth provenance is
@@ -224,9 +234,9 @@ class NarrativeContextBuilder:
         if kind != 'background' or scope.pov_actor_id:
             state=snapshot['world_state']; observer=state['camera'].get('pov_actor_id') or state['camera']['controlled_actor_id']
             snapshot['character_cards']=[c for c in snapshot['character_cards'] if known_birth(state,c['id'],observer)]
+            from backend.runtime_v3.kinship import visible_name
             for card in snapshot['character_cards']:
-                if state['characters'][card['id']].get('birth_provenance'):
-                    card['name']=birth_name(state,card['id'],observer)
+                card['name']=visible_name(state,card['id'],observer,card['name'])
         from backend.runtime_v3.director import plan
         state = snapshot['world_state']; campaign = snapshot.get('campaign', {})
         prompt_name = 'background_prompt.md' if kind == 'background' else 'game_system_prompt.md'
@@ -305,7 +315,7 @@ class ExtractionContextBuilder:
             from backend.runtime_v3.context_contract import RELATIONSHIP_EVIDENCE_CONTRACT
             rules += RELATIONSHIP_EVIDENCE_CONTRACT
         reproductive = bool(current.get('pregnancies')) or any(
-            c.get('reproductive_capability','unknown')!='unknown' or c.get('birth_provenance')
+            c.get('reproductive_capability','unknown')!='unknown' or is_game_birth(snapshot['world_state'],c['id'])
             for c in current['characters'].values())
         if reproductive:
             from backend.runtime_v3.context_contract import REPRODUCTION_CONTRACT
@@ -509,10 +519,9 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     from backend.runtime_v3.context_contract import EXTRACTION_TIME_CONTRACT
     rules += '\n' + (EXTRACTION_TIME_CONTRACT if builder.extraction else TIME_CONTRACT)
     rules += '\n' + (CONTROL_CONTRACT if extraction_text is None else 'death_protected_actor_ids: reject autonomous death.')
-    rules += ('\nMilestones are historical accepted transitions, not current state or actor knowledge. '
-              'Canonical WorldState overrides Milestones/History/biography. known_by limits each actor’s access; '
-              'historical roles, relations, homes and names cannot replace current truth.')
-    rules += f'\nRuntime v3. controlled_actor_id={camera["controlled_actor_id"]}; mode={camera["mode"]}; world_time={state["meta"]["world_time"]} минут.'
+    rules += ('\nWorldState overrides historical Milestones/History/biography (roles, relations, homes, names). '
+              'Milestones grant no Knowledge; known_by limits actor access.')
+    if not builder.extraction: rules += f'\nRuntime v3. controlled_actor_id={camera["controlled_actor_id"]}; mode={camera["mode"]}; world_time={state["meta"]["world_time"]} минут.'
     if snapshot.get('_time_skip'): rules += '\nДетерминированный Time Skip: ' + json.dumps(snapshot['_time_skip'], ensure_ascii=False) + '. Описывай только до actual_target, не позже. Hidden не становится знанием игрока.'
     if validation_feedback: rules += '\nИсправь структурную ошибку, верни полный JSON:\n' + validation_feedback
     from backend.services.world_creation_settings import presentation_rule
@@ -706,8 +715,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
             if message['content'].startswith('Choice context / controlled actor\n'):
                 choice = json.loads(message['content'].split('\n', 1)[1])
                 compacted = compact_choice_context(current, choice)
-                instruction = ('\nChoice context state_ref is a JSON Pointer to exactly that value '
-                    'in Текущее состояние / GM-only; it grants no other GM knowledge.')
+                instruction = ('\nChoice state_ref points only to that JSON value in Текущее состояние / GM-only, granting no other knowledge.')
                 candidate = block('Choice context / controlled actor', compacted)
                 # Account for the reference instruction too: compaction must
                 # never make a small context larger.
@@ -717,7 +725,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                         'Постоянные правила\n', 'Постоянные правила' + instruction + '\n', 1)
                 break
     if estimate(messages) > hard_context_limit:
-        raise ValueError('Контекст v3 не помещается в выбранную модель. Увеличь контекст или уменьши лимит ответа. Критические данные сцены и последние narrative сохранены.')
+        raise ValueError(f'Контекст v3 не помещается в выбранную модель ({estimate(messages)} / {hard_context_limit}). Увеличь контекст или уменьши лимит ответа. Критические данные сцены и последние narrative сохранены.')
     classifier = CharacterContextClassifier()
     counts = {mode: 0 for mode in (FULL_PRESENT, FULL_REMOTE, ACTIVE_REFERENCED, COMPACT_REFERENCED, INDEX)}
     for cid in state['characters']: counts[classifier.classify(cid, scope)] += 1

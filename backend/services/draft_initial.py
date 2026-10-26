@@ -12,7 +12,7 @@ EXTENSIONS = {
     'pregnancies':m.Pregnancy, 'reproductive_events':m.ReproductiveEvent,
     'naming_decisions':m.NamingDecision,
 }
-ACTOR_FIELDS = ('birth_provenance','life_status','birth_date','biological_sex','physical_state','capabilities',
+ACTOR_FIELDS = ('birth_provenance','birth_date_provenance','life_status','birth_date','biological_sex','physical_state','capabilities',
     'developmental_stage','name_history','appearance','personality','values',
     'reproductive_capability','identity_components','life_fact_id','parentage_complete_fact_id')
 

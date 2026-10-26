@@ -1,4 +1,5 @@
 """Shared portrait selection for cards, genealogy and future phone consumers."""
+from backend.runtime_v3.birth_identity import is_game_birth
 from backend.runtime_v3.calendar import age_on, current_time, profile_of
 
 
@@ -28,7 +29,7 @@ def select_portrait(state, cid):
 def silhouette(state,cid):
     actor=state['characters'][cid];observer=state['camera']['controlled_actor_id']
     sex=actor.get('biological_sex')
-    if actor.get('birth_provenance') and observer!=cid:
+    if is_game_birth(state,cid) and observer!=cid:
         pid=actor['birth_provenance'].get('pregnancy_id');p=state.get('pregnancies',{}).get(pid,{})
         fid=p.get('sex_fact_ids',{}).get(cid)
         if state['knowledge'].get(str(observer)+':'+str(fid),{}).get('status')!='known': sex=None

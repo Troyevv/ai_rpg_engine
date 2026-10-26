@@ -65,12 +65,13 @@ def test_mentions_and_unprovable_semantics_do_not_force_transition():
     assert StateResolver(world(), NARRATIVE, '').resolve(raw('room')).state['camera']['location_id'] == 'room'
 
 def test_departure_and_arrival_update_presence_and_character_endpoints():
-    text = 'Соня ушла в коридор. К Илье пришёл Юра и остался.'
+    text = 'Соня ушла в коридор. Юра пришёл в Критический успех к Илье и остался.'
     payload = dict(final_scene=dict(location_id='room', present_character_ids=['a', 'c']),
         movements=[dict(actor_id='b', to_location_id='hall', evidence=text)])
     state = world()
     state['characters']['c']['location_id'] = 'hall'
-    result = StateResolver(state, text, '').resolve(payload).state
+    payload['movements'].append(dict(actor_id='c',from_location_id='hall',to_location_id='room',assertion='completed_arrival',actor_evidence='Юра',destination_evidence='Критический успех',evidence=text))
+    result = StateResolver(state, text, '',actor_names={'c':'Юра'}).resolve(payload).state
     assert result['camera']['present_character_ids'] == ['a', 'c']
     assert result['characters']['b']['location_id'] == 'hall'
     assert result['characters']['c']['location_id'] == 'room'

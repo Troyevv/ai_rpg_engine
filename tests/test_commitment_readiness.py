@@ -58,8 +58,8 @@ def test_dependency_does_not_interrupt_skip(tmp_path):
     assert job['status'] == 'error'
     assert repo.get_snapshot(sid) == before and repo.list_turns(sid) == turns
     assert Repository(repo.path).get_snapshot(sid) == before
-    # Branch after rollback retains the original chronology.
-    assert run(repo, sid, 1)[0]['status'] == 'saved'
+    # Resolve the pending saved narrative before the next branch turn.
+    assert run(repo, sid, 1,retry=job['id'])[0]['status'] == 'saved'
     repo = Repository(repo.path)
     assert run(repo, sid, 1)[0]['status'] == 'saved'
     assert repo.get_snapshot(sid)['world_state']['meta']['world_time'] == 5565
