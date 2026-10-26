@@ -416,7 +416,7 @@ if __name__ == '__main__':
     def ui_completion_seed(checkpoint: str = 'ui-calendar'):
         from devtools.narrative_test_world import load_fixture
         from test_narrative_test_world import ordinary_job
-        if checkpoint not in ('ui-calendar','ui-calendar-custom','ui-family','ui-family-dense','ui-public-directory'):
+        if checkpoint not in ('ui-calendar','ui-calendar-custom','ui-family','ui-family-dense','ui-public-directory','ui-dossier'):
             raise ValueError('Unknown UI checkpoint')
         result=load_fixture(app.state.repository,checkpoint)
         if checkpoint.startswith('ui-family') or checkpoint=='ui-public-directory':

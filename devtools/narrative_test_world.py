@@ -796,3 +796,26 @@ def _ui_public_directory(state):
     return state
 
 CHECKPOINTS['ui-public-directory']=_ui_public_directory
+
+
+def _ui_dossier(state):
+    """#83 dense, sparse and restricted records in the shared #78 world."""
+    from backend.runtime_v3.models import Condition
+    state=_ui_family(state)
+    world=state['world']
+    for card in state['characters']:
+        if card['id']==ACTOR_ID:
+            card['fields'].update({'Биография':'Кирилл вернулся в город после работы в архиве. '+('Он восстанавливает старые карты и ищет историю своей семьи. '*18),
+                'Характер':'Внимателен к деталям, сдержан в незнакомой компании.', 'Стиль общения':'Говорит спокойно, иногда шутит.',
+                'Внешность':'Короткие тёмные волосы, светлая рубашка, следы краски на руках.'})
+    world['characters'][ACTOR_ID]['physical_state']='Устал после дороги, промок под дождём.'
+    world['characters'][ACTOR_ID]['biological_sex']='male'
+    world['characters']['qa_vera']['biological_sex']='female'
+    world['conditions']['dossier-known']=Condition(id='dossier-known',actor_id=ACTOR_ID,description='Повреждение ноги',effects={'can_move':False},evidence='Осторожно опирается на трость.').model_dump()
+    world['facts']['dossier-hidden']=dict(id='dossier-hidden',text='PRIVATE DOSSIER CONDITION',secret=True,character_ids=['qa_vera'],evidence=['QA'])
+    world['conditions']['dossier-hidden']=Condition(id='dossier-hidden',actor_id='qa_vera',description='PRIVATE DOSSIER CONDITION',fact_id='dossier-hidden',effects={'can_speak':False},evidence='PRIVATE EVIDENCE').model_dump()
+    world['knowledge']['qa_vera:dossier-hidden']=dict(actor_id='qa_vera',fact_id='dossier-hidden',status='known')
+    return state
+
+
+CHECKPOINTS['ui-dossier']=_ui_dossier

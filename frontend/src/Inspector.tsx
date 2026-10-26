@@ -1,17 +1,20 @@
+import {CharacterView} from './CharacterDossier';
+import {dossierText as t,type DossierTab} from './lib/dossier';
 import {CharacterAvatar} from "./Portrait";
 import {SectionTabs} from "./components/ui/section-tabs";
 import {ThemeSelector} from "./ThemeProvider";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
   Download,
+  Maximize2, Minimize2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { api, download } from "./api";
 import { type World, type Save, type Scene, active } from "./types";
 import {localDate} from "./dates";
-import {WorldView,SceneOverview,CharacterView,RelationsView,SecretsView,ThreadsView,MemoryView,Reveal} from "./InspectorViews";
+import {WorldView,SceneOverview,RelationsView,SecretsView,ThreadsView,MemoryView,Reveal} from "./InspectorViews";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import {
@@ -44,6 +47,10 @@ export function Inspector({
   setCharacter: (v: string) => void;
   refresh: () => void;
 }) {
+  const [dossierTab,setDossierTab]=useState<DossierTab>('overview');
+  const [expanded,setExpanded]=useState(()=>sessionStorage.getItem('dossier-expanded')==='yes');
+  const scrolls=useRef(new Map<string,number>());
+  const dialogRef=useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [near, setNear] = useState(false);
   const [scene, setScene] = useState<Scene>({
@@ -61,8 +68,7 @@ export function Inspector({
     setQuery("");
     setNear(false);
   }, [open, world?.id]);
-  if (!world || !state) return null;
-  const cards = state.characters.filter(
+  const cards = (state?.characters||[]).filter(
     (c) =>
       (!query ||
         [c.name, ...(c.aliases ?? [])]
@@ -72,9 +78,14 @@ export function Inspector({
       (!near || meta?.present_ids.includes(c.id)),
   );
   const selected = cards.find((c) => c.id === character) ?? cards[0];
+  const scrollKey=`${save?.id||world?.id}:${state?.controlled_actor_id}:${selected?.id}:${panel}:${dossierTab}`;
+  useLayoutEffect(()=>{const el=dialogRef.current;if(open&&el)el.scrollTop=scrolls.current.get(scrollKey)||0},[open,scrollKey]);
+  useEffect(()=>{if(open&&panel==='Персонажи'&&selected&&selected.id!==character)setCharacter(selected.id)},[open,panel,selected?.id,character,setCharacter]);
+  if (!world || !state) return null;
   return (
     <Dialog open={open} onOpenChange={(v) => !v && close()}>
-      <DialogContent className="inspector-dialog">
+      <DialogContent ref={dialogRef} onOpenAutoFocus={e=>{if(panel==='Персонажи'){e.preventDefault();requestAnimationFrame(()=>{const el=dialogRef.current;if(el){el.querySelector<HTMLButtonElement>('.dossier-tabs [aria-selected="true"]')?.focus({preventScroll:true});el.scrollTop=scrolls.current.get(scrollKey)||0}})}}} onScroll={e=>scrolls.current.set(scrollKey,e.currentTarget.scrollTop)} className={`inspector-dialog ${panel==='Персонажи'?'dossier-inspector':''} ${expanded&&panel==='Персонажи'?'dossier-expanded':''}`}>
+        {panel==='Персонажи'&&<button className="dossier-width-toggle" aria-label={t(expanded?'collapse':'expand')} aria-pressed={expanded} onClick={()=>{setExpanded(!expanded);sessionStorage.setItem('dossier-expanded',!expanded?'yes':'no')}}>{expanded?<Minimize2 size={18}/>:<Maximize2 size={18}/>}</button>}
         <DialogHeader>
           <DialogTitle title={world.name}>{world.name}</DialogTitle>
           <DialogDescription>
@@ -229,11 +240,11 @@ export function Inspector({
                     <ChevronRight />
                   </Button>
                 </div>
-                <p className="eyebrow">
+                <p className="eyebrow character-index">
                   {cards.indexOf(selected) + 1} / {cards.length} · Карточка
                   ведущего
                 </p>
-                <CharacterView state={state} card={selected} save={save} refresh={refresh}/>
+                <CharacterView state={state} card={selected} save={save} refresh={refresh} tab={dossierTab} setTab={setDossierTab} onCharacter={id=>{setQuery('');setNear(false);setCharacter(id)}}/>
               </>
             ) : (
               <p className="muted">Персонажи не найдены.</p>

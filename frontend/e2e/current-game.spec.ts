@@ -36,7 +36,10 @@ test("calendar, genealogy, policy and weather stay save-scoped and responsive", 
       .click();
     const family=page.locator(".save-workspace");
     await expect(family.locator(".react-flow__node").first()).toBeVisible();
-    await expect(family).not.toContainText("Зоя");
+    // PR #120 makes all canonical families public, independent of Knowledge.
+    await expect(family.getByLabel("Семья персонажа").locator('option[value="qa_zoya"]')).toContainText("Зоя");
+    await family.getByLabel("Семья персонажа").selectOption("qa_zoya");
+    await expect(family.locator(".family-node").filter({hasText:"Зоя"})).toBeVisible();
     await family.getByRole("button", { name: "Вся семья", exact: true }).click();
     await page.screenshot({
       path: info.outputPath(`family-${skin}.png`),

@@ -1,0 +1,9 @@
+{
+  "nodes": 80,
+  "heap": 24500000,
+  "render_ms": 1354,
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  }
+}
