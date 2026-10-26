@@ -133,7 +133,7 @@ export function InspectorCard({
   className?: string;
 }) {
   return (
-    <section className={`inspector-card ${className}`}>
+    <section className={`inspector-card ${className}`} aria-label={title}>
       {title && (
         <header className="inspector-card-heading">
           <h2>{title}</h2>
