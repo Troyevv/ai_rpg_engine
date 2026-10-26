@@ -84,6 +84,7 @@ export function GameCalendar({ save }: { save: Save }) {
     const offset = (year - 1) * monthCount + number - 1 + delta;
     const y = Math.floor(offset / monthCount) + 1;
     if (y < 1 || y > 9999) return;
+    setSelected(`${String(y).padStart(4,"0")}-${String((offset % monthCount)+1).padStart(2,"0")}-01`);
     setMonth(
       `${String(y).padStart(4, "0")}-${String((offset % monthCount) + 1).padStart(2, "0")}`,
     );
@@ -127,28 +128,9 @@ export function GameCalendar({ save }: { save: Save }) {
         </button>
       </div>
       {yearView ? (
-        <div className="calendar-year">
-          {Array.from({ length: monthCount }, (_, i) => (
-            <button
-              key={i}
-              onClick={() => {
-                setMonth(
-                  `${String(year).padStart(4, "0")}-${String(i + 1).padStart(2, "0")}`,
-                );
-                setYearView(false);
-              }}
-            >
-              {custom
-                ? profile.month_names?.[i] || i + 1
-                : calendarDate(
-                    `${String(year).padStart(4, "0")}-${String(i + 1).padStart(2, "0")}-01`,
-                    "month",
-                  )}
-            </button>
-          ))}
-        </div>
+        <CalendarYear save={save} year={year} profile={profile} today={today} choose={(date)=>{setMonth(date.slice(0,7));setSelected(date);setYearView(false)}}/>
       ) : (
-        <>
+        <div className="calendar-layout">
           {error ? (
             <p role="alert">{error}</p>
           ) : !data ? (
@@ -261,7 +243,7 @@ export function GameCalendar({ save }: { save: Save }) {
               </article>
             ))}
           </section>
-        </>
+        </div>
       )}
       {data?.notices.map((n) => (
         <p role="status" key={n}>
@@ -273,4 +255,12 @@ export function GameCalendar({ save }: { save: Save }) {
       )}
     </section>
   );
+}
+
+function CalendarYear({save,year,profile,today,choose}:{save:Save;year:number;profile:any;today:string;choose:(date:string)=>void}){
+ const [months,setMonths]=useState<Projection[]>([]),[error,setError]=useState("");
+ const custom=profile?.system==='custom';const count=custom?profile.month_lengths.length:12;
+ useEffect(()=>{let live=true;setMonths([]);setError("");Promise.all(Array.from({length:count},(_,i)=>{const prefix=`${String(year).padStart(4,'0')}-${String(i+1).padStart(2,'0')}`;const length=custom?profile.month_lengths[i]:new Date(year,i+1,0).getDate();return api<Projection>(`/saves/${save.id}/calendar?start_date=${prefix}-01&end_date=${prefix}-${String(length).padStart(2,'0')}`)})).then(rows=>{if(live)setMonths(rows)}).catch(e=>{if(live)setError(e.message)});return()=>{live=false}},[save.id,save.revision,year]);
+ if(error)return <p role="alert">{error}</p>;if(!months.length)return <p role="status">Загрузка года…</p>;
+ return <div className="calendar-year">{months.map((month,i)=><section className="calendar-mini" key={i}><h4>{custom?profile.month_names?.[i]||i+1:calendarDate(month.days[0].date,'month')}</h4><div style={{display:'grid',gridTemplateColumns:`repeat(${month.profile.weekday_names?.length||7},minmax(0,1fr))`}}>{(month.profile.weekday_names||['Пн','Вт','Ср','Чт','Пт','Сб','Вс']).map((w,j)=><small key={j}>{w}</small>)}{Array.from({length:month.days[0].weekday||0},(_,j)=><span key={'b'+j}/>)}{month.days.map(day=><button key={day.date} aria-label={custom?day.date:calendarDate(day.date)} aria-current={day.date===today?'date':undefined} onClick={()=>choose(day.date)}>{day.day}{[...month.events,...month.scheduled.items].some(e=>e.date<=day.date&&(e.end_date||e.date)>=day.date)&&<i aria-label="Есть события">•</i>}</button>)}</div></section>)}</div>
 }

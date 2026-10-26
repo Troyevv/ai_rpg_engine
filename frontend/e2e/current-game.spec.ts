@@ -34,13 +34,16 @@ test("calendar, genealogy, policy and weather stay save-scoped and responsive", 
     await tabs
       .getByRole("button", { name: "Родословная", exact: true })
       .click();
-    await expect(menu.locator(".react-flow__node").first()).toBeVisible();
-    await expect(menu).not.toContainText("Зоя");
-    await menu.getByRole("button", { name: "Вся семья", exact: true }).click();
+    const family=page.locator(".save-workspace");
+    await expect(family.locator(".react-flow__node").first()).toBeVisible();
+    await expect(family).not.toContainText("Зоя");
+    await family.getByRole("button", { name: "Вся семья", exact: true }).click();
     await page.screenshot({
       path: info.outputPath(`family-${skin}.png`),
       animations: "disabled",
     });
+    await page.keyboard.press("Escape");
+    await page.locator(".current-game-entry button").click();
     await tabs.getByRole("button", { name: "Настройки", exact: true }).click();
     await menu.getByLabel("Показывать изменения отношений").uncheck();
     expect(
@@ -57,16 +60,17 @@ test("calendar, genealogy, policy and weather stay save-scoped and responsive", 
   const menu = page.getByRole("dialog");
   const tabs = menu.getByRole("navigation", { name: "Разделы текущей игры" });
   await tabs.getByRole("button", { name: "Календарь", exact: true }).click();
-  await expect(menu.locator(".rdp-root")).toBeVisible();
-  await expect(menu).toContainText("Октябрь 2026");
+  const calendarArea=page.locator(".save-workspace");
+  await expect(calendarArea.locator(".rdp-root")).toBeVisible();
+  await expect(calendarArea).toContainText("Октябрь 2026");
   await page.screenshot({
     path: info.outputPath("calendar.png"),
     animations: "disabled",
   });
-  await menu.getByLabel("Следующий месяц", { exact: true }).click();
-  await expect(menu).toContainText("Ноябрь 2026");
-  await menu.getByRole("button", { name: "Год", exact: true }).click();
-  await expect(menu.locator(".calendar-year button")).toHaveCount(12);
+  await calendarArea.getByLabel("Следующий месяц", { exact: true }).click();
+  await expect(calendarArea).toContainText("Ноябрь 2026");
+  await calendarArea.getByRole("button", { name: "Год", exact: true }).click();
+  await expect(calendarArea.locator(".calendar-mini")).toHaveCount(12);
   const after = await (await request.get(`/api/saves/${calendar.save}`)).json();
   expect(after.revision).toBe(before.revision);
   expect(after.state.world_clock.minute).toBe(before.state.world_clock.minute);
@@ -248,7 +252,7 @@ test("explicit climate survives reload and matches the canonical calendar", asyn
   ).toEqual(configured.state.scene_meta.weather);
   await page.locator(".current-game-entry button").click();
   await menu.getByRole("button", { name: "Календарь", exact: true }).click();
-  await expect(menu.locator(".weather-badge").first()).toBeVisible();
+  await expect(page.locator(".save-workspace .weather-badge").first()).toBeVisible();
 });
 
 test('phone leaves composer reachable with keyboard-sized viewport and enlarged text',async({page,request},info)=>{

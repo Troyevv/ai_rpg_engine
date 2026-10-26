@@ -114,7 +114,7 @@ export function CurrentGame({
       <div className="current-game-entry">
         <Button ref={trigger} variant="outline" onClick={() => { transitioning.current = false; setOpen(true); }}>
           <Settings2 size={16} />
-          Игра
+          Управление игрой
         </Button>
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
@@ -137,7 +137,7 @@ export function CurrentGame({
               <button
                 key={key}
                 aria-pressed={key === tab}
-                onClick={() => setTab(key)}
+                onClick={() => {if(key==="calendar"||key==="family"){setOpen(false);window.dispatchEvent(new CustomEvent("save-workspace",{detail:{section:key}}))}else setTab(key)}}
               >
                 <Icon size={16} />
                 {label}

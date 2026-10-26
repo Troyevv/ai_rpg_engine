@@ -341,6 +341,11 @@ def create_app(db_path=None, recover=True):
             start_minute=start_minute,end_minute=end_minute,start_date=start_date,end_date=end_date,
             limit=limit,offset=offset)
 
+    @app.get('/api/saves/{sid}/genealogy-roots')
+    def genealogy_roots(sid: int):
+        from backend.runtime_v3.kinship import genealogy_roots
+        return genealogy_roots(repo.get_snapshot(sid))
+
     @app.get('/api/saves/{sid}/calendar')
     def calendar_projection(sid: int, start_date: str | None = None, end_date: str | None = None, minute: int | None = None):
         from backend.runtime_v3.calendar import calendar_range, current_time, calendar_label

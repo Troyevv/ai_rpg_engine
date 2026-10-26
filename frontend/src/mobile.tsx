@@ -1,6 +1,6 @@
 import {SceneClock} from './SceneClock';
 import {useEffect,useState} from 'react';
-import {BookOpen,Globe,Users,Brain,GitBranch,Menu,Settings2,Feather,Eye,EyeOff} from 'lucide-react';
+import {CalendarDays,BookOpen,Globe,Users,Brain,GitBranch,Menu,Settings2,Feather,Eye,EyeOff} from 'lucide-react';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from './components/ui/dialog';
 import {Button} from './components/ui/button';
 import type {Save,Scene} from './types';
@@ -24,7 +24,7 @@ export function useMobileViewport(mobile:boolean){
   return()=>{vv?.removeEventListener('resize',update);vv?.removeEventListener('scroll',update);window.removeEventListener('resize',update);document.removeEventListener('focusin',update);document.removeEventListener('focusout',update);document.documentElement.classList.remove('keyboard-open')};
  },[mobile]);
 }
-export function MobileNavigation({open,setOpen,world,go,inspect,settings,reading,toggleReading,branches}:{open:boolean;setOpen:(v:boolean)=>void;world:boolean;go:(v:'game'|'prepare')=>void;inspect:(v:'Мир'|'Персонажи'|'Память')=>void;settings:()=>void;reading:boolean;toggleReading:()=>void;branches:()=>void}){
+export function MobileNavigation({workspace,open,setOpen,world,go,inspect,settings,reading,toggleReading,branches}:{workspace:(section:"calendar"|"family")=>void;open:boolean;setOpen:(v:boolean)=>void;world:boolean;go:(v:'game'|'prepare')=>void;inspect:(v:'Мир'|'Персонажи'|'Память')=>void;settings:()=>void;reading:boolean;toggleReading:()=>void;branches:()=>void}){
  const act=(fn:()=>void)=>{setOpen(false);fn()};
  return <><Button size="icon" variant="ghost" aria-label="Меню игры" onClick={()=>setOpen(true)}><Menu/></Button>
  <Dialog open={open} onOpenChange={setOpen}><DialogContent className="mobile-sheet"><DialogHeader><DialogTitle>Меню игры</DialogTitle><DialogDescription>История, мир и инструменты</DialogDescription></DialogHeader>
@@ -33,6 +33,7 @@ export function MobileNavigation({open,setOpen,world,go,inspect,settings,reading
  <button disabled={!world} onClick={()=>act(()=>inspect('Мир'))}><Globe/>Мир</button>
  <button disabled={!world} onClick={()=>act(()=>inspect('Персонажи'))}><Users/>NPC</button>
  <button disabled={!world} onClick={()=>act(()=>inspect('Память'))}><Brain/>Память</button>
+ <button disabled={!world} onClick={()=>act(()=>workspace("calendar"))}><CalendarDays/>Календарь</button><button disabled={!world} onClick={()=>act(()=>workspace("family"))}><GitBranch/>Родословная</button>
  <button disabled={!world} onClick={()=>act(branches)}><GitBranch/>Ветки</button>
  </nav><div className="mobile-menu-tools">
  <Button variant="ghost" onClick={()=>act(()=>go('prepare'))}><Feather/>Создать</Button>

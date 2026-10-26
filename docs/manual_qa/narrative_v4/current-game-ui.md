@@ -86,3 +86,50 @@ Final responsive pass after focus/date/keyboard refinements: `current-game` + `c
 Full exploratory browser run (started before the UI fixes): **226 passed, 10 failed, 10 skipped**. Five failures were #45 graph layout/modal lifecycle/test-fixture defects, fixed and covered by the passing focused runs above. Five were existing generator waits (`draft-v4` structured motivations on both projects; `draft-world` creation at desktop 1280/1440 and mobile 412). An independent untouched-master worktree reproduces the same failure classes: **10 passed, 8 failed** across 18 baseline/creation checks, with failing viewport cases varying between runs. Both fail waiting for the generator to leave `generating` / open its result within the existing 12 s assertion budget. No timeout inflation or out-of-scope generator change was made; the full suite is **not reported green**.
 
 Final server confidentiality check also removes private observance definitions from `world_clock.calendar`, not only its event markers. The final targeted backend command, `python -m pytest -q tests/test_current_game_ui.py tests/test_narrative_pacing.py tests/test_calendar_v2.py tests/test_commitments.py`, passed **152 tests** (13.14 s).
+
+## PR120 completion specification — intermediate update, not acceptance
+
+Audit base and latest remote HEAD were both `8a6c181`; master remains `318a8f1` with #44/#116 integrated. No later changes were discarded. Existing seven Inspector views, Game, Phone and canonical APIs retain ownership. Calendar/family now share a direct desktop rail/mobile-menu workspace, preserving mounted Game; character-card entry uses that same workspace. Global settings remain separate. No new dependencies or SQL migration.
+
+Implemented in this update: direct navigation, month/agenda composition, miniature year grids, selected-date/range consistency, server-side authorized family root choices, permanent card entry, B02 direct reply path, B05 filtered calendar labels, and B06 valid Observance regression. Calendar/profile remain canonical. The year view requests one bounded month per configured month; no History loading.
+
+Validation: production build passed; `pytest -q tests/test_current_game_ui.py tests/test_remote_communication.py tests/test_life_social.py` **77 passed**. Browser `phone`, `runtime-handoff`, `pr120-completion` **12 passed** including Start → ordinary turn → reload → next ordinary turn on desktop/mobile. Updated `current-game` + `pr120-completion`: **16 passed**. Final visual/navigation rerun: **2 passed**. These are targeted runs, not a full-suite claim.
+
+Visual inspection caught unequal calendar columns (percentage day width); fixed with equal fixed-layout columns and recaptured. [Desktop month](pr120-completion-evidence/desktop-calendar-after.png), [mobile month](pr120-completion-evidence/mobile-calendar-after.png), [desktop year](pr120-completion-evidence/desktop-year-after.png), [mobile family](pr120-completion-evidence/mobile-family-after.png). [Desktop transitions](pr120-completion-evidence/desktop-video.webm), [mobile transitions](pr120-completion-evidence/mobile-video.webm). Before captures remain in issue45-evidence above. Videos cover navigation/month/year/family/return, **not** a completed outgoing phone conversation. Chromium emulation, no physical Android check.
+
+| Requirement | Status in this update |
+|---|---|
+| R01 | Direct desktop/mobile entrances and shared workspace implemented; draft/return verified |
+| R02 | Partial: calendar composition improved; complete visual system/phone review remains |
+| R03 | Month/agenda and real year grids implemented; custom-year acceptance still pending |
+| R04 | B04–B06 fixed, valid canonical fixture and projection checks pass |
+| R05 | Authorized roots/search and permanent card entry implemented; independent-family and large-graph acceptance pending |
+| R06 | Not complete: phone screen redesign remains |
+| R07–R08 | Not complete: automatic bounded dial/read→optional-reply job cycle remains |
+| R09 | Direct-conversation reply without reverse contact fixed and tested through planner/accept/delivery |
+| R10 | Not complete: new continuation orchestration/idempotency/lineage acceptance remains |
+| R11 | Targeted preservation tests pass; complete requested matrix remains |
+
+| Tests | Evidence / remaining work |
+|---|---|
+| T01–T03 | Passed runtime-handoff and direct-navigation E2E |
+| T04 | Partial: calendar screenshot; dense multi-event/long-title review remains |
+| T05 | Passed selected day follows browsed month, revision unchanged |
+| T06 | Gregorian year passed; custom-year/boundary checks pending |
+| T07 | Existing backend lifecycle tests retained; full UI status matrix pending |
+| T08 | Valid private Observance canonical fixture and filtered UI projection pass |
+| T09 | Existing weather/reload tests pass; full switch/rollback matrix pending |
+| T10–T12 | Not fully verified: independent family, known isolated NPC, complex large graph |
+| T13 | Hidden root name regression caught and fixed; full matrix pending |
+| T14 | Existing phone draft/read/reload tests pass; redesign/motion acceptance pending |
+| T15–T16 | Not implemented end-to-end automatic continuation |
+| T17 | Existing phone routing tests pass; new complete interaction video pending |
+| T18–T19 | Not implemented end-to-end automatic read/reply cycle |
+| T20 | Planner candidate → accepted direct reply → original conversation delivery passes without reciprocal contact |
+| T21 | Existing remote communication tests pass |
+| T22–T23 | New continuation retry/reconnect/lineage checks pending |
+| T24 | Existing protagonist/incapacitation/death E2E retained and passing |
+| T25 | Narrow viewport/draft/focus tests pass; full physical keyboard and visual matrix pending |
+| T26 | Full requested preservation rerun pending; no Tabletop code changes |
+
+G1 is implemented; G2/G3/G6/G7 are partial. G4/G5 are **not met**. This update does not complete the attached specification and must not be treated as merge-ready or as closing #45.

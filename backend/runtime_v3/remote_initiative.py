@@ -126,6 +126,8 @@ def opportunities(state):
                 if cid not in latest or latest[cid]["ordinal"] < e["ordinal"]:
                     basis.setdefault(cid, []).append(e["id"])
     for cid, ids in sorted(basis.items()):
+        if not capabilities(state,cid)["can_act"] or any(c["blocked"] and {c["owner_id"],c["character_id"]} == {cid,external} for c in state["contacts"].values()):
+            continue
         recent = latest.get(cid)
         if recent and (
             recent["turn_id"] >= state["meta"]["turn_id"] - 2
@@ -143,7 +145,7 @@ def opportunities(state):
         paths += [
             dict(conversation_id=c["id"])
             for c in state["conversations"].values()
-            if c["group"] and {cid, external} <= members(c)
+            if {cid, external} <= members(c)
         ]
         if paths:
             result.append(

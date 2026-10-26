@@ -18,7 +18,9 @@ def weather_state():
 def test_calendar_filters_before_events_markers_and_counts():
     s=state();s['characters']['sonya']['birth_date']='2000-10-09'
     s['scheduled_events']['secret']=ScheduledEvent(id='secret',description='Secret plan',character_ids=['sonya'],temporal={'date':'2026-10-09'}).model_dump()
-    s['meta']['calendar']['profile']['observances']=[dict(id='private-anniversary',name='Hidden anniversary',kind='anniversary',month=10,day=9,character_ids=['sonya'])]
+    s['meta']['calendar']['profile']['observances']=[dict(id='private-anniversary',name='Hidden anniversary',month=10,day=9,character_ids=['sonya'])]
+    from backend.runtime_v3.models import Observance
+    Observance.model_validate(s['meta']['calendar']['profile']['observances'][0])
     before=deepcopy(s)
     assert not ui_view(snapshot(s))['world_clock']['calendar']['profile']['observances']
     view=player_calendar(s,'2026-10-01','2026-10-31')

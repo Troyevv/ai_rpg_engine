@@ -48,6 +48,9 @@ function Fit({ version }: { version: string }) {
   return null;
 }
 export function Genealogy({ save, rootId }: { save: Save; rootId?: string }) {
+  const [roots,setRoots]=useState<{id:string;name:string}[]>([]);
+  useEffect(()=>{let live=true;setRoots([]);api<{id:string;name:string}[]>(`/saves/${save.id}/genealogy-roots`).then(r=>{if(live)setRoots(r)}).catch(e=>{if(live)setError(e.message)});return()=>{live=false}},[save.id,save.revision,save.state.controlled_actor_id]);
+  const [search,setSearch]=useState("");
   const [root, setRoot] = useState(
       rootId || save.state.controlled_actor_id || "",
     ),
@@ -144,7 +147,7 @@ export function Genealogy({ save, rootId }: { save: Save; rootId?: string }) {
     };
   }, [graph, save.id]);
   return (
-    <section aria-label="Родословная">
+    <section aria-label="Родословная"><div className="family-toolbar"><label>Найти персонажа<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Имя персонажа"/></label><label>Семья персонажа<select value={root} onChange={e=>{setGraph(null);setSelected(null);setRoot(e.target.value)}}>{roots.filter(c=>c.name.toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label></div>
       <p className="muted">
         Только связи, известные управляемому персонажу. Пунктир отличает
         предположения и небиологические связи; смысл указан на линии.
@@ -166,10 +169,10 @@ export function Genealogy({ save, rootId }: { save: Save; rootId?: string }) {
       ) : !graph ? (
         <p role="status">Загрузка родословной…</p>
       ) : graph.nodes.length === 0 ? (
-        <p>Нет доступных сведений.</p>
+        <p>Известных семейных связей пока нет.</p>
       ) : (
         <>
-          <div className="family-graph">
+          {graph.edges.length===0&&<p>Известных семейных связей пока нет.</p>}<div className="family-graph">
             <ReactFlow
               nodes={layout.nodes}
               edges={layout.edges}

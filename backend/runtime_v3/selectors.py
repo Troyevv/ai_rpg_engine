@@ -120,7 +120,7 @@ def ui_view(snapshot, history=None):
     minutes = {now}
     for rows in (world['events'].values(), world['scene_records'].values()):
         minutes.update(r['minute'] for r in rows if type(r.get('minute')) is int)
-    result['world_clock']['calendar'] = dict(state['meta'].get('calendar') or {},
+    result['world_clock']['calendar'] = dict(calendar_state['meta'].get('calendar') or {},
         labels={str(m): label(m) for m in minutes})
     from backend.runtime_v3.kinship import genealogy, visible_relations
     from backend.runtime_v3.life import capabilities

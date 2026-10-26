@@ -1,6 +1,10 @@
+import { GameCalendar } from "./GameCalendar";
+import { Genealogy } from "./Genealogy";
+import "./styles/current-game.css";
 import {ThemeProvider, useTheme} from "./ThemeProvider";
 import { useCallback, useEffect, useState, useRef } from "react";
 import {
+  CalendarDays, GitBranch, ArrowLeft,
   BookOpen,
   Globe,
   Users,
@@ -30,6 +34,13 @@ export default function App() {
   const changeMode=(mode:string)=>{setGameMode(mode);localStorage.setItem('game-mode',mode);};
   const mobile=useMobile();useMobileViewport(mobile);
   const [mobileMenu,setMobileMenu]=useState(false);
+  const [workspace,setWorkspace]=useState<"calendar"|"family"|null>(null);
+  const [familyRoot,setFamilyRoot]=useState<string|undefined>();
+  const workspaceTrigger=useRef<HTMLElement|null>(null);
+  const closeWorkspace=()=>{setWorkspace(null);requestAnimationFrame(()=>{const target=workspaceTrigger.current?.isConnected?workspaceTrigger.current:document.querySelector<HTMLElement>(".current-game-entry button");target?.focus()})};
+  const openWorkspace=(section:"calendar"|"family",root?:string)=>{workspaceTrigger.current=document.activeElement as HTMLElement;setInspector(false);setView("game");setFamilyRoot(root);setWorkspace(section);window.dispatchEvent(new Event("save-workspace-opened"))};
+  useEffect(()=>{const open=(e:Event)=>{const d=(e as CustomEvent).detail;openWorkspace(d.section,d.root)};window.addEventListener('save-workspace',open);return()=>window.removeEventListener('save-workspace',open)},[]);
+  useEffect(()=>{if(!workspace)return;const key=(e:KeyboardEvent)=>{if(e.key==='Escape'){e.preventDefault();closeWorkspace()}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)},[workspace]);
   const [branches,setBranches]=useState(false);
   const [view, setView] = useState<"game" | "prepare">("game");
   const [library, setLibrary] = useState(false);
@@ -137,14 +148,14 @@ export default function App() {
         <button
           className="brand"
           aria-label="AI RPG Engine"
-          onClick={() => setView("game")}
+          onClick={() => {setView("game");closeWorkspace()}}
         >
           <Feather size={26} />
         </button>
         <div className="nav-links">
           <button
-            className={view === "game" ? "current" : ""}
-            onClick={() => setView("game")}
+            className={view === "game" && !workspace ? "current" : ""}
+            onClick={() => {setView("game");closeWorkspace()}}
           >
             <BookOpen />
             <span>Игра</span>
@@ -156,6 +167,7 @@ export default function App() {
             <Feather />
             <span>Создать</span>
           </button>
+          {(['calendar','family'] as const).map(section=><button key={section} disabled={!save} className={workspace===section?'current':''} onClick={()=>openWorkspace(section)}>{section==='calendar'?<CalendarDays/>:<GitBranch/>}<span>{section==='calendar'?'Календарь':'Родословная'}</span></button>)}
           <div className="nav-divider" />
           <button disabled={!world} onClick={() => inspect("Мир")}>
             <Globe />
@@ -187,7 +199,7 @@ export default function App() {
             </span>
             <span className="muted">⌄</span>
           </button>
-          {mobile?<MobileNavigation open={mobileMenu} setOpen={setMobileMenu} world={!!world} go={setView} inspect={inspect} settings={()=>setSettings(true)} reading={reading} toggleReading={()=>setReading(!reading)} branches={()=>setBranches(true)}/>:<div className="topbar-actions">
+          {mobile?<MobileNavigation workspace={openWorkspace} open={mobileMenu} setOpen={setMobileMenu} world={!!world} go={setView} inspect={inspect} settings={()=>setSettings(true)} reading={reading} toggleReading={()=>setReading(!reading)} branches={()=>setBranches(true)}/>:<div className="topbar-actions">
             {view === "game" && (
               <Button
                 variant="ghost"
@@ -253,6 +265,7 @@ export default function App() {
           />
         )}
       </div>
+      {workspace&&save&&<section className="save-workspace" aria-label={workspace==='calendar'?'Календарь':'Родословная'}><header><button onClick={closeWorkspace}><ArrowLeft size={18}/>Вернуться в историю</button><h1>{workspace==='calendar'?'Календарь':'Родословная'}</h1><p>Сведения текущего прохождения</p></header>{workspace==='calendar'?<GameCalendar key={`${save.id}:${save.state.controlled_actor_id}`} save={save}/>:<Genealogy key={`${save.id}:${save.state.controlled_actor_id}`} save={save} rootId={familyRoot}/>}</section>}
       <Dialog open={branches} onOpenChange={setBranches}><DialogContent className={mobile?'mobile-sheet':''}><DialogHeader><DialogTitle>Ветки истории</DialogTitle><DialogDescription>Варианты ответов доступны под сценами. Смена старого варианта требует отката зависимых ходов. Именованные ветки пока не реализованы.</DialogDescription></DialogHeader></DialogContent></Dialog>
       <Settings
         open={settings}

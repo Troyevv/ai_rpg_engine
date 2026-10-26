@@ -54,7 +54,7 @@ def genealogy(snapshot, root_id=None, *, depth=3, limit=100):
     empty = dict(nodes=[],edges=[],kinship=[],truncated=False)
     if observer not in s['characters']: return empty
     edges = [r for r in visible_relations(s,observer) if r['kind'] in FAMILY]
-    known_ids = {observer} | {r[k] for r in edges for k in ('source_id','target_id')}
+    known_ids = {row['id'] for row in genealogy_roots(snapshot)}
     root = root_id or observer
     # Unknown and nonexistent IDs have exactly the same response.
     if root not in known_ids: return empty
@@ -109,3 +109,11 @@ def genealogy(snapshot, root_id=None, *, depth=3, limit=100):
                 relation = 'half_sibling' if kind=='parent' and complete and a!=b else 'sibling'
                 kinship.append(dict(source_id=cid,target_id=other,kind=relation,lineage=kind))
     return dict(nodes=nodes,edges=edges,kinship=kinship,truncated=truncated)
+
+
+def genealogy_roots(snapshot):
+    s=snapshot['world_state'];observer=s['camera']['controlled_actor_id']
+    if observer not in s['characters']:return []
+    ids={observer}|{r[k] for r in visible_relations(s,observer) for k in ('source_id','target_id')}
+    cards={c['id']:c['name'] for c in snapshot.get('character_cards',[])}
+    return [dict(id=cid,name=visible_name(s,cid,observer,cards.get(cid,cid))) for cid in sorted(ids)]

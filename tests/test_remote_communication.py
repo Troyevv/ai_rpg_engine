@@ -905,3 +905,18 @@ def test_shared_emergency_number_preserves_selected_service_in_call_log():
     event = next(iter(snap["world_state"]["remote_events"].values()))
     assert event["destination"] == "qa-shared" and event["service"] == "police"
     assert projection(snap)["events"][0]["label"] == "Полиция"
+
+
+def test_direct_reply_without_reverse_contact():
+    s=phone();del s['world_state']['contacts']['b-a']
+    s=command(s,'send',contact_id='a-b',content='Привет')
+    event=list(s['world_state']['remote_events'].values())[-1]
+    s,_=accept(s,dict(action='read',actor_id='b',event_id=event['id'],basis_ids=[event['id']]),opportunities(s['world_state']),'read-one-way')
+    options=opportunities(s['world_state'])
+    candidate=next(o for o in options if o['actor_id']=='b' and 'send' in o['actions'])
+    assert {'conversation_id':event['conversation_id']} in candidate['paths']
+    s,_=accept(s,dict(action='send',actor_id='b',conversation_id=event['conversation_id'],basis_ids=[event['id']],content='Привет в ответ'),options,'reply-one-way')
+    reply=list(s['world_state']['remote_events'].values())[-1]
+    assert reply['conversation_id']==event['conversation_id']
+    assert 'a' in reply['delivered_to']
+    assert 'b-a' not in s['world_state']['contacts']

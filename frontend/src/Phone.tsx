@@ -93,6 +93,7 @@ export function Phone({
   const screen = useRef<HTMLDivElement>(null);
   const drafts = useRef<Record<string, string>>({});
 
+  useEffect(()=>{const close=()=>setOpen(false);window.addEventListener("save-workspace-opened",close);return()=>window.removeEventListener("save-workspace-opened",close)},[]);
   const [open, setOpen] = useState(false),
     [tab, setTab] = useState("contacts");
   const [conversation, setConversation] = useState<string | null>(null),
