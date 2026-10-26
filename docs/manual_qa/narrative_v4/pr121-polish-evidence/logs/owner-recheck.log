@@ -1,0 +1,69 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> ai-rpg-frontend@2.0.0 test:e2e
+> playwright test portrait-polish --grep temporary phone owner
+
+
+Running 2 tests using 1 worker
+
+(node:34) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] Semantic retrieval unavailable (ModuleNotFoundError); structural fallback
+  ✓  1 [desktop] › e2e/portrait-polish.spec.ts:98:1 › temporary phone owner and real outgoing API use its portrait (3.8s)
+(node:132) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 [mobile] › e2e/portrait-polish.spec.ts:98:1 › temporary phone owner and real outgoing API use its portrait (1.0m)
+
+
+  1) [mobile] › e2e/portrait-polish.spec.ts:98:1 › temporary phone owner and real outgoing API use its portrait 
+
+    Test timeout of 60000ms exceeded.
+
+    Error: page.waitForResponse: Test timeout of 60000ms exceeded.
+
+       at navigation.ts:8
+
+       6 | }
+       7 | export async function actor(page:Page,id:string,name:string){
+    >  8 |  const committed=page.waitForResponse(r=>r.url().endsWith('/protagonist')&&r.request().method()==='POST');
+         |                       ^
+       9 |  if(await page.getByLabel('Управляемый персонаж').isVisible())await page.getByLabel('Управляемый персонаж').selectOption(id);
+      10 |  else {await page.locator('.mobile-pov button').first().click();await page.getByRole('dialog').getByRole('button',{name,exact:true}).click()}
+      11 |  expect((await committed).ok()).toBe(true);
+        at actor (/workspace/scratch/621c8d3da2c9/ai_rpg_engine/frontend/e2e/navigation.ts:8:23)
+        at /workspace/scratch/621c8d3da2c9/ai_rpg_engine/frontend/e2e/portrait-polish.spec.ts:109:90
+
+    Error: locator.click: Test timeout of 60000ms exceeded.
+    Call log:
+      - waiting for getByRole('dialog').getByRole('button', { name: 'Кирилл Ларин', exact: true })
+
+
+       at navigation.ts:10
+
+       8 |  const committed=page.waitForResponse(r=>r.url().endsWith('/protagonist')&&r.request().method()==='POST');
+       9 |  if(await page.getByLabel('Управляемый персонаж').isVisible())await page.getByLabel('Управляемый персонаж').selectOption(id);
+    > 10 |  else {await page.locator('.mobile-pov button').first().click();await page.getByRole('dialog').getByRole('button',{name,exact:true}).click()}
+         |                                                                                                                                      ^
+      11 |  expect((await committed).ok()).toBe(true);
+      12 |  await expect(page.locator('.current-game-entry button')).toBeEnabled();
+      13 | }
+        at actor (/workspace/scratch/621c8d3da2c9/ai_rpg_engine/frontend/e2e/navigation.ts:10:134)
+        at /workspace/scratch/621c8d3da2c9/ai_rpg_engine/frontend/e2e/portrait-polish.spec.ts:109:84
+
+    Error Context: test-results/portrait-polish-temporary--d7fd0-tgoing-API-use-its-portrait-mobile/error-context.md
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/portrait-polish-temporary--d7fd0-tgoing-API-use-its-portrait-mobile/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/portrait-polish-temporary--d7fd0-tgoing-API-use-its-portrait-mobile/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/portrait-polish-temporary--d7fd0-tgoing-API-use-its-portrait-mobile/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [mobile] › e2e/portrait-polish.spec.ts:98:1 › temporary phone owner and real outgoing API use its portrait 
+  1 passed (1.1m)

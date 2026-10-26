@@ -1,0 +1,81 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> ai-rpg-frontend@2.0.0 test:e2e
+> playwright test portrait-polish dossier phone
+
+
+Running 58 tests using 1 worker
+
+(node:33) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [desktop] › e2e/dossier-compact.spec.ts:3:1 › all tabs in compact desktop and sparse restricted mobile, both skins (4.5s)
+  ✓   2 [desktop] › e2e/dossier-portraits.spec.ts:4:1 › portrait original and edit surfaces retain circular crop in both skins (3.1s)
+  ✓   3 [desktop] › e2e/dossier-states.spec.ts:6:1 › physical state variants never imply health (5.1s)
+[WebServer] Semantic retrieval unavailable (ModuleNotFoundError); structural fallback
+  ✓   4 [desktop] › e2e/dossier-states.spec.ts:33:1 › large roster search and missing portrait asset stay usable (4.2s)
+  ✓   5 [desktop] › e2e/phone.spec.ts:4:1 › phone controls, freeform text, reload and physical scene (4.7s)
+  ✓   6 [desktop] › e2e/phone.spec.ts:81:1 › decline and configured in-game emergency log (2.9s)
+  ✓   7 [desktop] › e2e/phone.spec.ts:106:1 › group membership and protagonist-owned contacts (4.1s)
+  ✓   8 [desktop] › e2e/phone.spec.ts:175:1 › unread text and shared portrait projection (2.4s)
+(node:243) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   9 [desktop] › e2e/dossier.spec.ts:15:39 › five tabs, widths, two skins and preservation 360 (6.8s)
+  ✓  10 [desktop] › e2e/dossier.spec.ts:15:39 › five tabs, widths, two skins and preservation 393 (6.2s)
+  ✓  11 [desktop] › e2e/dossier.spec.ts:15:39 › five tabs, widths, two skins and preservation 768 (7.5s)
+  ✓  12 [desktop] › e2e/dossier.spec.ts:15:39 › five tabs, widths, two skins and preservation 1440 (7.9s)
+  ✓  13 [desktop] › e2e/dossier.spec.ts:51:1 › public family opens dossier and returns to graph, no speculative nodes, bounded dense layout (4.8s)
+  ✓  14 [desktop] › e2e/dossier.spec.ts:70:1 › start, ordinary turn, dossier name link, persistent reload, next turn (5.2s)
+  ✓  15 [desktop] › e2e/dossier.spec.ts:86:1 › family gestures, two skins, reduced motion and unchanged game state (3.1s)
+  ✓  16 [desktop] › e2e/dossier.spec.ts:120:1 › search selection and local dossier scroll survive close, resize and reopen (3.5s)
+[WebServer] Semantic retrieval unavailable (ModuleNotFoundError); structural fallback
+  ✓  17 [desktop] › e2e/phone-completion.spec.ts:16:1 › T15 T18 outgoing call and automatic read reply through real jobs (6.7s)
+  ✓  18 [desktop] › e2e/phone-completion.spec.ts:61:2 › T16 decline completes without a manual turn (1.8s)
+  ✓  19 [desktop] › e2e/phone-completion.spec.ts:61:2 › T16 silent completes without a manual turn (2.4s)
+  ✓  20 [desktop] › e2e/phone-completion.spec.ts:71:1 › T19 read without reply stops and explicit wait is bounded (3.2s)
+  ✓  21 [desktop] › e2e/phone-completion.spec.ts:87:1 › T22 provider failure retains send, retry/reload does not resend (4.2s)
+  ✓  22 [desktop] › e2e/phone-completion.spec.ts:105:1 › T14 T17 T25 incoming call preserves physical turn and phone draft in two skins (6.4s)
+  ✓  23 [desktop] › e2e/phone-completion.spec.ts:149:1 › technical call failure preserves canonical time and ringing; Retry uses original call (11.7s)
+  ✓  24 [desktop] › e2e/portrait-polish.spec.ts:18:39 › polish visual matrix 360 (5.1s)
+  ✓  25 [desktop] › e2e/portrait-polish.spec.ts:18:39 › polish visual matrix 393 (6.4s)
+  ✓  26 [desktop] › e2e/portrait-polish.spec.ts:18:39 › polish visual matrix 768 (5.3s)
+  ✓  27 [desktop] › e2e/portrait-polish.spec.ts:18:39 › polish visual matrix 1440 (5.8s)
+  ✓  28 [desktop] › e2e/portrait-polish.spec.ts:69:1 › portrait viewer, editor, error recovery, semantic tabs and resize drafts (6.6s)
+[WebServer] Semantic retrieval unavailable (ModuleNotFoundError); structural fallback
+  ✓  29 [desktop] › e2e/portrait-polish.spec.ts:97:1 › temporary phone owner and real outgoing API use its portrait (2.5s)
+(node:1045) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  30 [mobile] › e2e/dossier-compact.spec.ts:3:1 › all tabs in compact desktop and sparse restricted mobile, both skins (5.0s)
+  ✓  31 [mobile] › e2e/dossier-portraits.spec.ts:4:1 › portrait original and edit surfaces retain circular crop in both skins (3.4s)
+  ✓  32 [mobile] › e2e/dossier-states.spec.ts:6:1 › physical state variants never imply health (7.5s)
+  ✓  33 [mobile] › e2e/dossier-states.spec.ts:33:1 › large roster search and missing portrait asset stay usable (4.0s)
+  ✓  34 [mobile] › e2e/phone.spec.ts:4:1 › phone controls, freeform text, reload and physical scene (4.5s)
+  ✓  35 [mobile] › e2e/phone.spec.ts:81:1 › decline and configured in-game emergency log (2.0s)
+  ✓  36 [mobile] › e2e/phone.spec.ts:106:1 › group membership and protagonist-owned contacts (3.8s)
+  ✓  37 [mobile] › e2e/phone.spec.ts:175:1 › unread text and shared portrait projection (2.5s)
+(node:1237) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  38 [mobile] › e2e/dossier.spec.ts:15:39 › five tabs, widths, two skins and preservation 360
+  -  39 [mobile] › e2e/dossier.spec.ts:15:39 › five tabs, widths, two skins and preservation 393
+  -  40 [mobile] › e2e/dossier.spec.ts:15:39 › five tabs, widths, two skins and preservation 768
+  -  41 [mobile] › e2e/dossier.spec.ts:15:39 › five tabs, widths, two skins and preservation 1440
+  ✓  42 [mobile] › e2e/dossier.spec.ts:51:1 › public family opens dossier and returns to graph, no speculative nodes, bounded dense layout (5.8s)
+  ✓  43 [mobile] › e2e/dossier.spec.ts:70:1 › start, ordinary turn, dossier name link, persistent reload, next turn (5.3s)
+  ✓  44 [mobile] › e2e/dossier.spec.ts:86:1 › family gestures, two skins, reduced motion and unchanged game state (4.1s)
+  ✓  45 [mobile] › e2e/dossier.spec.ts:120:1 › search selection and local dossier scroll survive close, resize and reopen (4.3s)
+  ✓  46 [mobile] › e2e/phone-completion.spec.ts:16:1 › T15 T18 outgoing call and automatic read reply through real jobs (6.6s)
+[WebServer] Semantic retrieval unavailable (ModuleNotFoundError); structural fallback
+  ✓  47 [mobile] › e2e/phone-completion.spec.ts:61:2 › T16 decline completes without a manual turn (2.4s)
+  ✓  48 [mobile] › e2e/phone-completion.spec.ts:61:2 › T16 silent completes without a manual turn (2.6s)
+  ✓  49 [mobile] › e2e/phone-completion.spec.ts:71:1 › T19 read without reply stops and explicit wait is bounded (2.8s)
+  ✓  50 [mobile] › e2e/phone-completion.spec.ts:87:1 › T22 provider failure retains send, retry/reload does not resend (3.8s)
+  ✓  51 [mobile] › e2e/phone-completion.spec.ts:105:1 › T14 T17 T25 incoming call preserves physical turn and phone draft in two skins (6.8s)
+  ✓  52 [mobile] › e2e/phone-completion.spec.ts:149:1 › technical call failure preserves canonical time and ringing; Retry uses original call (12.0s)
+  -  53 [mobile] › e2e/portrait-polish.spec.ts:18:39 › polish visual matrix 360
+  -  54 [mobile] › e2e/portrait-polish.spec.ts:18:39 › polish visual matrix 393
+  -  55 [mobile] › e2e/portrait-polish.spec.ts:18:39 › polish visual matrix 768
+  -  56 [mobile] › e2e/portrait-polish.spec.ts:18:39 › polish visual matrix 1440
+  ✓  57 [mobile] › e2e/portrait-polish.spec.ts:69:1 › portrait viewer, editor, error recovery, semantic tabs and resize drafts (7.1s)
+  ✓  58 [mobile] › e2e/portrait-polish.spec.ts:97:1 › temporary phone owner and real outgoing API use its portrait (2.6s)
+
+  8 skipped
+  50 passed (4.2m)

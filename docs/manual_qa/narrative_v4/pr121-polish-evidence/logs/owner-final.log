@@ -1,0 +1,17 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> ai-rpg-frontend@2.0.0 test:e2e
+> playwright test portrait-polish --grep temporary phone owner
+
+
+Running 2 tests using 1 worker
+
+(node:34) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] Semantic retrieval unavailable (ModuleNotFoundError); structural fallback
+  ✓  1 [desktop] › e2e/portrait-polish.spec.ts:98:1 › temporary phone owner and real outgoing API use its portrait (4.0s)
+(node:131) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  2 [mobile] › e2e/portrait-polish.spec.ts:98:1 › temporary phone owner and real outgoing API use its portrait (4.2s)
+
+  2 passed (11.3s)

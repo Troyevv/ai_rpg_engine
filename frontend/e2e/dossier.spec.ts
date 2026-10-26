@@ -2,7 +2,7 @@ import {test,expect,type Page} from '@playwright/test';
 import {nav} from './navigation';
 import {writeFile} from 'node:fs/promises';
 test.use({video:'on'});
-const evidence='../docs/manual_qa/narrative_v4/issue83-evidence';
+const evidence=process.env.DOSSIER_EVIDENCE||'../docs/manual_qa/narrative_v4/issue83-evidence';
 const tabs=['Обзор','Личность','Отношения','Семья','История'];
 async function expectFitted(page:Page){
  await expect.poll(async()=>page.locator('.family-graph').evaluate(el=>{

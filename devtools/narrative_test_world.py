@@ -819,3 +819,26 @@ def _ui_dossier(state):
 
 
 CHECKPOINTS['ui-dossier']=_ui_dossier
+
+
+def _ui_portrait_polish(state):
+    """#121: shared dossier/phone regression fixture, canonical identities only."""
+    from backend.runtime_v3.remote_models import Contact
+    state = _phone(_ui_dossier(state))
+    world = state['world']; now = state['world_clock']['minute']
+    ids = [ACTOR_ID, 'qa_vera', 'qa_timur']
+    for owner in ids:
+        for target in ids:
+            if owner == target:
+                continue
+            cid = f'polish-{owner}-{target}'
+            world['contacts'][cid] = Contact(id=cid, owner_id=owner, character_id=target,
+                label=next(c['name'] for c in state['characters'] if c['id']==target), address='qa-'+target,
+                identity_visible=True, provenance='QA explicit import', created_at=now).model_dump()
+    world['conversations']['qa-group']['members'].append(dict(actor_id='qa_timur', joined_at=now,
+        left_at=None, provenance='QA explicit membership'))
+    world['characters'][ACTOR_ID]['situation'] = 'Сравнивает старую карту с записями семьи. ' * 8
+    return state
+
+
+CHECKPOINTS['ui-portrait-polish'] = _ui_portrait_polish

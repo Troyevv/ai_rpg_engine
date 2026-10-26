@@ -1,6 +1,6 @@
 /* #83 dossier only. Shared Inspector navigation remains owned by #86. */
-:root{--sex-male:#8ac5fa;--sex-female:#f1a6c6}
-html[data-skin="paper"]{--sex-male:#195b91;--sex-female:#96385f}
+:root{--sex-male:#8ac5fa;--sex-female:#f1a6c6;--dossier-overview:#83baff;--dossier-personality:#c6a5ff;--dossier-relationships:#fa9fb4;--dossier-family:#79d6b0;--dossier-history:#e8bf69}
+html[data-skin="paper"]{--sex-male:#195b91;--sex-female:#96385f;--dossier-overview:#2863a1;--dossier-personality:#7850a3;--dossier-relationships:#b13e61;--dossier-family:#26785c;--dossier-history:#93600b}
 .inspector-dialog.dossier-inspector{width:440px;padding:20px;transition:width var(--transition-normal,.24s) var(--ease-out,ease);container-type:inline-size}
 .inspector-dialog.dossier-expanded{width:min(900px,calc(100vw - 90px));max-width:100%}
 .dossier-width-toggle{position:absolute;right:54px;top:14px;min-height:40px;min-width:40px;color:var(--text-muted)}
@@ -15,9 +15,14 @@ html[data-skin="paper"]{--sex-male:#195b91;--sex-female:#96385f}
 .dossier-inspector>.check{font-size:12px;margin:4px 0;min-height:28px}
 .dossier-inspector>input{min-height:36px;padding:7px 10px;font-size:13px}
 .dossier-inspector .character-index{margin:4px 0 6px;font-size:10px}
+.character-profile{--dossier-portrait-size:120px}
+.dossier-expanded .character-profile{--dossier-portrait-size:144px}
 .character-profile .dossier-header{display:flex;align-items:flex-start;gap:16px;padding:12px 0 16px;margin:0;border:0}
-.dossier-header .portrait-control{position:relative;margin:0;flex:none;width:88px;height:88px}
-.dossier-header .portrait-pencil{position:absolute;right:-7px;bottom:-7px;width:36px;height:36px;min-height:36px;background:var(--surface-elevated);border:1px solid var(--border-strong);box-shadow:var(--shadow-sm);display:grid;place-items:center;padding:6px}
+.dossier-header .portrait-control{position:relative;margin:0 8px 12px 0;flex:none;width:var(--dossier-portrait-size);height:var(--dossier-portrait-size)}
+.dossier-header .portrait-pencil{position:absolute;right:-14px;bottom:-14px;width:44px;height:44px;min-height:44px;background:transparent;border:0;box-shadow:none;display:grid;place-items:center;padding:0}
+.portrait-pencil-face{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--surface-elevated);border:1px solid var(--border-strong);box-shadow:var(--shadow-sm);color:var(--text-secondary)}
+.portrait-pencil:hover .portrait-pencil-face,.portrait-pencil:focus-visible .portrait-pencil-face{color:var(--accent);border-color:var(--accent)}
+.portrait-pencil:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .dossier-identity{min-width:0;flex:1}
 .dossier-header .eyebrow{font-size:9px;letter-spacing:.12em}
 .character-profile .dossier-header h2{font:600 clamp(20px,3vw,28px)/1.2 var(--story-font);margin:5px 0 8px;overflow-wrap:anywhere}
@@ -26,8 +31,10 @@ html[data-skin="paper"]{--sex-male:#195b91;--sex-female:#96385f}
 .character-profile .dossier-header .character-lead{font:14px/1.5 var(--story-font);margin:8px 0;color:var(--text-secondary)}
 .dossier-location{display:flex;align-items:baseline;gap:6px;color:var(--text-muted);font:12px/1.5 var(--ui-font);margin:8px 0 0;overflow-wrap:anywhere}.dossier-location svg{flex-shrink:0;align-self:center;color:var(--accent)}
 .dossier-tabs{display:flex;overflow-x:auto;flex-wrap:nowrap!important;max-width:100%;padding:2px 0 6px;gap:2px!important;scrollbar-width:thin;border-bottom:1px solid var(--border);margin-bottom:14px}
-.dossier-tabs button{flex:0 0 auto;min-height:44px;padding:8px 10px!important;font-size:12px;white-space:nowrap}.dossier-tabs .tab-label{display:flex;align-items:center;gap:6px}.dossier-tabs svg{color:var(--text-muted);flex-shrink:0}.dossier-tabs .selected svg,.dossier-tabs .selected .tab-label{color:var(--accent)}
+.dossier-tabs button{flex:0 0 auto;min-height:44px;padding:8px 10px!important;font-size:12px;white-space:nowrap}.dossier-tabs .tab-label{display:flex;align-items:center;gap:6px}.dossier-tabs svg{flex-shrink:0}.dossier-tabs .selected .tab-label{color:var(--accent)}
+.dossier-tabs .dossier-icon-overview{color:var(--dossier-overview)}.dossier-tabs .dossier-icon-personality{color:var(--dossier-personality)}.dossier-tabs .dossier-icon-relationships{color:var(--dossier-relationships)}.dossier-tabs .dossier-icon-family{color:var(--dossier-family)}.dossier-tabs .dossier-icon-history{color:var(--dossier-history)}
 .dossier-panel{min-width:0;animation:dossier-enter var(--transition-fast,.14s) var(--ease-out,ease)}.dossier-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-items:start}.dossier-wide{grid-column:1/-1}
+.dossier-columns{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-items:start}.dossier-column{display:flex;flex-direction:column;gap:12px;min-width:0}
 .character-profile section.dossier-card{margin:0;padding:14px 16px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface-1);min-width:0;overflow-wrap:anywhere}
 .dossier-card h3{font:600 14px/1.4 var(--ui-font);margin:0 0 12px;color:var(--text)}.dossier-card h4{font:600 12px/1.5 var(--ui-font);margin:14px 0 6px;color:var(--text-secondary)}
 .dossier-card p{margin:6px 0;font-size:14px;line-height:1.6}.dossier-card .prose{font:15px/1.65 var(--story-font)}.dossier-card .prose p:first-child{margin-top:0}.dossier-card .prose p:last-child{margin-bottom:0}.dossier-empty{color:var(--text-muted);font:13px/1.6 var(--ui-font)!important}
@@ -36,8 +43,8 @@ html[data-skin="paper"]{--sex-male:#195b91;--sex-female:#96385f}
 .dossier-emotion{border-left:2px solid var(--accent);padding-left:10px;color:var(--text-secondary)}
 .dossier-people{display:grid;gap:8px;margin-bottom:12px}.dossier-person{display:flex;align-items:center;gap:12px;text-align:left;min-width:0;width:100%;border-bottom:1px solid var(--border);padding:12px 0;color:var(--text)}.dossier-person>span:not(.character-avatar),.dossier-person>div{flex:1;min-width:0;overflow-wrap:anywhere}.dossier-person p{font-size:12px;color:var(--text-secondary)}.dossier-person small{font-size:11px;color:var(--text-muted)}.dossier-family-open{min-height:44px;border:1px solid var(--border-strong);border-radius:var(--radius-md);color:var(--accent);padding:10px 14px;width:100%;margin:8px 0}
 .dossier-condition{border-left:2px solid var(--accent);padding:8px 10px;margin:10px 0}.dossier-condition>strong{display:block;font-size:14px;margin-bottom:6px}.dossier-condition .pill{font-size:11px}
-@container(min-width:600px){.dossier-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dossier-header{gap:24px!important;padding:20px 0!important}.dossier-tabs button{flex:1;padding:10px 14px!important}.dossier-header .character-lead{max-width:60ch}.dossier-header .eyebrow{font-size:10px}}
-@media(max-width:767px){.inspector-dialog.dossier-inspector,.inspector-dialog.dossier-expanded{width:100%;height:100dvh;max-height:100dvh;inset:0;border-radius:0;padding:14px 16px}.dossier-width-toggle{display:none}.dossier-inspector .dialog-header{padding-right:32px}.dossier-header .portrait-control{width:72px;height:72px}.dossier-header .portrait-control>.character-avatar{width:72px!important;height:72px!important}.dossier-header .character-lead{font-size:13px!important}.character-profile .dossier-header{gap:12px}.dossier-inspector .theme-disclosure:not([open]){display:inline-block}.dossier-inspector>.metadata:not([open]){margin:0}.dossier-card{padding:12px!important}}
+@container(min-width:600px){.dossier-columns{grid-template-columns:repeat(2,minmax(0,1fr))}.dossier-header{gap:24px!important;padding:20px 0!important}.dossier-tabs button{flex:1;padding:10px 14px!important}.dossier-header .character-lead{max-width:60ch}.dossier-header .eyebrow{font-size:10px}}
+@media(max-width:767px){.inspector-dialog.dossier-inspector,.inspector-dialog.dossier-expanded{width:100%;height:100dvh;max-height:100dvh;inset:0;border-radius:0;padding:14px 16px}.dossier-width-toggle{display:none}.dossier-inspector .dialog-header{padding-right:32px}.character-profile,.dossier-expanded .character-profile{--dossier-portrait-size:104px}.dossier-header .character-lead{font-size:13px!important}.character-profile .dossier-header{gap:12px}.dossier-inspector .theme-disclosure:not([open]){display:inline-block}.dossier-inspector>.metadata:not([open]){margin:0}.dossier-card{padding:12px!important}}
 @keyframes dossier-enter{from{opacity:.5;transform:translateY(3px)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.dossier-panel{animation:none}.inspector-dialog.dossier-inspector{transition:none}}
 .dossier-card,.family-node{border-width:var(--skin-border-width,1px);border-style:var(--skin-border-style,solid);background-image:var(--skin-card-image)}
@@ -45,6 +52,5 @@ html[data-skin="paper"]{--sex-male:#195b91;--sex-female:#96385f}
 .dossier-sex{font-family:system-ui,sans-serif;font-size:24px;font-weight:600;line-height:1}
 .inspector-dialog.dossier-inspector .dialog-title{font:600 15px/1.4 var(--ui-font);-webkit-line-clamp:1}
 .inspector-dialog.dossier-inspector .dialog-description{font-size:11px;margin:2px 0 6px}
-.inspector-dialog.dossier-inspector .dossier-header .portrait-pencil{width:44px;height:44px;min-height:44px}
 .family-graph .react-flow__node{transition:none}
 .dossier-name{display:flex;align-items:baseline;gap:8px;min-width:0}.dossier-name h2{min-width:0}.dossier-name .dossier-sex{flex-shrink:0}

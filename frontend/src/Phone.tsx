@@ -41,6 +41,7 @@ type Event = {
   content: string | null;
   label: string;
   subject: PortraitSubject;
+  sender?: PortraitSubject;
   destination: string;
 };
 export type PhoneState = {
@@ -746,10 +747,10 @@ export function Phone({
                                 : "phone-message"
                             }
                           >
-                            {avatar(e.subject)}
+                            {avatar(e.sender ?? {id:"",name:"Неизвестный участник",silhouette:"neutral"})}
                             <div>
                               <small title={formatDateLabel(e.time_label)}>
-                                {e.outgoing ? "Ты" : e.label} · {e.time_label.match(/\d{2}:\d{2}/)?.[0] || formatDateLabel(e.time_label)}
+                                {e.outgoing ? "Ты" : e.sender?.name ?? "Неизвестный участник"} · {e.time_label.match(/\d{2}:\d{2}/)?.[0] || formatDateLabel(e.time_label)}
                               </small>
                               <p>{e.content ?? "Непрочитанное сообщение"}</p>
                               <small>
