@@ -99,7 +99,8 @@ export function Game({
   const { job, reconnecting } = useJob(submitted ?? save?.job, refresh);
   const awaitingCommit=job?.status==='saved'&&job.revision===save?.revision&&!save?.turns.some(t=>t.variants?.some(v=>v.job_id===job.id));
   const unapplied = !!job && ['error','stopped'].includes(job.status) && !!job.narrative_complete && job.revision === save?.revision;
-  const pending = active(job)||!!awaitingCommit||unapplied;
+  const running = active(job)||!!awaitingCommit;
+  const pending = running||unapplied;
 
   useEffect(() => {
     const id = requestAnimationFrame(() => {
@@ -298,17 +299,17 @@ export function Game({
                   />
                   {t.timing?.total!=null&&<details className="turn-timing"><summary>Время хода: {t.timing.total.toFixed(1)} с</summary><Timing timing={t.timing}/></details>}
                   {mobile?<div className="mobile-variants">
-                    <Button size="icon" variant="ghost" aria-label="Ещё вариант" disabled={busy||pending||!t.variants?.some(v=>v.can_regenerate)} onClick={()=>{const later=i<save.turns.length-1;if(later&&!window.confirm('Откатить следующие ходы в архив?'))return;void turn('regenerate','',t.id,later)}}>↻</Button>
-                    {[-1,1].map((step)=>{const list=t.variants||[];const index=list.findIndex(v=>v.id===t.active_variant_id);const v=list[index+step];return <span className="variant-step" key={step}>{step===1&&<span>{index+1} / {list.length||1}</span>}<Button size="icon" variant="ghost" aria-label={step<0?'Предыдущий вариант':'Следующий вариант'} disabled={busy||pending||!v} onClick={()=>{const later=i<save.turns.length-1;if(later&&!window.confirm('Откатить следующие ходы в архив?'))return;void run(async()=>{await api(`/saves/${save.id}/turns/${t.id}/variant`,{variant_id:v.id,revision:save.revision,rollback_following:later});setSubmitted(null);refresh()})}}>{step<0?'‹':'›'}</Button></span>})}
+                    <Button size="icon" variant="ghost" aria-label="Ещё вариант" disabled={busy||running||!t.variants?.some(v=>v.can_regenerate)} onClick={()=>{const later=i<save.turns.length-1;if(later&&!window.confirm('Откатить следующие ходы в архив?'))return;void turn('regenerate','',t.id,later)}}>↻</Button>
+                    {[-1,1].map((step)=>{const list=t.variants||[];const index=list.findIndex(v=>v.id===t.active_variant_id);const v=list[index+step];return <span className="variant-step" key={step}>{step===1&&<span>{index+1} / {list.length||1}</span>}<Button size="icon" variant="ghost" aria-label={step<0?'Предыдущий вариант':'Следующий вариант'} disabled={busy||running||!v} onClick={()=>{const later=i<save.turns.length-1;if(later&&!window.confirm('Откатить следующие ходы в архив?'))return;void run(async()=>{await api(`/saves/${save.id}/turns/${t.id}/variant`,{variant_id:v.id,revision:save.revision,rollback_following:later});setSubmitted(null);refresh()})}}>{step<0?'‹':'›'}</Button></span>})}
                     <Button size="icon" variant="ghost" aria-label="Контекст / usage" onClick={()=>{setDiagnosticJob(t.variants?.find(v=>v.id===t.active_variant_id)?.job_id||undefined);setDiagnostics(true)}}>⋯</Button>
                   </div>:<div className="variant-controls">
                     <span className="muted small">Вариант {(t.variants||[]).find(v=>v.id===t.active_variant_id)?.ordinal||1} / {t.variants?.length||1}</span>
-                    {(t.variants||[]).map(v=><Button key={v.id} size="sm" variant={v.id===t.active_variant_id?"outline":"ghost"} disabled={busy||pending||v.id===t.active_variant_id} onClick={()=>{
+                    {(t.variants||[]).map(v=><Button key={v.id} size="sm" variant={v.id===t.active_variant_id?"outline":"ghost"} disabled={busy||running||v.id===t.active_variant_id} onClick={()=>{
                       const later = i<save.turns.length-1;
                       if(later&&!window.confirm("Смена варианта откатит все последующие ходы. Они сохранятся в архиве. Продолжить?"))return;
                       void run(async()=>{await api(`/saves/${save.id}/turns/${t.id}/variant`,{variant_id:v.id,revision:save.revision,rollback_following:later});setSubmitted(null);refresh()});
                     }}>{v.ordinal}</Button>)}
-                    <Button size="sm" variant="ghost" title={t.variants?.some(v=>v.can_regenerate) ? "" : "У старого хода нет сохранённого контекста"} disabled={busy||pending||!t.variants?.some(v=>v.can_regenerate)} onClick={()=>{
+                    <Button size="sm" variant="ghost" title={t.variants?.some(v=>v.can_regenerate) ? "" : "У старого хода нет сохранённого контекста"} disabled={busy||running||!t.variants?.some(v=>v.can_regenerate)} onClick={()=>{
                       const later=i<save.turns.length-1;
                       if(later&&!window.confirm("После успешной генерации последующие ходы будут откачены в архив. Продолжить?"))return;
                       void turn("regenerate","",t.id,later);

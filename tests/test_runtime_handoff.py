@@ -34,6 +34,12 @@ def arrival(actor='viktoria_solovyova', evidence=NARRATIVE):
     return dict(final_scene=dict(location_id='ilya_cabinet',present_character_ids=['ilya',actor],elapsed_minutes=1),
                 movements=[dict(actor_id=actor,from_location_id='salon_lak',to_location_id='ilya_cabinet',assertion='completed_arrival',actor_evidence='Виктория Соловьёва',destination_evidence='кабинет',evidence=evidence)])
 
+def provider_payload(kwargs):
+    raw=arrival()
+    current=json.loads(next(m['content'].split('\n',1)[1] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only\n')))
+    if 'viktoria_solovyova' in current['camera']['present_character_ids']:raw.pop('movements')
+    return raw
+
 def test_original_export_reaches_game_api_with_all_identities(api):
     client,app=api;sid=imported(client)
     expected={c['id']:c['name'] for c in source()['characters']}
@@ -44,8 +50,9 @@ def test_original_export_reaches_game_api_with_all_identities(api):
 
 def test_wrong_actor_cannot_borrow_viktoria_arrival_evidence(api):
     client,app=api;sid=imported(client);s=app.state.repository.get_snapshot(sid)
+    raw=arrival('marina_volkova');raw['movements'][0]['from_location_id']=s['world_state']['characters']['marina_volkova']['location_id']
     with pytest.raises(StructuralDeltaError):
-        StateResolver(s['world_state'],NARRATIVE,'',actor_names={c['id']:c['name'] for c in s['character_cards']}).resolve(RawTurnResult.parse(arrival('marina_volkova')))
+        StateResolver(s['world_state'],NARRATIVE,'',actor_names={c['id']:c['name'] for c in s['character_cards']}).resolve(RawTurnResult.parse(raw))
 
 def submit(client,sid,kind='start',text=''):
     save=client.get(f'/api/saves/{sid}').json()
@@ -63,8 +70,10 @@ def test_real_start_repair_turn_reopen_next_turn(api):
     before=repo.get_snapshot(sid);calls=[]
     def provider(**kw):
         calls.append(kw)
-        if not kw.get('response_format'):yield NARRATIVE;return
-        raw=arrival()
+        if not kw.get('response_format'):
+            yield NARRATIVE if sum(not c.get('response_format') for c in calls)==1 else 'Виктория Соловьёва отвечает: «Скоро закончу».'
+            return
+        raw=provider_payload(kw)
         if sum(bool(c.get('response_format')) for c in calls)==1:raw.pop('movements')
         yield json.dumps(raw,ensure_ascii=False)
     with patch('engine.chat_stream',side_effect=provider):
@@ -214,6 +223,21 @@ def test_exact_handoff_preserves_authored_graph_and_values(api):
     assert current['world_state']==old['world_state']
     assert current['character_cards']==old['character_cards']
     assert current['authoring']==old['authoring']==source()['authoring']
+    authored=source()['world']
+    def preserves(value,expected):
+        if isinstance(expected,dict):
+            for key,item in expected.items():preserves(value[key],item)
+        else:assert value==expected
+    for section in ('relationships','knowledge','objective_relations','threads','facts','roles','residences','organizations','contacts','possessions'):
+        for key,row in authored[section].items():
+            key=row['source_id']+':'+row['target_id'] if section=='relationships' else row['actor_id']+':'+row['fact_id'] if section=='knowledge' else key
+            canonical=current['world_state'][section][key]
+            for field in row.keys()&canonical.keys():preserves(canonical[field],row[field])
+            if section=='facts':assert canonical['visibility']==('secret' if row['secret'] else 'public')
+    with repo.connect() as db:history,_=read_history(db,current['history_head'])
+    legacy=next(row['world'] for row in history['legacy'] if row.get('schema_version')==2)
+    for section in ('threads','facts'):
+        for key,row in authored[section].items():preserves(legacy[section][key],row)
     expected=json.loads((ROOT/'expectations.json').read_text())
     for section,count in expected['counts'].items():
         if section=='cards':value=current['character_cards']
@@ -379,3 +403,44 @@ def test_context_retains_bounded_identity_and_typed_arrival_contract():
     assert {'actor_evidence','destination_evidence','from_location_id','assertion'}<=schema.keys()
     assert 'completed_arrival' in str(extraction)
     assert len(cards)<len(original['character_cards'])
+
+
+def test_runtime_birth_date_establishment_tracks_date_not_birth_permission():
+    from test_reproduction import state,conceive,deliver
+    from backend.runtime_v3.birth_identity import is_game_birth
+    s=state();s['characters']['b']['birth_date']=None
+    text='Дата рождения: 2000-02-03.'
+    result=StateResolver(s,text,'').resolve(dict(final_scene=dict(location_id='home',present_character_ids=['a','b']),character_changes=[dict(id='b',birth_date='2000-02-03',evidence=text)]))
+    assert result.state['characters']['b']['birth_date_provenance']['source']=='extraction'
+    assert not is_game_birth(result.state,'b')
+    born=deliver(conceive().state).state
+    child=next(iter(born['pregnancies'].values()))['children'][0]['id']
+    assert born['characters'][child]['birth_date_provenance']['source']=='birth_event'
+    assert is_game_birth(born,child)
+
+
+def test_corrupt_provenance_shape_reaches_schema_validation():
+    from test_reproduction import state
+    from backend.runtime_v3.models import assert_world_state_v3_invariants
+    s=state();s['characters']['b']['birth_provenance']='broken'
+    with pytest.raises(ValueError):assert_world_state_v3_invariants(s)
+
+
+def test_old_migration_cache_is_interpreted_without_rewriting_it(api):
+    from backend.runtime_v3.repository import migrate_snapshot
+    from backend.runtime_v3.selectors import ui_view
+    client,app=api;sid=imported(client);repo=app.state.repository
+    with repo.connect() as db:
+        wid=db.execute('SELECT world_id FROM saves WHERE id=?',(sid,)).fetchone()[0]
+        legacy_source={r[0]:json.loads(r[1]) for r in db.execute('SELECT kind,payload FROM world_parts WHERE world_id=?',(wid,))}
+        digest=hashlib.sha256(json.dumps(legacy_source,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+        row=db.execute('SELECT snapshot_json FROM world_migrations_v3 WHERE source_hash=?',(digest,)).fetchone()
+        old=json.loads((ROOT/'legacy_snapshot.json').read_text());old['history_head']=json.loads(row[0])['history_head']
+        encoded=json.dumps(old,ensure_ascii=False)
+        db.execute('UPDATE world_migrations_v3 SET snapshot_json=? WHERE source_hash=?',(encoded,digest))
+    with repo.connect() as db:
+        before=list(db.iterdump())
+        first,_=migrate_snapshot(db,legacy_source);second,_=migrate_snapshot(db,legacy_source)
+        assert first==second
+        assert {c['id']:c['name'] for c in ui_view(first)['characters']}=={c['id']:c['name'] for c in old['character_cards']}
+        assert list(db.iterdump())==before

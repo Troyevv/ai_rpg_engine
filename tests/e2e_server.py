@@ -58,16 +58,16 @@ def stream(**kwargs):
         return
     full='\n'.join(m['content'] for m in kwargs['messages'])
     if handoff_provider is not None and 'ilya_cabinet' in full:
-        from test_runtime_handoff import NARRATIVE as entry,arrival
+        from test_runtime_handoff import NARRATIVE as entry,provider_payload
         if kwargs.get('response_format'):
             handoff_provider['extractions']+=1
-            raw=arrival()
+            raw=provider_payload(kwargs)
             raw['choices']=[dict(action='Ждать ответа',speech='')]
             if handoff_provider['extractions']<=2:raw.pop('movements')
             yield json.dumps(raw,ensure_ascii=False)
         else:
             handoff_provider['narratives']+=1
-            yield entry
+            yield entry if handoff_provider['narratives']==1 else 'Виктория Соловьёва отвечает: «Скоро закончу».'
         return
     if kwargs['messages'][0]['content'].startswith('Один необязательный пакет') and 'TEST_RELEASE_QUALITY' in full:
         yield '{"patches":[],"preserved_unknown":null}';return

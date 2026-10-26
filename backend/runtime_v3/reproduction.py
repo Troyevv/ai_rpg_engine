@@ -241,7 +241,7 @@ def birth(r,c,event):
         if cid in s['characters']: raise ValueError('child identity collision')
         temper={key:('low','moderate','high')[min(2,int(unit(cid,key)*3))] for key in ('activity','adaptability','sensitivity','intensity','sociability')}
         item=PersonalityItem(field='temperament',text=json.dumps(temper,sort_keys=True),source_ids=[event['id']]).model_dump()
-        actor=Character(id=cid,location_id=c['location_id'],birth_date=date,life_status='alive',
+        actor=Character(id=cid,location_id=c['location_id'],birth_date=date,birth_date_provenance=dict(source='birth_event',event_id=event['id']),life_status='alive',
             biological_sex=ch['sex'],developmental_stage='infant',personality=PersonalityProfile(items={'early_temperament':item}),values={},
             birth_provenance=dict(pregnancy_id=p['id'],event_id=event['id'],minute=now)).model_dump()
         s['characters'][cid]=actor
@@ -339,8 +339,9 @@ def appearance_adapter(snapshot, child_id):
     """
     actor=snapshot['world_state']['characters'][child_id]
     card=next((c for c in snapshot['character_cards'] if c['id']==child_id),{})
+    from backend.runtime_v3.birth_identity import game_metadata,dob_metadata
     return deepcopy(dict(character_id=child_id,appearance_text=card.get('fields',{}).get('Внешность'),
-        birth_provenance=actor.get('birth_provenance',{})))
+        birth_provenance=game_metadata(actor),birth_date_provenance=dob_metadata(actor)))
 
 
 def validate_reproduction(state):

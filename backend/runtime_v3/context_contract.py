@@ -8,8 +8,8 @@ create locations[] with canonical ID/name/evidence and use that ID in final_scen
 Choose the final stop, not intermediate travel. Reuse known places/aliases (Гвоздь,
 кофейня Гвоздь, кафе Гвоздь); mention/plan alone never moves the camera.
 Present_character_ids: only physically present at the end; remove departures, include
-arrivals who stayed. Messages/memories are not presence. Supply departed actors'
-movements require established destinations. New arrivals need completed_arrival,
+arrivals who stayed. Messages/memories are not presence.
+Movements require established destinations. New arrivals need completed_arrival,
 origin and actor/place anchors inside evidence. Future/negated/remote/ambiguous is
 NOT arrival; situation_evidence cannot authorize it. A movement for a
 final_scene participant must end at final_scene.location_id. Situation is current

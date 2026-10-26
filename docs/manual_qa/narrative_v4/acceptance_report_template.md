@@ -1,12 +1,12 @@
 # Приёмка PR #116 — identity / Runtime handoff / opening scene
 
-> Отчёт по единому ТЗ runtime_handoff_and_start. Контролируемые ответы ниже синтетические; оригинальный пользовательский extraction отсутствует. Статусы браузера/итогового CI обновляются только после завершения соответствующих jobs.
+> Отчёт по единому ТЗ runtime_handoff_and_start. Контролируемые ответы ниже синтетические; оригинальный пользовательский extraction отсутствует. Это снимок доказательств при публикации дерева. Итоговая аттестация этого же отчёта (SHA/tree, jobs, R14/T11/T24/G3/G5 и screenshots) находится в описании [PR #116](https://github.com/Troyevv/ai_rpg_engine/pull/116) и заполняется только после завершения CI, без нового коммита, меняющего проверяемый SHA.
 
 ## 1. Версия
 
 - Исходный HEAD: 58c8e2967470b5c9f461d887016387f2f29d2142 (проверен повторно перед публикацией).
 - Итоговый опубликованный HEAD / tree: Точный опубликованный SHA/tree и ссылки на jobs — в итоговой записи PR #116; SHA не встраивается в собственное содержимое коммита.
-- Изменения после 58c8e29 сохранены: Да. Свежий remote HEAD равен базе; публикация fast-forward с expected_sha, без force.
+- Изменения после 58c8e29 сохранены: Да. Перед первой публикацией свежий remote HEAD равнялся базе; перед уточнениями — f3328793ba49860d2f4bc12ca3e7aba778ee27c2. Обе публикации fast-forward с expected_sha, без force.
 - Итоговый CI, jobs verify / desktop / mobile: NOT RUN — ожидает публикации этого дерева; окончательный статус см. итоговую запись PR #116.
 - Локальная среда и ограничения: Linux, Python 3.12, Node; pytest и npm build доступны. Playwright CDN вернул повреждённый архив Chromium; browser acceptance выполняется в GitHub Actions.
 
@@ -20,14 +20,14 @@
 | Первая сцена / scene_arrival_unsupported | Prompt требовал movements лишь вне final_scene; resolver требовал основание для нового участника. Generic situation quote разрешал чужое прибытие. Реальный исходный extraction неизвестен. | raw/context_contract/resolver; synthetic A01–A08 |
 | Повторная обработка / единственный commit | Существующий bounded repair сохранён; terminal arrival diagnostic, epoch и UI/API pending guard дополнены. | engine, engine_storage, Game; real_start/retry/epoch tests |
 
-Исходный пользовательский игровой job/extraction/SQLite были доступны? Если нет, явно указать, что проверено на реплике и синтетических ответах. Generation E5 не является gameplay-log.
+Исходный пользовательский игровой job/extraction/SQLite **не предоставлены**. Проверены исходный экспорт, локальная baseline-реплика старого save и явно синтетические ответы provider. Generation E5 не является gameplay-log.
 
 ## 3. Контракт и совместимость
 
 - DOB metadata до/после, real-birth metadata, mixed case: Новые записи: birth_date_provenance (DOB), birth_provenance (игровой процесс). Общий discriminator читает старые DOB-only payloads без выдачи прав/Knowledge. Mixed сохраняет process, повреждённый pregnancy_id даёт конкретную ошибку; unknown provenance fail-closed.
 - Поведение старого Draft/save, миграционного кеша, rollback/variants: Совместимое чтение на копии через assert_world_state_v3_invariants/migrate_v2; старый JSON не переписывается GET. Старый canonical snapshot реально получен import→confirm на 58c8; restore/start/regenerate/variant/rollback проверены.
 - Защита скрытого рождения, именования и Knowledge: Существующие reproduction/kinship tests плюс новые hidden-ID и mixed/manual-DOB tests. Известное рождение не даёт известного имени. Настоящие unborn не становятся actors.
-- Сохранность всех DOB, ручной биографии Марины и manual_paths: Exact baseline canonical comparison, character_cards и authoring равны исходному экспорту. Все 19 DOB сохранены; ни один Knowledge не добавлен ради имени.
+- Сохранность всех DOB, ручной биографии Марины и manual_paths: Exact baseline canonical comparison, character_cards и authoring равны исходному экспорту. Все общие поля исходных entities сравнены напрямую; v2-only thread public_state/visible_to_ids/last_event_id и fact owner_id/evidence сохранены существующим immutable History, а не выдуманы в canonical схеме. Все 19 DOB сохранены; ни один Knowledge не добавлен ради имени.
 - Нужны ли действия пользователя для его существующего save и какие именно (без перегенерации): После обновления открыть существующий save; для сохранённого неприменённого текста — «Повторить обработку состояния». Не генерировать мир и не создавать ГГ. Подтверждение совместимости относится к локальной baseline-реплике; SQLite пользователя не предоставлена.
 
 ## 4. Трассировка исходного мира
@@ -38,11 +38,11 @@
 | Миграция | 19 actors + 19 cards | та же камера | 23 objective, 19 facts, 4 threads | exact baseline comparison |
 | SQLite save | все ID/поля равны baseline | те же места | граф не урезан | saves.state_json + read-only dump test |
 | Игровой API | 19 точных имён, не Без имени | ilya / ilya_cabinet | target_name восстановлены | original_export API test |
-| UI desktop/mobile | NOT RUN до CI | реальные API, не page.route | сценарий добавлен | runtime-handoff.spec.ts |
+| UI desktop/mobile | mobile f332879 PASS; desktop / final attestation в PR | реальные API, не page.route | 19 имён проверены | runtime-handoff.spec.ts |
 | Narrative context | 1 полная карточка + ограниченный индекс | Ilya один | POV Knowledge не расширен | context_retains_bounded test |
 | Extraction context | Viktoria по существующему ID/имени | origin=salon_lak | типизированный arrival contract | context_retains_bounded test |
 | Успешный первый commit | 19 прежних ID | Ilya+Viktoria в кабинете | Knowledge прежний | real_start_repair test |
-| Turn → reopen/reload → next turn | 19 прежних ID | три commits, +3 минуты | остальные NPC не перемещены | API cycle + browser pending |
+| Turn → reopen/reload → next turn | 19 прежних ID | три commits, +3 минуты | остальные NPC не перемещены | API cycle + mobile f332879 PASS; final attestation в PR |
 
 ## 5. Прогон требований и тестов
 
@@ -92,7 +92,7 @@
 | T23 | PASS | saves bytes/revision/history unchanged on failure |
 | T24 | NOT RUN | runtime-handoff.spec.ts desktop/mobile pending CI |
 | T25 | PASS | real API start→turn→reopen→next turn |
-| T26 | NOT RUN | 2095 full-suite PASS before last focused additions; final SHA CI pending |
+| T26 | PASS | 2103 local full-suite PASS; final SHA CI attestation in PR #116 |
 
 ## 6. Retry и транзакционность
 
@@ -110,7 +110,7 @@
 | Анализ оригинальных файлов | world SHA verified, E5 read, 5 original screenshots viewed | PASS |
 | Production unit/schema/projection | actual production functions; no replacement of resolver/migration/repo | PASS |
 | API с controlled provider | real import/generate/confirm/jobs/retry/turn/reopen | PASS |
-| Browser с реальными API/проекциями | desktop/mobile test added, Chromium unavailable locally | NOT RUN |
+| Browser с реальными API/проекциями | mobile f332879: 108 passed / 10 skipped, screenshots просмотрены; desktop и final attestation в PR | Частично выполнен на момент записи |
 | User gameplay-log replay, если предоставлен | Not provided. E5 is generation-only. | NOT RUN |
 | Синтетический негативный extraction | wrong actor/destination/origin/quote/assertion, no partial commit | PASS |
 | Live DeepSeek | No key/budget; no paid calls | NOT RUN |
@@ -146,3 +146,10 @@
 - Synthetic A01 narrative SHA-256: `7eee1eb974b0ee590f62a5fac54a79dab86c2036b425566c327c13941a1f4194`.
 - New large-world provider tests explicitly use context_length=131072; production defaults/retries/output budgets unchanged. The existing 32768 saturated triplet test remains mandatory and passes after lossless instruction deduplication.
 - Unknown origin in old flat geography retains existing final_scene semantics; a known different origin or structured destination requires actor-bound arrival. No parent hierarchy shortcut was introduced.
+
+## Дополнительный финальный прогон
+
+- `python -m pytest -q`: **2103 passed in 296.11s** (`/tmp/handoff-release-full.log`).
+- DOB/old-cache/birth/context focused checks: **78 passed in 22.75s**; два appearance-adapter checks — **2 passed**.
+- Browser test discovery: **236 tests / 38 files** (118 per viewport); no browser execution claimed by discovery.
+- Initial published `f332879` verify: **2100 passed**, build success. Mobile: **108 passed, 10 skipped**, 9.6m. Three handoff screenshots inspected: 19-card selector and Ilya name; rejected text with retry and no Start; committed minute 18:03 with Ilya/Viktoria scene. [Mobile artifact](https://github.com/Troyevv/ai_rpg_engine/actions/runs/40299902387/artifacts/12640582249). Desktop first attempt hit the unchanged 20-minute job limit after a slow Chromium install; a job retry was requested. Final refinement SHA attestation is recorded in PR #116 after CI completes.

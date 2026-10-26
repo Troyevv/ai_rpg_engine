@@ -100,9 +100,15 @@ class StateResolver:
         subject=item.get('actor_evidence');destination=item.get('destination_evidence')
         if not isinstance(subject,str) or not subject.strip() or not isinstance(destination,str) or not destination.strip(): return False
         subject=fold(subject);destination=fold(destination)
-        name=self.actor_names.get(cid) or self.before['characters'][cid].get('display_name') or ''
-        # Explicit subject anchor: a full canonical name or its first given name.
-        names={fold(name),fold(name.split()[0])} if name.strip() else {fold(cid)}
+        labels=[self.actor_names.get(cid),self.before['characters'][cid].get('display_name')]
+        names={fold(name) for name in labels if isinstance(name,str) and name.strip()}
+        for name in list(names):
+            first=name.split()[0]
+            ambiguous=any(other!=cid and any(isinstance(label,str) and label.strip() and fold(label).split()[0]==first
+                for label in (self.actor_names.get(other),actor.get('display_name')))
+                for other,actor in self.before['characters'].items())
+            if not ambiguous:names.add(first)
+        if not names:names={fold(cid)}
         place=self.state['locations'][target]
         places={fold(v) for v in [place['name'],*place.get('aliases',[])] if v.strip()}
         return subject in names and subject in quote and destination in places and destination in quote
@@ -350,6 +356,7 @@ class StateResolver:
                     if actor.get('birth_date') != birth:
                         prior = deepcopy(actor)
                         actor['birth_date'] = birth
+                        actor['birth_date_provenance'] = dict(source='extraction',evidence=item['evidence'],turn_id=self.turn_id)
                         from backend.runtime_v3.life import _transition
                         _transition(self,'birth_date_established',cid,prior,actor,item)
                 except (ValueError,TypeError):

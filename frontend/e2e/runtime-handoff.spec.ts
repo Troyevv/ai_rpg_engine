@@ -24,8 +24,21 @@ test('original export identities and rejected opening recover through real API t
  await page.getByLabel('Найти персонажа').fill('');
  await expect(page.getByLabel('Персонаж',{exact:true}).locator('option')).toHaveCount(19);
  await page.screenshot({path:`test-results/handoff-identities-${info.project.name}.png`,fullPage:true});
+ await page.locator('.panel-tabs').getByRole('button',{name:'Отношения',exact:true}).click();
+ await expect(page.locator('.inspector-dialog')).toContainText('Марина Волкова');
+ await expect(page.locator('.inspector-dialog')).not.toContainText('marina_volkova');
+ await page.locator('.panel-tabs').getByRole('button',{name:'Сюжет',exact:true}).click();
+ await expect(page.locator('.inspector-dialog')).toContainText('Илья Александров');
+ await expect(page.locator('.inspector-dialog')).not.toContainText('marina_volkova');
  // Close the inspector using the normal game navigation on both layouts.
  await page.keyboard.press('Escape');
+ await page.getByRole('button',{name:info.project.name==='mobile'?'Камера и журнал мира':'Камера · Журнал',exact:true}).click();
+ await expect(page.locator('.camera-cast article')).toHaveCount(19);
+ await expect(page.locator('.camera-cast')).toContainText('Виктория Соловьёва');
+ await expect(page.locator('.camera-cast')).not.toContainText('Без имени');
+ await page.screenshot({path:`test-results/handoff-camera-${info.project.name}.png`,fullPage:true});
+ await page.keyboard.press('Escape');
+ if(info.project.name==='desktop')await expect(page.getByLabel('Управляемый персонаж')).toHaveValue('ilya');
  await request.post('/test/runtime-handoff-provider');
  try {
   await page.getByRole('button',{name:'Начать игру',exact:true}).click();

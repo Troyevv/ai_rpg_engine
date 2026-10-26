@@ -26,11 +26,14 @@ def is_game_birth(state,cid):
 
 def compatible_state(state):
     result=deepcopy(state)
+    if not isinstance(result,dict):return result
     actors=result.get('characters',{})
+    processes=result.get('pregnancies',{})
+    if not isinstance(actors,dict) or not isinstance(processes,dict):return result
     for cid,actor in actors.items():
-        if not isinstance(actor,dict):continue
-        matches=[p for p in result.get('pregnancies',{}).values()
-                 if p.get('status')=='born' and any(c.get('id')==cid for c in p.get('children',[]))]
+        if not isinstance(actor,dict) or not isinstance(actor.get('birth_provenance',{}),dict) or not isinstance(actor.get('birth_date_provenance',{}),dict):continue
+        matches=[p for p in processes.values()
+                 if isinstance(p,dict) and isinstance(p.get('id'),str) and p.get('status')=='born' and isinstance(p.get('children'),list) and any(isinstance(c,dict) and c.get('id')==cid for c in p['children'])]
         if len(matches)==1 and not game_metadata(actor):
             # Preserve legacy DOB data, not a new fact or a fabricated birth event.
             actor['birth_date_provenance']=dob_metadata(actor)

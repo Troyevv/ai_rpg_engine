@@ -40,7 +40,7 @@ def ui_view(snapshot, history=None):
     scenes={}
     groups={}
     for cid,c in state['characters'].items():
-        if c['location_id'] is not None and c.get('life_status') != 'dead':groups.setdefault(c['location_id'],[]).append(cid)
+        if cid in names and c['location_id'] is not None and c.get('life_status') != 'dead':groups.setdefault(c['location_id'],[]).append(cid)
     for lid,present in groups.items():
         sid='view:'+lid
         scenes[sid]=dict(id=sid,location=place(lid),participants=sorted(present),start_minute=now,end_minute=now,
