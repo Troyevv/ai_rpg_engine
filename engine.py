@@ -138,6 +138,8 @@ def run_job(path, job_id, handle):
             before = json.loads(job['memory_before_json'] or job['before_json'])
             from backend.runtime_v3.models import assert_world_state_v3_invariants
             before['world_state']=assert_world_state_v3_invariants(before['world_state'])
+            if job['kind']=='turn' and config.get('interaction_channel'):
+                before['world_state']['meta']['interaction_focus']=config['interaction_channel']
             from backend.runtime_v3.protagonist import initialize
             initialize(before)
             if job['kind']=='pov' and not job['memory_before_json']:
@@ -251,7 +253,17 @@ def run_job(path, job_id, handle):
                     if skip_result: raw.final_scene['elapsed_minutes'] = skip_result['elapsed_minutes']
                     elif job['kind']=='turn' and __import__('re').match(r'^(?:я )?(?:ложусь спать|сплю)\b',job['user_text'].strip(),__import__('re').I):
                         raw.final_scene['elapsed_minutes']=0
-                    resolved=StateResolver(before['world_state'],narrative,job['user_text'],pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_plan,continuity_decision=continuity_plan,runtime_time_skip=bool(skip_result),turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),relationship_query=world_history.get('_relationship_query'),actor_names={c['id']:c['name'] for c in before['character_cards']}).resolve(raw)
+                    from backend.runtime_v3.remote_semantics import staged_sources
+                    resolved=StateResolver(before['world_state'],narrative,job['user_text'],pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_plan,continuity_decision=continuity_plan,runtime_time_skip=bool(skip_result),turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),relationship_query=world_history.get('_relationship_query'),actor_names={c['id']:c['name'] for c in before['character_cards']},remote_semantic_sources=staged_sources(before)).resolve(raw)
+                    if staged_sources(before):
+                        semantic_sections=set()
+                        if any(r.get('remote_source_ids') for r in raw.records['scheduled_event_changes'] if isinstance(r,dict)):
+                            semantic_sections.add('scheduled_events')
+                        if any(any(isinstance(c,dict) and c.get('source_event_id') in staged_sources(before) for c in r.get('intentions_updates',[])) for r in raw.records['character_changes'] if isinstance(r,dict)):
+                            semantic_sections.add('characters')
+                        rejected=[w for w in resolved.warnings if w.get('section') in semantic_sections]
+                        if rejected:
+                            raise ValueError('Семантическая проверка входящей связи: '+json.dumps(rejected,ensure_ascii=False))
                     state=deepcopy(before)
                     state.pop('_time_skip', None)
                     state.pop('last_time_skip', None)

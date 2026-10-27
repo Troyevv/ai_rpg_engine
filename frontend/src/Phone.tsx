@@ -1,5 +1,5 @@
 import { formatDateLabel } from "./gameDate";
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   Phone as PhoneIcon,
   MessageCircle,
@@ -73,7 +73,7 @@ export function Phone({
   disabled,
   onCommit,
   onBusyChange,
-  config, apiKey, onJob, job,
+  config, apiKey, onJob, job: receivedJob, activity,
 }: {
   save: Save;
   disabled: boolean;
@@ -83,8 +83,10 @@ export function Phone({
   apiKey: string;
   onJob: (job: Job) => void;
   job: Job | null;
+  activity?: ReactNode;
 }) {
   const phone = save.state.phone;
+  const job=receivedJob?.presentation?.actor_id&&receivedJob.presentation.actor_id!==phone?.actor_id?null:receivedJob;
   const ownerKey = `${save.id}:${phone?.actor_id}`;
   const [owner, setOwner] = useState(ownerKey);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -298,22 +300,7 @@ export function Phone({
       className="phone-affordance"
       style={{ "--phone-dock-bottom": `${dock}px` } as CSSProperties}
     >
-      {call?.status === "answered" && (
-        <label>
-          Разговор с {call.label}
-          <select
-            aria-label="Канал действия"
-            value={phone.focus}
-            disabled={locked}
-            onChange={(e) =>
-              void perform({ action: "focus", focus: e.target.value })
-            }
-          >
-            <option value="call">По телефону</option>
-            <option value="physical">Рядом · физическая сцена</option>
-          </select>
-        </label>
-      )}
+
       <div
         className={`phone-device ${open ? "is-open" : ""} ${call?.status === "ringing" ? "is-ringing" : ""}`}
         data-testid="phone-device"
@@ -368,7 +355,7 @@ export function Phone({
                 {status[call.status]} ·{" "}
                 {call.outgoing ? "Исходящий" : "Входящий"}
               </span>
-              {call.status==='answered'&&<button onClick={()=>{close();document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus()}}>Перейти к разговору</button>}
+              {call.status==='answered'&&<button onClick={()=>{close();window.dispatchEvent(new CustomEvent('phone-call-open',{detail:call.id}))}}>Перейти к разговору</button>}
               {!call.outgoing && call.status === "ringing" ? (
                 <div>
                   {[
@@ -574,7 +561,7 @@ export function Phone({
               </>
             )}
             {tab === "messages" && (
-              <>
+              <>{activity}
                 {!conversation && !contact ? (
                   <>
                     <button onClick={() => setGrouping(!grouping)}>
@@ -824,7 +811,7 @@ export function Phone({
             )}
             {tab === "calls" && (
               <>
-                <h3>История звонков</h3>
+                <h3>История звонков</h3>{activity}
                 <p className="muted small">Ответ / отказ: 1 минута. Без ответа — до {phone.capabilities.ring_timeout_minutes} мин. игрового времени. Дополнительное ожидание только по твоему действию.</p>
                 {!phone.events.some(e=>e.channel==='VOICE_CALL')&&<p>Звонков пока нет. Выбери контакт, чтобы позвонить.</p>}
                 {phone.events
@@ -836,6 +823,7 @@ export function Phone({
                       {avatar(e.subject)}
                       <div>
                         <strong>{e.label}</strong>
+                        {['answered','ended'].includes(e.status)&&<button onClick={()=>{close();window.dispatchEvent(new CustomEvent('phone-call-open',{detail:e.id}))}}>Читать разговор</button>}
                         <small>
                           {e.outgoing ? "Исходящий" : "Входящий"} ·{" "}
                           {status[e.status]} · {formatDateLabel(e.time_label)}

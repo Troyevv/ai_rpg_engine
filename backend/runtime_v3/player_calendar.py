@@ -19,8 +19,9 @@ def visible_calendar_state(state):
     profile = (view['meta'].get('calendar') or {}).get('profile') or {}
     profile['observances'] = [e for e in profile.get('observances', [])
         if not e.get('character_ids') or observer in e['character_ids']]
+    from backend.runtime_v3.remote import commitment_visible
     view['scheduled_events'] = {eid:e for eid,e in view['scheduled_events'].items()
-        if observer is not None and (
+        if observer is not None and commitment_visible(state, e, observer) and (
             known_claim(state, observer, eid, {'scheduled_event', 'commitment'})
             or (e.get('commitment') and observer in e['character_ids']))}
     # Pregnancy plans need their own knowledge even when the observer is involved.

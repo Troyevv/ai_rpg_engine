@@ -760,7 +760,7 @@ def advance(state, batch):
         state["meta"]["interaction_focus"] = "physical"
 
 
-def commitment_sources(state, record):
+def commitment_sources(state, record, *, delivered=False):
     """Narrow #66 evidence seam; not a general source of player agency."""
     ids = record.get("remote_source_ids", [])
     if (
@@ -788,7 +788,7 @@ def commitment_sources(state, record):
             return []
         # The agreement's participants must actually have perceived each cited
         # utterance; delivery or a later group join is insufficient.
-        if not actors <= {e["sender_id"], *e["read_by"]}:
+        if not actors <= {e["sender_id"], *(e["delivered_to"] if delivered else e["read_by"])}:
             return []
         rows.append(e)
     if len({e["conversation_id"] for e in rows}) != 1:
@@ -824,3 +824,19 @@ def validate_event_channel(state, item):
     ):
         return False
     return True
+
+
+def commitment_visible(state, record, observer):
+    """World truth never implies the observer has read the confirming message."""
+    ids = record.get('remote_source_ids', [])
+    if not ids:
+        call=state['remote_events'].get(record.get('remote_call_id'))
+        return not record.get('remote_call_id') or bool(call and observer in participants(call))
+    return observer is not None and all(
+        (e := state['remote_events'].get(eid)) is not None
+        and (e['sender_id'] == observer or observer in e['read_by']) for eid in ids)
+
+
+def authored_record_visible(state, record, observer):
+    event = state.get('remote_events', {}).get(record.get('source_event_id'))
+    return not event or observer == event['sender_id'] or observer in event['read_by']

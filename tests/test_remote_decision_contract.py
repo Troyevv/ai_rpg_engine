@@ -74,7 +74,7 @@ def test_failed_schema_after_read_replays_only_accepted_step(tmp_path):
     assert repo.get_snapshot(sid)==before
     frames=json.loads(repo.get_job(jid)['context_json']);assert frames[0]['accepted'] and not frames[1]['accepted']
     repo.retry_job(jid)
-    assert len(execute(repo,jid))==1
+    assert len(execute(repo,jid))==2  # remaining reply + semantic extraction; accepted read is replayed
     assert repo.get_job(jid)['status']=='saved'
     assert len(repo.get_snapshot(sid)['world_state']['remote_events'])==2
 

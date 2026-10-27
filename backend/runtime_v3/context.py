@@ -29,7 +29,7 @@ def visible_views(snapshot, turns, kind):
     from backend.services.pov import visible, actor_view
     actor = snapshot['world_state']['camera'].get('pov_actor_id') or snapshot['world_state']['camera']['controlled_actor_id']
     main = snapshot.get('campaign', {}).get('protagonist_id')
-    return [t if kind == 'background' and actor is None else actor_view(t, actor, main) for t in turns
+    return [t if kind == 'background' and actor is None else actor_view(t, actor, main) for t in turns if t.get('kind') != 'communication'
             if kind == 'background' and actor is None or visible(t, actor, main)]
 
 
@@ -72,7 +72,9 @@ def canonical_slice(state, scope, extraction=False, query=""):
         character.pop('values', None)
         if values and (not extraction or character['id'] in development_ids): character['values'] = values
         for key in ('goals', 'intentions', 'obligations'):
-            character[key] = context_records(character[key], evaluation=extraction, turn=state['meta']['turn_id'])
+            from backend.runtime_v3.remote import authored_record_visible
+            records=character[key] if extraction else [r for r in character[key] if authored_record_visible(state,r,scope.pov_actor_id or scope.controlled_actor_id)]
+            character[key] = context_records(records, evaluation=extraction, turn=state['meta']['turn_id'])
         if not extraction:
             cid = character['id']
             if cid in scope.referenced_actor_ids:
@@ -164,6 +166,8 @@ def canonical_slice(state, scope, extraction=False, query=""):
         if compact: current['reproductive_knowledge']=compact
         current['knowledge']=[row for row in current['knowledge'] if row['fact_id'] not in ids]
     if not extraction:
+        from backend.runtime_v3.remote import commitment_visible
+        current['scheduled_events']=[e for e in current['scheduled_events'] if commitment_visible(state,e,scope.pov_actor_id or scope.controlled_actor_id)]
         hidden_births={cid for cid in current['characters'] if not known_birth(state,cid,scope.pov_actor_id or scope.controlled_actor_id)}
         current['characters']={cid:c for cid,c in current['characters'].items() if cid not in hidden_births}
         current['objective_relations']=[r for r in current['objective_relations'] if not {r['source_id'],r['target_id']}&hidden_births]
@@ -465,6 +469,15 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     if remote:
         remote['input_channel'] = snapshot.get('_interaction_input_channel', state['meta']['interaction_focus'])
         current['communication'] = remote
+        if extraction_text is not None and snapshot.get('_remote_batch'):
+            from backend.runtime_v3.remote_semantics import staged_sources
+            sources=staged_sources(snapshot)
+            if sources:
+                remote['accepted_semantic_messages']=list(sources.values())
+                remote['constraints'] += (' Extract consequences of these accepted messages into scheduled_event_changes and explicit intentions_updates. '
+                    'A proposal requires actual assent; cite remote_source_ids and remote_time_source_id. Unread confirmation can establish GM truth, never recipient Knowledge. '
+                    'Keep original authored wording and source_event_id for intentions. Relative minute_offset is anchored to the original proposal, not this turn. ')
+
     if kind == 'background' and not camera.get('pov_actor_id'):
         from backend.runtime_v3.reproduction import context_projection
         current.update(context_projection(state,scope.relevant_actor_ids,None,extraction=True))
@@ -718,7 +731,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
             if message['content'].startswith('Choice context / controlled actor\n'):
                 choice = json.loads(message['content'].split('\n', 1)[1])
                 compacted = compact_choice_context(current, choice)
-                instruction = ('\nChoice state_ref points only to that JSON value in Текущее состояние / GM-only, granting no other knowledge.')
+                instruction = ('\nChoice state_ref references Текущее состояние / GM-only; grants no extra knowledge.')
                 candidate = block('Choice context / controlled actor', compacted)
                 # Account for the reference instruction too: compaction must
                 # never make a small context larger.

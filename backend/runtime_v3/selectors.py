@@ -65,12 +65,16 @@ def ui_view(snapshot, history=None):
         if differences and any(differences):
             value=max(differences,key=abs)
             world['relationships'][key]['change']=dict(direction='mixed' if any(v>0 for v in differences) and any(v<0 for v in differences) else 'up' if value>0 else 'down',reason=after.get('context',''))
+    from backend.runtime_v3.remote import authored_record_visible
     for cid,c in state['characters'].items():
+        c = dict(c, **{f:[r for r in c[f] if authored_record_visible(state,r,camera['controlled_actor_id'])] for f in ('goals','intentions','obligations')})
         world['characters'][cid]=dict(c,age=age_on(c.get('birth_date'),current_time(state)['date'],profile_of(state)),goals=active_texts(c['goals']),intentions=active_texts(c['intentions']),obligations=active_texts(c['obligations']),lifecycle={k:c[k] for k in ('goals','intentions','obligations')},location=place(c['location_id']) if c['location_id'] else None,
             scene_id=sid if cid in camera['present_character_ids'] else 'view:'+c['location_id'] if c['location_id'] else None,
             minute=now,last_event_id=None,short_goal='\n'.join(active_texts(c['goals'])))
     for fid,f in state['facts'].items():world['facts'][fid]=dict(f,secret=f['visibility']=='secret',evidence=[])
+    from backend.runtime_v3.remote import commitment_visible
     for eid,e in state['scheduled_events'].items():
+        if not commitment_visible(state,e,camera['controlled_actor_id']): continue
         view = commitment_view(state, e)
         window = view['temporal_projection']
         # Presentation labels are disposable and reuse the canonical calendar.
@@ -82,11 +86,13 @@ def ui_view(snapshot, history=None):
         # Phone payloads use the actor-owned projection below. Raw audit rows
         # may contain unread text or another character's private read receipt.
         if e.get('remote_interaction_id'): continue
+        if e.get('interaction_channel')=='call' and camera['controlled_actor_id'] not in e.get('witnesses',[]): continue
         if any(not isinstance(e.get(k,[]),list) or any(not isinstance(v,str) for v in e.get(k,[])) for k in ('participants','witnesses')):continue
         world['events'][e['id']]=dict(e,participants=e.get('participants',[]),witnesses=e.get('witnesses',[]),
             calendar_date=current_time(state,e['minute'])['date'] if type(e.get('minute')) is int else e.get('calendar_date'),
             minute=e.get('minute') if type(e.get('minute')) is int else None,recorded_minute=e.get('recorded_minute') if type(e.get('recorded_minute')) is int else -1,source_sequence=e.get('source_sequence',e['turn_id']-1 if type(e.get('turn_id')) is int else None),player_observed=e.get('player_observed',False))
     for i,t in enumerate(history.get('turns',[])):
+        if isinstance(t,dict) and t.get('interaction_channel') in ('phone','call'): continue
         if not isinstance(t,dict) or not isinstance(t.get('narrative'),str):continue
         if not isinstance(t.get('camera',{}),dict):continue
         if 'world_time' in t and type(t['world_time']) is not int:continue
@@ -101,7 +107,7 @@ def ui_view(snapshot, history=None):
         c=state['characters'][card['id']]
         age = age_on(c.get('birth_date'),current_time(state)['date'],profile_of(state))
         if age is not None: card['fields']['Возраст'] = str(age)
-        card['fields'].update({'Сейчас':c['situation'],'Чего хочет':'\n'.join(active_texts(c['goals'])),'Намерения':'\n'.join(active_texts(c['intentions']))})
+        card['fields'].update({'Сейчас':c['situation'],'Чего хочет':'\n'.join(active_texts(c['goals'])),'Намерения':'\n'.join(world['characters'][card['id']]['intentions'])})
     from backend.runtime_v3.weather import weather_at
     calendar_state=visible_calendar_state(state)
     metadata=dict(weather=weather_at(state),time=label(now),location=place(camera['location_id']),present_ids=list(camera['present_character_ids']))

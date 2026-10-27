@@ -202,6 +202,8 @@ def scheduled_time(state, event):
             minute = int(clock[:2])*60+int(clock[3:]) if clock else next((n for n,p in DAY_PERIODS if p==temporal.get('day_period')),0)
             resolved = reference//1440*1440 + offset*1440+minute
         else: resolved = None
+        if temporal.get('minute_offset') is not None:
+            resolved = reference + temporal['minute_offset']
     status = 'unresolved' if resolved is None else 'future' if resolved > state['meta']['world_time'] else 'due'
     return dict(status=status, due_minute=resolved)
 
@@ -218,7 +220,7 @@ def scheduled_window(state, event):
     """
     start = scheduled_due(state, event)
     temporal = event.get('temporal') or {}
-    precision = 'exact' if temporal.get('time') or not temporal and start is not None else 'period' if temporal.get('day_period') else 'day'
+    precision = 'exact' if temporal.get('minute_offset') is not None or temporal.get('time') or not temporal and start is not None else 'period' if temporal.get('day_period') else 'day'
     end = start
     if start is not None and precision != 'exact':
         if precision == 'day': end = start//1440*1440 + 1439

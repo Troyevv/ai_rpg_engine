@@ -43,7 +43,7 @@ export const NarrativeTurn=memo(function NarrativeTurn({t,i,save,world,prefs,mob
                   </p>
                   <NarrativeText identity={identity} onPresented={onPresented} text={t.assistant_text} complete={committed||!!job?.narrative_complete||!!job&&['error','stopped'].includes(job.status)} saveId={save.id} worldId={world.id} links={prefs.link_names} onCharacter={openCharacter}/>
                   {!committed&&<JobView job={job?.status==='saved'?{...job,status:'committing'}:job} statusOnly reconnecting={reconnecting} stop={stop}/>}
-                  {committed&&<>
+                  {committed&&!t.read_only_projection&&<>
                   {t.timing?.total!=null&&<details className="turn-timing"><summary>Время хода: {t.timing.total.toFixed(1)} с</summary><Timing timing={t.timing}/></details>}
                   {mobile?<div className="mobile-variants">
                     <Button size="icon" variant="ghost" aria-label="Ещё вариант" disabled={busy||running||!t.variants?.some(v=>v.can_regenerate)} onClick={()=>{const later=i<save.turns.length-1;if(later&&!window.confirm('Откатить следующие ходы в архив?'))return;void turn('regenerate','',t.id,later)}}>↻</Button>

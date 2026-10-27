@@ -1,3 +1,4 @@
+import {phoneText} from './lib/phone';
 import {useId, type ReactNode} from 'react';
 import {UserRound,Brain,HeartHandshake,Users,BookOpen,MapPin,ArrowUpRight} from 'lucide-react';
 import {CharacterAvatar,PortraitControl} from './Portrait';
@@ -60,6 +61,7 @@ export function CharacterView({state,card,save,refresh,tab='overview',setTab=()=
     {!fields.some(([k,v])=>personalityFields.has(k)&&v.trim())&&<DossierEmpty/>}
     {fields.filter(([k,v])=>personalityFields.has(k)&&v.trim()).map(([k,v])=><DossierSection key={k} title={k}><Prose text={v}/></DossierSection>)}
     <DossierSection title="Цели, намерения и обязательства" wide><p className="muted small">Сведения ведущего; могут быть неизвестны другим персонажам.</p>{save&&refresh&&card.id===actor?<MotivationEditor key={`${save.id}:${card.id}`} save={save} card={card} refresh={refresh}/>:<><h4>Цель</h4><Prose text={c?.short_goal||card.fields['Чего хочет']}/><h4>Намерения</h4><Prose text={c?.intentions?.join('\n\n')||card.fields['Намерения']}/></>}
+     <h4>{phoneText('plans')}</h4>{Object.values(state.world?.scheduled_events||{}).filter(p=>p.character_ids.includes(card.id)).map(p=><p key={p.id}>{p.description} · {p.start_label||'Время уточняется'} · {p.character_ids.map(id=>state.characters.find(c=>c.id===id)?.name||id).join(', ')} · {p.status==='pending'?'План':p.status==='resolved'?'Состоялось':'Отменено'}</p>)}
      <Reveal title="Обязательства" text={c?.obligations?.join('\n\n')||card.fields['Обязательства']} preview={false}/>
      {c?.lifecycle&&<details><summary>История целей и намерений</summary>{Object.values(c.lifecycle).flatMap(rows=>rows.filter(r=>r.status!=='active'||r.review_required?.length).map(r=><p key={r.id}>{r.review_required?.length?'Требует переоценки':({completed:'Завершено',cancelled:'Отменено',blocked:'Заблокировано',failed:'Не выполнено',expired:'Утратило актуальность',superseded:'Заменено'}[r.status]||r.status)} · {r.text}</p>))}</details>}
     </DossierSection>

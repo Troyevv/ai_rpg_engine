@@ -30,9 +30,10 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, relationship_query=None, relationship_receipts=None):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, relationship_query=None, relationship_receipts=None, remote_semantic_sources=None):
         if mode not in ("turn", "background"):
             raise ValueError("Неизвестный режим StateResolver.")
+        self.remote_semantic_sources = remote_semantic_sources or {}
         self.minimal_promotion_ids = set(minimal_promotion_ids or ())
         self.relationship_query = relationship_query
         self.relationship_receipts = relationship_receipts or []
@@ -69,7 +70,11 @@ class StateResolver:
 
     def supported(self, record):
         quote = record.get('evidence')
-        return isinstance(quote,str) and bool(normalized(quote)) and any(normalized(quote) in source for source in self.sources)
+        remote = self.remote_semantic_sources.get(record.get('source_event_id')) if isinstance(record.get('source_event_id'),str) else None
+        sources = self.sources + ([normalized(remote['content'])] if remote else [])
+        if set(record) <= {'id','evidence','intentions_updates'} and record.get('intentions_updates'):
+            sources += [normalized(e['content']) for e in self.remote_semantic_sources.values() if e['sender_id']==record.get('id')]
+        return isinstance(quote,str) and bool(normalized(quote)) and any(normalized(quote) in source for source in sources)
 
     def records(self, raw, section, *, evidence=True):
         seen=set()
@@ -117,7 +122,7 @@ class StateResolver:
         from backend.runtime_v3.remote import commitment_sources
         quote=record.get('evidence')
         return isinstance(quote,str) and bool(normalized(quote)) and any(
-            normalized(quote) in normalized(e['content']) for e in commitment_sources(self.before,record))
+            normalized(quote) in normalized(e['content']) for e in commitment_sources(self.before,record,delivered=bool(self.remote_semantic_sources)))
 
     def actor(self, value, section, index):
         if not isinstance(value,str) or value not in self.state['characters']:
@@ -304,8 +309,8 @@ class StateResolver:
             event = dict(id=event_id,local_id=eid,text=item['text'],
                 **lists,medium=medium,evidence=item['evidence'],turn_id=self.turn_id,
                 player_observed=self.observed,recorded_minute=s['meta']['world_time'])
-            if item.get('interaction_channel')=='call':
-                event['interaction_channel']='call'
+            if item.get('interaction_channel') in ('call','physical'):
+                event['interaction_channel']=item['interaction_channel']
             for key in ('minute','order'):
                 if type(item.get(key)) is int and item[key] >= 0: event[key]=item[key]
             if isinstance(item.get('location_id'),str) and item['location_id'] in s['locations']: event['location_id']=item['location_id']

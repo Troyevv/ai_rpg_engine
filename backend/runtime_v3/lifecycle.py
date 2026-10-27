@@ -92,17 +92,22 @@ def apply_changes(resolver, item, cid, index, events):
                 continue
             if 'expected_revision' in change and (type(change['expected_revision']) is not int or change['expected_revision'] != (old or {}).get('revision',0)):
                 reject('Устаревшая версия мотивации.', 'motivation_conflict'); continue
-            event=None
+            event=None;remote=None
             if change.get('source_event_id') is not None:
                 event=events.get(change['source_event_id']) if isinstance(change['source_event_id'],str) else None
+                remote=getattr(resolver,'remote_semantic_sources',{}).get(change['source_event_id']) if isinstance(change['source_event_id'],str) else None
+                if remote and remote['sender_id']==cid:
+                    event=dict(id=remote['id'],participants=[cid])
                 if not event or cid not in event['participants']:
                     reject('Источник не является принятым событием персонажа.'); continue
+            if remote and old and status!=old['status'] and old.get('source_event_id')==remote['id']:
+                reject('Старая реплика не подтверждает новое состояние намерения.', 'motivation_remote_replay'); continue
             quote=quote_normalized(change['evidence'])
             if status in ('completed','failed','expired','blocked') and quote not in quote_normalized(resolver.narrative):
                 reject('Ввод с планом действия не доказывает его выполнение.', 'motivation_completion_source'); continue
             player_quote=change.get('player_evidence','')
             explicit=(change.get('player_assertion')=='explicit_choice' and isinstance(player_quote,str)
-                and bool(quote_normalized(player_quote)) and quote_normalized(player_quote) in quote_normalized(resolver.player_input))
+                and bool(quote_normalized(player_quote)) and (quote_normalized(player_quote) in quote_normalized(resolver.player_input) or remote is not None and remote['sender_id']==cid and quote_normalized(player_quote) in quote_normalized(remote['content'])))
             if controlled and status in ('cancelled','superseded') and not explicit:
                 reject('Отказ/замена EXTERNAL требует явного решения игрока.', 'motivation_agency'); continue
             dependencies=change.get('dependencies',(old or {}).get('dependencies',{}))

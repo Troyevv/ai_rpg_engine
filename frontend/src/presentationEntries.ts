@@ -11,8 +11,20 @@ export function presentationEntries(save:Save|null,job:Job|null){
   entries.push({identity:job.id,committed:false,job,turn:{
     id:-1,node_id:job.id,active_variant_id:job.id,variants:[],memory_archived:false,
     sequence:target?.sequence??(save.turns.at(-1)?.sequence||0)+1,
+    presentation:job.presentation,
     kind:target?.kind||job.kind,user_text:target?.user_text||job.user_text||'',
     assistant_text:job.narrative,choices:[],pov_actor_id:target?.pov_actor_id||save.state.camera?.pov_actor_id,
   }});
   return entries;
+}
+
+export function surfaceEntries(entries:ReturnType<typeof presentationEntries>,surface:'physical'|'phone'|'call',actor?:string|null,callId?:string|null){
+ return entries.flatMap(entry=>{
+   const route=entry.turn.presentation??{surface:entry.turn.kind==='communication'?'phone':'physical'};
+   if(surface==='physical'&&route.surface==='call'&&route.physical_text){return [{...entry,identity:entry.identity+':physical',turn:{...entry.turn,read_only_projection:true,user_text:'',assistant_text:route.physical_text,variants:[],choices:[]}}]}
+   if(route.surface!==surface)return [];
+   if(surface!=='physical'&&(route.actor_id&&route.actor_id!==actor||surface==='call'&&route.call_id!==callId))return [];
+   if(surface==='call'&&route.call_text!==undefined)return [{...entry,turn:{...entry.turn,assistant_text:route.call_text}}];
+   return [entry];
+ });
 }

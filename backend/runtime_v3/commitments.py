@@ -53,9 +53,18 @@ def apply_commitments(resolver, raw):
             reject('Нужны canonical ID и подтверждённая семантика изменения.'); continue
         old = events.get(eid)
         from backend.runtime_v3.remote import commitment_sources
-        sources=commitment_sources(resolver.before,item) if item.get('remote_source_ids') else []
+        sources=commitment_sources(resolver.before,item, delivered=bool(getattr(resolver, 'remote_semantic_sources', None))) if item.get('remote_source_ids') else []
+        admitted=getattr(resolver, 'remote_semantic_sources', {})
+        if admitted and sources and any(e['id'] not in admitted for e in sources):
+            reject('Источник не входит в принятый semantic context.', 'commitment_remote_source'); continue
         if item.get('remote_source_ids') and not sources:
             reject('Сообщения не прочитаны участниками договорённости.', 'commitment_remote_unperceived'); continue
+        if sources and getattr(resolver,'remote_semantic_sources',None) and assertion=='agreed' and not set(item.get('character_ids',[])) <= {e['sender_id'] for e in sources}:
+            reject('Каждому участнику нужна собственная подтверждающая реплика.', 'commitment_missing_assent'); continue
+        if sources and old and assertion=='rescheduled' and admitted:
+            fresh={e['sender_id'] for e in sources if e['id'] not in old.get('remote_source_ids',[])}
+            if not set(item.get('character_ids',old['character_ids'])) <= fresh:
+                reject('Переносу нужно новое согласие участников.', 'commitment_missing_assent'); continue
         if sources and old and assertion!='agreed' and set(item['remote_source_ids'])<=set(old.get('remote_source_ids',[])):
             reject('Старое сообщение не является новым решением.', 'commitment_remote_replay'); continue
         if old and old['status'] != 'pending':
@@ -75,6 +84,14 @@ def apply_commitments(resolver, raw):
         fields.update({k:item[k] for k in EDITABLE if k in item})
         fields.update(commitment=True, evidence=item['evidence'], source_turn=resolver.turn_id)
         if sources: fields['remote_source_ids']=item['remote_source_ids']
+        elif resolver.before['meta'].get('interaction_focus')=='call':
+            from backend.runtime_v3.remote import active_call
+            call=active_call(resolver.before,resolver.before['camera']['controlled_actor_id'])
+            if call and call['status']=='answered':
+                from backend.runtime_v3.remote import participants
+                if assertion=='agreed' and not set(fields.get('character_ids',[])) <= participants(call):
+                    reject('Участник не присутствовал в разговоре.', 'commitment_missing_assent'); continue
+                fields['remote_call_id']=call['id']
         if old is None or assertion == 'rescheduled':
             fields['time_reference_minute'] = resolver.before['meta']['world_time']
             if sources:
@@ -138,6 +155,8 @@ def apply_commitments(resolver, raw):
                 e['description'].strip().casefold() == entry['description'].strip().casefold()
                 and set(e['character_ids']) == set(entry['character_ids'])
                 and scheduled_window(state, e)['start_minute'] == window['start_minute']), None)
+            if not duplicate and sources:
+                duplicate=next((e for e in events.values() if set(e.get('remote_source_ids',[]))==set(item['remote_source_ids']) and set(e['character_ids'])==set(entry['character_ids']) and scheduled_window(state,e)['start_minute']==window['start_minute']),None)
             if duplicate:
                 reject('Повтор существующего плана: используй его canonical ID.', 'commitment_duplicate'); continue
         events[eid] = entry

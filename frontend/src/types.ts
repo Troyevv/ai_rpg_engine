@@ -127,7 +127,10 @@ export interface Choice {
   action: string;
   speech: string;
 }
+export interface PresentationRoute {surface:"physical"|"phone"|"call";actor_id?:string|null;call_id?:string|null;conversation_id?:string|null;physical_text?:string;call_text?:string}
 export interface Turn {
+  read_only_projection?: boolean;
+  presentation?: PresentationRoute;
   changes?: {communication?: {rejected?: string[]}};
   pov_actor_id?: string|null;
   audience_json?: string;
@@ -144,6 +147,7 @@ export interface Turn {
   timing?: Record<string,number>|null;
 }
 export interface Job {
+  presentation?: PresentationRoute;
   attempt_epoch?: number;
   resumable?: boolean;
   replaces_id?:number|null;

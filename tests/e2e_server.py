@@ -5,6 +5,9 @@ import json
 import re
 import os
 os.environ["TABLETOP_DEBUG"] = "1"
+# Browser transport fixtures use deterministic structural retrieval, not an optional
+# local embedding-model installation. Embedding behavior has dedicated unit tests.
+os.environ["RPG_SEMANTIC_ENABLED"] = "0"
 from pathlib import Path
 import sys
 import tempfile
@@ -58,6 +61,9 @@ def stream(**kwargs):
             yield controlled;return
         yield '{"issues":[]}'
         return
+    if kwargs['messages'][0]['content'].startswith('Remote semantic extraction/'):
+        from phone_semantic_fixture import extract
+        yield json.dumps(extract(json.loads(kwargs['messages'][1]['content'])),ensure_ascii=False);return
     full='\n'.join(m['content'] for m in kwargs['messages'])
     if handoff_provider is not None and 'ilya_cabinet' in full:
         from test_runtime_handoff import NARRATIVE as entry,provider_payload
@@ -91,7 +97,7 @@ def stream(**kwargs):
         if phone_mode=='decline' and action=='answer':action='decline'
         p=dict(actor_id=o['actor_id'],action=action,basis_ids=o['basis_ids'])
         if 'event_id' in o:p['event_id']=o['event_id']
-        if action=='send':p.update(o['paths'][0],content='Да, увидимся завтра. Напиши, когда освободишься.')
+        if action=='send':p.update(o['paths'][0],content='Да, договорились.' if phone_mode=='meeting' else 'Да, увидимся завтра. Напиши, когда освободишься.')
         if action=='identify':p.update(speaker_name='Дежурный оператор')
         yield json.dumps(dict(action=p),ensure_ascii=False)
         return

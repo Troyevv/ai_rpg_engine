@@ -9,7 +9,9 @@ from context_builder import describe_context, estimate
 def execute(storage, job, handle, chat_stream):
     config = json.loads(job["config_json"])
     before = json.loads(job["memory_before_json"] or job["before_json"])
-    frames = json.loads(job["context_json"] or "[]")
+    journal = json.loads(job["context_json"] or "[]")
+    semantic = next((f for f in journal if f.get("stage") == "remote_semantics"), None)
+    frames = [f for f in journal if f.get("stage") != "remote_semantics"]
     captured = []
     # Mark the durable command boundary retryable even if the provider fails
     # before returning any text. No fabricated player utterance is inserted.
@@ -85,6 +87,43 @@ def execute(storage, job, handle, chat_stream):
     if output is None or handle.cancelled.is_set():
         return
     after, batch, report = output
+    from backend.runtime_v3.remote_semantics import messages as semantic_messages, resolve as semantic_resolve
+    source=after['world_state']['remote_events'][report['source_event_id']]
+    substantive = 'send' in report['accepted'] or source['operation_id']==config['communication']['request_id']
+    prompts = semantic_messages(after, report['source_event_id']) if substantive else None
+    if prompts:
+        if estimate(prompts) > config['context_length'] - config['update_tokens'] - 512:
+            raise ValueError('Контекст телефонных последствий не помещается в окно модели; сообщения сохранены.')
+        frame = dict(stage='remote_semantics', messages=prompts, accepted=False)
+        if semantic:
+            frame['previous_attempt'] = semantic
+        captured.append(frame)
+        storage.save_communication_context(job['id'], captured, before)
+        storage.job_progress(job['id'], 'extracting', complete=True)
+        try:
+            if semantic and semantic.get('accepted') and semantic.get('messages') == prompts and not job['replaces_id']:
+                response = semantic['response']
+            else:
+                def on_semantic_stream(stream):
+                    handle.stream = stream
+                    if handle.cancelled.is_set(): stream.close()
+                response = ''.join(tracked_stream(storage, chat_stream, job['id'], 'remote_semantics', config,
+                    prompts, describe_context(prompts), temperature=0.1, max_tokens=config['update_tokens'],
+                    model=config['model'], require_complete=True, cancel_event=handle.cancelled,
+                    on_stream=on_semantic_stream, provider=config.get('provider','local'), api_key=handle.api_key,
+                    response_format={'type':'json_object'}))
+            frame['response'] = response
+            storage.save_communication_context(job['id'], captured, before)
+            if handle.cancelled.is_set(): return
+            after, consequences = semantic_resolve(after, report['source_event_id'], response)
+            for section, records in consequences.items(): batch[section].extend(records)
+            frame['accepted'] = True
+        except Exception as exc:
+            frame['error'] = str(exc)
+            raise
+        finally:
+            storage.save_communication_context(job['id'], captured, before)
+
     batch["state_changes"].append(dict(kind="communication_receipt", request_id=config["communication"]["request_id"], job_id=job["id"]))
     labels = {"answered": "Собеседник ответил. Разговор доступен в сцене.", "declined": "Собеседник отклонил вызов.", "missed": "Вызов завершён без ответа."}
     text = labels.get(report["outcome"], "Обработка сообщения завершена. Переписка доступна в телефоне.")

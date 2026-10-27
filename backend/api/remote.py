@@ -36,11 +36,13 @@ def install_jobs(app, repo, credentials, public_job):
     @app.get('/api/saves/{sid}/phone/diagnostics/{jid}')
     def communication_diagnostics(sid: int, jid: str):
         import json
-        repo.get_snapshot(sid)
+        snapshot = repo.get_snapshot(sid)
         job = repo.get_job(jid)
         if job['save_id'] != sid or job['kind'] != 'communication':
             raise ValueError('Операция связи недоступна в этом прохождении.')
         config = json.loads(job['config_json'])
+        if config.get('communication',{}).get('owner_id') != snapshot['world_state']['camera']['controlled_actor_id']:
+            raise ValueError('Диагностика телефона другого персонажа недоступна.')
         return dict(job_id=jid, source=config.get('communication'),
                     attempt_epoch=job['attempt_epoch'], status=job['status'],
                     frames=json.loads(job['context_json'] or '[]'),

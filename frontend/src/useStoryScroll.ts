@@ -4,7 +4,7 @@ import {useCallback,useLayoutEffect,useRef,useState} from 'react';
  * Never start smooth-scroll animations: a single pending frame coalesces resizes.
  * Keep a visible article anchor while unpinned, including regeneration above it.
  */
-export function useStoryScroll(saveId?:number){
+export function useStoryScroll(saveId?:number|string){
   const scroll=useRef<HTMLDivElement>(null),pinned=useRef(true);
   const [away,setAway]=useState(false);
   const frame=useRef(0),lastTop=useRef(0);
@@ -52,6 +52,7 @@ export function useStoryScroll(saveId?:number){
   },[remember]);
   useLayoutEffect(()=>{
     const el=scroll.current;if(!el)return;
+    pinned.current=true;anchor.current=null;lastTop.current=0;setAway(false);
     try {const saved=JSON.parse(sessionStorage.getItem(key)||'null');if(saved){pinned.current=saved.pinned;el.scrollTop=saved.top;setAway(!saved.pinned)}}catch{/* old UI preference */}
     remember();schedule();
     const observer=new ResizeObserver(schedule);observer.observe(el);

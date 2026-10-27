@@ -25,28 +25,16 @@ test("phone controls, freeform text, reload and physical scene", async ({
   const dialog = page.getByRole("region", {name:"Телефон персонажа"});
   await expect(dialog.getByText("Входящий", { exact: false })).toBeVisible();
   await dialog.getByRole("button", { name: "Ответить", exact: true }).click();
-  await expect(
-    dialog.getByRole("button", { name: "Завершить разговор", exact: true }),
-  ).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(
-    page.locator(".choices button").filter({ hasText: "Посмотреть в окно" }),
-  ).toHaveCount(0);
-  await page.getByLabel("Канал действия").selectOption("physical");
-  await expect(
-    page.locator(".choices button").filter({ hasText: "Посмотреть в окно" }),
-  ).toBeVisible();
-  await page.getByLabel("Канал действия").selectOption("call");
+  const call=page.getByRole('dialog',{name:'Сцена звонка'});
+  await expect(call).toBeVisible();
+  await call.getByLabel('Свернуть звонок').click();
+  await expect(page.locator('.choices button').filter({hasText:'Посмотреть в окно'})).toBeVisible();
   await page.reload();
-  await page
-    .getByRole("button", { name: /^Телефон/ })
-    .click();
-  await dialog
-    .getByRole("button", { name: "Завершить разговор", exact: true })
-    .click();
-  await expect(
-    dialog.getByRole("button", { name: "Завершить разговор", exact: true }),
-  ).toHaveCount(0);
+  await expect(page.getByRole('button',{name:/Вернуться к звонку/})).toBeVisible();
+  await page.getByRole('button',{name:/Вернуться к звонку/}).click();
+  await call.getByRole('button',{name:'Завершить звонок',exact:true}).click();
+  await expect(call).toHaveCount(0);
+  await page.getByRole('button',{name:/^Телефон/}).click();
   const after = await (await request.get(`/api/saves/${selected.save}`)).json();
   expect(after.state.scene).toEqual(before.state.scene);
   await dialog.getByRole("button", { name: "Вера работа", exact: true }).click();

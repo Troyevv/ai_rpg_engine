@@ -138,7 +138,7 @@ class EngineStorage:
                     original=db.execute('SELECT config_json FROM game_jobs WHERE id=?',(v['job_id'],)).fetchone()
                     if original and '_prompts' in json.loads(original[0]):
                         config=dict(config,_prompts=json.loads(original[0])['_prompts'])
-                        for key in ('_context_selection','long_term_advance','communication','time_skip','actor_id','source_turn_id','source_node_id','camera_actor_id','camera_scene_id','camera_direct'):
+                        for key in ('_context_selection','long_term_advance','communication','interaction_channel','time_skip','actor_id','source_turn_id','source_node_id','camera_actor_id','camera_scene_id','camera_direct'):
                             if key in json.loads(original[0]):config[key]=json.loads(original[0])[key]
                 if context_json is None:
                     raise ValueError('У старого хода нет снимка исходного контекста. Точная перегенерация недоступна.')
@@ -178,6 +178,11 @@ class EngineStorage:
                     raise ValueError('Напиши действие.')
             from backend.runtime_v3.camera import controlled
             config = dict(config)
+            if kind == 'turn' and config.get('interaction_channel') == 'call':
+                from backend.runtime_v3.remote import active_call
+                call = active_call(validated_state, validated_state['camera']['controlled_actor_id'])
+                if not call or call['status'] != 'answered':
+                    raise ValueError('Нет соединённого звонка для телефонной реплики.')
             config.setdefault('_prompts',self.prompt_snapshot(db))
             job_id = uuid.uuid4().hex
             db.execute('''INSERT INTO game_jobs(id,save_id,revision,before_json,user_text,kind,replaces_id,status,config_json)
@@ -242,6 +247,8 @@ class EngineStorage:
             assert_world_state_v3_invariants(state['world_state'],json.loads(job['before_json'])['world_state'])
             if history_batch is not None:
                 state=dict(state,history_head=append_history(db,state.get('history_head'),history_batch))
+            from backend.runtime_v3.surfaces import committed_route
+            changes = dict(changes, presentation=committed_route(dict(job), history_batch))
             after = json.dumps(state, ensure_ascii=False)
             values = (job['user_text'], job['narrative'], job['before_json'], after, job['kind'],
                       json.dumps(choices,ensure_ascii=False), json.dumps(changes,ensure_ascii=False))

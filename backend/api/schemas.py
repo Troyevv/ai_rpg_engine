@@ -32,6 +32,7 @@ class TimeSkip(DTO):
     reason: str = Field(default='', max_length=1000)
 
 class Turn(Credential):
+    interaction_channel: Literal["physical", "call"] | None = None
     time_skip: TimeSkip | None = None
     target_turn_id: int | None = None
     rollback_following: bool = False
