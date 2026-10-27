@@ -49,6 +49,7 @@ export interface Relation {
   change?: { direction: "up" | "down"; reason: string; turn?: number };
 }
 export interface Scene {
+  weather?: import("./SceneClock").Weather|null;
   time: string;
   location: string;
   present_ids: string[];
@@ -69,6 +70,9 @@ export interface ResidenceRoleView {
   since:number|null;until:number|null;since_date:string|null;until_date:string|null;
 }
 export interface State {
+  campaign?: {title?:string;setting?:string;era?:string;genre?:string;description?:string;public_description?:string};
+  world_summary?:string;
+  summary?:string;
   phone?: import('./Phone').PhoneState|null;
   residence_roles?:{residences:ResidenceRoleView[];roles:ResidenceRoleView[]};
   life_state?:{life_status:string;conditions:{id:string;description:string;status:string;duration:string}[];names:{previous:string;current:string;date:string|null;minute:number}[]}|null;
@@ -83,7 +87,7 @@ export interface State {
   notifications?:RuntimeNotice[];
   last_long_term_advance?: {actual_target:number;requested_target:number;llm_calls:number;max_llm_calls:number;interruption:{kind:string}|null;decisions:{id:string;context:string;kind:string;domains?:string[]}[];accepted:{summaries:string[]}[];unresolved:{id:string;reason:string}[]}|null;
   last_time_skip?:{requested_duration:number;elapsed_minutes:number;interrupted:boolean;background_candidates:number;simulated_candidates?:number;skipped_candidates?:number;merged_candidates?:number;living_world_llm_calls?:number};
-  world?: {version:number;characters:Record<string,{life_status?:string;location:string|null;minute:number|null;scene_id:string|null;situation?:string;birth_date?:string|null;age?:number|null;physical_state?:string;short_goal?:string;goals?:string[];intentions?:string[];emotion?:string;emotion_source_sequence?:number|null;value_history?:{id:string;before?:string|null;text:string;status:string;minute:number}[];lifecycle?:Record<string,{id:string;text:string;status:string;review_required?:string[]}[]>;obligations?:string[]}>;scenes:Record<string,{id:string;participants:string[];location:string;start_minute:number|null;end_minute:number|null;status:string}>;facts?:Record<string,WorldFact>;knowledge?:Record<string,Knowledge>;threads?:Record<string,Thread>;events?:Record<string,WorldEvent>;scheduled_events?:Record<string,ScheduledCommitment>;relationships?:Record<string,WorldRelation>};
+  world?: {objective_relations?:Record<string,SocialRelation & {fact_id?:string|null}>;version:number;characters:Record<string,{life_status?:string;location:string|null;minute:number|null;scene_id:string|null;situation?:string;birth_date?:string|null;age?:number|null;physical_state?:string;short_goal?:string;goals?:string[];intentions?:string[];emotion?:string;emotion_source_sequence?:number|null;value_history?:{id:string;before?:string|null;text:string;status:string;minute:number}[];lifecycle?:Record<string,{id:string;text:string;status:string;review_required?:string[]}[]>;obligations?:string[]}>;scenes:Record<string,{id:string;participants:string[];location:string;start_minute:number|null;end_minute:number|null;status:string}>;facts?:Record<string,WorldFact>;knowledge?:Record<string,Knowledge>;threads?:Record<string,Thread>;events?:Record<string,WorldEvent>;scheduled_events?:Record<string,ScheduledCommitment>;relationships?:Record<string,WorldRelation>};
   world_clock?: {last_event_time:string;minute?:number;calendar?:import("./lib/worldTime").WorldCalendar;projection?:{date:string|null;time:string;day:number;day_period:string};nearby?:{id:string;date:string;kind:string;name:string|null;character_ids:string[]}[]};
   memory?: {id: string; summary: string; through_sequence: number; per_actor?:Record<string,{summary:string;through_sequence:number}>};
   scene: string;
@@ -91,7 +95,7 @@ export interface State {
   sections: Record<string, string>;
   characters: Character[];
   relationships: Relation[];
-  locations: { id?:string; name: string; text: string }[];
+  locations: { id?:string; name: string; text: string; parent_id?:string|null }[];
   story_notes: string;
   facts?: { text: string; known_by: string[]; turn: number }[];
   plans?: { text: string; status: string }[];
@@ -206,7 +210,7 @@ export const active = (job: Job | null | undefined) =>
 
 export interface WorldFact {id:string;text:string;secret:boolean;character_ids:string[];evidence?:string[]}
 export interface Knowledge {actor_id:string;fact_id:string;status:string;source_event_id?:string|null;evidence?:string;revision?:number;replaced_by?:string|null}
-export interface Thread {id:string;description:string;state:string;status:string;character_ids:string[];relevance:number;last_event_id?:string|null}
+export interface Thread {id:string;description:string;state:string;status:string;character_ids:string[];relevance:number;last_event_id?:string|null;source_event_id?:string|null}
 export interface WorldEvent {id:string;text:string;participants:string[];witnesses:string[];minute:number|null;source_sequence:number;player_observed:boolean;fact_ids:string[]}
 export interface WorldRelation {source_id:string;target_id:string;context:string;dimensions:Record<string,number|{direction:string;reason:string}>}
 
@@ -215,6 +219,6 @@ export interface ScheduledCommitment {
   status:'pending'|'resolved'|'cancelled'; outcome:string;
   context_category:string; interval_state:string|null; condition:string;
   start_label:string|null; end_label:string|null;
-  temporal_projection:{precision:string; relevance:string};
+  temporal_projection:{precision:string; relevance:string; start_minute?:number|null; end_minute?:number|null};
   evidence:string; depends_on:string[];
 }

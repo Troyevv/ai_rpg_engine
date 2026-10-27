@@ -1,5 +1,5 @@
 import {test,expect} from '@playwright/test';
-import {nav} from './navigation';
+import {nav,pickCharacter} from './navigation';
 test.use({video:'on'});
 async function seed(page:any,request:any,checkpoint:string){
  const response=await request.post(`/test/ui-completion-seed?checkpoint=${checkpoint}`);expect(response.ok()).toBe(true);
@@ -72,8 +72,8 @@ test('T03 T11 contextual date and empty character card open the shared workspace
  await page.getByRole('button',{name:'Открыть календарь',exact:true}).click();
  const area=page.locator('.save-workspace');await expect(area.locator('.rdp-root')).toBeVisible();
  await page.keyboard.press('Escape');await expect(page.getByLabel('Своё действие или реплика')).toHaveValue('Контекстный черновик');
- await nav(page,'Мир');await page.locator('.panel-tabs').getByRole('button',{name:'Персонажи',exact:true}).click();
- await page.getByLabel('Персонаж',{exact:true}).selectOption('qa_oleg');
+ await nav(page,'Мир');await nav(page,'Персонажи');
+ await pickCharacter(page,'qa_oleg');
  await page.getByRole('tab',{name:'Семья',exact:true}).click();
  await page.getByRole('button',{name:'Открыть родословную',exact:true}).click();
  await expect(area.getByLabel('Семья персонажа')).toHaveValue('qa_oleg');

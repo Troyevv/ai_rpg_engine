@@ -1,5 +1,5 @@
 import {test,expect,type Page} from '@playwright/test';
-import {nav,actor,diagnostics} from './navigation';
+import {nav,actor,diagnostics,pickCharacter} from './navigation';
 
 const palette=['graphite','gothic','parchment','noir','neon'];
 async function noOverflow(page:Page){
@@ -18,7 +18,7 @@ async function capture(page:Page,path:string){
  await page.screenshot({path,animations:'disabled'});
 }
 async function themeControl(page:Page){
- await nav(page,'Мир');await page.locator('.theme-disclosure > summary').click();
+ await nav(page,'Мир');await page.locator('.inspector-workspace').getByRole('button',{name:'Настройки и сведения о мире',exact:true}).click();
  return page.getByLabel('Тема мира',{exact:true}).filter({has:page.locator('option')});
 }
 
@@ -33,7 +33,7 @@ test('world themes persist across reload and devices; portals inherit theme; all
  for(const id of palette){
   await themeControl(page);await page.locator('.theme-selector select').selectOption(id);
   await expect(page.locator('html')).toHaveAttribute('data-theme',id);
-  expect(await page.getByRole('dialog').evaluate(el=>getComputedStyle(el).getPropertyValue('--bg').trim())).toBe(await page.locator('html').evaluate(el=>getComputedStyle(el).getPropertyValue('--bg').trim()));
+  expect(await page.getByRole('dialog').evaluate(el=>getComputedStyle(el).getPropertyValue('--bg').trim())).toBe(await page.locator('.inspector-workspace').evaluate(el=>getComputedStyle(el).getPropertyValue('--bg').trim()));
   const contrast=await page.locator('html').evaluate(el=>{
    const css=getComputedStyle(el);
    const luminance=(token:string)=>{
@@ -48,7 +48,7 @@ test('world themes persist across reload and devices; portals inherit theme; all
    });
   });
   for(const ratio of contrast)expect(ratio).toBeGreaterThanOrEqual(4.5);
-  await noOverflow(page);await page.getByRole('button',{name:'Закрыть',exact:true}).click();
+  await noOverflow(page);await page.getByRole('dialog').getByRole('button',{name:'Закрыть',exact:true}).click();await page.locator('.inspector-workspace').getByRole('button',{name:'Закрыть',exact:true}).click();
   await expect(page.locator('.choices button').first()).toBeEnabled();
   await page.locator('.story-scroll').evaluate(el=>el.scrollTop=0);
   await capture(page,info.outputPath(`${id}.png`));
@@ -80,7 +80,7 @@ test('legacy world defaults, auto selection, keyboard tabs and reduced motion re
  await page.goto('/');await expect(page.locator('html')).toHaveAttribute('data-theme','graphite');
  await themeControl(page);await page.locator('.theme-selector select').selectOption('auto');
  await expect(page.locator('.theme-selector')).toContainText('Автовыбор закреплён');
- await page.getByRole('button',{name:'Закрыть',exact:true}).click();
+ await page.getByRole('dialog').getByRole('button',{name:'Закрыть',exact:true}).click();await page.locator('.inspector-workspace').getByRole('button',{name:'Закрыть',exact:true}).click();
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.turn')).toHaveCount(1);
  const save=await(await request.get(`/api/saves/${selection.save}`)).json();
  const target=save.state.characters.find((c:any)=>c.id==='character_2');
@@ -126,10 +126,10 @@ for(const size of [{width:1920,height:1080},{width:1366,height:768},{width:360,h
   await page.goto('/');await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.choices button')).toHaveCount(6);
   await noOverflow(page);await page.locator('.story-scroll').evaluate(el=>el.scrollTop=0);
   await capture(page,info.outputPath('game.png'));
-  await nav(page,'Мир');await page.locator('.panel-tabs').getByRole('button',{name:'Персонажи',exact:true}).click();
-  await page.getByLabel('Персонаж',{exact:true}).selectOption('character_2');await noOverflow(page);
+  await nav(page,'Мир');await nav(page,'Персонажи');
+  await pickCharacter(page,'character_2');await noOverflow(page);
   await capture(page,info.outputPath('inspector.png'));
-  await page.locator('.panel-tabs').getByRole('button',{name:'Отношения',exact:true}).click();await noOverflow(page);
+  await nav(page,'Отношения');await noOverflow(page);
   await capture(page,info.outputPath('relationships.png'));await page.getByRole('button',{name:'Закрыть',exact:true}).click();
   await diagnostics(page);await page.getByRole('tab',{name:'Производительность'}).click();await noOverflow(page);
   await capture(page,info.outputPath('diagnostics.png'));

@@ -1,5 +1,5 @@
 import {test,expect,type Page,type APIRequestContext} from '@playwright/test';
-import {nav,actor} from './navigation';
+import {nav,actor,pickCharacter} from './navigation';
 const evidence=process.env.PORTRAIT_EVIDENCE||'../docs/manual_qa/narrative_v4/pr121-polish-evidence';
 const phase=process.env.PR121_BEFORE?'before':'after';
 test.use({video:'on'});
@@ -7,7 +7,7 @@ async function seed(page:Page,request:APIRequestContext,hidden=false){
  const r=await request.post(`/test/phone-seed?incoming=false&polish=true&hidden=${hidden}`);expect(r.ok(),await r.text()).toBeTruthy();const s=await r.json();
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),s);return s;
 }
-async function dossier(page:Page){await nav(page,'Мир');await page.locator('.panel-tabs').getByRole('button',{name:'Персонажи',exact:true}).click();return page.locator('.inspector-dialog')}
+async function dossier(page:Page){await nav(page,'Мир');await nav(page,'Персонажи');return page.locator('.inspector-workspace')}
 async function upload(page:Page,request:APIRequestContext,s:any){
  for(const [i,cid] of ['qa_kirill','qa_vera','qa_timur'].entries()){
   const data=await page.evaluate(i=>{const c=document.createElement('canvas');c.width=300;c.height=400;const x=c.getContext('2d')!;x.fillStyle=['#3478aa','#b64e76','#548756'][i];x.fillRect(0,0,300,400);x.fillStyle='#f8e0c5';x.beginPath();x.arc(150,140,70,0,Math.PI*2);x.fill();x.fillStyle='#233042';x.fillRect(60,220,180,180);x.fillStyle='white';x.font='48px sans-serif';x.fillText(['К','В','Т'][i],132,315);return c.toDataURL('image/png').split(',')[1]},i);
@@ -21,10 +21,10 @@ for(const width of [360,393,768,1440])test(`polish visual matrix ${width}`,async
  for(const skin of ['graphite','parchment']){
   await request.put(`/api/worlds/${s.world}/presentation`,{data:{theme_id:skin}});await page.goto('/');const d=await dossier(page);
   await page.emulateMedia({reducedMotion:'reduce'});
-  if(width>=768&&await d.getByRole('button',{name:'Сузить досье'}).count())await d.getByRole('button',{name:'Сузить досье'}).click();
+  if(width>=768&&await d.getByRole('button',{name:'Компактная панель'}).count())await d.getByRole('button',{name:'Компактная панель'}).click();
   if(phase==='after')await expect(d.locator('.portrait-control>.character-avatar')).toHaveCSS('width',width<768?'104px':'120px');
   await page.screenshot({path:`${evidence}/${phase}-${width}-${skin}-compact.png`});
-  if(width>=768)await d.getByRole('button',{name:'Расширить досье'}).click();
+  if(width>=768&&await d.getByRole('button',{name:'Расширить панель',exact:true}).isVisible())await d.getByRole('button',{name:'Расширить панель',exact:true}).click();
   if(phase==='after'){
    await expect(d.locator('.portrait-control>.character-avatar')).toHaveCSS('width',width<768?'104px':'144px');
    const pencil=d.locator('.portrait-pencil');await expect(pencil).toHaveCSS('width','44px');await expect(pencil.locator('svg')).toHaveAttribute('width','16');
@@ -36,13 +36,13 @@ for(const width of [360,393,768,1440])test(`polish visual matrix ${width}`,async
    }
   }
   await page.screenshot({path:`${evidence}/${phase}-${width}-${skin}-overview.png`});
-  await d.getByLabel('Персонаж',{exact:true}).selectOption('qa_vera');
+  await pickCharacter(page,'qa_vera');
   await page.screenshot({path:`${evidence}/${phase}-${width}-${skin}-female.png`});
   await page.keyboard.press('Escape');
  }
  await upload(page,request,s);
  for(const skin of ['graphite','parchment']){
- await request.put(`/api/worlds/${s.world}/presentation`,{data:{theme_id:skin}});await page.reload();const d=await dossier(page);await d.getByLabel('Персонаж',{exact:true}).selectOption('qa_kirill');await d.getByRole('tab',{name:'Обзор',exact:true}).click();
+ await request.put(`/api/worlds/${s.world}/presentation`,{data:{theme_id:skin}});await page.reload();const d=await dossier(page);await pickCharacter(page,'qa_kirill');await d.getByRole('tab',{name:'Обзор',exact:true}).click();
  await expect.poll(()=>d.locator('.portrait-control img').evaluate((e:HTMLImageElement)=>e.complete&&e.naturalWidth>0)).toBe(true);
  await page.screenshot({path:`${evidence}/${phase}-${width}-${skin}-uploaded.png`});await page.keyboard.press('Escape');
  await page.getByRole('button',{name:/^Телефон/}).click();const phone=page.getByRole('region',{name:'Телефон персонажа'});
@@ -88,8 +88,8 @@ test('portrait viewer, editor, error recovery, semantic tabs and resize drafts',
  await page.keyboard.press('Escape');
  // A failed image URL must not poison a different character or a subsequent upload.
  await page.route('**/qa_kirill/portraits/assets/*',r=>r.fulfill({status:404,body:''}));await page.reload();const again=await dossier(page);await again.getByRole('tab',{name:'Обзор',exact:true}).click();await expect(again.locator('.portrait-control .avatar-fallback')).toBeVisible();
- await again.getByLabel('Персонаж',{exact:true}).selectOption('qa_vera');await expect(again.locator('.portrait-control img')).toBeVisible();
- await page.unroute('**/qa_kirill/portraits/assets/*');await again.getByLabel('Персонаж',{exact:true}).selectOption('qa_kirill');await expect(again.locator('.portrait-control img')).toBeVisible();
+ await pickCharacter(page,'qa_vera');await expect(again.locator('.portrait-control img')).toBeVisible();
+ await page.unroute('**/qa_kirill/portraits/assets/*');await pickCharacter(page,'qa_kirill');await expect(again.locator('.portrait-control img')).toBeVisible();
  await page.evaluate(()=>document.documentElement.style.fontSize='24px');expect(await again.evaluate(e=>e.scrollWidth<=e.clientWidth+1)).toBe(true);
  await page.screenshot({path:`${evidence}/after-${info.project.name}-large-text.png`});
  await page.keyboard.press('Escape');await page.getByRole('button',{name:/^Телефон/}).click();const phone=page.getByRole('region',{name:'Телефон персонажа'});await phone.getByRole('button',{name:'Переписки',exact:true}).click();await phone.locator('button.phone-row').filter({hasText:'Вера Ларина'}).click();await expect(phone.locator('.phone-message.outgoing img')).toHaveAttribute('src',/qa_kirill/);
@@ -139,7 +139,7 @@ test('temporary phone owner and real outgoing API use its portrait',async({page,
 test('fallback geometry, neutral identity and long text at each size',async({page,request},info)=>{
  test.skip(phase==='before');test.setTimeout(90000);await seed(page,request);await page.goto('/');const d=await dossier(page);
  for(const [cid,sex] of [['qa_kirill','male'],['qa_vera','female'],['qa_oleg','neutral']]){
-  await d.getByLabel('Персонаж',{exact:true}).selectOption(cid);
+  await pickCharacter(page,cid);
   const avatar=d.locator('.portrait-control>.character-avatar');await expect(avatar).toHaveClass(new RegExp('avatar-'+sex));await expect(avatar.locator('svg')).toHaveAttribute('data-silhouette',sex);
   for(const size of [36,40,48,104,120,144]){
    // Exercise the actual shared component's responsive typography, not an SVG mock.

@@ -1,5 +1,5 @@
 import {test,expect} from '@playwright/test';
-import {nav} from './navigation';
+import {nav,pickCharacter,searchCharacter} from './navigation';
 import {writeFile} from 'node:fs/promises';
 // Rendering contracts use variants of a real API response; persistence and
 // provenance gates are independently exercised in test_character_dossier.py.
@@ -19,7 +19,7 @@ test('physical state variants never imply health',async({page,request})=>{
   await route.fulfill({json:data});
  });
  for(variant of ['blank','transient','condition','both','resolved','incapacitated','legacy']){
-  await page.goto('/');await nav(page,'Мир');await page.locator('.panel-tabs').getByRole('button',{name:'Персонажи',exact:true}).click();
+  await page.goto('/');await nav(page,'Мир');await nav(page,'Персонажи');
   const panel=page.getByRole('tabpanel');await expect(panel).not.toContainText('Здоров');await expect(panel).not.toContainText('Без ограничений');await expect(panel).not.toContainText('PRIVATE');
   if(['transient','both'].includes(variant))await expect(panel).toContainText('Промок под дождём');else await expect(panel).toContainText('Нет данных');
   if(['condition','both','incapacitated'].includes(variant))await expect(panel).toContainText('Повреждение ноги');else await expect(panel).not.toContainText('Повреждение ноги');
@@ -32,10 +32,10 @@ test('physical state variants never imply health',async({page,request})=>{
 
 test('large roster search and missing portrait asset stay usable',async({page,request},info)=>{
  const s=await(await request.post('/test/ui-completion-seed?checkpoint=ui-family-dense')).json();
- await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),s);await page.goto('/');await nav(page,'Мир');await page.locator('.panel-tabs').getByRole('button',{name:'Персонажи',exact:true}).click();
- const d=page.locator('.inspector-dialog'),count=await d.getByLabel('Персонаж',{exact:true}).locator('option').count(),start=Date.now();await d.getByLabel('Найти персонажа').fill('Родственник 99');await expect(d.locator('h2').filter({hasText:'Родственник 99 с длинным именем'})).toBeVisible();
+ await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),s);await page.goto('/');await nav(page,'Мир');await nav(page,'Персонажи');
+ const d=page.locator('.inspector-workspace'),count=Number((await d.locator('.inspector-counter').innerText()).split('/')[1]),start=Date.now();await searchCharacter(page,'Родственник 99');await expect(d.locator('h2').filter({hasText:'Родственник 99 с длинным именем'})).toBeVisible();
  await writeFile(`../docs/manual_qa/narrative_v4/issue83-evidence/performance-roster-${info.project.name}.json`,JSON.stringify({roster:count,search_ms:Date.now()-start,heap:await page.evaluate(()=>(performance as any).memory?.usedJSHeapSize||null)},null,2));
- await d.getByLabel('Найти персонажа').fill('');await d.getByLabel('Персонаж',{exact:true}).selectOption('qa_vera');
+ await pickCharacter(page,'qa_vera');
  await page.getByRole('button',{name:'Редактировать портрет',exact:true}).click();
  const png=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=c.height=256;return c.toDataURL().split(',')[1]});
  await page.getByLabel('Файл портрета').setInputFiles({name:'qa.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});

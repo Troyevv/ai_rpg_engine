@@ -842,3 +842,23 @@ def _ui_portrait_polish(state):
 
 
 CHECKPOINTS['ui-portrait-polish'] = _ui_portrait_polish
+
+
+def _ui_inspector(state):
+    """#86 presentation checkpoint: existing canonical fields, no new mechanics."""
+    from backend.runtime_v3.models import Relationship, Thread
+    state = _ui_dossier(_commitments(state))
+    world = state['world']
+    world['relationships']['qa_vera:'+ACTOR_ID] = Relationship(
+        source_id='qa_vera', target_id=ACTOR_ID,
+        context='Вера ценит заботу Кирилла, но не согласна с его решением.',
+        dimensions={'trust': -20, 'respect': 45}).model_dump()
+    for status, text in [('developing','Подготовка выставки карт'),('dormant','Возвращение на пристань'),
+                         ('resolved','Завершённая реставрация')]:
+        tid='qa_inspector_'+status
+        world['threads'][tid]=Thread(id=tid, description=text, state='Записанное состояние линии: '+text+'.',
+            status=status, character_ids=[ACTOR_ID,'qa_vera'], relevance=.5).model_dump()
+    return state
+
+
+CHECKPOINTS['ui-inspector'] = _ui_inspector

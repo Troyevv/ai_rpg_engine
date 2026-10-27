@@ -1,13 +1,10 @@
-import {SocialStateView} from './SocialStateView';
-import {worldTime} from './lib/worldTime';
 import {relationshipLabel} from './lib/relationships';
 import { useState, type ReactNode } from 'react';
-import type { State, Scene, Character, WorldFact, Knowledge, Save } from './types';
+import type { State, Knowledge, Save } from './types';
 import {RelationshipEditor} from './RelationshipEditor';
 import { Markdown } from './Markdown';
 export const brief = (text: string, n = 150) => { const clean = text.replace(/[#*_`>]/g, '').replace(/\s+/g, ' ').trim(); return clean.length > n ? clean.slice(0, n).replace(/\s+\S*$/, '') + '…' : clean; };
 const nameOf = (s: State, id: string) => s.characters.find(c => c.id === id)?.name || id;
-const names = (s: State, ids: string[]) => ids.map(id => nameOf(s, id)).join(', ') || 'Не указаны';
 
 export function Reveal({ title, text, children, info, preview = true }: {
     info?: ReactNode;
@@ -32,20 +29,6 @@ export function KnowledgeRows({state, rows}: {state:State;rows:Knowledge[]}) {
     const retired=rows.filter(k=>['outdated','refuted','superseded'].includes(k.status));
     return <><Items items={current.map(render)}/>{retired.length>0&&<details><summary>Прежние убеждения · {retired.length}</summary><Items items={retired.map(render)}/></details>}</>;
 }
-function facts(s: State): WorldFact[] { return s.world?.facts ? Object.values(s.world.facts) : (s.facts || []).map((f, i) => ({ id: String(i), text: f.text, secret: false, character_ids: f.known_by, evidence: [] })); }
-function FactRows({ state, values }: {
-    state: State;
-    values: WorldFact[];
-}) { const knowledge = Object.values(state.world?.knowledge || {}); return values.length ? <Items items={values.map(f => { const known = knowledge.filter(k => k.fact_id === f.id && k.status === 'known').map(k => k.actor_id); const suspected = knowledge.filter(k => k.fact_id === f.id && k.status === 'suspected').map(k => k.actor_id); return <Reveal key={f.id} info={f.secret ? `Знают: ${names(state, known)} · Подозревают: ${names(state, suspected)}` : undefined} title={brief(f.text, 100)} text={f.text} preview={false}><p className="small">Знают: {names(state, state.world?.knowledge ? known : f.character_ids)}</p><p className="small">Подозревают: {names(state, suspected)}</p>{!!f.evidence?.length && <Reveal title="Основания" text={f.evidence.join('\n\n')} preview={false}/>}</Reveal>; })}/> : <Empty>Пока нет записанных фактов.</Empty>; }
-export function SceneOverview({ state, meta }: {
-    state: State;
-    meta?: Scene;
-}) { return <div className="scene-overview"><dl className="inspect-kv"><dt>Время</dt><dd>{meta?.time || state.world_clock?.last_event_time || 'Не указано'}</dd><dt>Место</dt><dd>{meta?.location || 'Не указано'}</dd><dt>Рядом</dt><dd>{names(state, meta?.present_ids || [])}</dd></dl><Reveal title="Текущая ситуация" text={state.scene}/></div>; }
-export function WorldView({ state, meta, saveId }: {
-    saveId?:number;
-    state: State;
-    meta?: Scene;
-}) { return <div className="inspector-content"><SceneOverview state={state} meta={meta}/><CommitmentsView state={state}/><SocialStateView state={state} saveId={saveId}/><h3>Места</h3><Items items={state.locations.map((l, i) => <Reveal key={i} title={l.name} text={l.text}/>)}/><h3>Факты мира</h3><FactRows state={state} values={facts(state).filter(f => !f.secret)}/></div>; }
 export function RelationsView({ state, actor, save, refresh, excludeSource }: {
     state: State;
     actor?: string;
@@ -56,32 +39,3 @@ export function RelationsView({ state, actor, save, refresh, excludeSource }: {
     if (!structured.some(x => x.source_id === r.source_id && (x.target_id === r.target_id || nameOf(state, x.target_id) === r.target_name)))
         rows.push({ source: r.source_id, target: r.target_id || r.target_name || 'Неизвестно', text: r.text, dimensions: {}, change: r.change });
 } return <div className="inspector-content">{card&&save&&refresh&&<RelationshipEditor key={`${save.id}-${card.id}`} save={save} card={card} refresh={refresh}/>}<Items items={rows.filter(r => (!actor || r.source === actor || r.target === actor) && (!card || r.source!==card.id) && r.source!==excludeSource).map((r, i) => <Reveal key={i} info={Object.entries(r.dimensions).map(([k, v]) => `${relationshipLabel(k)}: ${typeof v === 'number' ? v : v.direction === 'up' ? '↑' : v.direction === 'down' ? '↓' : '→'}`).join(' · ')} title={`${nameOf(state, r.source)} → ${nameOf(state, r.target)}`} text={r.text}><div className="inspect-chips">{Object.entries(r.dimensions).map(([key, value]) => <span className="pill" key={key}>{relationshipLabel(key)}: {typeof value === 'number' ? value : <span className={value.direction === 'up' ? 'positive' : value.direction === 'down' ? 'negative' : ''}>{value.direction === 'up' ? '↑' : value.direction === 'down' ? '↓' : '→'} {value.reason}</span>}</span>)}</div>{r.change && <p className={r.change.direction === 'up' ? 'positive' : 'negative'}>{r.change.direction === 'up' ? '↑' : '↓'} {r.change.reason}</p>}</Reveal>)}/>{!rows.length && <Empty>Отношения пока не записаны.</Empty>}</div>; }
-
-export function SecretsView({ state }: {
-    state: State;
-}) { return <div className="inspector-content"><p className="eyebrow">Сведения ведущего · спойлеры</p><FactRows state={state} values={facts(state).filter(f => f.secret)}/><Reveal title="Исходные тайны и знания мира" text={state.sections.knowledge} preview={false}/></div>; }
-export function ThreadsView({ state }: {
-    state: State;
-}) { const rows = state.world?.threads ? Object.values(state.world.threads) : (state.plans || []).map((p, i) => ({ id: String(i), description: p.text, state: p.text, status: p.status === 'open' ? 'active' : p.status === 'done' ? 'resolved' : p.status, character_ids: [], relevance: 0 })); const list = (active: boolean) => <Items items={rows.filter(t => ['active', 'developing'].includes(t.status) === active).sort((a, b) => b.relevance - a.relevance).map(t => <Reveal key={t.id} title={brief(t.description, 100)} text={t.state}><p className="small">{{ active: 'Активная', developing: 'Развивается', dormant: 'На паузе', resolved: 'Завершена', cancelled: 'Отменена' }[t.status] || t.status} · {names(state, t.character_ids)}</p>{t.description !== t.state && <Markdown text={t.description}/>}</Reveal>)}/>; return <div className="inspector-content"><h3>Активные линии</h3>{list(true)}{!rows.some(t => ['active', 'developing'].includes(t.status)) && <Empty>Активных линий пока нет.</Empty>}<details className="inspect-more"><summary>На паузе и завершённые</summary>{list(false)}</details><Reveal title="Исходные сюжетные заметки" text={state.story_notes} preview={false}/></div>; }
-export function MemoryView({ state }: {
-    state: State;
-}) { const [scope, setScope] = useState('player'); const actor = state.controlled_actor_id === undefined ? state.protagonist_id || state.characters.find(c => c.is_player)?.id : state.controlled_actor_id; const knowledge = Object.values(state.world?.knowledge || {}).filter(k => k.actor_id === actor && k.status !== 'unknown'); const events = state.world?.events ? Object.values(state.world.events).filter(e => scope === 'player' ? e.player_observed : e.witnesses.includes(actor || '') || knowledge.some(k => k.status === 'known' && k.source_event_id === e.id)).sort((a, b) => (b.minute ?? -1) - (a.minute ?? -1) || b.source_sequence - a.source_sequence) : (state.events || []).filter(e=>scope==='player'||e.character_ids.includes(actor||'')).slice().reverse().map((e, i) => ({ id: String(i), text: e.text, participants: e.character_ids, minute: null, source_sequence: e.turn })); return <div className="inspector-content"><h3>Важные факты</h3><FactRows state={state} values={facts(state).filter(f => !f.secret)}/><h3>События</h3><label className="small">Показать<select aria-label="Видимость событий" value={scope} onChange={e => setScope(e.target.value)}><option value="player">Известно игроку</option><option value="actor" disabled={!actor}>Известно персонажу</option></select></label><Items items={events.map(e => <Reveal key={e.id} title={brief(e.text, 100)} text={e.text} preview={false}><p className="small">{worldTime(e.minute,state.world_clock?.calendar)} · Ход {e.source_sequence}</p><p className="small">{names(state, e.participants)}</p></Reveal>)}/>{!events.length && <Empty>Событий пока нет.</Empty>}<h3>Знания текущего персонажа</h3>{actor ? <KnowledgeRows state={state} rows={knowledge}/> : <Empty>Сейчас камера наблюдает мир без управляемого персонажа.</Empty>}<Reveal title="Архив старой LLM-памяти (не используется ведущим)" preview={false}><h4>Объективная память ведущего</h4><Markdown text={state.memory?.summary || 'Память ещё не сжималась.'}/>{Object.entries(state.memory?.per_actor || {}).map(([id, m]) => <Reveal key={id} title={nameOf(state, id)} text={m.summary} preview={false}/>)}</Reveal></div>; }
-
-
-function CommitmentsView({state}:{state:State}) {
- const events=Object.values(state.world?.scheduled_events||{});
- if(!events.length)return null;
- const labels:Record<string,string>={'PLAN':'План','OVERDUE PLAN':'Просроченный план','CURRENT STATE':'Действующий период','FACT':'Завершено','CANCELLED PLAN':'Отменено'};
- return <section aria-label="Договорённости и периоды"><h3>Договорённости и периоды</h3>
-  <p className="muted small">Сведения ведущего; не означают знания персонажей. Наступление срока не означает выполнение.</p>
-  <Items items={events.map(e=><Reveal key={e.id} title={e.description} info={e.outcome==='missed'?'Не выполнено':labels[e.context_category]||({pending:'План',resolved:'Завершено',cancelled:'Отменено'}[e.status])} preview={false}>
-   <p>{names(state,e.character_ids)}</p>
-   <p>{e.start_label ? (e.temporal_projection.precision==='exact'&&!e.interval_state ? e.start_label : `Окно: ${e.start_label} — ${e.end_label}`) : 'Срок не определён'}</p>
-   {e.condition&&<p>Условие: {e.condition}</p>}
-   {e.outcome==='blocked'&&<p>Есть препятствие; исход ещё не установлен.</p>}
-   {e.outcome==='dependency_cancelled'&&<p>Зависимый план потерял актуальность.</p>}
-   {!!e.depends_on?.length&&<p>Зависит от: {e.depends_on.map(id=>state.world?.scheduled_events?.[id]?.description||id).join(', ')}</p>}
-   {e.evidence&&<Reveal title="Основание последнего изменения" text={e.evidence}/>}
-  </Reveal>)}/>
- </section>;
-}

@@ -111,6 +111,7 @@ export function Phone({
   const reading = useRef<Record<string,{top:number;pinned:boolean}>>({});
 
   useEffect(()=>{const close=()=>setOpen(false);window.addEventListener("save-workspace-opened",close);return()=>window.removeEventListener("save-workspace-opened",close)},[]);
+  useEffect(()=>{const show=()=>{if(phone)setOpen(true)};window.addEventListener("phone-open",show);return()=>window.removeEventListener("phone-open",show)},[phone]);
   const [open, setOpen] = useState(false),
     [tab, setTab] = useState("contacts");
   const [conversation, setConversation] = useState<string | null>(null),

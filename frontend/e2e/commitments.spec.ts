@@ -9,10 +9,10 @@ test('canonical commitments and interval projection survive read-only browsing a
  await nav(page,'Мир');
  const section=page.getByRole('region',{name:'Договорённости и периоды'});
  await expect(section).toBeVisible();
- await section.getByText('Поездка в сад в пятницу вечером.',{exact:true}).click();
+ await section.getByRole('article').filter({hasText:'Поездка в сад в пятницу вечером.'}).getByText('Подробнее',{exact:true}).click();
  await expect(section).toContainText('Условие: После работы');
  await expect(section).toContainText('Окно:');
- await section.getByText('Возвращение из сада домой.',{exact:true}).click();
+ await section.getByRole('article').filter({hasText:'Возвращение из сада домой.'}).getByText('Подробнее',{exact:true}).click();
  await expect(section).toContainText('Зависит от: Поездка в сад в пятницу вечером.');
  const before=await(await request.get(`/api/saves/${selected.save}`)).json();
  const projection=await(await request.get(`/api/saves/${selected.save}/calendar?start_date=2026-10-01&end_date=2026-10-31`)).json();

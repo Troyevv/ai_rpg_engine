@@ -1,0 +1,53 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> ai-rpg-frontend@2.0.0 test:e2e
+> playwright test e2e/inspector86.spec.ts e2e/presentation.spec.ts e2e/knowledge.spec.ts e2e/runtime-handoff.spec.ts --max-failures=2
+
+
+Running 32 tests using 1 worker
+
+(node:112) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [desktop] › e2e/inspector86.spec.ts:15:3 › seven sections, skins, widths 1440 (9.2s)
+  ✓   2 [desktop] › e2e/inspector86.spec.ts:15:3 › seven sections, skins, widths 768 (9.1s)
+  ✓   3 [desktop] › e2e/inspector86.spec.ts:15:3 › seven sections, skins, widths 393 (13.5s)
+  ✓   4 [desktop] › e2e/inspector86.spec.ts:15:3 › seven sections, skins, widths 360 (13.0s)
+  ✓   5 [desktop] › e2e/inspector86.spec.ts:85:1 › selector keyboard, filters, section return, scene editor and metadata (2.3s)
+  ✓   6 [desktop] › e2e/inspector86.spec.ts:147:1 › real directed filters, thread statuses, memory search and scene save retry (2.0s)
+[WebServer] Semantic retrieval unavailable (OSError); structural fallback
+  ✓   7 [desktop] › e2e/inspector86.spec.ts:248:1 › phone projection stays remote and returns to the existing device (9.0s)
+  ✓   8 [desktop] › e2e/inspector86.spec.ts:289:1 › browser Back closes settings, source dossier, then workspace without losing draft (1.3s)
+(node:376) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   9 [desktop] › e2e/knowledge.spec.ts:4:1 › grounded correction shows current and old beliefs after reload without gossip (3.2s)
+  ✓  10 [desktop] › e2e/presentation.spec.ts:25:1 › world themes persist across reload and devices; portals inherit theme; all palettes remain playable (13.9s)
+  ✓  11 [desktop] › e2e/presentation.spec.ts:71:1 › legacy world defaults, auto selection, keyboard tabs and reduced motion retain POV and camera (3.6s)
+  ✓  12 [desktop] › e2e/presentation.spec.ts:105:2 › long content smoke 1920 (3.4s)
+  ✓  13 [desktop] › e2e/presentation.spec.ts:105:2 › long content smoke 1366 (3.3s)
+  ✓  14 [desktop] › e2e/presentation.spec.ts:105:2 › long content smoke 360 (4.5s)
+  ✓  15 [desktop] › e2e/presentation.spec.ts:105:2 › long content smoke 430 (4.3s)
+  ✓  16 [desktop] › e2e/runtime-handoff.spec.ts:6:1 › original export identities and rejected opening recover through real API then turn reload turn (7.3s)
+(node:602) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  17 [mobile] › e2e/inspector86.spec.ts:15:3 › seven sections, skins, widths 1440
+  -  18 [mobile] › e2e/inspector86.spec.ts:15:3 › seven sections, skins, widths 768
+  -  19 [mobile] › e2e/inspector86.spec.ts:15:3 › seven sections, skins, widths 393
+  -  20 [mobile] › e2e/inspector86.spec.ts:15:3 › seven sections, skins, widths 360
+  ✓  21 [mobile] › e2e/inspector86.spec.ts:85:1 › selector keyboard, filters, section return, scene editor and metadata (4.4s)
+  ✓  22 [mobile] › e2e/inspector86.spec.ts:147:1 › real directed filters, thread statuses, memory search and scene save retry (5.9s)
+  ✓  23 [mobile] › e2e/inspector86.spec.ts:248:1 › phone projection stays remote and returns to the existing device (2.8s)
+  ✓  24 [mobile] › e2e/inspector86.spec.ts:289:1 › browser Back closes settings, source dossier, then workspace without losing draft (1.4s)
+(node:808) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] Semantic retrieval unavailable (OSError); structural fallback
+  ✓  25 [mobile] › e2e/knowledge.spec.ts:4:1 › grounded correction shows current and old beliefs after reload without gossip (4.2s)
+  ✓  26 [mobile] › e2e/presentation.spec.ts:25:1 › world themes persist across reload and devices; portals inherit theme; all palettes remain playable (14.5s)
+  ✓  27 [mobile] › e2e/presentation.spec.ts:71:1 › legacy world defaults, auto selection, keyboard tabs and reduced motion retain POV and camera (3.8s)
+  ✓  28 [mobile] › e2e/presentation.spec.ts:105:2 › long content smoke 1920 (6.1s)
+  ✓  29 [mobile] › e2e/presentation.spec.ts:105:2 › long content smoke 1366 (4.6s)
+  ✓  30 [mobile] › e2e/presentation.spec.ts:105:2 › long content smoke 360 (4.7s)
+  ✓  31 [mobile] › e2e/presentation.spec.ts:105:2 › long content smoke 430 (4.8s)
+  ✓  32 [mobile] › e2e/runtime-handoff.spec.ts:6:1 › original export identities and rejected opening recover through real API then turn reload turn (9.2s)
+
+  4 skipped
+  28 passed (2.9m)

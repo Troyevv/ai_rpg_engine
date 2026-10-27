@@ -1,11 +1,11 @@
 import {test,expect} from '@playwright/test';
-import {nav} from './navigation';
+import {nav,pickCharacter} from './navigation';
 const out='../docs/manual_qa/narrative_v4/issue83-evidence';
 test('portrait original and edit surfaces retain circular crop in both skins',async({page,request},info)=>{
  const s=await(await request.post('/test/appearance-seed')).json();await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),s);
  if(info.project.name==='mobile')await page.setViewportSize({width:360,height:800});
  for(const skin of ['graphite','parchment']){
- await request.put(`/api/worlds/${s.world}/presentation`,{data:{theme_id:skin}});await page.goto('/');await nav(page,'Мир');await page.locator('.panel-tabs').getByRole('button',{name:'Персонажи',exact:true}).click();await page.getByLabel('Персонаж',{exact:true}).selectOption('qa_vera');
+ await request.put(`/api/worlds/${s.world}/presentation`,{data:{theme_id:skin}});await page.goto('/');await nav(page,'Мир');await nav(page,'Персонажи');await pickCharacter(page,'qa_vera');
  await page.getByRole('button',{name:'Редактировать портрет',exact:true}).click();await expect(page.getByLabel('Файл портрета')).toBeVisible();
  if(skin==='graphite'){
  const png=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=256;c.height=384;const ctx=c.getContext('2d')!;ctx.fillStyle='#75848f';ctx.fillRect(0,0,256,384);ctx.fillStyle='#d2c3a5';ctx.fillRect(80,80,96,150);return c.toDataURL().split(',')[1]});

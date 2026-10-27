@@ -1,11 +1,11 @@
 import {test,expect} from '@playwright/test';
-import {nav} from './navigation';
+import {nav,pickCharacter} from './navigation';
 
 test('portrait upload crop history original and deletion remain usable',async({page,request})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
  const response=await request.post('/test/appearance-seed');expect(response.ok()).toBeTruthy();
  const selected=await response.json();await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selected);
- await page.goto('/');await nav(page,'Мир');await page.locator('.panel-tabs').getByRole('button',{name:'Персонажи',exact:true}).click();await page.getByLabel('Персонаж',{exact:true}).selectOption('qa_vera');
+ await page.goto('/');await nav(page,'Мир');await nav(page,'Персонажи');await pickCharacter(page,'qa_vera');
  const pencil=page.getByRole('button',{name:'Редактировать портрет'});await expect(pencil).toBeVisible();
  const fallback=page.locator('.character-profile .portrait-control .character-avatar');
  await expect(fallback.locator('svg')).toBeVisible();
@@ -27,7 +27,7 @@ test('portrait upload crop history original and deletion remain usable',async({p
  await page.getByLabel('Масштаб просмотра').fill('3');
  const pane=page.getByLabel('Оригинал портрета',{exact:true});const box=(await pane.boundingBox())!;await page.mouse.move(box.x+box.width*.7,box.y+box.height*.7);await page.mouse.down();await page.mouse.move(box.x+box.width*.3,box.y+box.height*.3);await page.mouse.up();expect(await pane.evaluate(e=>e.scrollTop)).toBeGreaterThan(0);
  await page.getByRole('dialog').last().getByRole('button',{name:'Закрыть',exact:true}).click();
- await page.reload();await nav(page,'Мир');await page.locator('.panel-tabs').getByRole('button',{name:'Персонажи',exact:true}).click();await page.getByLabel('Персонаж',{exact:true}).selectOption('qa_vera');await expect(fallback.locator('img')).toBeVisible();
+ await page.reload();await nav(page,'Мир');await nav(page,'Персонажи');await pickCharacter(page,'qa_vera');await expect(fallback.locator('img')).toBeVisible();
  await pencil.click();await expect(page.getByLabel('Масштаб кадрирования')).toHaveValue('2');await expect(page.getByLabel('По вертикали')).toHaveValue('0.25');
  await expect(page.getByLabel('Возраст от',{exact:true})).toHaveValue('30');await expect(page.getByLabel('Возраст до',{exact:true})).toHaveValue('50');
  await page.getByRole('button',{name:'История портретов',exact:true}).click();await expect(page.getByLabel('История портретов',{exact:true}).getByText('Портрет · текущий')).toBeVisible();

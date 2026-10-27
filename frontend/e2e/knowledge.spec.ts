@@ -1,5 +1,5 @@
 import {test,expect} from '@playwright/test';
-import {nav} from './navigation';
+import {nav,pickCharacter} from './navigation';
 
 test('grounded correction shows current and old beliefs after reload without gossip',async({page,request})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
@@ -9,8 +9,8 @@ test('grounded correction shows current and old beliefs after reload without gos
  await page.goto('/');
  for(let n=0;n<2;n++){
   await nav(page,'Мир');
-  await page.locator('.panel-tabs').getByRole('button',{name:'Персонажи',exact:true}).click();
-  await page.getByLabel('Персонаж',{exact:true}).selectOption('qa_kirill');
+  await nav(page,'Персонажи');
+  await pickCharacter(page,'qa_kirill');
   const panel=page.locator('.character-profile');
   await panel.getByRole('tab',{name:'История',exact:true}).click();
   await panel.locator('summary').filter({hasText:/^Знания и подозрения/}).click();

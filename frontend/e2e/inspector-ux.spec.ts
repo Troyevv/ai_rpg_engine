@@ -25,9 +25,9 @@ for(const width of [360,390,412,430,1440])test(`inspector layout ${width}px`,asy
  await expect(library).not.toContainText('Invalid Date');
  expect(await library.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
  await page.screenshot({path:`test-results/library-${width}.png`});
- await page.keyboard.press('Escape');await nav(page,'Мир');const dialog=page.locator('.inspector-dialog');
+ await page.keyboard.press('Escape');await nav(page,'Мир');const dialog=page.locator('.inspector-workspace');
  for(const tab of ['Мир','Сцена','Персонажи','Отношения','Тайны','Сюжет','Память']){
-  await dialog.locator('.panel-tabs').getByRole('button',{name:tab,exact:true}).click();
+  await nav(page,tab);
   expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
   // No-overflow alone missed the previous bug: headings were squeezed beside previews.

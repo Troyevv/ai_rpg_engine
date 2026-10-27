@@ -47,11 +47,13 @@ test("scenario → summary → world → save → start → action → regenerat
   await page.getByRole("button", { name: "Начать игру", exact: true }).click();
   await expect(page.locator(".choices button")).toHaveCount(6);
   await expect(page.locator(".turn")).toHaveCount(1);
-  await page.locator(".story .npc-link").first().click();
-  await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(
-    page.getByText("Карточка ведущего", { exact: false }),
-  ).toBeVisible();
+  const characterLink = page.locator(".story .npc-link").first();
+  const characterName = (await characterLink.innerText()).trim();
+  await characterLink.click();
+  await expect(page.locator(".inspector-workspace")).toBeVisible();
+  await expect(page.locator(".character-profile")).toBeVisible();
+  await expect(page.locator(".character-header")).toContainText(characterName);
+  await expect(page.getByRole("tab", { name: "Обзор", exact: true })).toHaveAttribute("aria-selected", "true");
   await page.getByRole("button", { name: "Закрыть", exact: true }).click();
   await page
     .getByLabel("Своё действие или реплика")
