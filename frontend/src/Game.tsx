@@ -9,7 +9,10 @@ import {Phone} from './Phone';
 import {TimeSkip} from './TimeSkip';
 import {RuntimeNotifications} from './RuntimeNotifications';
 import {useMotionPreset} from "./motion";
-import {Timing} from './Timing';
+import {NarrativeTurn} from "./NarrativeTurn";
+import {useStableEvent} from "./hooks";
+import {useStoryScroll} from "./useStoryScroll";
+import {presentationEntries} from "./presentationEntries";
 import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import {
@@ -33,7 +36,7 @@ import {
 } from "./types";
 import { Markdown } from "./Markdown";
 import { Diagnostics } from "./Diagnostics";
-import { JobView } from "./JobView";
+
 import { Button } from "./components/ui/button";
 import { Textarea } from "./components/ui/textarea";
 import {NarrativePolicy} from './NarrativePolicy';
@@ -63,7 +66,7 @@ export function Game({
   const decoration=themes.find(t=>t.id===presentation.theme_id)?.decoration||'none';
   const mobile=useMobile();
   const [notices,setNotices]=useState(()=>localStorage.getItem('relationship-notices')!=='off');
-  const [away,setAway]=useState(false);
+
   const input=useRef<HTMLTextAreaElement>(null);
   const mainActor=save?.state.protagonist_id||save?.state.characters.find(c=>c.is_player)?.id;
   const actorId=save?.state.controlled_actor_id===undefined?mainActor:save.state.controlled_actor_id;
@@ -85,39 +88,30 @@ export function Game({
   const busy=requestBusy||phoneBusy||!!(controlCommit&&save?.id===controlCommit.saveId&&save.revision<controlCommit.revision);
   const refreshControl=(after:Save)=>{setControlCommit({saveId:after.id,revision:after.revision});refresh()};
   const [submitted, setSubmitted] = useState<Job | null>(null);
-  const scroll = useRef<HTMLDivElement>(null);
-  const pinned = useRef(true);
+  const {scroll,away,jumpToLatest,onScroll}=useStoryScroll(save?.id);
   const reduced = useReducedMotion();
-  const turnMotion=useMotionPreset('fadeUp');
   const choicesMotion=useMotionPreset('staggerContainer');
   const choiceMotion=useMotionPreset('staggerItem');
-  const povMotion=useMotionPreset('povTransition');
   // The loaded journal is already visible. Animate only records added in this session.
-  const initialTurns=useRef(new Set(save?.turns.map(t=>t.id)||[]));
   const initialChoice=useRef(save?.turns.at(-1)?.active_variant_id);
   const [selectedChoice,setSelectedChoice]=useState<number|null>(null);
   useEffect(()=>{if(!busy)setSelectedChoice(null)},[save?.turns.at(-1)?.active_variant_id,busy]);
   useEffect(() => {
     setDraft(sessionStorage.getItem(draftKey) || "");
     setSubmitted(null);
-    pinned.current = true;
   }, [save?.id,actorId]);
   const { job, reconnecting } = useJob(submitted ?? save?.job, refresh);
   const awaitingCommit=job?.status==='saved'&&job.revision===save?.revision&&!save?.turns.some(t=>t.variants?.some(v=>v.job_id===job.id));
   const unapplied = !!job && ['error','stopped'].includes(job.status) && !!job.narrative_complete && job.revision === save?.revision;
-  const running = active(job)||!!awaitingCommit;
-  const pending = running||unapplied;
+  const running = active(job)||!!job?.live&&job.status!=="saved"||!!awaitingCommit;
+  const [presented,setPresented]=useState<string|null>(null);
+  const onPresented=useStableEvent((id:string)=>{if(id===job?.id)setPresented(id)});
+  const revealingCommit=job?.status==='saved'&&save?.turns.some(t=>t.variants?.find(v=>v.id===t.active_variant_id)?.job_id===job.id)&&presented!==job.id;
+  const pending = running||unapplied||!!revealingCommit;
   const canAct = !!save && !!actorId && !save.state.protagonist_required && save.state.actor_capabilities?.can_act!==false;
   const canSubmit = canAct && !busy && !pending && !!save?.turns.length;
   useEffect(()=>{if(save?.state.protagonist_required)setProtagonistOpen(true)},[save?.id,save?.state.protagonist_required]);
 
-  useEffect(() => {
-    const id = requestAnimationFrame(() => {
-      if (scroll.current && pinned.current)
-        scroll.current.scrollTop = scroll.current.scrollHeight;
-    });
-    return () => cancelAnimationFrame(id);
-  }, [job?.narrative, save?.turns.length]);
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
     try {
@@ -143,7 +137,6 @@ export function Game({
         api_key: apiKey,
       });
       setSubmitted(j);
-      pinned.current = true;
       if (kind === "turn" && text === draftRef.current) {
         setDraft("");
         sessionStorage.removeItem(draftKey);
@@ -152,16 +145,24 @@ export function Game({
   const switchActor=(actor:string,source?:number)=>void run(async()=>{
     if(!save)return;
     const after=await api<Save>(`/saves/${save.id}/protagonist`,{actor_id:actor,operation:'temporary',operation_id:crypto.randomUUID(),revision:save.revision});
-    refreshControl(after);pinned.current=true;setAway(false);
+    refreshControl(after);jumpToLatest();
   });
   const observe=(actor?:string,scene?:string)=>void run(async()=>{
     if(!save)return;
     if(actor){const after=await api<Save>(`/saves/${save.id}/protagonist`,{actor_id:actor,operation:'observe',operation_id:crypto.randomUUID(),revision:save.revision});refreshControl(after);return;}
     const j=await api<Job>(`/saves/${save.id}/camera`,{actor_id:actor,scene_id:scene,revision:save.revision,config:prefs.game,api_key:apiKey});
-    setSubmitted(j);pinned.current=true;setAway(false);
+    setSubmitted(j);jumpToLatest();
   });
   useEffect(()=>{if(!mobile||!input.current)return;const el=input.current;el.style.height='auto';el.style.height=Math.min(el.scrollHeight,132)+'px'},[draft,mobile]);
-  useEffect(()=>{if(!scroll.current)return;const observer=new ResizeObserver(()=>{if(pinned.current&&scroll.current)scroll.current.scrollTop=scroll.current.scrollHeight});const story=scroll.current.firstElementChild;if(story)observer.observe(story);return()=>observer.disconnect()},[world?.id,save?.id]);
+
+  const stableRun=useStableEvent(run);
+  const stableTurn=useStableEvent(turn);
+  const stopJob=useStableEvent(()=>void run(async()=>{
+    if(!job)return;
+    const stopped=await api<Job>(`/jobs/${job.id}/stop`,{});
+    setSubmitted(stopped);refresh();
+  }));
+  const entries=presentationEntries(save,job);
   const meta = save?.scene_meta ?? world?.scene_meta;
   const state = save?.state ?? world?.state;
   if (!world)
@@ -192,7 +193,7 @@ export function Game({
       {save&&<CurrentGame refresh={refreshControl} save={save} disabled={busy||pending} notices={notices} onNotices={v=>{setNotices(v);localStorage.setItem('relationship-notices',v?'on':'off')}} policy={()=>setPolicyOpen(true)} protagonist={()=>setProtagonistOpen(true)} camera={()=>setCameraOpen(true)} openCharacter={openCharacter} timeSkip={()=>setTimeSkipOpen(true)} longTerm={()=>setLongTermOpen(true)}/>}
       {save&&<> <LongTermAdvance open={longTermOpen} onOpenChange={setLongTermOpen} save={save} disabled={busy||pending||!save.turns.length||!!save.state.protagonist_required} submit={request=>void run(async()=>{
                       const j=await api<Job>(`/saves/${save.id}/long-term`,{request,config:prefs.game,revision:save.revision,api_key:apiKey});
-                      setSubmitted(j);pinned.current=true;
+                      setSubmitted(j);jumpToLatest();
                     })}/>
                     <TimeSkip open={timeSkipOpen} onOpenChange={setTimeSkipOpen} save={save} disabled={busy||pending||!save.turns.length||!!save.state.protagonist_required} submit={(duration,reason)=>void turn('turn',actorId===null||save.state.actor_capabilities?.can_act===false?'':`Жду ${duration} минут.${reason?' '+reason:''}`,undefined,false,{duration,reason})}/>
 </>}
@@ -239,16 +240,7 @@ export function Game({
       <div
         className="story-scroll"
         ref={scroll}
-        onScroll={() => {
-          if (scroll.current){
-            pinned.current =
-              scroll.current.scrollHeight -
-                scroll.current.scrollTop -
-                scroll.current.clientHeight <
-              80;
-            setAway(!pinned.current);
-          }
-        }}
+        onScroll={onScroll}
       >
         <div
           className="story"
@@ -286,56 +278,7 @@ export function Game({
             </div>
           ) : (
             <>
-              {save.turns.map((t, i) => (
-                <motion.article
-                  key={t.id}
-                  className={`turn ${t.kind==="background"?"background-turn":""}`}
-                  initial={initialTurns.current.has(t.id) ? false : "hidden"}
-                  animate="visible"
-                  variants={turnMotion}
-                >
-                  {t.kind==='communication'&&!!t.changes?.communication?.rejected?.length&&<div role="alert"><strong>Старая ошибочная обработка связи</strong><p>Этот результат был сохранён прежней версией. «Ещё вариант» повторит обработку от исходного события без повторной отправки. При наличии следующих ходов потребуется их откат в архив. Исходный вариант останется доступен.</p></div>}
-                  {t.kind==='pov'&&<motion.div className="pov-divider" variants={povMotion}><span>Другая точка зрения</span><strong>{save.state.characters.find(c=>c.id===t.pov_actor_id)?.name}</strong></motion.div>}
-                  {t.kind==='background'&&<div className="narrative-divider">Тем временем</div>}
-                  {t.user_text && (
-                    <div className="player-action" data-testid="player-action">
-                      <span className="eyebrow">Твоё действие</span>
-                      <Markdown text={t.user_text} />
-                    </div>
-                  )}
-                  <p className="turn-number">
-                    {t.kind==="background"?`Тем временем… · За кулисами · ход ${t.sequence}`:i === 0 ? "Первая сцена" : `Ход ${t.sequence}`}
-                    {t.kind!=="background"&&<span> · POV: {save.state.characters.find(c=>c.id===(t.pov_actor_id||mainActor))?.name}</span>}
-                  </p>
-                  <Markdown
-                    text={t.assistant_text}
-                    saveId={save.id}
-                    worldId={world.id}
-                    links={prefs.link_names}
-                    onCharacter={openCharacter}
-                  />
-                  {t.timing?.total!=null&&<details className="turn-timing"><summary>Время хода: {t.timing.total.toFixed(1)} с</summary><Timing timing={t.timing}/></details>}
-                  {mobile?<div className="mobile-variants">
-                    <Button size="icon" variant="ghost" aria-label="Ещё вариант" disabled={busy||running||!t.variants?.some(v=>v.can_regenerate)} onClick={()=>{const later=i<save.turns.length-1;if(later&&!window.confirm('Откатить следующие ходы в архив?'))return;void turn('regenerate','',t.id,later)}}>↻</Button>
-                    {[-1,1].map((step)=>{const list=t.variants||[];const index=list.findIndex(v=>v.id===t.active_variant_id);const v=list[index+step];return <span className="variant-step" key={step}>{step===1&&<span>{index+1} / {list.length||1}</span>}<Button size="icon" variant="ghost" aria-label={step<0?'Предыдущий вариант':'Следующий вариант'} disabled={busy||running||!v} onClick={()=>{const later=i<save.turns.length-1;if(later&&!window.confirm('Откатить следующие ходы в архив?'))return;void run(async()=>{await api(`/saves/${save.id}/turns/${t.id}/variant`,{variant_id:v.id,revision:save.revision,rollback_following:later});setSubmitted(null);refresh()})}}>{step<0?'‹':'›'}</Button></span>})}
-                    <Button size="icon" variant="ghost" aria-label="Контекст / usage" onClick={()=>{setDiagnosticJob(t.variants?.find(v=>v.id===t.active_variant_id)?.job_id||undefined);setDiagnostics(true)}}>⋯</Button>
-                  </div>:<div className="variant-controls">
-                    <span className="muted small">Вариант {(t.variants||[]).find(v=>v.id===t.active_variant_id)?.ordinal||1} / {t.variants?.length||1}</span>
-                    {(t.variants||[]).map(v=><Button key={v.id} size="sm" variant={v.id===t.active_variant_id?"outline":"ghost"} disabled={busy||running||v.id===t.active_variant_id} onClick={()=>{
-                      const later = i<save.turns.length-1;
-                      if(later&&!window.confirm("Смена варианта откатит все последующие ходы. Они сохранятся в архиве. Продолжить?"))return;
-                      void run(async()=>{await api(`/saves/${save.id}/turns/${t.id}/variant`,{variant_id:v.id,revision:save.revision,rollback_following:later});setSubmitted(null);refresh()});
-                    }}>{v.ordinal}</Button>)}
-                    <Button size="sm" variant="ghost" title={t.variants?.some(v=>v.can_regenerate) ? "" : "У старого хода нет сохранённого контекста"} disabled={busy||running||!t.variants?.some(v=>v.can_regenerate)} onClick={()=>{
-                      const later=i<save.turns.length-1;
-                      if(later&&!window.confirm("После успешной генерации последующие ходы будут откачены в архив. Продолжить?"))return;
-                      void turn("regenerate","",t.id,later);
-                    }}>Ещё вариант</Button>
-                    <Button size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(t.variants?.find(v=>v.id===t.active_variant_id)?.job_id||undefined);setDiagnostics(true)}}>Контекст / usage</Button>
-                    {!!t.memory_archived&&<span className="muted small">В архиве памяти · полный текст сохранён</span>}
-                  </div>}
-                </motion.article>
-              ))}
+              {entries.map((entry,i)=><NarrativeTurn key={entry.identity} identity={entry.identity} t={entry.turn} i={i} save={save} world={world} prefs={prefs} mobile={mobile} busy={busy} running={pending} mainActor={mainActor} turn={stableTurn} run={stableRun} setSubmitted={setSubmitted} refresh={refresh} setDiagnosticJob={setDiagnosticJob} setDiagnostics={setDiagnostics} openCharacter={openCharacter} job={entry.job} reconnecting={entry.job?reconnecting:false} stop={stopJob} committed={entry.committed} onPresented={onPresented}/>)}
               {!save.turns.length && !job && (
                 <div className="empty-state">
                   <p>
@@ -344,21 +287,6 @@ export function Game({
                   </p>
                 </div>
               )}
-              <JobView
-                job={awaitingCommit&&job?{...job,status:"validating"}:job}
-                reconnecting={reconnecting}
-                worldId={world.id}
-                saveId={save.id}
-                onCharacter={openCharacter}
-                links={prefs.link_names}
-                stop={() =>
-                  run(async () => {
-                    await api(`/jobs/${job!.id}/stop`, {});
-                    setSubmitted(null);
-                    refresh();
-                  })
-                }
-              />
               {unapplied && <p role="status">{job?.kind==='communication'?'Действие связи сохранено. Повтори обработку, чтобы завершить цикл.':'Текст сцены сохранён, состояние ещё не применено. Повтори обработку состояния.'}</p>}
               {job &&
                 ["error", "stopped"].includes(job.status) &&
@@ -393,7 +321,7 @@ export function Game({
                     <label>Продолжить за персонажа…<select aria-label="Участник фоновой сцены" value="" disabled={busy} onChange={e=>switchActor(e.target.value,save.turns.at(-1)!.id)}><option value="">Выбрать участника</option>{save.state.characters.filter(c=>JSON.parse(save.turns.at(-1)?.audience_json||'[]').includes(c.id)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
                   </div>}
                   {save.state.actor_capabilities?.can_act===false&&<div><p role="status">Персонаж сейчас не может действовать. Можно продолжить течение времени или наблюдать за миром.</p>{actorId&&<Button disabled={busy||pending} onClick={()=>observe(actorId)}>Продолжить наблюдать за героем</Button>}</div>}
-                  <motion.div className="choices" key={save.turns.at(-1)?.active_variant_id} variants={choicesMotion} initial={initialChoice.current===save.turns.at(-1)?.active_variant_id?false:"hidden"} animate="visible">
+                  <motion.div className="choices" key={save.turns.at(-1)?.active_variant_id} variants={choicesMotion} initial={reduced||initialChoice.current===save.turns.at(-1)?.active_variant_id?false:"hidden"} animate="visible">
                     {(save.state.actor_capabilities?.can_act!==false&&save.turns.at(-1)?.kind!=="background"&&(save.turns.at(-1)?.pov_actor_id||mainActor)===actorId?save.turns.at(-1)?.choices:[])?.filter(c=>!save.state.phone||(c.interaction_channel||"physical")===save.state.phone.focus).map((c, i) => (
                       <motion.button
                         variants={choiceMotion}
@@ -493,13 +421,7 @@ export function Game({
           <div className="composer-footer">
             <span>Твоё действие всегда важнее предложенных вариантов.</span>
             {away&&<button
-              onClick={() => {
-                pinned.current = true;setAway(false);
-                scroll.current?.scrollTo({
-                  top: scroll.current.scrollHeight,
-                  behavior: reduced ? "auto" : "smooth",
-                });
-              }}
+              onClick={jumpToLatest}
             >
               <ArrowDown size={13} />К последней сцене
             </button>}

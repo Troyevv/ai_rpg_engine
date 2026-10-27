@@ -1,0 +1,62 @@
+name: Streaming continuity evidence
+on:
+  pull_request:
+    paths:
+      - 'frontend/src/NarrativeText.tsx'
+      - 'frontend/src/NarrativeTurn.tsx'
+      - 'frontend/src/useStoryScroll.ts'
+      - 'frontend/e2e/streaming72.spec.ts'
+      - '.github/workflows/streaming72.yml'
+permissions:
+  contents: read
+concurrency:
+  group: streaming-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: after
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: before
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r after/requirements.txt -r after/requirements-dev.txt
+      - run: npm ci && npx playwright install --with-deps chromium
+        working-directory: after/frontend
+      - name: Baseline — identical transport and capture script on the PR base
+        run: |
+          cp after/frontend/e2e/streaming72.spec.ts before/frontend/e2e/
+          cd before/frontend
+          npm ci
+          npm run build
+          npx playwright test streaming72 --reporter=line
+        env:
+          STREAM_BASELINE: '1'
+          STREAM_EVIDENCE: ${{ github.workspace }}/evidence
+          CI: 'true'
+      - name: After — invariants, desktop/mobile and persisted smoke
+        if: '!cancelled()'
+        run: npm run build && npx playwright test streaming72 --reporter=line
+        working-directory: after/frontend
+        env:
+          STREAM_EVIDENCE: ${{ github.workspace }}/evidence
+          CI: 'true'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: streaming72-before-after
+          path: |
+            evidence
+            before/frontend/test-results
+            after/frontend/test-results
+          retention-days: 14

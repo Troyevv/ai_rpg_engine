@@ -237,7 +237,7 @@ export default function App() {
             )}
           </div>}
         </header>
-        {view === "prepare" ? (
+        {view === "prepare" && (
           <WorldWorkshop
               onGame={choose}
             prefs={prefs}
@@ -247,15 +247,16 @@ export default function App() {
               setLibrary(true);
             }}
           />
-        ) : loading || prefsLoading ? (
-          <div className="skeleton-page">
+        )}
+        {loading || prefsLoading ? (
+          view !== "prepare" && <div className="skeleton-page">
             <div />
             <div />
             <div />
             <p className="muted">Открываем историю…</p>
           </div>
-        ) : (
-          <div className="game-preserved" inert={!!workspace||inspector} aria-hidden={!!workspace||inspector}><Game
+        ) : (view !== "prepare" || !!save) && (
+          <div className="game-preserved" style={view==="prepare"?{display:"none"}:undefined} inert={view==="prepare"||!!workspace||inspector} aria-hidden={view==="prepare"||!!workspace||inspector}><Game
             key={`${selection.world}-${selection.save}`}
             world={world}
             save={save}

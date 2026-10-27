@@ -7,6 +7,7 @@ const labels: Record<string, string> = {
   extracting: "Обновляет состояние мира",
   validating: "Завершает ход",
   saved: "Готово",
+  committing: "Загружает сохранённый ход…",
   error: "Не удалось завершить",
   stopped: "Генерация остановлена",
 };
@@ -18,8 +19,10 @@ export function JobView({
   saveId,
   onCharacter,
   links = true,
+  statusOnly = false,
 }: {
   job: Job | null;
+  statusOnly?: boolean;
   reconnecting?: boolean;
   stop: () => void;
   worldId?: number;
@@ -44,8 +47,8 @@ export function JobView({
           <span className="muted">Свернуть / раскрыть</span>
         </summary>
         {active(job)&&<ol className="generation-stages" aria-label="Продолжение истории">{(job.kind==='communication'?[['generating','Решение собеседника'],['validating','Сохраняет результат']]:[['generating','Создаёт сцену'],['extracting','Обновляет мир'],['validating','Завершает ход']]).map(([stage,label])=><li key={stage} aria-current={job.status===stage?'step':undefined}><span aria-hidden="true">{job.status===stage?'●':'○'}</span> {label}</li>)}</ol>}
-        {job.user_text && <div className="player-action"><span className="eyebrow">Твоё действие</span><Markdown text={job.user_text}/></div>}
-        {job.narrative && (
+        {!statusOnly && job.user_text && <div className="player-action"><span className="eyebrow">Твоё действие</span><Markdown text={job.user_text}/></div>}
+        {!statusOnly && job.narrative && (
           <Markdown
             text={job.narrative}
             worldId={worldId}

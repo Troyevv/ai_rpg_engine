@@ -24,6 +24,8 @@ jobs:
       - run: python -m pytest -q
       - run: npm ci
         working-directory: frontend
+      - run: npm test
+        working-directory: frontend
       - run: npm run build
         working-directory: frontend
   browser:
