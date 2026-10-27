@@ -443,3 +443,12 @@
 .protagonist-field{margin:.6rem 0;padding:.4rem;min-width:0}
 .protagonist-paths,.protagonist-actions{display:flex;gap:.6rem;flex-wrap:wrap}
 .protagonist-actions{position:sticky;bottom:0;background:var(--background);padding:.8rem 0}
+
+/* #72: the same article owns the preview and committed narrative. */
+.pending-turn { margin:0 0 40px; }
+.story-scroll { overflow-anchor:none; scroll-behavior:auto; }
+@media(max-width:767px) { .pending-turn { margin-bottom:18px; } }
+@media(prefers-reduced-motion:reduce) {
+  .story .spin { animation:none; }
+  .story .choices, .story .choices button { transition:none; animation:none; }
+}

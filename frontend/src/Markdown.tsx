@@ -1,20 +1,23 @@
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { api } from "./api";
-export function Markdown({
+export const Markdown = memo(function Markdown({
   text,
   saveId,
   worldId,
   onCharacter,
   links = true,
+  streaming = false,
 }: {
   text: string;
+  streaming?: boolean;
   saveId?: number;
   worldId?: number;
   onCharacter?: (id: string) => void;
   links?: boolean;
 }) {
-  const [html, setHtml] = useState("");
+  const [html, setHtml] = useState<{text:string;html:string}|null>(null);
   useEffect(() => {
+    if (streaming) return;
     const controller = new AbortController();
     const timer = setTimeout(() => {
       api<{ html: string }>(
@@ -23,14 +26,14 @@ export function Markdown({
         "POST",
         controller.signal,
       )
-        .then((value) => setHtml(value.html))
+        .then((value) => setHtml({text,html:value.html}))
         .catch(() => {});
     }, 80);
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [text, saveId, worldId, links]);
+  }, [text, saveId, worldId, links, streaming]);
   return (
     <div
       className="prose"
@@ -42,11 +45,11 @@ export function Markdown({
           onCharacter?.(button.dataset.characterId);
       }}
     >
-      {html ? (
-        <div dangerouslySetInnerHTML={{ __html: html }} />
+      {!streaming && html?.text===text ? (
+        <div dangerouslySetInnerHTML={{ __html: html.html }} />
       ) : (
-        <div className="plain-markdown">{text}</div>
+        <div>{text.split(/\n\n+/).map((paragraph,i)=><p className="plain-markdown" key={i}>{paragraph}</p>)}</div>
       )}
     </div>
   );
-}
+});
