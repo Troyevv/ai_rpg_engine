@@ -40,10 +40,10 @@ it('bursty snapshots reveal intermediate exact prefixes without HTTP; drain surv
  expect(host.querySelector('.narrative-text')).toBe(node);expect(host.querySelectorAll('.narrative-text')).toHaveLength(1);
  expect(node.textContent!.length).toBeGreaterThanOrEqual(partial.length);
  await advance(5000);
- expect(node.getAttribute('data-revealing')).toBe('false');expect(done).toHaveBeenCalledWith(initialJob.id);
+ expect(node.getAttribute('data-revealing')).toBe('false');
  await advance(100);
  const requests=vi.mocked(fetch).mock.calls.filter(c=>JSON.parse(c[1]!.body as string).text===text);
- expect(requests).toHaveLength(1);
+ expect(requests).toHaveLength(1);expect(done).toHaveBeenCalledWith(initialJob.id);
  expect(host.querySelector('.job')).toBeNull();
 });
 it('reduced motion shows whole snapshots immediately and still defers Markdown until complete',async()=>{
@@ -122,4 +122,27 @@ it('SSE reconnect retains text; stale parent refresh cannot regress status; Retr
  await emit({...initialJob,narrative:text,status:'error',narrative_complete:true});expect(complete).toHaveBeenCalledTimes(1);expect(stream.closed).toBe(true);
  await render(<JobReader initial={{...initialJob,narrative:text,status:'extracting',attempt_epoch:1}}/>);
  expect(Stream.all).toHaveLength(2);expect(Stream.all.filter(s=>!s.closed)).toHaveLength(1);expect(host.textContent).toBe(text);
+});
+
+it('fast snapshots update one running frame instead of restarting it for every chunk',async()=>{
+ const props={identity:'fast',complete:false,onPresented:noop,saveId:1,worldId:1,links:true,onCharacter:noop};
+ const cancel=vi.spyOn(window,'cancelAnimationFrame');
+ await render(<NarrativeText {...props} text=""/>);
+ for(let i=1;i<=10;i++){await render(<NarrativeText {...props} text={text.slice(0,i*100)}/>);await advance(2)}
+ expect(cancel).not.toHaveBeenCalled();
+ expect(host.textContent!.length).toBeGreaterThan(0);
+ await advance(5000);expect(host.querySelector('.narrative-text')!.getAttribute('data-revealing')).toBe('false');
+ cancel.mockRestore();
+});
+
+it('layout clamping when choices disappear does not turn off bottom-follow',async()=>{
+ let resize=noop;
+ vi.stubGlobal('ResizeObserver',class {constructor(cb:()=>void){resize=cb}observe(){}disconnect(){}});
+ function Reader(){const {scroll,onScroll,away}=useStoryScroll(73);return <div ref={scroll} onScroll={onScroll} data-away={away}><article data-reading-id="one">Scene</article></div>}
+ await render(<Reader/>);const el=host.firstElementChild as HTMLElement;let height=1000,top=0;
+ Object.defineProperties(el,{scrollHeight:{get:()=>height},clientHeight:{get:()=>200},scrollTop:{get:()=>top,set:v=>{top=Math.min(height-200,v)}}});
+ await act(()=>resize());await advance(20);expect(top).toBe(800);
+ height=600;top=400;await act(()=>el.dispatchEvent(new Event('scroll',{bubbles:true})));
+ expect(el.dataset.away).toBe('false');
+ height=1200;await act(()=>resize());await advance(20);expect(top).toBe(1000);
 });

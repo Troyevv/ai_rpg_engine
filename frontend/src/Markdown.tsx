@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 export const Markdown = memo(function Markdown({
   text,
@@ -7,15 +7,19 @@ export const Markdown = memo(function Markdown({
   onCharacter,
   links = true,
   streaming = false,
+  onReady,
 }: {
   text: string;
   streaming?: boolean;
+  onReady?:()=>void;
   saveId?: number;
   worldId?: number;
   onCharacter?: (id: string) => void;
   links?: boolean;
 }) {
-  const [html, setHtml] = useState<{text:string;html:string}|null>(null);
+  const [html, setHtml] = useState<{text:string;html:string|null}|null>(null);
+  const ready=useRef(onReady);ready.current=onReady;
+  useEffect(()=>{if(!streaming&&html?.text===text)ready.current?.()},[html,text,streaming]);
   useEffect(() => {
     if (streaming) return;
     const controller = new AbortController();
@@ -27,7 +31,7 @@ export const Markdown = memo(function Markdown({
         controller.signal,
       )
         .then((value) => setHtml({text,html:value.html}))
-        .catch(() => {});
+        .catch(() => {if(!controller.signal.aborted)setHtml({text,html:null})});
     }, 80);
     return () => {
       clearTimeout(timer);
@@ -45,7 +49,7 @@ export const Markdown = memo(function Markdown({
           onCharacter?.(button.dataset.characterId);
       }}
     >
-      {!streaming && html?.text===text ? (
+      {!streaming && html?.text===text && html.html ? (
         <div dangerouslySetInnerHTML={{ __html: html.html }} />
       ) : (
         <div>{text.split(/\n\n+/).map((paragraph,i)=><p className="plain-markdown" key={i}>{paragraph}</p>)}</div>

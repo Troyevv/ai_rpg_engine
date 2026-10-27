@@ -20,7 +20,6 @@ export function useStoryScroll(saveId?:number){
       const node=hit&&el.contains(hit)?hit:anchor.current?Array.from(el.querySelectorAll<HTMLElement>('[data-reading-id]')).find(n=>n.dataset.readingId===anchor.current!.id):el.querySelector<HTMLElement>('[data-reading-id]');
       anchor.current=node?{id:node.dataset.readingId!,offset:node.getBoundingClientRect().top-top}:null;
     }
-    sessionStorage.setItem(key,JSON.stringify({top:el.scrollTop,pinned:pinned.current}));
   },[key]);
   const schedule=useCallback(()=>{
     if(frame.current)return;
@@ -43,7 +42,11 @@ export function useStoryScroll(saveId?:number){
     const el=scroll.current;if(!el)return;
     const top=el.scrollTop;
     // Moving upwards is user intent even inside the near-bottom threshold.
-    if(top<lastTop.current-1)pinned.current=false;
+    const maximum=Math.max(0,el.scrollHeight-el.clientHeight);
+    // Removing choices / closing the keyboard can clamp scrollTop upwards
+    // before ResizeObserver runs. That is layout, not a user's scroll gesture.
+    const clamped=pinned.current&&maximum<lastTop.current&&Math.abs(top-maximum)<2;
+    if(top<lastTop.current-1&&!clamped)pinned.current=false;
     else if(el.scrollHeight-el.clientHeight-top<2)pinned.current=true;
     setAway(!pinned.current);remember();
   },[remember]);
@@ -54,8 +57,25 @@ export function useStoryScroll(saveId?:number){
     const observer=new ResizeObserver(schedule);observer.observe(el);
     if(el.firstElementChild)observer.observe(el.firstElementChild);
     const upward=(e:WheelEvent)=>{if(e.deltaY<0){pinned.current=false;setAway(true);remember()}};
+    let touchY=0;
+    const touchStart=(e:TouchEvent)=>{touchY=e.touches[0]?.clientY??0};
+    const touchMove=(e:TouchEvent)=>{
+      const next=e.touches[0]?.clientY??touchY;
+      if(next>touchY){pinned.current=false;setAway(true);remember()}
+      touchY=next;
+    };
+    const keyUp=(e:KeyboardEvent)=>{if(['ArrowUp','PageUp','Home'].includes(e.key)){pinned.current=false;setAway(true);remember()}};
+    const persist=()=>sessionStorage.setItem(key,JSON.stringify({top:lastTop.current,pinned:pinned.current}));
     el.addEventListener('wheel',upward,{passive:true});
-    return()=>{remember();observer.disconnect();el.removeEventListener('wheel',upward);cancelAnimationFrame(frame.current);frame.current=0};
+    el.addEventListener('touchstart',touchStart,{passive:true});
+    el.addEventListener('touchmove',touchMove,{passive:true});
+    el.addEventListener('keydown',keyUp);
+    window.addEventListener('pagehide',persist);
+    return()=>{
+      persist();observer.disconnect();el.removeEventListener('wheel',upward);
+      el.removeEventListener('touchstart',touchStart);el.removeEventListener('touchmove',touchMove);el.removeEventListener('keydown',keyUp);
+      window.removeEventListener('pagehide',persist);cancelAnimationFrame(frame.current);frame.current=0;
+    };
   },[key,remember,schedule]);
   return {scroll,pinned,away,jumpToLatest,onScroll};
 }

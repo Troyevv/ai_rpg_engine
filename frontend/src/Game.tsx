@@ -278,7 +278,7 @@ export function Game({
             </div>
           ) : (
             <>
-              {entries.map((entry,i)=><NarrativeTurn key={entry.identity} identity={entry.identity} t={entry.turn} i={i} save={save} world={world} prefs={prefs} mobile={mobile} busy={busy} running={running} mainActor={mainActor} turn={stableTurn} run={stableRun} setSubmitted={setSubmitted} refresh={refresh} setDiagnosticJob={setDiagnosticJob} setDiagnostics={setDiagnostics} openCharacter={openCharacter} job={entry.job} reconnecting={entry.job?reconnecting:false} stop={stopJob} committed={entry.committed} onPresented={onPresented}/>)}
+              {entries.map((entry,i)=><NarrativeTurn key={entry.identity} identity={entry.identity} t={entry.turn} i={i} save={save} world={world} prefs={prefs} mobile={mobile} busy={busy} running={pending} mainActor={mainActor} turn={stableTurn} run={stableRun} setSubmitted={setSubmitted} refresh={refresh} setDiagnosticJob={setDiagnosticJob} setDiagnostics={setDiagnostics} openCharacter={openCharacter} job={entry.job} reconnecting={entry.job?reconnecting:false} stop={stopJob} committed={entry.committed} onPresented={onPresented}/>)}
               {!save.turns.length && !job && (
                 <div className="empty-state">
                   <p>
