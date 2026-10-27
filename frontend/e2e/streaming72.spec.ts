@@ -89,3 +89,30 @@ test('real Start Game → ordinary turn → persisted reload → next ordinary t
  const after=await(await request.get(`/api/saves/${s.save}`)).json();expect(after.revision).toBeGreaterThan(stored.revision);
  await mkdir(evidence,{recursive:true});await page.close();await copyFile(await page.video()!.path(),`${evidence}/smoke-${info.project.name}.webm`);
 });
+
+test('leave for authoring and return during generation without losing the stream or draft',async({page,request},info)=>{
+ test.skip(baseline,'Baseline unmounts Game; this is an added regression assertion.');
+ const s=await(await request.post('/test/seed')).json();
+ const saved=await(await request.get(`/api/saves/${s.save}`)).json();
+ const job:Job={id:'navigation72',status:'generating',narrative:'',error:'',kind:'start',revision:saved.revision};
+ await page.route(`**/api/saves/${s.save}/turns`,route=>route.fulfill({json:job}));
+ await page.addInitScript(s=>{
+  localStorage.setItem('selection',JSON.stringify(s));const Real=window.EventSource;
+  (window as any).EventSource=class extends EventTarget {onopen:any;onerror:any;closed=false;constructor(url:string){super();if(!url.includes('navigation72'))return new Real(url) as any;(window as any).navStream=this;queueMicrotask(()=>this.onopen?.(new Event('open')))}close(){this.closed=true}};
+ },s);
+ await page.goto('/');await page.getByRole('button',{name:'Начать игру',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>!!(window as any).navStream)).toBe(true);
+ const emit=async(patch:Partial<Job>)=>{Object.assign(job,patch);await page.evaluate(j=>(window as any).navStream.dispatchEvent(new MessageEvent('snapshot',{data:JSON.stringify(j)})),job)};
+ await emit({narrative:narrative.slice(0,700)});await frames(page,30);
+ await page.getByLabel('Своё действие или реплика').fill('Черновик при переходе');
+ await page.evaluate(()=>{(window as any).navNode=document.querySelector('.narrative-text')});
+ await nav(page,'Создать');await expect(page.locator('.game')).toBeHidden();
+ await emit({narrative,status:'extracting',narrative_complete:true});await frames(page,90);
+ await nav(page,'Игра');await expect(page.locator('.game')).toBeVisible();
+ expect(await page.evaluate(()=>!(window as any).navStream.closed&&(window as any).navNode===document.querySelector('.narrative-text'))).toBe(true);
+ await expect(page.getByLabel('Своё действие или реплика')).toHaveValue('Черновик при переходе');
+ await expect(page.getByText('Обновляет состояние мира',{exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Отправить действие',exact:true})).toBeDisabled();
+ await expect(page.locator('.narrative-text')).toContainText('Абзац 18.');
+ await mkdir(evidence,{recursive:true});await page.close();await copyFile(await page.video()!.path(),`${evidence}/navigation-${info.project.name}.webm`);
+});
