@@ -255,7 +255,7 @@ export default function App() {
             <div />
             <p className="muted">Открываем историю…</p>
           </div>
-        ) : (
+        ) : (view !== "prepare" || !!save) && (
           <div className="game-preserved" style={view==="prepare"?{display:"none"}:undefined} inert={view==="prepare"||!!workspace||inspector} aria-hidden={view==="prepare"||!!workspace||inspector}><Game
             key={`${selection.world}-${selection.save}`}
             world={world}
