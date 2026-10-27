@@ -55,39 +55,82 @@ Markdown counts, long-task durations and heap sample as
 the new invariants. Baseline and after run independently; missing recordings
 must not be treated as successful acceptance.
 
-## Current verification and limitations
+## Verified runs and recordings
 
-Local component tests: 10 passed. Local backend smoke/API/runtime-handoff: 50
-passed. Production frontend build passed. Browser launch is blocked locally by
-`socket() failed: Operation not permitted` before any page is rendered. No local
-before/after video or browser/performance result exists. GitHub Actions results
-must be reviewed separately before marking the PR ready.
+- [Full CI on b4d944b](https://github.com/Troyevv/ai_rpg_engine/actions/runs/40464967849):
+  2170 backend tests, 171 desktop E2E, 148 mobile E2E passed; 23 mobile tests
+  skipped by the existing viewport conditions. Production build and component tests passed.
+- [Before/after capture run](https://github.com/Troyevv/ai_rpg_engine/actions/runs/40464967831):
+  6 baseline scenarios and 6 implementation scenarios passed.
+- [Download recordings + screenshots + raw metrics](https://github.com/Troyevv/ai_rpg_engine/actions/runs/40464967831/artifacts/12715928308).
+  Contains `before/after-{desktop,mobile}-{motion,reduced}.webm`, screenshots,
+  JSON frame traces, and `smoke-{desktop,mobile}.webm`. Artifact retention: 14 days.
+- Local final component coverage: 14 passed, including the subsequent Stop/live
+  worker fix and historical React Profiler assertion. That follow-up is validated
+  independently by the latest PR checks; the links above identify the exact
+  earlier code revision and must not be described as testing later changes.
 
-Physical Android/IME behavior is **not** covered by viewport emulation. Real
-phone keyboard opening/closing, touch scrolling during long generation, phone
-notifications and Inspector transitions still require manual visual acceptance.
-Markdown with lists/headings changes geometry when final formatting arrives;
-perceived smoothness and within-paragraph reading anchors need browser review.
+Local Chromium cannot launch (`socket() failed: Operation not permitted`). All
+reported browser results and recordings therefore come from GitHub Actions,
+not an invented local run. Static frames extracted from the mobile recording
+were reviewed for layout, reading position, status, choices and viewport resize.
+They do not establish smoothness on a physical phone.
+
+## Measured baseline / after (b4d944b)
+
+60 long history records, 4× Chromium CPU throttling, controlled snapshots.
+The two after Markdown requests are the static player action and final narrative;
+there are no narrative HTTP requests driven by animation frames.
+
+| Measurement | Desktop before → after | Mobile before → after |
+| --- | --- | --- |
+| Markdown requests during scenario | 6 → 2 | 6 → 2 |
+| Same narrative DOM after commit | no → yes | no → yes |
+| Reading-history scroll delta at commit | 0 → 0 px | 0 → 0 px |
+| Mutations in historical narrative | 0 → 0 | 0 → 0 |
+| Text growth updates (motion) | 6 → 110 | 6 → 116 |
+| Largest growth (characters) | 1410 → 264 | 1410 → 264 |
+| Frame interval p95 (whole recording) | 73.0 → 73.8 ms | 64.0 → 68.9 ms |
+| End JS heap sample | 19.3 → 60.3 MB | 19.3 → 35.1 MB |
+
+These are single-run observations including automation, recording, panel actions,
+and GC timing, **not** a claim of higher FPS or lower memory. Reduced motion
+intentionally retains immediate snapshot-sized updates (6 growth updates).
+Its p95 intervals were 47.8 → 45.1 ms desktop and 47.6 → 45.2 ms mobile.
+Later capture scripts also record per-frame heap samples and input-to-next-frame
+latency; consult their own artifact rather than extrapolating these measurements.
+
+Regression gates use semantic invariants: same DOM, one narrative, no historical
+mutations, at most two Markdown requests in this isolated scenario, less than
+2 px bottom/reading-anchor drift (rounding tolerance). They do not enforce an
+invented frame-time budget. Component Profiler checks separately verify that
+reveal frames do not commit renders in historical articles.
 
 ## Dependency/performance decision
 
-No runtime dependency or virtualization was added. Memoized articles and an
-isolated reveal loop remove frame-driven journal rerenders. This is an
-architectural observation, not a measured browser speedup. A react-virtuoso
-proof-of-concept is not justified without the requested successful profiling;
-record actual before/after frame/heap/network measurements before deciding.
-Vitest/jsdom are development-only dependencies for deterministic component tests.
-No invented timing or memory thresholds are reported.
+No runtime dependency or virtualization was added. Existing DOM/React APIs
+remove frame-driven journal work; the measured traces do not isolate list
+rendering as a bottleneck warranting react-virtuoso. A virtualized implementation
+would introduce new focus/variant/partial-turn anchoring risks without measured
+benefit. The heap samples above do not establish a memory trend or leak by
+themselves. Revisit virtualization only with repeatable evidence of a retained
+history bottleneck. Vitest/jsdom are development-only dependencies; the existing
+Vite bundle-size warning remains, with no new runtime library.
 
-## Manual acceptance checklist (not yet completed)
+## Acceptance coverage and remaining manual limits
 
-- [ ] Slow / fast / bursty response; partial Markdown; full-text equality.
-- [ ] Exactly one visible narrative; no fade/replay at commit; choices below it.
-- [ ] Follow at bottom; upward wheel/touch disables follow; jump restores follow.
-- [ ] Scroll-up anchor during final Markdown, commit and choices.
-- [ ] Stop, recoverable error, Retry, transport disconnect/reconnect.
-- [ ] Navigate away/back mid-stream; preserve draft and visible prefix.
-- [ ] Graphite/Parchment, desktop/393px/360px, reduced-motion.
-- [ ] Physical Android keyboard, phone notifications, Inspector open/close.
-- [ ] Long journal under constrained mobile CPU; compare recorded metrics.
-- [ ] Review real smoke recording and API persistence assertions.
+- [x] Small/bursty snapshots, processing stages, completion and final Markdown.
+- [x] Exactly one narrative and stable DOM identity at commit; choices after commit.
+- [x] Bottom-follow during streaming, scroll-up preservation, jump-to-latest.
+- [x] Recoverable error, Retry, simulated transport disconnect/reconnect.
+- [x] Unit regression for Stop while worker remains live, then Retry availability.
+- [x] Draft retained through reload and Inspector navigation.
+- [x] Desktop/mobile, reduced motion, long history, phone open/close with unread notification.
+- [x] Required real FastAPI/SQLite persisted ordinary-turn smoke on both projects.
+- [x] Existing skin/navigation/phone/variant regressions in the full E2E suite.
+- [ ] Physical Android IME/touch acceptance. Resizing a focused mobile viewport
+      exercises geometry but does not emulate an actual Android keyboard.
+- [ ] Human review of perceived smoothness on a low-end physical phone, including
+      formatting-heavy prose and within-paragraph reading anchors.
+
+Keep these limits explicit during review. No automatic merge is authorized.

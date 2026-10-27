@@ -5,7 +5,7 @@ import type {Job,Save,Turn} from '../src/types';
 const baseline=process.env.STREAM_BASELINE==='1';
 const evidence=process.env.STREAM_EVIDENCE||'../docs/manual_qa/narrative_v4/issue72-evidence';
 test.use({video:'on'});
-const narrative=Array.from({length:18},(_,i)=>`Абзац ${i+1}. Персонаж 1 открывает книгу. Вечерний свет падает на стол, и разговор продолжается спокойно, без спешки. 🕯️`).join('\n\n');
+const narrative=Array.from({length:18},(_,i)=>`Абзац ${i+1}. Персонаж 1 открывает книгу. Вечерний свет падает на стол, и разговор продолжается спокойно, без спешки. 🕯️`).join('\n\n')+'\n\n**Тихий вечер** продолжается. [Книга](https://example.com) остаётся открытой.\n\n- Чашка на столе\n- Свет у окна';
 async function frames(page:Page,n=20){await page.evaluate(n=>new Promise<void>(resolve=>{let count=0;const tick=()=>++count>=n?resolve():requestAnimationFrame(tick);requestAnimationFrame(tick)}),n)}
 for(const reduced of [false,true])test(`controlled streaming, commit, scroll and journal ${reduced?'reduced':'motion'}`,async({page,request},info)=>{
  test.setTimeout(120000);await mkdir(evidence,{recursive:true});
@@ -32,10 +32,13 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
  const w=window as any;w.samples=[];w.oldNode=document.querySelector('.turn .prose');w.oldMutations=0;
  new MutationObserver(rs=>w.oldMutations+=rs.length).observe(w.oldNode,{subtree:true,childList:true,characterData:true});
  w.longTasks=[];new PerformanceObserver(list=>w.longTasks.push(...list.getEntries().map(e=>e.duration))).observe({entryTypes:['longtask']});
- w.sampling=true;const tick=()=>{const e=document.querySelector('.story-scroll')!;const prose=document.querySelector('[data-stream-id] .narrative-text')||document.querySelector('.job details > .prose');w.samples.push({at:performance.now(),top:e.scrollTop,gap:e.scrollHeight-e.clientHeight-e.scrollTop,length:prose?.textContent?.length||0});if(w.sampling)requestAnimationFrame(tick)};requestAnimationFrame(tick);
+ w.inputLatencies=[];document.addEventListener('input',()=>{const start=performance.now();requestAnimationFrame(()=>w.inputLatencies.push(performance.now()-start))});
+ w.sampling=true;const tick=()=>{const e=document.querySelector('.story-scroll')!;const prose=document.querySelector('[data-stream-id] .narrative-text')||document.querySelector('.job details > .prose');w.samples.push({at:performance.now(),heap:(performance as any).memory?.usedJSHeapSize,top:e.scrollTop,gap:e.scrollHeight-e.clientHeight-e.scrollTop,length:prose?.textContent?.length||0});if(w.sampling)requestAnimationFrame(tick)};requestAnimationFrame(tick);
  });
  for(const length of [35,90,700,710,narrative.length]){
-  await emit({narrative:narrative.slice(0,length)});await frames(page,25);
+  await emit({narrative:narrative.slice(0,length)});
+  if(length===90)await page.getByLabel('Своё действие или реплика').fill('Черновик во время генерации');
+  await frames(page,25);
   if(!baseline)await expect.poll(()=>page.locator('.story-scroll').evaluate(el=>el.scrollHeight-el.clientHeight-el.scrollTop)).toBeLessThan(2);
  }
  await emit({status:'extracting',narrative_complete:true});await frames(page,100);
@@ -69,7 +72,7 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
  await page.getByLabel('Своё действие или реплика').fill('Черновик не потерять');
  if(info.project.name==='mobile'){await page.setViewportSize({width:393,height:480});await page.getByLabel('Своё действие или реплика').focus();await frames(page,30);await page.setViewportSize({width:393,height:852})}
  await nav(page,'Мир');await page.keyboard.press('Escape');await expect(page.getByLabel('Своё действие или реплика')).toHaveValue('Черновик не потерять');
- const metrics=await page.evaluate(()=>{const w=window as any;w.sampling=false;return {samples:w.samples,longTasks:w.longTasks,oldMutations:w.oldMutations,heap:(performance as any).memory?.usedJSHeapSize}});
+ const metrics=await page.evaluate(()=>{const w=window as any;w.sampling=false;return {samples:w.samples,longTasks:w.longTasks,inputLatencies:w.inputLatencies,oldMutations:w.oldMutations,heap:(performance as any).memory?.usedJSHeapSize}});
  const name=`${baseline?'before':'after'}-${info.project.name}-${reduced?'reduced':'motion'}`;
  await writeFile(`${evidence}/${name}.json`,JSON.stringify({...metrics,markdown:streamedRequests,stable,up,upAfter,viewport:page.viewportSize(),cpuThrottle:4},null,2));
  await page.screenshot({path:`${evidence}/${name}.png`});await page.close();await copyFile((await page.video()!.path()),`${evidence}/${name}.webm`);

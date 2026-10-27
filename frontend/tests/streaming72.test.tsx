@@ -1,5 +1,5 @@
 import {afterEach,beforeEach,describe,it,expect,vi} from 'vitest';
-import {act} from 'react';
+import {act,Profiler} from 'react';
 import {createRoot,type Root} from 'react-dom/client';
 import {NarrativeTurn} from '../src/NarrativeTurn';
 import {NarrativeText} from '../src/NarrativeText';
@@ -145,4 +145,25 @@ it('layout clamping when choices disappear does not turn off bottom-follow',asyn
  height=600;top=400;await act(()=>el.dispatchEvent(new Event('scroll',{bubbles:true})));
  expect(el.dataset.away).toBe('false');
  height=1200;await act(()=>resize());await advance(20);expect(top).toBe(1000);
+});
+
+it('Stop keeps the existing SSE recovery until the worker is no longer live, so Retry can unlock',async()=>{
+ class Stream extends EventTarget {static last:Stream;onopen=noop;onerror=noop;closed=false;constructor(){super();Stream.last=this}close(){this.closed=true}}
+ vi.stubGlobal('EventSource',Stream);const complete=vi.fn();
+ function Reader({initial}:{initial:Job}){const {job}=useJob(initial,complete);return <button disabled={job?.live}>{job?.narrative}</button>}
+ const stopped={...initialJob,status:'stopped',narrative:'Сохранённый текст',narrative_complete:true,live:true};
+ await render(<Reader initial={stopped}/>);const stream=Stream.last;
+ await act(()=>stream.dispatchEvent(new MessageEvent('snapshot',{data:JSON.stringify(stopped)})));
+ expect(stream.closed).toBe(false);expect(complete).not.toHaveBeenCalled();expect(host.querySelector('button')!.disabled).toBe(true);
+ await act(()=>stream.dispatchEvent(new MessageEvent('snapshot',{data:JSON.stringify({...stopped,live:false})})));
+ expect(stream.closed).toBe(true);expect(complete).toHaveBeenCalledOnce();expect(host.querySelector('button')!.disabled).toBe(false);expect(host.textContent).toBe(stopped.narrative);
+});
+
+it('animation frames do not commit renders in the historical journal',async()=>{
+ const historical=vi.fn();const t={id:1,active_variant_id:'old',node_id:'old',sequence:1,kind:'turn',assistant_text:'История',user_text:'',variants:[],choices:[],memory_archived:false} as Turn;
+ const history=<Profiler id="history" onRender={historical}><NarrativeTurn {...shared} identity="old" t={t} i={0} job={null} committed/></Profiler>;
+ const props={identity:'isolated',complete:false,onPresented:noop,saveId:1,worldId:1,links:true,onCharacter:noop};
+ await render(<>{history}<NarrativeText {...props} text=""/></>);await advance(100);
+ await render(<>{history}<NarrativeText {...props} text={text}/></>);historical.mockClear();
+ await advance(5000);expect(historical).not.toHaveBeenCalled();
 });

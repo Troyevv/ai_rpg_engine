@@ -103,7 +103,7 @@ export function Game({
   const { job, reconnecting } = useJob(submitted ?? save?.job, refresh);
   const awaitingCommit=job?.status==='saved'&&job.revision===save?.revision&&!save?.turns.some(t=>t.variants?.some(v=>v.job_id===job.id));
   const unapplied = !!job && ['error','stopped'].includes(job.status) && !!job.narrative_complete && job.revision === save?.revision;
-  const running = active(job)||!!awaitingCommit;
+  const running = active(job)||!!job?.live&&job.status!=="saved"||!!awaitingCommit;
   const [presented,setPresented]=useState<string|null>(null);
   const onPresented=useStableEvent((id:string)=>{if(id===job?.id)setPresented(id)});
   const revealingCommit=job?.status==='saved'&&save?.turns.some(t=>t.variants?.find(v=>v.id===t.active_variant_id)?.job_id===job.id)&&presented!==job.id;

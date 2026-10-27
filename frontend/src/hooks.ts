@@ -20,7 +20,7 @@ export function useJob(initial: Job | null | undefined, completed: () => void) {
     setJob(previous=>latestSnapshot(previous,initial??null));
   }, [initial]);
   const id = initial?.id;
-  const running = active(initial);
+  const running = active(initial)||!!initial?.live&&initial.status!=="saved";
   useEffect(() => {
     setReconnecting(false);
     if (!id || !running) return;
@@ -31,7 +31,7 @@ export function useJob(initial: Job | null | undefined, completed: () => void) {
       const next = JSON.parse((event as MessageEvent).data) as Job;
       setJob(previous=>latestSnapshot(previous,next));
       setReconnecting(false);
-      if (!active(next)) {
+      if (!active(next)&&(next.status==="saved"||!next.live)) {
         stream.close();
         callback.current();
         if (next.error) toast.error(next.error);
