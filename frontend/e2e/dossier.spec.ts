@@ -123,7 +123,12 @@ test('search selection and local dossier scroll survive close, resize and reopen
  await searchCharacter(page,'Вера');await expect(d.getByRole('heading',{name:'Вера Ларина',exact:true})).toBeVisible();
  await page.keyboard.press('Escape');await open(page);await expect(d.getByLabel('Персонаж',{exact:true})).toHaveAttribute('data-value','qa_vera');
  await pickCharacter(page,'qa_kirill');await d.getByRole('tab',{name:'Обзор',exact:true}).click();
- await page.setViewportSize({width:info.project.name==='mobile'?360:1000,height:600});const scroll=d.locator('.inspector-scroll');const position=await scroll.evaluate(el=>{el.scrollTop=250;return el.scrollTop});expect(position).toBeGreaterThan(0);await expect.poll(()=>scroll.evaluate(el=>el.scrollTop)).toBe(position);await page.keyboard.press('Escape');await open(page);await expect.poll(()=>scroll.evaluate(el=>el.scrollTop)).toBe(position);
+ await page.setViewportSize({width:info.project.name==='mobile'?360:1000,height:600});
+ const scroll=d.locator('.inspector-scroll');
+ // Close in the same frame: the browser's queued scroll event must not be the
+ // only way to remember the position before the surface becomes hidden.
+ const position=await scroll.evaluate(el=>{el.scrollTop=250;const position=el.scrollTop;window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));return position});
+ expect(position).toBeGreaterThan(0);await expect(d).toBeHidden();await open(page);await expect.poll(()=>scroll.evaluate(el=>el.scrollTop)).toBe(position);
  await page.setViewportSize({width:info.project.name==='mobile'?393:1000,height:850});await expect(d.getByLabel('Персонаж',{exact:true})).toHaveAttribute('data-value','qa_kirill');
  await page.keyboard.press('Escape');
  let failed=false;await page.route('**/genealogy?*',async route=>{if(!failed&&route.request().url().includes('root_id=qa_timur')){failed=true;await route.fulfill({status:503,json:{detail:'QA temporary failure'}})}else await route.continue()});

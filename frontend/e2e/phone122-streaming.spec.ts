@@ -20,11 +20,12 @@ for(const reduced of [false,true])test(`122 call bursty SSE and independent anch
  const callId=save.state.phone!.events.find(e=>e.status==='answered')!.id;
  const route={surface:'call' as const,actor_id:save.state.controlled_actor_id,call_id:callId};
  const main:Turn[]=Array.from({length:16},(_,i)=>({...save.turns[0],id:800+i,node_id:`archive${i}`,active_variant_id:`archive${i}`,sequence:i,user_text:'',assistant_text:prose,variants:[{id:`archive${i}`,ordinal:1,job_id:`archive${i}`,can_regenerate:true}]}));
- save={...save,turns:main,job:null};
+ save={...save,turns:main,physical_choice_source:{turn_id:main.at(-1)!.id,variant_id:main.at(-1)!.active_variant_id},job:null};
  let job:Job={id:'phone122-stream',kind:'turn',status:'generating',narrative:'',error:'',revision:save.revision,presentation:route,user_text:'Расскажи подробнее.'};
  await page.route(`**/api/saves/${selected.save}`,r=>r.fulfill({json:save}));
  await page.route(`**/api/saves/${selected.save}/turns`,r=>r.fulfill({json:job}));
  await page.reload();await expect(call).toBeVisible();await call.getByLabel('Свернуть звонок').click();
+ const choices=page.locator('.choices button strong');const choiceText=await choices.allTextContents();expect(choiceText.length).toBeGreaterThan(0);
  const story=page.locator('.story-scroll');await story.evaluate(el=>el.scrollTop=el.scrollHeight/2);await frames(page);
  const mainTop=await story.evaluate(el=>el.scrollTop);
  await page.getByLabel('Своё действие или реплика').fill('Сохранить основной черновик');
@@ -38,11 +39,13 @@ for(const reduced of [false,true])test(`122 call bursty SSE and independent anch
  const callTop=await scroll.evaluate(el=>el.scrollTop);expect(callTop).toBeGreaterThan(0);
  for(const length of [2510,3200,3300,prose.length]){await emit({narrative:prose.slice(0,length)});await frames(page,25)}
  await emit({status:'extracting',narrative_complete:true});await frames(page,100);
+ await expect(choices).toHaveText(choiceText);
  await call.getByLabel('Реплика в звонке').fill('Сохранить черновик звонка');
  await page.evaluate(()=>(window as any).callText=document.querySelector('.call-scene .narrative-text'));
  const committed:Turn={...main[0],id:900,sequence:17,node_id:'call-turn',active_variant_id:'call-variant',presentation:route,user_text:job.user_text!,assistant_text:prose,variants:[{id:'call-variant',ordinal:1,job_id:job.id,can_regenerate:true}]};
  save={...save,revision:save.revision+1,turns:[...main,committed],job:{...job,status:'saved'}};
  await emit({status:'saved'});await expect(call.locator('.turn')).toHaveCount(1);await frames(page,30);
+ await expect(choices).toHaveText(choiceText);
  expect(await page.evaluate(()=>(window as any).callText===document.querySelector('.call-scene .narrative-text'))).toBe(true);
  expect(Math.abs(await scroll.evaluate(el=>el.scrollTop)-callTop)).toBeLessThan(2);
  expect(Math.abs(await story.evaluate(el=>el.scrollTop)-mainTop)).toBeLessThan(2);
@@ -63,6 +66,7 @@ for(const reduced of [false,true])test(`122 call bursty SSE and independent anch
  await expect(page.getByLabel('Своё действие или реплика')).toHaveValue('Сохранить основной черновик');
  expect(Math.abs(await story.evaluate(el=>el.scrollTop)-mainTop)).toBeLessThan(2);
  await expect(story.locator('.turn')).toHaveCount(main.length);
+ await expect(choices).toHaveText(choiceText);
  const evidence=process.env.PHONE122_EVIDENCE;
  if(evidence){await mkdir(evidence,{recursive:true});await page.close();await copyFile(await page.video()!.path(),`${evidence}/anchors-${info.project.name}-${reduced?'reduced':'motion'}.webm`)}
 });

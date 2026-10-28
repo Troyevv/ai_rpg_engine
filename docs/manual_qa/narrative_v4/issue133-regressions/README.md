@@ -32,6 +32,20 @@ Frontend использует идентичность этого источни
 
 Дополнительно устранены гонки позднего ответа HTTP, стиравшего следующий черновик, и автоматического read, позволявшего нажать кнопку до отображения блокировки. Непрочитанный перенос/отмена теперь сохраняет прежний известный план через существующую History; фильтрация применяется до context relevance/pacing.
 
+## Изменённые исходники относительно исходного PR
+
+| Область | Файлы |
+| --- | --- |
+| DeepSeek request / безопасная диагностика | `backend/runtime_v3/remote_semantics.py`, `llm.py`, `backend/services/usage.py`, `backend/repositories/runtime.py` |
+| Источник физической сцены / API | `backend/runtime_v3/surfaces.py`, `storage.py`, `backend/api/app.py` |
+| Knowledge / календарь / контекст | `backend/runtime_v3/remote.py`, `backend/runtime_v3/context.py`, `backend/runtime_v3/player_calendar.py`, `backend/runtime_v3/selectors.py` |
+| UI поверхностей / choices | `frontend/src/Game.tsx`, `frontend/src/presentationEntries.ts`, `frontend/src/types.ts`, `frontend/src/NarrativeTurn.tsx` |
+| Телефон / звонок / общая диагностика | `frontend/src/Phone.tsx`, `frontend/src/CallScene.tsx`, `frontend/src/Diagnostics.tsx`, `frontend/src/lib/phone.ts` |
+| Найденная в полном CI гонка возврата | `frontend/src/Inspector.tsx`, `frontend/e2e/dossier.spec.ts` |
+| Backend / API / SDK tests | `tests/test_phone133.py`, `tests/test_phone122.py`, `tests/e2e_server.py` |
+| Frontend / browser tests | `frontend/tests/phone122.test.tsx`, `frontend/e2e/phone133.spec.ts`, `frontend/e2e/phone122.spec.ts`, `frontend/e2e/phone122-streaming.spec.ts`, `frontend/e2e/phone-completion.spec.ts`, `frontend/e2e/streaming72.spec.ts`, `frontend/e2e/inspector86.spec.ts` |
+| QA #78 / материалы | `docs/manual_qa/narrative_v4/phone.md`, прежний `issue122-evidence/README.md`, текущий каталог `issue133-regressions` |
+
 ## Проверки и воспроизведение
 
 | Сценарий | Автоматическая проверка |
@@ -55,6 +69,10 @@ npx playwright test --reporter=line
 В этой среде браузер запускается с `PLAYWRIGHT_EXECUTABLE_PATH=/tmp/issue133-browser/chrome-headless-shell-linux64/chrome-headless-shell` (Chromium 134); штатный CDN-загрузчик Playwright вернул повреждённый архив. CI использует штатную установку. Видео записаны настоящим браузером, не сгенерированы. Для world-authoring fixture JSON используется chunk 512, для narrative — прежние 60 символов; искусственная задержка growing schema больше не создаёт ложные таймауты UI.
 
 Локально: **2190 backend tests passed**, **31 frontend tests passed**, production build пройдён; focused phone/calendar/context **56 passed**, усиленная проверка исходного времени и HTTP contract **20 passed**. Финальный локальный browser-прогон: **38 passed (5.5m)**, baseline: **4 passed** (три в исходном прогоне, один после ожидания отображения initial choices; два неприменимых recovery assertions пропущены на baseline). CI фиксируется в [PR #133](https://github.com/Troyevv/ai_rpg_engine/pull/133) на соответствующем HEAD. Числа пересекаются и не суммируются.
+
+Первый CI выявил устаревшую fixture в `streaming72.spec.ts`: она подменяла всю History синтетическими ходами, оставляя `physical_choice_source` от исходного API-save. Обе streaming fixtures теперь согласованно обновляют проекцию вместе с History; дополнительно проверены сохранение/блокировка choices при генерации, замена после физического commit и сохранение при call commit/отбое. Проверки scroll anchors, DOM identity и числа Markdown-запросов не ослаблены. Повторный `npx playwright test streaming72 phone122-streaming --reporter=line`: **12 passed (4.5m)**. Дополнительная проверка Inspector: **13 passed, 5 штатных project skips** (desktop-only сценарии не дублируются в mobile project).
+
+Полный первый browser CI дополнительно выявил гонку сохранения scroll досье: закрытие до отложенного `scroll`-события теряло позицию. Исходный тест локально прошёл 3 раза, но усиленное воспроизведение «scroll + Escape в одном кадре» упало на desktop и mobile (**2 failed до исправления**). `Inspector.back` теперь считывает DOM-позицию перед скрытием панели. Это локальное исправление существующей навигации, без второго scroll owner или изменения телефонного pipeline. Повторный усиленный сценарий: **6 passed (33.2s)** — по три на desktop/mobile; build пройден. Таймауты/проверки не ослаблены, новые skips и Retry не добавлены.
 
 ## Реальные материалы до/после
 

@@ -13,7 +13,8 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
  const s=await(await request.post(reduced?'/test/phone-seed?unread=true':'/test/seed')).json();
  let save:Save=await(await request.get(`/api/saves/${s.save}`)).json();
  const turns:Turn[]=Array.from({length:60},(_,i)=>({id:1000+i,node_id:`n${i}`,active_variant_id:`v${i}`,sequence:i+1,user_text:'',assistant_text:`Архивная сцена ${i+1}.\n\n`+narrative,choices:[{action:'Продолжить',speech:''}],kind:'turn',memory_archived:false,variants:[{id:`v${i}`,ordinal:1,job_id:`old${i}`,can_regenerate:true}]}));
- save={...save,turns};let job:Job={id:'stream72',status:'generating',narrative:'',error:'',kind:'turn',revision:save.revision,user_text:'Открываю книгу.'};
+ // This fixture replaces the complete API History, including its read projection.
+ save={...save,turns,physical_choice_source:{turn_id:turns.at(-1)!.id,variant_id:turns.at(-1)!.active_variant_id}};let job:Job={id:'stream72',status:'generating',narrative:'',error:'',kind:'turn',revision:save.revision,user_text:'Открываю книгу.'};
  await page.route(`**/api/saves/${s.save}`,route=>route.fulfill({json:save}));
  await page.route(`**/api/saves/${s.save}/turns`,route=>route.fulfill({json:job}));
  await page.addInitScript(s=>{
@@ -27,6 +28,7 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
  const cdp=await page.context().newCDPSession(page);await cdp.send('Emulation.setCPUThrottlingRate',{rate:4});
  await page.getByLabel('Своё действие или реплика').fill(job.user_text!);await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>!!(window as any).testStream)).toBe(true);
+ if(!baseline){await expect(page.locator('.choices button')).toHaveCount(1);await expect(page.locator('.choices button')).toBeDisabled()}
  const emit=async(patch:Partial<Job>)=>{job={...job,...patch};await page.evaluate(j=>(window as any).testStream.dispatchEvent(new MessageEvent('snapshot',{data:JSON.stringify(j)})),job)};
  await page.evaluate(()=>{
  const w=window as any;w.samples=[];w.oldNode=document.querySelector('.turn .prose');w.oldMutations=0;
@@ -60,9 +62,10 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
  await emit({status:'validating'});await frames(page);
  await page.evaluate(()=>{(window as any).streamNode=document.querySelector('[data-stream-id] .narrative-text')||document.querySelector('.job details > .prose')});
  const streamedRequests=markdown-beforeRequests;
- const turn={...turns[0],id:2000,node_id:'new',active_variant_id:'committed',sequence:61,user_text:job.user_text!,assistant_text:narrative,variants:[{id:'committed',ordinal:1,job_id:job.id,can_regenerate:true}]};
- save={...save,revision:save.revision+1,turns:[...turns,turn],job:{...job,status:'saved'}};
+ const turn={...turns[0],id:2000,node_id:'new',active_variant_id:'committed',sequence:61,user_text:job.user_text!,assistant_text:narrative,choices:[{action:'Закрыть книгу',speech:''}],variants:[{id:'committed',ordinal:1,job_id:job.id,can_regenerate:true}]};
+ save={...save,revision:save.revision+1,turns:[...turns,turn],physical_choice_source:{turn_id:turn.id,variant_id:turn.active_variant_id},job:{...job,status:'saved'}};
  await emit({status:'saved'});await expect(page.locator('.turn')).toHaveCount(61);await expect(page.locator('.choices button')).toHaveCount(1);await frames(page,30);
+ await expect(page.locator('.choices button')).toContainText('Закрыть книгу');
  const upAfter=await scroller.evaluate(el=>el.scrollTop);
  const stable=await page.evaluate(()=>{const w=window as any;return w.streamNode?.isConnected && document.querySelector('.turn:last-of-type .narrative-text')===w.streamNode});
  if(!baseline){expect(stable).toBe(true);expect(Math.abs(upAfter-up)).toBeLessThan(2);expect(streamedRequests).toBeLessThanOrEqual(2);expect(await page.evaluate(()=>(window as any).oldMutations)).toBe(0)}
