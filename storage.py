@@ -134,12 +134,20 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
     def list_turns(self, save_id):
         with self.connect() as db:
             rows = [dict(row) for row in db.execute(
-                'SELECT id,sequence,user_text,assistant_text,kind,choices_json,changes_json,node_id,active_variant_id,memory_archived,pov_actor_id,audience_json,timing_json,before_json FROM turns WHERE save_id=? ORDER BY sequence', (save_id,))]
+                'SELECT id,sequence,user_text,assistant_text,kind,choices_json,changes_json,node_id,active_variant_id,memory_archived,pov_actor_id,audience_json,timing_json,CASE WHEN json_extract(changes_json,\'$.presentation.surface\') IS NOT NULL THEN \'{}\' ELSE before_json END AS before_json FROM turns WHERE save_id=? ORDER BY sequence', (save_id,))]
             from backend.runtime_v3.surfaces import route
             for row in rows:
                 before = json.loads(row.pop('before_json'))
                 row['presentation'] = json.loads(row['changes_json']).get('presentation') or route(before, row['kind'])
             return rows
+
+    def physical_choice_source(self, save_id, turns, state):
+        from backend.runtime_v3.surfaces import physical_choice_source
+        with self.connect() as db:
+            def after_for(tid):
+                row=db.execute('SELECT after_json FROM turns WHERE save_id=? AND id=?',(save_id,tid)).fetchone()
+                return json.loads(row[0]) if row else {}
+            return physical_choice_source(turns,state,after_for)
 
     def update_scene_meta(self, save_id, metadata, expected_revision=None):
         with self.connect() as db:

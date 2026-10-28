@@ -42,13 +42,14 @@ def cost(inp,out,cached,pricing):
 
 
 def tracked_stream(storage, stream_fn, job_id, stage, config, messages, diagnostics=None, **kwargs):
-    from llm import thinking_options, OutputLimitReached
+    from llm import thinking_options, OutputLimitReached, ProviderHTTPError
     effective = dict(config, thinking=thinking_options(config.get('provider','local'),config['model'],config.get('thinking','off'))[0])
     effective.update({k:kwargs[k] for k in ('max_tokens','temperature','response_format') if k in kwargs})
     rid = storage.begin_request(job_id,stage,effective,messages,diagnostics or {'estimated_tokens':estimate(messages),'parts':[]})
     started=time.perf_counter()
-    response=[] if stage in ('extraction','extraction_repair','world_simulation_delta','world_simulation_repair') else None
+    response=[] if stage in ('extraction','extraction_repair','world_simulation_delta','world_simulation_repair','remote_semantics') else None
     usage, status, finish_reason = None, 'error', None
+    provider_error = None
     def received(value):
         nonlocal usage
         usage = value
@@ -64,8 +65,11 @@ def tracked_stream(storage, stream_fn, job_id, stage, config, messages, diagnost
     except OutputLimitReached:
         status = 'length'
         raise
+    except ProviderHTTPError as exc:
+        provider_error = exc.diagnostic
+        raise
     finally:
         event = kwargs.get('cancel_event')
         if event is not None and event.is_set():
             status = 'stopped'
-        storage.finish_request(rid,status,usage,time.perf_counter()-started,finish_reason,response_text=''.join(response) if response is not None else None)
+        storage.finish_request(rid,status,usage,time.perf_counter()-started,finish_reason,response_text=''.join(response) if response is not None else None,provider_error=provider_error)

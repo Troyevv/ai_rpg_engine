@@ -98,15 +98,15 @@ test('122 ten sequential messages leave no phone cards or story mutations',async
  const s=await(await request.post('/test/phone-seed?incoming=false&decision=answer')).json();
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),s);await page.goto('/');
  const story=page.locator('.story-scroll');await expect(story.locator('.turn')).toHaveCount(1);
- const text=await story.locator('.narrative-text').allTextContents();
+ const text=(await story.locator('.narrative-text').allTextContents()).map(s=>s.trim());
  await page.getByRole('button',{name:/^Телефон/}).click();const phone=page.getByRole('region',{name:'Телефон персонажа'});
  await phone.getByRole('button',{name:'Вера работа',exact:true}).click();await phone.getByRole('button',{name:'Написать',exact:true}).click();
  for(let i=0;i<10;i++){
   await phone.getByLabel('Сообщение в телефоне').fill(`Сообщение ${i+1}. Подробности разговора.`);
   await phone.getByRole('button',{name:'Отправить сообщение',exact:true}).click();
-  await expect.poll(async()=>{const x=await(await request.get(`/api/saves/${s.save}`)).json();return x.job?.status}).toBe('saved');
+  await expect.poll(async()=>{const x=await(await request.get(`/api/saves/${s.save}`)).json();return x.job?.status==='saved'?x.state.phone.events.filter((e:any)=>e.channel==='TEXT_MESSAGE').length:-1}).toBe(2*(i+1));
   await expect(story.locator('.turn')).toHaveCount(1);await expect(story.locator('.pending-turn')).toHaveCount(0);
-  expect(await story.locator('.narrative-text').allTextContents()).toEqual(text);
+  expect((await story.locator('.narrative-text').allTextContents()).map(s=>s.trim())).toEqual(text);
  }
  const after=await(await request.get(`/api/saves/${s.save}`)).json();expect(after.state.phone.events.filter((e:any)=>e.channel==='TEXT_MESSAGE')).toHaveLength(20);
 });

@@ -175,6 +175,7 @@ def create_app(db_path=None, recover=True):
         value['turns']=projected
         from backend.runtime_v3.surfaces import visible_changes
         canonical=repo.get_snapshot(sid).get('world_state')
+        value['physical_choice_source']=repo.physical_choice_source(sid,value['turns'],canonical) if canonical else None
         for t in value['turns']:
             t['changes']=visible_changes(t['changes'],canonical,owner) if canonical else t['changes']
             t['changes_json']=json.dumps(t['changes'],ensure_ascii=False)
@@ -381,7 +382,9 @@ def create_app(db_path=None, recover=True):
             raise ValueError('Нужны обе границы диапазона календаря.')
         if start_date is not None:
             from backend.runtime_v3.player_calendar import player_calendar
-            return player_calendar(state, start_date, end_date, {c['id']:c['name'] for c in snapshot.get('character_cards',[])})
+            from backend.runtime_v3.repository import read_history
+            with repo.connect() as db: history,_=read_history(db,snapshot.get('history_head'))
+            return player_calendar(state, start_date, end_date, {c['id']:c['name'] for c in snapshot.get('character_cards',[])},history)
         now = state['meta']['world_time']
         if minute is not None and not max(0,now-10080) <= minute <= now+10080:
             raise ValueError('Предпросмотр времени ограничен семью сутками.')

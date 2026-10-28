@@ -2,6 +2,8 @@
 
 Base: `master` at `50d6694db0ee838c99a34f2159386e05e04186a8` (includes #72 / PR #124, #120, #121). Branch: `codex/issue122-phone-scenes-commitments`. No database migration or historical-snapshot rewrite.
 
+**Уточнение R02 и последующие исправления PR #133:** технические средства перенесены из телефона в общую диагностику. См. [актуальный отчёт о трёх регрессиях](../issue133-regressions/README.md).
+
 ## Audit and ownership
 
 Read AGENTS, #122, Epic #36, #70, #66, #37, #75, and integrated #72. The existing `/phone/dispatch` already owned atomic source commands, source-bound continuation, accepted decision checkpoints and Retry (#120). Runtime `communication.run` advanced canonical time and persisted RemoteInteractions, but committed only a receipt: no semantic Extraction consumed the accepted reply. The normal Narrative turn did run Extraction. `Game` rendered communication jobs and their receipts alongside physical turns. Phone focus selected the main composer channel. Calendar/participant projections did not distinguish unread message evidence.
@@ -27,7 +29,7 @@ Ordinary autonomous incoming messages reuse the existing Narrative Extraction wi
 | Requirement | Implementation and evidence |
 | --- | --- |
 | R01 | Structured filtering before rendering pending/saved turns, including receipts/tools. Unit tests cover six job states and commit identity; ten-message browser test checks no main cards or pending slots. |
-| R02 | Existing direct/group Phone, delivery/read rules, shared portraits and local recovery retained; processing history/variants stay inside Phone. Existing phone suites retained and updated for the new scene. |
+| R02 | Existing direct/group Phone, delivery/read rules, shared portraits and local recovery retained; processing history/variants are available in global Diagnostics per the updated user requirement. Existing phone suites retained and updated for the new scene. |
 | R03 | Connected-call-only desktop overlay / mobile surface, large shared avatar, status/time, transcript, composer and explicit end. Real API browser flow in two themes. Existing runtime audio/channel boundary tests retained. |
 | R04 | Minimize/restore, Escape, browser Back, backdrop and workspace navigation preserve canonical call. Explicit call composer vs physical composer; shared busy guard and synchronous request lock. |
 | R05 | Independent main/call drafts and anchors, explicit end restores main input; read-only ended-call journal. Reload no longer waits for a hidden presentation completion. |

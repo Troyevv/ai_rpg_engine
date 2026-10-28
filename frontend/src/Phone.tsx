@@ -1,5 +1,6 @@
+import {phoneText as t} from "./lib/phone";
 import { formatDateLabel } from "./gameDate";
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import {
   Phone as PhoneIcon,
   MessageCircle,
@@ -73,7 +74,7 @@ export function Phone({
   disabled,
   onCommit,
   onBusyChange,
-  config, apiKey, onJob, job: receivedJob, activity,
+  config, apiKey, onJob, job: receivedJob,
 }: {
   save: Save;
   disabled: boolean;
@@ -83,7 +84,6 @@ export function Phone({
   apiKey: string;
   onJob: (job: Job) => void;
   job: Job | null;
-  activity?: ReactNode;
 }) {
   const phone = save.state.phone;
   const job=receivedJob?.presentation?.actor_id&&receivedJob.presentation.actor_id!==phone?.actor_id?null:receivedJob;
@@ -105,7 +105,6 @@ export function Phone({
   const requestLock = useRef(false);
   const autoReadAttempt = useRef<string | null>(null);
   const currentOwner = useRef(ownerKey); currentOwner.current = ownerKey;
-  const [diagnostics, setDiagnostics] = useState<{key:string;value:unknown}|null>(null);
   const [detail, setDetail] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [entry, setEntry] = useState(true);
@@ -181,7 +180,7 @@ export function Phone({
     setGroupMembers([]);
     setGroupName("");
   }, [save.id, phone?.actor_id]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) {autoReadAttempt.current=null;return;}
     if (tab !== 'messages' || !conversation || disabled || busy || requestLock.current || !phone?.events.some(e=>e.conversation_id===conversation&&e.unread)) return;
     const attempt=`${ownerKey}:${conversation}:${save.revision}`;
@@ -192,7 +191,7 @@ export function Phone({
     setBusy(true);
     api<Save>(`/saves/${save.id}/phone`, {revision:save.revision, command:{action:'read',conversation_id:conversation,operation_id:crypto.randomUUID()}})
       .then(next=>{if(currentOwner.current===owner)onCommit(next)})
-      .catch(e=>{if(currentOwner.current===owner)setError(e.message)})
+      .catch(e=>{if(currentOwner.current===owner)setError(t("failed"))})
       .finally(()=>{requestLock.current=false;setBusy(false)});
   }, [save.revision, open, tab, conversation, disabled, busy]);
   useLayoutEffect(()=>{const el=messages.current;if(el){const position=reading.current[messageKey];el.scrollTop=position&&!position.pinned?position.top:el.scrollHeight}},[conversation,tab,open,phone?.events.length,save.revision]);
@@ -225,7 +224,7 @@ export function Phone({
       if(command.action==='call'){setTab('calls');setEntry(false)}
       return next;
     } catch (e) {
-      if(currentOwner.current===owner)setError((e as Error).message);
+      if(currentOwner.current===owner)setError(t("failed"));
     } finally {
       requestLock.current = false;
       setBusy(false);
@@ -255,14 +254,18 @@ export function Phone({
         : { contact_id: contact }),
     });
     if (next) {
-      drafts.current[messageKey] = "";
-      sessionStorage.removeItem(`phone-draft:${messageKey}`);
+      const remaining=drafts.current[messageKey]===text?'':(drafts.current[messageKey]||'');
+      drafts.current[messageKey]=remaining;
+      if(remaining)sessionStorage.setItem(`phone-draft:${messageKey}`,remaining);
+      else sessionStorage.removeItem(`phone-draft:${messageKey}`);
       if(currentMessage.current!==messageKey)return;
-      setText("");
+      setText(current=>current===text?'':current);
       const last = next.state.phone?.events
         .filter((e) => e.channel === "TEXT_MESSAGE" && e.outgoing)
         .at(-1);
       if (last?.conversation_id) {
+        const destination=`${ownerKey}:${last.conversation_id}`;
+        if(destination!==messageKey&&remaining){drafts.current[destination]=remaining;sessionStorage.setItem(`phone-draft:${destination}`,remaining)}
         setConversation(last.conversation_id);
         setContact(null);
       }
@@ -280,7 +283,7 @@ export function Phone({
       const result=await api<{job:Job;save:Save}>(`/saves/${save.id}/phone/dispatch`,{revision:save.revision,config,api_key:apiKey,continuation:{source_event_id:event.id,owner_id:phone.actor_id,request_id:requestId}});
       sessionStorage.removeItem(key);
       if(currentOwner.current===ownerKey){onJob(result.job);onCommit(result.save)}
-    }catch(e){if(currentOwner.current===ownerKey)setError((e as Error).message)}finally{requestLock.current=false;setBusy(false)}
+    }catch(e){if(currentOwner.current===ownerKey)setError(t("failed"))}finally{requestLock.current=false;setBusy(false)}
   };
   const latestOutgoing = phone.events.filter(e=>e.outgoing&&e.channel==='TEXT_MESSAGE'&&e.conversation_id===conversation).at(-1);
   const hasReply = !!latestOutgoing && phone.events.slice(phone.events.findIndex(e=>e.id===latestOutgoing.id)+1).some(e=>!e.outgoing&&e.conversation_id===conversation);
@@ -293,8 +296,9 @@ export function Phone({
       if(active(job))await api(`/jobs/${job.id}/stop`,{});
       const next=await api<Save>(`/saves/${save.id}/phone`,{revision:save.revision,command:{action:'end',event_id:call.id,operation_id:crypto.randomUUID()}});
       if(currentOwner.current===ownerKey){onJob({...job,status:'stopped'});onCommit(next)}
-    }catch(e){if(currentOwner.current===ownerKey)setError((e as Error).message)}finally{requestLock.current=false;setBusy(false)}
+    }catch(e){if(currentOwner.current===ownerKey)setError(t("failed"))}finally{requestLock.current=false;setBusy(false)}
   };
+  const jobHere=job?.kind==='communication'&&(job.presentation?.call_id?tab==='calls':tab==='messages'&&!!conversation&&job.presentation?.conversation_id===conversation);
   return (
     <div
       className="phone-affordance"
@@ -343,9 +347,8 @@ export function Phone({
           </header>
           <p className="muted small">Внутриигровая связь · {tab==='contacts'?'Контакты':tab==='messages'?'Переписки':'Звонки'}</p>
           {error && <p role="alert">{error}</p>}
-          {job?.kind==='communication'&&active(job)&&<p className="phone-progress" role="status">Ожидаем решение собеседника… Не более 4 решений за цикл.</p>}
-          {tab==='calls'&&job?.kind==='communication'&&job.status==='saved'&&<p className="phone-progress" role="status">{job.narrative}</p>}
-          {job?.kind==='communication'&&['error','stopped'].includes(job.status)&&job.revision===save.revision&&<div role="alert" className="phone-progress"><p>{call?"Не удалось обработать вызов. Это техническая ошибка, а не отказ собеседника.":"Сообщение отправлено. Не удалось обработать реакцию собеседника."}</p><details onToggle={e=>{if(e.currentTarget.open){const key=`${ownerKey}:${job.id}`;void api(`/saves/${save.id}/phone/diagnostics/${job.id}`).then(value=>setDiagnostics({key,value})).catch(e=>setDiagnostics({key,value:{error:(e as Error).message}}))}}}><summary>Технические подробности</summary><p>{job.error}</p><small>Операция {job.id}</small>{diagnostics?.key===`${ownerKey}:${job.id}`&&<pre style={{maxHeight:240,overflow:'auto',whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{JSON.stringify(diagnostics.value,null,2)}</pre>}</details><button disabled={busy} onClick={async()=>{try{onJob(await api<Job>(`/jobs/${job.id}/retry`,{config,api_key:apiKey}))}catch(e){setError((e as Error).message)}}}>Повторить обработку</button></div>}
+          {jobHere&&active(job)&&<p className="phone-progress" role="status">{t('waiting')}</p>}
+          {jobHere&&job&&['error','stopped'].includes(job.status)&&job.revision===save.revision&&<div role="alert" className="phone-progress"><p>{t('reactionFailed')}</p><button disabled={busy} onClick={async()=>{try{onJob(await api<Job>(`/jobs/${job.id}/retry`,{config,api_key:apiKey}))}catch{setError(t('failed'))}}}>{t('retry')}</button></div>}
           {call&&tab==='messages'&&(conversation||contact)&&<button className="phone-call-link" onClick={()=>setTab('calls')}>{call.status==='ringing'?'Вызов':'Разговор'} · {call.label} →</button>}
           {call && !(tab==='messages'&&(conversation||contact)) && (
             <section className="phone-call" aria-label="Текущий звонок">
@@ -561,7 +564,7 @@ export function Phone({
               </>
             )}
             {tab === "messages" && (
-              <>{activity}
+              <>
                 {!conversation && !contact ? (
                   <>
                     <button onClick={() => setGrouping(!grouping)}>
@@ -811,8 +814,7 @@ export function Phone({
             )}
             {tab === "calls" && (
               <>
-                <h3>История звонков</h3>{activity}
-                <p className="muted small">Ответ / отказ: 1 минута. Без ответа — до {phone.capabilities.ring_timeout_minutes} мин. игрового времени. Дополнительное ожидание только по твоему действию.</p>
+                <h3>История звонков</h3>
                 {!phone.events.some(e=>e.channel==='VOICE_CALL')&&<p>Звонков пока нет. Выбери контакт, чтобы позвонить.</p>}
                 {phone.events
                   .filter((e) => e.channel === "VOICE_CALL")

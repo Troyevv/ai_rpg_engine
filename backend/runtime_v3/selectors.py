@@ -72,9 +72,8 @@ def ui_view(snapshot, history=None):
             scene_id=sid if cid in camera['present_character_ids'] else 'view:'+c['location_id'] if c['location_id'] else None,
             minute=now,last_event_id=None,short_goal='\n'.join(active_texts(c['goals'])))
     for fid,f in state['facts'].items():world['facts'][fid]=dict(f,secret=f['visibility']=='secret',evidence=[])
-    from backend.runtime_v3.remote import commitment_visible
-    for eid,e in state['scheduled_events'].items():
-        if not commitment_visible(state,e,camera['controlled_actor_id']): continue
+    from backend.runtime_v3.remote import visible_commitments
+    for eid,e in visible_commitments(state,camera['controlled_actor_id'],history).items():
         view = commitment_view(state, e)
         window = view['temporal_projection']
         # Presentation labels are disposable and reuse the canonical calendar.
@@ -109,7 +108,7 @@ def ui_view(snapshot, history=None):
         if age is not None: card['fields']['Возраст'] = str(age)
         card['fields'].update({'Сейчас':c['situation'],'Чего хочет':'\n'.join(active_texts(c['goals'])),'Намерения':'\n'.join(world['characters'][card['id']]['intentions'])})
     from backend.runtime_v3.weather import weather_at
-    calendar_state=visible_calendar_state(state)
+    calendar_state=visible_calendar_state(state,history)
     metadata=dict(weather=weather_at(state),time=label(now),location=place(camera['location_id']),present_ids=list(camera['present_character_ids']))
     campaign=deepcopy(snapshot.get('campaign',{}))
     result=dict(campaign,characters=cards,world=world,controlled_actor_id=camera['controlled_actor_id'],

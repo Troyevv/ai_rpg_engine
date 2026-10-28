@@ -73,7 +73,9 @@ def test_api_jobs_meeting_unread_read_calendar_reload_next_turn(tmp_path):
     after=client.get(f'/api/saves/{sid}').json()
     assert after['turns'][-1]['presentation']['surface']=='phone'
     assert after['job']['presentation']['surface']=='phone'
+    request_count=len(repo.request_log(save_id=sid))
     read(repo,client,sid)
+    assert len(repo.request_log(save_id=sid))==request_count
     state=repo.get_snapshot(sid)['world_state']
     assert list(visible_calendar_state(state)['scheduled_events'])==['phone-meeting']
     date=repo.get_save(sid)['state']['world_clock']['projection']['date']
@@ -125,15 +127,27 @@ def test_authored_intention_keeps_exact_text_and_remote_source(tmp_path):
 @pytest.mark.parametrize('temporal,precision', [({'day_offset':1},'day'),({'weekday':4,'day_period':'evening'},'period'),({'minute_offset':120},'exact')])
 def test_relative_windows_anchor_to_proposal_not_reply_or_read(tmp_path,temporal,precision):
     repo,client,sid=setup(tmp_path);jid=dispatch(repo,client,sid)
+    execute(repo,jid,outcome='read_only')
+    state=repo.get_snapshot(sid)['world_state'];source=next(iter(state['remote_events'].values()))
+    assert state['meta']['world_time']==source['world_time']+1
+    with patch('engine.launch'):
+        response=client.post(f'/api/saves/{sid}/phone/dispatch',json=dict(revision=repo.get_save(sid)['revision'],config=CONFIG,
+            continuation=dict(source_event_id=source['id'],owner_id=source['sender_id'],request_id='later-reply')))
+    assert response.status_code==200,response.text
+    jid=response.json()['job']['id']
     def change(value,data):
         value['scheduled_event_changes'][0]['temporal']=temporal
         return value
     execute(repo,jid,transform=change)
     assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
     state=repo.get_snapshot(sid)['world_state'];plan=state['scheduled_events']['phone-meeting']
+    assert state['remote_events'][plan['remote_source_ids'][1]]['world_time']==source['world_time']+1
     assert plan['time_reference_minute']==state['remote_events'][plan['remote_source_ids'][0]]['world_time']
     assert scheduled_window(state,plan)['precision']==precision
-    before=deepcopy(plan);read(repo,client,sid)
+    before=deepcopy(plan)
+    scene=repo.get_save(sid)['state']['scene_meta']
+    repo.update_scene_meta(sid,dict(time='09:30',location=scene['location'],present_ids=scene['present_ids']))
+    read(repo,client,sid)
     assert repo.get_snapshot(sid)['world_state']['scheduled_events']['phone-meeting']==before
 
 
@@ -172,7 +186,10 @@ def test_reschedule_cancel_one_id_and_no_read_side_effects(tmp_path):
                 player_assertion='explicit_choice',player_evidence=text)
             if assertion=='rescheduled':row['temporal']={'day_offset':1,'day_period':'evening'}
             return dict(final_scene=data['final_scene'],scheduled_event_changes=[row])
+        known=deepcopy(repo.get_save(sid)['state']['world']['scheduled_events']['phone-meeting'])
         jid=dispatch(repo,client,sid,text,'phone122-change-'+str(i));execute(repo,jid,transform=transform)
+        perceived=repo.get_save(sid)['state']['world']['scheduled_events']['phone-meeting']
+        assert perceived['temporal']==known['temporal'] and perceived['status']==known['status']
         assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
         read(repo,client,sid)
         state=repo.get_snapshot(sid)['world_state'];assert len(state['scheduled_events'])==1

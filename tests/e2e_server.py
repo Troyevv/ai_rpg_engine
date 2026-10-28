@@ -62,6 +62,9 @@ def stream(**kwargs):
         yield '{"issues":[]}'
         return
     if kwargs['messages'][0]['content'].startswith('Remote semantic extraction/'):
+        if phone_mode=='semantic_error_once':
+            phone_mode='answer'
+            raise RuntimeError('Controlled semantic outage')
         from phone_semantic_fixture import extract
         yield json.dumps(extract(json.loads(kwargs['messages'][1]['content'])),ensure_ascii=False);return
     full='\n'.join(m['content'] for m in kwargs['messages'])
@@ -97,7 +100,7 @@ def stream(**kwargs):
         if phone_mode=='decline' and action=='answer':action='decline'
         p=dict(actor_id=o['actor_id'],action=action,basis_ids=o['basis_ids'])
         if 'event_id' in o:p['event_id']=o['event_id']
-        if action=='send':p.update(o['paths'][0],content='Да, договорились.' if phone_mode=='meeting' else 'Да, увидимся завтра. Напиши, когда освободишься.')
+        if action=='send':p.update(o['paths'][0],content='Да, договорились.' if phone_mode=='meeting' else 'Привет. Ещё в офисе, разгребаю бумаги. А что, есть планы?' if phone_mode=='greeting' else 'Да, увидимся завтра. Напиши, когда освободишься.')
         if action=='identify':p.update(speaker_name='Дежурный оператор')
         yield json.dumps(dict(action=p),ensure_ascii=False)
         return
@@ -230,11 +233,12 @@ def stream(**kwargs):
         value = NARRATIVE
     if kwargs.get('on_usage'):
         kwargs['on_usage']({'prompt_tokens':1000,'completion_tokens':100,'prompt_cache_hit_tokens':800})
-    for i in range(0, len(value), 60):
+    chunk_size=512 if 'Каноническая JSON Schema WorldState' in full else 60
+    for i in range(0, len(value), chunk_size):
         time.sleep(.025)
         if kwargs.get('cancel_event') and kwargs['cancel_event'].is_set():
             raise RuntimeError('Генерация остановлена.')
-        yield value[i:i+60]
+        yield value[i:i+chunk_size]
 
 
 def tabletop_stream(**kwargs):

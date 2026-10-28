@@ -42,7 +42,8 @@ def messages(snapshot, source_id):
     props = schema['properties']['scheduled_event_changes']['items']['properties']
     props.update(remote_source_ids=dict(type='array', items=dict(type='string'), minItems=1, maxItems=8),
                  remote_time_source_id=dict(type='string'))
-    rules = ('Remote semantic extraction/1. Extract ONLY accepted phone content into the existing RawTurnResult schema. '
+    rules = ('Remote semantic extraction/1. Return one valid JSON object matching the supplied schema. '
+             'Extract ONLY accepted phone content into the existing RawTurnResult schema. '
              'This is GM truth, not a broadcast of Knowledge. No physical actions, emotion, goals or values. '
              'A proposal alone or hypothetical/past discussion is NOT an agreement. Require explicit assent from each '
              'participant; never include every group member automatically. Use scheduled_event_changes with assertion '
@@ -60,6 +61,9 @@ def messages(snapshot, source_id):
         current_time=current_time(state), calendar=state['meta']['calendar'],
         final_scene=dict(location_id=state['camera']['location_id'],
                          present_character_ids=state['camera']['present_character_ids'], elapsed_minutes=0),
+        example_json_output=dict(final_scene=dict(location_id=state['camera']['location_id'],
+            present_character_ids=state['camera']['present_character_ids'], elapsed_minutes=0),
+            scheduled_event_changes=[], character_changes=[]),
         accepted_messages=[{k:e[k] for k in ('id','ordinal','sender_id','recipient_ids','conversation_id','world_time','content','read_by','delivered_to')} for e in rows],
         characters={cid:dict(id=cid, intentions=state['characters'][cid]['intentions']) for cid in sorted(ids)},
         existing_plans=[commitment_view(state,e) for e in state['scheduled_events'].values() if ids.intersection(e['character_ids'])],

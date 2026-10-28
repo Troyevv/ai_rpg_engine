@@ -121,7 +121,7 @@ class RuntimeStorage:
               dump(messages), dump(diagnostics), dump(config), dump(price_snapshot(config, datetime.now(timezone.utc)))))
         return rid
 
-    def finish_request(self, rid, status, usage, duration=None, finish_reason=None, response_text=None):
+    def finish_request(self, rid, status, usage, duration=None, finish_reason=None, response_text=None, provider_error=None):
         from backend.services.usage import usage_values, cost
         inp, out, cached = usage_values(usage)
         with self.connect() as db:
@@ -129,6 +129,8 @@ class RuntimeStorage:
             amount = cost(inp, out, cached, pricing)
             db.execute('UPDATE llm_requests SET status=?,usage_json=?,input_tokens=?,output_tokens=?,cached_input_tokens=?,cost_usd=?,duration=?,finish_reason=?,response_text=? WHERE id=?',
                        (status, dump(usage) if usage is not None else None, inp, out, cached, amount, duration, finish_reason, response_text, rid))
+            if provider_error is not None:
+                db.execute("UPDATE llm_requests SET diagnostics_json=json_set(diagnostics_json,'$.provider_error',json(?)) WHERE id=?",(dump(provider_error),rid))
 
     def request_log(self, save_id=None, workspace_id=None, job_id=None):
         field, value = ('save_id', save_id) if save_id is not None else ('workspace_id', workspace_id) if workspace_id else ('job_id', job_id)

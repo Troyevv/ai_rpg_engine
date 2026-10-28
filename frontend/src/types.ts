@@ -165,6 +165,7 @@ export interface Job {
   warnings?: {section: string; reason: string; rejected: unknown}[];
 }
 export interface Save extends SaveItem {
+  physical_choice_source?: {turn_id:number;variant_id:string}|null;
   world_id: number;
   state: State;
   revision: number;

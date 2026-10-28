@@ -41,6 +41,43 @@ def committed_route(job, history):
     return result
 
 
+def physical_scene(state):
+    """Choice applicability, excluding phone focus, remote Knowledge and clock.
+
+    This is a disposable comparison of existing snapshots, not another scene or
+    choice store. Physical presence/situation/life changes invalidate suggestions.
+    """
+    camera=state.get('camera',{})
+    present=set(camera.get('present_character_ids',[]))
+    return dict(camera={k:camera.get(k) for k in ('controlled_actor_id','pov_actor_id','location_id','situation')},
+        present=sorted(present),
+        characters={cid:{k:state['characters'][cid].get(k) for k in ('location_id','life_status')}
+                    for cid in present if cid in state.get('characters',{})},
+        conditions={key:row for key,row in state.get('conditions',{}).items()
+                    if row.get('actor_id') in present},
+        possessions={key:row for key,row in state.get('possessions',{}).items()
+                    if row.get('holder_id') in present or row.get('location_id')==camera.get('location_id')})
+
+
+def physical_choice_source(turns, state, after_for=None):
+    """Latest physical source in the active History lineage, never latest job."""
+    actor=state.get('camera',{}).get('controlled_actor_id')
+    if not actor:return None
+    for turn in reversed(turns):
+        presentation=turn['presentation']
+        if presentation.get('physical_text'):
+            return None  # Accepted external event invalidates older suggestions.
+        if presentation['surface']!='physical' or turn['kind'] not in ('start','turn','pov'):
+            continue
+        after=(after_for(turn['id']) if after_for else json.loads(turn['after_json'])).get('world_state',{})
+        camera=after.get('camera',{})
+        if (camera.get('pov_actor_id') or camera.get('controlled_actor_id'))!=actor:
+            return None
+        if physical_scene(after)!=physical_scene(state):return None
+        return dict(turn_id=turn['id'],variant_id=turn['active_variant_id'])
+    return None
+
+
 def visible_changes(changes, state, actor):
     """Read-only diagnostics summary must not preload unread phone consequences."""
     from copy import deepcopy

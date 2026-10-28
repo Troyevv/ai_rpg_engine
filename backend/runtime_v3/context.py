@@ -436,6 +436,13 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                   target_context_budget=18000, pacing_decision=None, initiative_decision=None, continuity_decision=None):
     from context_builder import estimate
     state = snapshot['world_state']; camera = state['camera']
+    if extraction_text is None:
+        # Apply the knowledge boundary before relevance/pacing can summarize a
+        # private commitment, not just before rendering the final calendar list.
+        from backend.runtime_v3.remote import visible_commitments
+        observer = camera.get('pov_actor_id') or camera.get('controlled_actor_id')
+        state = dict(state, scheduled_events=visible_commitments(state,observer,world_history))
+        snapshot = dict(snapshot, world_state=state)
     all_views = visible_views(snapshot, turns, kind)
     # Respect an explicit smaller user setting, but never exceed six narrative turns.
     views = all_views[-min(6, max(0, recent_turns)):] if recent_turns else []

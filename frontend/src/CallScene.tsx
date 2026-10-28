@@ -19,13 +19,13 @@ export function CallScene({save,disabled,children,submit,end,callId,onSelect,rec
  const input=useRef<HTMLTextAreaElement>(null),panel=useRef<HTMLDivElement>(null);
  const priorFocus=useRef<HTMLElement|null>(document.activeElement as HTMLElement);
  const {scroll,onScroll,away,jumpToLatest}=useStoryScroll(scope);
- const collapse=()=>{setMinimized(true);sessionStorage.setItem(`call-min:${scope}`,'true');priorFocus.current?.focus()};
+ const collapse=()=>{setMinimized(true);sessionStorage.setItem(`call-min:${scope}`,'true');priorFocus.current?.focus({preventScroll:true})};
  const expand=()=>{setMinimized(false);sessionStorage.setItem(`call-min:${scope}`,'false')};
  useEffect(()=>{
    if(minimized)return;
    panel.current?.focus();
    if(history.state?.phoneCall!==scope)history.pushState({...history.state,phoneCall:scope},'');
-   return()=>{if(history.state?.phoneCall===scope)history.back()};
+   return()=>{if(history.state?.phoneCall===scope&&!history.state?.inspectorOpen)history.back()};
  },[minimized,scope]);
  useEffect(()=>{
    const show=(event:Event)=>{if((event as CustomEvent).detail===callId)expand()};
@@ -36,12 +36,12 @@ export function CallScene({save,disabled,children,submit,end,callId,onSelect,rec
  useEffect(()=>{if(obscured)collapse()},[obscured]);
  const wasActive=useRef(active);
  useEffect(()=>{if(wasActive.current&&!active){collapse();onSelect(null)}wasActive.current=active},[active]);
- const send=async()=>{if(disabled||!active||!draft.trim())return;const text=draft;try{await submit(text)}catch{return}setDraft('');sessionStorage.removeItem(key)};
+ const send=async()=>{if(disabled||!active||!draft.trim())return;const text=draft;try{await submit(text)}catch{return}setDraft(current=>current===text?'':current);if(sessionStorage.getItem(key)===text)sessionStorage.removeItem(key)};
  if(!call)return null;
  return createPortal(<>
    {minimized&&<button className="call-chip" onClick={expand}><Phone size={18}/><span>{call.label}</span><strong>{t(active?'restore':'history')}</strong></button>}
    <div className="call-scene-backdrop" hidden={minimized} onClick={collapse}>
-     <section ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-label={t('scene')} className="call-scene" onClick={e=>e.stopPropagation()} onKeyDown={e=>{
+     <section ref={panel} tabIndex={-1} role={minimized?undefined:'dialog'} aria-modal={minimized?undefined:true} aria-label={t('scene')} className="call-scene" onClick={e=>e.stopPropagation()} onKeyDown={e=>{
        if(e.key==='Escape'){e.preventDefault();e.stopPropagation();collapse()}
        if(e.key==='Tab'){
          const nodes=Array.from(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled),textarea:not(:disabled),a[href]')||[]).filter(el=>el.getClientRects().length);

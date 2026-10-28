@@ -1,4 +1,16 @@
 import type {Job,Save,Turn} from './types';
+export function physicalChoiceTurn(save:Save|null):Turn|undefined {
+ if(!save)return;
+ if(save.physical_choice_source!==undefined){
+   const source=save.physical_choice_source;
+   return source?save.turns.find(t=>t.id===source.turn_id&&t.active_variant_id===source.variant_id):undefined;
+ }
+ // Older servers/fixtures: never cross a known physical event in a call.
+ for(const t of [...save.turns].reverse()){
+   if(t.presentation?.physical_text||t.read_only_projection)return;
+   if((t.presentation?.surface||(t.kind==='communication'?'phone':'physical'))==='physical'&&['start','turn','pov'].includes(t.kind))return t;
+ }
+}
 export function turnIdentity(turn:Turn):string {
   return turn.variants?.find(v=>v.id===turn.active_variant_id)?.job_id || `turn:${turn.id}:${turn.active_variant_id}`;
 }

@@ -840,3 +840,16 @@ def commitment_visible(state, record, observer):
 def authored_record_visible(state, record, observer):
     event = state.get('remote_events', {}).get(record.get('source_event_id'))
     return not event or observer == event['sender_id'] or observer in event['read_by']
+
+
+def visible_commitments(state, observer, history=None):
+    """Use existing History for the last known version of an unread change."""
+    result={eid:e for eid,e in state['scheduled_events'].items() if commitment_visible(state,e,observer)}
+    hidden=set(state['scheduled_events'])-result.keys()
+    if not hidden or not history:return result
+    for change in reversed(history.get('state_changes',[])):
+        for eid,old in change.get('before_scheduled_events',{}).items():
+            if eid in hidden and old and commitment_visible(state,old,observer):
+                result[eid]=old;hidden.remove(eid)
+        if not hidden:break
+    return result

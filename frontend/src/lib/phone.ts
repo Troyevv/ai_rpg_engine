@@ -6,6 +6,8 @@ const ru = {
   input: 'Реплика в звонке', send: 'Сказать собеседнику', connected: 'Соединение установлено',
   ended: 'Разговор завершён', physical: 'Действия рядом — в основной сцене', latest: 'К последней реплике',
   plans: 'Планы и договорённости',
+  waiting:'Ожидаем ответа…', failed:'Не получилось. Попробуй ещё раз.',
+  reactionFailed:'Не удалось получить ответ. Можно повторить.',retry:'Повторить',
 };
-const en:typeof ru={scene:'Call scene',minimize:'Minimize call',end:'End call',restore:'Return to call',history:'Call history',close:'Close conversation',input:'Call speech',send:'Speak to caller',connected:'Connected',ended:'Call ended',physical:'Physical actions in the main scene',latest:'Latest reply',plans:'Plans and agreements'};
+const en:typeof ru={waiting:'Waiting for a reply…',failed:'Could not complete this. Try again.',reactionFailed:'Could not receive a reply. You can retry.',retry:'Retry',scene:'Call scene',minimize:'Minimize call',end:'End call',restore:'Return to call',history:'Call history',close:'Close conversation',input:'Call speech',send:'Speak to caller',connected:'Connected',ended:'Call ended',physical:'Physical actions in the main scene',latest:'Latest reply',plans:'Plans and agreements'};
 export const phoneText = (key: keyof typeof ru) => (gameLocale().startsWith('en')?en:ru)[key];

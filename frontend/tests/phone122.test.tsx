@@ -1,8 +1,26 @@
 import {describe,it,expect} from 'vitest';
-import {presentationEntries,surfaceEntries} from '../src/presentationEntries';
+import {presentationEntries,surfaceEntries,physicalChoiceTurn} from '../src/presentationEntries';
 import type {Save,Job,Turn} from '../src/types';
 const turn=(id:number,surface:'physical'|'phone'|'call'):Turn=>({id,sequence:id,node_id:String(id),active_variant_id:String(id),memory_archived:false,user_text:'source',assistant_text:'text',choices:[],kind:surface==='phone'?'communication':'turn',presentation:{surface,actor_id:'a',call_id:surface==='call'?'call-a':null},variants:[{id:String(id),job_id:`j${id}`,ordinal:1,can_regenerate:true}]});
 const save={id:1,revision:4,state:{camera:{}},turns:[turn(0,'physical'),turn(1,'phone'),turn(2,'call')]} as Save;
+describe('physical choice source is independent of communication history',()=>{
+ for(const status of ['generating','extracting','validating','saved','error','stopped'])it(`keeps the same source through ${status}`,()=>{
+   const current={...save,job:{status}} as Save;
+   expect(physicalChoiceTurn(current)?.id).toBe(0);
+ });
+ it('honors canonical invalidation and active variant identity',()=>{
+   expect(physicalChoiceTurn({...save,physical_choice_source:null})).toBeUndefined();
+   expect(physicalChoiceTurn({...save,physical_choice_source:{turn_id:0,variant_id:'old'}})).toBeUndefined();
+   expect(physicalChoiceTurn({...save,physical_choice_source:{turn_id:0,variant_id:'0'}})?.id).toBe(0);
+ });
+ it('never revives old suggestions across a mixed physical event',()=>{
+   const mixed={...turn(3,'call'),presentation:{surface:'call' as const,physical_text:'Дверь открылась.'}};
+   expect(physicalChoiceTurn({...save,turns:[...save.turns,mixed]})).toBeUndefined();
+   const next={...turn(4,'physical'),choices:[]};
+   expect(physicalChoiceTurn({...save,turns:[...save.turns,mixed,next]})).toBe(next);
+   expect(physicalChoiceTurn({...save,turns:save.turns.slice(0,1)})?.id).toBe(0);
+ });
+});
 describe('one history projected into independent reading surfaces',()=>{
  for(const status of ['generating','extracting','validating','saved','error','stopped']){
   it(`never projects phone streaming/status into story: ${status}`,()=>{
