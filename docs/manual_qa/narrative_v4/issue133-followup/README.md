@@ -28,7 +28,9 @@ messages in the whole thread). Ordinary Narrative agency checks remain active.
 One bounded correction can repair rejected commitments using the same accepted
 messages and same candidate IDs. A correction cannot erase a rejected meeting.
 Failure stays recoverable; manual Retry replays accepted decisions and resumes
-semantic correction without send/read/NPC generation/time duplication. Invalid
+semantic correction without send/read/NPC generation/time duplication. Unusable
+initial envelopes or forbidden scene mutations regenerate only the semantic
+response on Retry; they are never replayed forever as accepted work. Invalid
 optional intentions are rejected locally and retained as diagnostics. Snapshots,
 History, Knowledge, calendar visibility and the atomic commit remain unchanged.
 

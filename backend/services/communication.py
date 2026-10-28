@@ -115,7 +115,7 @@ def execute(storage, job, handle, chat_stream):
         try:
             # A failed repair resumes from the accepted decision journal AND the
             # original semantic response, without another NPC or extraction call.
-            if semantic and semantic.get('response') and semantic.get('messages') == prompts and not job['replaces_id']:
+            if semantic and semantic.get('response') and (semantic.get('accepted') or semantic.get('validation_errors')) and semantic.get('messages') == prompts and not job['replaces_id']:
                 response = semantic['response']
             else:
                 response = generate_semantics('remote_semantics', prompts)

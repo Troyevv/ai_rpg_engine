@@ -180,3 +180,22 @@ def test_canonical_identity_does_not_invent_player_choice(tmp_path,proof):
     assert repo.get_job(jid)['status']=='error'
     assert 'controlled_actor_unsupported' in repo.get_job(jid)['error']
     assert repo.get_snapshot(sid)==before
+
+
+@pytest.mark.parametrize('invalid',['envelope','scene'])
+def test_retry_regenerates_unusable_semantic_response_only(tmp_path,invalid):
+    repo,client,sid=setup(tmp_path);jid=dispatch(repo,client,sid)
+    before=repo.get_snapshot(sid)
+    def malformed(value,data):
+        if invalid=='envelope':return 'not a result object'
+        value['final_scene']['elapsed_minutes']=10
+        return value
+    assert execute(repo,jid,transform=malformed)==['decision','decision','semantic']
+    assert repo.get_job(jid)['status']=='error'
+    assert repo.get_snapshot(sid)==before
+    repo.retry_job(jid,CONFIG)
+    assert execute(repo,jid)==['semantic']
+    assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
+    state=repo.get_snapshot(sid)['world_state']
+    assert len(state['remote_events'])==2 and len(state['scheduled_events'])==1
+    assert state['meta']['world_time']==before['world_state']['meta']['world_time']+1
