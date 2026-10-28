@@ -70,13 +70,14 @@ def test_invalid_optional_intention_does_not_discard_meeting_or_messages(tmp_pat
     assert not any(i['text']=='invented' for i in state['characters']['qa_kirill']['intentions'])
 
 
-def test_repair_cannot_erase_rejected_meeting_and_retry_replays_only_repair(tmp_path):
+@pytest.mark.parametrize('missing_field',['player_assertion','id'])
+def test_repair_cannot_erase_rejected_meeting_and_retry_replays_only_repair(tmp_path,missing_field):
     repo,client,sid=setup(tmp_path);jid=dispatch(repo,client,sid)
     before=deepcopy(repo.get_snapshot(sid));attempt=0
     def invalid(value,data):
         nonlocal attempt
         attempt+=1
-        if attempt==1:value['scheduled_event_changes'][0].pop('player_assertion')
+        if attempt==1:value['scheduled_event_changes'][0].pop(missing_field)
         else:value['scheduled_event_changes']=[]
         return value
     assert execute(repo,jid,transform=invalid)==['decision','decision','semantic','semantic']

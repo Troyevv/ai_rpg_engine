@@ -145,7 +145,8 @@ def execute(storage, job, handle, chat_stream):
                 from backend.runtime_v3.raw import RawTurnResult
                 records=RawTurnResult.parse(repaired).records['scheduled_event_changes']
                 ids={r.get('id') for r in records if isinstance(r,dict) and isinstance(r.get('id'),str)}
-                if not set(rejection.candidate_ids)<=ids:
+                original_records=RawTurnResult.parse(response).records['scheduled_event_changes']
+                if len(records)<len(original_records) or not set(rejection.candidate_ids)<=ids:
                     raise SemanticValidationError([dict(code='commitment_repair_omission',section='scheduled_events',action='reject_repair')],rejection.candidate_ids)
                 warnings=[]
                 resolved,consequences=semantic_resolve(after,report['source_event_id'],repaired,warnings)
