@@ -1,8 +1,9 @@
 import {test,expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {defaults} from '../src/types';
+import {diagnostics} from './navigation';
 
-for (const scenario of ['entry','doorway']) {
+for (const scenario of ['entry','doorway','optional-annotation','semantic-retry']) {
  test(`scene authority 136 ${scenario}: real jobs turn reload turn`,async({page,request},info)=>{
   const source=JSON.parse(readFileSync(new URL('../../tests/fixtures/runtime_handoff/world.json',import.meta.url),'utf8'));
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
@@ -16,13 +17,32 @@ for (const scenario of ['entry','doorway']) {
   const view=async()=> (await(await request.get(`/api/saves/${selected.save}`)).json());
   const first=await view();
   await request.post(`/test/runtime-handoff-provider?scenario=${scenario}`);
+  let calls:{narratives:number;extractions:number}|undefined;
   try {
    await page.goto('/');await page.getByRole('button',{name:'Начать игру',exact:true}).click();
-   await expect(page.locator('.turn')).toHaveCount(1);
+   if(scenario==='semantic-retry') {
+    await expect(page.getByRole('button',{name:'Повторить обработку состояния',exact:true})).toBeEnabled();
+    const rejected=await view();expect(rejected.turns).toHaveLength(0);
+    expect(rejected.state.world.characters.viktoria_solovyova.life_status).toBe('alive');
+    await page.reload();
+    await page.getByRole('button',{name:'Повторить обработку состояния',exact:true}).click();
+   }
+   await expect(page.locator('.turn')).toHaveCount(1,{timeout:30000});
    const accepted=await view();const job=await(await request.get(`/api/jobs/${accepted.job.id}`)).json();
    expect(job.status).toBe('saved');const text=job.narrative;
-   expect(text).toContain(scenario==='entry'?'вошла внутрь':'Виктория стоит в проёме');
-   expect(accepted.state.scene_meta.present_ids).toEqual(scenario==='entry'?['ilya','viktoria_solovyova']:['ilya']);
+   expect(text).toContain(scenario==='doorway'?'Виктория стоит в проёме':'вошла внутрь');
+   expect(accepted.state.scene_meta.present_ids).toEqual(scenario==='doorway'?['ilya']:['ilya','viktoria_solovyova']);
+   expect(accepted.state.world.characters.viktoria_solovyova.life_status).toBe('alive');
+   if(scenario==='optional-annotation')expect(job.warnings.some((w:{code:string})=>w.code==='initiative_knowledge_invalid')).toBe(true);
+   if(scenario==='semantic-retry')expect(job.warnings.some((w:{code:string;section:string})=>w.code==='extraction_revised'&&w.section==='life_changes')).toBe(true);
+   if(scenario==='semantic-retry') {
+    await diagnostics(page);
+    const dialog=page.getByRole('dialog');
+    await dialog.getByRole('tab',{name:'Производительность',exact:true}).click();
+    await expect(dialog.locator('.delta-warnings')).toContainText('Применён исправленный результат Extraction.');
+    await expect(dialog.locator('.delta-warnings')).not.toContainText('Запись отброшена.');
+    await page.keyboard.press('Escape');
+   }
    if(scenario==='doorway') {
     expect(accepted.state.scene_meta.observed_ids).toEqual(['viktoria_solovyova']);
     expect(accepted.state.world.characters.viktoria_solovyova.location_id).toBe(first.state.world.characters.viktoria_solovyova.location_id);
@@ -41,9 +61,9 @@ for (const scenario of ['entry','doorway']) {
    await page.screenshot({path:`test-results/authority136-${scenario}-${info.project.name}.png`,fullPage:true,animations:'disabled'});
    expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width);
   } finally {
-   const calls=await(await request.post('/test/runtime-handoff-provider?enabled=false')).json();
-   expect(calls.narratives).toBe(3);expect(calls.extractions).toBe(3);
+   calls=await(await request.post('/test/runtime-handoff-provider?enabled=false')).json();
   }
+  expect(calls?.narratives).toBe(3);expect(calls?.extractions).toBe(scenario==='semantic-retry'?5:3);
   expect(errors).toEqual([]);
  });
 }

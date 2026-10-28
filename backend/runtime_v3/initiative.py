@@ -6,7 +6,7 @@ from copy import deepcopy
 import json
 from typing import Literal
 from pydantic import Field
-from backend.runtime_v3.models import StrictModel, fatal
+from backend.runtime_v3.models import StrictModel
 from backend.runtime_v3.life import capabilities
 
 
@@ -91,14 +91,14 @@ def validate_actions(resolver, raw, events):
         if claim.response == 'player_supplied':
             quote = normalized(claim.player_evidence)
             if external not in claim.target_ids or not quote or quote not in normalized(resolver.player_input):
-                fatal('Нет источника решения игрока.', 'initiative_player_evidence_required', repairable=True, section='scene_actions', index=index)
+                warning('initiative_player_evidence_required'); continue
         invalid_knowledge = any(
             (k := resolver.before['knowledge'].get(key)) is None or k['actor_id'] != cid
             or k['status'] not in ('known', 'suspected')
             or k['status'] == 'suspected' and claim.knowledge_use != 'inquiry'
             for key in claim.knowledge_ids)
         if invalid_knowledge:
-            fatal('Недоступный источник знания.', 'initiative_knowledge_invalid', repairable=True, section='scene_actions', index=index)
+            warning('initiative_knowledge_invalid'); continue
         caps = capabilities(resolver.state, cid)
         stages=[caps]
         if cid in resolver.before['characters']: stages.append(capabilities(resolver.before,cid))
@@ -106,8 +106,8 @@ def validate_actions(resolver, raw, events):
         # Final capabilities must not erase an accepted earlier Event.
         if not any(stage['can_act'] and (claim.modality!='speech' or stage['can_speak'])
                    and (claim.modality!='departure' or stage['can_move']) for stage in stages):
-            fatal('Действие противоречит установленной способности.', 'initiative_capability_invalid', repairable=True, section='scene_actions', index=index)
+            warning('initiative_capability_invalid'); continue
         if claim.adult and any(not capabilities(resolver.state, a)['adult_eligible'] for a in [cid, *claim.target_ids]):
-            fatal('Недопустимый контекст взрослого взаимодействия.', 'initiative_adult_context_required', repairable=False)
+            warning('initiative_adult_context_required'); continue
         seen.add(claim.source_event_id)
         event['scene_action'] = claim.model_dump(exclude={'source_event_id', 'evidence'})

@@ -186,7 +186,7 @@ def test_required_journey_api_jobs_sqlite_phone_reload(tmp_path):
 
 
 @pytest.mark.parametrize('omit', [False, True])
-def test_t17_repair_cannot_erase_death_and_preserves_atomic_lineage(api, omit):
+def test_t17_repair_reinterprets_proposals_and_preserves_atomic_lineage(api, omit):
     from storage import Storage
     client,app=api;sid=imported(client);repo=app.state.repository
     before=repo.get_snapshot(sid);calls=[]
@@ -195,24 +195,23 @@ def test_t17_repair_cannot_erase_death_and_preserves_atomic_lineage(api, omit):
     raw['events']=[dict(id='death',text='Её дыхание оборвалось.',participants=['viktoria_solovyova'])]
     def provider(**kw):
         calls.append(kw)
-        if not kw.get('response_format'):yield 'Её дыхание оборвалось.';return
+        if not kw.get('response_format'):yield ('Она жива; смерть была слухом.' if omit else 'Её дыхание оборвалось.');return
         value=deepcopy(raw)
         if len(calls)==2:value['final_scene']['location_id']='missing-room'
-        elif omit:value['life_changes']=[]
+        elif omit:
+            value['life_changes']=[]
+            value['events']=[dict(id='rumor',text='Сообщение о смерти было слухом.',participants=['viktoria_solovyova'])]
         yield json.dumps(value)
     with patch('engine.chat_stream',side_effect=provider):job=wait_job(client,submit(client,sid))
     assert len(calls)==3
+    assert job['status']=='saved',job.get('error')
+    after=Storage(repo.path).get_snapshot(sid)
+    assert after['world_state']['characters']['viktoria_solovyova']['life_status']==('alive' if omit else 'dead')
     if omit:
-        assert job['status']=='error'
-        assert repo.get_snapshot(sid)==before and repo.list_turns(sid)==[]
-        assert json.loads(repo.get_job(job['id'])['repair_diagnostics_json'])[-1]['repair_error_code']=='extraction_repair_omission'
-    else:
-        assert job['status']=='saved',job.get('error')
-        after=Storage(repo.path).get_snapshot(sid)
-        assert after['world_state']['characters']['viktoria_solovyova']['life_status']=='dead'
-        assert len(repo.list_turns(sid))==1
-        repo.rollback_last(sid)
-        assert repo.get_snapshot(sid)==before
+        assert any(w['code']=='extraction_revised' and w['section']=='life_changes' for w in json.loads(repo.get_job(job['id'])['warnings_json']))
+    assert len(repo.list_turns(sid))==1
+    repo.rollback_last(sid)
+    assert repo.get_snapshot(sid)==before
 
 
 @pytest.mark.parametrize('authorization', ['none','forged','player','involuntary'])
@@ -242,12 +241,18 @@ def test_t31_nested_life_typo_is_visible():
     assert exc.value.path['path']=='life_changes[0].life_stauts'
 
 
-def test_retry_after_restart_cannot_erase_classified_outcome(api):
+def test_retry_uses_latest_provisional_response_without_union_of_claims(api):
     from test_runtime_handoff import REMOTE
     client,app=api;sid=imported(client);repo=app.state.repository;before=repo.get_snapshot(sid)
     bad=arrival();bad['movements']=[];bad['final_scene']['location_id']='missing'
     bad['life_changes']=[dict(id='viktoria_solovyova',life_status='dead')]
-    def first(**kw):yield json.dumps(bad) if kw.get('response_format') else 'Её дыхание оборвалось.'
+    attempts=[]
+    def first(**kw):
+        if not kw.get('response_format'):yield 'Она жива; смерть была слухом.';return
+        value=deepcopy(bad)
+        if attempts:value['life_changes']=[]
+        attempts.append(value)
+        yield json.dumps(value)
     with patch('engine.chat_stream',side_effect=first):job=wait_job(client,submit(client,sid))
     assert job['status']=='error'
     calls=[];omitted=arrival();omitted['movements']=[]
@@ -256,9 +261,11 @@ def test_retry_after_restart_cannot_erase_classified_outcome(api):
         response=client.post(f"/api/jobs/{job['id']}/retry",json=dict(config=REMOTE,api_key='test-secret'))
         assert response.status_code==200,response.text
         result=wait_job(client,job['id'])
-    assert result['status']=='error' and len(calls)==1
-    assert repo.get_snapshot(sid)==before and repo.list_turns(sid)==[]
-    assert json.loads(repo.get_job(job['id'])['repair_diagnostics_json'])[-1]['repair_error_code']=='extraction_repair_omission'
+    assert result['status']=='saved' and len(calls)==1
+    assert repo.get_snapshot(sid)['world_state']['characters']['viktoria_solovyova']['life_status']=='alive'
+    assert len(repo.list_turns(sid))==1
+    feedback=next(json.loads(m['content'].split('Исправь структурную ошибку, верни полный JSON:\n',1)[1]) for m in calls[0]['messages'] if 'original_extraction' in m['content'])
+    assert json.loads(feedback['original_extraction'])==attempts[-1]
 
 
 def test_observed_stale_colocation_clears_only_unknown_position(api):

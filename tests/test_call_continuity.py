@@ -275,7 +275,7 @@ def test_repair_may_remove_unaccepted_optional_events(tmp_path):
 
 
 @pytest.mark.parametrize('remove',[True,False])
-def test_repair_cannot_delete_an_accepted_physical_event(tmp_path,remove):
+def test_call_repair_reinterprets_uncommitted_events_without_committing_invalid_ids(tmp_path,remove):
     repo,client,sid,cid=connected(tmp_path);before=repo.get_snapshot(sid)
     attempts=0
     def repair(value,current):
@@ -288,8 +288,14 @@ def test_repair_cannot_delete_an_accepted_physical_event(tmp_path,remove):
             value['physical_projections']=[]
         return value
     jid,_=turn(repo,client,sid,OFFER,repair,narrative_extra='\n'+END)
-    assert repo.get_job(jid)['status']=='error'
-    assert repo.get_snapshot(sid)==before
+    saved(repo,jid)
+    warnings=json.loads(repo.get_job(jid)['warnings_json'])
+    assert any(w['section']=='events' and w['code']=='extraction_revised' for w in warnings)
+    assert repo.get_snapshot(sid)['world_state']['remote_events'][cid]['status']=='ended'
+    if not remove:
+        assert any(w['section']=='events' and w['action']=='drop_record' for w in warnings)
+    route=client.get(f'/api/saves/{sid}').json()['turns'][-1]['presentation']
+    assert not route['physical_events']
 
 
 def test_legacy_confirmed_physical_card_is_not_erased(tmp_path):

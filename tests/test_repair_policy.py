@@ -20,7 +20,9 @@ def test_repair_reason_persists_restart_and_variant_switch(db,secondary):
     original=repo.list_turns(sid)[0];repo=Storage(repo.path)
     first=repo.turn_diagnostics(sid)[0];reason=first['repairs'][0]
     assert reason['repair_error_code']=='unknown_character' and reason['stage']=='extraction_repair'
-    assert bool(first['warnings'])==secondary and first['timing']['extraction_repair']>=0
+    assert any(w['code']=='extraction_revised' for w in first['warnings'])
+    assert bool([w for w in first['warnings'] if w['code']!='extraction_revised'])==secondary
+    assert first['timing']['extraction_repair']>=0
     requests={r['stage']:r for r in first['requests']}
     assert json.loads(requests['extraction']['response_text'])==bad
     assert json.loads(requests['extraction_repair']['response_text'])==fixed

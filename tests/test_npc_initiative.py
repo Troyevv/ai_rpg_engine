@@ -78,15 +78,15 @@ def test_adult_proposals_do_not_create_consent_or_reciprocity(text, modality):
     dict(adult=True,target_ids=['child']), dict(source_event_id='missing'),
     dict(knowledge_ids=['a:secret']), dict(evidence='Выдуманная цитата'),
 ])
-def test_unsupported_agency_is_atomic(changes):
+def test_optional_claim_does_not_create_agency_or_erase_event(changes):
     snap=snapshot();before=deepcopy(snap)
+    out=resolve(snap,payload(snap,**changes))
+    assert len(out.history['events'])==1
+    assert out.state['knowledge']==snap['world_state']['knowledge']
+    assert out.state['characters']['a']['intentions']==[]
     if changes.get('response')=='player_supplied' or 'knowledge_ids' in changes or changes.get('adult') or changes.get('actor_id')=='baby':
-        with pytest.raises(StructuralDeltaError): resolve(snap,payload(snap,**changes))
-    else:
-        out=resolve(snap,payload(snap,**changes))
-        assert len(out.history['events'])==1
-        assert out.state['knowledge']==snap['world_state']['knowledge']
-        assert out.state['characters']['a']['intentions']==[]
+        assert 'scene_action' not in out.history['events'][0]
+        assert any(w['section']=='scene_actions' and w['action']=='drop_record' for w in out.warnings)
     assert snap==before
 
 
@@ -117,7 +117,10 @@ def test_temporary_control_and_observation_follow_camera_not_protagonist():
 def test_capabilities_constrain_actions_without_personality_gates(effect,modality):
     snap=snapshot();s=snap['world_state']
     s['conditions']['blocked']=Condition(id='blocked',actor_id='b',description='Ограничение',effects={effect:False}).model_dump()
-    with pytest.raises(StructuralDeltaError):resolve(snap,payload(snap,modality=modality))
+    out=resolve(snap,payload(snap,modality=modality))
+    assert len(out.history['events'])==1 and 'scene_action' not in out.history['events'][0]
+    assert any(w['code']=='initiative_capability_invalid' for w in out.warnings)
+    assert out.state['conditions']==s['conditions']
 
 
 def test_reference_does_not_open_remote_channel():
@@ -135,9 +138,11 @@ def test_reference_does_not_open_remote_channel():
 def test_actor_knowledge_is_not_world_truth(status,usage,allowed):
     snap=snapshot();snap['world_state']['facts']['secret']['character_ids']=['a','b'];snap['world_state']['knowledge']['b:secret']=Knowledge(actor_id='b',fact_id='secret',status=status).model_dump()
     raw=payload(snap,knowledge_ids=['b:secret'],knowledge_use=usage)
-    if allowed: assert resolve(snap,raw).history['events']
-    else:
-        with pytest.raises(StructuralDeltaError):resolve(snap,raw)
+    out=resolve(snap,raw)
+    assert len(out.history['events'])==1
+    assert ('scene_action' in out.history['events'][0]) == allowed
+    assert out.state['knowledge']==snap['world_state']['knowledge']
+    if not allowed: assert any(w['code']=='initiative_knowledge_invalid' for w in out.warnings)
 
 
 @given(st.sampled_from(['calm','moderate','dynamic','intense']),st.booleans())
@@ -286,20 +291,24 @@ def test_initiative_news_and_completed_intention_use_normal_provenance():
     assert out.state['characters']['a']['intentions']==[]
 
 
-def test_invalid_claim_fails_real_job_without_extra_repair_or_saved_state(tmp_path):
+def test_invalid_annotation_warns_real_job_without_extra_repair(tmp_path):
     from backend.repositories.preparation import Repository
     from devtools.narrative_test_world import load_fixture,ACTOR_ID
     from test_narrative_test_world import CONFIG,ordinary_job
     from runtime_v3_fixture import execute
     repo=Repository(tmp_path/'invalid.sqlite');sid=load_fixture(repo,'initiative')['save']
     ordinary_job(repo,sid,'start');before=repo.get_snapshot(sid);camera=before['world_state']['camera']
-    text='Вера обнимает Кирилла; тот добровольно отвечает объятием.'
+    text='Вера протягивает руку, предлагая поздороваться.'
     raw=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids']),
         events=[dict(id='bad',text=text,evidence=text,participants=['qa_vera',ACTOR_ID])],
         scene_actions=[dict(actor_id='qa_vera',target_ids=[ACTOR_ID],source_event_id='bad',phase='start',modality='physical',adult=True,interruptible=True,response='player_supplied',player_evidence='Обнимаю в ответ.',evidence=text)])
     job=repo.begin_job(sid,'Слушаю.','turn',CONFIG);calls=execute(repo,job,raw,text)
-    assert repo.get_job(job)['status']=='error'
-    assert len(calls)==3 and repo.get_snapshot(sid)==before
+    assert repo.get_job(job)['status']=='saved'
+    assert len(calls)==2
+    after=repo.get_snapshot(sid)
+    for field in ('goals','intentions','obligations','emotion'):
+        assert after['world_state']['characters'][ACTOR_ID][field]==before['world_state']['characters'][ACTOR_ID][field]
+    assert any(w['code']=='initiative_player_evidence_required' for w in json.loads(repo.get_job(job)['warnings_json']))
 
 
 def test_shared_event_cannot_overwrite_another_initiator():

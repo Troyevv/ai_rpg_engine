@@ -87,26 +87,6 @@ def apply_lifecycle(resolver, raw):
             getattr(resolver.history,section).extend(values)
 
 
-def repair_candidates(raw, accepted_events=()):
-    """Guard critical claims and already validated Events, not optional hints."""
-    result={section:[row for row in raw.records[section] if isinstance(row,dict)]
-        for section in ('scheduled_event_changes','call_lifecycle_changes')}
-    result['events']=[dict(id=e['local_id'],evidence=e['evidence']) for e in accepted_events
-        if e.get('interaction_channel')=='physical' and e.get('local_id')]
-    return result
-
-
-def validate_repair(previous, raw):
-    for section,rows in previous.items():
-        key='call_id' if section=='call_lifecycle_changes' else 'id'
-        for row in rows:
-            if not any(isinstance(other,dict) and ((row.get(key) is not None and other.get(key)==row[key])
-                or (row.get('evidence') and other.get('evidence')==row['evidence']))
-                for other in raw.records[section]):
-                fatal('Исправление удалило подтверждённое последствие телефонного хода.',
-                    'call_repair_omission',repairable=False,section=section)
-
-
 def reconcile(resolver, reason, quote=None):
     """Presentation audit, not another canonical state or a prose classifier."""
     audit=getattr(resolver,'physical_reconciliation',None)

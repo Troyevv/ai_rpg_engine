@@ -78,47 +78,22 @@ class RawTurnResult:
         return cls(deepcopy(payload['final_scene']), records, choices, warnings)
 
 
-# Protect already classified vital outcomes across the existing bounded repair.
-# This compares structured identity/outcome only; it never reads literary text.
-def repair_outcomes(raw, before):
-    fields = {
-        'life_changes': ('id', 'life_status', 'display_name'),
-        'condition_changes': ('id', 'actor_id', 'status', 'effects'),
-        'scheduled_event_changes': ('id', 'assertion', 'character_ids'),
-        'social_relation_changes': ('id', 'kind', 'source_id', 'target_id', 'status'),
-        'residence_changes': ('id', 'actor_id', 'location_id', 'status'),
-        'role_changes': ('id', 'actor_id', 'status'),
-        'call_lifecycle_changes': ('call_id', 'actor_id', 'assertion'),
-        'movements': ('actor_id', 'to_location_id'),
-    }
-    result = {}
-    for section, keys in fields.items():
-        for row in raw.records[section]:
-            if not isinstance(row, dict): continue
-            if section == 'call_lifecycle_changes' and row.get('assertion') != 'completed_end': continue
-            if section in ('life_changes','condition_changes','social_relation_changes','residence_changes','role_changes') and row.get('assertion','established') != 'established': continue
-            if section == 'scheduled_event_changes' and row.get('assertion') not in ('agreed','rescheduled','cancelled','occurred','missed','blocked','started','ended'): continue
-            identity_key = keys[0]
-            if not isinstance(row.get(identity_key), str) or not row[identity_key]: continue
-            actor_keys = ('actor_id', 'source_id', 'target_id')
-            if any(row.get(k) is not None and (not isinstance(row[k],str) or row[k] not in before['characters']) for k in actor_keys): continue
-            if section == 'life_changes' and row['id'] not in before['characters']: continue
-            if section == 'life_changes' and 'life_status' in row and row['life_status'] not in ('alive','dead','missing','unknown'): continue
-            if section == 'life_changes' and not any(k in row for k in keys[1:]): continue
-            if section == 'movements' and (not isinstance(row.get('to_location_id'),str) or row['to_location_id'] not in before['locations']): continue
-            result.setdefault(section, []).append({k:deepcopy(row[k]) for k in keys if k in row})
-    return result
+def repair_revision_warnings(previous, current):
+    """Audit revised proposals, never adjudicate which Extraction is true.
 
-
-def validate_repair_outcomes(required, raw):
-    for section, rows in required.items():
-        for expected in rows:
-            if not any(isinstance(row,dict) and all(row.get(k)==v for k,v in expected.items())
-                       for row in raw.records[section]):
-                fatal('Исправление удалило или изменило установленный исход.', 'extraction_repair_omission',
-                      repairable=False, section=section, path=section,
-                      source_ids=[expected.get('id') or expected.get('call_id')],
-                      severity='hard_conflict', action='regenerate', expected=expected)
+    A rejected attempt has no canonical outcomes, even if individual records
+    passed validation before a later failure. Committed before/History remain
+    protected by domain handlers and the existing transaction boundary.
+    Full old/new responses and their provenance live in the request log.
+    """
+    if previous is None: return []
+    sections = ['final_scene'] + [name for name in SECTIONS if name not in OPTIONAL_SECTIONS]
+    return [dict(type='extraction_revision', section=section, code='extraction_revised',
+                 action='use_revised_extraction',
+                 reason='Изменён предварительный результат Extraction; различие JSON не доказывает правильность интерпретации.')
+            for section in sections
+            if (previous.final_scene if section == 'final_scene' else previous.records[section]) !=
+               (current.final_scene if section == 'final_scene' else current.records[section])]
 
 
 def extraction_schema():
@@ -362,4 +337,4 @@ def repair_feedback(diagnostic, payload, before):
     """Retry-only context: never infer scene semantics from prose in Python."""
     return json.dumps(dict(diagnostic=diagnostic, original_extraction=payload,
         previous_camera=before['camera'], known_locations=before['locations'],
-        contract='narrative-authority-v1: preserve all established consequences from the same narrative. final_scene present owns physical membership; observed is visible outside. Do not invent movements, consent or endpoints. Repair only the reported structural inconsistency.'), ensure_ascii=False)
+        contract='narrative-authority-v1: original_extraction — предварительный результат отклонённой попытки, не канон. Повторно интерпретируй то же полное повествование: исправь сообщённую ошибку и ошибочные классификации, сохрани все действительно произошедшие последствия и их зависимости. Не удаляй последствия только ради прохождения валидации. before/History — принятый канон; не переписывай его. final_scene present owns physical membership; observed is visible outside. Do not invent movements, consent or endpoints.'), ensure_ascii=False)

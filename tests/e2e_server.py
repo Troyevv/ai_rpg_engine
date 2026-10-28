@@ -81,13 +81,17 @@ def stream(**kwargs):
             raw['movements']=[]
             if scenario=='doorway':
                 raw['final_scene'].update(present_character_ids=['ilya'],observed_character_ids=['viktoria_solovyova'])
-            if scenario=='retry' and handoff_provider['extractions']<=2:
+            if scenario in ('retry','semantic-retry') and handoff_provider['extractions']<=2:
                 raw['final_scene']['location_id']='unknown-room'
+                if scenario=='semantic-retry':raw['life_changes']=[dict(id='viktoria_solovyova',life_status='dead')]
+            if scenario=='optional-annotation':
+                raw['events']=[dict(id='greeting',text='Виктория приветствует Илью.',participants=['ilya','viktoria_solovyova'],witnesses=['ilya'],medium='conversation')]
+                raw['scene_actions']=[dict(actor_id='viktoria_solovyova',target_ids=['ilya'],source_event_id='greeting',phase='start',modality='speech',knowledge_ids=['missing'])]
             yield json.dumps(raw,ensure_ascii=False)
         else:
             handoff_provider['narratives']+=1
             if handoff_provider.get('scenario')=='doorway':entry='Виктория стоит в проёме, не заходя.'
-            elif handoff_provider.get('scenario')=='entry':entry='Виктория вошла внутрь и подошла к столу.'
+            elif handoff_provider.get('scenario') in ('entry','optional-annotation','semantic-retry'):entry='Виктория вошла внутрь и подошла к столу.'
             yield entry if handoff_provider['narratives']==1 else 'Виктория Соловьёва отвечает: «Скоро закончу».'
         return
     if kwargs['messages'][0]['content'].startswith('Один необязательный пакет') and 'TEST_RELEASE_QUALITY' in full:
