@@ -256,12 +256,12 @@ def test_response_reference_requires_pending_id_and_current_player_evidence(refe
     raw=action_payload(snap,response=response,player_evidence=evidence,response_event_id=reference)
     resolver=StateResolver(snap['world_state'],raw['events'][0]['text'],'Нет.',
         initiative_decision=action_permit(snap), continuity_decision={'pending_response_ids':['first','second']})
-    if evidence=='Да.':
-        with pytest.raises(StructuralDeltaError):resolver.resolve(raw)
-    else:
-        out=resolver.resolve(raw)
-        assert out.history['turns'][0]['continuity']['answered_response_ids']==[]
-        assert any(w['code']=='initiative_response_reference_invalid' for w in out.warnings)
+    out=resolver.resolve(raw)
+    assert out.history['turns'][0]['continuity']['answered_response_ids']==[]
+    assert len(out.history['events'])==1 and 'scene_action' not in out.history['events'][0]
+    expected='initiative_player_evidence_required' if evidence=='Да.' else 'initiative_response_reference_invalid'
+    assert any(w['code']==expected for w in out.warnings)
+    assert out.state['characters']==snap['world_state']['characters']
     assert snap==before
 
 
