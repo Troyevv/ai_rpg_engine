@@ -41,6 +41,7 @@ test('original export identities and rejected opening recover through real API t
  await page.keyboard.press('Escape');
  if(info.project.name==='desktop')await expect(page.getByLabel('Управляемый персонаж')).toHaveValue('ilya');
  await request.post('/test/runtime-handoff-provider');
+ let calls:{narratives:number;extractions:number}|undefined;
  try {
   await page.getByRole('button',{name:'Начать игру',exact:true}).click();
   await expect(page.getByRole('button',{name:'Повторить обработку состояния',exact:true})).toBeEnabled();
@@ -49,7 +50,9 @@ test('original export identities and rejected opening recover through real API t
   await page.screenshot({path:`test-results/handoff-rejected-${info.project.name}.png`,fullPage:true,animations:'disabled'});
   await page.reload();
   await page.getByRole('button',{name:'Повторить обработку состояния',exact:true}).click();
-  await expect(page.locator('.turn')).toHaveCount(1);
+  // Real validation/SQLite commit can exceed the UI assertion default under load.
+  // Await the committed turn; keep all canonical and provider-count assertions.
+  await expect(page.locator('.turn')).toHaveCount(1,{timeout:30000});
   expect((await view()).state.scene_meta.present_ids).toEqual(['ilya','viktoria_solovyova']);
   await page.locator('.choices button').filter({hasText:'Ждать ответа'}).click();
   await expect(page.locator('.turn')).toHaveCount(2);
@@ -62,8 +65,9 @@ test('original export identities and rejected opening recover through real API t
   await page.screenshot({path:`test-results/handoff-played-${info.project.name}.png`,fullPage:true,animations:'disabled'});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width);
  } finally {
-  const calls=await(await request.post('/test/runtime-handoff-provider?enabled=false')).json();
-  expect(calls.narratives).toBe(3);expect(calls.extractions).toBe(5);
+  calls=await(await request.post('/test/runtime-handoff-provider?enabled=false')).json();
  }
+ // Do not replace a primary failure with the expected incomplete call counts.
+ expect(calls?.narratives).toBe(3);expect(calls?.extractions).toBe(5);
  expect(errors).toEqual([]);
 });
