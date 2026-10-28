@@ -99,7 +99,7 @@ def stream(**kwargs):
     observer='Тип хода: background' in full or 'Режим observer:' in full or 'mode=observer' in full
     if kwargs['messages'][0]['content'].startswith('Select at most ONE optional grounded autonomous remote action.'):
         options=json.loads(kwargs['messages'][1]['content'])['options']
-        if phone_mode=='silent' or not options:
+        if phone_mode in ('silent','narrative138') or not options:
             yield '{"action":null}';return
         time.sleep(0.15)
         o=options[0];action=o['actions'][0]
@@ -120,6 +120,12 @@ def stream(**kwargs):
         return
     current_message=next((m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only\n')),None)
     current_phone=json.loads(current_message.split('\n',1)[1]) if current_message else {}
+    if current_phone.get('communication') and phone_mode=='narrative138':
+        from narrative_phone138_fixture import response
+        task=json.loads(next(m['content'].split('\n',1)[1] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')))
+        value=response(current_phone,task,bool(kwargs.get('response_format')))
+        yield json.dumps(value,ensure_ascii=False) if isinstance(value,dict) else value
+        return
     if current_phone.get('communication'):
         camera=current_phone['camera']
         voice=current_phone['communication'].get('focus')=='call'
@@ -435,6 +441,14 @@ if __name__ == '__main__':
         engine.run_job(app.state.repository.path,job,engine.Worker())
         assert app.state.repository.get_job(job)['status']=='saved'
         return {'world':result['world'],'save':result['save']}
+
+    @app.post('/test/narrative-phone138-seed')
+    def narrative_phone138_seed():
+        global phone_mode
+        phone_mode='narrative138'
+        from devtools.narrative_test_world import load_fixture
+        seed=load_fixture(app.state.repository,'phone-office')
+        return {'world':seed['world'],'save':seed['save']}
 
     @app.post('/test/phone-seed')
     def phone_seed(unread: bool = False, incoming: bool = True, decision: str = "silent", polish: bool = False, hidden: bool = False):

@@ -48,7 +48,8 @@ Explicit supersedes needs both facts in Event.fact_ids. Retire existing beliefs 
 revival requires expected_revision. Same-slot changes need distinct Event.order.
 Acquisition requires an accepted perception/communication source, never intentions, time decay or automatic truth refresh.
 Message Event author_id is its established author in
-participants; recipient/reader is witness. Do not guess authors from scene presence.
+participants; only actual reading/perception makes a recipient a witness, never delivery alone.
+Do not guess authors from scene presence.
 Unknown Event minute/order may be omitted; final_scene elapsed_minutes is explicit on ordinary turns.
 '''
 
@@ -435,8 +436,7 @@ explicit deadlines; Runtime anchors relative dates. Prose/choices use the active
 """
 
 NARRATIVE_CONTRACT += """
-SCENE AGENCY: Director.scene_agency grants optional initiative to its actors, up to
-budget meaningful beats. Do not wait for EXTERNAL to make every first move. Start,
+SCENE AGENCY: Director.scene_agency supplies optional suggestions, never permits or quotas. Do not wait for EXTERNAL to make every first move. Start,
 continue, redirect or end conversations; ask/offer help, share news, invite, refuse,
 apologize, set boundaries, leave or act in one's interests when grounded. Silence is
 also valid. No initiative quota, turn timer, uniform assertiveness or manufactured drama.
@@ -506,4 +506,32 @@ new significant events can. Events: player_assertion=completed_interaction + exa
 player_evidence only for completed interactions explicitly supplied by EXTERNAL input.
 Never fabricate EXTERNAL actions, speech, consent or decisions. No reliable evidence:
 omit change. Preserve directed independence and inertia.
+"""
+
+
+REMOTE_NARRATIVE_CONTRACT = """
+NPC PHONE INITIATIVE: DeepSeek may decide that an NPC sends a message or calls during
+an ordinary scene, using their own Knowledge and established communication channels.
+No Director candidate/permit or separate NPC agent is required. Respect communication_capabilities;
+without the channel do not narrate an actual phone delivery. Write the actual message text
+when established; prose remains intact. Delivery/ringing does not imply EXTERNAL reading,
+answering, declining or replying. Leave those choices to phone controls. A remote sender
+stays at their physical location. Existing/staged events are not sent again.
+"""
+
+REMOTE_EXTRACTION_CONTRACT = """
+remote_events: new occurred NPC TEXT_MESSAGE/VOICE_CALL, chronological order; canonical
+sender_id/recipient_ids, exact message content copied from completed_narrative, never composed.
+No Director permit. Intentions, negations, offers, dreams, rumours and past quotations are
+NOT new deliveries. Actual delivery without text: include empty content for targeted repair.
+Use sender-owned contact_id OR conversation_id with exact members; omitted IDs resolve only
+an existing direct route. established_contact={label,address} only for an explicitly newly
+established sender-owned address to one recipient. Never invent addresses/identities/membership.
+minute=absolute canonical time within this turn; preserve equal-time order. Omit only if
+unspecified (diagnosed end-of-turn fallback). No second elapsed. TEXT_MESSAGE=delivered,
+never read; VOICE_CALL=ringing, ended if NPC caller hung up (ended_at), missed only after
+canonical timeout. No EXTERNAL read/answer/decline/ignore/reply inferred from prose.
+existing_event_id references a staged/earlier event without resending; otherwise omit continuations.
+Active-call hangup uses call_lifecycle_changes. Optional source_event_id links this extraction's
+Event. Delivery grants no recipient Knowledge, public Facts or physical presence. Preserve prose.
 """

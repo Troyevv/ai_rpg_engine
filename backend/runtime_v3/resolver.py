@@ -340,6 +340,8 @@ class StateResolver:
                 cause=events.get(item.get('source_event_id'))
                 if cause is None or self.protected_actor_id not in cause['participants']:
                     fatal('Нет принятого источника непроизвольного перемещения.', 'movement_agency', repairable=True, section='movements', source_ids=[item.get('source_event_id')])
+        from backend.runtime_v3.narrative_remote import apply_extracted_remote
+        remote_history = apply_extracted_remote(self, raw, events)
         from backend.runtime_v3.knowledge import apply_knowledge
         apply_knowledge(self, raw, events)
         from backend.runtime_v3.life import apply_life
@@ -459,6 +461,8 @@ class StateResolver:
         apply_continuity(self, raw, events)
         validate_temporal_boundaries(self, elapsed)
         from backend.runtime_v3.remote import advance as advance_remote
+        for section, values in remote_history.to_dict().items():
+            getattr(self.history, section).extend(values)
         advance_remote(s, self.history)
         from backend.runtime_v3.call_continuity import apply_lifecycle, project_physical
         project_physical(self, raw)

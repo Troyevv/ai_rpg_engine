@@ -121,3 +121,26 @@ class RemoteProposal(RemoteModel):
     knowledge_ids: list[str] = Field(default_factory=list, max_length=8)
     speaker_name: str = Field(default="", max_length=160)
     existing_character_id: str | None = None
+
+
+class EstablishedContact(RemoteModel):
+    """An address actually established in this scene, never a generated number."""
+    label: str = Field(min_length=1, max_length=160)
+    address: str = Field(min_length=1, max_length=160)
+
+
+class ExtractedRemoteEvent(RemoteModel):
+    """Ordinary Extraction input to Remote, not a second persistent event model."""
+    sender_id: str
+    recipient_ids: list[str] = Field(min_length=1, max_length=16)
+    channel: Literal["TEXT_MESSAGE", "VOICE_CALL"]
+    content: str = Field(default="", max_length=4000)
+    minute: int | None = Field(default=None, ge=0)
+    status: Literal["delivered", "ringing", "missed", "ended"] | None = None
+    ended_at: int | None = Field(default=None, ge=0)
+    contact_id: str | None = None
+    conversation_id: str | None = None
+    established_contact: EstablishedContact | None = None
+    existing_event_id: str | None = None
+    source_event_id: str | None = None
+    evidence: str = ""

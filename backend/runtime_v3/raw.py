@@ -6,7 +6,7 @@ import json
 from backend.runtime_v3.models import fatal
 from backend.services.relation_dimensions import RELATION_DIMENSIONS
 
-SECTIONS = ('call_lifecycle_changes','physical_projections','scene_transitions','continuity_beats','scene_actions','narrative_developments','consequences','locations','promotions','events','facts','knowledge_gained','character_changes',
+SECTIONS = ('remote_events','call_lifecycle_changes','physical_projections','scene_transitions','continuity_beats','scene_actions','narrative_developments','consequences','locations','promotions','events','facts','knowledge_gained','character_changes',
             'relationship_changes','movements','thread_changes','scheduled_event_changes',
             'life_changes','condition_changes','social_relation_changes',
             'location_changes','organization_changes','residence_changes','role_changes',
@@ -214,6 +214,11 @@ def extraction_schema():
         identity_components={'type':'object','additionalProperties':string})
     from backend.runtime_v3.appearance import AppearanceDelta
     definitions['appearance_deltas'] = wire_schema(AppearanceDelta.model_json_schema())
+    from backend.runtime_v3.remote_models import ExtractedRemoteEvent
+    remote_schema = ExtractedRemoteEvent.model_json_schema()
+    contact_schema = remote_schema.pop('$defs')['EstablishedContact']
+    remote_schema['properties']['established_contact'] = {'anyOf':[contact_schema, {'type':'null'}]}
+    definitions['remote_events'] = remote_schema
     from backend.runtime_v3.possessions import PossessionDelta
     definitions['possession_deltas'] = wire_schema(PossessionDelta.model_json_schema())
     for section in ('social_relation_changes','role_changes','residence_changes'):
@@ -286,6 +291,8 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
     if not relationship_evidence:
         for field in ('source_event_ids', 'assertion', 'rationale'):
             schema['properties']['relationship_changes']['items']['properties'].pop(field)
+    if not communication:
+        schema['properties'].pop('remote_events')
     if communication:
         schema['properties']['events']['items']['properties']['interaction_channel']={'enum':['physical','call']}
         props=schema['properties']['scheduled_event_changes']['items']['properties']
