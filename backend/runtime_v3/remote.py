@@ -714,7 +714,9 @@ def context_projection(state):
         if len(rows) >= 6:
             break
     constraints = (
-        "Only committed events exist; never invent incoming messages/calls or player device actions. "
+        "DeepSeek may author new NPC messages/calls in ordinary Narrative without Director permission; "
+        "Extraction records them as remote_events in the same atomic turn. Existing event IDs are not new sends. "
+        "Never invent player device actions. Message text may remain in prose; it does not mean the recipient read it. "
         "Unread content is unknown. Ringing is not consent. Device controls belong only to phone UI, never Narrative choices. "
         "Do not duplicate phone messages as physical dialogue or move the camera because of a call. "
         "input_channel binds submitted input; focus binds future choices."
@@ -733,6 +735,8 @@ def context_projection(state):
             "remote_time_source_id anchors relative time to the proposal message. A proposal alone is not agreement."
         )
     return dict(
+        conversations=[dict(id=c["id"], member_ids=sorted(members(c)), group=c["group"])
+            for c in state["conversations"].values() if actor in members(c)][:8],
         focus=state["meta"]["interaction_focus"],
         active_call=call["id"] if call and call["status"] == "answered" else None,
         participants=sorted(participants(call))

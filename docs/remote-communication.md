@@ -37,10 +37,15 @@ physical or connected-call speech. Answer/decline/ignore/end are deterministic
 phone controls. Canonical elapsed time can expire ringing. No browser telephone
 scheme, external emergency endpoint or real telephony API is used.
 
-## Event-first orchestration
+## Narrative extraction and existing communication orchestration
 
-The existing #69 initiative permit exposes a bounded remote opportunity set.
-An actual pending interaction or established active intention/thread may permit one
+Issue #138 adds ordinary Narrative → Extraction → Remote commands inside the Resolver
+commit. DeepSeek can initiate an NPC message/call without a Director permit. The
+message text remains in prose; only explicit reading grants recipient Knowledge.
+See [the bridge contract and acceptance matrix](narrative-phone138.md).
+
+The existing #69 initiative planner exposes a bounded remote opportunity set.
+An actual pending interaction or established active intention/thread may offer one
 optional planning request. There is no per-contact/group loop of LLM calls and no
 request on opening the phone. Structured proposals are validated before narrative
 generation. Rejected proposals cannot create phone state. Accepted events are
@@ -50,7 +55,7 @@ staging. Failed/cancelled generation publishes neither provisional event nor cue
 
 The existing ContextScope/Context Builder includes at most six recent accessible
 communications, bounded message text and explicit call constraints. Unread message
-content is excluded. Phone-disabled worlds receive no phone instruction payload. Under budget pressure,
+content is excluded. Phone-disabled worlds receive explicit disabled capabilities, without the phone extraction schema. Under budget pressure,
 older communication rows are omitted while the latest cue and active call remain.
 Raw remote lifecycle audit payloads never bypass the perception-filtered projection.
 Extraction may end an existing answered call through the evidence-bound

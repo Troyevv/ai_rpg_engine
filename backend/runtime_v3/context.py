@@ -7,7 +7,7 @@ from copy import deepcopy
 from pathlib import Path
 import json
 from backend.runtime_v3.scope import RelevanceResolver, CharacterContextClassifier, FULL_PRESENT, FULL_OBSERVED, FULL_REMOTE, ACTIVE_REFERENCED, COMPACT_REFERENCED, INDEX
-from backend.runtime_v3.context_contract import EXTRACTION_CONTRACT, NARRATIVE_CONTRACT, TIME_CONTRACT
+from backend.runtime_v3.context_contract import EXTRACTION_CONTRACT, NARRATIVE_CONTRACT, TIME_CONTRACT, REMOTE_EXTRACTION_CONTRACT, REMOTE_NARRATIVE_CONTRACT
 from backend.runtime_v3.raw import prompt_schema
 from backend.runtime_v3.calendar import current_time, nearby_calendar, age_on, profile_of, scheduled_time, commitment_view
 
@@ -249,6 +249,7 @@ class NarrativeContextBuilder:
         prompt_name = 'background_prompt.md' if kind == 'background' else 'game_system_prompt.md'
         rules = (prompts or {}).get(prompt_name, {}).get('content') or (PROMPTS/prompt_name).read_text(encoding='utf-8')
         rules += '\n' + NARRATIVE_CONTRACT
+        if current.get('communication'): rules += REMOTE_NARRATIVE_CONTRACT
         cards, index, behavioral = [], [], []
         classifier = CharacterContextClassifier()
         for card in snapshot['character_cards']:
@@ -318,6 +319,7 @@ class ExtractionContextBuilder:
         saved = (prompts or {}).get('state_update_prompt.md', {}).get('content')
         # Preserve user overrides, but do not send the bundled generic contract twice.
         rules = (saved + '\n' if saved and saved.strip() != default.strip() else '') + EXTRACTION_CONTRACT
+        if current.get('communication'): rules += REMOTE_EXTRACTION_CONTRACT
         if current.get('relationship_evidence'):
             from backend.runtime_v3.context_contract import RELATIONSHIP_EVIDENCE_CONTRACT
             rules += RELATIONSHIP_EVIDENCE_CONTRACT
@@ -474,6 +476,10 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     current = canonical_slice(state, scope, extraction_text is not None, user_text+'\n'+(extraction_text or ''))
     from backend.runtime_v3.remote import context_projection as remote_context
     remote = remote_context(state)
+    cfg = state['meta']['communication']
+    current['communication_capabilities'] = {key: cfg[key] for key in ('text_message', 'voice_call')}
+    if cfg['voice_call']:
+        current['communication_capabilities']['ring_timeout_minutes'] = cfg['ring_timeout_minutes']
     if remote:
         remote['input_channel'] = snapshot.get('_interaction_input_channel', state['meta']['interaction_focus'])
         current['communication'] = remote
@@ -733,6 +739,18 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                 references(schema['properties'])
                 schema['$defs'] = {key:value for key,value in schema.get('$defs', {}).items() if key in used}
                 replace_block('JSON Schema', schema)
+                break
+    # New phone outcomes are essential; optional Director attribution must not
+    # crowd them out of a tight extraction request. The parser/Resolver still
+    # accept these annotations, but do not require them to establish an event.
+    if builder.extraction and communication and estimate(messages) > hard_context_limit:
+        for message in messages:
+            if message['content'].startswith('JSON Schema\n'):
+                schema = json.loads(message['content'].split('\n', 1)[1])
+                for section in ('scene_actions', 'narrative_developments', 'consequences', 'continuity_beats', 'scene_transitions', 'physical_projections'):
+                    if estimate(messages) <= hard_context_limit: break
+                    schema['properties'].pop(section, None)
+                    replace_block('JSON Schema', schema)
                 break
     # Possession support is bounded by both its own cap and the request budget.
     # Keep explicitly named objects; omit lower-ranked incidental property first.
