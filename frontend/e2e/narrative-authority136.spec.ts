@@ -39,8 +39,8 @@ for (const scenario of ['entry','doorway','optional-annotation','semantic-retry'
     await diagnostics(page);
     const dialog=page.getByRole('dialog');
     await dialog.getByRole('tab',{name:'Производительность',exact:true}).click();
-    await expect(dialog.locator('.delta-warnings')).toContainText('Применён исправленный результат Extraction.');
-    await expect(dialog.locator('.delta-warnings')).not.toContainText('Запись отброшена.');
+    await expect(dialog.locator('section.delta-warnings')).toContainText('Применён исправленный результат Extraction.');
+    await expect(dialog.locator('section.delta-warnings')).not.toContainText('Запись отброшена.');
     await page.keyboard.press('Escape');
    }
    if(scenario==='doorway') {
