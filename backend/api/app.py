@@ -147,7 +147,14 @@ def create_app(db_path=None, recover=True):
             value['live'] = engine.live(jid)
         value['repairs'] = json.loads(value.get('repair_diagnostics_json') or '[]')
         value['warnings'] = json.loads(value.get('warnings_json','[]'))
-        return repo.public_job(value)
+        result = repo.public_job(value)
+        route = result.get('presentation', {})
+        if route.get('surface') in ('phone', 'call') and value.get('save_id'):
+            owner = repo.get_snapshot(value['save_id'])['world_state']['camera']['controlled_actor_id']
+            if route.get('actor_id') != owner:
+                result = {**result, 'narrative': '', 'user_text': '', 'error': '', 'warnings': [],
+                          'presentation': {'surface': route['surface'], 'actor_id': None, 'call_id': None}}
+        return result
 
     @app.get('/api/saves/{sid}')
     def save(sid: int):
@@ -155,8 +162,24 @@ def create_app(db_path=None, recover=True):
         value['scene_meta'] = scene_metadata(value['state'])
         value['turns'] = [{**t, 'choices': json.loads(t['choices_json']), 'changes': json.loads(t['changes_json']),
                            'timing': json.loads(t['timing_json']) if t['timing_json'] else None} for t in repo.list_turns(sid)]
+        owner = value['state'].get('controlled_actor_id')
+        projected=[]
         for t in value['turns']:
-            t['variants'] = repo.variants(t['node_id'])
+            route=t['presentation']
+            if route['surface']=='physical' or route.get('actor_id')==owner:
+                projected.append(t)
+            elif route.get('physical_text') and (visible_physical := [e['physical_text'] for e in route.get('physical_events',[]) if owner in e.get('witnesses',[])]):
+                projected.append({**t,'user_text':'','assistant_text':'\n\n'.join(visible_physical),
+                    'choices':[],'choices_json':'[]','changes':{},'changes_json':'{}',
+                    'timing':None,'timing_json':None,'presentation':{'surface':'physical'},'read_only_projection':True})
+        value['turns']=projected
+        from backend.runtime_v3.surfaces import visible_changes
+        canonical=repo.get_snapshot(sid).get('world_state')
+        value['physical_choice_source']=repo.physical_choice_source(sid,value['turns'],canonical) if canonical else None
+        for t in value['turns']:
+            t['changes']=visible_changes(t['changes'],canonical,owner) if canonical else t['changes']
+            t['changes_json']=json.dumps(t['changes'],ensure_ascii=False)
+            t['variants'] = [] if t.get('read_only_projection') else repo.variants(t['node_id'])
         latest = repo.latest_job(sid)
         value['job'] = job(latest['id']) if latest else None
         return value
@@ -184,6 +207,8 @@ def create_app(db_path=None, recover=True):
     @app.post('/api/saves/{sid}/turns')
     def turn(sid: int, body: Turn):
         settings = body.config.model_dump()
+        if body.interaction_channel is not None:
+            settings['interaction_channel'] = body.interaction_channel
         if body.time_skip:
             if body.kind != 'turn': raise ValueError('Time Skip допустим только для нового хода.')
             settings['time_skip'] = body.time_skip.model_dump()
@@ -357,7 +382,9 @@ def create_app(db_path=None, recover=True):
             raise ValueError('Нужны обе границы диапазона календаря.')
         if start_date is not None:
             from backend.runtime_v3.player_calendar import player_calendar
-            return player_calendar(state, start_date, end_date, {c['id']:c['name'] for c in snapshot.get('character_cards',[])})
+            from backend.runtime_v3.repository import read_history
+            with repo.connect() as db: history,_=read_history(db,snapshot.get('history_head'))
+            return player_calendar(state, start_date, end_date, {c['id']:c['name'] for c in snapshot.get('character_cards',[])},history)
         now = state['meta']['world_time']
         if minute is not None and not max(0,now-10080) <= minute <= now+10080:
             raise ValueError('Предпросмотр времени ограничен семью сутками.')

@@ -5,6 +5,9 @@ import json
 import re
 import os
 os.environ["TABLETOP_DEBUG"] = "1"
+# Browser transport fixtures use deterministic structural retrieval, not an optional
+# local embedding-model installation. Embedding behavior has dedicated unit tests.
+os.environ["RPG_SEMANTIC_ENABLED"] = "0"
 from pathlib import Path
 import sys
 import tempfile
@@ -58,6 +61,15 @@ def stream(**kwargs):
             yield controlled;return
         yield '{"issues":[]}'
         return
+    if kwargs['messages'][0]['content'].startswith('Remote semantic extraction/'):
+        if phone_mode=='semantic_error_once':
+            phone_mode='answer'
+            raise RuntimeError('Controlled semantic outage')
+        from phone_semantic_fixture import extract
+        data=json.loads(kwargs['messages'][1]['content']);value=extract(data)
+        if phone_mode=='agency_missing_once' and 'repair' not in data and value.get('scheduled_event_changes'):
+            value['scheduled_event_changes'][0].pop('player_assertion')
+        yield json.dumps(value,ensure_ascii=False);return
     full='\n'.join(m['content'] for m in kwargs['messages'])
     if handoff_provider is not None and 'ilya_cabinet' in full:
         from test_runtime_handoff import NARRATIVE as entry,provider_payload
@@ -91,7 +103,7 @@ def stream(**kwargs):
         if phone_mode=='decline' and action=='answer':action='decline'
         p=dict(actor_id=o['actor_id'],action=action,basis_ids=o['basis_ids'])
         if 'event_id' in o:p['event_id']=o['event_id']
-        if action=='send':p.update(o['paths'][0],content='Да, увидимся завтра. Напиши, когда освободишься.')
+        if action=='send':p.update(o['paths'][0],content='Да, договорились.' if phone_mode=='meeting' else 'Привет. Ещё в офисе, разгребаю бумаги. А что, есть планы?' if phone_mode=='greeting' else 'Да, увидимся завтра. Напиши, когда освободишься.')
         if action=='identify':p.update(speaker_name='Дежурный оператор')
         yield json.dumps(dict(action=p),ensure_ascii=False)
         return
@@ -100,6 +112,25 @@ def stream(**kwargs):
     if current_phone.get('communication'):
         camera=current_phone['camera']
         voice=current_phone['communication'].get('focus')=='call'
+        if phone_mode.startswith('office'):
+            from call_continuity_fixture import response,BEFORE,AFTER
+            task=json.loads(next(m['content'].split('\n',1)[1] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')))
+            if voice:
+                value=response(current_phone,task['player_input'],'complete' if kwargs.get('response_format') else None)
+                if isinstance(value,dict) and phone_mode=='office-recovery':
+                    value.pop('physical_projections',None)
+                    value['choices']=[]
+                if isinstance(value,dict) and phone_mode=='office-rejected' and value.get('events'):
+                    value['events'][0]['evidence']='Несуществующая цитата.'
+
+            else:
+                text=AFTER if 'Виктория' in camera.get('situation','') and 'ответ' in camera.get('situation','') else BEFORE
+                value=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),choices=[dict(action='Посмотреть на часы',speech='')]) if kwargs.get('response_format') else text
+            if isinstance(value,dict):yield json.dumps(value,ensure_ascii=False)
+            else:
+                for i in range(0,len(value),20):
+                    yield value[i:i+20];time.sleep(0.05)
+            return
         text='Вера отвечает по телефону: «Да, слышу тебя. Давай встретимся завтра».' if voice else 'В комнате тихо. За окном шелестят листья.'
         if kwargs.get('response_format'):
             events=[dict(id='phone-dialogue',text=text,evidence=text,participants=current_phone['communication']['participants'],witnesses=current_phone['communication']['participants'],medium='conversation',interaction_channel='call')] if voice else []
@@ -224,11 +255,12 @@ def stream(**kwargs):
         value = NARRATIVE
     if kwargs.get('on_usage'):
         kwargs['on_usage']({'prompt_tokens':1000,'completion_tokens':100,'prompt_cache_hit_tokens':800})
-    for i in range(0, len(value), 60):
+    chunk_size=512 if 'Каноническая JSON Schema WorldState' in full else 60
+    for i in range(0, len(value), chunk_size):
         time.sleep(.025)
         if kwargs.get('cancel_event') and kwargs['cancel_event'].is_set():
             raise RuntimeError('Генерация остановлена.')
-        yield value[i:i+60]
+        yield value[i:i+chunk_size]
 
 
 def tabletop_stream(**kwargs):
@@ -393,7 +425,7 @@ if __name__ == '__main__':
         from test_narrative_test_world import CONFIG
         from backend.runtime_v3.remote import apply
         from backend.runtime_v3.repository import append_history
-        result=load_fixture(app.state.repository,'ui-portrait-polish' if polish else 'phone')
+        result=load_fixture(app.state.repository,'phone-office' if decision.startswith('office') else 'ui-portrait-polish' if polish else 'phone')
         repo=app.state.repository;sid=result['save']
         job=repo.begin_job(sid,'','start',CONFIG)
         engine.run_job(repo.path,job,engine.Worker())

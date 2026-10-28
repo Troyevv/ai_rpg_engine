@@ -127,7 +127,10 @@ export interface Choice {
   action: string;
   speech: string;
 }
+export interface PresentationRoute {physical_reconciliation?:boolean;surface:"physical"|"phone"|"call";actor_id?:string|null;call_id?:string|null;conversation_id?:string|null;physical_text?:string;physical_events?:{id:string;source_record_id:string;turn_id:number;order:number;minute:number;physical_text:string}[];call_text?:string}
 export interface Turn {
+  read_only_projection?: boolean;
+  presentation?: PresentationRoute;
   changes?: {communication?: {rejected?: string[]}};
   pov_actor_id?: string|null;
   audience_json?: string;
@@ -144,6 +147,7 @@ export interface Turn {
   timing?: Record<string,number>|null;
 }
 export interface Job {
+  presentation?: PresentationRoute;
   attempt_epoch?: number;
   resumable?: boolean;
   replaces_id?:number|null;
@@ -161,6 +165,7 @@ export interface Job {
   warnings?: {section: string; reason: string; rejected: unknown}[];
 }
 export interface Save extends SaveItem {
+  physical_choice_source?: {turn_id:number;variant_id:string}|null;
   world_id: number;
   state: State;
   revision: number;

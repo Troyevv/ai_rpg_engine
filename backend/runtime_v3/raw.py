@@ -5,7 +5,7 @@ import json
 from backend.runtime_v3.models import fatal
 from backend.services.relation_dimensions import RELATION_DIMENSIONS
 
-SECTIONS = ('scene_transitions','continuity_beats','scene_actions','narrative_developments','consequences','locations','promotions','events','facts','knowledge_gained','character_changes',
+SECTIONS = ('call_lifecycle_changes','physical_projections','scene_transitions','continuity_beats','scene_actions','narrative_developments','consequences','locations','promotions','events','facts','knowledge_gained','character_changes',
             'relationship_changes','movements','thread_changes','scheduled_event_changes',
             'life_changes','condition_changes','social_relation_changes',
             'location_changes','organization_changes','residence_changes','role_changes',
@@ -36,7 +36,7 @@ class RawTurnResult:
         for section in SECTIONS:
             values = payload.get(section, [])
             if not isinstance(values, list):
-                if section in ('scene_transitions','continuity_beats','scene_actions','consequences','narrative_developments'):
+                if section in ('call_lifecycle_changes','scene_transitions','continuity_beats','scene_actions','consequences','narrative_developments'):
                     fatal('некорректная секция политики истории', 'narrative_policy_section_invalid', repairable=False, section=section)
                 warnings.append(dict(section=section, code='optional_section_invalid', action='drop_section', reason='ожидался список'))
                 values = []
@@ -84,7 +84,7 @@ def extraction_schema():
             dimensions=obj({d:{'type':'number','minimum':-100,'maximum':100} for d in RELATION_DIMENSIONS})), ('source_id','target_id','evidence')),
         'movements':record(dict(actor_id=string,to_location_id=string,from_location_id={'type':['string','null']},assertion={'enum':['completed_arrival']},actor_evidence=string,destination_evidence=string,order={'type':'integer','minimum':0}), ('actor_id','to_location_id','evidence')),
         'thread_changes':record(dict(id=string,description=string,character_ids=strings,status={'enum':['active','developing','dormant','resolved','paused']},state=string,relevance={'type':'number','minimum':0,'maximum':1}), ('id','evidence')),
-        'scheduled_event_changes':record(dict(id=string,description=string,character_ids=strings,due_minute={'type':'integer','minimum':0},temporal=obj(dict(date=string,weekday={'type':'integer','minimum':0,'maximum':13},day_offset={'type':'integer','minimum':-366,'maximum':366},time=string,day_period={'enum':['night','morning','afternoon','evening']})),status={'enum':['pending','resolved','cancelled']},condition=string,type=string), ('id','evidence')),
+        'scheduled_event_changes':record(dict(id=string,description=string,character_ids=strings,due_minute={'type':'integer','minimum':0},temporal=obj(dict(minute_offset={'type':'integer','minimum':0,'maximum':527040},date=string,weekday={'type':'integer','minimum':0,'maximum':13},day_offset={'type':'integer','minimum':-366,'maximum':366},time=string,day_period={'enum':['night','morning','afternoon','evening']})),status={'enum':['pending','resolved','cancelled']},condition=string,type=string), ('id','evidence')),
     }
     from backend.runtime_v3.narrative_policy_models import NarrativeDevelopment, ConsequenceClaim, FavorablePath
     from backend.runtime_v3.initiative import SceneAction
@@ -195,7 +195,7 @@ def extraction_schema():
     return schema
 
 
-def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=False):
+def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=False, voice=False):
     """Validation-equivalent schema; prose lives once in the extraction contract."""
     from collections import Counter
     def structural(node):
@@ -224,7 +224,15 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
         props=schema['properties']['scheduled_event_changes']['items']['properties']
         props['remote_source_ids']={'type':'array','items':{'type':'string'},'maxItems':8}
         props['remote_time_source_id']={'type':'string'}
+        props['player_source_id']={'type':'string'}
         schema['properties']['choices']['items']['properties']['device_control']={'enum':['answer','decline','ignore','end']}
+    if voice:
+        schema['properties']['call_lifecycle_changes']={'type':'array','maxItems':1,'items':{'type':'object','properties':{'call_id':{'type':'string'},'actor_id':{'type':'string'},'assertion':{'enum':['completed_end']},'evidence':{'type':'string'},'player_evidence':{'type':'string'}},'required':['call_id','actor_id','assertion','evidence']}}
+        schema['properties']['physical_projections']={'type':'array','items':{'type':'object','properties':{'event_id':{'type':'string'},'text':{'type':'string'}},'required':['event_id','text']}}
+        props=schema['properties']['scheduled_event_changes']['items']['properties']
+        props['call_time_source_id']={'type':'string'}
+        props['call_evidence']={'type':'array','maxItems':8,'items':{'type':'object','properties':{'source_id':{'type':'string'},'actor_id':{'type':'string'},'quote':{'type':'string'},'assertion':{'enum':['proposal','assent','cancellation','outcome']}},'required':['source_id','actor_id','quote','assertion']}}
+        schema['properties']['choices']['items']['properties']['interaction_channel']={'enum':['physical','call']}
     if not favorable_paths:
         for key in ('favorable_path','resolution','stakes_for'):
             schema['properties']['thread_changes']['items']['properties'].pop(key,None)

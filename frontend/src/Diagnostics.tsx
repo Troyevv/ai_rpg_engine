@@ -1,3 +1,4 @@
+import type {ReactNode} from 'react';
 import {SectionTabs} from "./components/ui/section-tabs";
 import {useEffect,useState} from "react";
 import {toast} from "sonner";
@@ -11,7 +12,7 @@ export interface RequestRecord {
  input_tokens:number|null; output_tokens:number|null; cached_input_tokens:number|null; cost_usd:string|null;
  response_text?:string|null; duration?:number|null; finish_reason?:string|null; max_tokens?:number|null;
  pricing:{version:string;period?:string}|null;
- diagnostics:{selection?:{pacing?:Record<string,unknown>;mode:string;characters:Record<string,number>;character_total:number;character_included?:Record<string,number>;knowledge?:Record<string,number>;semantic?:Record<string,unknown>;entities?:{entity_type:string;entity_id:string;semantic_similarity:number|null;selection_reasons:string[];selected:boolean;included:boolean}[];sections:Record<string,{selected:number;included?:number;total:number}>;narrative_continuity:number;previous_player_inputs:number;target_context_budget:number;hard_context_limit:number;target_exceeded:boolean}|null;estimated_tokens:number;overhead_tokens?:number;token_method?:string;parts:{name:string;role:string;estimated_tokens:number;content:string}[]};
+ diagnostics:{provider_error?:Record<string,unknown>;selection?:{pacing?:Record<string,unknown>;mode:string;characters:Record<string,number>;character_total:number;character_included?:Record<string,number>;knowledge?:Record<string,number>;semantic?:Record<string,unknown>;entities?:{entity_type:string;entity_id:string;semantic_similarity:number|null;selection_reasons:string[];selected:boolean;included:boolean}[];sections:Record<string,{selected:number;included?:number;total:number}>;narrative_continuity:number;previous_player_inputs:number;target_context_budget:number;hard_context_limit:number;target_exceeded:boolean}|null;estimated_tokens:number;overhead_tokens?:number;token_method?:string;parts:{name:string;role:string;estimated_tokens:number;content:string}[]};
  messages:{role:string;content:string}[];
 }
 interface Total {cost_usd:string;unknown_requests:number;input_tokens:number;output_tokens:number;cached_input_tokens:number}
@@ -23,7 +24,7 @@ function RequestTotals({rows}:{rows:RequestRecord[]}){
  const sum=(key:'input_tokens'|'output_tokens'|'cached_input_tokens')=>`${rows.reduce((s,r)=>s+(r[key]??0),0).toLocaleString()}${rows.some(r=>r[key]==null)?' + неизвестно':''}`;
  return <div className="usage-grid">{[['Input',sum('input_tokens')],['Output',sum('output_tokens')],['Cache',sum('cached_input_tokens')],['LLM-вызовов',rows.length],['Стоимость',money(String(rows.reduce((s,r)=>s+Number(r.cost_usd??0),0)))+(rows.some(r=>r.cost_usd==null)?' + неизвестно':'')]].map(([k,v])=><section key={k}><span>{k}</span><strong>{v}</strong></section>)}</div>;
 }
-export function Diagnostics({saveId,workspaceId,jobId,open,onOpenChange}:{saveId?:number;workspaceId?:string;jobId?:string;open:boolean;onOpenChange:(v:boolean)=>void}) {
+export function Diagnostics({saveId,workspaceId,jobId,open,onOpenChange,historyTools}:{historyTools?:ReactNode;saveId?:number;workspaceId?:string;jobId?:string;open:boolean;onOpenChange:(v:boolean)=>void}) {
  const [data,setData]=useState<Accounting|null>(null);
  const [rows,setRows]=useState<RequestRecord[]>([]);
  const [selected,setSelected]=useState('');
@@ -32,6 +33,7 @@ export function Diagnostics({saveId,workspaceId,jobId,open,onOpenChange}:{saveId
  const [tab,setTab]=useState('context');
  const [archive,setArchive]=useState<{id:number;reason:string;payload:string}[]>([]);
  const [busy,setBusy]=useState(false);
+ const [communication,setCommunication]=useState<unknown>(null);
  const load=async()=>{
   setBusy(true);
   try {
@@ -47,13 +49,19 @@ export function Diagnostics({saveId,workspaceId,jobId,open,onOpenChange}:{saveId
  const warnings=turn?.warnings||(!turnId?jobDetails?.warnings:[])||[];
  const repairs=turn?.repairs||(!turnId?jobDetails?.repairs:[])||[];
  const request=filtered.find(r=>r.id===selected)||filtered[0];
+ useEffect(()=>{
+  let live=true;setCommunication(null);
+  if(open&&saveId&&request?.stage.startsWith('remote_'))void api(`/saves/${saveId}/phone/diagnostics/${request.job_id}`).then(v=>{if(live)setCommunication(v)}).catch(()=>{});
+  return()=>{live=false};
+ },[open,saveId,request?.job_id,request?.stage]);
  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="settings-dialog diagnostics">
   <DialogHeader><DialogTitle>Диагностика</DialogTitle><DialogDescription>Снимки фактически отправленных запросов. Здесь есть GM-only данные и тайны мира.</DialogDescription></DialogHeader>
-  <SectionTabs className="diagnostic-tabs" label="Раздел диагностики" tablist panelId="diagnostic-panel" value={tab} onChange={setTab} items={[{id:'context',label:'Контекст'},{id:'performance',label:'Производительность'},{id:'cost',label:'Расходы'}]}/>
+  <SectionTabs className="diagnostic-tabs" label="Раздел диагностики" tablist panelId="diagnostic-panel" value={tab} onChange={setTab} items={[{id:'context',label:'Контекст'},{id:'performance',label:'Производительность'},{id:'cost',label:'Расходы'},...(historyTools?[{id:'history',label:'История и восстановление'}]:[])]}/>
   <Button variant="outline" disabled={busy} onClick={()=>void load()}>Обновить</Button>
   {!!data?.history_audit?.length&&<details className="delta-warnings"><summary>Аудит истории · ⚠ {data.history_audit.length}</summary><p>Исторические сведения неполны. Текущее состояние и сохранённые знания не отменены.</p>{data.history_audit.map((w,i)=><p key={i}><code>{w.section} · {w.code}</code><br/>{w.reason}</p>)}</details>}
   {turns.length>0&&<label>Ход<select aria-label="Ход диагностики" value={turnId==='all'?'all':turn?.active_variant_id||''} onChange={e=>{setTurnId(e.target.value);setSelected('')}}><option value="all">Все запросы прохождения</option>{turns.map(t=><option key={t.active_variant_id} value={t.active_variant_id}>#{t.sequence} · {t.timing?.total==null?'нет timing':t.timing.total.toFixed(1)+' с'}</option>)}</select></label>}
   <div role="tabpanel" id="diagnostic-panel" aria-labelledby={`diagnostic-panel-tab-${tab}`}>
+  {tab==='history'&&historyTools}
   {tab==='performance'&&<>
    <h3>{turn?`Ход #${turn.sequence}`:'Выбранный вариант'}</h3><Timing timing={timing}/>
    <RequestTotals rows={filtered}/>
@@ -90,6 +98,8 @@ export function Diagnostics({saveId,workspaceId,jobId,open,onOpenChange}:{saveId
      <p>Мягкая цель: {request.diagnostics.selection.target_context_budget} · Предел входа: {request.diagnostics.selection.hard_context_limit}{request.diagnostics.selection.target_exceeded?' · Цель превышена для сохранения сцены':''}</p>
     </section>}
     {request.diagnostics.selection?.pacing&&<details><summary>Решения политики истории</summary><pre className="context-content">{JSON.stringify(request.diagnostics.selection.pacing,null,2)}</pre></details>}
+    {request.diagnostics.provider_error&&<details open><summary>Ответ API · безопасная диагностика</summary><pre className="context-content">{JSON.stringify(request.diagnostics.provider_error,null,2)}</pre></details>}
+    {communication!=null&&<details><summary>Обработка связи · журнал восстановления</summary><pre className="context-content">{JSON.stringify(communication,null,2)}</pre></details>}
     {request.response_text!=null&&<details><summary>Фактический ответ extraction</summary><pre className="context-content">{request.response_text}</pre></details>}
     {request.messages.map((m,i)=><details key={i}><summary>{i+1}. {request.diagnostics.parts?.[i]?.name||m.role} · ≈{request.diagnostics.parts?.[i]?.estimated_tokens??'—'} токенов</summary><pre className="context-content">{m.content}</pre></details>)}
    </>}

@@ -30,9 +30,11 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, relationship_query=None, relationship_receipts=None):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, relationship_query=None, relationship_receipts=None, remote_semantic_sources=None, call_sources=None):
         if mode not in ("turn", "background"):
             raise ValueError("Неизвестный режим StateResolver.")
+        self.call_sources = call_sources or {}
+        self.remote_semantic_sources = remote_semantic_sources or {}
         self.minimal_promotion_ids = set(minimal_promotion_ids or ())
         self.relationship_query = relationship_query
         self.relationship_receipts = relationship_receipts or []
@@ -69,7 +71,11 @@ class StateResolver:
 
     def supported(self, record):
         quote = record.get('evidence')
-        return isinstance(quote,str) and bool(normalized(quote)) and any(normalized(quote) in source for source in self.sources)
+        remote = self.remote_semantic_sources.get(record.get('source_event_id')) if isinstance(record.get('source_event_id'),str) else None
+        sources = self.sources + ([normalized(remote['content'])] if remote else [])
+        if set(record) <= {'id','evidence','intentions_updates'} and record.get('intentions_updates'):
+            sources += [normalized(e['content']) for e in self.remote_semantic_sources.values() if e['sender_id']==record.get('id')]
+        return isinstance(quote,str) and bool(normalized(quote)) and any(normalized(quote) in source for source in sources)
 
     def records(self, raw, section, *, evidence=True):
         seen=set()
@@ -115,9 +121,12 @@ class StateResolver:
 
     def remote_commitment_supported(self, record):
         from backend.runtime_v3.remote import commitment_sources
+        from backend.runtime_v3.call_continuity import commitment_sources as voice_sources
         quote=record.get('evidence')
+        if record.get('call_evidence'):
+            return isinstance(quote,str) and bool(normalized(quote)) and any(normalized(quote) in normalized(e['content']) for e in voice_sources(self,record))
         return isinstance(quote,str) and bool(normalized(quote)) and any(
-            normalized(quote) in normalized(e['content']) for e in commitment_sources(self.before,record))
+            normalized(quote) in normalized(e['content']) for e in commitment_sources(self.before,record,delivered=bool(self.remote_semantic_sources)))
 
     def actor(self, value, section, index):
         if not isinstance(value,str) or value not in self.state['characters']:
@@ -168,6 +177,10 @@ class StateResolver:
             self.warn('final_scene',0,'Мёртвый персонаж не участвует в текущей сцене.',entity=cid)
         present = [cid for cid in present if cid not in dead_present]
         for cid in present: self.actor(cid,'final_scene',0)
+        scene['present_character_ids']=present
+        from backend.runtime_v3.call_continuity import prepare_scene
+        prepare_scene(self, raw)
+        lid, present = scene.get('location_id'), scene['present_character_ids']
         camera = deepcopy(s['camera'])
         if camera['mode']=='actor' and camera['controlled_actor_id'] not in present and s['characters'].get(camera['controlled_actor_id'], {}).get('life_status') != 'dead':
             fatal('controlled actor отсутствует в final_scene', 'camera_actor_missing', repairable=True)
@@ -263,6 +276,7 @@ class StateResolver:
         controlled=camera['controlled_actor_id']
         if controlled is not None and self.supported({'evidence':scene.get('situation_evidence')}):
             s['characters'][controlled]['situation']=situation
+        self.scene_character_situation=s['characters'].get(controlled,{}).get('situation')
         for i, item in self.records(raw,'facts'):
             fields = {key:item[key] for key in ('id','text','visibility','character_ids','claim') if key in item}
             if 'claim' in fields and fields['claim'] is not None:
@@ -304,8 +318,8 @@ class StateResolver:
             event = dict(id=event_id,local_id=eid,text=item['text'],
                 **lists,medium=medium,evidence=item['evidence'],turn_id=self.turn_id,
                 player_observed=self.observed,recorded_minute=s['meta']['world_time'])
-            if item.get('interaction_channel')=='call':
-                event['interaction_channel']='call'
+            if item.get('interaction_channel') in ('call','physical'):
+                event['interaction_channel']=item['interaction_channel']
             for key in ('minute','order'):
                 if type(item.get(key)) is int and item[key] >= 0: event[key]=item[key]
             if isinstance(item.get('location_id'),str) and item['location_id'] in s['locations']: event['location_id']=item['location_id']
@@ -447,6 +461,9 @@ class StateResolver:
         validate_temporal_boundaries(self, elapsed)
         from backend.runtime_v3.remote import advance as advance_remote
         advance_remote(s, self.history)
+        from backend.runtime_v3.call_continuity import apply_lifecycle, project_physical
+        project_physical(self, raw)
+        apply_lifecycle(self, raw)
         upserts = {section:{key:deepcopy(value) for key,value in s[section].items() if value != self.before[section].get(key)}
             for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions','residences','roles','organizations','reproductive_events','pregnancies','naming_decisions','possessions','contacts','conversations','remote_events')}
         digest = sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
@@ -466,12 +483,20 @@ class StateResolver:
             continuity=turn_signal(self), camera_before=deepcopy(self.before['camera']),camera=deepcopy(state['camera']),
             game_time_before=self.before['meta']['world_time'],world_time=state['meta']['world_time'],
             player_observed=self.observed))
+        if getattr(self,'physical_reconciliation',None):
+            self.history.turns[-1]['physical_reconciliation']=self.physical_reconciliation
+        from backend.runtime_v3.remote import active_call
+        source_call=active_call(self.before,self.protected_actor_id)
+        if source_call and self.before['meta']['interaction_focus']=='call':
+            self.history.turns[-1].update(call_id=source_call['id'],controlled_actor_id=self.protected_actor_id)
         choices = raw.choices if self.mode != 'background' and camera['mode'] == 'actor' and controlled and capabilities(state,controlled)['can_act'] else []
         if any(s['meta']['communication'][channel] for channel in ('text_message','voice_call')):
             choices = [c for c in choices if c.get('device_control') is None]
         choices = filter_choices(self, choices)
         if any(s['meta']['communication'][channel] for channel in ('text_message','voice_call')):
-            choices = [dict(c, interaction_channel=s['meta']['interaction_focus']) for c in choices]
+            choices = [dict(c, interaction_channel=c.get('interaction_channel',self.before['meta']['interaction_focus'])) for c in choices]
+            if self.before['meta']['interaction_focus']=='call' and not any(e.get('physical_text') for e in self.history.events):
+                choices = [c for c in choices if c['interaction_channel']!='physical']
             remote_call = active_call(self.before, controlled)
             if remote_call:
                 remote_ids = participants(remote_call) - set(self.before['camera']['present_character_ids'])

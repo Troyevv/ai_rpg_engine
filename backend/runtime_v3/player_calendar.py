@@ -11,7 +11,7 @@ def known_claim(state, observer, subject, predicates):
                for fid, f in state['facts'].items())
 
 
-def visible_calendar_state(state):
+def visible_calendar_state(state, history=None):
     view = deepcopy(state)
     observer = state['camera']['controlled_actor_id']
     # Personal observances require the observer's participation. Public calendar
@@ -19,7 +19,8 @@ def visible_calendar_state(state):
     profile = (view['meta'].get('calendar') or {}).get('profile') or {}
     profile['observances'] = [e for e in profile.get('observances', [])
         if not e.get('character_ids') or observer in e['character_ids']]
-    view['scheduled_events'] = {eid:e for eid,e in view['scheduled_events'].items()
+    from backend.runtime_v3.remote import visible_commitments
+    view['scheduled_events'] = {eid:e for eid,e in visible_commitments(state,observer,history).items()
         if observer is not None and (
             known_claim(state, observer, eid, {'scheduled_event', 'commitment'})
             or (e.get('commitment') and observer in e['character_ids']))}
@@ -30,8 +31,8 @@ def visible_calendar_state(state):
     return view
 
 
-def player_calendar(state, start_date, end_date, names=None):
-    result = calendar_range(visible_calendar_state(state), start_date, end_date)
+def player_calendar(state, start_date, end_date, names=None, history=None):
+    result = calendar_range(visible_calendar_state(state,history), start_date, end_date)
     from backend.runtime_v3.calendar import ordinal, profile_of
     from backend.runtime_v3.weather import weather_at
     cal = state['meta'].get('calendar') or {}

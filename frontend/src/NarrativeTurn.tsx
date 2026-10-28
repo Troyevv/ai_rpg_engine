@@ -1,3 +1,4 @@
+import {phoneText} from './lib/phone';
 import {memo, useRef} from 'react';
 import {motion,useReducedMotion} from 'framer-motion';
 import {useMotionPreset} from './motion';
@@ -8,7 +9,8 @@ import {Timing} from './Timing';
 import {Button} from './components/ui/button';
 import {api} from './api';
 import type {Job,Save,World,Preferences,Turn} from './types';
-export const NarrativeTurn=memo(function NarrativeTurn({t,i,save,world,prefs,mobile,busy,running,mainActor,turn,run,setSubmitted,refresh,setDiagnosticJob,setDiagnostics,openCharacter,job,reconnecting,stop,identity,committed,onPresented}: {
+export const NarrativeTurn=memo(function NarrativeTurn({t,i,save,world,prefs,mobile,busy,running,mainActor,turn,run,setSubmitted,refresh,setDiagnosticJob,setDiagnostics,openCharacter,job,reconnecting,stop,identity,committed,onPresented,showTools=true,toolsOnly=false}: {
+ showTools?:boolean;toolsOnly?:boolean;
  t:Turn;i:number;save:Save;world:World;prefs:Preferences;mobile:boolean;busy:boolean;running:boolean;mainActor?:string;
  turn:(kind:'start'|'turn'|'regenerate'|'background',text?:string,target?:number,rollback?:boolean)=>Promise<void>;
  run:(fn:()=>Promise<void>)=>Promise<void>;setSubmitted:(j:Job|null)=>void;refresh:()=>void;
@@ -28,6 +30,8 @@ export const NarrativeTurn=memo(function NarrativeTurn({t,i,save,world,prefs,mob
                   animate="visible"
                   variants={turnMotion}
                 >
+                  {toolsOnly&&<h4>Ход {t.sequence}</h4>}
+                  {!toolsOnly&&<>
                   {t.kind==='communication'&&!!t.changes?.communication?.rejected?.length&&<div role="alert"><strong>Старая ошибочная обработка связи</strong><p>Этот результат был сохранён прежней версией. «Ещё вариант» повторит обработку от исходного события без повторной отправки. При наличии следующих ходов потребуется их откат в архив. Исходный вариант останется доступен.</p></div>}
                   {t.kind==='pov'&&<motion.div className="pov-divider" variants={povMotion}><span>Другая точка зрения</span><strong>{save.state.characters.find(c=>c.id===t.pov_actor_id)?.name}</strong></motion.div>}
                   {t.kind==='background'&&<div className="narrative-divider">Тем временем</div>}
@@ -41,9 +45,11 @@ export const NarrativeTurn=memo(function NarrativeTurn({t,i,save,world,prefs,mob
                     {t.kind==="background"?`Тем временем… · За кулисами · ход ${t.sequence}`:i === 0 ? "Первая сцена" : `Ход ${t.sequence}`}
                     {t.kind!=="background"&&<span> · POV: {save.state.characters.find(c=>c.id===(t.pov_actor_id||mainActor))?.name}</span>}
                   </p>
+                  {committed&&t.presentation?.physical_reconciliation&&!t.read_only_projection&&<p role="status" className="muted small">{phoneText('physicalReconciled')}</p>}
                   <NarrativeText identity={identity} onPresented={onPresented} text={t.assistant_text} complete={committed||!!job?.narrative_complete||!!job&&['error','stopped'].includes(job.status)} saveId={save.id} worldId={world.id} links={prefs.link_names} onCharacter={openCharacter}/>
-                  {!committed&&<JobView job={job?.status==='saved'?{...job,status:'committing'}:job} statusOnly reconnecting={reconnecting} stop={stop}/>}
-                  {committed&&<>
+                  {!committed&&showTools&&<JobView job={job?.status==='saved'?{...job,status:'committing'}:job} statusOnly reconnecting={reconnecting} stop={stop}/>}
+                  </>}
+                  {committed&&showTools&&!t.read_only_projection&&<>
                   {t.timing?.total!=null&&<details className="turn-timing"><summary>Время хода: {t.timing.total.toFixed(1)} с</summary><Timing timing={t.timing}/></details>}
                   {mobile?<div className="mobile-variants">
                     <Button size="icon" variant="ghost" aria-label="Ещё вариант" disabled={busy||running||!t.variants?.some(v=>v.can_regenerate)} onClick={()=>{const later=i<save.turns.length-1;if(later&&!window.confirm('Откатить следующие ходы в архив?'))return;void turn('regenerate','',t.id,later)}}>↻</Button>

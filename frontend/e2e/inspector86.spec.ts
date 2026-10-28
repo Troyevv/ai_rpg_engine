@@ -279,10 +279,9 @@ test("phone projection stays remote and returns to the existing device", async (
   await phone.getByRole("button", { name: "Контакты", exact: true }).click();
   await phone.getByRole("button", { name: "Вера работа", exact: true }).click();
   await phone.getByRole("button", { name: "Позвонить", exact: true }).click();
-  await expect(
-    phone.getByRole("button", { name: "Перейти к разговору" }),
-  ).toBeVisible();
-  await page.keyboard.press("Escape");
+  const call=page.getByRole("dialog", { name: "Сцена звонка" });
+  await expect(call).toBeVisible();
+  await call.getByRole("button", { name: "Свернуть звонок" }).click();
   await nav(page, "Сцена");
   await expect(phone).not.toBeVisible();
   await expect(page.locator(".inspector-remote")).toContainText("Вера");

@@ -2,7 +2,7 @@
 from copy import deepcopy
 import json
 import pytest
-from hypothesis import given, strategies as st
+from hypothesis import given, settings, strategies as st
 from backend.runtime_v3.models import Fact, Knowledge, Character, assert_world_state_v3_invariants
 from backend.runtime_v3.resolver import StateResolver
 from backend.runtime_v3.knowledge import slot
@@ -205,6 +205,9 @@ def test_branches_and_json_reload_keep_independent_chronology():
     assert not read_history(conn,right['history_head'])[0]['knowledge_acquisitions']
 
 
+# This checks state invariants, not performance; 25 Resolver runs exceed 200ms
+# on constrained workers (also reproduced on the unchanged master).
+@settings(deadline=None)
 @given(st.lists(st.sampled_from(['bank','hospital']),min_size=1,max_size=25))
 def test_property_one_current_known_value_per_exclusive_slot(sequence):
     s=initial()['world_state']

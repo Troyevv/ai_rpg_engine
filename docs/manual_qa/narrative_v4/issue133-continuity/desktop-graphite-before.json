@@ -1,0 +1,88 @@
+{
+  "id": 1,
+  "revision": 2,
+  "physical_choice_source": {
+    "turn_id": 1,
+    "variant_id": "d37b013acfef4bc8ba8e1bb79222cc3b"
+  },
+  "turns": [
+    {
+      "id": 1,
+      "sequence": 0,
+      "assistant_text": "Илья сидит в кабинете. Виктория ждёт за дверью и пока не стучит.",
+      "choices": [
+        {
+          "action": "Посмотреть на часы",
+          "speech": "",
+          "interaction_channel": "physical"
+        }
+      ],
+      "presentation": {
+        "surface": "physical",
+        "actor_id": "qa_kirill",
+        "call_id": null
+      }
+    }
+  ],
+  "world_clock": {
+    "minute": 540,
+    "last_event_time": "День 1 · 2026-10-05 · Пн · 09:00",
+    "calendar": {
+      "start_minute": 540,
+      "start_weekday": 0,
+      "start_date": "2026-10-05",
+      "profile": {
+        "id": "two-shores",
+        "system": "gregorian",
+        "month_lengths": [],
+        "month_names": [],
+        "weekday_names": [],
+        "observances": [
+          {
+            "id": "map-day",
+            "name": "День старых карт",
+            "month": 10,
+            "day": 5,
+            "character_ids": []
+          }
+        ],
+        "seasons": []
+      },
+      "labels": {
+        "480": "День 1 · 2026-10-05 · Пн · 08:00",
+        "540": "День 1 · 2026-10-05 · Пн · 09:00"
+      }
+    },
+    "projection": {
+      "world_time": 540,
+      "day": 1,
+      "date": "2026-10-05",
+      "weekday": 0,
+      "weekday_name": "monday",
+      "time": "09:00",
+      "day_period": "morning",
+      "season": null,
+      "summary": "Day 1 / 2026-10-05 / monday / 09:00 / morning"
+    },
+    "nearby": [
+      {
+        "id": "map-day:2026-10-05",
+        "date": "2026-10-05",
+        "kind": "observance",
+        "name": "День старых карт",
+        "character_ids": []
+      },
+      {
+        "id": "birthday:qa_vera:2026-10-06",
+        "date": "2026-10-06",
+        "kind": "birthday",
+        "name": null,
+        "character_ids": [
+          "qa_vera"
+        ]
+      }
+    ]
+  },
+  "phone_events": [],
+  "scheduled_events": {}
+}

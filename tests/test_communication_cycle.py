@@ -10,6 +10,8 @@ from backend.runtime_v3.communication import run, options_for
 
 
 def decision(messages, outcome='answer'):
+    if messages[0]['content'].startswith('Remote semantic extraction/'):
+        return json.dumps({'final_scene':json.loads(messages[1]['content'])['final_scene']})
     options = json.loads(messages[1]['content'])['options']
     o = options[0]
     action = o['actions'][0]
@@ -101,7 +103,7 @@ def test_job_atomic_dispatch_retry_replays_read_and_no_duplicate_send(tmp_path):
         dispatch(repo,sid,operation='second-action')
     assert repo.get_snapshot(sid)==original
     repo.retry_job(jid,CONFIG)
-    assert len(execute(repo,jid))==1
+    assert len(execute(repo,jid))==2  # reply + semantic stage; accepted read is replayed
     assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
     after=repo.get_snapshot(sid)
     assert len(after['world_state']['remote_events'])==2

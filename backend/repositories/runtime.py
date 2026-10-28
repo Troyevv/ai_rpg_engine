@@ -90,17 +90,17 @@ class RuntimeStorage:
                 config['_context_selection'] = selection
                 db.execute('UPDATE game_jobs SET config_json=? WHERE id=?', (dump(config), job_id))
 
-    def save_communication_context(self, job_id, frames, before):
+    def save_communication_context(self, job_id, frames, before, warnings=None):
         """Checkpoint bounded provider decisions, guarded against stopped/stale workers.
 
         The original before snapshot is immutable. Only this job's captured
         frame responses grow; retries replay them and variants record the result.
         """
         with self.connect() as db:
-            db.execute("""UPDATE game_jobs SET context_json=?,memory_before_json=COALESCE(memory_before_json,?)
+            db.execute("""UPDATE game_jobs SET context_json=?,memory_before_json=COALESCE(memory_before_json,?),warnings_json=COALESCE(?,warnings_json)
                 WHERE id=? AND kind='communication' AND status IN ('generating','extracting')
                 AND (? IS NULL OR attempt_epoch=?)""",
-                (dump(frames),dump(before),job_id,getattr(self,'worker_epoch',None),getattr(self,'worker_epoch',None)))
+                (dump(frames),dump(before),dump(warnings) if warnings is not None else None,job_id,getattr(self,'worker_epoch',None),getattr(self,'worker_epoch',None)))
 
     def record_repair(self, job_id, diagnostic):
         with self.connect() as db:
@@ -121,7 +121,7 @@ class RuntimeStorage:
               dump(messages), dump(diagnostics), dump(config), dump(price_snapshot(config, datetime.now(timezone.utc)))))
         return rid
 
-    def finish_request(self, rid, status, usage, duration=None, finish_reason=None, response_text=None):
+    def finish_request(self, rid, status, usage, duration=None, finish_reason=None, response_text=None, provider_error=None):
         from backend.services.usage import usage_values, cost
         inp, out, cached = usage_values(usage)
         with self.connect() as db:
@@ -129,6 +129,8 @@ class RuntimeStorage:
             amount = cost(inp, out, cached, pricing)
             db.execute('UPDATE llm_requests SET status=?,usage_json=?,input_tokens=?,output_tokens=?,cached_input_tokens=?,cost_usd=?,duration=?,finish_reason=?,response_text=? WHERE id=?',
                        (status, dump(usage) if usage is not None else None, inp, out, cached, amount, duration, finish_reason, response_text, rid))
+            if provider_error is not None:
+                db.execute("UPDATE llm_requests SET diagnostics_json=json_set(diagnostics_json,'$.provider_error',json(?)) WHERE id=?",(dump(provider_error),rid))
 
     def request_log(self, save_id=None, workspace_id=None, job_id=None):
         field, value = ('save_id', save_id) if save_id is not None else ('workspace_id', workspace_id) if workspace_id else ('job_id', job_id)

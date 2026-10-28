@@ -27,7 +27,7 @@ RPG_DB_PATH="$PWD/data/dev-phone.sqlite3" python -m uvicorn backend.main:app --h
    позже, будущие не доставляются вышедшему; уже прочитанное знание не исчезает.
 5. Входящий звонок на фоне обычных Narrative choices остаётся ringing. Ответить,
    отклонить или игнорировать через телефон. Обычные действия не отвечают за игрока.
-6. Ответить и переключать «По телефону / Рядом · физическая сцена». Локации и состав
+6. Ответить: открывается отдельная сцена звонка. Её ввод адресован собеседнику; основной ввод — физической сцене. Свернуть и восстановить звонок. Локации и состав
    камеры не меняются, удалённый собеседник не касается героя и не видит комнату.
    Завершить звонок: вернуть фокус физической сцены.
 7. Позвонить самостоятельно. Ответ не предполагается заранее. Команда автоматически запускает bounded job до canonical
@@ -51,6 +51,96 @@ RPG_DB_PATH="$PWD/data/dev-phone.sqlite3" python -m uvicorn backend.main:app --h
 
 При provider error сообщение сохранено. «Повторить обработку» продолжает тот же job без повторной отправки; принятые решения воспроизводятся из checkpoint. Cancel/end, reload, regenerate, variant и rollback используют прежние snapshots/history/revision guards. Модельные попытки учитываются в штатной диагностике.
 
-Контакты имеют отдельные детали; изменения контакта раскрываются отдельно от написать/позвонить. Сообщения и вызовы используют общую каноническую историю. Раскрытие устройства не читает все входящие. Draft/scroll разделены по владельцу и беседе; sessionStorage сохраняет draft при reload той же вкладки. В разговоре основной Narrative composer принимает реплики с явным каналом.
+Контакты имеют отдельные детали; изменения контакта раскрываются отдельно от написать/позвонить. Сообщения и вызовы используют общую каноническую историю. Раскрытие устройства не читает все входящие. Draft/scroll разделены по владельцу и беседе; sessionStorage сохраняет draft при reload той же вкладки. После #122 реплики принимает отдельная сцена звонка; основной Narrative composer всегда отправляет физическое действие. Оба используют существующий job pipeline и единый lock.
 
 Дополнительные тесты: `tests/test_communication_cycle.py`, `frontend/e2e/phone-completion.spec.ts`. [Итоговая R/T/G матрица и ограничения](current-game-ui.md#pr120-final-acceptance), [снимки/записи](pr120-final-evidence/README.md).
+
+
+## #122 — последствия и отдельная сцена
+
+Используется тот же checkpoint `phone`, без изменения base. Полная матрица и записи: [issue122 acceptance](issue122-evidence/README.md).
+
+1. Start Game, открыть чат Веры, отправить «Встретимся через два часа?». До ответа/чтения календарь не раскрывает подтверждение.
+2. После явного согласия и чтения проверить единственный pending plan с исходными RemoteInteraction IDs, временем исходной реплики +120 минут. Открыть существующий календарь и вкладку «Личность» обоих участников. Это один commitment, без двух автоматически придуманных intentions.
+3. Сохранить/reload; Time Skip на четыре часа останавливается у встречи. Due сохраняет pending. Подтверждённое событие встречи завершает тот же ID. Следующий обычный ход не создаёт повторную встречу.
+4. Отдельно отправить «Я планирую встретиться с Верой.»: проверить точный текст, автора и source_event_id у intention. Отмена/выполнение требуют свежего evidence.
+5. Перенести и отменить встречу; проверить один ID, новый срок/статус, Knowledge до/после чтения, Retry semantic stage без повторной отправки.
+6. Сделать десять длинных сообщений, затем звонок. В главной истории нет телефонных карточек. Проверить оба черновика/якоря, Escape/Back, журнал завершённого звонка, 360/393 px, graphite/parchment и reduced motion.
+
+Детерминированный транспорт: `tests/phone_semantic_fixture.py`, `tests/test_phone122.py`, `frontend/e2e/phone122*.spec.ts`. Семантическая классификация в production выполняется Extraction; тестовый разбор фраз не входит в Runtime.
+
+### PR #133 — регрессии пользовательского тестирования
+
+Повторить [сценарии A–F и provider contract](issue133-regressions/README.md) на
+существующем checkpoint `phone`. В игровой переписке и звонке больше нет jobs,
+usage или JSON: инструменты находятся в общей Диагностике → История и восстановление.
+Короткая ошибка и «Повторить» остаются в соответствующем диалоге.
+После двух сообщений, разговора, сворачивания и отбоя проверить прежние choices,
+черновик и позицию чтения. Затем выполнить обычный ход, reload и ещё один ход.
+При реальном изменении места/присутствующих/внешнем событии старые choices недоступны.
+Для live DeepSeek отдельно проверить ту же бытовую реплику и договорённость:
+контролируемый HTTP-тест не заменяет проверку реального API.
+
+### PR #133 — follow-up: agency proof and active call feedback
+
+На том же checkpoint `phone` проверить предложение игрока «Встретимся через час?»
+и обратный порядок: предложение NPC → явное «Да, согласен» игрока. После согласия
+и чтения — один план, срок от исходного сообщения +60 минут, без Narrative-пересказа.
+В группе согласие относится только к авторам подтверждающих сообщений.
+Один вопрос без ответа не создаёт встречи. Повторить перенос/отмену, reload и Retry.
+
+В тестовом транспорте `/test/phone-seed?incoming=false&decision=agency_missing_once`
+намеренно отсутствует `player_assertion`: один source-bound semantic repair должен
+сохранить встречу без второго send/read или дополнительной минуты. Невалидное
+намерение отбрасывается отдельно; предупреждение остаётся в общей диагностике.
+Отклонённую встречу нельзя удалить из repair, чтобы объявить job успешным.
+
+В звонке дождаться каждого реального состояния: соединение → ожидание первых
+токенов → речь → сохранение последствий → готовность. Остановить ответ до первых
+токенов: звонок остаётся открыт, поздний ответ не коммитится; исходную реплику можно
+вернуть в ввод. При остановке после полного текста используется прежний Retry.
+Проверить оба черновика/якоря, сворачивание, graphite/parchment, 360/393 px,
+reduced motion и live region. [Evidence and limits](issue133-followup/README.md).
+
+
+### PR #133 — единый мир во время звонка
+
+Существующий loader #78: checkpoint `phone-office` (изолированная dev database;
+`base` не изменён). Reset: повторно загрузить checkpoint. Browser fixture:
+`POST /test/phone-seed?incoming=false&decision=office`.
+
+1. Start Game: Илья в кабинете, Виктория за дверью, пока не стучит; есть физические варианты.
+2. Телефон → Катя → Позвонить. «Встретимся через час?» → согласие Кати и стук Виктории.
+3. До commit стук не является фактом. После commit стук уже в основной ленте,
+   реплики Кати только в звонке; физические варианты предлагают ответить Виктории.
+4. «Я скоро освобожусь.» → Виктория требует ответа. Проверить порядок двух физических карточек,
+   пока звонок остаётся активным; свернуть/открыть без потери обоих черновиков.
+5. «Тогда до встречи.» → фактический отбой Кати. Канонический статус ended,
+   встреча pending с временем исходного предложения +60 минут; звонок занял 6 минут.
+6. Reload → Телефон → Звонки → Читать разговор: журнал read-only, часы не меняются.
+   Обычный ход «Ответить Виктории.» продолжает её стук/требование, а не исходное ожидание.
+7. Проверить rollback/варианты/ветку, смену управляемого actor и POV без чужих реплик;
+   ошибка Extraction не публикует частичный мир, Retry не повторяет Narrative/время.
+8. Отрицательные случаи: без физического события нет карточки; одно предложение без согласия
+   не создаёт плана; обычное прощание не завершает звонок; ручной отбой работает.
+
+Automated evidence: `tests/test_call_continuity.py`, `frontend/e2e/call-continuity.spec.ts`.
+Это контролируемый provider, не live LLM. См. [отчёт](issue133-continuity/README.md).
+
+
+### P0: optional Extraction recovery (#133)
+
+Use the existing `phone-office` checkpoint and repeat the first ordinary call with
+DeepSeek. Compare a normal response against missing/malformed physical_projections,
+wrong optional event references/evidence, empty/partial physical choices, and a
+camera.situation paraphrase. A valid reply must save without a projection repair loop.
+Accepted physical Events appear via Event.text fallback; unsupported arrivals remain
+absent from WorldState, produce a visible reconciliation notice, and cannot silently
+return as facts in the next prompt/memory. Check the phone transcript and main story
+before/after reload. Enter a real physical action when suggestions are absent; check
+that earlier Events and elapsed time were not applied again. Complete NPC hangup and
+check the agreed appointment retains its original proposal-time anchor.
+
+Controlled-provider API/jobs and desktop/mobile execution:
+[recovery report](issue133-recovery/README.md). A live DeepSeek run remains a separate
+manual acceptance step; automated provider fixtures do not establish live compliance.

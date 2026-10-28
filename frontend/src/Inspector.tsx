@@ -322,6 +322,9 @@ export function Inspector({
     setPanel("Персонажи");
   };
   const back = () => {
+    // A scroll event can still be queued when Escape/Back hides the surface.
+    // Capture the current DOM position before that event loses its open owner.
+    if (scrollRef.current) scrolls.current.set(key, scrollRef.current.scrollTop);
     if (origin) {
       const from = origin;
       setOrigin(null);

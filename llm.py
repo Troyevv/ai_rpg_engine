@@ -252,9 +252,40 @@ def unload_all_models() -> int:
 
 class ProviderHTTPError(RuntimeError):
     """Confirmed HTTP rejection, without credentials or response bodies."""
-    def __init__(self,message,status_code):
+    def __init__(self,message,status_code,diagnostic=None):
         super().__init__(message)
         self.status_code=status_code
+        self.diagnostic=diagnostic or {'http_status':status_code}
+
+
+def provider_rejection(exc, messages, max_tokens, response_format):
+    """Classify the actual API rejection without storing its echoed prompt/key.
+
+    Unknown server text is deliberately not retained. A body digest permits
+    correlation with a provider support report without publishing that body.
+    """
+    import hashlib
+    import json
+    body=getattr(exc,'body',None)
+    error=body.get('error',body) if isinstance(body,dict) else {}
+    error=error if isinstance(error,dict) else {}
+    message=str(error.get('message','')).lower()
+    reason='unclassified_rejection'
+    if 'json' in message and ('messages' in message or 'prompt' in message) and ('contain' in message or 'include' in message):
+        reason='json_instruction_required'
+    elif 'context' in message and ('length' in message or 'token' in message):
+        reason='context_limit'
+    elif 'max_tokens' in message:
+        reason='output_limit'
+    elif 'model' in message and ('exist' in message or 'invalid' in message):
+        reason='model_unavailable'
+    return dict(http_status=getattr(exc,'status_code',None),reason=reason,
+        error_type=error.get('type') if error.get('type') in ('invalid_request_error','authentication_error','rate_limit_error','server_error') else None,
+        parameter=error.get('param') if error.get('param') in ('messages','response_format','max_tokens','model') else None,
+        body_sha256=hashlib.sha256(json.dumps(body,ensure_ascii=False,default=str).encode()).hexdigest(),
+        request=dict(message_count=len(messages),message_bytes=len(json.dumps(messages,ensure_ascii=False).encode()),
+            has_json_instruction=any('json' in str(m.get('content','')).lower() for m in messages),
+            max_tokens=max_tokens,response_format=response_format))
 
 
 class OutputLimitReached(RuntimeError):
@@ -348,7 +379,8 @@ def chat_stream(
             raise RuntimeError("Ответ не завершён: увеличь лимит ответа/контекста и повтори генерацию.")
     except Exception as exc:
         if stream is None and getattr(exc,'status_code',None) is not None:
-            raise ProviderHTTPError(deepseek_error(exc),exc.status_code) from None
+            raise ProviderHTTPError(deepseek_error(exc),exc.status_code,
+                provider_rejection(exc,messages,max_tokens,response_format)) from None
         if remote and not isinstance(exc, RuntimeError):
             raise RuntimeError(deepseek_error(exc)) from None
         raise

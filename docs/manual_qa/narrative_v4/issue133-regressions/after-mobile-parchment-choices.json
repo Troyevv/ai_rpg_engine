@@ -1,0 +1,232 @@
+{
+  "clock": {
+    "minute": 542,
+    "last_event_time": "День 1 · 2026-10-05 · Пн · 09:02",
+    "calendar": {
+      "start_minute": 540,
+      "start_weekday": 0,
+      "start_date": "2026-10-05",
+      "profile": {
+        "id": "two-shores",
+        "system": "gregorian",
+        "month_lengths": [],
+        "month_names": [],
+        "weekday_names": [],
+        "observances": [
+          {
+            "id": "map-day",
+            "name": "День старых карт",
+            "month": 10,
+            "day": 5,
+            "character_ids": []
+          }
+        ],
+        "seasons": []
+      },
+      "labels": {
+        "480": "День 1 · 2026-10-05 · Пн · 08:00",
+        "540": "День 1 · 2026-10-05 · Пн · 09:00",
+        "542": "День 1 · 2026-10-05 · Пн · 09:02"
+      }
+    },
+    "projection": {
+      "world_time": 542,
+      "day": 1,
+      "date": "2026-10-05",
+      "weekday": 0,
+      "weekday_name": "monday",
+      "time": "09:02",
+      "day_period": "morning",
+      "season": null,
+      "summary": "Day 1 / 2026-10-05 / monday / 09:02 / morning"
+    },
+    "nearby": [
+      {
+        "id": "map-day:2026-10-05",
+        "date": "2026-10-05",
+        "kind": "observance",
+        "name": "День старых карт",
+        "character_ids": []
+      },
+      {
+        "id": "birthday:qa_vera:2026-10-06",
+        "date": "2026-10-06",
+        "kind": "birthday",
+        "name": null,
+        "character_ids": [
+          "qa_vera"
+        ]
+      }
+    ]
+  },
+  "source": {
+    "turn_id": 125,
+    "variant_id": "e57fbe54095045a594529ca0ff2fb08c"
+  },
+  "events": [
+    {
+      "id": "remote_2396dcba518febe4179c",
+      "channel": "TEXT_MESSAGE",
+      "conversation_id": "direct_eb94ec192979a6136c3d",
+      "world_time": 540,
+      "status": "delivered",
+      "destination": "qa-vera",
+      "outgoing": true,
+      "read_count": 1,
+      "recipient_count": 1,
+      "unread": false,
+      "content": "Привет. Ты занята сегодня?",
+      "sender": {
+        "id": "qa_kirill",
+        "name": "Кирилл Ларин",
+        "portrait": null,
+        "silhouette": "neutral"
+      },
+      "subject": {
+        "id": "qa_vera",
+        "name": "Вера работа",
+        "portrait": null,
+        "silhouette": "neutral"
+      },
+      "label": "Вера работа",
+      "time_label": "День 1 · 2026-10-05 · Пн · 09:00"
+    },
+    {
+      "id": "remote_6862c4cfb8b5561c492c",
+      "channel": "TEXT_MESSAGE",
+      "conversation_id": "direct_eb94ec192979a6136c3d",
+      "world_time": 540,
+      "status": "delivered",
+      "destination": "direct_eb94ec192979a6136c3d",
+      "outgoing": false,
+      "read_count": null,
+      "recipient_count": null,
+      "unread": false,
+      "content": "Привет. Ещё в офисе, разгребаю бумаги. А что, есть планы?",
+      "sender": {
+        "id": "qa_vera",
+        "name": "Вера работа",
+        "portrait": null,
+        "silhouette": "neutral"
+      },
+      "subject": {
+        "id": "qa_vera",
+        "name": "Вера работа",
+        "portrait": null,
+        "silhouette": "neutral"
+      },
+      "label": "Вера работа",
+      "time_label": "День 1 · 2026-10-05 · Пн · 09:00"
+    },
+    {
+      "id": "remote_d65e054afa855cc56647",
+      "channel": "TEXT_MESSAGE",
+      "conversation_id": "direct_eb94ec192979a6136c3d",
+      "world_time": 541,
+      "status": "delivered",
+      "destination": "direct_eb94ec192979a6136c3d",
+      "outgoing": true,
+      "read_count": 1,
+      "recipient_count": 1,
+      "unread": false,
+      "content": "Спасибо. Напишу позже.",
+      "sender": {
+        "id": "qa_kirill",
+        "name": "Кирилл Ларин",
+        "portrait": null,
+        "silhouette": "neutral"
+      },
+      "subject": {
+        "id": "qa_vera",
+        "name": "Вера работа",
+        "portrait": null,
+        "silhouette": "neutral"
+      },
+      "label": "Вера работа",
+      "time_label": "День 1 · 2026-10-05 · Пн · 09:01"
+    },
+    {
+      "id": "remote_55efed8fd179119b004b",
+      "channel": "TEXT_MESSAGE",
+      "conversation_id": "direct_eb94ec192979a6136c3d",
+      "world_time": 541,
+      "status": "delivered",
+      "destination": "direct_eb94ec192979a6136c3d",
+      "outgoing": false,
+      "read_count": null,
+      "recipient_count": null,
+      "unread": false,
+      "content": "Привет. Ещё в офисе, разгребаю бумаги. А что, есть планы?",
+      "sender": {
+        "id": "qa_vera",
+        "name": "Вера работа",
+        "portrait": null,
+        "silhouette": "neutral"
+      },
+      "subject": {
+        "id": "qa_vera",
+        "name": "Вера работа",
+        "portrait": null,
+        "silhouette": "neutral"
+      },
+      "label": "Вера работа",
+      "time_label": "День 1 · 2026-10-05 · Пн · 09:01"
+    }
+  ],
+  "turns": [
+    {
+      "id": 124,
+      "kind": "start",
+      "choices": [
+        {
+          "action": "Посмотреть в окно",
+          "speech": "",
+          "interaction_channel": "physical"
+        }
+      ],
+      "presentation": {
+        "surface": "physical",
+        "actor_id": "qa_kirill",
+        "call_id": null
+      }
+    },
+    {
+      "id": 125,
+      "kind": "turn",
+      "choices": [
+        {
+          "action": "Посмотреть в окно",
+          "speech": "",
+          "interaction_channel": "physical"
+        }
+      ],
+      "presentation": {
+        "surface": "physical",
+        "actor_id": "qa_kirill",
+        "call_id": null
+      }
+    },
+    {
+      "id": 126,
+      "kind": "communication",
+      "choices": [],
+      "presentation": {
+        "surface": "phone",
+        "actor_id": "qa_kirill",
+        "call_id": null,
+        "conversation_id": "direct_eb94ec192979a6136c3d"
+      }
+    },
+    {
+      "id": 127,
+      "kind": "communication",
+      "choices": [],
+      "presentation": {
+        "surface": "phone",
+        "actor_id": "qa_kirill",
+        "call_id": null,
+        "conversation_id": "direct_eb94ec192979a6136c3d"
+      }
+    }
+  ]
+}

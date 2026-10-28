@@ -112,6 +112,7 @@ class Calendar(StrictModel):
 
 
 class TemporalValue(StrictModel):
+    minute_offset: int | None = Field(default=None, ge=0, le=527040)
     date: str | None = None
     weekday: int | None = Field(default=None, ge=0, le=13)
     day_offset: int | None = Field(default=None, ge=-366, le=366)
@@ -120,8 +121,10 @@ class TemporalValue(StrictModel):
 
     @model_validator(mode='after')
     def one_temporal_basis(self):
-        if sum(v is not None for v in (self.date,self.weekday,self.day_offset)) != 1:
-            raise ValueError('temporal value requires exactly one date, weekday or day_offset')
+        if sum(v is not None for v in (self.date,self.weekday,self.day_offset,self.minute_offset)) != 1:
+            raise ValueError('temporal value requires exactly one date, weekday, day_offset or minute_offset')
+        if self.minute_offset is not None and (self.time is not None or self.day_period is not None):
+            raise ValueError('minute_offset already defines an exact relative instant')
         if self.time is not None and self.day_period is not None:
             raise ValueError('choose exact time or an imprecise period')
         return self
@@ -558,6 +561,13 @@ class Thread(StrictModel):
     relevance: float = Field(default=0.5, ge=0, le=1)
 
 
+class CallEvidence(StrictModel):
+    source_id: str
+    actor_id: str
+    quote: str
+    assertion: Literal['proposal', 'assent', 'cancellation', 'outcome']
+
+
 class ScheduledEvent(StrictModel):
     id: str
     time_semantics: Literal['legacy', 'explicit'] = 'legacy'
@@ -580,6 +590,9 @@ class ScheduledEvent(StrictModel):
     evidence: str = ''
     source_turn: int | None = Field(default=None, ge=0)
     remote_source_ids: list[str] = Field(default_factory=list, max_length=8)
+    remote_call_id: str | None = None
+    call_evidence: list[CallEvidence] = Field(default_factory=list, max_length=8)
+    call_time_source_id: str | None = None
 
 
 class SignificantPossession(StrictModel):
