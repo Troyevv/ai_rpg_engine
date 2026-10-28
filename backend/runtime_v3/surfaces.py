@@ -37,22 +37,34 @@ def committed_route(job, history):
         text = job.get('narrative', '')
         for event in physical:
             # An accepted exact excerpt is a span, never a phrase classifier.
-            excerpt=event.get('physical_text',event.get('evidence'))
+            excerpt=event.get('physical_excerpt',event.get('physical_text',event.get('evidence')))
             if excerpt and excerpt in text:
                 text = text.replace(excerpt, '', 1)
+        audits=[t['physical_reconciliation'] for t in (history or {}).get('turns',[]) if t.get('physical_reconciliation')]
+        for audit in audits:
+            for span in audit.get('excluded_spans',[]):text=text.replace(span,'')
+        if audits:result['physical_reconciliation']=True
         result['call_text'] = text.strip()
     return result
+
+
+def reconciled_view(turn):
+    """Context/memory read the accepted presentation; original prose stays in History."""
+    route=turn.get('presentation',{})
+    if not route.get('physical_reconciliation'):return turn
+    return {**turn,'assistant_text':route.get('call_text','')+'\n'+route.get('physical_text','')+
+        '\n[Runtime: unconfirmed physical claims in this turn were rejected. Continue from canonical WorldState; do not replay discarded prose.]'}
 
 
 def physical_scene(state):
     """Choice applicability, excluding phone focus, remote Knowledge and clock.
 
     This is a disposable comparison of existing snapshots, not another scene or
-    choice store. Physical presence/situation/life changes invalidate suggestions.
+    choice store. Structural presence/location/life changes invalidate suggestions.
     """
     camera=state.get('camera',{})
     present=set(camera.get('present_character_ids',[]))
-    return dict(camera={k:camera.get(k) for k in ('controlled_actor_id','pov_actor_id','location_id','situation')},
+    return dict(camera={k:camera.get(k) for k in ('controlled_actor_id','pov_actor_id','location_id')},
         present=sorted(present),
         characters={cid:{k:state['characters'][cid].get(k) for k in ('location_id','life_status')}
                     for cid in present if cid in state.get('characters',{})},

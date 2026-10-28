@@ -112,11 +112,17 @@ def stream(**kwargs):
     if current_phone.get('communication'):
         camera=current_phone['camera']
         voice=current_phone['communication'].get('focus')=='call'
-        if phone_mode=='office':
+        if phone_mode.startswith('office'):
             from call_continuity_fixture import response,BEFORE,AFTER
             task=json.loads(next(m['content'].split('\n',1)[1] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')))
             if voice:
                 value=response(current_phone,task['player_input'],'complete' if kwargs.get('response_format') else None)
+                if isinstance(value,dict) and phone_mode=='office-recovery':
+                    value.pop('physical_projections',None)
+                    value['choices']=[]
+                if isinstance(value,dict) and phone_mode=='office-rejected' and value.get('events'):
+                    value['events'][0]['evidence']='Несуществующая цитата.'
+
             else:
                 text=AFTER if 'Виктория' in camera.get('situation','') and 'ответ' in camera.get('situation','') else BEFORE
                 value=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),choices=[dict(action='Посмотреть на часы',speech='')]) if kwargs.get('response_format') else text
@@ -419,7 +425,7 @@ if __name__ == '__main__':
         from test_narrative_test_world import CONFIG
         from backend.runtime_v3.remote import apply
         from backend.runtime_v3.repository import append_history
-        result=load_fixture(app.state.repository,'phone-office' if decision=='office' else 'ui-portrait-polish' if polish else 'phone')
+        result=load_fixture(app.state.repository,'phone-office' if decision.startswith('office') else 'ui-portrait-polish' if polish else 'phone')
         repo=app.state.repository;sid=result['save']
         job=repo.begin_job(sid,'','start',CONFIG)
         engine.run_job(repo.path,job,engine.Worker())

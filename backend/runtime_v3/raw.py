@@ -36,7 +36,7 @@ class RawTurnResult:
         for section in SECTIONS:
             values = payload.get(section, [])
             if not isinstance(values, list):
-                if section in ('call_lifecycle_changes','physical_projections','scene_transitions','continuity_beats','scene_actions','consequences','narrative_developments'):
+                if section in ('call_lifecycle_changes','scene_transitions','continuity_beats','scene_actions','consequences','narrative_developments'):
                     fatal('некорректная секция политики истории', 'narrative_policy_section_invalid', repairable=False, section=section)
                 warnings.append(dict(section=section, code='optional_section_invalid', action='drop_section', reason='ожидался список'))
                 values = []

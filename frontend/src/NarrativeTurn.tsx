@@ -1,3 +1,4 @@
+import {phoneText} from './lib/phone';
 import {memo, useRef} from 'react';
 import {motion,useReducedMotion} from 'framer-motion';
 import {useMotionPreset} from './motion';
@@ -44,6 +45,7 @@ export const NarrativeTurn=memo(function NarrativeTurn({t,i,save,world,prefs,mob
                     {t.kind==="background"?`Тем временем… · За кулисами · ход ${t.sequence}`:i === 0 ? "Первая сцена" : `Ход ${t.sequence}`}
                     {t.kind!=="background"&&<span> · POV: {save.state.characters.find(c=>c.id===(t.pov_actor_id||mainActor))?.name}</span>}
                   </p>
+                  {committed&&t.presentation?.physical_reconciliation&&!t.read_only_projection&&<p role="status" className="muted small">{phoneText('physicalReconciled')}</p>}
                   <NarrativeText identity={identity} onPresented={onPresented} text={t.assistant_text} complete={committed||!!job?.narrative_complete||!!job&&['error','stopped'].includes(job.status)} saveId={save.id} worldId={world.id} links={prefs.link_names} onCharacter={openCharacter}/>
                   {!committed&&showTools&&<JobView job={job?.status==='saved'?{...job,status:'committing'}:job} statusOnly reconnecting={reconnecting} stop={stop}/>}
                   </>}

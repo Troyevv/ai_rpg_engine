@@ -105,13 +105,35 @@ surfaces. `physical_projections` reference accepted physical Event local IDs and
 exact non-overlapping literary spans containing their evidence. These become
 Event `physical_text`, stable ID/source_record_id, chronological order, minute and
 calendar date. Projection reads neither advance time nor create canonical facts.
-No event means no extra physical card. Invalid/missing projections or applicable
-physical choices trigger the existing bounded extraction repair, then fail atomically.
+No accepted event means no extra physical card. Projections are optional: missing,
+malformed, overlapping or incorrectly referenced spans are dropped with diagnostics;
+accepted Events fall back to Event.text. An unambiguous exact evidence match can
+recover a wrong optional reference. No additional LLM call is needed.
+
+Unsupported optional scene hints are not canonical movements. Text changes to
+camera.situation are not structural physical transitions. Accepted Event text can
+supply the scene summary; independently validated character changes remain intact.
+Rejected physical claims produce a reconciliation audit: identifiable unsupported
+spans are excluded from committed display, the phone shows a localized notice, and
+context/memory read the reconciled presentation with an explicit Runtime annotation.
+Original prose remains in History. This does not semantically classify arbitrary
+prose: a claim omitted entirely from Extraction cannot be reliably identified by
+literal matching. WorldState remains authoritative.
+
+Critical IDs, agency, consent, Knowledge/POV, lifecycle and atomic commit guards
+remain strict. Bounded repair may remove unaccepted optional Events/projections;
+it must retain already validated physical Events, including successful validation
+in the repaired result, and cannot erase commitment/lifecycle claims to bypass their
+checks. No new required Extraction fields or save migration are introduced.
 
 Call and physical choices carry separate interaction_channel tags through filtering.
 The latest physical source remains applicable while physical_scene is unchanged;
-a mixed turn supplies current physical choices from the same extraction. The main
-composer retains free input. Provisional streaming never publishes a physical Event.
+a mixed turn can supply current physical choices from the same extraction. Missing
+or filtered choices do not invalidate the turn. Applicable prior choices remain;
+a changed scene without suggestions exposes free input instead of stale choices.
+The next actual player action generates suggestions from current WorldState through
+the normal turn pipeline, without replaying the previous Events or clock advance.
+The main composer retains free input. Provisional streaming never publishes a physical Event.
 After commit the phone text excludes the accepted physical spans; the story shows
 those spans in order. Older ambiguous snapshots are not rewritten.
 

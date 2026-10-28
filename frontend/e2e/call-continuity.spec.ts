@@ -55,3 +55,33 @@ for(const theme of ['graphite','parchment'])test(`one world during and after NPC
  await expect(story).toContainText('После её стука и требования ответа');await expect(input).toBeEnabled();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
+
+for(const mode of ['office-recovery','office-rejected'])test(`optional call extraction recovers: ${mode}`,async({page,request})=>{
+ const seed=await(await request.post(`/test/phone-seed?incoming=false&decision=${mode}`)).json();
+ await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),seed);await page.goto('/');
+ await page.getByRole('button',{name:/^Телефон/}).click();const phone=page.getByRole('region',{name:'Телефон персонажа'});
+ await phone.getByRole('button',{name:'Катя',exact:true}).click();await phone.getByRole('button',{name:'Позвонить',exact:true}).click();
+ const call=page.getByRole('dialog',{name:'Сцена звонка'});await expect(call).toBeVisible();
+ await call.getByLabel('Реплика в звонке').fill('Встретимся через час?');await call.getByLabel('Сказать собеседнику').click();
+ await expect.poll(async()=>(await(await request.get(`/api/saves/${seed.save}`)).json()).job.status).toBe('saved');
+ await expect(call).toContainText('Да, договорились');
+ const story=page.locator('.story-scroll');
+ if(mode==='office-recovery'){
+  await expect(story).toContainText('Стук в дверь.');
+  await expect(page.locator('.choices')).not.toContainText('Посмотреть на часы');
+ }else{
+  await expect(call).toContainText('Неподтверждённые изменения окружения не применены');
+  await expect(story).not.toContainText('Стук в дверь.');
+ }
+ await call.getByLabel('Свернуть звонок').click();await expect(page.getByLabel('Своё действие или реплика')).toBeEnabled();
+ await page.reload();
+ await expect(call).toHaveCount(0);
+ await page.getByRole('button',{name:/Вернуться к звонку/}).click();
+ await expect(call).toContainText('Да, договорились');
+ if(mode==='office-rejected')await expect(call).toContainText('Неподтверждённые изменения окружения не применены');
+ await call.getByLabel('Реплика в звонке').fill('Тогда до встречи.');await call.getByLabel('Сказать собеседнику').click();
+ await expect(call).toHaveCount(0);await expect(page.getByLabel('Своё действие или реплика')).toBeEnabled();
+ const after=await(await request.get(`/api/saves/${seed.save}`)).json();
+ expect(after.state.phone.events.find((e:any)=>e.channel==='VOICE_CALL').status).toBe('ended');
+ expect(after.state.world.scheduled_events['office-meeting'].status).toBe('pending');
+});

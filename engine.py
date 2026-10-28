@@ -247,6 +247,7 @@ def run_job(path, job_id, handle):
                     return
                 storage.job_progress(job_id, 'validating')
                 stage_started=time.perf_counter()
+                resolver = None
                 try:
                     from copy import deepcopy
                     from dataclasses import asdict
@@ -261,7 +262,13 @@ def run_job(path, job_id, handle):
                         raw.final_scene['elapsed_minutes']=0
                     from backend.runtime_v3.remote_semantics import staged_sources
                     from backend.runtime_v3.call_continuity import sources as call_sources
-                    resolved=StateResolver(before['world_state'],narrative,job['user_text'],pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_plan,continuity_decision=continuity_plan,runtime_time_skip=bool(skip_result),turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),relationship_query=world_history.get('_relationship_query'),actor_names={c['id']:c['name'] for c in before['character_cards']},remote_semantic_sources=staged_sources(before),call_sources=call_sources(before['world_state'],world_history,narrative,job['user_text'],sequence+1)).resolve(raw)
+                    resolver=StateResolver(before['world_state'],narrative,job['user_text'],pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_plan,continuity_decision=continuity_plan,runtime_time_skip=bool(skip_result),turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),relationship_query=world_history.get('_relationship_query'),actor_names={c['id']:c['name'] for c in before['character_cards']},remote_semantic_sources=staged_sources(before),call_sources=call_sources(before['world_state'],world_history,narrative,job['user_text'],sequence+1))
+                    resolved=resolver.resolve(raw)
+                    if call_candidates is not None:
+                        accepted_ids={e.get('local_id') for e in resolved.history.get('events',[])}
+                        if any(e['id'] not in accepted_ids for e in call_candidates['events']):
+                            from backend.runtime_v3.models import fatal
+                            fatal('Исправление отменило принятый физический Event.', 'call_repair_omission',repairable=False)
                     if before['world_state']['meta'].get('interaction_focus')=='call':
                         rejected=[w for w in resolved.warnings if w.get('section')=='scheduled_events']
                         if rejected:
@@ -299,6 +306,8 @@ def run_job(path, job_id, handle):
                             db.execute('UPDATE game_jobs SET warnings_json=? WHERE id=?', (json.dumps(previous+warnings,ensure_ascii=False),job_id))
                     break
                 except StructuralDeltaError as exc:
+                    if call_candidates is not None and resolver is not None:
+                        call_candidates['events']=repair_candidates(raw,resolver.history.events)['events']
                     if not exc.repairable or attempt==1 and exc.code!='scene_arrival_unsupported': raise
                     diagnostic=exc.diagnostic('extraction_repair' if attempt==0 and exc.repairable else 'validation_failed')
                     diagnostic.update(attempt=attempt,attempt_epoch=job['attempt_epoch'],revision=job['revision'])

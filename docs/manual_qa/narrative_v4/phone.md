@@ -126,3 +126,21 @@ reduced motion и live region. [Evidence and limits](issue133-followup/README.md
 
 Automated evidence: `tests/test_call_continuity.py`, `frontend/e2e/call-continuity.spec.ts`.
 Это контролируемый provider, не live LLM. См. [отчёт](issue133-continuity/README.md).
+
+
+### P0: optional Extraction recovery (#133)
+
+Use the existing `phone-office` checkpoint and repeat the first ordinary call with
+DeepSeek. Compare a normal response against missing/malformed physical_projections,
+wrong optional event references/evidence, empty/partial physical choices, and a
+camera.situation paraphrase. A valid reply must save without a projection repair loop.
+Accepted physical Events appear via Event.text fallback; unsupported arrivals remain
+absent from WorldState, produce a visible reconciliation notice, and cannot silently
+return as facts in the next prompt/memory. Check the phone transcript and main story
+before/after reload. Enter a real physical action when suggestions are absent; check
+that earlier Events and elapsed time were not applied again. Complete NPC hangup and
+check the agreed appointment retains its original proposal-time anchor.
+
+Controlled-provider API/jobs and desktop/mobile execution:
+[recovery report](issue133-recovery/README.md). A live DeepSeek run remains a separate
+manual acceptance step; automated provider fixtures do not establish live compliance.

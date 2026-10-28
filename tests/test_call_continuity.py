@@ -21,7 +21,7 @@ def connected(tmp_path):
     return repo,client,sid,call['id']
 
 
-def turn(repo,client,sid,text,transform=None,jid=None,fail=False):
+def turn(repo,client,sid,text,transform=None,jid=None,fail=False,narrative_extra=""):
     if jid is None:
         with patch('engine.launch'):
             r=client.post(f'/api/saves/{sid}/turns',json=dict(kind='turn',text=text,interaction_channel='call',config=CONFIG,revision=repo.get_save(sid)['revision']))
@@ -35,6 +35,7 @@ def turn(repo,client,sid,text,transform=None,jid=None,fail=False):
         extraction=bool(kw.get('response_format'));calls.append('extraction' if extraction else 'narrative')
         if extraction and fail:raise RuntimeError('extraction outage')
         value=response(current,text,'completed' if extraction else None)
+        if not extraction:value+=narrative_extra
         if extraction and transform:value=transform(value,current)
         yield json.dumps(value,ensure_ascii=False) if extraction else value
     with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=provider):
@@ -138,13 +139,10 @@ def test_extraction_failure_retry_variants_rollback(tmp_path):
     assert not any(e.get('physical_text') for e in history['events'])
 
 
-@pytest.mark.parametrize('fault',['missing_projection','forged_projection','missing_choices','player_end','unknown_call'])
+@pytest.mark.parametrize('fault',['player_end','unknown_call'])
 def test_invalid_mixed_claims_never_partially_commit(tmp_path,fault):
     repo,client,sid,cid=connected(tmp_path);before=repo.get_snapshot(sid)
     def corrupt(value,current):
-        if fault=='missing_projection':value.pop('physical_projections')
-        if fault=='forged_projection':value['physical_projections'][0]['text']='Виктория вошла.'
-        if fault=='missing_choices':value['choices']=[]
         if fault in ('player_end','unknown_call'):
             value['call_lifecycle_changes']=[dict(call_id=cid if fault=='player_end' else 'wrong',actor_id='qa_kirill',assertion='completed_end',evidence=KNOCK)]
         return value
@@ -196,21 +194,105 @@ def test_npc_proposal_player_assent_and_new_evidence_for_reschedule(tmp_path):
 
 
 
-def test_repair_cannot_hide_missing_physical_projection(tmp_path):
-    repo,client,sid,cid=connected(tmp_path);before=repo.get_snapshot(sid)
+@pytest.mark.parametrize('fault',['missing_projection','forged_projection','wrong_reference','malformed_projection','missing_choices','partial_choices','bad_event_evidence'])
+def test_optional_physical_failures_recover_in_real_job(tmp_path,fault):
+    repo,client,sid,cid=connected(tmp_path);before=repo.get_snapshot(sid)['world_state']
+    def imperfect(value,current):
+        if fault=='missing_projection':value.pop('physical_projections')
+        if fault=='forged_projection':value['physical_projections'][0]['text']='Виктория вошла.'
+        if fault=='wrong_reference':value['physical_projections'][0]['event_id']='typo'
+        if fault=='malformed_projection':value['physical_projections']={'oops':'not a list'}
+        if fault=='missing_choices':value['choices']=[]
+        if fault=='partial_choices':value['choices']=value['choices'][:1]
+        if fault=='bad_event_evidence':value['events'][0]['evidence']='Этого нет в повествовании.'
+        return value
+    jid,calls=turn(repo,client,sid,OFFER,imperfect);saved(repo,jid)
+    assert calls==['narrative','extraction']  # optional metadata never costs a repair
+    view=client.get(f'/api/saves/{sid}').json();route=view['turns'][-1]['presentation']
+    after=repo.get_snapshot(sid)['world_state']
+    assert after['meta']['world_time']==before['meta']['world_time']+2
+    assert after['remote_events'][cid]['status']=='answered'
+    assert ASSENT in route['call_text']
+    if fault=='bad_event_evidence':
+        assert route['physical_text']==''
+        assert route['physical_reconciliation']
+        assert after['camera']['situation']==before['camera']['situation']
+    else:
+        assert route['physical_text'] in (KNOCK,'Стук в дверь.')
+        assert route['physical_events'][0]['source_record_id']
+        assert KNOCK not in route['call_text']
+    assert Repository(repo.path).get_snapshot(sid)==repo.get_snapshot(sid)
+    jid,_=turn(repo,client,sid,'Тогда до встречи.');saved(repo,jid)
+    final=repo.get_snapshot(sid)['world_state']
+    assert final['remote_events'][cid]['status']=='ended'
+    assert scheduled_window(final,final['scheduled_events']['office-meeting'])['start_minute']==before['meta']['world_time']+60
+
+
+def test_text_only_situation_preserves_choices_and_clock(tmp_path):
+    repo,client,sid,cid=connected(tmp_path)
+    old=client.get(f'/api/saves/{sid}').json()['physical_choice_source']
+    before=repo.get_snapshot(sid)['world_state']
+    def paraphrase(value,current):
+        value['final_scene']['situation']='Персонаж продолжает находиться в том же помещении.'
+        return value
+    jid,calls=turn(repo,client,sid,'До свидания.',paraphrase);saved(repo,jid)
+    view=client.get(f'/api/saves/{sid}').json()
+    assert view['physical_choice_source']==old
+    assert not view['turns'][-1]['presentation']['physical_text']
+    assert repo.get_snapshot(sid)['world_state']['camera']['situation']==before['camera']['situation']
+    assert calls==['narrative','extraction']
+
+
+def test_unconfirmed_optional_arrival_is_dropped_and_disclosed(tmp_path):
+    repo,client,sid,cid=connected(tmp_path);before=repo.get_snapshot(sid)['world_state']
+    def arrival(value,current):
+        value['events']=[];value['physical_projections']=[]
+        value['final_scene']['present_character_ids'].append('qa_marina')
+        value['final_scene']['situation']='Виктория вошла в кабинет.'
+        value['final_scene']['situation_evidence']=KNOCK
+        return value
+    jid,calls=turn(repo,client,sid,OFFER,arrival);saved(repo,jid)
+    after=repo.get_snapshot(sid)['world_state']
+    assert after['camera']['present_character_ids']==before['camera']['present_character_ids']
+    assert after['characters']['qa_marina']['location_id']==before['characters']['qa_marina']['location_id']
+    route=client.get(f'/api/saves/{sid}').json()['turns'][-1]['presentation']
+    assert route['physical_reconciliation'] and ASSENT in route['call_text']
+    assert not route['physical_text']
+    assert 'call_scene_hint_dropped' in repo.get_job(jid)['warnings_json']
+
+
+def test_repair_may_remove_unaccepted_optional_events(tmp_path):
+    repo,client,sid,cid=connected(tmp_path)
     attempts=0
-    def omit(value,current):
+    def repair(value,current):
         nonlocal attempts
         attempts+=1
-        value.pop('physical_projections')
-        if attempts>1:
-            value['events']=[]
-            value['choices']=[]
-            value['final_scene'].pop('situation',None)
-            value['final_scene'].pop('situation_evidence',None)
+        if attempts==1:
+            value['events'][0]['evidence']='not in narrative'
+            value['physical_projections'][0]['event_id']='missing'
+            value['call_lifecycle_changes']=[dict(call_id=cid,actor_id='qa_vera',assertion='intended_end',evidence=END)]
+        else:
+            value['events']=[];value['physical_projections']=[]
+            value['call_lifecycle_changes']=[dict(call_id=cid,actor_id='qa_vera',assertion='completed_end',evidence=END)]
         return value
-    jid,_=turn(repo,client,sid,OFFER,omit)
+    jid,_=turn(repo,client,sid,OFFER,repair,narrative_extra='\n'+END);saved(repo,jid)
     assert attempts==2
+
+
+@pytest.mark.parametrize('remove',[True,False])
+def test_repair_cannot_delete_an_accepted_physical_event(tmp_path,remove):
+    repo,client,sid,cid=connected(tmp_path);before=repo.get_snapshot(sid)
+    attempts=0
+    def repair(value,current):
+        nonlocal attempts
+        attempts+=1
+        value['call_lifecycle_changes']=[dict(call_id=cid,actor_id='qa_vera',assertion='intended_end' if attempts==1 else 'completed_end',evidence=END)]
+        if attempts>1:
+            if remove:value['events']=[]
+            else:value['events'][0]['evidence']='invalid replacement evidence'
+            value['physical_projections']=[]
+        return value
+    jid,_=turn(repo,client,sid,OFFER,repair,narrative_extra='\n'+END)
     assert repo.get_job(jid)['status']=='error'
     assert repo.get_snapshot(sid)==before
 
@@ -247,3 +329,48 @@ def test_npc_first_proposal_waits_for_player_assent_across_real_jobs(tmp_path):
     state=repo.get_snapshot(sid)['world_state']
     assert list(state['scheduled_events'])==['office-meeting']
     assert state['scheduled_events']['office-meeting']['status']=='cancelled'
+
+
+def test_missing_choices_then_real_action_uses_current_state_once(tmp_path):
+    repo,client,sid,cid=connected(tmp_path)
+    def no_choices(value,current):value['choices']=[];return value
+    jid,_=turn(repo,client,sid,OFFER,no_choices);saved(repo,jid)
+    before=repo.get_snapshot(sid)['world_state']
+    job=repo.begin_job(sid,'Посмотреть на дверь.','turn',dict(CONFIG,interaction_channel='physical'))
+    seen=[]
+    def provider(**kw):
+        if kw['messages'][0]['content'].startswith('Select at most ONE'):yield '{"action":null}';return
+        seen.append(kw['messages'])
+        if not kw.get('response_format'):yield 'После стука дверь остаётся закрытой.';return
+        camera=before['camera']
+        yield json.dumps(dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),choices=[dict(action='Открыть дверь',speech='')]))
+    with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=provider):engine.run_job(repo.path,job,engine.Worker())
+    saved(repo,job)
+    assert KNOCK in json.dumps(seen[0],ensure_ascii=False)
+    view=client.get(f'/api/saves/{sid}').json()
+    assert view['physical_choice_source']['turn_id']==view['turns'][-1]['id']
+    assert view['turns'][-1]['choices'][0]['action']=='Открыть дверь'
+    assert repo.get_snapshot(sid)['world_state']['meta']['world_time']==before['meta']['world_time']
+    with repo.connect() as db:history,_=read_history(db,repo.get_snapshot(sid)['history_head'])
+    assert len([e for e in history['events'] if e.get('physical_text')])==1
+
+
+def test_reconciled_context_cannot_silently_replay_rejected_prose(tmp_path):
+    from backend.runtime_v3.context import visible_views
+    repo,client,sid,cid=connected(tmp_path)
+    def rejected(value,current):value['events'][0]['evidence']='неподтверждённый источник';return value
+    jid,_=turn(repo,client,sid,OFFER,rejected);saved(repo,jid)
+    views=visible_views(repo.get_snapshot(sid),repo.list_turns(sid),'turn')
+    assert KNOCK not in views[-1]['assistant_text']
+    assert ASSENT in views[-1]['assistant_text']
+    assert 'unconfirmed physical claims' in views[-1]['assistant_text']
+
+
+def test_optional_scene_recovery_preserves_accepted_character_situation(tmp_path):
+    repo,client,sid,cid=connected(tmp_path)
+    def changed(value,current):
+        value['final_scene']['situation']='Неподтверждённое описание'
+        value['character_changes']=[dict(id='qa_kirill',situation='Слышит стук.',evidence=KNOCK)]
+        return value
+    jid,_=turn(repo,client,sid,OFFER,changed);saved(repo,jid)
+    assert repo.get_snapshot(sid)['world_state']['characters']['qa_kirill']['situation']=='Слышит стук.'

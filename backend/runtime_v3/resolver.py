@@ -177,6 +177,10 @@ class StateResolver:
             self.warn('final_scene',0,'Мёртвый персонаж не участвует в текущей сцене.',entity=cid)
         present = [cid for cid in present if cid not in dead_present]
         for cid in present: self.actor(cid,'final_scene',0)
+        scene['present_character_ids']=present
+        from backend.runtime_v3.call_continuity import prepare_scene
+        prepare_scene(self, raw)
+        lid, present = scene.get('location_id'), scene['present_character_ids']
         camera = deepcopy(s['camera'])
         if camera['mode']=='actor' and camera['controlled_actor_id'] not in present and s['characters'].get(camera['controlled_actor_id'], {}).get('life_status') != 'dead':
             fatal('controlled actor отсутствует в final_scene', 'camera_actor_missing', repairable=True)
@@ -272,6 +276,7 @@ class StateResolver:
         controlled=camera['controlled_actor_id']
         if controlled is not None and self.supported({'evidence':scene.get('situation_evidence')}):
             s['characters'][controlled]['situation']=situation
+        self.scene_character_situation=s['characters'].get(controlled,{}).get('situation')
         for i, item in self.records(raw,'facts'):
             fields = {key:item[key] for key in ('id','text','visibility','character_ids','claim') if key in item}
             if 'claim' in fields and fields['claim'] is not None:
@@ -478,6 +483,8 @@ class StateResolver:
             continuity=turn_signal(self), camera_before=deepcopy(self.before['camera']),camera=deepcopy(state['camera']),
             game_time_before=self.before['meta']['world_time'],world_time=state['meta']['world_time'],
             player_observed=self.observed))
+        if getattr(self,'physical_reconciliation',None):
+            self.history.turns[-1]['physical_reconciliation']=self.physical_reconciliation
         from backend.runtime_v3.remote import active_call
         source_call=active_call(self.before,self.protected_actor_id)
         if source_call and self.before['meta']['interaction_focus']=='call':
@@ -486,8 +493,6 @@ class StateResolver:
         if any(s['meta']['communication'][channel] for channel in ('text_message','voice_call')):
             choices = [c for c in choices if c.get('device_control') is None]
         choices = filter_choices(self, choices)
-        if any(e.get('physical_text') for e in self.history.events) and capabilities(state,controlled)['can_act'] and not any(c.get('interaction_channel')=='physical' for c in choices):
-            fatal('Физические варианты не прошли проверку.', 'physical_choices_rejected',repairable=True)
         if any(s['meta']['communication'][channel] for channel in ('text_message','voice_call')):
             choices = [dict(c, interaction_channel=c.get('interaction_channel',self.before['meta']['interaction_focus'])) for c in choices]
             if self.before['meta']['interaction_focus']=='call' and not any(e.get('physical_text') for e in self.history.events):

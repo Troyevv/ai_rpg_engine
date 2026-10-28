@@ -51,7 +51,8 @@ def _compact(storage, job, state, history, config, generate, cancelled):
     summarize=Compactor(prompt,config,generate,cancelled).summarize
     while candidates:
         chunk=candidates[:batch]
-        summary=summarize(memory.get('summary',''),chunk,'Объективная память ведущего')
+        from backend.runtime_v3.surfaces import reconciled_view
+        summary=summarize(memory.get('summary',''),[reconciled_view(t) for t in chunk],'Объективная память ведущего')
         if cancelled.is_set():
             return state
         per_actor=deepcopy(memory.get('per_actor',{}))

@@ -1,3 +1,5 @@
+> The strict optional-projection behavior described below is superseded by the [P0 recovery report](../issue133-recovery/README.md). This document retains the earlier run evidence.
+
 # PR #133 — единый мир телефонной и физической сцен
 
 ## Причина и исправление
