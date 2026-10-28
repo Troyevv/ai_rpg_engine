@@ -271,3 +271,26 @@ def test_boundary_regenerate_variant_rollback_keeps_original_before(api):
     with repo.connect() as db:
         variants=[json.loads(r[0]) for r in db.execute('SELECT payload FROM response_variants WHERE save_id=?',(sid,))]
     assert next(v for v in variants if v['active_variant_id']==first['active_variant_id'])['before_json']==first_before
+
+
+def test_unknown_camera_new_place_uses_named_anchor_not_deictic_guess(api):
+    from backend.runtime_v3.context import build_context
+    from backend.services.world_delta_errors import StructuralDeltaError
+    client,app=api;sid=imported(client);snapshot=app.state.repository.get_snapshot(sid)
+    s=snapshot['world_state'];s['camera']['location_id']=None;s['characters']['ilya']['location_id']=None
+    text='Илья вошёл в новую прихожую.'
+    raw=dict(final_scene=dict(location_id='entry_hall',present_character_ids=['ilya'],elapsed_minutes=0),
+        locations=[dict(id='entry_hall',name='Новая прихожая',evidence=text)],
+        movements=[dict(actor_id='ilya',from_location_id=None,to_location_id='entry_hall',
+            assertion='completed_arrival',actor_evidence='Илья',destination_evidence='новую прихожую',
+            destination_name='Новая прихожая',destination_reference='named_location',evidence=text)])
+    result=resolve(snapshot,text,raw,player='Я иду в прихожую.')
+    assert result.state['characters']['ilya']['location_id']=='entry_hall'
+    assert result.history['movements'][0]['from_location_id'] is None
+    assert result.state['meta']['world_time']==s['meta']['world_time']
+    messages=build_context(snapshot,[],'Я иду в прихожую.','turn',131072,2000,extraction_text=text)
+    current=json.loads(next(m['content'].split('\n',1)[1] for m in messages if m['content'].startswith('Текущее состояние / GM-only\n')))
+    assert 'location_id' in current['characters']['ilya'] and current['characters']['ilya']['location_id'] is None
+    raw['movements'][0].update(destination_reference='camera_location',anchor_location_id='entry_hall')
+    with pytest.raises(StructuralDeltaError) as error:resolve(snapshot,text,raw)
+    assert error.value.path['condition']=='camera_anchor_mismatch'
