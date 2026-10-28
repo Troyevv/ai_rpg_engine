@@ -11,6 +11,14 @@ from backend.runtime_v3.calendar import current_time, commitment_view
 from backend.runtime_v3.remote import participants
 
 
+class SemanticValidationError(ValueError):
+    """A proposed commitment was rejected; never report it as saved."""
+    def __init__(self, warnings, candidate_ids=()):
+        self.warnings=warnings
+        self.candidate_ids=list(candidate_ids)
+        super().__init__('Семантическая проверка связи: '+json.dumps(warnings,ensure_ascii=False))
+
+
 def evidence_slice(state, source_id):
     source = state['remote_events'][source_id]
     if source['channel'] != 'TEXT_MESSAGE':
@@ -41,7 +49,14 @@ def messages(snapshot, source_id):
     character['properties']={k:v for k,v in character['properties'].items() if k in ('id','evidence','intentions_updates')}
     props = schema['properties']['scheduled_event_changes']['items']['properties']
     props.update(remote_source_ids=dict(type='array', items=dict(type='string'), minItems=1, maxItems=8),
-                 remote_time_source_id=dict(type='string'))
+                 remote_time_source_id=dict(type='string'), player_source_id=dict(type='string',
+                 description='Canonical ID of the controlled actor message explicitly proposing/accepting/changing this plan; must belong to remote_source_ids.'))
+    schema['properties']['scheduled_event_changes']['items']['allOf']=[{
+        'if':{'required':['character_ids','assertion'],'properties':{
+            'character_ids':{'contains':{'const':state['camera']['controlled_actor_id']}},
+            'assertion':{'enum':['agreed','rescheduled']}}},
+        'then':{'required':['player_assertion','player_source_id','player_evidence'],
+                'properties':{'player_assertion':{'const':'explicit_choice'}}}}]
     rules = ('Remote semantic extraction/1. Return one valid JSON object matching the supplied schema. '
              'Extract ONLY accepted phone content into the existing RawTurnResult schema. '
              'This is GM truth, not a broadcast of Knowledge. No physical actions, emotion, goals or values. '
@@ -50,8 +65,13 @@ def messages(snapshot, source_id):
              'agreed/rescheduled/cancelled/occurred, exact evidence, remote_source_ids and remote_time_source_id. '
              'Anchor relative dates to the original proposal timestamp using temporal.minute_offset for hours/minutes, day_offset for tomorrow, weekday/day_period for imprecise windows; never invented due_minute. '
              'Reuse existing plan IDs on reschedule/cancellation/completion; due does not mean occurred. '
-             'For EXTERNAL participant require player_assertion=explicit_choice and exact player_evidence from their '
-             'authored message. Agreement does not require creating motivations. Only explicitly authored intentions '
+             'For EXTERNAL participant require player_assertion=explicit_choice AND player_source_id identifying their '
+             'own explicit proposal/assent/change in remote_source_ids. Copy its entire content as player_evidence; '
+             'never quote the NPC confirmation as player evidence. The adapter verifies sender_id and binds the '
+             'canonical text, so no extra Narrative player_input is needed. A question proposing a concrete meeting '
+             'can establish the proposer choice only after the other participants explicitly assent. Greeting, '
+             'refusal, hypothetical discussion and mere receipt are not assent. Never invent explicit_choice. '
+             'Agreement does not require creating motivations. Only explicitly authored intentions '
              'may use character_changes.intentions_updates; preserve their exact wording, source_event_id and evidence. '
              'Do not create an intention for a recipient. Existing intention lifecycle uses fresh evidence, not time. '
              'Return final_scene exactly as supplied, including zero elapsed_minutes. No choices. '
@@ -70,7 +90,7 @@ def messages(snapshot, source_id):
         schema=schema), ensure_ascii=False))]
 
 
-def resolve(snapshot, source_id, response):
+def resolve(snapshot, source_id, response, diagnostics=None):
     state = snapshot['world_state']
     rows = evidence_slice(state, source_id)
     raw = RawTurnResult.parse(response)
@@ -80,26 +100,49 @@ def resolve(snapshot, source_id, response):
             if k not in ('scheduled_event_changes','character_changes')):
         raise ValueError('Телефонное извлечение пытается изменить физическую сцену или неподдерживаемый раздел.')
     by_id = {e['id']:e for e in rows}
+    actor = state['camera']['controlled_actor_id']
     for item in raw.records['scheduled_event_changes']:
         if not isinstance(item, dict) or not isinstance(item.get('remote_source_ids'), list) or not item['remote_source_ids'] or any(not isinstance(eid,str) or eid not in by_id for eid in item['remote_source_ids']):
-            raise ValueError('Договорённости нужны принятые источники этого разговора.')
-    for item in raw.records['character_changes']:
+            raise SemanticValidationError([dict(section='scheduled_events',code='commitment_remote_source',entity=item.get('id') if isinstance(item,dict) else None)],
+                [r['id'] for r in raw.records['scheduled_event_changes'] if isinstance(r,dict) and isinstance(r.get('id'),str)])
+        # Resolve declared identity, not meaning: explicit_choice still belongs
+        # to Extraction and is mandatory. Never infer consent from message presence.
+        if item.get('player_assertion')=='explicit_choice':
+            authored=[e for e in rows if e['id'] in item['remote_source_ids'] and e['sender_id']==actor]
+            declared=item.get('player_source_id')
+            matches=[e for e in authored if e['id']==declared] if declared is not None else [
+                e for e in authored if item.get('player_evidence')==e['content']]
+            if len(matches)==1:
+                item['player_source_id']=matches[0]['id']
+                item['player_evidence']=matches[0]['content']
+    optional_warnings=[]
+    valid_characters=[]
+    for index,item in enumerate(raw.records['character_changes']):
         if not isinstance(item, dict) or set(item) - {'id','evidence','intentions_updates'}:
-            raise ValueError('Телефонное извлечение поддерживает только явно выраженные намерения.')
-        for change in item.get('intentions_updates', []):
-            event = by_id.get(change.get('source_event_id'))
-            if not event or event['sender_id'] != item['id'] or not isinstance(change.get('evidence'),str) or not change['evidence'].strip() or change['evidence'] not in event['content']:
-                raise ValueError('Намерение не подтверждено автором телефонной реплики.')
+            optional_warnings.append(dict(section='characters',index=index,code='remote_optional_record_invalid',action='drop_record'))
+            continue
+        valid=[]
+        for change in item.get('intentions_updates', []) if isinstance(item.get('intentions_updates',[]),list) else [None]:
+            if not isinstance(change,dict):
+                optional_warnings.append(dict(section='characters',index=index,code='remote_intention_source',action='drop_record'));continue
+            source=change.get('source_event_id')
+            event = by_id.get(source) if isinstance(source,str) else None
+            if not event or event['sender_id'] != item.get('id') or not isinstance(change.get('evidence'),str) or not change['evidence'].strip() or change['evidence'] not in event['content']:
+                optional_warnings.append(dict(section='characters',index=index,code='remote_intention_source',action='drop_record'));continue
             if not change.get('id') and change.get('text') != change.get('evidence'):
-                raise ValueError('Новое намерение должно сохранять авторскую формулировку.')
-    actor = state['camera']['controlled_actor_id']
+                optional_warnings.append(dict(section='characters',index=index,code='remote_intention_wording',action='drop_record'));continue
+            valid.append(change)
+        if valid: valid_characters.append(dict(item,intentions_updates=valid))
+    raw.records['character_changes']=valid_characters
     narrative = '\n'.join(e['content'] for e in rows)
     authored = '\n'.join(e['content'] for e in rows if e['sender_id'] == actor)
     resolver = StateResolver(state, narrative, authored, turn_id=state['meta']['turn_id'], observed=False)
     resolver.remote_semantic_sources = by_id
     result = resolver.resolve(raw)
-    if result.warnings:
-        raise ValueError('Семантическая проверка связи: '+json.dumps(result.warnings, ensure_ascii=False))
+    critical=[w for w in result.warnings if w.get('section') in ('scheduled_events','scheduled_event_changes') and w.get('code')!='commitment_duplicate']
+    if critical:
+        raise SemanticValidationError(critical,[r['id'] for r in raw.records['scheduled_event_changes'] if isinstance(r,dict) and isinstance(r.get('id'),str)])
+    if diagnostics is not None: diagnostics.extend(optional_warnings+result.warnings)
     after = deepcopy(snapshot)
     after['world_state'] = result.state
     # Extraction is not a second physical scene or elapsed turn.

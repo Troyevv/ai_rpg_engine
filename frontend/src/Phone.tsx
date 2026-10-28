@@ -347,15 +347,15 @@ export function Phone({
           </header>
           <p className="muted small">Внутриигровая связь · {tab==='contacts'?'Контакты':tab==='messages'?'Переписки':'Звонки'}</p>
           {error && <p role="alert">{error}</p>}
-          {jobHere&&active(job)&&<p className="phone-progress" role="status">{t('waiting')}</p>}
+          {jobHere&&active(job)&&<p className="phone-progress" role="status">{call?.status==='ringing'?t('dialing'):t('waiting')}</p>}
           {jobHere&&job&&['error','stopped'].includes(job.status)&&job.revision===save.revision&&<div role="alert" className="phone-progress"><p>{t('reactionFailed')}</p><button disabled={busy} onClick={async()=>{try{onJob(await api<Job>(`/jobs/${job.id}/retry`,{config,api_key:apiKey}))}catch{setError(t('failed'))}}}>{t('retry')}</button></div>}
           {call&&tab==='messages'&&(conversation||contact)&&<button className="phone-call-link" onClick={()=>setTab('calls')}>{call.status==='ringing'?'Вызов':'Разговор'} · {call.label} →</button>}
           {call && !(tab==='messages'&&(conversation||contact)) && (
             <section className="phone-call" aria-label="Текущий звонок">
               {avatar(call.subject)}
               <strong>{call.label}</strong>
-              <span>
-                {status[call.status]} ·{" "}
+              <span role="status" aria-live="polite">
+                {call.status==='ringing'&&<span className="phone-dialing" aria-hidden="true">● </span>}{status[call.status]} ·{" "}
                 {call.outgoing ? "Исходящий" : "Входящий"}
               </span>
               {call.status==='answered'&&<button onClick={()=>{close();window.dispatchEvent(new CustomEvent('phone-call-open',{detail:call.id}))}}>Перейти к разговору</button>}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import {phoneText} from "./lib/phone";
 import { active, type Job } from "./types";
 // A delayed refresh/reconnect must not roll an observed snapshot backwards.
 function latestSnapshot(previous:Job|null,incoming:Job|null):Job|null {
@@ -34,7 +35,7 @@ export function useJob(initial: Job | null | undefined, completed: () => void) {
       if (!active(next)&&(next.status==="saved"||!next.live)) {
         stream.close();
         callback.current();
-        if (next.error) toast.error(next.error);
+        if (next.error) toast.error(['phone','call'].includes(next.presentation?.surface||'')?phoneText('responseFailed'):next.error);
       }
     });
     return () => stream.close();

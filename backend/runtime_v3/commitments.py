@@ -126,10 +126,26 @@ def apply_commitments(resolver, raw):
         if controlled in set(entry['character_ids'] + (old or {}).get('character_ids', [])) and assertion in ('agreed', 'rescheduled', 'cancelled') and not npc_cancellation:
             proof = item.get('player_evidence')
             from backend.runtime_v3.resolver import normalized
-            player_sources=[resolver.player_input]+[e['content'] for e in sources if e['sender_id']==controlled]
-            if (item.get('player_assertion') != 'explicit_choice' or not isinstance(proof, str)
-                or not normalized(proof) or not any(normalized(proof) in normalized(text) for text in player_sources)):
-                reject('Решение controlled actor требует явного player_input.', 'controlled_actor_unsupported'); continue
+            # Remote decisions must be grounded in THIS record's admitted sources,
+            # never an unrelated older message in the concatenated thread.
+            authored=[e for e in sources if e['sender_id']==controlled]
+            source_id=item.get('player_source_id')
+            if source_id is None and admitted and sources:
+                exact=[e for e in authored if e['content']==proof]
+                if len(exact)==1:
+                    source_id=exact[0]['id']
+                    item['player_source_id']=source_id
+            player_sources=[e['content'] for e in authored] if sources else [resolver.player_input]
+            failure = ('player_assertion' if item.get('player_assertion') != 'explicit_choice' else
+                       'player_source_id' if source_id is not None and not any(e['id']==source_id for e in authored) else
+                       'player_evidence' if (admitted and sources and source_id is None) or not isinstance(proof,str) or not normalized(proof) or not any(normalized(proof) in normalized(text) for text in player_sources) else None)
+            if source_id is not None and failure is None:
+                source=next(e for e in authored if e['id']==source_id)
+                if proof != source['content']: failure='player_evidence'
+            if failure:
+                reject('Решение controlled actor требует явного источника: '+failure, 'controlled_actor_unsupported')
+                resolver.warnings[-1]['evidence_field']=failure
+                continue
         window = scheduled_window(state, entry)
         if (old is None or assertion == 'rescheduled') and (window['start_minute'] is None or window['start_minute'] < 0):
             reject('Нужна разрешимая календарная привязка.'); continue

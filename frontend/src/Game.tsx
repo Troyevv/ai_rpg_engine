@@ -209,7 +209,7 @@ export function Game({
     );
   return (
     <main className="game">
-      {save&&selectedCall&&<CallScene key={`${viewScope}:${selectedCall}`} save={save} callId={selectedCall} onSelect={setSelectedCall} obscured={diagnostics} disabled={busy||pending||!canAct} recovery={job?.presentation?.call_id===selectedCall?retry:null} submit={async text=>{
+      {save&&selectedCall&&<CallScene key={`${viewScope}:${selectedCall}`} save={save} callId={selectedCall} onSelect={setSelectedCall} obscured={diagnostics} job={job?.presentation?.call_id===selectedCall?job:null} reconnecting={reconnecting} stop={stopJob} stopping={busy} disabled={busy||pending||!canAct} recovery={job?.presentation?.call_id===selectedCall?retry:null} submit={async text=>{
         let sent=false;
         await run(async()=>{const j=await api<Job>(`/saves/${save.id}/turns`,{kind:'turn',text,interaction_channel:'call',config:prefs.game,revision:save.revision,api_key:apiKey});setSubmitted(j);sent=true});
         if(!sent)throw new Error('Не удалось отправить реплику');

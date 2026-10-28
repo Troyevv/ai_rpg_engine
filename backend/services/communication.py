@@ -100,29 +100,66 @@ def execute(storage, job, handle, chat_stream):
         captured.append(frame)
         storage.save_communication_context(job['id'], captured, before)
         storage.job_progress(job['id'], 'extracting', complete=True)
+        from backend.runtime_v3.remote_semantics import SemanticValidationError
+        def generate_semantics(stage, outgoing):
+            if estimate(outgoing) > config['context_length'] - config['update_tokens'] - 512:
+                raise ValueError('Контекст исправления договорённости не помещается в окно модели.')
+            def on_semantic_stream(stream):
+                handle.stream = stream
+                if handle.cancelled.is_set(): stream.close()
+            return ''.join(tracked_stream(storage, chat_stream, job['id'], stage, config,
+                outgoing, describe_context(outgoing), temperature=0.1, max_tokens=config['update_tokens'],
+                model=config['model'], require_complete=True, cancel_event=handle.cancelled,
+                on_stream=on_semantic_stream, provider=config.get('provider','local'), api_key=handle.api_key,
+                response_format={'type':'json_object'}))
         try:
-            if semantic and semantic.get('accepted') and semantic.get('messages') == prompts and not job['replaces_id']:
+            # A failed repair resumes from the accepted decision journal AND the
+            # original semantic response, without another NPC or extraction call.
+            if semantic and semantic.get('response') and semantic.get('messages') == prompts and not job['replaces_id']:
                 response = semantic['response']
             else:
-                def on_semantic_stream(stream):
-                    handle.stream = stream
-                    if handle.cancelled.is_set(): stream.close()
-                response = ''.join(tracked_stream(storage, chat_stream, job['id'], 'remote_semantics', config,
-                    prompts, describe_context(prompts), temperature=0.1, max_tokens=config['update_tokens'],
-                    model=config['model'], require_complete=True, cancel_event=handle.cancelled,
-                    on_stream=on_semantic_stream, provider=config.get('provider','local'), api_key=handle.api_key,
-                    response_format={'type':'json_object'}))
+                response = generate_semantics('remote_semantics', prompts)
             frame['response'] = response
             storage.save_communication_context(job['id'], captured, before)
             if handle.cancelled.is_set(): return
-            after, consequences = semantic_resolve(after, report['source_event_id'], response)
+            warnings=[]
+            try:
+                resolved, consequences = semantic_resolve(after, report['source_event_id'], response, warnings)
+            except SemanticValidationError as rejection:
+                # Exactly one source-bound correction per attempt, never an HTTP
+                # retry and never a fresh communication decision or time advance.
+                repair_data=json.loads(prompts[1]['content'])
+                repair_data['repair']=dict(rejected_response=response, diagnostics=rejection.warnings,
+                    required_candidate_ids=rejection.candidate_ids,
+                    instruction='Return corrected JSON using ONLY the supplied accepted messages. Preserve every candidate ID and valid record; do not erase a rejected meeting to hide an error. Correct evidence identity/quotation, never invent consent. If evidence is insufficient leave the candidate invalid for explicit recovery.')
+                repair=[prompts[0],dict(role='user',content=json.dumps(repair_data,ensure_ascii=False))]
+                frame['repair_messages']=repair
+                frame['validation_errors']=rejection.warnings
+                storage.record_repair(job['id'],dict(stage='remote_semantics_repair',repair_error_code='remote_semantic_validation',
+                    repair_error_type=type(rejection).__name__,repair_reason=str(rejection)))
+                storage.save_communication_context(job['id'],captured,before)
+                repaired=generate_semantics('remote_semantics_repair',repair)
+                frame['repair_response']=repaired
+                storage.save_communication_context(job['id'],captured,before)
+                if handle.cancelled.is_set():return
+                from backend.runtime_v3.raw import RawTurnResult
+                records=RawTurnResult.parse(repaired).records['scheduled_event_changes']
+                ids={r.get('id') for r in records if isinstance(r,dict) and isinstance(r.get('id'),str)}
+                if not set(rejection.candidate_ids)<=ids:
+                    raise SemanticValidationError([dict(code='commitment_repair_omission',section='scheduled_events',action='reject_repair')],rejection.candidate_ids)
+                warnings=[]
+                resolved,consequences=semantic_resolve(after,report['source_event_id'],repaired,warnings)
+                frame['initial_response']=response
+                frame['response']=repaired
+            after=resolved
             for section, records in consequences.items(): batch[section].extend(records)
+            frame['warnings']=warnings
             frame['accepted'] = True
         except Exception as exc:
             frame['error'] = str(exc)
             raise
         finally:
-            storage.save_communication_context(job['id'], captured, before)
+            storage.save_communication_context(job['id'], captured, before, frame.get('warnings'))
 
     batch["state_changes"].append(dict(kind="communication_receipt", request_id=config["communication"]["request_id"], job_id=job["id"]))
     labels = {"answered": "Собеседник ответил. Разговор доступен в сцене.", "declined": "Собеседник отклонил вызов.", "missed": "Вызов завершён без ответа."}

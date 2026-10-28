@@ -90,17 +90,17 @@ class RuntimeStorage:
                 config['_context_selection'] = selection
                 db.execute('UPDATE game_jobs SET config_json=? WHERE id=?', (dump(config), job_id))
 
-    def save_communication_context(self, job_id, frames, before):
+    def save_communication_context(self, job_id, frames, before, warnings=None):
         """Checkpoint bounded provider decisions, guarded against stopped/stale workers.
 
         The original before snapshot is immutable. Only this job's captured
         frame responses grow; retries replay them and variants record the result.
         """
         with self.connect() as db:
-            db.execute("""UPDATE game_jobs SET context_json=?,memory_before_json=COALESCE(memory_before_json,?)
+            db.execute("""UPDATE game_jobs SET context_json=?,memory_before_json=COALESCE(memory_before_json,?),warnings_json=COALESCE(?,warnings_json)
                 WHERE id=? AND kind='communication' AND status IN ('generating','extracting')
                 AND (? IS NULL OR attempt_epoch=?)""",
-                (dump(frames),dump(before),job_id,getattr(self,'worker_epoch',None),getattr(self,'worker_epoch',None)))
+                (dump(frames),dump(before),dump(warnings) if warnings is not None else None,job_id,getattr(self,'worker_epoch',None),getattr(self,'worker_epoch',None)))
 
     def record_repair(self, job_id, diagnostic):
         with self.connect() as db:

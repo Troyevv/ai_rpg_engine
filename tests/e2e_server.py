@@ -66,7 +66,10 @@ def stream(**kwargs):
             phone_mode='answer'
             raise RuntimeError('Controlled semantic outage')
         from phone_semantic_fixture import extract
-        yield json.dumps(extract(json.loads(kwargs['messages'][1]['content'])),ensure_ascii=False);return
+        data=json.loads(kwargs['messages'][1]['content']);value=extract(data)
+        if phone_mode=='agency_missing_once' and 'repair' not in data and value.get('scheduled_event_changes'):
+            value['scheduled_event_changes'][0].pop('player_assertion')
+        yield json.dumps(value,ensure_ascii=False);return
     full='\n'.join(m['content'] for m in kwargs['messages'])
     if handoff_provider is not None and 'ilya_cabinet' in full:
         from test_runtime_handoff import NARRATIVE as entry,provider_payload

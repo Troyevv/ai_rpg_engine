@@ -74,3 +74,25 @@ test('133 D: semantic failure and Retry preserve one response, one minute and ch
  expect(rows.filter((r:any)=>r.stage==='remote_initiative')).toHaveLength(2);
  expect(rows.filter((r:any)=>r.stage==='remote_semantics')).toHaveLength(2);
 });
+
+test('133 canonical agency repair commits once without narrative confirmation',async({page,request})=>{
+ const s=await(await request.post('/test/phone-seed?incoming=false&decision=agency_missing_once')).json();
+ await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),s);await page.goto('/');
+ const state=async()=>await(await request.get(`/api/saves/${s.save}`)).json();
+ const before=await state();
+ await page.getByRole('button',{name:/^Телефон/}).click();const phone=page.getByRole('region',{name:'Телефон персонажа'});
+ await phone.getByRole('button',{name:'Вера работа',exact:true}).click();await phone.getByRole('button',{name:'Написать',exact:true}).click();
+ await phone.getByLabel('Сообщение в телефоне').fill('Встретимся через два часа?');await phone.getByRole('button',{name:'Отправить сообщение',exact:true}).click();
+ await expect.poll(async()=>(await state()).job?.status).toBe('saved');
+ await expect.poll(async()=>Object.keys((await state()).state.world.scheduled_events).length).toBe(1);
+ await expect(phone).not.toContainText(/controlled_actor_unsupported|Семантическая проверка/);
+ const after=await state();expect(after.state.phone.events).toHaveLength(2);expect(after.state.world_clock.minute).toBe(before.state.world_clock.minute+1);
+ await expect(page.locator('.story-scroll .turn')).toHaveCount(1);
+ const accounting=await(await request.get(`/api/saves/${s.save}/accounting`)).json();
+ const rows=accounting.requests.filter((r:any)=>r.job_id===after.job.id);
+ expect(rows.filter((r:any)=>r.stage==='remote_initiative')).toHaveLength(2);
+ expect(rows.filter((r:any)=>r.stage==='remote_semantics')).toHaveLength(1);
+ expect(rows.filter((r:any)=>r.stage==='remote_semantics_repair')).toHaveLength(1);
+ await page.reload();expect((await state()).state.phone.events).toHaveLength(2);
+ expect(Object.keys((await state()).state.world.scheduled_events)).toHaveLength(1);
+});

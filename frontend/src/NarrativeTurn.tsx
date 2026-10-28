@@ -1,5 +1,4 @@
 import {memo, useRef} from 'react';
-import {phoneText as phoneText} from './lib/phone';
 import {motion,useReducedMotion} from 'framer-motion';
 import {useMotionPreset} from './motion';
 import {Markdown} from './Markdown';
@@ -47,7 +46,6 @@ export const NarrativeTurn=memo(function NarrativeTurn({t,i,save,world,prefs,mob
                   </p>
                   <NarrativeText identity={identity} onPresented={onPresented} text={t.assistant_text} complete={committed||!!job?.narrative_complete||!!job&&['error','stopped'].includes(job.status)} saveId={save.id} worldId={world.id} links={prefs.link_names} onCharacter={openCharacter}/>
                   {!committed&&showTools&&<JobView job={job?.status==='saved'?{...job,status:'committing'}:job} statusOnly reconnecting={reconnecting} stop={stop}/>}
-                  {!committed&&!showTools&&<p role="status">{phoneText(job&&['error','stopped'].includes(job.status)?'reactionFailed':'waiting')}</p>}
                   </>}
                   {committed&&showTools&&!t.read_only_projection&&<>
                   {t.timing?.total!=null&&<details className="turn-timing"><summary>Время хода: {t.timing.total.toFixed(1)} с</summary><Timing timing={t.timing}/></details>}

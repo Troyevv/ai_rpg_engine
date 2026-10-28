@@ -224,6 +224,7 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
         props=schema['properties']['scheduled_event_changes']['items']['properties']
         props['remote_source_ids']={'type':'array','items':{'type':'string'},'maxItems':8}
         props['remote_time_source_id']={'type':'string'}
+        props['player_source_id']={'type':'string'}
         schema['properties']['choices']['items']['properties']['device_control']={'enum':['answer','decline','ignore','end']}
     if not favorable_paths:
         for key in ('favorable_path','resolution','stakes_for'):
