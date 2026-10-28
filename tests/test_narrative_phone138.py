@@ -330,3 +330,15 @@ def test_optional_annotation_and_time_skip_clock_do_not_block_delivery():
     assert out.state['meta']['world_time']==start+5
     assert next(iter(out.state['remote_events'].values()))['world_time']==start+2
     assert any(w['code']=='remote_optional_source_invalid' for w in out.warnings)
+
+
+def test_delivery_cue_is_not_mistaken_for_private_message_content():
+    snap=phone()
+    out=resolve(snap,[message(source_event_id='vibration')],
+        facts=[dict(id='cue',text='Телефон завибрировал.',visibility='public')],
+        events=[dict(id='vibration',text='Телефон завибрировал.',medium='observation',
+            participants=['a'],witnesses=['a'],fact_ids=['cue'])],
+        knowledge_gained=[dict(actor_id='a',fact_id='cue',source_event_id='vibration')])
+    assert out.state['knowledge']['a:cue']['status']=='known'
+    assert not next(iter(out.state['remote_events'].values()))['read_by']
+    assert TEXT not in str(out.state['facts'])

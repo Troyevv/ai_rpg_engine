@@ -476,7 +476,10 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     current = canonical_slice(state, scope, extraction_text is not None, user_text+'\n'+(extraction_text or ''))
     from backend.runtime_v3.remote import context_projection as remote_context
     remote = remote_context(state)
-    current['communication_capabilities'] = state['meta']['communication']
+    cfg = state['meta']['communication']
+    current['communication_capabilities'] = {key: cfg[key] for key in ('text_message', 'voice_call')}
+    if cfg['voice_call']:
+        current['communication_capabilities']['ring_timeout_minutes'] = cfg['ring_timeout_minutes']
     if remote:
         remote['input_channel'] = snapshot.get('_interaction_input_channel', state['meta']['interaction_focus'])
         current['communication'] = remote

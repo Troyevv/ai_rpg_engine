@@ -265,7 +265,7 @@ def input_fields():
     return fields
 
 
-def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=False, voice=False, elapsed_required=False):
+def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=None, voice=False, elapsed_required=False):
     """Validation-equivalent schema; prose lives once in the extraction contract."""
     from collections import Counter
     def structural(node):
@@ -291,7 +291,7 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
     if not relationship_evidence:
         for field in ('source_event_ids', 'assertion', 'rationale'):
             schema['properties']['relationship_changes']['items']['properties'].pop(field)
-    if not communication:
+    if communication is False:
         schema['properties'].pop('remote_events')
     if communication:
         schema['properties']['events']['items']['properties']['interaction_channel']={'enum':['physical','call']}

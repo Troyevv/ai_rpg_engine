@@ -160,7 +160,7 @@ def apply_extracted_remote(resolver, raw, events):
         sources = [events[row.source_event_id]] if row.source_event_id else [e for e in events.values()
             if e['medium'] == 'message' and actor in e['participants'] and recipients & set(e['participants'])]
         for source in sources:
-            if event['channel'] == 'TEXT_MESSAGE':
+            if event['channel'] == 'TEXT_MESSAGE' and source['medium'] == 'message':
                 unread = set(event['delivered_to']) - set(event['read_by'])
                 if any(k.get('source_event_id') == source['local_id'] and k.get('actor_id') in unread
                        for k in raw.records['knowledge_gained'] if isinstance(k, dict)):
