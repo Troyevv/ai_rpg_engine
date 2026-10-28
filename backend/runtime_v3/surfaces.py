@@ -30,13 +30,16 @@ def committed_route(job, history):
     if result['surface'] == 'call':
         # Only accepted, explicitly physical Events can cross into the story.
         # Missing legacy tags are ambiguous, never guessed from literary text.
-        physical = [e for e in (history or {}).get('events', []) if e.get('interaction_channel') == 'physical']
-        result['physical_text'] = '\n\n'.join(e['text'] for e in physical)
+        physical = sorted([e for e in (history or {}).get('events', []) if e.get('interaction_channel')=='physical' and result['actor_id'] in e.get('witnesses',[])], key=lambda e:(e.get('turn_id',0),e.get('order',0)))
+        result['physical_events'] = [{k:e[k] for k in ('id','source_record_id','turn_id','order','minute','physical_text','witnesses')} for e in physical if e.get('physical_text')]
+        # Preserve accepted legacy cards without fabricating new projection provenance.
+        result['physical_text'] = '\n\n'.join(e.get('physical_text',e['text']) for e in physical)
         text = job.get('narrative', '')
         for event in physical:
             # An accepted exact excerpt is a span, never a phrase classifier.
-            if event.get('evidence') and event['evidence'] in text:
-                text = text.replace(event['evidence'], '', 1)
+            excerpt=event.get('physical_text',event.get('evidence'))
+            if excerpt and excerpt in text:
+                text = text.replace(excerpt, '', 1)
         result['call_text'] = text.strip()
     return result
 
@@ -65,9 +68,10 @@ def physical_choice_source(turns, state, after_for=None):
     if not actor:return None
     for turn in reversed(turns):
         presentation=turn['presentation']
-        if presentation.get('physical_text'):
-            return None  # Accepted external event invalidates older suggestions.
-        if presentation['surface']!='physical' or turn['kind'] not in ('start','turn','pov'):
+        mixed=bool(presentation.get('physical_text'))
+        if mixed and (presentation.get('actor_id')!=actor or not presentation.get('physical_events')):
+            return None  # Legacy/other actor projection has no applicable choices.
+        if not mixed and (presentation['surface']!='physical' or turn['kind'] not in ('start','turn','pov')):
             continue
         after=(after_for(turn['id']) if after_for else json.loads(turn['after_json'])).get('world_state',{})
         camera=after.get('camera',{})

@@ -163,6 +163,7 @@ def run_job(path, job_id, handle):
                 target = next(t for t in history if t['id'] == job['replaces_id'])
                 history = [t for t in history if t['sequence'] < target['sequence']]
             sequence = history[-1]['sequence'] + 1 if history else 0
+            before['_resolver_turn_id']=sequence+1
             from backend.runtime_v3.time_skip import TimeSkipRequest, parse_skip, plan_skip
             skip_request = None
             if job['kind'] == 'turn':
@@ -230,6 +231,7 @@ def run_job(path, job_id, handle):
             from backend.runtime_v3.continuity import recorded as recorded_continuity
             continuity_plan = recorded_continuity(recorded_messages)
             feedback = None
+            call_candidates = None
             for attempt in range(2):
                 if handle.cancelled.is_set() or storage.get_job(job_id)['status'] not in ('extracting', 'validating'):
                     return
@@ -250,11 +252,21 @@ def run_job(path, job_id, handle):
                     from dataclasses import asdict
                     from backend.runtime_v3.raw import RawTurnResult, repair_feedback
                     raw=RawTurnResult.parse(result)
+                    if before['world_state']['meta'].get('interaction_focus')=='call':
+                        from backend.runtime_v3.call_continuity import repair_candidates, validate_repair
+                        if call_candidates is not None: validate_repair(call_candidates, raw)
+                        else: call_candidates = repair_candidates(raw)
                     if skip_result: raw.final_scene['elapsed_minutes'] = skip_result['elapsed_minutes']
                     elif job['kind']=='turn' and __import__('re').match(r'^(?:я )?(?:ложусь спать|сплю)\b',job['user_text'].strip(),__import__('re').I):
                         raw.final_scene['elapsed_minutes']=0
                     from backend.runtime_v3.remote_semantics import staged_sources
-                    resolved=StateResolver(before['world_state'],narrative,job['user_text'],pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_plan,continuity_decision=continuity_plan,runtime_time_skip=bool(skip_result),turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),relationship_query=world_history.get('_relationship_query'),actor_names={c['id']:c['name'] for c in before['character_cards']},remote_semantic_sources=staged_sources(before)).resolve(raw)
+                    from backend.runtime_v3.call_continuity import sources as call_sources
+                    resolved=StateResolver(before['world_state'],narrative,job['user_text'],pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_plan,continuity_decision=continuity_plan,runtime_time_skip=bool(skip_result),turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),relationship_query=world_history.get('_relationship_query'),actor_names={c['id']:c['name'] for c in before['character_cards']},remote_semantic_sources=staged_sources(before),call_sources=call_sources(before['world_state'],world_history,narrative,job['user_text'],sequence+1)).resolve(raw)
+                    if before['world_state']['meta'].get('interaction_focus')=='call':
+                        rejected=[w for w in resolved.warnings if w.get('section')=='scheduled_events']
+                        if rejected:
+                            from backend.runtime_v3.models import fatal
+                            fatal('Голосовая договорённость не прошла проверку.', 'call_commitment_rejected',repairable=True,diagnostics=rejected)
                     if staged_sources(before):
                         semantic_sections=set()
                         if any(r.get('remote_source_ids') for r in raw.records['scheduled_event_changes'] if isinstance(r,dict)):
@@ -265,6 +277,7 @@ def run_job(path, job_id, handle):
                         if rejected:
                             raise ValueError('Семантическая проверка входящей связи: '+json.dumps(rejected,ensure_ascii=False))
                     state=deepcopy(before)
+                    state.pop('_resolver_turn_id',None)
                     state.pop('_time_skip', None)
                     state.pop('last_time_skip', None)
                     state.pop('_interaction_input_channel', None)

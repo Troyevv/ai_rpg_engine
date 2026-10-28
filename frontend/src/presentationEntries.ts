@@ -33,7 +33,7 @@ export function presentationEntries(save:Save|null,job:Job|null){
 export function surfaceEntries(entries:ReturnType<typeof presentationEntries>,surface:'physical'|'phone'|'call',actor?:string|null,callId?:string|null){
  return entries.flatMap(entry=>{
    const route=entry.turn.presentation??{surface:entry.turn.kind==='communication'?'phone':'physical'};
-   if(surface==='physical'&&route.surface==='call'&&route.physical_text){return [{...entry,identity:entry.identity+':physical',turn:{...entry.turn,read_only_projection:true,user_text:'',assistant_text:route.physical_text,variants:[],choices:[]}}]}
+   if(surface==='physical'&&entry.committed&&route.surface==='call'&&route.physical_text){return [{...entry,identity:entry.identity+':physical',turn:{...entry.turn,read_only_projection:true,user_text:'',assistant_text:route.physical_text,variants:[],choices:[]}}]}
    if(route.surface!==surface)return [];
    if(surface!=='physical'&&(route.actor_id&&route.actor_id!==actor||surface==='call'&&route.call_id!==callId))return [];
    if(surface==='call'&&route.call_text!==undefined)return [{...entry,turn:{...entry.turn,assistant_text:route.call_text}}];

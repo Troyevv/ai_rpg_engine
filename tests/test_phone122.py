@@ -285,6 +285,11 @@ def test_call_agreement_mixed_physical_event_and_owner_switch(tmp_path):
         dict(id='knock',text=physical,evidence=physical,participants=['qa_kirill'],witnesses=['qa_kirill'],medium='observation',interaction_channel='physical')],
         scheduled_event_changes=[dict(id='call-meeting',description='Встреча после звонка',character_ids=['qa_kirill','qa_vera'],temporal=dict(day_offset=1),assertion='agreed',evidence=answer,player_assertion='explicit_choice',player_evidence=speech)])
     jid=repo.begin_job(sid,speech,'turn',dict(CONFIG,interaction_channel='call'))
+    from backend.runtime_v3.models import identity
+    record=identity('record',len(repo.list_turns(sid))+1,answer+'\n\n'+physical,True)
+    raw['physical_projections']=[dict(event_id='knock',text=physical)]
+    raw['choices']=[dict(action='Подойти к двери',speech='',interaction_channel='physical')]
+    raw['scheduled_event_changes'][0].update(call_evidence=[dict(source_id=record+':player',actor_id='qa_kirill',quote=speech,assertion='proposal'),dict(source_id=record+':narrative',actor_id='qa_vera',quote=answer,assertion='assent')],call_time_source_id=record+':player',player_source_id=record+':player')
     narrative_job(repo,jid,raw,answer+'\n\n'+physical)
     assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
     projection=repo.list_turns(sid)[-1]['presentation']

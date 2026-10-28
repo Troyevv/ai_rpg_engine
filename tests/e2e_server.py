@@ -112,6 +112,19 @@ def stream(**kwargs):
     if current_phone.get('communication'):
         camera=current_phone['camera']
         voice=current_phone['communication'].get('focus')=='call'
+        if phone_mode=='office':
+            from call_continuity_fixture import response,BEFORE,AFTER
+            task=json.loads(next(m['content'].split('\n',1)[1] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')))
+            if voice:
+                value=response(current_phone,task['player_input'],'complete' if kwargs.get('response_format') else None)
+            else:
+                text=AFTER if 'Виктория' in camera.get('situation','') and 'ответ' in camera.get('situation','') else BEFORE
+                value=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),choices=[dict(action='Посмотреть на часы',speech='')]) if kwargs.get('response_format') else text
+            if isinstance(value,dict):yield json.dumps(value,ensure_ascii=False)
+            else:
+                for i in range(0,len(value),20):
+                    yield value[i:i+20];time.sleep(0.05)
+            return
         text='Вера отвечает по телефону: «Да, слышу тебя. Давай встретимся завтра».' if voice else 'В комнате тихо. За окном шелестят листья.'
         if kwargs.get('response_format'):
             events=[dict(id='phone-dialogue',text=text,evidence=text,participants=current_phone['communication']['participants'],witnesses=current_phone['communication']['participants'],medium='conversation',interaction_channel='call')] if voice else []
@@ -406,7 +419,7 @@ if __name__ == '__main__':
         from test_narrative_test_world import CONFIG
         from backend.runtime_v3.remote import apply
         from backend.runtime_v3.repository import append_history
-        result=load_fixture(app.state.repository,'ui-portrait-polish' if polish else 'phone')
+        result=load_fixture(app.state.repository,'phone-office' if decision=='office' else 'ui-portrait-polish' if polish else 'phone')
         repo=app.state.repository;sid=result['save']
         job=repo.begin_job(sid,'','start',CONFIG)
         engine.run_job(repo.path,job,engine.Worker())

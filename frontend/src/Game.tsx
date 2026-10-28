@@ -95,7 +95,13 @@ export function Game({
   const [selectedCall,setSelectedCall]=useState<string|null>(null);
   const activeCall=save?.state.phone?.events.find(e=>e.channel==='VOICE_CALL'&&e.status==='answered');
   useEffect(()=>{setSelectedCall(activeCall?.id||null)},[viewScope,activeCall?.id]);
-  useEffect(()=>{const open=(e:Event)=>{setSelectedCall((e as CustomEvent).detail)};window.addEventListener('phone-call-open',open);return()=>window.removeEventListener('phone-call-open',open)},[]);
+  useEffect(()=>{const open=(e:Event)=>{
+    const id=(e as CustomEvent<string>).detail;
+    if(!save?.state.phone?.events.some(call=>call.id===id))return;
+    // An explicit journal open must expand even if hang-up persisted a collapsed panel.
+    sessionStorage.removeItem(`call-min:${save.id}:${save.state.phone.actor_id}:${save.state.camera?.pov_actor_id}:${id}`);
+    setSelectedCall(id);
+  };window.addEventListener('phone-call-open',open);return()=>window.removeEventListener('phone-call-open',open)},[save]);
   const reduced = useReducedMotion();
   const choicesMotion=useMotionPreset('staggerContainer');
   const choiceMotion=useMotionPreset('staggerItem');
@@ -117,7 +123,7 @@ export function Game({
   const streamedJob=useRef<string|null>(null);
   if(active(job))streamedJob.current=job?.id||null;
   const onPresented=useStableEvent((id:string)=>{if(id===job?.id)setPresented(id)});
-  const revealingCommit=(submitted?.id===job?.id||streamedJob.current===job?.id)&&job?.kind!=='communication'&&job?.status==='saved'&&save?.turns.some(t=>t.variants?.find(v=>v.id===t.active_variant_id)?.job_id===job.id)&&presented!==job.id;
+  const revealingCommit=(job?.presentation?.surface!=='call'||activeCall?.id===job.presentation.call_id)&&(submitted?.id===job?.id||streamedJob.current===job?.id)&&job?.kind!=='communication'&&job?.status==='saved'&&save?.turns.some(t=>t.variants?.find(v=>v.id===t.active_variant_id)?.job_id===job.id)&&presented!==job.id;
   const pending = running||unapplied||!!revealingCommit;
   const canAct = !!save && !!actorId && !save.state.protagonist_required && save.state.actor_capabilities?.can_act!==false;
   const canSubmit = canAct && !busy && !pending && !!save?.turns.length;

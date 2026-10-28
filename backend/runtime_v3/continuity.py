@@ -286,10 +286,10 @@ def filter_choices(resolver, choices):
             if key in blocked: continue
             if any(rows[k].get('status') in ('resolved', 'cancelled', 'completed', 'failed', 'expired', 'closed') for k in ids): continue
         # Exact duplicates are harmless to remove even for legacy choices.
-        key = key or (choice['action'].strip(), choice.get('speech', '').strip())
+        key = (choice.get('interaction_channel'), key or (choice['action'].strip(), choice.get('speech', '').strip()))
         if key in seen: continue
         seen.add(key)
-        result.append({k: choice[k] for k in ('action', 'speech') if k in choice})
+        result.append({k: choice[k] for k in ('action', 'speech', 'interaction_channel') if k in choice})
     return result
 
 

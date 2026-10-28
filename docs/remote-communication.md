@@ -53,7 +53,8 @@ communications, bounded message text and explicit call constraints. Unread messa
 content is excluded. Phone-disabled worlds receive no phone instruction payload. Under budget pressure,
 older communication rows are omitted while the latest cue and active call remain.
 Raw remote lifecycle audit payloads never bypass the perception-filtered projection.
-Existing extraction is not permitted to create phone lifecycle transitions.
+Extraction may end an existing answered call through the evidence-bound
+`call_lifecycle_changes` contract below; other lifecycle commands retain their owners.
 
 ## UI and portraits
 
@@ -95,3 +96,35 @@ relative dates anchor to the proposal message's canonical timestamp. The
 A provider can still violate literary instructions; deterministic fixtures establish
 Runtime boundaries, not universal compliance of arbitrary model prose. Manual QA
 in `docs/manual_qa/narrative_v4/phone.md` covers the live-provider visual/semantic review.
+
+
+## Call continuity (#133)
+
+The normal Narrative → Extraction → Resolver → atomic History commit owns both
+surfaces. `physical_projections` reference accepted physical Event local IDs and
+exact non-overlapping literary spans containing their evidence. These become
+Event `physical_text`, stable ID/source_record_id, chronological order, minute and
+calendar date. Projection reads neither advance time nor create canonical facts.
+No event means no extra physical card. Invalid/missing projections or applicable
+physical choices trigger the existing bounded extraction repair, then fail atomically.
+
+Call and physical choices carry separate interaction_channel tags through filtering.
+The latest physical source remains applicable while physical_scene is unchanged;
+a mixed turn supplies current physical choices from the same extraction. The main
+composer retains free input. Provisional streaming never publishes a physical Event.
+After commit the phone text excludes the accepted physical spans; the story shows
+those spans in order. Older ambiguous snapshots are not rewritten.
+
+`call_lifecycle_changes` accepts one completed_end with existing call_id, actual
+participant actor_id and an exact completed-narrative quote. EXTERNAL decisions also
+require player evidence. It invokes the existing Remote end transition in the same
+commit at the already-advanced clock. Goodbye/intention alone is not completed_end;
+Extraction owns semantic classification, Python validates references and evidence.
+
+Voice plans use exact `call_evidence` sources from the active call's immutable History
+lineage, including earlier turns. Both proposal and assent are required. Player
+sources must be authored input, never narrator wording; player_source_id is mandatory.
+`call_time_source_id` identifies the proposal, anchoring calendar arithmetic to its
+original minute. Reschedules require fresh sources from both participants, cancellations
+a matching decision-author cancellation proof. ScheduledEvent remains the sole plan;
+no separate transcript, calendar, Runtime or extra generation call is introduced.

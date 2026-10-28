@@ -561,6 +561,13 @@ class Thread(StrictModel):
     relevance: float = Field(default=0.5, ge=0, le=1)
 
 
+class CallEvidence(StrictModel):
+    source_id: str
+    actor_id: str
+    quote: str
+    assertion: Literal['proposal', 'assent', 'cancellation', 'outcome']
+
+
 class ScheduledEvent(StrictModel):
     id: str
     time_semantics: Literal['legacy', 'explicit'] = 'legacy'
@@ -584,6 +591,8 @@ class ScheduledEvent(StrictModel):
     source_turn: int | None = Field(default=None, ge=0)
     remote_source_ids: list[str] = Field(default_factory=list, max_length=8)
     remote_call_id: str | None = None
+    call_evidence: list[CallEvidence] = Field(default_factory=list, max_length=8)
+    call_time_source_id: str | None = None
 
 
 class SignificantPossession(StrictModel):

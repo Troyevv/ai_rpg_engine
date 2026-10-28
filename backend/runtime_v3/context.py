@@ -336,7 +336,7 @@ class ExtractionContextBuilder:
                        block('Choice context / controlled actor', choice_context(snapshot, scope, current, views, kind)),
                        block('Entity IDs', [dict(id=c['id'], name=c['name'], aliases=c.get('aliases', []))
                             for c in snapshot['character_cards'] if c['id'] in scope.relevant_actor_ids]),
-                       block('JSON Schema', prompt_schema(relationship_evidence=bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
+                       block('JSON Schema', prompt_schema(relationship_evidence=bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
 
 
 def choice_context(snapshot, scope, current, views, kind):
@@ -476,6 +476,11 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     if remote:
         remote['input_channel'] = snapshot.get('_interaction_input_channel', state['meta']['interaction_focus'])
         current['communication'] = remote
+        if remote.get('active_call'):
+            from backend.runtime_v3.call_continuity import CONTRACT, sources as call_sources
+            remote['constraints'] += '\n' + CONTRACT
+            if extraction_text is not None:
+                remote['call_sources']=list(call_sources(state,world_history,extraction_text,user_text,snapshot.get('_resolver_turn_id',state['meta']['turn_id']+1)).values())
         if extraction_text is not None and snapshot.get('_remote_batch'):
             from backend.runtime_v3.remote_semantics import staged_sources
             sources=staged_sources(snapshot)

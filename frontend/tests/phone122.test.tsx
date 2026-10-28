@@ -52,3 +52,8 @@ describe('one history projected into independent reading surfaces',()=>{
   legacy.kind='communication';expect(surfaceEntries(presentationEntries({...save,turns:[legacy]},null),'physical')).toHaveLength(0);
  });
 });
+
+it('uncommitted physical metadata cannot escape the call surface',()=>{
+ const job={id:'pending',kind:'turn',status:'extracting',narrative:'call',revision:4,presentation:{surface:'call',actor_id:'a',call_id:'call-a',physical_text:'unvalidated'}} as Job;
+ expect(surfaceEntries(presentationEntries({...save,turns:[]},job),'physical')).toHaveLength(0);
+});

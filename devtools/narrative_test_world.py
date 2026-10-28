@@ -862,3 +862,20 @@ def _ui_inspector(state):
 
 
 CHECKPOINTS['ui-inspector'] = _ui_inspector
+
+
+def _phone_office(state):
+    """#133 continuity checkpoint, retaining the #78 import/schema and stable IDs."""
+    state=_phone(state)
+    names={ACTOR_ID:'Илья','qa_vera':'Катя','qa_marina':'Виктория'}
+    for card in state['characters']:
+        if card['id'] in names:card['name']=names[card['id']]
+    scene=state['world']['scenes'][SCENE_ID]
+    scene.update(location='Кабинет Ильи',participants=[ACTOR_ID],text='Илья в кабинете. Виктория ждёт за дверью и пока не стучит.')
+    for cid,place in [(ACTOR_ID,'Кабинет Ильи'),('qa_vera',LIBRARY),('qa_marina','Коридор перед кабинетом')]:
+        state['world']['characters'][cid].update(location=place,scene_id=SCENE_ID if cid==ACTOR_ID else None)
+    state['world']['contacts']['phone-qa_kirill-qa-vera']['label']='Катя'
+    return state
+
+
+CHECKPOINTS['phone-office']=_phone_office

@@ -168,8 +168,8 @@ def create_app(db_path=None, recover=True):
             route=t['presentation']
             if route['surface']=='physical' or route.get('actor_id')==owner:
                 projected.append(t)
-            elif route.get('physical_text'):
-                projected.append({**t,'user_text':'','assistant_text':route['physical_text'],
+            elif route.get('physical_text') and (visible_physical := [e['physical_text'] for e in route.get('physical_events',[]) if owner in e.get('witnesses',[])]):
+                projected.append({**t,'user_text':'','assistant_text':'\n\n'.join(visible_physical),
                     'choices':[],'choices_json':'[]','changes':{},'changes_json':'{}',
                     'timing':None,'timing_json':None,'presentation':{'surface':'physical'},'read_only_projection':True})
         value['turns']=projected
