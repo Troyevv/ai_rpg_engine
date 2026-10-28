@@ -1,0 +1,21 @@
+Command: PLAYWRIGHT_EXECUTABLE_PATH=/tmp/issue136-browser/chromium npm run test:e2e -- runtime-handoff.spec.ts --project=mobile --repeat-each=3
+
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> ai-rpg-frontend@2.0.0 test:e2e
+> playwright test runtime-handoff.spec.ts --project=mobile --repeat-each=3
+
+
+Running 3 tests using 1 worker
+
+(node:33) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [mobile] › e2e/runtime-handoff.spec.ts:6:1 › original export identities and rejected opening recover through real API then turn reload turn (11.9s)
+(node:122) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  2 [mobile] › e2e/runtime-handoff.spec.ts:6:1 › original export identities and rejected opening recover through real API then turn reload turn (13.9s)
+(node:211) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  3 [mobile] › e2e/runtime-handoff.spec.ts:6:1 › original export identities and rejected opening recover through real API then turn reload turn (11.6s)
+
+  3 passed (44.3s)

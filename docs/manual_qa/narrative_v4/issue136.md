@@ -9,6 +9,7 @@ PR #135 HEAD e92ae9e3294ff8919e363f013ed6701e358311c8 was inspected; its observe
 characters, context/UI and regression ideas were integrated selectively. Its arrival
 proof gates were not carried over. #135 remains open; neither PR is merged by this work.
 Branch: `codex/issue-136-narrative-extraction`, target `master`.
+PR: https://github.com/Troyevv/ai_rpg_engine/pull/137 (open; no automatic merge).
 
 The original user's failed job/SQLite/provider response is unavailable. Existing E5
 export and #78 test-world fixtures supply the integration worlds; all new narrative
@@ -255,12 +256,13 @@ retain all 19 identities, prior Knowledge, one Extraction per turn and subsequen
 
 * Frontend `npm run build`: PASS (existing bundle-size warning only).
 * Frontend `npm test`: 34 passed across 3 files.
-* Playwright selected desktop/mobile matrix: 48 passed in 7.8m; repeated on the final
-  implementation during delivery. `issue136-evidence/e2e-48.txt` contains the run.
+* Playwright selected desktop/mobile matrix: first 48 passed in 7.8m; final repetition
+  and the intervening mobile timeout are documented in the delivery-results appendix.
 * Focused suites: 132 passed (authority/commitments/Knowledge/#133/corpus), 232 passed
   (risk/initiative/life/residence), 62 passed (diagnostics/repair/#133/authority).
 * Initial baseline: 7 RED regressions; see `baseline-red.txt`.
-* Complete final backend result is recorded in the delivery-results appendix.
+* Complete backend: **2297 passed in 800.89s (13:20)** on the committed production
+  source. `issue136-evidence/backend-final.txt` contains the full result.
 
 Screenshots inspected: `issue136-evidence/authority136-journey-{desktop,mobile}.png`,
 `authority136-doorway-mobile.png` and `authority136-entry-desktop.png`. No horizontal
@@ -294,3 +296,43 @@ live repair effectiveness and long open-ended campaigns are **not measured** her
 The corpus is small, synthetic and cannot prove universal semantic completeness.
 Actual real-device mobile browsers, production deployment and the original user's
 unavailable failed DB trace were not tested. Pixel 7 here is Chromium viewport emulation.
+
+
+## Delivery results (2026-10-28)
+
+Production code tested: `2abe43a81ba8af9f24b4833246ae66fba9c69862`, tree
+`e2710c413b5b5266e05f7a939c3d0cdb67dbbf27`. Subsequent commit
+`f814b78608a29598b28c0f7baa02b3bb151f87f1` changes only the browser Retry test;
+final documentation/evidence commits do not alter production behavior.
+
+| Command | Result |
+|---|---|
+| `python -m pytest -q` | 2297 passed, 800.89s |
+| `cd frontend && npm test` | 34 passed, 3 files |
+| `cd frontend && npm run build` | PASS; existing bundle-size warning |
+| `npm run test:e2e -- runtime-handoff.spec.ts --project=mobile --repeat-each=3` | 3 passed, 44.3s |
+| Final selected desktop/mobile matrix below | **48 passed, 7.3m**, final test source f814b78 |
+| Real DeepSeek evaluation | **NOT RUN**, no safe key, zero live calls |
+
+Browser command (run from `frontend`, with the locally available Chromium path in
+`PLAYWRIGHT_EXECUTABLE_PATH`):
+
+```bash
+npm run test:e2e -- narrative-authority136.spec.ts call-continuity.spec.ts phone133.spec.ts runtime-handoff.spec.ts pov.spec.ts knowledge.spec.ts long-term.spec.ts commitments.spec.ts narrative-continuity.spec.ts npc-initiative.spec.ts narrative-pacing.spec.ts streaming72.spec.ts
+```
+
+The intermediate repeat had 47 passes and one mobile Retry timeout. Trace evidence
+showed a successful `saved` job after 13.218s, including 11.041s validation/apply;
+the UI assertion allowed 12s. Backend and browser suites were running concurrently;
+the individual delay was not profiled. The test now allows 30s for that real commit
+and retains exact canonical/provider assertions. Cleanup no longer masks an original
+failure with incomplete call counts. Three mobile repetitions passed. See
+`retry-timeout-diagnosis.json`, `retry-repeat.txt` and `e2e-final-48.txt` in
+`issue136-evidence`. This is a test timing correction, not a claim of a Runtime
+performance improvement.
+
+The final backend run covers all collected tests, including Tabletop regressions.
+The local browser result is the explicitly listed 48-test acceptance matrix, not a
+claim to have run every browser spec locally. GitHub's workflow runs its full browser
+projects separately; its live status is linked on PR #137. CI status is not used as
+proof of real-model Extraction quality or unobserved production behavior.
