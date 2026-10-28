@@ -132,7 +132,12 @@ test('temporary phone owner and real outgoing API use its portrait',async({page,
  } finally {releaseRead();releaseView();}
  await page.unrouteAll({behavior:'wait'});
  await expect(page.getByRole('button',{name:'Мир без ГГ',exact:true})).toBeEnabled();
- for(const [id,name] of [['qa_timur','Тимур Серов'],['qa_kirill','Кирилл Ларин (ГГ)']]) await actor(page,id,name);
+ // Make the existing exit transition observable independently of HTTP speed.
+ await page.addStyleTag({content:'.dialog-content[data-state="closed"],.dialog-overlay[data-state="closed"] { animation-duration: 1s !important; }'});
+ for(const [id,name] of [['qa_timur','Тимур Серов'],['qa_kirill','Кирилл Ларин (ГГ)']]) {
+  await actor(page,id,name);
+  expect(await page.getByRole('dialog').count()).toBe(0);
+ }
  await page.getByRole('button',{name:/^Телефон/}).click();await phone.getByRole('button',{name:'Переписки',exact:true}).click();await phone.locator('button.phone-row').filter({hasText:'Вера Ларина'}).click();await expect(phone.locator('.phone-message.outgoing img').first()).toHaveAttribute('src',/qa_kirill/);
 });
 

@@ -5,8 +5,10 @@ export async function nav(page:Page,name:string){
  await page.getByRole('button',{name,exact:true}).last().click();
 }
 export async function actor(page:Page,id:string,name:string){
+ const mobile=!await page.getByLabel('Управляемый персонаж').isVisible();
+ if(mobile)await expect(page.getByRole('dialog')).toHaveCount(0);
  const committed=page.waitForResponse(r=>r.url().endsWith('/protagonist')&&r.request().method()==='POST');
- if(await page.getByLabel('Управляемый персонаж').isVisible())await page.getByLabel('Управляемый персонаж').selectOption(id);
+ if(!mobile)await page.getByLabel('Управляемый персонаж').selectOption(id);
  else {await page.locator('.mobile-pov button').first().click();await page.getByRole('dialog').getByRole('button',{name,exact:true}).click()}
  const response=await committed;
  expect(response.ok(),await response.text()).toBe(true);
@@ -15,6 +17,9 @@ export async function actor(page:Page,id:string,name:string){
  if(await page.getByLabel('Управляемый персонаж').isVisible())await expect(page.getByLabel('Управляемый персонаж')).toHaveValue(id);
  else await expect(page.locator('.mobile-pov button').first()).toHaveText(after.state.characters.find((c:{id:string})=>c.id===id).name.replace(' (ГГ)','')+' ▾');
  await expect(page.getByLabel('Управляемый персонаж').or(page.locator('.mobile-pov button').first())).toBeEnabled();
+ // API commit can precede Radix's CSS exit/unmount. A following actor switch
+ // must open a fresh sheet, not interact with the previous closing surface.
+ if(mobile)await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 export async function diagnostics(page:Page){
  if(await page.locator('.mobile-story-tools').isVisible() && await page.locator('.mobile-story-tools').getAttribute('open')===null)await page.locator('.mobile-story-tools summary').click();

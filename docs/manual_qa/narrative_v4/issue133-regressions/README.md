@@ -42,6 +42,7 @@ Frontend использует идентичность этого источни
 | UI поверхностей / choices | `frontend/src/Game.tsx`, `frontend/src/presentationEntries.ts`, `frontend/src/types.ts`, `frontend/src/NarrativeTurn.tsx` |
 | Телефон / звонок / общая диагностика | `frontend/src/Phone.tsx`, `frontend/src/CallScene.tsx`, `frontend/src/Diagnostics.tsx`, `frontend/src/lib/phone.ts` |
 | Найденная в полном CI гонка возврата | `frontend/src/Inspector.tsx`, `frontend/e2e/dossier.spec.ts` |
+| Синхронизация E2E с закрытием мобильного диалога | `frontend/e2e/navigation.ts`, `frontend/e2e/portrait-polish.spec.ts` |
 | Backend / API / SDK tests | `tests/test_phone133.py`, `tests/test_phone122.py`, `tests/e2e_server.py` |
 | Frontend / browser tests | `frontend/tests/phone122.test.tsx`, `frontend/e2e/phone133.spec.ts`, `frontend/e2e/phone122.spec.ts`, `frontend/e2e/phone122-streaming.spec.ts`, `frontend/e2e/phone-completion.spec.ts`, `frontend/e2e/streaming72.spec.ts`, `frontend/e2e/inspector86.spec.ts` |
 | QA #78 / материалы | `docs/manual_qa/narrative_v4/phone.md`, прежний `issue122-evidence/README.md`, текущий каталог `issue133-regressions` |
@@ -73,6 +74,8 @@ npx playwright test --reporter=line
 Первый CI выявил устаревшую fixture в `streaming72.spec.ts`: она подменяла всю History синтетическими ходами, оставляя `physical_choice_source` от исходного API-save. Обе streaming fixtures теперь согласованно обновляют проекцию вместе с History; дополнительно проверены сохранение/блокировка choices при генерации, замена после физического commit и сохранение при call commit/отбое. Проверки scroll anchors, DOM identity и числа Markdown-запросов не ослаблены. Повторный `npx playwright test streaming72 phone122-streaming --reporter=line`: **12 passed (4.5m)**. Дополнительная проверка Inspector: **13 passed, 5 штатных project skips** (desktop-only сценарии не дублируются в mobile project).
 
 Полный первый browser CI дополнительно выявил гонку сохранения scroll досье: закрытие до отложенного `scroll`-события теряло позицию. Исходный тест локально прошёл 3 раза, но усиленное воспроизведение «scroll + Escape в одном кадре» упало на desktop и mobile (**2 failed до исправления**). `Inspector.back` теперь считывает DOM-позицию перед скрытием панели. Это локальное исправление существующей навигации, без второго scroll owner или изменения телефонного pipeline. Повторный усиленный сценарий: **6 passed (33.2s)** — по три на desktop/mobile; build пройден. Таймауты/проверки не ослаблены, новые skips и Retry не добавлены.
+
+Следующий полный CI: desktop **180 passed**, mobile **156 passed / 23 project skips** и один сбой второго быстрого выбора персонажа. Проверка обнаружила недостающий барьер в E2E helper `actor`: HTTP commit и enabled-control опережают размонтирование закрывающегося Radix-диалога. Сценарий с замедленным CSS exit доказывает преждевременное завершение helper: после него остаётся один диалог (**1 failed до исправления**). Helper теперь ожидает реальное размонтирование перед следующим переключением; тест сохраняет проверки revision, блокировки во время read и правильного владельца/портрета. После исправления: **6 passed (49.6s)**, по три на desktop/mobile. Runtime и игровое переключение персонажа для этого не менялись; произвольных sleeps/retries нет.
 
 ## Реальные материалы до/после
 
