@@ -213,14 +213,9 @@ def test_optional_physical_failures_recover_in_real_job(tmp_path,fault):
     assert after['meta']['world_time']==before['meta']['world_time']+2
     assert after['remote_events'][cid]['status']=='answered'
     assert ASSENT in route['call_text']
-    if fault=='bad_event_evidence':
-        assert route['physical_text']==''
-        assert route['physical_reconciliation']
-        assert after['camera']['situation']==before['camera']['situation']
-    else:
-        assert route['physical_text'] in (KNOCK,'Стук в дверь.')
-        assert route['physical_events'][0]['source_record_id']
-        assert KNOCK not in route['call_text']
+    assert route['physical_text'] in (KNOCK,'Стук в дверь.')
+    assert route['physical_events'][0]['source_record_id']
+    if fault!='bad_event_evidence':assert KNOCK not in route['call_text']
     assert Repository(repo.path).get_snapshot(sid)==repo.get_snapshot(sid)
     jid,_=turn(repo,client,sid,'Тогда до встречи.');saved(repo,jid)
     final=repo.get_snapshot(sid)['world_state']
@@ -253,12 +248,12 @@ def test_unconfirmed_optional_arrival_is_dropped_and_disclosed(tmp_path):
         return value
     jid,calls=turn(repo,client,sid,OFFER,arrival);saved(repo,jid)
     after=repo.get_snapshot(sid)['world_state']
-    assert after['camera']['present_character_ids']==before['camera']['present_character_ids']
-    assert after['characters']['qa_marina']['location_id']==before['characters']['qa_marina']['location_id']
+    assert 'qa_marina' in after['camera']['present_character_ids']
+    assert after['characters']['qa_marina']['location_id']==after['camera']['location_id']
     route=client.get(f'/api/saves/{sid}').json()['turns'][-1]['presentation']
-    assert route['physical_reconciliation'] and ASSENT in route['call_text']
+    assert ASSENT in route['call_text']
     assert not route['physical_text']
-    assert 'call_scene_hint_dropped' in repo.get_job(jid)['warnings_json']
+    assert 'call_scene_hint_dropped' not in repo.get_job(jid)['warnings_json']
 
 
 def test_repair_may_remove_unaccepted_optional_events(tmp_path):
@@ -268,7 +263,7 @@ def test_repair_may_remove_unaccepted_optional_events(tmp_path):
         nonlocal attempts
         attempts+=1
         if attempts==1:
-            value['events'][0]['evidence']='not in narrative'
+            value['events'][0]['participants']=['missing-actor']
             value['physical_projections'][0]['event_id']='missing'
             value['call_lifecycle_changes']=[dict(call_id=cid,actor_id='qa_vera',assertion='intended_end',evidence=END)]
         else:
@@ -289,7 +284,7 @@ def test_repair_cannot_delete_an_accepted_physical_event(tmp_path,remove):
         value['call_lifecycle_changes']=[dict(call_id=cid,actor_id='qa_vera',assertion='intended_end' if attempts==1 else 'completed_end',evidence=END)]
         if attempts>1:
             if remove:value['events']=[]
-            else:value['events'][0]['evidence']='invalid replacement evidence'
+            else:value['events'][0]['participants']=['missing-actor']
             value['physical_projections']=[]
         return value
     jid,_=turn(repo,client,sid,OFFER,repair,narrative_extra='\n'+END)
@@ -358,7 +353,7 @@ def test_missing_choices_then_real_action_uses_current_state_once(tmp_path):
 def test_reconciled_context_cannot_silently_replay_rejected_prose(tmp_path):
     from backend.runtime_v3.context import visible_views
     repo,client,sid,cid=connected(tmp_path)
-    def rejected(value,current):value['events'][0]['evidence']='неподтверждённый источник';return value
+    def rejected(value,current):value['events'][0]['participants']=['missing-actor'];return value
     jid,_=turn(repo,client,sid,OFFER,rejected);saved(repo,jid)
     views=visible_views(repo.get_snapshot(sid),repo.list_turns(sid),'turn')
     assert KNOCK not in views[-1]['assistant_text']

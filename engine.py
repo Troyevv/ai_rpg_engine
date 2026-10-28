@@ -232,6 +232,25 @@ def run_job(path, job_id, handle):
             continuity_plan = recorded_continuity(recorded_messages)
             feedback = None
             call_candidates = None
+            required_outcomes = None
+            if job['attempt_epoch']:
+                from backend.runtime_v3.raw import RawTurnResult, repair_feedback, repair_outcomes
+                # Manual Retry resumes this exact narrative and lineage. Its first
+                # response must not forget outcomes protected before a restart.
+                for request in reversed(storage.request_log(job_id=job_id)):
+                    if request['stage'] not in ('extraction', 'extraction_repair') or not request.get('response_text'):
+                        continue
+                    try:
+                        previous_raw = RawTurnResult.parse(request['response_text'])
+                    except StructuralDeltaError:
+                        continue
+                    required_outcomes = required_outcomes or {}
+                    for section, rows in repair_outcomes(previous_raw, before['world_state']).items():
+                        retained = required_outcomes.setdefault(section, [])
+                        retained.extend(row for row in rows if row not in retained)
+                    diagnostics = json.loads(job.get('repair_diagnostics_json') or '[]')
+                    if diagnostics:
+                        feedback = repair_feedback(diagnostics[-1], request['response_text'], before['world_state'])
             for attempt in range(2):
                 if handle.cancelled.is_set() or storage.get_job(job_id)['status'] not in ('extracting', 'validating'):
                     return
@@ -251,18 +270,18 @@ def run_job(path, job_id, handle):
                 try:
                     from copy import deepcopy
                     from dataclasses import asdict
-                    from backend.runtime_v3.raw import RawTurnResult, repair_feedback
+                    from backend.runtime_v3.raw import RawTurnResult, repair_feedback, repair_outcomes, validate_repair_outcomes
                     raw=RawTurnResult.parse(result)
+                    if required_outcomes is not None: validate_repair_outcomes(required_outcomes, raw)
+                    else: required_outcomes = repair_outcomes(raw, before['world_state'])
                     if before['world_state']['meta'].get('interaction_focus')=='call':
                         from backend.runtime_v3.call_continuity import repair_candidates, validate_repair
                         if call_candidates is not None: validate_repair(call_candidates, raw)
                         else: call_candidates = repair_candidates(raw)
                     if skip_result: raw.final_scene['elapsed_minutes'] = skip_result['elapsed_minutes']
-                    elif job['kind']=='turn' and __import__('re').match(r'^(?:я )?(?:ложусь спать|сплю)\b',job['user_text'].strip(),__import__('re').I):
-                        raw.final_scene['elapsed_minutes']=0
                     from backend.runtime_v3.remote_semantics import staged_sources
                     from backend.runtime_v3.call_continuity import sources as call_sources
-                    resolver=StateResolver(before['world_state'],narrative,job['user_text'],pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_plan,continuity_decision=continuity_plan,runtime_time_skip=bool(skip_result),turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),relationship_query=world_history.get('_relationship_query'),actor_names={c['id']:c['name'] for c in before['character_cards']},remote_semantic_sources=staged_sources(before),call_sources=call_sources(before['world_state'],world_history,narrative,job['user_text'],sequence+1))
+                    resolver=StateResolver(before['world_state'],narrative,job['user_text'],pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_plan,continuity_decision=continuity_plan,runtime_time_skip=bool(skip_result),require_elapsed=job['kind']=='turn' and not skip_result,turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),relationship_query=world_history.get('_relationship_query'),actor_names={c['id']:c['name'] for c in before['character_cards']},remote_semantic_sources=staged_sources(before),call_sources=call_sources(before['world_state'],world_history,narrative,job['user_text'],sequence+1))
                     resolved=resolver.resolve(raw)
                     if call_candidates is not None:
                         accepted_ids={e.get('local_id') for e in resolved.history.get('events',[])}
@@ -308,7 +327,6 @@ def run_job(path, job_id, handle):
                 except StructuralDeltaError as exc:
                     if call_candidates is not None and resolver is not None:
                         call_candidates['events']=repair_candidates(raw,resolver.history.events)['events']
-                    if not exc.repairable or attempt==1 and exc.code!='scene_arrival_unsupported': raise
                     diagnostic=exc.diagnostic('extraction_repair' if attempt==0 and exc.repairable else 'validation_failed')
                     diagnostic.update(attempt=attempt,attempt_epoch=job['attempt_epoch'],revision=job['revision'])
                     storage.record_repair(job_id,diagnostic)

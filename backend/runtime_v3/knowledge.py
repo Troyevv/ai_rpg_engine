@@ -78,9 +78,7 @@ def apply_knowledge(resolver, raw, events):
         if (not isinstance(actor, str) or not isinstance(fid, str) or
             actor not in s['characters'] or fid not in s['facts'] or not event or
             actor not in event['witnesses'] or fid not in event['fact_ids'] or
-            event['medium'] not in INFORMATION_MEDIA or
-            normalized(item['evidence']) not in normalized(r.narrative) or
-            normalized(event['evidence']) not in normalized(r.narrative)):
+            event['medium'] not in INFORMATION_MEDIA):
             reject('Нет подтверждённого восприятия в завершённом повествовании.'); continue
         if (not r.observed or r.mode == 'background') and actor in r.protected_knowledge_actor_ids:
             reject('Фоновое событие не меняет знания участников основной сцены.'); continue

@@ -47,6 +47,15 @@ def test_meaningful_action_without_external_input(phase):
     assert snap == before
 
 
+def test_accepted_speech_before_same_turn_death_is_not_erased():
+    snap=snapshot();raw=payload(snap)
+    raw['life_changes']=[dict(id='b',life_status='dead')]
+    out=resolve(snap,raw,text='Борис успел заговорить, затем его дыхание оборвалось.')
+    assert out.state['characters']['b']['life_status']=='dead'
+    assert out.history['events'][0]['scene_action']['modality']=='speech'
+    assert 'b' not in out.state['camera']['present_character_ids']
+
+
 @pytest.mark.parametrize('text,modality',[
     ('Борис протягивает ладонь, предлагая взять его за руку.', 'physical'),
     ('Борис раскрывает объятия и ждёт.', 'physical'),
@@ -70,9 +79,16 @@ def test_adult_proposals_do_not_create_consent_or_reciprocity(text, modality):
     dict(knowledge_ids=['a:secret']), dict(evidence='Выдуманная цитата'),
 ])
 def test_unsupported_agency_is_atomic(changes):
-    snap = snapshot(); before = deepcopy(snap)
-    with pytest.raises(StructuralDeltaError): resolve(snap,payload(snap,**changes))
-    assert snap == before
+    snap=snapshot();before=deepcopy(snap)
+    if changes.get('response')=='player_supplied' or 'knowledge_ids' in changes or changes.get('adult') or changes.get('actor_id')=='baby':
+        with pytest.raises(StructuralDeltaError): resolve(snap,payload(snap,**changes))
+    else:
+        out=resolve(snap,payload(snap,**changes))
+        assert len(out.history['events'])==1
+        assert out.state['knowledge']==snap['world_state']['knowledge']
+        assert out.state['characters']['a']['intentions']==[]
+    assert snap==before
+
 
 
 def test_refusal_is_a_supplied_response_not_forced_reconciliation():
@@ -140,11 +156,14 @@ def test_pacing_and_silence_never_require_or_forbid_ordinary_initiative(preset,q
 
 def test_budget_and_legacy_context_do_not_invent_permission():
     snap=snapshot();raw=payload(snap);raw['scene_actions']*=4
-    with pytest.raises(StructuralDeltaError):resolve(snap,raw)
+    out=resolve(snap,raw)
+    assert len(out.history['events'])==1 and len(out.warnings)==3
     assert recorded_plan([])=={}
-    with pytest.raises(StructuralDeltaError):StateResolver(snap['world_state'],TEXT,'',initiative_decision={}).resolve(payload(snap))
+    out=StateResolver(snap['world_state'],TEXT,'',initiative_decision={}).resolve(payload(snap))
+    assert out.history['events'][0]['scene_action']['actor_id']=='b'
     raw=payload(snap);raw.pop('scene_actions')
-    assert StateResolver(snap['world_state'],TEXT,'').resolve(raw).state
+    assert len(StateResolver(snap['world_state'],TEXT,'').resolve(raw).history['events'])==1
+
 
 
 def test_context_personality_emotion_intentions_relationships_and_permit_replay(tmp_path):
@@ -236,6 +255,10 @@ def test_initiative_cannot_supply_external_desires_or_agreement():
     raw['character_changes']=[dict(id='a',intentions=['Поцеловать Бориса.'],emotion='Влюблён.',evidence=TEXT)]
     raw['scheduled_event_changes']=[dict(id='date',description='Свидание',character_ids=['a','b'],
         temporal=dict(day_offset=1,time='19:00'),assertion='agreed',evidence=TEXT)]
+    before=deepcopy(snap)
+    with pytest.raises(StructuralDeltaError) as exc: resolve(snap,raw)
+    assert exc.value.code=='controlled_actor_unsupported' and snap==before
+    raw['scheduled_event_changes']=[]
     out=resolve(snap,raw)
     assert not out.state['characters']['a']['intentions'] and not out.state['characters']['a']['emotion']
     assert not out.state['scheduled_events']
@@ -276,11 +299,13 @@ def test_invalid_claim_fails_real_job_without_extra_repair_or_saved_state(tmp_pa
         scene_actions=[dict(actor_id='qa_vera',target_ids=[ACTOR_ID],source_event_id='bad',phase='start',modality='physical',adult=True,interruptible=True,response='player_supplied',player_evidence='Обнимаю в ответ.',evidence=text)])
     job=repo.begin_job(sid,'Слушаю.','turn',CONFIG);calls=execute(repo,job,raw,text)
     assert repo.get_job(job)['status']=='error'
-    assert len(calls)==2 and repo.get_snapshot(sid)==before
+    assert len(calls)==3 and repo.get_snapshot(sid)==before
 
 
 def test_shared_event_cannot_overwrite_another_initiator():
     snap=snapshot();observer,_=transition(snap,'observe','b','watch')
     raw=payload(observer,response='none',interruptible=False)
     raw['scene_actions'].append(dict(raw['scene_actions'][0],actor_id='a',target_ids=['b']))
-    with pytest.raises(StructuralDeltaError):resolve(observer,raw)
+    out=resolve(observer,raw)
+    assert out.history['events'][0]['scene_action']['actor_id']=='b'
+    assert any(w['code']=='initiative_duplicate' for w in out.warnings)

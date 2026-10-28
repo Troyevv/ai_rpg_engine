@@ -212,6 +212,7 @@ class Camera(StrictModel):
     pov_actor_id: str | None = None
     location_id: str | None = None
     present_character_ids: list[str] = Field(default_factory=list)
+    observed_character_ids: list[str] = Field(default_factory=list)
     controlled_actor_id: str | None = None
     mode: Literal['actor', 'observer'] = 'actor'
     situation: str = ''
@@ -694,11 +695,14 @@ def assert_world_state_v3_invariants(state, before=None):
         fatal('неизвестный controlled actor')
     if camera['mode'] == 'actor' and camera['controlled_actor_id'] not in present and actors.get(camera['controlled_actor_id'], {}).get('life_status') != 'dead':
         fatal('controlled actor отсутствует в камере')
+    observed = camera['observed_character_ids']
+    if len(set(observed)) != len(observed) or set(observed) & set(present) or set(observed) - actors.keys():
+        fatal('некорректные наблюдаемые участники камеры')
     remote = camera['remote_interactions']
     if len({r['actor_id'] for r in remote}) != len(remote):
         fatal('повторный участник удалённого взаимодействия')
     for interaction in remote:
-        if interaction['actor_id'] not in actors or interaction['actor_id'] in present or interaction['last_active_turn'] > value['meta']['turn_id']:
+        if interaction['actor_id'] not in actors or interaction['actor_id'] in present + observed or interaction['last_active_turn'] > value['meta']['turn_id']:
             fatal('некорректный участник удалённого взаимодействия')
     for cid, actor in actors.items():
         if actor['location_id'] is not None and actor['location_id'] not in locations:

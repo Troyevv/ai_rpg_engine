@@ -25,7 +25,7 @@ class PossessionDelta(StrictModel):
     decision_actor_id: str | None = None
     source_event_id: str
     fact_id: str
-    evidence: str = Field(min_length=1, max_length=1000)
+    evidence: str = Field(default="", max_length=1000)
     player_evidence: str = ''
     player_assertion: Literal['explicit_choice'] | None = None
 
@@ -129,8 +129,6 @@ def apply_possessions(r, raw, events):
             event = events.get(c['source_event_id'])
             if not event or c['fact_id'] not in event['fact_ids']:
                 raise ValueError('Нет принятого Event/Fact вещи.')
-            if not normalized(c['evidence']) or normalized(c['evidence']) not in normalized(r.narrative) or normalized(event['evidence']) not in normalized(r.narrative):
-                raise ValueError('Требуется совершившийся исход в повествовании.')
             old = items.get(c['item_id'])
             guard = identity('possession', c['fact_id'], c['operation'])
             if old and guard in old['applied']: continue

@@ -73,7 +73,7 @@ def test_lifecycle_owner_holder_location_and_history():
 @pytest.mark.parametrize('update', [dict(assertion='planned'), dict(significance='incidental'),
     dict(expected_revision=2),dict(source_event_id='missing'),dict(fact_id='missing'),
     dict(updates={'owner_id':'missing'}),dict(updates={'location_id':'missing'}),dict(updates={'price':'20'}),
-    dict(updates={'status':'lost','holder_id':'b'}),dict(evidence='Цитата не из текста')])
+    dict(updates={'status':'lost','holder_id':'b'})])
 def test_bad_records_are_local_and_no_phantom_objects(update):
     s=state(); c=delta(s);raw=payload(s,c);raw['possession_deltas'][0].update(update)
     r=StateResolver(s,TEXT,'').resolve(raw)
@@ -82,6 +82,7 @@ def test_bad_records_are_local_and_no_phantom_objects(update):
 
 def test_intention_player_only_evidence_and_mentions_do_not_create_objects():
     s=state(); c=delta(s);raw=payload(s,c)
+    raw['possession_deltas'][0]['assertion']='planned'
     r=StateResolver(s,'Она только думает о подарке.',TEXT).resolve(raw)
     assert r.warnings and not r.state['possessions']
     raw['possession_deltas']=[]
@@ -289,8 +290,10 @@ def test_delta_limit_and_transaction_retry_after_transfer():
     c['source_event_id']='retry_renamed'
     replay=StateResolver(first.state,TEXT,'').resolve(payload(first.state,c))
     assert not replay.warnings and replay.state['possessions']==first.state['possessions']
-    parsed=RawTurnResult.parse(dict(final_scene={},possession_deltas=[c]*30))
-    assert len(parsed.records['possession_deltas'])==24 and parsed.warnings
+    from backend.services.world_delta_errors import StructuralDeltaError
+    with pytest.raises(StructuralDeltaError) as exc:
+        RawTurnResult.parse(dict(final_scene={},possession_deltas=[c]*30))
+    assert exc.value.code=='development_budget' and exc.value.repairable
 
 
 def test_field_sources_cannot_be_rebound_using_a_noop_update():

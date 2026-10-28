@@ -77,10 +77,17 @@ def stream(**kwargs):
             handoff_provider['extractions']+=1
             raw=provider_payload(kwargs)
             raw['choices']=[dict(action='Ждать ответа',speech='')]
-            if handoff_provider['extractions']<=2:raw.pop('movements')
+            scenario=handoff_provider.get('scenario','retry')
+            raw['movements']=[]
+            if scenario=='doorway':
+                raw['final_scene'].update(present_character_ids=['ilya'],observed_character_ids=['viktoria_solovyova'])
+            if scenario=='retry' and handoff_provider['extractions']<=2:
+                raw['final_scene']['location_id']='unknown-room'
             yield json.dumps(raw,ensure_ascii=False)
         else:
             handoff_provider['narratives']+=1
+            if handoff_provider.get('scenario')=='doorway':entry='Виктория стоит в проёме, не заходя.'
+            elif handoff_provider.get('scenario')=='entry':entry='Виктория вошла внутрь и подошла к столу.'
             yield entry if handoff_provider['narratives']==1 else 'Виктория Соловьёва отвечает: «Скоро закончу».'
         return
     if kwargs['messages'][0]['content'].startswith('Один необязательный пакет') and 'TEST_RELEASE_QUALITY' in full:
@@ -121,11 +128,19 @@ def stream(**kwargs):
                     value.pop('physical_projections',None)
                     value['choices']=[]
                 if isinstance(value,dict) and phone_mode=='office-rejected' and value.get('events'):
-                    value['events'][0]['evidence']='Несуществующая цитата.'
+                    value['events'][0]['participants']=['missing-actor']
 
             else:
                 text=AFTER if 'Виктория' in camera.get('situation','') and 'ответ' in camera.get('situation','') else BEFORE
                 value=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),choices=[dict(action='Посмотреть на часы',speech='')]) if kwargs.get('response_format') else text
+                if phone_mode=='office-authority136':
+                    doorway=task['player_input'] in ('Подождать у двери.','Продолжить после звонка.')
+                    text='Виктория стоит в проёме, не заходя.' if doorway else 'Виктория вошла внутрь и отвечает Илье.'
+                    present=[cid for cid in camera['present_character_ids'] if cid!='qa_marina']
+                    if not doorway: present.append('qa_marina')
+                    value=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=present,
+                        observed_character_ids=['qa_marina'] if doorway else [],elapsed_minutes=0),
+                        events=[dict(id='dialogue',text=text,participants=[camera['controlled_actor_id'],'qa_marina'],witnesses=[camera['controlled_actor_id']],medium='conversation')]) if kwargs.get('response_format') else text
             if isinstance(value,dict):yield json.dumps(value,ensure_ascii=False)
             else:
                 for i in range(0,len(value),20):
@@ -357,10 +372,10 @@ if __name__ == '__main__':
     app.state.tabletop_runtime.dice=dice
     app.state.tabletop_runtime.combat.dice=dice
     @app.post('/test/runtime-handoff-provider')
-    def runtime_handoff_provider(enabled: bool=True):
+    def runtime_handoff_provider(enabled: bool=True, scenario: str="retry"):
         global handoff_provider
         previous=handoff_provider
-        handoff_provider={'narratives':0,'extractions':0} if enabled else None
+        handoff_provider={'narratives':0,'extractions':0,'scenario':scenario} if enabled else None
         return previous or {}
 
     @app.post('/test/calendar-policy-e5')

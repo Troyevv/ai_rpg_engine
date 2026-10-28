@@ -9,6 +9,7 @@ from test_runtime_v3_domain import initial
 from test_engine import db, CONFIG
 from runtime_v3_fixture import execute
 
+PLAYER = 'Иду в кофейню.'
 NARRATIVE = 'Илья и Соня сидят за столиком у окна в кофейне «Гвоздь».'
 
 def world():
@@ -18,14 +19,15 @@ def world():
 
 def raw(lid='nail', present=None):
     return dict(final_scene=dict(location_id=lid, present_character_ids=present or ['a', 'b'],
-        situation=NARRATIVE, situation_evidence=NARRATIVE),
+        situation=NARRATIVE, situation_evidence=NARRATIVE,elapsed_minutes=0),
+        movements=[dict(actor_id='a',to_location_id=lid,player_assertion='explicit_choice',player_evidence=PLAYER)] if (present is None or 'a' in present) else [],
         locations=[dict(id='nail', name='Гвоздь', evidence=NARRATIVE)])
 
 def test_new_location_and_situation_are_canonical_and_patch_replays():
     before = world()
     payload = raw()
     payload['character_changes'] = [dict(id='b', situation=NARRATIVE, evidence=NARRATIVE)]
-    result = StateResolver(before, NARRATIVE, '').resolve(payload)
+    result = StateResolver(before, NARRATIVE, PLAYER).resolve(payload)
     assert result.state['camera']['location_id'] == 'nail'
     assert result.state['locations']['nail']['name'] == 'Гвоздь'
     for cid in ['a', 'b']:
@@ -35,22 +37,22 @@ def test_new_location_and_situation_are_canonical_and_patch_replays():
     assert before == world()
 
 def test_return_to_existing_location_keeps_identity():
-    first = StateResolver(world(), NARRATIVE, '').resolve(raw()).state
-    back = dict(final_scene=dict(location_id='room', present_character_ids=['a', 'b']))
-    second = StateResolver(first, 'Они вернулись в «Критический успех».', '').resolve(back).state
+    first = StateResolver(world(), NARRATIVE, PLAYER).resolve(raw()).state
+    back = dict(final_scene=dict(location_id='room', present_character_ids=['a', 'b']),movements=[dict(actor_id='a',to_location_id='room',player_assertion='explicit_choice',player_evidence='Возвращаюсь.')])
+    second = StateResolver(first, 'Они вернулись в «Критический успех».', 'Возвращаюсь.').resolve(back).state
     assert second['camera']['location_id'] == 'room'
     assert second['locations'] == first['locations']
     again = raw()
     again['locations'] = []
-    third = StateResolver(second, NARRATIVE, '').resolve(again).state
+    third = StateResolver(second, NARRATIVE, PLAYER).resolve(again).state
     assert third['camera']['location_id'] == 'nail'
     assert third['locations'] == first['locations']
 
 def test_new_location_and_stale_scene_with_endpoint_claim_requires_repair():
     payload = raw('room')
-    payload['movements'] = [dict(actor_id='a', to_location_id='nail', evidence=NARRATIVE)]
+    payload['movements'] = [dict(actor_id='a', to_location_id='nail', evidence=NARRATIVE,player_assertion='explicit_choice',player_evidence=PLAYER)]
     with pytest.raises(StructuralDeltaError) as error:
-        StateResolver(world(), NARRATIVE, '').resolve(payload)
+        StateResolver(world(), NARRATIVE, PLAYER).resolve(payload)
     assert error.value.code == 'scene_movement_conflict'
     assert error.value.repairable
 
@@ -62,7 +64,7 @@ def test_mentions_and_unprovable_semantics_do_not_force_transition():
     assert result.state['camera']['location_id'] == 'room'
     assert result.state['characters']['a']['location_id'] == 'room'
     # A new location alone is not proof that the camera went there.
-    assert StateResolver(world(), NARRATIVE, '').resolve(raw('room')).state['camera']['location_id'] == 'room'
+    assert StateResolver(world(), NARRATIVE, PLAYER).resolve(raw('room')).state['camera']['location_id'] == 'room'
 
 def test_departure_and_arrival_update_presence_and_character_endpoints():
     text = 'Соня ушла в коридор. Юра пришёл в Критический успех к Илье и остался.'
@@ -79,30 +81,31 @@ def test_departure_and_arrival_update_presence_and_character_endpoints():
 def test_ordered_route_uses_last_endpoint_and_does_not_duplicate_movement_history():
     payload = raw()
     payload['movements'] = [
-        dict(actor_id='a', to_location_id='nail', order=2, evidence=NARRATIVE),
-        dict(actor_id='a', to_location_id='hall', order=1, evidence=NARRATIVE)]
-    result = StateResolver(world(), NARRATIVE, '').resolve(payload)
-    assert len([m for m in result.history['movements'] if m['actor_id'] == 'a']) == 1
+        dict(actor_id='a', to_location_id='nail', order=2, evidence=NARRATIVE,player_assertion='explicit_choice',player_evidence=PLAYER),
+        dict(actor_id='a', to_location_id='hall', order=1, evidence=NARRATIVE,player_assertion='explicit_choice',player_evidence=PLAYER)]
+    result = StateResolver(world(), NARRATIVE, PLAYER).resolve(payload)
+    assert len([m for m in result.history['movements'] if m['actor_id'] == 'a']) == 2
 
 def test_promoted_npc_gets_same_location_and_card_identity():
     payload = raw(present=['a', 'b', 'barista'])
     payload['promotions'] = [dict(id='barista', name='Маша',
         fields={key: 'Описание' for key in CARD_FIELDS}, evidence=NARRATIVE)]
-    result = StateResolver(world(), NARRATIVE, '').resolve(payload)
+    result = StateResolver(world(), NARRATIVE, PLAYER).resolve(payload)
     assert result.cards[0]['id'] == 'barista'
     assert result.state['characters']['barista']['location_id'] == 'nail'
 
 @pytest.mark.parametrize('section', ['locations', 'promotions'])
-def test_missing_evidence_for_required_scene_entity_is_repairable(section):
+def test_required_scene_entity_needs_identity_but_not_literal_evidence(section):
     payload = raw(present=['a', 'barista']) if section == 'promotions' else raw()
     if section == 'promotions':
         payload['promotions'] = [dict(id='barista', name='Маша',
             fields={key: 'Описание' for key in CARD_FIELDS}, evidence='Нет в тексте')]
     else:
         payload['locations'][0]['evidence'] = 'Нет в тексте'
-    with pytest.raises(StructuralDeltaError) as error:
-        StateResolver(world(), NARRATIVE, '').resolve(payload)
-    assert error.value.repairable
+    resolved=StateResolver(world(), NARRATIVE, PLAYER).resolve(payload)
+    assert resolved.state['camera']['location_id']=='nail'
+    payload[section][0]['id']=''
+    with pytest.raises(StructuralDeltaError): StateResolver(world(), NARRATIVE, PLAYER).resolve(payload)
 
 @pytest.mark.parametrize('repair_succeeds', [True, False])
 def test_real_engine_repairs_once_with_original_and_full_context(db, repair_succeeds):

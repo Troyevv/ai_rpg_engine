@@ -5,6 +5,7 @@ import pytest
 from hypothesis import given, settings, strategies as st
 from backend.runtime_v3.models import Fact, Knowledge, Character, assert_world_state_v3_invariants
 from backend.runtime_v3.resolver import StateResolver
+from backend.services.world_delta_errors import StructuralDeltaError
 from backend.runtime_v3.knowledge import slot
 from backend.runtime_v3.context import build_context
 from backend.runtime_v3.history import audit_world_history
@@ -92,7 +93,7 @@ def test_invalid_updates_never_retire_or_broadcast(damage):
     if damage=='source':p['knowledge_gained'][0]['source_event_id']='old-event'
     if damage=='medium':p['events'][0]['medium']='action'
     if damage=='fact':p['events'][0]['fact_ids']=[]
-    if damage=='future':text='Анна ещё не получила сообщение.';player=TEXT
+    if damage=='future':text='Анна ещё не получила сообщение.';player=TEXT;p['knowledge_gained']=[]
     if damage=='revision':p['knowledge_gained'][0]['expected_revision']=9
     if damage=='revision_type':p['knowledge_gained'][0]['expected_revision']=False
     if damage=='status':p['knowledge_gained'][0]['status']=[]
@@ -103,7 +104,8 @@ def test_invalid_updates_never_retire_or_broadcast(damage):
         else:s['characters']['c']['capabilities']['conscious']=False
     before=deepcopy(s['knowledge'])
     r=StateResolver(s,text,player).resolve(p)
-    assert r.state['knowledge']==before and r.warnings
+    assert r.state['knowledge']==before
+    assert bool(r.warnings)==(damage!='future')
 
 
 def test_scope_disambiguates_parallel_roles_and_no_text_matching():
@@ -288,9 +290,12 @@ def test_acquisition_and_projection_budgets_do_not_expand_with_npc_count():
         fid=f'f{n}';s['facts'][fid]=Fact(id=fid,text='topic',character_ids=['a','b']).model_dump()
         p['events'].append(dict(id=f'e{n}',text=TEXT,evidence=TEXT,witnesses=['a'],fact_ids=[fid],medium='observation'))
         p['knowledge_gained'].append(dict(actor_id='a',fact_id=fid,source_event_id=f'e{n}',evidence=TEXT))
+    before=deepcopy(s)
+    with pytest.raises(StructuralDeltaError) as exc: StateResolver(s,TEXT,'').resolve(p)
+    assert exc.value.code=='knowledge_budget' and s==before
+    p['knowledge_gained']=p['knowledge_gained'][:64]
     r=StateResolver(s,TEXT,'').resolve(p)
     assert len(r.history['knowledge_acquisitions'])==64
-    assert any(w['code']=='knowledge_budget' for w in r.warnings)
     snap=initial();snap['world_state']=r.state
     context=build_context(snap,[],'topic','turn',32768,2000)
     assert context.selection['knowledge']['selected']<=48

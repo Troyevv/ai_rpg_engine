@@ -88,7 +88,7 @@ def _remap(raw, remap, field):
     for section, rows in raw.records.items():
         for row in rows:
             if not isinstance(row, dict): continue
-            keys = ('location_id','to_location_id','parent_id') if field == 'location_id' else ('organization_id',)
+            keys = ('location_id','from_location_id','to_location_id','anchor_location_id','parent_id') if field == 'location_id' else ('organization_id',)
             for key in keys:
                 if isinstance(row.get(key), str) and row[key] in remap: row[key] = remap[row[key]]
             if field == 'location_id' and isinstance(row.get('location_ids'),list):
@@ -142,7 +142,7 @@ def apply_locations(resolver, raw):
     for i,item in _records(resolver,raw,'location_changes'):
         key=item['id']; old=deepcopy(state['locations'].get(key))
         try:
-            if old is None or item.get('assertion') != 'established': raise ValueError('established known location required')
+            if old is None or item.get('assertion', 'established') != 'established': raise ValueError('established known location required')
             if set(item) - {'id','assertion','evidence','parent_id','kind','aliases'}: raise ValueError('arbitrary location rewrite forbidden')
             row=deepcopy(old)
             for k in ('parent_id','kind','aliases'):
@@ -180,7 +180,7 @@ def apply_residence(resolver, raw):
         for i,item in _records(resolver,raw,section):
             key=item['id']; prior=deepcopy(state); size=len(resolver.history.state_changes)
             try:
-                if item.get('assertion') != 'established': raise ValueError('completed/established evidence required')
+                if item.get('assertion', 'established') != 'established': raise ValueError('completed/established evidence required')
                 model=MODELS[target]; old=deepcopy(state[target].get(key))
                 if old and old['status']=='closed': raise ValueError('closed phase is immutable; use new ID')
                 allowed = set(model.model_fields) - {'since','until','since_date','until_date','source_turn','name_history'}
@@ -189,7 +189,8 @@ def apply_residence(resolver, raw):
                 if target == 'roles':
                     controls.add('significance')
                     if 'significance' in item and item['significance'] not in ('major','routine'):
-                        raise ValueError('invalid role significance')
+                        resolver.warn(section,i,'Некорректная аннотация значимости.',field='significance',code='optional_metadata_invalid')
+                        item.pop('significance')
                 if set(item)-allowed-controls: raise ValueError('arbitrary state or chronology rewrite forbidden')
                 if target == 'organizations':
                     if not old:
@@ -230,6 +231,8 @@ def apply_residence(resolver, raw):
                     if old:
                         if any(k in item and item[k] != old[k] for k in (*identity_fields,'context','fact_id')):
                             raise ValueError('phase identity/context cannot change; close old and create new phase')
+                        if item.get('status',old['status']) == old['status'] and not item.get('replaces'):
+                            continue  # Repeating the same active phase is idempotent.
                         if item.get('status') != 'closed': raise ValueError('existing phase requires explicit closure')
                         _close(resolver,target,fields,item,item.get('outcome','ended'),record=False)
                     else:
@@ -254,7 +257,8 @@ def apply_residence(resolver, raw):
             except (ValueError,TypeError,KeyError) as exc:
                 state.clear();state.update(prior)
                 del resolver.history.state_changes[size:]
-                resolver.warn(section,i,str(exc),entity=key,code='residence_transition_invalid')
+                from backend.runtime_v3.models import fatal
+                fatal(str(exc), 'residence_transition_invalid', repairable=True, section=section, index=i, entity=key)
 
 
 def select_social_ids(state, actor_ids, query=''):

@@ -13,6 +13,7 @@ from backend.services.world_delta_errors import StructuralDeltaError
 def test_repair_reason_persists_restart_and_variant_switch(db,secondary):
     repo,_,sid=db;bad=character_payload({});bad['final_scene']['present_character_ids']=['missing']
     fixed=character_payload({'emotion':'боится'} if secondary else {})
+    for payload in (bad,fixed): payload['final_scene']['elapsed_minutes']=0
     job=repo.begin_job(sid,'Я подхожу к окну.','start',CONFIG)
     assert len(execute(repo,job,bad,NARRATIVE,repaired=fixed))==3
     assert repo.get_job(job)['status']=='saved',repo.get_job(job)['error']
@@ -37,7 +38,8 @@ def test_unexpected_or_unsafe_failure_never_calls_repair(db,error):
         assert len(execute(repo,job,character_payload({}),NARRATIVE))==2
     assert repo.get_job(job)['status']=='error'
     assert repo.get_snapshot(sid)==before and not repo.list_turns(sid)
-    assert json.loads(repo.get_job(job)['repair_diagnostics_json'])==[]
+    diagnostics=json.loads(repo.get_job(job)['repair_diagnostics_json'])
+    assert [d['stage'] for d in diagnostics] == (['validation_failed'] if isinstance(error,StructuralDeltaError) else [])
 
 
 def test_repair_exhaustion_cannot_commit_partial_changes(db):

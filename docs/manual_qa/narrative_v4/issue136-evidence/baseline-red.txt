@@ -1,0 +1,111 @@
+FFFFFFF                                                                  [100%]
+=================================== FAILURES ===================================
+_______________ test_t45_start_without_movement_reload_next_turn _______________
+
+api = (<starlette.testclient.TestClient object at 0x7f5aada11e20>, <fastapi.applications.FastAPI object at 0x7f5aaea73b00>)
+
+    def test_t45_start_without_movement_reload_next_turn(api):
+        from storage import Storage
+        client, app = api
+        sid = imported(client); repo = app.state.repository
+        before = repo.get_snapshot(sid); calls = []
+        payload = arrival(); payload['movements'] = []
+        def provider(**kw):
+            calls.append(kw)
+            yield json.dumps(payload) if kw.get('response_format') else 'Виктория вошла внутрь и подошла к столу.'
+        with patch('engine.chat_stream', side_effect=provider):
+            job = wait_job(client, submit(client, sid))
+>           assert job['status'] == 'saved', job.get('error')
+E           AssertionError: Runtime v3: Повествование сохранено, но приход участника не подтверждён. Повтори обработку состояния.
+E           assert 'error' == 'saved'
+E             
+E             - saved
+E             + error
+
+tests/test_narrative_authority136.py:24: AssertionError
+________________ test_t46_observed_without_boundary_or_movement ________________
+
+api = (<starlette.testclient.TestClient object at 0x7f5aada23c50>, <fastapi.applications.FastAPI object at 0x7f5aad059100>)
+
+    def test_t46_observed_without_boundary_or_movement(api):
+        client, app = api; sid = imported(client)
+        before = app.state.repository.get_snapshot(sid)['world_state']
+        raw = arrival(); raw['movements'] = []
+        raw['final_scene'].update(present_character_ids=['ilya'], observed_character_ids=['viktoria_solovyova'])
+        out = StateResolver(before, 'Виктория стоит в проёме, не заходя.', '').resolve(raw)
+>       assert out.state['camera']['observed_character_ids'] == ['viktoria_solovyova']
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'observed_character_ids'
+
+tests/test_narrative_authority136.py:40: KeyError
+_________ test_t32_essential_wrong_type_requires_repair[life_changes] __________
+
+section = 'life_changes'
+
+    @pytest.mark.parametrize('section', ['life_changes', 'movements', 'scheduled_event_changes'])
+    def test_t32_essential_wrong_type_requires_repair(section):
+>       with pytest.raises(StructuralDeltaError) as error:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE StructuralDeltaError
+
+tests/test_narrative_authority136.py:48: Failed
+___________ test_t32_essential_wrong_type_requires_repair[movements] ___________
+
+section = 'movements'
+
+    @pytest.mark.parametrize('section', ['life_changes', 'movements', 'scheduled_event_changes'])
+    def test_t32_essential_wrong_type_requires_repair(section):
+>       with pytest.raises(StructuralDeltaError) as error:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE StructuralDeltaError
+
+tests/test_narrative_authority136.py:48: Failed
+____ test_t32_essential_wrong_type_requires_repair[scheduled_event_changes] ____
+
+section = 'scheduled_event_changes'
+
+    @pytest.mark.parametrize('section', ['life_changes', 'movements', 'scheduled_event_changes'])
+    def test_t32_essential_wrong_type_requires_repair(section):
+>       with pytest.raises(StructuralDeltaError) as error:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE StructuralDeltaError
+
+tests/test_narrative_authority136.py:48: Failed
+________________ test_t31_unknown_meaningful_section_diagnostic ________________
+
+    def test_t31_unknown_meaningful_section_diagnostic():
+>       with pytest.raises(StructuralDeltaError) as error:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE StructuralDeltaError
+
+tests/test_narrative_authority136.py:55: Failed
+____________________ test_t28_optional_wrong_type_is_local _____________________
+
+    def test_t28_optional_wrong_type_is_local():
+>       raw = RawTurnResult.parse(dict(final_scene={}, scene_actions={'broken':True}))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_narrative_authority136.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+backend/runtime_v3/raw.py:40: in parse
+    fatal('некорректная секция политики истории', 'narrative_policy_section_invalid', repairable=False, section=section)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+message = 'некорректная секция политики истории'
+code = 'narrative_policy_section_invalid', repairable = False
+path = {'section': 'scene_actions'}
+
+    def fatal(message, code='current_state_invalid', repairable=False, **path):
+>       raise StructuralDeltaError('Runtime v3: ' + message, code=code, repairable=repairable, **path)
+E       backend.services.world_delta_errors.StructuralDeltaError: Runtime v3: некорректная секция политики истории
+
+backend/runtime_v3/models.py:641: StructuralDeltaError
+=========================== short test summary info ============================
+FAILED tests/test_narrative_authority136.py::test_t45_start_without_movement_reload_next_turn
+FAILED tests/test_narrative_authority136.py::test_t46_observed_without_boundary_or_movement
+FAILED tests/test_narrative_authority136.py::test_t32_essential_wrong_type_requires_repair[life_changes]
+FAILED tests/test_narrative_authority136.py::test_t32_essential_wrong_type_requires_repair[movements]
+FAILED tests/test_narrative_authority136.py::test_t32_essential_wrong_type_requires_repair[scheduled_event_changes]
+FAILED tests/test_narrative_authority136.py::test_t31_unknown_meaningful_section_diagnostic
+FAILED tests/test_narrative_authority136.py::test_t28_optional_wrong_type_is_local
+7 failed in 5.27s

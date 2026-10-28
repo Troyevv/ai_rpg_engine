@@ -75,7 +75,7 @@ def transition(snapshot, operation, actor_id, operation_id, *, pov_actor_id=None
     before_camera=deepcopy(state['camera'])
     state['camera'].update(location_id=lid,present_character_ids=present,controlled_actor_id=controlled,
         subject_id=actor_id,pov_actor_id=pov,mode='actor' if controlled else 'observer',
-        situation=actor['situation'],remote_interactions=[])
+        situation=actor['situation'],remote_interactions=[],observed_character_ids=[])
     batch.state_changes.append(dict(kind='control_transition',entity=actor_id,before=before_camera,
         after=deepcopy(state['camera']),operation=operation,operation_id=operation_id,turn_id=meta['turn_id']))
     result['world_state'] = assert_world_state_v3_invariants(state)

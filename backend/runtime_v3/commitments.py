@@ -47,8 +47,9 @@ def apply_commitments(resolver, raw):
     accepted = {}
     for index, item in resolver.records(raw, 'scheduled_event_changes'):
         eid, assertion = item.get('id'), item.get('assertion')
-        def reject(reason, code='commitment_invalid'):
-            resolver.warn('scheduled_event_changes', index, reason, entity=eid, code=code)
+        def reject(reason, code='commitment_invalid', **details):
+            from backend.runtime_v3.models import fatal
+            fatal(reason, code, repairable=True, section='scheduled_event_changes', index=index, entity=eid, **details)
         if not isinstance(eid, str) or not eid.strip() or assertion not in ASSERTIONS:
             reject('Нужны canonical ID и подтверждённая семантика изменения.'); continue
         old = events.get(eid)
@@ -82,7 +83,7 @@ def apply_commitments(resolver, raw):
         if old and assertion == 'agreed':
             # A repeat is not a reschedule and must never move a relative anchor.
             repeated = resolver.typed(ScheduledEvent, {**old, **{k:item[k] for k in EDITABLE if k in item}}, 'scheduled_event_changes', index)
-            if repeated is None: continue
+            if repeated is None: reject('Повреждены поля повторного плана.')
             if any(repeated[k] != old.get(k) for k in EDITABLE if k != 'id'):
                 reject('Для изменения существующего плана нужен rescheduled.'); continue
             continue
@@ -123,7 +124,7 @@ def apply_commitments(resolver, raw):
         fields['outcome'] = {'occurred':'fulfilled', 'ended':'fulfilled', 'cancelled':'cancelled',
                              'missed':'missed', 'blocked':'blocked'}.get(assertion, '')
         entry = resolver.typed(ScheduledEvent, fields, 'scheduled_event_changes', index)
-        if entry is None: continue
+        if entry is None: reject('Повреждены поля договорённости.')
         if not entry['character_ids'] or len(set(entry['character_ids'])) != len(entry['character_ids']):
             reject('Нужны уникальные участники.'); continue
         if resolver.mode == 'background' and resolver.protected_actor_id in entry['character_ids'] + (old or {}).get('character_ids', []):
@@ -158,8 +159,7 @@ def apply_commitments(resolver, raw):
                 source=next(e for e in authored if e['id']==source_id)
                 if proof != source['content']: failure='player_evidence'
             if failure:
-                reject('Решение controlled actor требует явного источника: '+failure, 'controlled_actor_unsupported')
-                resolver.warnings[-1]['evidence_field']=failure
+                reject('Решение controlled actor требует явного источника: '+failure, 'controlled_actor_unsupported', evidence_field=failure)
                 continue
         window = scheduled_window(state, entry)
         if (old is None or assertion == 'rescheduled') and (window['start_minute'] is None or window['start_minute'] < 0):
@@ -194,16 +194,12 @@ def apply_commitments(resolver, raw):
         accepted[eid] = (index, old)
 
     # Resolve references after the batch so departure/return can be created together.
-    # Reject invalid optional records locally, including references to rejected ones.
-    while True:
-        invalid = invalid_dependencies(events, accepted)
-        if not invalid: break
-        for eid in sorted(invalid):
-            index, old = accepted.pop(eid)
-            if old is None: events.pop(eid)
-            else: events[eid] = old
-            resolver.warn('scheduled_event_changes', index, 'Неизвестная или циклическая зависимость.',
-                          entity=eid, code='commitment_dependency_invalid')
+    invalid = invalid_dependencies(events, accepted)
+    if invalid:
+        from backend.runtime_v3.models import fatal
+        fatal('Неизвестная или циклическая зависимость договорённости.',
+              'commitment_dependency_invalid', repairable=True,
+              section='scheduled_event_changes', source_ids=sorted(invalid))
     from backend.runtime_v3.life import _transition
     for eid, (index, old) in accepted.items():
         item = raw.records['scheduled_event_changes'][index]

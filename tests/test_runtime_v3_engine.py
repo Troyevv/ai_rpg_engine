@@ -74,7 +74,7 @@ def test_unknown_camera_repair_once_then_fatal_preserves_save(db):
     assert len(calls)==3
     assert repo.get_job(job)['status']=='error'
     assert repo.get_snapshot(sid)==before and repo.list_turns(sid)==[]
-    assert len(json.loads(repo.get_job(job)['repair_diagnostics_json']))==1
+    assert [r['stage'] for r in json.loads(repo.get_job(job)['repair_diagnostics_json'])] == ['extraction_repair','validation_failed']
 
 
 def test_100_jobs_through_engine_with_pov_background_and_reload(db):
@@ -91,7 +91,7 @@ def test_100_jobs_through_engine_with_pov_background_and_reload(db):
         elif step%10==3:kind='background';config['camera_actor_id']='c';config['camera_direct']=True
         elif before['world_state']['camera']['controlled_actor_id'] is None:kind='pov';config['actor_id']='a'
         else:kind='turn'
-        job=repo.begin_job(sid,'Я подхожу к окну.' if kind=='turn' else '',kind,config)
+        job=repo.begin_job(sid,'Я перехожу в '+('hall' if step%2 else 'room')+'.' if kind=='turn' else '',kind,config)
         calls=[]
         def stream(**kw):
             calls.append(kw)
@@ -101,12 +101,13 @@ def test_100_jobs_through_engine_with_pov_background_and_reload(db):
             block=next(m['content'] for m in kw['messages'] if m['content'].startswith('Текущее состояние / GM-only'))
             state=json.loads(block.split('\n',1)[1]);camera=state['camera']
             current=camera['controlled_actor_id'] or camera['present_character_ids'][0]
-            raw=dict(final_scene=dict(location_id='hall' if step%2 else 'room',present_character_ids=[current],elapsed_minutes=1),
+            raw=dict(final_scene=dict(location_id=('hall' if step%2 else 'room') if kind=='turn' else camera['location_id'],present_character_ids=[current],elapsed_minutes=1),
                 character_changes=[dict(id=current,situation='У окна',emotion='ревнует',evidence='Разговор продолжается.')],
                 facts=[dict(id='f'+str(step),text='Факт '+str(step),evidence='Разговор продолжается.')],
                 events=[dict(id='e',text='Разговор',participants=[current],witnesses=[current],fact_ids=['f'+str(step)],medium='conversation',evidence='Разговор продолжается.')],
                 knowledge_gained=[dict(actor_id=current,fact_id='f'+str(step),source_event_id='missing' if step%7==0 else 'e',evidence='Разговор продолжается.')],
                 relationship_changes=[dict(source_id='b',target_id='c',context='Разговор',dimensions={'trust':step,'sympathy':10},evidence='Разговор продолжается.')])
+            if kind=='turn': raw['movements']=[dict(actor_id=current,to_location_id=raw['final_scene']['location_id'],player_assertion='explicit_choice',player_evidence='Я перехожу в '+raw['final_scene']['location_id']+'.')]
             yield json.dumps(raw)
         with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=stream):
             engine.run_job(repo.path,job,engine.Worker())

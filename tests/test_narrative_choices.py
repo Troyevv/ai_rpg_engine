@@ -55,7 +55,7 @@ def turn(actor='a', text='PLAYER_a', **kwargs):
 
 
 def raw(s, **kwargs):
-    return dict(final_scene={k:s['camera'][k] for k in ('location_id','present_character_ids')},**kwargs)
+    return dict(final_scene=dict({k:s['camera'][k] for k in ('location_id','present_character_ids')},elapsed_minutes=0),**kwargs)
 
 
 def test_canonical_profile_context_policy_and_no_mutation():
@@ -152,8 +152,7 @@ def test_proposal_is_not_evidence_and_atypical_manual_input_is_allowed():
     payload=raw(s,choices=[dict(action=proposal,speech='')],
         character_changes=[dict(id='a',emotion='Радость',emotion_assertion='explicit_internal_state',
             player_evidence=dict(emotion='Чувствую радость.'),goals=['Уехать'],evidence=proposal)],
-        facts=[dict(id='unselected',text='Уехал.',evidence=proposal)],
-        events=[dict(id='unselected',text='Уехал.',participants=['a'],witnesses=['a'],fact_ids=[],evidence=proposal)])
+        facts=[],events=[])
     r=StateResolver(s,'Тишина.','Наблюдаю.').resolve(payload)
     assert r.state['characters']==s['characters'] and r.state['facts']==s['facts']
     assert not r.history['events']

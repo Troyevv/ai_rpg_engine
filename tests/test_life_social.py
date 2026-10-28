@@ -5,6 +5,7 @@ import pytest
 from hypothesis import given, settings, strategies as st
 from backend.runtime_v3.models import Character, WorldStateV3, Fact, Knowledge, ObjectiveRelation, Condition, assert_world_state_v3_invariants
 from backend.runtime_v3.resolver import StateResolver
+from backend.services.world_delta_errors import StructuralDeltaError
 from backend.runtime_v3.life import capabilities
 from backend.runtime_v3.kinship import genealogy, visible_relations
 
@@ -32,6 +33,14 @@ def run(s,section=None,records=(),text=TEXT,player=TEXT,**kwargs):
     return StateResolver(s,text,player,**kwargs).resolve(payload)
 
 
+def rejected(s, section, records, **kwargs):
+    before=deepcopy(s)
+    with pytest.raises(StructuralDeltaError) as error:
+        run(s,section,records,**kwargs)
+    assert error.value.repairable and s == before
+    assert error.value.code == 'life_transition_invalid'
+
+
 def tie(rid='marriage',kind='spouse',a='a',b='b',**kw):
     return dict(id=rid,kind=kind,source_id=a,target_id=b,**kw)
 
@@ -55,8 +64,7 @@ def test_partner_engagement_marriage_divorce_reconnection_keep_all_phases_and_na
     assert s['objective_relations']['remarriage']['status']=='active'
     assert s['relationships']==baseline
     assert s['characters']==before['characters']
-    rejected=run(s,'social_relation_changes',[dict(id='spouse',status='active')])
-    assert rejected.state['objective_relations']==s['objective_relations'] and rejected.warnings
+    rejected(s,'social_relation_changes',[dict(id='spouse',status='active')])
 
 
 def test_concurrent_marriages_and_contacts_no_monogamy_or_emotion_coupling():
@@ -71,34 +79,29 @@ def test_concurrent_marriages_and_contacts_no_monogamy_or_emotion_coupling():
 
 
 @pytest.mark.parametrize('bad',[
-    tie(evidence='not in narrative'),tie(assertion='proposal'),tie(assertion='wish'),
+    tie(assertion='proposal'),tie(assertion='wish'),
     tie(a='missing'),tie(a='a',b='a'),tie(kind='emotional_parent'),dict(id=[],kind='spouse'),
 ])
-def test_optional_bad_records_are_local(bad):
+def test_invalid_substantial_transition_rejects_atomic_patch(bad):
     s=state()
-    r=run(s,'social_relation_changes',[bad,tie('good','friend','c','d')])
-    assert set(r.state['objective_relations'])=={'good'}
-    assert r.warnings and r.state['meta']['turn_id']==1
-    assert s==state()
+    rejected(s,'social_relation_changes',[bad,tie('good','friend','c','d')])
 
 
 def test_no_player_choice_no_voluntary_relation_but_npc_closure_is_allowed():
-    r=run(state(),'social_relation_changes',[tie()],player='')
-    assert not r.state['objective_relations']
+    rejected(state(),'social_relation_changes',[tie()],player='')
     s=run(state(),'social_relation_changes',[tie()]).state
     r=run(s,'social_relation_changes',[dict(id='marriage',status='closed',decision_actor_id='b')],player='')
     assert r.state['objective_relations']['marriage']['status']=='closed'
-    r=run(s,'social_relation_changes',[dict(id='marriage',status='closed')],player='',mode='background',protected_actor_id='a')
-    assert r.state['objective_relations']==s['objective_relations']
+    rejected(s,'social_relation_changes',[dict(id='marriage',status='closed')],player='',mode='background',protected_actor_id='a')
 
 
 def test_inverse_symmetry_duplicate_and_cycle_never_rewrite_existing_relations():
     s=run(state(),'social_relation_changes',[tie('child','child','b','a'),tie('bc','parent','b','c')]).state
     assert s['objective_relations']['child']['source_id']=='a'
-    r=run(s,'social_relation_changes',[tie('duplicate','parent','a','b'),tie('cycle','parent','c','a'),tie('ok','guardian','d','b')])
-    assert set(r.state['objective_relations'])=={'child','bc','ok'} and len(r.warnings)==2
-    r=run(r.state,'social_relation_changes',[dict(id='child',target_id='d')])
-    assert r.state['objective_relations']['child']['target_id']=='b'
+    for bad in [tie('duplicate','parent','a','b'),tie('cycle','parent','c','a'),dict(id='child',target_id='d')]:
+        rejected(s,'social_relation_changes',[bad,tie('ok','guardian','d','b')])
+    result=run(s,'social_relation_changes',[tie('ok','guardian','d','b')])
+    assert set(result.state['objective_relations'])=={'child','bc','ok'}
 
 
 def test_adoption_guardian_foster_step_and_revocation_preserve_biology_and_personality():
@@ -118,8 +121,7 @@ def test_adoption_guardian_foster_step_and_revocation_preserve_biology_and_perso
 def test_name_change_history_and_no_marriage_surname_inference():
     s=run(state(),'social_relation_changes',[tie()]).state
     assert s['characters']['a']['display_name']=='A'
-    r=run(s,'life_changes',[dict(id='a',display_name='Новое имя')],player='')
-    assert r.state['characters']['a']['display_name']=='A'
+    rejected(s,'life_changes',[dict(id='a',display_name='Новое имя')],player='')
     s=run(s,'life_changes',[dict(id='a',display_name='Новое имя')]).state
     s=run(s,'life_changes',[dict(id='a',display_name='Третье имя')]).state
     assert [r['previous'] for r in s['characters']['a']['name_history']]==['A','Новое имя']
@@ -145,7 +147,7 @@ def test_death_is_not_missing_and_death_blocks_scene_emotions_movement_and_backg
     assert not result.state['relationships'] and 'b' not in result.state['camera']['present_character_ids']
     after=deepcopy(s);after['meta']['world_time']+=100
     assert background_candidate(s,after) is None and not interval_candidates(s,after)[0]
-    assert run(s,'life_changes',[dict(id='b',life_status='alive')]).state['characters']['b']['life_status']=='dead'
+    rejected(s,'life_changes',[dict(id='b',life_status='alive')])
 
 
 def test_dead_controlled_identity_retained_without_ordinary_choices():
@@ -165,9 +167,8 @@ def test_conditions_overlap_unknown_outcome_and_explicit_recovery():
     s=run(s,'condition_changes',[dict(id='coma',status='resolved')]).state
     assert capabilities(s,'a')['can_act'] and not capabilities(s,'a')['can_move']
     assert s['conditions']['leg']['status']=='active'
-    r=run(s,'condition_changes',[dict(id='leg',effects={'can_move':True})])
-    assert r.state['conditions']==s['conditions'] and r.warnings
-    assert run(s,'condition_changes',[dict(id='coma',status='active')]).state['conditions']['coma']['status']=='resolved'
+    rejected(s,'condition_changes',[dict(id='leg',effects={'can_move':True})])
+    rejected(s,'condition_changes',[dict(id='coma',status='active')])
 
 
 @pytest.mark.parametrize('stage,act,speak,adult',[('infant',False,False,False),('child',True,True,False),('adolescent',True,True,False),('adult',True,True,True),('unknown',True,True,False)])
@@ -341,17 +342,14 @@ def test_death_invalidates_commitments_without_success_and_no_new_unrelated_chan
     assert s['scheduled_events']['trip']['status']=='cancelled'
     assert s['scheduled_events']['return']['status']=='cancelled'
     assert not any(e['outcome']=='fulfilled' for e in s['scheduled_events'].values())
-    s2=change(s,[dict(id='trip',assertion='occurred')],player='').state
-    assert s2['scheduled_events']==s['scheduled_events']
+    with pytest.raises(StructuralDeltaError): change(s,[dict(id='trip',assertion='occurred')],player='')
 
 
 def test_invalid_transition_does_not_leave_phantom_history():
     s=run(state(),'social_relation_changes',[tie()]).state
     # Fact does not cover B, so the entire optional death transition is rejected.
     inform(s,'bad',['a'],{'a':'known'})
-    r=run(s,'life_changes',[dict(id='b',life_status='dead',fact_id='bad')])
-    assert r.state['objective_relations']==s['objective_relations']
-    assert not any(h.get('kind')=='objective_relations' for h in r.history['state_changes'])
+    rejected(s,'life_changes',[dict(id='b',life_status='dead',fact_id='bad')])
 
 
 def test_real_history_sibling_branches_keep_independent_genealogy(tmp_path):
@@ -397,5 +395,4 @@ def test_family_checkpoints_use_normal_import_and_incapacitated_start_is_playabl
 
 def test_impossible_known_biological_birth_order_rejected_locally():
     s=state();s['characters']['a']['birth_date']='2020-01-01';s['characters']['b']['birth_date']='2000-01-01'
-    r=run(s,'social_relation_changes',[tie('bad','parent')])
-    assert not r.state['objective_relations'] and r.warnings
+    rejected(s,'social_relation_changes',[tie('bad','parent')])

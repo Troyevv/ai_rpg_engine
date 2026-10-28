@@ -149,7 +149,7 @@ def test_birth_date_requires_explicit_evidence_and_cannot_rewrite_known_date():
     result=StateResolver(s,text,'').resolve(raw)
     assert result.state['characters']['ilya']['birth_date']=='2000-10-09'
     bad=deepcopy(raw);bad['character_changes'][0]['birth_date']='2000-01-01'
-    assert StateResolver(s,text,'').resolve(bad).state['characters']['ilya']['birth_date'] is None
+    assert StateResolver(result.state,text,'').resolve(bad).state['characters']['ilya']['birth_date']=='2000-10-09'
 
 
 def test_optional_malformed_dates_degrade_locally_without_rewriting_source():

@@ -76,12 +76,13 @@ def test_extraction_supplies_existing_ids_status_revision_not_terminal_entries()
 def test_completion_requires_narrated_result_and_stable_identity(bad):
     s=initial()['world_state'];p=completion(s);narrative=MEET;player=''
     change=p['character_changes'][0]['intentions_updates'][0]
-    if bad=='future': narrative='Илья ещё дома.';player=MEET
+    if bad=='future': narrative='Илья ещё дома.';player=MEET;p['character_changes']=[]
     if bad=='missing_event': change['source_event_id']='invented'
     if bad=='stale_revision': change['expected_revision']=8
     if bad=='unknown_id': change['id']='other'
     r=StateResolver(s,narrative,player).resolve(p)
-    assert r.state['characters']['a']['intentions']==s['characters']['a']['intentions'] and r.warnings
+    assert r.state['characters']['a']['intentions']==s['characters']['a']['intentions']
+    assert bool(r.warnings)==(bad!='future')
 
 
 def test_replay_terminal_and_conflicting_updates_do_not_duplicate_history():

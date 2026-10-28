@@ -127,8 +127,8 @@ def _records(resolver, raw, section):
     for i,item in enumerate(raw.records.get(section, [])):
         key = item.get('id') if isinstance(item,dict) else None
         if not isinstance(key,str) or not key.strip() or key in seen or not resolver.supported(item):
-            resolver.warn(section,i,'Нужны уникальный ID и подтверждённое основание.',code='life_transition_invalid')
-            continue
+            from backend.runtime_v3.models import fatal
+            fatal('Нужен уникальный ID изменения.', 'life_transition_invalid', repairable=True, section=section, index=i)
         seen.add(key)
         yield i,item
 
@@ -144,7 +144,7 @@ def apply_life(resolver, raw):
             old_state = deepcopy(s)
             history_size = len(resolver.history.state_changes)
             try:
-                if item.get('assertion') != 'established':
+                if item.get('assertion', 'established') != 'established':
                     raise ValueError('only established/completed truth, not intent or proposal')
                 if section == 'life_changes':
                     if key not in s['characters']: raise ValueError('unknown actor')
@@ -188,6 +188,7 @@ def apply_life(resolver, raw):
                     if actor['life_status'] == 'dead':
                         # Remove ordinary participation, retain identity/control/history/location.
                         s['camera']['present_character_ids'] = [c for c in s['camera']['present_character_ids'] if c != key]
+                        s['camera']['observed_character_ids'] = [c for c in s['camera'].get('observed_character_ids',[]) if c != key]
                         s['camera']['remote_interactions'] = [r for r in s['camera']['remote_interactions'] if r['actor_id'] != key]
                         for r in s['objective_relations'].values():
                             if r['status'] == 'active' and key in (r['source_id'],r['target_id']) and r['kind'] in ('spouse','partner','engaged'):
@@ -248,7 +249,8 @@ def apply_life(resolver, raw):
             except (ValueError,TypeError,KeyError,ValidationError) as exc:
                 s.clear(); s.update(old_state)
                 del resolver.history.state_changes[history_size:]
-                resolver.warn(section,index,str(exc),entity=key,code='life_transition_invalid')
+                from backend.runtime_v3.models import fatal
+                fatal(str(exc), 'life_transition_invalid', repairable=True, section=section, index=index, entity=key)
     # Owners consume dead IDs independently; no monolithic cascade deleting state.
     dead = {cid for cid,c in s['characters'].items() if c['life_status']=='dead'}
     from backend.runtime_v3.lifecycle import invalidate_dead_motivations

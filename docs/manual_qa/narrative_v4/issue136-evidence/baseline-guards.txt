@@ -1,0 +1,224 @@
+engine.py:2:from backend.services.world_delta_errors import StructuralDeltaError
+engine.py:271:                            fatal('Исправление отменило принятый физический Event.', 'call_repair_omission',repairable=False)
+engine.py:276:                            fatal('Голосовая договорённость не прошла проверку.', 'call_commitment_rejected',repairable=True,diagnostics=rejected)
+engine.py:308:                except StructuralDeltaError as exc:
+backend/runtime_v3/long_term.py:408:    from backend.services.world_delta_errors import StructuralDeltaError
+backend/runtime_v3/long_term.py:724:        except (ValueError, StructuralDeltaError) as exc:
+backend/runtime_v3/simulation.py:10:from backend.services.world_delta_errors import StructuralDeltaError
+backend/runtime_v3/simulation.py:46:                fatal('background не должен продвигать часы','background_time_invalid',repairable=True)
+backend/runtime_v3/simulation.py:49:                fatal('background меняет управляемого персонажа','background_agency_invalid',repairable=True)
+backend/runtime_v3/simulation.py:51:        except StructuralDeltaError as exc:
+backend/runtime_v3/raw.py:32:                fatal('некорректный JSON extraction', 'raw_root_invalid', repairable=True)
+backend/runtime_v3/raw.py:34:            fatal('ожидается объект RawTurnResult с final_scene', 'raw_root_invalid', repairable=True)
+backend/runtime_v3/raw.py:40:                    fatal('некорректная секция политики истории', 'narrative_policy_section_invalid', repairable=False, section=section)
+backend/runtime_v3/raw.py:198:def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=False, voice=False):
+backend/runtime_v3/commitments.py:50:        def reject(reason, code='commitment_invalid'):
+backend/runtime_v3/commitments.py:53:            reject('Нужны canonical ID и подтверждённая семантика изменения.'); continue
+backend/runtime_v3/commitments.py:62:                reject('Голосовая договорённость требует подтверждённых proposal/assent источников.', 'commitment_call_evidence'); continue
+backend/runtime_v3/commitments.py:65:            reject('Источник не входит в принятый semantic context.', 'commitment_remote_source'); continue
+backend/runtime_v3/commitments.py:67:            reject('Сообщения не прочитаны участниками договорённости.', 'commitment_remote_unperceived'); continue
+backend/runtime_v3/commitments.py:69:            reject('Каждому участнику нужна собственная подтверждающая реплика.', 'commitment_missing_assent'); continue
+backend/runtime_v3/commitments.py:73:                reject('Переносу нужно новое согласие участников.', 'commitment_missing_assent'); continue
+backend/runtime_v3/commitments.py:75:            reject('Старое сообщение не является новым решением.', 'commitment_remote_replay'); continue
+backend/runtime_v3/commitments.py:77:            reject('Нужны новые доказательства изменения плана.', 'commitment_remote_replay'); continue
+backend/runtime_v3/commitments.py:79:            reject('Завершённый план нельзя повторно активировать.', 'commitment_terminal'); continue
+backend/runtime_v3/commitments.py:81:            reject('Изменение ссылается на неизвестный план.'); continue
+backend/runtime_v3/commitments.py:87:                reject('Для изменения существующего плана нужен rescheduled.'); continue
+backend/runtime_v3/commitments.py:90:            reject('Новому плану/переносу нужна структурная temporal привязка, не LLM minute.'); continue
+backend/runtime_v3/commitments.py:101:                    reject('Участник не присутствовал в разговоре.', 'commitment_missing_assent'); continue
+backend/runtime_v3/commitments.py:110:                    reject('Относительное время сообщения требует его canonical ID.', 'commitment_remote_time'); continue
+backend/runtime_v3/commitments.py:115:                    reject('Голосовое время требует исходное предложение.', 'commitment_call_time'); continue
+backend/runtime_v3/commitments.py:121:            reject('Статус противоречит подтверждённому исходу.'); continue
+backend/runtime_v3/commitments.py:128:            reject('Нужны уникальные участники.'); continue
+backend/runtime_v3/commitments.py:130:            reject('Фоновая симуляция не меняет план protected actor.', 'background_commitment_protected'); continue
+backend/runtime_v3/commitments.py:133:            reject('Участник умер; план не может стать выполненным или активным.'); continue
+backend/runtime_v3/commitments.py:135:            reject('Неизвестное место плана.'); continue
+backend/runtime_v3/commitments.py:138:                reject('Изменение исхода не переписывает идентичность и сроки плана.'); continue
+backend/runtime_v3/commitments.py:161:                reject('Решение controlled actor требует явного источника: '+failure, 'controlled_actor_unsupported')
+backend/runtime_v3/commitments.py:166:            reject('Нужна разрешимая календарная привязка.'); continue
+backend/runtime_v3/commitments.py:168:            reject('Конец интервала должен быть не раньше начала.'); continue
+backend/runtime_v3/commitments.py:170:            reject('Прошедшее обсуждение не создаёт будущий план.'); continue
+backend/runtime_v3/commitments.py:173:                reject('Начало/конец требуют личного интервала и допустимого перехода.'); continue
+backend/runtime_v3/commitments.py:176:                    reject('Будущий интервал ещё не начался.'); continue
+backend/runtime_v3/commitments.py:178:                    reject('Интервал уже начат.'); continue
+backend/runtime_v3/commitments.py:181:            reject('Для интервала используй started/ended.'); continue
+backend/runtime_v3/commitments.py:192:                reject('Повтор существующего плана: используй его canonical ID.', 'commitment_duplicate'); continue
+backend/runtime_v3/remote_semantics.py:22:def evidence_slice(state, source_id):
+backend/runtime_v3/lifecycle.py:79:            def reject(reason,code='motivation_invalid'):
+backend/runtime_v3/lifecycle.py:82:                reject('Нет evidence lifecycle.'); continue
+backend/runtime_v3/lifecycle.py:84:                reject('Фоновая симуляция не меняет мотивацию EXTERNAL.', 'motivation_agency'); continue
+backend/runtime_v3/lifecycle.py:88:                reject('Неизвестный статус.'); continue
+backend/runtime_v3/lifecycle.py:91:                if status != old['status']: reject('Закрытая запись не переоткрывается.', 'motivation_terminal')
+backend/runtime_v3/lifecycle.py:94:                reject('Устаревшая версия мотивации.', 'motivation_conflict'); continue
+backend/runtime_v3/lifecycle.py:102:                    reject('Источник не является принятым событием персонажа.'); continue
+backend/runtime_v3/lifecycle.py:104:                reject('Старая реплика не подтверждает новое состояние намерения.', 'motivation_remote_replay'); continue
+backend/runtime_v3/lifecycle.py:107:                reject('Ввод с планом действия не доказывает его выполнение.', 'motivation_completion_source'); continue
+backend/runtime_v3/lifecycle.py:112:                reject('Отказ/замена EXTERNAL требует явного решения игрока.', 'motivation_agency'); continue
+backend/runtime_v3/lifecycle.py:117:                reject('Некорректные semantic dependencies.'); continue
+backend/runtime_v3/lifecycle.py:120:                    reject('Текст существующей записи нельзя переписать; используй superseded и новую запись.'); continue
+backend/runtime_v3/lifecycle.py:122:                    reject('Возобновление требует semantic assertion unblocked.'); continue
+backend/runtime_v3/lifecycle.py:124:                    reject('Переоценка требует явного semantic assertion still_active/unblocked.'); continue
+backend/runtime_v3/lifecycle.py:139:                    reject('Неизвестный motivation ID.'); continue
+backend/runtime_v3/lifecycle.py:142:                    reject('Новая запись требует непустой текст и active.'); continue
+backend/runtime_v3/lifecycle.py:144:                    reject('Новая мотивация не задана игроком.', 'motivation_agency'); continue
+backend/runtime_v3/residence.py:114:                fatal('конфликт canonical location ID', 'canonical_id_conflict', repairable=True)
+backend/runtime_v3/values.py:88:        def reject(reason,code='value_invalid'):
+backend/runtime_v3/values.py:91:            reject('Персонаж не может иметь новые установленные принципы.');continue
+backend/runtime_v3/values.py:94:            reject('Фон не меняет ценности EXTERNAL.','value_agency');continue
+backend/runtime_v3/values.py:98:            reject('Устаревшая или конфликтующая дельта.','value_conflict');continue
+backend/runtime_v3/values.py:100:            reject('Establish требует новый ID, refine/retire — существующий.');continue
+backend/runtime_v3/values.py:102:            reject('Неправильный текст операции.');continue
+backend/runtime_v3/values.py:109:                reject('Нет принятого явного заявления о долговременной ценности.','value_agency');continue
+backend/runtime_v3/values.py:128:                reject('Недостаточно независимого опыта/добровольных выборов.','value_evidence_insufficient');continue
+backend/runtime_v3/values.py:131:            reject('Повторное использование того же основания.','value_replay');continue
+backend/runtime_v3/values.py:133:            reject('Лимит 48 ценностей.');continue
+backend/runtime_v3/call_continuity.py:18:        fatal('История активного звонка превышает бюджет доказательств.', 'call_evidence_budget')
+backend/runtime_v3/call_continuity.py:68:        fatal('Несколько отбоев одного хода.', 'call_end_duplicate',repairable=True)
+backend/runtime_v3/call_continuity.py:75:            fatal('Не подтверждён фактический отбой звонка.', 'call_end_unsupported',repairable=True)
+backend/runtime_v3/call_continuity.py:79:            fatal('Нет команды игрока на отбой.', 'call_end_agency',repairable=True)
+backend/runtime_v3/call_continuity.py:107:                fatal('Исправление удалило подтверждённое последствие телефонного хода.',
+backend/runtime_v3/call_continuity.py:108:                    'call_repair_omission',repairable=False,section=section)
+backend/runtime_v3/call_continuity.py:152:def evidence_span(narrative, evidence):
+backend/runtime_v3/personality.py:256:def history_query(db, head, *, actor_ids, kind='personality_delta', limit=16, evidence_ids=None):
+backend/runtime_v3/relationships.py:54:        def reject(code, reason):
+backend/runtime_v3/relationships.py:58:            reject('relationship_endpoint_invalid', 'Неизвестное или совпадающее направление отношений.'); continue
+backend/runtime_v3/relationships.py:60:            reject('relationship_duplicate', 'Повторное направление отношений.'); continue
+backend/runtime_v3/relationships.py:63:            reject('relationship_source_dead', 'Мёртвый персонаж не меняет чувства.'); continue
+backend/runtime_v3/relationships.py:74:                reject('relationship_evidence_required', 'Чувствам нужен явный ввод игрока или принятые канонические взаимодействия.'); continue
+backend/runtime_v3/relationships.py:79:                reject('relationship_source_invalid', 'Основание отсутствует, уже использовано, предшествует правке или не является взаимодействием.'); continue
+backend/runtime_v3/relationships.py:84:            reject('relationship_dimension_invalid', 'Некорректные измерения отношений.'); continue
+backend/runtime_v3/relationships.py:100:            reject('relationship_step_exceeded', 'Автономное изменение превышает допустимый постепенный сдвиг.'); continue
+backend/runtime_v3/relationships.py:103:                reject('relationship_context_invalid', 'Некорректный контекст отношений.'); continue
+backend/runtime_v3/migration.py:47:        fatal('невозможно мигрировать неполное сохранение', 'migration_invalid')
+backend/runtime_v3/migration.py:66:        if len(matches) > 1: fatal('неоднозначное место при миграции: нужен canonical ID', 'migration_invalid')
+backend/runtime_v3/migration.py:107:        fatal('неизвестный controlled actor при миграции', 'migration_invalid')
+backend/runtime_v3/resolver.py:72:    def supported(self, record):
+backend/runtime_v3/resolver.py:80:    def records(self, raw, section, *, evidence=True):
+backend/runtime_v3/resolver.py:92:                    if key in seen:fatal('повторный canonical ID записи','canonical_id_conflict',repairable=True,section=section,index=i)
+backend/runtime_v3/resolver.py:133:            fatal('неизвестный обязательный character_id', 'unknown_character', repairable=True, section=section,index=index)
+backend/runtime_v3/resolver.py:160:                fatal('конфликт canonical character ID', 'canonical_id_conflict', repairable=True)
+backend/runtime_v3/resolver.py:168:            fatal('неизвестное конечное место камеры', 'camera_location_invalid', repairable=True)
+backend/runtime_v3/resolver.py:170:            fatal('повреждены участники final_scene', 'camera_invalid', repairable=True)
+backend/runtime_v3/resolver.py:186:            fatal('controlled actor отсутствует в final_scene', 'camera_actor_missing', repairable=True)
+backend/runtime_v3/resolver.py:189:            fatal('некорректная длительность хода', 'invalid_time', repairable=True)
+backend/runtime_v3/resolver.py:201:            fatal('некорректное описание камеры', 'camera_invalid', repairable=True)
+backend/runtime_v3/resolver.py:235:                fatal('неизвестное конечное место перемещения','movement_endpoint_invalid',repairable=True,index=i)
+backend/runtime_v3/resolver.py:243:                    fatal('неоднозначное перемещение','movement_ambiguous',repairable=True,entity=cid)
+backend/runtime_v3/resolver.py:247:                    fatal('конечное перемещение участника противоречит final_scene',
+backend/runtime_v3/resolver.py:264:                    fatal('Повествование сохранено, но приход участника не подтверждён. Повтори обработку состояния.',
+backend/runtime_v3/resolver.py:294:                    fatal('конфликт canonical fact ID','canonical_id_conflict',repairable=True,entity=entry['id'])
+backend/runtime_v3/resolver.py:310:                fatal('неоднозначный ID Event этого хода','canonical_id_conflict',repairable=True)
+backend/runtime_v3/resolver.py:504:                    fatal('Звонок не переносит собеседника в физическую сцену.', 'remote_false_colocation')
+backend/runtime_v3/models.py:8:from backend.services.world_delta_errors import StructuralDeltaError
+backend/runtime_v3/models.py:640:def fatal(message, code='current_state_invalid', repairable=False, **path):
+backend/runtime_v3/models.py:641:    raise StructuralDeltaError('Runtime v3: ' + message, code=code, repairable=repairable, **path)
+backend/runtime_v3/models.py:663:        fatal(str(exc), 'current_state_schema_invalid')
+backend/runtime_v3/models.py:667:        fatal('неизвестный главный герой')
+backend/runtime_v3/models.py:671:            fatal('некорректный период управления')
+backend/runtime_v3/models.py:674:        fatal('несогласованные периоды главного героя')
+backend/runtime_v3/models.py:677:            fatal('неизвестный персонаж камеры/POV')
+backend/runtime_v3/models.py:681:                fatal('конфликт canonical ID', section=section, entity=key)
+backend/runtime_v3/models.py:686:                fatal('повторный motivation ID', section=field, entity=cid)
+backend/runtime_v3/models.py:689:        fatal('неизвестное место камеры')
+backend/runtime_v3/models.py:692:        fatal('неизвестные или повторные участники камеры')
+backend/runtime_v3/models.py:694:        fatal('неизвестный controlled actor')
+backend/runtime_v3/models.py:696:        fatal('controlled actor отсутствует в камере')
+backend/runtime_v3/models.py:699:        fatal('повторный участник удалённого взаимодействия')
+backend/runtime_v3/models.py:702:            fatal('некорректный участник удалённого взаимодействия')
+backend/runtime_v3/models.py:705:            fatal('неизвестное место персонажа', entity=cid)
+backend/runtime_v3/models.py:707:            fatal('позиция участника не совпадает с камерой', entity=cid)
+backend/runtime_v3/models.py:711:            fatal('повреждена ссылка текущего Knowledge', entity=key)
+backend/runtime_v3/models.py:713:            fatal('повреждена ссылка исправления Knowledge', entity=key)
+backend/runtime_v3/models.py:719:                fatal('противоречащие текущие Knowledge одного слота', entity=key)
+backend/runtime_v3/models.py:723:            fatal('повреждена ссылка отношения', entity=key)
+backend/runtime_v3/models.py:725:            fatal('повреждено измерение отношений', entity=key)
+backend/runtime_v3/models.py:729:                fatal('неизвестный связанный персонаж', section=section, entity=key)
+backend/runtime_v3/models.py:732:            fatal('неизвестный участник последствий линии', section='threads', entity=item['id'])
+backend/runtime_v3/models.py:735:            fatal('неизвестное место scheduled event', section='scheduled_events', entity=item['id'])
+backend/runtime_v3/models.py:738:    except ValueError as exc: fatal(str(exc), 'life_state_invalid')
+backend/runtime_v3/models.py:741:    except ValueError as exc: fatal(str(exc), 'residence_state_invalid')
+backend/runtime_v3/models.py:744:    except ValueError as exc: fatal(str(exc), 'reproduction_state_invalid')
+backend/runtime_v3/models.py:748:        fatal('время или номер хода движется назад')
+backend/runtime_v3/models.py:780:            fatal('patch создан для другого состояния', 'stale_patch')
+backend/runtime_v3/models.py:784:                fatal('неизвестная секция patch')
+backend/runtime_v3/pacing.py:172:def reject(code, **details):
+backend/runtime_v3/pacing.py:176:    fatal('Предложенные последствия не соответствуют политике истории.',code,repairable=False,**details)
+backend/runtime_v3/pacing.py:190:    if len(raw.records['consequences'])>24: reject('risk_budget_exceeded')
+backend/runtime_v3/pacing.py:193:        except (ValueError,TypeError): reject('risk_claim_invalid')
+backend/runtime_v3/pacing.py:196:            reject('risk_evidence_invalid')
+backend/runtime_v3/pacing.py:197:        if not explicit(resolver,claim) and not grounded(state,claim['basis_ids'],cid): reject('risk_grounding_missing')
+backend/runtime_v3/pacing.py:202:            if (claim['kind']=='protagonist_death') != (cid==main): reject('risk_severity_mismatch')
+backend/runtime_v3/pacing.py:203:            if not resolver.death_policy.permits_autonomous_death(state,cid): reject('risk_death_denied',entity=cid)
+backend/runtime_v3/pacing.py:204:        elif not risk[claim['kind']]: reject('risk_denied',consequence=claim['kind'],entity=cid)
+backend/runtime_v3/pacing.py:214:                reject('risk_pacing_required',entity=cid)
+backend/runtime_v3/pacing.py:228:                    if not resolver.death_policy.permits_autonomous_death(state,cid): reject('risk_death_denied',entity=cid)
+backend/runtime_v3/pacing.py:229:                    if not declared & {'npc_death','protagonist_death'}: reject('risk_classification_required',entity=cid)
+backend/runtime_v3/pacing.py:231:                    if not declared & {'serious_illness','injury','permanent_injury','major_accident'}: reject('risk_classification_required',entity=cid)
+backend/runtime_v3/pacing.py:236:                        reject('risk_classification_required',entity=cid)
+backend/runtime_v3/pacing.py:241:                        reject('risk_classification_required',entity=cid)
+backend/runtime_v3/pacing.py:243:                        reject('risk_severity_mismatch')
+backend/runtime_v3/pacing.py:245:                        reject('risk_severity_mismatch')
+backend/runtime_v3/pacing.py:254:                if not risk[key]: reject('risk_denied',consequence=key,entity=cid)
+backend/runtime_v3/pacing.py:284:            if declared[cid]!=claim['source_event_id']: reject('pacing_candidate_reused')
+backend/runtime_v3/pacing.py:290:    if not decision: reject('pacing_context_missing')
+backend/runtime_v3/pacing.py:291:    if len(records)>decision['budget']['candidates']: reject('pacing_budget_exceeded')
+backend/runtime_v3/pacing.py:298:        except (ValueError,TypeError): reject('pacing_claim_invalid')
+backend/runtime_v3/pacing.py:299:        if claim.escalation>decision['profile']['escalation']: reject('pacing_escalation_limit')
+backend/runtime_v3/pacing.py:302:            reject('pacing_candidate_invalid')
+backend/runtime_v3/pacing.py:303:        if not set(candidate['actor_ids']) & set(event.get('participants',[])): reject('pacing_grounding_missing')
+backend/runtime_v3/pacing.py:318:    if len(opened)>pacing['candidate_budget']: reject('pacing_budget_exceeded')
+backend/runtime_v3/pacing.py:319:    if opened and after>max(prior,pacing['thread_cap']): reject('pacing_thread_cap')
+backend/runtime_v3/pacing.py:327:            if item.get('resolution')!='favorable': reject('favorable_resolution_required')
+backend/runtime_v3/pacing.py:329:        if not thread.get('favorable_path'): reject('favorable_path_required',entity=thread['id'])
+backend/runtime_v3/pacing.py:331:        if not grounded(state,basis,main): reject('favorable_path_ungrounded')
+backend/runtime_v3/pacing.py:334:                reject('favorable_path_unknown_basis')
+backend/runtime_v3/pacing.py:355:            if not risk[category]: reject('risk_denied',consequence=category,entity=key)
+backend/runtime_v3/pacing.py:363:        if claim['source_event_id'] not in accepted_events: reject('risk_event_not_accepted')
+backend/runtime_v3/pacing.py:379:        if not matched: reject('risk_canonical_consequence_missing',consequence=kind,entity=actor)
+backend/runtime_v3/continuity.py:43:def reject(code):
+backend/runtime_v3/continuity.py:44:    fatal('Нарушена непрерывность повествования.', code, repairable=False)
+backend/runtime_v3/continuity.py:173:        fatal('Обычный ход пересекает временную границу договорённости.',
+backend/runtime_v3/continuity.py:174:              'ordinary_temporal_boundary', repairable=False)
+backend/runtime_v3/continuity.py:178:        fatal('Обычный ход пропускает неразрешённую возможность ответа.',
+backend/runtime_v3/continuity.py:179:              'ordinary_response_boundary', repairable=False)
+backend/runtime_v3/continuity.py:185:    except (ValueError, TypeError): reject('compression_invalid')
+backend/runtime_v3/continuity.py:189:    if not 0 < elapsed <= limit or not resolver.supported(claim.model_dump()): reject('compression_boundary')
+backend/runtime_v3/continuity.py:194:            reject('compression_response_required')
+backend/runtime_v3/continuity.py:208:        reject('continuity_budget')
+backend/runtime_v3/continuity.py:212:        except (ValueError, TypeError): reject('scene_transition_invalid')
+backend/runtime_v3/continuity.py:215:            reject('scene_transition_evidence')
+backend/runtime_v3/continuity.py:218:            if not thread or not set(claim.actor_ids) & set(thread['character_ids']): reject('scene_transition_thread')
+backend/runtime_v3/continuity.py:240:                reject('thread_reopen_requires_event')
+backend/runtime_v3/continuity.py:247:        except (ValueError, TypeError): reject('continuity_beat_invalid')
+backend/runtime_v3/continuity.py:250:            reject('continuity_beat_evidence')
+backend/runtime_v3/continuity.py:251:        if any(key not in rows for key in claim.basis_ids): reject('continuity_basis_invalid')
+backend/runtime_v3/continuity.py:255:                reject('continuity_external_decision')
+backend/runtime_v3/continuity.py:259:                reject('continuity_unknown_fact')
+backend/runtime_v3/continuity.py:264:            reject('continuity_repeated_beat')
+backend/runtime_v3/initiative.py:83:    def reject(code):
+backend/runtime_v3/initiative.py:84:        fatal('Некорректная инициатива персонажа.', code, repairable=False, section='scene_actions')
+backend/runtime_v3/initiative.py:86:        reject('initiative_budget_exceeded')
+backend/runtime_v3/initiative.py:89:        reject('initiative_control_mismatch')
+backend/runtime_v3/initiative.py:95:            reject('initiative_claim_invalid')
+backend/runtime_v3/initiative.py:98:            reject('initiative_actor_ineligible')
+backend/runtime_v3/initiative.py:101:            reject('initiative_event_invalid')
+backend/runtime_v3/initiative.py:105:            reject('initiative_duplicate')
+backend/runtime_v3/initiative.py:108:            reject('initiative_evidence_invalid')
+backend/runtime_v3/initiative.py:111:            reject('initiative_capability_invalid')
+backend/runtime_v3/initiative.py:113:            reject('initiative_channel_invalid')
+backend/runtime_v3/initiative.py:115:            reject('initiative_target_absent')
+backend/runtime_v3/initiative.py:117:            reject('initiative_adult_context_required')
+backend/runtime_v3/initiative.py:120:                reject('initiative_response_required')
+backend/runtime_v3/initiative.py:122:                reject('initiative_player_evidence_required')
+backend/runtime_v3/initiative.py:127:                    reject('initiative_consequence_required')
+backend/runtime_v3/initiative.py:129:            reject('initiative_response_target_invalid')
+backend/runtime_v3/initiative.py:133:                reject('initiative_response_reference_invalid')
+backend/runtime_v3/initiative.py:139:                reject('initiative_knowledge_invalid')
+backend/runtime_v3/knowledge.py:73:        def reject(reason, code='knowledge_path_invalid'):
+backend/runtime_v3/knowledge.py:84:            reject('Нет подтверждённого восприятия в завершённом повествовании.'); continue
+backend/runtime_v3/knowledge.py:86:            reject('Фоновое событие не меняет знания участников основной сцены.'); continue
+backend/runtime_v3/knowledge.py:89:            reject('Персонаж не способен воспринять источник.'); continue
+backend/runtime_v3/knowledge.py:93:            reject('Устаревшая ревизия знания.', 'knowledge_revision_conflict'); continue
+backend/runtime_v3/knowledge.py:96:            reject('Некорректный статус знания.'); continue
+backend/runtime_v3/knowledge.py:98:            reject('Повторное установление убеждения требует его ревизии.', 'knowledge_revision_conflict'); continue
+backend/runtime_v3/knowledge.py:104:            reject('Исправление требует прежних fact_id в том же событии.'); continue

@@ -109,7 +109,7 @@ def ui_view(snapshot, history=None):
         card['fields'].update({'Сейчас':c['situation'],'Чего хочет':'\n'.join(active_texts(c['goals'])),'Намерения':'\n'.join(world['characters'][card['id']]['intentions'])})
     from backend.runtime_v3.weather import weather_at
     calendar_state=visible_calendar_state(state,history)
-    metadata=dict(weather=weather_at(state),time=label(now),location=place(camera['location_id']),present_ids=list(camera['present_character_ids']))
+    metadata=dict(observed_ids=[cid for cid in camera.get('observed_character_ids', []) if cid in names],weather=weather_at(state),time=label(now),location=place(camera['location_id']),present_ids=list(camera['present_character_ids']))
     campaign=deepcopy(snapshot.get('campaign',{}))
     result=dict(campaign,characters=cards,world=world,controlled_actor_id=camera['controlled_actor_id'],
         narrative_policy={k:deepcopy(state['meta'][k]) for k in ('narrative_pacing','narrative_risk','outcome_preference')},

@@ -21,7 +21,7 @@ def state():
         organizations={'guild':Organization(id='guild',name='Guild',kind='guild',status='active',location_ids=['office']).model_dump()}).model_dump()
 
 
-def run(s, section=None, rows=(), *, player=TEXT, scene=None, **kwargs):
+def run(s, section=None, rows=(), *, player=TEXT, scene=None, movement=None, **kwargs):
     payload=dict(final_scene=scene or dict(location_id=s['camera']['location_id'],present_character_ids=s['camera']['present_character_ids'],elapsed_minutes=5))
     if section:
         payload[section]=[dict({'evidence':TEXT,'assertion':'established'},**r) for r in rows]
@@ -31,7 +31,15 @@ def run(s, section=None, rows=(), *, player=TEXT, scene=None, **kwargs):
             for r in payload[section]:
                 r.pop('player_assertion',None);r.pop('player_evidence',None)
                 if section=='locations':r.pop('assertion',None)
+    if movement: payload['movements']=[movement]
     return StateResolver(s,TEXT,player,**kwargs).resolve(payload)
+
+
+def rejected(s, section, rows, **kwargs):
+    before=deepcopy(s)
+    with pytest.raises(StructuralDeltaError) as exc: run(s,section,rows,**kwargs)
+    assert exc.value.repairable and s==before
+    assert exc.value.code in ('residence_transition_invalid','life_transition_invalid')
 
 
 def residence(rid='r1',actor='a',location='home',**kwargs):
@@ -52,7 +60,7 @@ def test_travel_sublocations_and_role_never_mutate_residence_or_presence():
     s=run(s,'role_changes',[role()]).state
     for destination in ('room','south','second','home'):
         before=deepcopy(s)
-        s=run(s,scene=dict(location_id=destination,present_character_ids=['a'])).state
+        s=run(s,scene=dict(location_id=destination,present_character_ids=['a']),player='Иду в '+destination, movement=dict(actor_id='a',to_location_id=destination,player_assertion='explicit_choice',player_evidence='Иду в '+destination)).state
         assert s['residences']==before['residences'] and s['roles']==before['roles']
         assert s['characters']['a']['location_id']==destination
         assert s['characters']['b']['location_id']=='south'
@@ -68,10 +76,8 @@ def test_relocation_replacement_is_explicit_atomic_and_history_is_immutable():
     assert after['residences']['holiday']['status']=='active'
     assert after['characters']==s['characters']
     assert any(h.get('entity')=='r1' and h['before']['status']=='active' for h in r.history['state_changes'])
-    assert run(after,'residence_changes',[dict(id='r1',status='active')]).state['residences']==after['residences']
-    bad=run(s,'residence_changes',[residence('bad',location='absent',replaces=['r1'])])
-    assert bad.state['residences']==s['residences']
-    assert not any(h.get('kind')=='residences' for h in bad.history['state_changes'])
+    rejected(after,'residence_changes',[dict(id='r1',status='active')])
+    rejected(s,'residence_changes',[residence('bad',location='absent',replaces=['r1'])])
 
 
 def test_two_jobs_school_training_work_and_specific_termination():
@@ -99,8 +105,7 @@ def test_role_endings_keep_opening_evidence(outcome):
 def test_employer_program_change_new_phase_not_arbitrary_rewrite():
     s=run(state(),'role_changes',[role()]).state
     for field,value in [('organization_id',None),('field','New program'),('title','New job'),('actor_id','b')]:
-        r=run(s,'role_changes',[dict(id='job',status='closed',**{field:value})])
-        assert r.state['roles']==s['roles'] and r.warnings
+        rejected(s,'role_changes',[dict(id='job',status='closed',**{field:value})])
     s=run(s,'organization_changes',[dict(id='academy',name='Academy',kind='academy',status='active')]).state
     s=run(s,'role_changes',[dict(id='training',actor_id='a',kind='education',title='Scholar',field='Maps',organization_id='academy',replaces=['job'])]).state
     assert s['roles']['job']['organization_id']=='guild' and s['roles']['job']['status']=='closed'
@@ -113,13 +118,12 @@ def test_organization_rename_alias_closure_no_jobs_knowledge_or_residence_invent
     knowledge=deepcopy(s['knowledge']);actors=deepcopy(s['characters']);homes=deepcopy(s['residences'])
     s=run(s,'organization_changes',[dict(id='guild',name='New Guild')]).state
     assert s['organizations']['guild']['name_history'][0]['previous']=='Guild'
-    duplicate=run(s,'organization_changes',[dict(id='duplicate',name='Guild')])
-    assert 'duplicate' not in duplicate.state['organizations'] and duplicate.warnings
+    rejected(s,'organization_changes',[dict(id='duplicate',name='Guild')])
     s=run(s,'organization_changes',[dict(id='guild',status='closed')]).state
     assert all(r['status']=='closed' and r['outcome']=='organization_closed' for r in s['roles'].values())
     assert s['knowledge']==knowledge and s['characters']==actors and s['residences']==homes
-    assert 'new' not in run(s,'role_changes',[role('new')]).state['roles']
-    assert run(s,'organization_changes',[dict(id='guild',status='active')]).state['organizations']==s['organizations']
+    rejected(s,'role_changes',[role('new')])
+    rejected(s,'organization_changes',[dict(id='guild',status='active')])
 
 
 def test_hierarchy_forward_parents_cycles_broken_refs_dynamic_aliases():
@@ -137,13 +141,12 @@ def test_hierarchy_forward_parents_cycles_broken_refs_dynamic_aliases():
     assert r.warnings[0]['code']=='location_identity_reused'
 
 
-def test_new_scene_arrival_requires_movement_evidence_not_residence_or_job():
+def test_final_scene_authority_is_independent_of_residence_and_job():
     s=run(state(),'residence_changes',[residence('remote','b','home')]).state
     s=run(s,'role_changes',[role('remote_job','b')]).state
-    with pytest.raises(StructuralDeltaError,match='не подтверждён'):
-        run(s,scene=dict(location_id='home',present_character_ids=['a','b']))
-    with pytest.raises(StructuralDeltaError):
-        run(s,scene=dict(location_id='home',present_character_ids=['a','b'],situation_evidence=TEXT))
+    arrived=run(s,scene=dict(location_id='home',present_character_ids=['a','b']))
+    assert arrived.state['characters']['b']['location_id']=='home'
+    assert arrived.state['residences']==s['residences'] and arrived.state['roles']==s['roles']
     text='b arrived at home.'
     r=StateResolver(s,text,'').resolve(dict(final_scene=dict(location_id='home',present_character_ids=['a','b']),movements=[dict(actor_id='b',from_location_id='south',to_location_id='home',assertion='completed_arrival',actor_evidence='b',destination_evidence='home',evidence=text)]))
     assert r.state['characters']['b']['location_id']=='home'
@@ -156,24 +159,21 @@ def test_new_scene_arrival_requires_movement_evidence_not_residence_or_job():
     ('role_changes',dict(id='x',actor_id='a',kind='education',title='Student',since=999)),
     ('organization_changes',dict(id='x',name='X',location_ids=['absent'])),
 ])
-def test_malformed_optional_record_does_not_discard_ordinary_turn(section,row):
-    s=state();r=run(s,section,[row])
-    assert r.warnings and r.state['meta']['turn_id']==1
-    assert r.state['roles']==s['roles'] and r.state['residences']==s['residences'] and r.state['organizations']==s['organizations']
+def test_malformed_significant_transition_does_not_commit_partial_turn(section,row):
+    rejected(state(),section,[row])
 
 
 def test_unsupported_future_and_player_background_agency():
     s=state()
     for section,row in [('residence_changes',residence()),('role_changes',role())]:
-        assert run(s,section,[row],player='').warnings
-        assert run(s,section,[dict(row,assertion='proposal')]).warnings
-        assert run(s,section,[row],mode='background').warnings
-        assert run(s,section,[dict(row,transition='external',decision_actor_id='a')],player='').warnings
+        rejected(s,section,[row],player='')
+        rejected(s,section,[dict(row,assertion='proposal')])
+        rejected(s,section,[row],mode='background')
+        rejected(s,section,[dict(row,transition='external',decision_actor_id='a')],player='')
         result=run(s,section,[dict(row,transition='external',decision_actor_id='b')],player='')
         assert not result.warnings
     s=run(s,'role_changes',[role()]).state
-    r=run(s,'organization_changes',[dict(id='guild',status='closed')],mode='background')
-    assert r.state['roles']==s['roles'] and r.state['organizations']==s['organizations'] and r.warnings
+    rejected(s,'organization_changes',[dict(id='guild',status='closed')],mode='background')
 
 
 def test_known_opening_does_not_disclose_closure_or_rename_to_other_observer():
@@ -305,10 +305,7 @@ def test_real_time_skip_does_not_create_or_close_roles_residences(tmp_path):
 
 def test_bad_organization_closure_rolls_back_cascade_and_history():
     s=run(state(),'role_changes',[role()]).state
-    r=run(s,'organization_changes',[dict(id='guild',status='closed',closure_fact_id='absent')])
-    assert r.state['roles']==s['roles'] and r.state['organizations']==s['organizations']
-    assert not any(h.get('kind') in ('roles','organizations') for h in r.history['state_changes'])
-    assert r.warnings
+    rejected(s,'organization_changes',[dict(id='guild',status='closed',closure_fact_id='absent')])
 
 
 def test_import_duplicate_organization_alias_and_broken_role_reference_rejected():
