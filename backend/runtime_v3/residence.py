@@ -88,7 +88,7 @@ def _remap(raw, remap, field):
     for section, rows in raw.records.items():
         for row in rows:
             if not isinstance(row, dict): continue
-            keys = ('location_id','to_location_id','parent_id') if field == 'location_id' else ('organization_id',)
+            keys = ('location_id','from_location_id','to_location_id','anchor_location_id','parent_id') if field == 'location_id' else ('organization_id',)
             for key in keys:
                 if isinstance(row.get(key), str) and row[key] in remap: row[key] = remap[row[key]]
             if field == 'location_id' and isinstance(row.get('location_ids'),list):

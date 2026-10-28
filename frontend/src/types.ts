@@ -53,6 +53,7 @@ export interface Scene {
   time: string;
   location: string;
   present_ids: string[];
+  observed_ids?: string[];
 }
 export interface SocialRelation {
   id:string;kind:string;source_id:string;target_id:string;status:'active'|'closed';
@@ -144,6 +145,7 @@ export interface Turn {
   timing?: Record<string,number>|null;
 }
 export interface Job {
+  repairs?: {stage:string; repair_error_code:string; condition?:string; attempt_epoch?:number}[];
   attempt_epoch?: number;
   resumable?: boolean;
   replaces_id?:number|null;

@@ -33,7 +33,7 @@ def scene_plan(state, scope):
     their letter was read; remote actors require an already available channel.
     """
     external = scope.controlled_actor_id
-    ranked = sorted(scope.present_actor_ids | scope.remote_actor_ids,
+    ranked = sorted(scope.present_actor_ids | scope.observed_actor_ids | scope.remote_actor_ids,
                     key=lambda cid: (cid not in scope.present_actor_ids,
                                      -scope.actor_scores.get(cid, 0), cid))
     actors = []
@@ -44,7 +44,7 @@ def scene_plan(state, scope):
         if not caps['can_act']:
             continue
         actors.append(dict(actor_id=cid,
-            channel='scene' if cid in scope.present_actor_ids else 'established_remote',
+            channel='scene' if cid in scope.present_actor_ids else 'boundary' if cid in scope.observed_actor_ids else 'established_remote',
             capabilities={k: caps[k] for k in ('can_speak', 'can_move', 'adult_eligible')}))
     result = dict(external_actor_id=external, actors=actors[:8],
                 budget=3, optional=True, extra_llm_calls=0)
@@ -109,7 +109,8 @@ def validate_actions(resolver, raw, events):
         caps = capabilities(resolver.before, cid)
         if not caps['can_act'] or claim.modality == 'speech' and not caps['can_speak'] or claim.modality == 'departure' and not caps['can_move']:
             reject('initiative_capability_invalid')
-        if actors[cid]['channel'] != 'scene' and claim.modality in ('physical', 'departure'):
+        if (actors[cid]['channel'] == 'established_remote' and claim.modality in ('physical', 'departure') or
+                actors[cid]['channel'] == 'boundary' and claim.modality == 'physical'):
             reject('initiative_channel_invalid')
         if claim.modality == 'physical' and not set(claim.target_ids) <= set(resolver.before['camera']['present_character_ids']):
             reject('initiative_target_absent')

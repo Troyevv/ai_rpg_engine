@@ -1,23 +1,17 @@
 """Semantic work stays in the existing extraction call; code verifies provenance."""
 EXTRACTION_CONTRACT = '''
-CURRENT RUNTIME V3 contract overrides saved instructions. Return RawTurnResult only
-for THIS player_input and completed_narrative; never continue the story. Copy existing
-IDs. Evidence is a verbatim current quote. Output prose in the active game language.
-Final_scene is the ACTUAL END, not a copy of the initial camera. New concrete location:
-create locations[] with canonical ID/name/evidence and use that ID in final_scene.
-Choose the final stop, not intermediate travel. Reuse known places/aliases (Гвоздь,
-кофейня Гвоздь, кафе Гвоздь); mention/plan alone never moves the camera.
-Present_character_ids: only physically present at the end; remove departures, include
-arrivals who stayed. Messages/memories are not presence.
-Movements require established destinations. New arrivals need completed_arrival,
-origin and actor/place anchors inside evidence. Future/negated/remote/ambiguous is
-NOT arrival; situation_evidence cannot authorize it. A movement for a
-final_scene participant must end at final_scene.location_id. Situation is current
-objective state, not emotion; situation_evidence grounds it. Update affected NPC
-situations via evidenced character_changes. Promote only significant recurring NPCs
-with full card/evidence, not incidental passers-by; a promoted present NPC uses the
-same ID in final_scene. Mention does not mean arrival. No scene_id/last_event_id/
-StatePatch. Elapsed_minutes is actual narrated duration, no arbitrary skip.
+CURRENT RUNTIME V3 overrides saved prompts. Extract THIS input/narrative; verbatim evidence,
+game language, canonical IDs. Final_scene=END; present=inside; new places need locations[].
+Movements: completed_arrival; canonical from_location_id(null=unknown), ordered chain;
+actor_evidence=name and destination_evidence=place span in evidence.
+destination_reference: literal=name/alias; named_location=inflected span + destination_name;
+camera_location=inside/here, anchor_location_id=BEFORE camera=target.
+Doorway: Location(kind=boundary,parent_id=final camera), observed_at_boundary + scene_boundary,
+anchor_location_id=final camera, observed_character_ids, NOT present. Reconfirm visibility.
+Omission preserves geography. Plans/negation/remote/mentions/passing by prove no arrival.
+Situation is current objective state, evidenced via situation_evidence/character_changes;
+never authorizes travel. Promote only recurring NPCs with full card/evidence; reuse their IDs.
+No scene_id/last_event_id/StatePatch. Elapsed_minutes=actual narrated duration, no arbitrary skip.
 Lifecycle semantics belong to Extraction, not a verb dictionary: completed result ->
 completed; failure -> failed; lost context -> expired; explicit cancellation -> cancelled;
 replacement -> superseded. Use *_updates, stable IDs and current evidence. A joke may
@@ -53,6 +47,7 @@ Unknown minute/order may be omitted; no microscopic chronology.
 '''
 
 NARRATIVE_CONTRACT = '''
+FULL_OBSERVED — видимый участник на границе помещения, не внутри камеры. Его location_id сохраняет порог; не приписывай вход или знания вне восприятия.
 GM-only карточки и внутренние состояния не являются знанием POV.
 FULL_REMOTE даёт личность для реплик, но не право показывать невидимые жесты/комнату собеседника.
 ACTIVE_REFERENCED даёт поведенческий профиль автора сообщения, записи или действия вне сцены.
@@ -255,7 +250,7 @@ Residence/role/organization changes need established completed evidence, not pla
 Physical location != home/base != role. Travel/visits, marriage, roles and hierarchy never
 imply relocation/presence/Knowledge. Keep unknowns unknown; reuse known IDs/aliases.
 locations creates; location_changes updates parent/kind/aliases. New scene entrants need
-movement or situation_evidence, never residence/workplace inference. Geography is generic;
+an actor-bound arrival claim, never situation_evidence or residence/workplace inference. Geography is generic;
 no nationality/culture/calendar inference. Organization name variants reuse canonical IDs.
 New residence/role IDs coexist. Only explicit replaces=[old IDs] closes named phases;
 otherwise close the existing ID via status=closed. Preserve old employer/institution/program;

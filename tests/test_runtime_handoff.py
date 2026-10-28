@@ -220,6 +220,7 @@ def test_exact_handoff_preserves_authored_graph_and_values(api):
     # Baseline artifact was created using the real import/confirm API at 58c8e29.
     # New default DOB field is the sole shape addition; the original export is untouched.
     for cid,actor in old['world_state']['characters'].items():actor.setdefault('birth_date_provenance',{})
+    old['world_state']['camera'].setdefault('observed_character_ids',[])
     old['world_state']['meta'].setdefault('weather',None)  # Conservative optional environment profile.
     assert current['world_state']==old['world_state']
     assert current['character_cards']==old['character_cards']

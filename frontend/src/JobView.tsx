@@ -32,6 +32,9 @@ export function JobView({
 }) {
   if (!job) return null;
   if (job.status === "saved") return null;
+  const repairs = job.repairs || [];
+  const lastRepair = repairs.at(-1);
+  const repeatedSpatialFailure = job.status === "error" && lastRepair?.repair_error_code === "scene_arrival_unsupported";
   return (
     <section className={`job ${job.narrative ? "job-streaming" : ""}`}>
       <details open>
@@ -69,6 +72,8 @@ export function JobView({
           {job.error}
         </p>
       )}
+      {repeatedSpatialFailure && <p className="muted">Повторная обработка не создаёт новую сцену. Если причина повторяется, открой диагностику: нужно исправить извлечение положения участников, а не повторять генерацию.</p>}
+      {active(job) && lastRepair?.stage === 'extraction_repair' && lastRepair.repair_error_code === 'scene_arrival_unsupported' && <p role="status" className="muted">Уточняет положение участников по сохранённому тексту…</p>}
       {active(job) && (
         <Button variant="outline" size="sm" onClick={stop}>
           <Square size={13} />

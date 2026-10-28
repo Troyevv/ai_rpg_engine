@@ -15,13 +15,20 @@ Present_character_ids — только физически присутствую
 пришедших и оставшихся включи; сообщения/воспоминания не означают присутствия.
 Для ушедших передай movements с конечным местом, только если оно установлено.
 Movements также обязательны для пришедшего из другого места нового участника final_scene.
-Дай assertion=completed_arrival, from_location_id из исходного состояния, actor_evidence
-(точная цитата имени или первого имени из карточки), destination_evidence (название или alias
-места в цитате), evidence завершённого физического перехода и to_location_id.
-Не утверждай completed_arrival для обещания, отрицания, телефона, человека за дверью
-или неоднозначного субъекта. situation_evidence не заменяет доказательство прибытия.
-Если передаёшь
-маршрут участника final_scene, его последняя точка должна совпадать с final_scene.location_id.
+Дай assertion=completed_arrival, from_location_id (null только для неизвестного origin),
+actor_evidence (имя/однозначное первое имя в цитате), destination_evidence и evidence.
+Для «внутрь/сюда» используй destination_reference=camera_location,
+anchor_location_id=исходный camera.location_id=to_location_id. Полное имя комнаты не нужно.
+Для именованного места: destination_reference=named_location, destination_name=каноническое
+имя/alias, destination_evidence=форма из цитаты. Без reference действует literal-проверка.
+На открытом пороге, но не внутри: переиспользуй/создай Location(kind=boundary,parent_id=место
+камеры) с evidence; movements.assertion=observed_at_boundary,
+destination_reference=scene_boundary, anchor_location_id=конечная камера. Это наблюдаемая
+позиция, не выдуманный маршрут внутрь. NPC включи в observed_character_ids, не present.
+Каждый ход подтверждай видимость на границе; отсутствие записи убирает только видимость.
+За закрытой дверью, по телефону, в обещании, отрицании или упоминании — ни приход, ни
+наблюдение. situation_evidence не заменяет actor-bound movement. Не сочиняй вход при repair.
+Последняя точка маршрута участника present должна совпадать с final_scene.location_id.
 Situation описывает конечную объективную ситуацию с situation_evidence, не старое место;
 индивидуальные situation затронутых NPC обнови через character_changes с evidence.
 Новый значимый NPC требует promotions с полной карточкой и evidence; если он остаётся

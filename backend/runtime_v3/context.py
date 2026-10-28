@@ -6,7 +6,7 @@ from backend.runtime_v3.knowledge import context_rows
 from copy import deepcopy
 from pathlib import Path
 import json
-from backend.runtime_v3.scope import RelevanceResolver, CharacterContextClassifier, FULL_PRESENT, FULL_REMOTE, ACTIVE_REFERENCED, COMPACT_REFERENCED, INDEX
+from backend.runtime_v3.scope import RelevanceResolver, CharacterContextClassifier, FULL_PRESENT, FULL_OBSERVED, FULL_REMOTE, ACTIVE_REFERENCED, COMPACT_REFERENCED, INDEX
 from backend.runtime_v3.context_contract import EXTRACTION_CONTRACT, NARRATIVE_CONTRACT, TIME_CONTRACT
 from backend.runtime_v3.raw import prompt_schema
 from backend.runtime_v3.calendar import current_time, nearby_calendar, age_on, profile_of, scheduled_time, commitment_view
@@ -37,7 +37,7 @@ def canonical_slice(state, scope, extraction=False, query=""):
     current = dict(meta={k:v for k,v in state['meta'].items() if k not in ('weather','calendar','current_protagonist_id','protagonist_required','protagonist_periods','narrative_pacing','narrative_risk','outcome_preference','pacing_recent','communication','interaction_focus')},
         weather=weather_at(state),
         current_time=current_time(state), calendar_context=nearby_calendar(state, scope.relevant_actor_ids), camera=deepcopy(state['camera']),
-        locations={lid: state['locations'][lid] for lid in scope.location_ids},
+        locations={lid: deepcopy(state['locations'][lid]) for lid in scope.location_ids},
         characters={cid: deepcopy(state['characters'][cid]) for cid in sorted(scope.relevant_actor_ids)},
         facts={fid: state['facts'][fid] for fid in scope.fact_ids},
         knowledge=context_rows(state, scope.knowledge_ids, extraction=extraction),
@@ -171,6 +171,7 @@ def canonical_slice(state, scope, extraction=False, query=""):
         for section in ('threads','scheduled_events'):
             current[section]=[r for r in current[section] if not set(r.get('character_ids',[]))&hidden_births]
         current['camera']['present_character_ids']=[cid for cid in current['camera']['present_character_ids'] if cid not in hidden_births]
+        current['camera']['observed_character_ids']=[cid for cid in current['camera'].get('observed_character_ids',[]) if cid not in hidden_births]
 
         from backend.runtime_v3.possessions import private_fact_ids as possession_facts
         protected = private_fact_ids(state) | possession_facts(state)
@@ -248,7 +249,7 @@ class NarrativeContextBuilder:
         classifier = CharacterContextClassifier()
         for card in snapshot['character_cards']:
             mode = classifier.classify(card['id'], scope)
-            if mode in (FULL_PRESENT, FULL_REMOTE):
+            if mode in (FULL_PRESENT, FULL_OBSERVED, FULL_REMOTE):
                 card = deepcopy(card)
                 actor = state['characters'][card['id']]
                 age = age_on(actor.get('birth_date'),current_time(state)['date'],profile_of(state))
@@ -367,7 +368,7 @@ def choice_context(snapshot, scope, current, views, kind):
                 and view.get('user_text', '').strip()):
             text = view['user_text']
             recent.append(dict(sequence=view.get('sequence'), player_input=text[:800], truncated=len(text)>800))
-    participants = scope.present_actor_ids | scope.remote_actor_ids
+    participants = scope.present_actor_ids | scope.observed_actor_ids | scope.remote_actor_ids
     from backend.runtime_v3.reproduction import context_projection
     reproductive=context_projection(state,scope.relevant_actor_ids,cid)
     return deepcopy(dict(enabled=True, actor_id=cid, personality=profile,
@@ -378,7 +379,7 @@ def choice_context(snapshot, scope, current, views, kind):
             for k in current['knowledge'] if k['actor_id']==cid and k['status'] in ('known','suspected')
             and k['fact_id'] in current['facts']],
         scene=dict(location_id=state['camera']['location_id'], present_actor_ids=sorted(scope.present_actor_ids),
-                   remote_actor_ids=sorted(scope.remote_actor_ids), situation=state['camera']['situation']),
+                   observed_actor_ids=sorted(scope.observed_actor_ids), remote_actor_ids=sorted(scope.remote_actor_ids), situation=state['camera']['situation']),
         recent_player_expression=recent))
 
 
@@ -664,8 +665,12 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                 return {k:nonempty(v) for k,v in value.items() if v not in (None,'',[],{}) or k in ('parent_id','location_id','controlled_actor_id','pov_actor_id')}
             if isinstance(value,list): return [nonempty(v) for v in value]
             return value
+        # Physical resolution needs canonical names/aliases/topology, not optional
+        # scenic descriptions. Elide only in Extraction under hard pressure.
+        for place in current['locations'].values():
+            place.pop('description', None)
         for key in current:
-            if key not in ('meta','camera','current_time','time_skip_target','locations','narrative_policy','scene_agency'):
+            if key not in ('meta','camera','current_time','time_skip_target','narrative_policy','scene_agency'):
                 current[key]=nonempty(current[key])
         refresh_current()
         # Wire-only compaction of repeated empty defaults also applies to choice
@@ -730,7 +735,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     if estimate(messages) > hard_context_limit:
         raise ValueError(f'Контекст v3 не помещается в выбранную модель ({estimate(messages)} / {hard_context_limit}). Увеличь контекст или уменьши лимит ответа. Критические данные сцены и последние narrative сохранены.')
     classifier = CharacterContextClassifier()
-    counts = {mode: 0 for mode in (FULL_PRESENT, FULL_REMOTE, ACTIVE_REFERENCED, COMPACT_REFERENCED, INDEX)}
+    counts = {mode: 0 for mode in (FULL_PRESENT, FULL_OBSERVED, FULL_REMOTE, ACTIVE_REFERENCED, COMPACT_REFERENCED, INDEX)}
     for cid in state['characters']: counts[classifier.classify(cid, scope)] += 1
     sections = {key: dict(selected=selected[key], included=len(current[key]), total=len(state[key]))
                 for key in ('locations', 'facts', 'knowledge', 'relationships', 'threads', 'scheduled_events')}
@@ -759,7 +764,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                 selection_reasons=sorted(scope.selection_reasons.get((entity_kind, eid), {'INDEX'} if entity_kind == 'characters' else set())),
                 selected=eid in selected_ids[entity_kind], included=eid in included_ids[entity_kind]))
     knowledge_counts = {'selected': selected['knowledge'], 'POV': sum(k['actor_id'] == scope.controlled_actor_id for k in current['knowledge'])}
-    for mode in (FULL_PRESENT, FULL_REMOTE, ACTIVE_REFERENCED):
+    for mode in (FULL_PRESENT, FULL_OBSERVED, FULL_REMOTE, ACTIVE_REFERENCED):
         knowledge_counts[mode] = sum(k['actor_id'] != scope.controlled_actor_id and classifier.classify(k['actor_id'], scope) == mode for k in current['knowledge'])
     diagnostics = dict(mode=('World Simulation ' if kind == 'background' else '') + ('Extraction' if builder.extraction else 'Narrative'),
         continuity=scope.continuity_decision, initiative=scope.initiative_decision, pacing=scope.pacing_decision, characters=counts, character_included=included_counts, knowledge=knowledge_counts,

@@ -76,7 +76,7 @@ export function CharacterPicker({
   const input = useRef<HTMLInputElement>(null);
   const cards = state.characters.filter(
     (c) =>
-      (!near || meta?.present_ids.includes(c.id)) &&
+      (!near || meta?.present_ids.includes(c.id) || meta?.observed_ids?.includes(c.id)) &&
       [c.name, ...(c.aliases || [])]
         .join(" ")
         .toLocaleLowerCase()
@@ -302,7 +302,7 @@ export function Inspector({
   }, [panel]);
   const cards = (state?.characters || []).filter(
     (c) =>
-      (!near || meta?.present_ids.includes(c.id)) &&
+      (!near || meta?.present_ids.includes(c.id) || meta?.observed_ids?.includes(c.id)) &&
       [c.name, ...(c.aliases || [])]
         .join(" ")
         .toLocaleLowerCase()

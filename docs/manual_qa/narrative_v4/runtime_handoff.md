@@ -57,3 +57,15 @@ save after updating, then retry state processing for a saved unapplied narrative
 import → confirm at `58c8e2967470b5c9f461d887016387f2f29d2142`, not the user's SQLite.
 The provided generation E5 journal is not a gameplay extraction log. No original
 user gameplay job/raw extraction or paid provider run is claimed here.
+
+## Literary arrivals / #134
+
+Follow [the #134 evidence and contract report](issue134.md). The existing test server
+provider supports `POST /test/runtime-handoff-provider?scenario=entry|doorway|retry`.
+Using the same E5 import, run Start → inspect first job/canonical positions → ordinary
+turn → reload → next turn. Doorway keeps Ilya inside and Viktoria on the threshold,
+visible for dialogue, never falsely inside. Retry exhausts two extractions, reloads
+and processes the saved text once. Compare all 19 IDs, unchanged uninvolved positions,
+time +3, unchanged first narrative and Knowledge. Inspect desktop/mobile screenshots.
+Then exercise regenerate/select prior variant/rollback; before JSON stays immutable.
+Automated: `tests/test_scene_arrival134.py`, `frontend/e2e/scene-arrival134.spec.ts`.

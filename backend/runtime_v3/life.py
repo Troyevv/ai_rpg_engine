@@ -188,6 +188,7 @@ def apply_life(resolver, raw):
                     if actor['life_status'] == 'dead':
                         # Remove ordinary participation, retain identity/control/history/location.
                         s['camera']['present_character_ids'] = [c for c in s['camera']['present_character_ids'] if c != key]
+                        s['camera']['observed_character_ids'] = [c for c in s['camera'].get('observed_character_ids',[]) if c != key]
                         s['camera']['remote_interactions'] = [r for r in s['camera']['remote_interactions'] if r['actor_id'] != key]
                         for r in s['objective_relations'].values():
                             if r['status'] == 'active' and key in (r['source_id'],r['target_id']) and r['kind'] in ('spouse','partner','engaged'):

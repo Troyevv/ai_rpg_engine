@@ -61,6 +61,26 @@ def stream(**kwargs):
     full='\n'.join(m['content'] for m in kwargs['messages'])
     if handoff_provider is not None and 'ilya_cabinet' in full:
         from test_runtime_handoff import NARRATIVE as entry,provider_payload
+        if handoff_provider.get('scenario'):
+            from test_scene_arrival134 import DOORWAY, ENTRY, doorway_payload, contextual_arrival
+            scenario=handoff_provider['scenario']
+            if kwargs.get('response_format'):
+                handoff_provider['extractions']+=1
+                current=json.loads(next(m['content'].split('\n',1)[1] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only\n')))
+                if scenario=='entry':
+                    raw=contextual_arrival()
+                    if current['camera']['present_character_ids']==['ilya','viktoria_solovyova']:raw.pop('movements')
+                else:
+                    raw=doorway_payload(current['characters']['viktoria_solovyova']['location_id'])
+                    raw['final_scene']['elapsed_minutes']=1
+                    if scenario=='retry' and handoff_provider['extractions']<=2:
+                        raw=dict(final_scene=dict(location_id='ilya_cabinet',present_character_ids=['ilya','viktoria_solovyova']))
+                raw['choices']=[dict(action='Ждать ответа',speech='')]
+                yield json.dumps(raw,ensure_ascii=False)
+            else:
+                handoff_provider['narratives']+=1
+                yield ENTRY if scenario=='entry' else DOORWAY
+            return
         if kwargs.get('response_format'):
             handoff_provider['extractions']+=1
             raw=provider_payload(kwargs)
@@ -325,10 +345,10 @@ if __name__ == '__main__':
     app.state.tabletop_runtime.dice=dice
     app.state.tabletop_runtime.combat.dice=dice
     @app.post('/test/runtime-handoff-provider')
-    def runtime_handoff_provider(enabled: bool=True):
+    def runtime_handoff_provider(enabled: bool=True, scenario: str=""):
         global handoff_provider
         previous=handoff_provider
-        handoff_provider={'narratives':0,'extractions':0} if enabled else None
+        handoff_provider={'narratives':0,'extractions':0,'scenario':scenario} if enabled else None
         return previous or {}
 
     @app.post('/test/calendar-policy-e5')

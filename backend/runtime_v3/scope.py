@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 import re
 
 FULL_PRESENT = 'FULL_PRESENT'
+FULL_OBSERVED = 'FULL_OBSERVED'
 FULL_REMOTE = 'FULL_REMOTE'
 ACTIVE_REFERENCED = 'ACTIVE_REFERENCED'
 COMPACT_REFERENCED = 'COMPACT_REFERENCED'
@@ -58,6 +59,7 @@ class ContextScope:
     communication: dict = field(default_factory=dict)
     pov_actor_id: str | None = None
     present_actor_ids: set = field(default_factory=set)
+    observed_actor_ids: set = field(default_factory=set)
     remote_actor_ids: set = field(default_factory=set)
     active_actor_ids: set = field(default_factory=set)
     acting_scheduled_event_ids: set = field(default_factory=set)
@@ -89,7 +91,7 @@ class ContextScope:
 
     def summary(self):
         return {name: sorted(getattr(self, name)) for name in (
-            'present_actor_ids', 'remote_actor_ids', 'active_actor_ids', 'referenced_actor_ids',
+            'present_actor_ids', 'observed_actor_ids', 'remote_actor_ids', 'active_actor_ids', 'referenced_actor_ids',
             'location_ids', 'thread_ids', 'scheduled_event_ids')}
 
 
@@ -97,6 +99,8 @@ class CharacterContextClassifier:
     def classify(self, actor_id, scope):
         if actor_id in scope.present_actor_ids:
             return FULL_PRESENT
+        if actor_id in scope.observed_actor_ids:
+            return FULL_OBSERVED
         if actor_id in scope.remote_actor_ids:
             return FULL_REMOTE
         if actor_id in scope.active_actor_ids:
@@ -115,6 +119,7 @@ class RelevanceResolver:
         names = {cid: actor_aliases(c) for cid, c in cards.items()}
         scope = ContextScope(camera['controlled_actor_id'],pov_actor_id=camera.get('pov_actor_id') or camera['controlled_actor_id'])
         scope.present_actor_ids = set(camera['present_character_ids'])
+        scope.observed_actor_ids = set(camera.get('observed_character_ids', []))
         # A remote flag is a renewed current-scene interaction, not a relevance score.
         scope.remote_actor_ids = {r['actor_id'] for r in camera.get('remote_interactions', [])
                                   if r['last_active_turn'] == state['meta']['turn_id']}
@@ -133,10 +138,10 @@ class RelevanceResolver:
         if any(state['meta']['communication'][channel] for channel in ('text_message','voice_call')):
             # Canonical calls, never a keyword in player prose, own phone channels.
             scope.remote_actor_ids = participants(call) - {camera['controlled_actor_id']} if call and call['status']=='answered' else set()
-        scope.remote_actor_ids -= scope.present_actor_ids
+        scope.remote_actor_ids -= scope.present_actor_ids | scope.observed_actor_ids
         from backend.runtime_v3.participation import active_actors
-        scope.active_actor_ids = active_actors(snapshot, user_text, names, recent_views, world_history) - scope.present_actor_ids - scope.remote_actor_ids
-        core = scope.present_actor_ids | scope.remote_actor_ids | scope.active_actor_ids
+        scope.active_actor_ids = active_actors(snapshot, user_text, names, recent_views, world_history) - scope.present_actor_ids - scope.remote_actor_ids - scope.observed_actor_ids
+        core = scope.present_actor_ids | scope.observed_actor_ids | scope.remote_actor_ids | scope.active_actor_ids
         scores = {cid: 0 for cid in cards}
         query = user_text + '\n' + (completed_narrative or '')
         scope.query_words = words(query)
@@ -247,7 +252,7 @@ class RelevanceResolver:
         for eid in scope.scheduled_event_ids:
             event = state['scheduled_events'][eid]
             if eid in acting_scheduled:
-                scope.active_actor_ids.update(set(event['character_ids']) - scope.present_actor_ids - scope.remote_actor_ids)
+                scope.active_actor_ids.update(set(event['character_ids']) - scope.present_actor_ids - scope.remote_actor_ids - scope.observed_actor_ids)
                 for cid in event['character_ids']: scope.reason('characters', cid, 'SCHEDULED')
         core |= scope.active_actor_ids
         scope.referenced_actor_ids -= core
@@ -258,6 +263,8 @@ class RelevanceResolver:
             social['residences'], social['roles'], social['organizations'])
         locations.update(state['residences'][rid]['location_id'] for rid in scope.residence_ids)
         locations.update(lid for oid in scope.organization_ids for lid in state['organizations'][oid]['location_ids'])
+        locations.update(state['characters'][cid]['location_id'] for cid in (scope.relevant_actor_ids if completed_narrative is not None else scope.observed_actor_ids)
+                         if state['characters'][cid]['location_id'] is not None)
         # Structural ancestors do not change participant/actor relevance or Knowledge.
         for lid in list(locations):
             parent = state['locations'][lid].get('parent_id')
@@ -312,6 +319,7 @@ class RelevanceResolver:
         scope.event_ids = [e['id'] for e in scope.history_events if isinstance(e.get('id'), str)]
         for cid in scope.relevant_actor_ids:
             if cid in scope.present_actor_ids: scope.reason('characters', cid, 'PRESENT')
+            if cid in scope.observed_actor_ids: scope.reason('characters', cid, 'OBSERVED_BOUNDARY')
             if cid in scope.remote_actor_ids: scope.reason('characters', cid, 'REMOTE')
             if cid in scope.active_actor_ids: scope.reason('characters', cid, 'ACTIVE_NARRATIVE')
             if mentions(query, names.get(cid, [])): scope.reason('characters', cid, 'EXPLICIT_MENTION')

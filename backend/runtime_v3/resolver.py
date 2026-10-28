@@ -87,31 +87,70 @@ class StateResolver:
                     seen.add(key)
                 yield i, item
 
-    def arrival_supported(self, item, cid, origin, target):
-        """Validate extraction's semantic assertion and its explicit identity anchors.
-
-        No verb matching or inference of movement from narrative. Ambiguous,
-        future, negated and remote actions must not be asserted as completed.
-        """
-        if not self.supported(item) or item.get('assertion')!='completed_arrival' or item.get('from_location_id')!=origin:
-            return False
+    def arrival_failure(self, item, cid, origin, target):
+        """Validate semantic extraction plus source/identity/context anchors, not verbs."""
+        if not self.supported(item): return 'evidence_unsupported'
+        assertion = item.get('assertion')
+        if assertion not in ('completed_arrival', 'observed_at_boundary'): return 'assertion_not_completed'
+        if 'from_location_id' not in item or item['from_location_id'] != origin: return 'origin_mismatch'
         def fold(value): return normalized(value).casefold().replace('ё','е')
-        quote=fold(item['evidence'])
-        subject=item.get('actor_evidence');destination=item.get('destination_evidence')
-        if not isinstance(subject,str) or not subject.strip() or not isinstance(destination,str) or not destination.strip(): return False
-        subject=fold(subject);destination=fold(destination)
-        labels=[self.actor_names.get(cid),self.before['characters'][cid].get('display_name')]
-        names={fold(name) for name in labels if isinstance(name,str) and name.strip()}
+        quote = fold(item['evidence'])
+        subject, destination = item.get('actor_evidence'), item.get('destination_evidence')
+        if not isinstance(subject,str) or not subject.strip(): return 'actor_anchor_missing'
+        if not isinstance(destination,str) or not destination.strip(): return 'destination_anchor_missing'
+        subject, destination = fold(subject), fold(destination)
+        labels = [self.actor_names.get(cid), self.before['characters'].get(cid,{}).get('display_name')]
+        names = {fold(name) for name in labels if isinstance(name,str) and name.strip()}
         for name in list(names):
-            first=name.split()[0]
-            ambiguous=any(other!=cid and any(isinstance(label,str) and label.strip() and fold(label).split()[0]==first
-                for label in (self.actor_names.get(other),actor.get('display_name')))
+            first = name.split()[0]
+            ambiguous = any(other != cid and any(isinstance(label,str) and label.strip() and fold(label).split()[0] == first
+                for label in (self.actor_names.get(other), actor.get('display_name')))
                 for other,actor in self.before['characters'].items())
-            if not ambiguous:names.add(first)
-        if not names:names={fold(cid)}
-        place=self.state['locations'][target]
-        places={fold(v) for v in [place['name'],*place.get('aliases',[])] if v.strip()}
-        return subject in names and subject in quote and destination in places and destination in quote
+            if not ambiguous: names.add(first)
+        if not names: names = {fold(cid)}
+        if subject not in names or subject not in quote: return 'actor_anchor_mismatch'
+        if destination not in quote: return 'destination_quote_mismatch'
+        place = self.state['locations'].get(target)
+        if place is None: return 'destination_unknown'
+        places = {fold(v) for v in [place['name'], *place.get('aliases',[])] if v.strip()}
+        reference = item.get('destination_reference', 'literal')
+        if reference == 'scene_boundary':
+            anchor = item.get('anchor_location_id')
+            if assertion != 'observed_at_boundary': return 'boundary_assertion_required'
+            if not anchor or anchor != self.state['camera']['location_id']: return 'camera_anchor_mismatch'
+            if place.get('kind') != 'boundary' or place.get('parent_id') != anchor or target == anchor:
+                return 'boundary_location_mismatch'
+        elif assertion != 'completed_arrival': return 'boundary_reference_required'
+        elif reference == 'camera_location':
+            # Deictic "inside / here" refers to the recorded source camera, not
+            # an arbitrary final_scene destination supplied by the same extraction.
+            anchor = item.get('anchor_location_id')
+            if not anchor or anchor != self.before['camera']['location_id'] or target != anchor:
+                return 'camera_anchor_mismatch'
+        elif reference == 'named_location':
+            # Extraction resolves grammatical forms to a canonical name/alias.
+            # The surface quote remains independently bound to this source.
+            name = item.get('destination_name')
+            if not isinstance(name,str) or fold(name) not in places: return 'destination_identity_mismatch'
+        elif reference != 'literal' or destination not in places:
+            return 'destination_identity_mismatch'
+        return None
+
+    def arrival_supported(self, item, cid, origin, target):
+        return item.get('assertion') == 'completed_arrival' and self.arrival_failure(item,cid,origin,target) is None
+
+    def spatial_error(self, raw, cid, origin, target, condition, candidates=None):
+        candidates = candidates if candidates is not None else [r for r in raw.records['movements']
+            if isinstance(r,dict) and r.get('actor_id') == cid]
+        fatal('Повествование сохранено. Факт прибытия или наблюдения не подтверждён источником. '
+              'Повторная обработка использует тот же текст; при повторении ошибки проверь диагностику задания.',
+              'scene_arrival_unsupported', repairable=True, entity=cid, condition=condition,
+              from_location_id=origin, to_location_id=target, before_camera=self.before['camera'],
+              previous_present=self.before['camera']['present_character_ids'],
+              final_present=raw.final_scene.get('present_character_ids'), final_scene=raw.final_scene,
+              movements=candidates, filtered_movements=[w for w in self.warnings if w.get('section')=='movements'],
+              before_hash=sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest(),
+              contract_version='physical-arrival-v2')
 
     def remote_commitment_supported(self, record):
         from backend.runtime_v3.remote import commitment_sources
@@ -212,10 +251,24 @@ class StateResolver:
         camera.update(location_id=lid,present_character_ids=present,situation=situation)
         s['camera'] = camera
         s['meta'].update(turn_id=self.turn_id,world_time=s['meta']['world_time']+elapsed)
+        observed = scene.get('observed_character_ids', [])
+        if not isinstance(observed,list) or any(not isinstance(cid,str) for cid in observed):
+            fatal('повреждены наблюдаемые участники', 'camera_invalid', repairable=True)
+        if len(set(observed)) != len(observed) or set(observed) & set(present):
+            fatal('наблюдение на границе не равно присутствию внутри', 'camera_invalid', repairable=True)
+        for cid in observed: self.actor(cid,'final_scene',0)
+        camera['observed_character_ids'] = observed
+        # Explicit semantic claims must not disappear through optional-record filtering.
+        for item in raw.records['movements']:
+            if isinstance(item,dict) and ('assertion' in item or 'destination_reference' in item) and not self.supported(item):
+                cid = self.actor(item.get('actor_id'),'movements',0)
+                self.spatial_error(raw,cid,s['characters'][cid]['location_id'],item.get('to_location_id'),'evidence_unsupported')
         moves = {}
         for i, item in self.records(raw,'movements'):
             cid = self.actor(item.get('actor_id'),'movements',i)
-            if not capabilities(s,cid)['can_move']:
+            if not capabilities(s,cid)['can_move'] and item.get('assertion') != 'observed_at_boundary':
+                if 'assertion' in item or 'destination_reference' in item:
+                    self.spatial_error(raw,cid,s['characters'][cid]['location_id'],item.get('to_location_id'),'movement_capability_blocked')
                 self.warn('movements',i,'Персонаж не может самостоятельно перемещаться.',entity=cid); continue
             target = item.get('to_location_id')
             if not isinstance(target,str) or target not in s['locations']:
@@ -223,39 +276,39 @@ class StateResolver:
             order = item.get('order')
             if order is not None and (type(order) is not int or order < 0):
                 self.warn('movements',i,'некорректный необязательный order',field='order'); order = None
-            moves.setdefault(cid,[]).append((order,target,item['evidence']))
+            moves.setdefault(cid,[]).append((order,target,item))
         for cid, route in moves.items():
-            if len({r[1] for r in route}) > 1:
+            if len(route) > 1:
                 if any(r[0] is None for r in route) or len({r[0] for r in route}) != len(route):
                     fatal('неоднозначное перемещение','movement_ambiguous',repairable=True,entity=cid)
                 route.sort(key=lambda r:r[0])
-            if cid in present:
-                if route[-1][1] != lid:
-                    fatal('конечное перемещение участника противоречит final_scene',
-                          'scene_movement_conflict', repairable=True, entity=cid,
-                          scene_location_id=lid, movement_location_id=route[-1][1])
-                continue  # Consistent redundant route; final_scene owns the endpoint.
+            if cid in present and route[-1][1] != lid:
+                fatal('конечное перемещение участника противоречит final_scene',
+                      'scene_movement_conflict', repairable=True, entity=cid,
+                      scene_location_id=lid, movement_location_id=route[-1][1])
             origin = s['characters'][cid]['location_id']
-            for order,target,evidence in route:
+            entrant = cid in self.before['characters'] and cid not in self.before['camera']['present_character_ids'] and cid in present and (origin is not None or s['locations'].get(lid,{}).get('parent_id'))
+            if cid in present and not entrant and all('assertion' not in r[2] and 'destination_reference' not in r[2] for r in route):
+                continue  # Legacy endpoint-only claims retain their original History shape.
+            for order,target,item in route:
+                if entrant or cid in observed or 'assertion' in item or 'destination_reference' in item:
+                    failure = self.arrival_failure(item,cid,origin,target)
+                    if failure: self.spatial_error(raw,cid,origin,target,failure)
+                if item.get('assertion') == 'observed_at_boundary' and (cid not in observed or cid in present):
+                    self.spatial_error(raw,cid,origin,target,'boundary_not_observed')
                 self.history.movements.append(dict(actor_id=cid,from_location_id=origin,to_location_id=target,
-                    evidence=evidence,order=order,turn_id=self.turn_id))
+                    evidence=item['evidence'],order=order,turn_id=self.turn_id,
+                    **({'assertion':item['assertion']} if 'assertion' in item else {})))
                 origin = target
             s['characters'][cid]['location_id'] = origin
+        for cid in observed:
+            route = moves.get(cid, [])
+            if not route or route[-1][2].get('assertion') != 'observed_at_boundary':
+                self.spatial_error(raw,cid,s['characters'][cid]['location_id'],lid,'boundary_observation_required')
         for cid in present:
             origin = s['characters'][cid]['location_id']
-            # A new physical participant needs an actor-bound completed arrival,
-            # even for independent locations. A generic situation quote is not a route.
             if cid in self.before['characters'] and cid not in self.before['camera']['present_character_ids'] and (origin is not None or s['locations'].get(lid,{}).get('parent_id')) and origin != lid:
-                candidates=[item for item in raw.records['movements'] if isinstance(item,dict) and item.get('actor_id')==cid and item.get('to_location_id')==lid]
-                if cid not in moves or not any(self.arrival_supported(item,cid,origin,lid) for item in candidates):
-                    fatal('Повествование сохранено, но приход участника не подтверждён. Повтори обработку состояния.',
-                          'scene_arrival_unsupported', repairable=True, entity=cid,
-                          from_location_id=origin,to_location_id=lid,
-                          previous_present=self.before['camera']['present_character_ids'], final_present=present,
-                          movements=candidates, evidence_requirement='completed_arrival + actor_evidence + destination_evidence + matching origin',
-                          before_hash=sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest(),
-                          contract_version='physical-arrival-v1')
-
+                self.spatial_error(raw,cid,origin,lid,'completed_arrival_required')
             if origin != lid:
                 self.history.movements.append(dict(actor_id=cid,from_location_id=origin,to_location_id=lid,
                     derived_from='final_scene',turn_id=self.turn_id))

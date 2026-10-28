@@ -209,6 +209,7 @@ class Camera(StrictModel):
     pov_actor_id: str | None = None
     location_id: str | None = None
     present_character_ids: list[str] = Field(default_factory=list)
+    observed_character_ids: list[str] = Field(default_factory=list)
     controlled_actor_id: str | None = None
     mode: Literal['actor', 'observer'] = 'actor'
     situation: str = ''
@@ -681,6 +682,13 @@ def assert_world_state_v3_invariants(state, before=None):
         fatal('неизвестный controlled actor')
     if camera['mode'] == 'actor' and camera['controlled_actor_id'] not in present and actors.get(camera['controlled_actor_id'], {}).get('life_status') != 'dead':
         fatal('controlled actor отсутствует в камере')
+    observed = camera.get('observed_character_ids', [])
+    if len(set(observed)) != len(observed) or set(observed) & set(present) or set(observed) - actors.keys():
+        fatal('некорректные наблюдаемые участники камеры')
+    for cid in observed:
+        place = locations.get(actors[cid]['location_id'], {})
+        if place.get('kind') != 'boundary' or not camera['location_id'] or place.get('parent_id') != camera['location_id']:
+            fatal('наблюдаемый участник не находится на границе камеры', entity=cid)
     remote = camera['remote_interactions']
     if len({r['actor_id'] for r in remote}) != len(remote):
         fatal('повторный участник удалённого взаимодействия')

@@ -1,0 +1,230 @@
+[
+  {
+    "case": "unsupported_inside",
+    "source": "SYNTHETIC provider payload; not original user job",
+    "before_camera": {
+      "subject_id": null,
+      "pov_actor_id": null,
+      "location_id": "ilya_cabinet",
+      "present_character_ids": [
+        "ilya"
+      ],
+      "controlled_actor_id": "ilya",
+      "mode": "actor",
+      "situation": "Илья сидит в своей подсобке-кабинете после возвращения из суда. На столе — бумаги, на стационарном телефоне ни одного сообщения, в почте — письма банков о просроченных кредитах. За дверью слышно, как в салоне готовятся закрываться.",
+      "remote_interactions": []
+    },
+    "actor_origin": "salon_lak",
+    "narrative": "В замке поворачивается ключ, дверь приоткрывается на ладонь. Виктория стоит в проёме, в куртке поверх рабочего фартука, с сумкой на плече; за её спиной пустой коридор и наполовину погашенные лампы. Она смотрит на разбросанные бумаги на столе, потом на Илью — и не спешит уходить",
+    "raw_extraction": {
+      "final_scene": {
+        "location_id": "ilya_cabinet",
+        "present_character_ids": [
+          "ilya",
+          "viktoria_solovyova"
+        ],
+        "elapsed_minutes": 1
+      },
+      "movements": [
+        {
+          "actor_id": "viktoria_solovyova",
+          "from_location_id": "salon_lak",
+          "to_location_id": "ilya_cabinet",
+          "assertion": "completed_arrival",
+          "actor_evidence": "Виктория",
+          "destination_evidence": "в проёме",
+          "evidence": "В замке поворачивается ключ, дверь приоткрывается на ладонь. Виктория стоит в проёме, в куртке поверх рабочего фартука, с сумкой на плече; за её спиной пустой коридор и наполовину погашенные лампы. Она смотрит на разбросанные бумаги на столе, потом на Илью — и не спешит уходить"
+        }
+      ]
+    },
+    "status": "error",
+    "error": "Runtime v3: Повествование сохранено, но приход участника не подтверждён. Повтори обработку состояния.",
+    "repairs": [
+      {
+        "repair_reason": "Runtime v3: Повествование сохранено, но приход участника не подтверждён. Повтори обработку состояния.",
+        "repair_error_type": "StructuralDeltaError",
+        "repair_error_code": "scene_arrival_unsupported",
+        "stage": "extraction_repair",
+        "entity": "viktoria_solovyova",
+        "from_location_id": "salon_lak",
+        "to_location_id": "ilya_cabinet",
+        "previous_present": [
+          "ilya"
+        ],
+        "final_present": [
+          "ilya",
+          "viktoria_solovyova"
+        ],
+        "movements": [
+          {
+            "actor_id": "viktoria_solovyova",
+            "from_location_id": "salon_lak",
+            "to_location_id": "ilya_cabinet",
+            "assertion": "completed_arrival",
+            "actor_evidence": "Виктория",
+            "destination_evidence": "в проёме",
+            "evidence": "В замке поворачивается ключ, дверь приоткрывается на ладонь. Виктория стоит в проёме, в куртке поверх рабочего фартука, с сумкой на плече; за её спиной пустой коридор и наполовину погашенные лампы. Она смотрит на разбросанные бумаги на столе, потом на Илью — и не спешит уходить"
+          }
+        ],
+        "evidence_requirement": "completed_arrival + actor_evidence + destination_evidence + matching origin",
+        "before_hash": "9e5ad999e7f09be4f5168364ded04b48b4dadcf6962761acc42ab83c097974ac",
+        "contract_version": "physical-arrival-v1",
+        "attempt": 0,
+        "attempt_epoch": 0,
+        "revision": 0
+      },
+      {
+        "repair_reason": "Runtime v3: Повествование сохранено, но приход участника не подтверждён. Повтори обработку состояния.",
+        "repair_error_type": "StructuralDeltaError",
+        "repair_error_code": "scene_arrival_unsupported",
+        "stage": "validation_failed",
+        "entity": "viktoria_solovyova",
+        "from_location_id": "salon_lak",
+        "to_location_id": "ilya_cabinet",
+        "previous_present": [
+          "ilya"
+        ],
+        "final_present": [
+          "ilya",
+          "viktoria_solovyova"
+        ],
+        "movements": [
+          {
+            "actor_id": "viktoria_solovyova",
+            "from_location_id": "salon_lak",
+            "to_location_id": "ilya_cabinet",
+            "assertion": "completed_arrival",
+            "actor_evidence": "Виктория",
+            "destination_evidence": "в проёме",
+            "evidence": "В замке поворачивается ключ, дверь приоткрывается на ладонь. Виктория стоит в проёме, в куртке поверх рабочего фартука, с сумкой на плече; за её спиной пустой коридор и наполовину погашенные лампы. Она смотрит на разбросанные бумаги на столе, потом на Илью — и не спешит уходить"
+          }
+        ],
+        "evidence_requirement": "completed_arrival + actor_evidence + destination_evidence + matching origin",
+        "before_hash": "9e5ad999e7f09be4f5168364ded04b48b4dadcf6962761acc42ab83c097974ac",
+        "contract_version": "physical-arrival-v1",
+        "attempt": 1,
+        "attempt_epoch": 0,
+        "revision": 0
+      }
+    ],
+    "canonical_unchanged": true,
+    "committed_turns": 0
+  },
+  {
+    "case": "contextual_entry",
+    "source": "SYNTHETIC provider payload; not original user job",
+    "before_camera": {
+      "subject_id": null,
+      "pov_actor_id": null,
+      "location_id": "ilya_cabinet",
+      "present_character_ids": [
+        "ilya"
+      ],
+      "controlled_actor_id": "ilya",
+      "mode": "actor",
+      "situation": "Илья сидит в своей подсобке-кабинете после возвращения из суда. На столе — бумаги, на стационарном телефоне ни одного сообщения, в почте — письма банков о просроченных кредитах. За дверью слышно, как в салоне готовятся закрываться.",
+      "remote_interactions": []
+    },
+    "actor_origin": "salon_lak",
+    "narrative": "Виктория Соловьёва открыла дверь и вошла внутрь. Илья поднял голову.",
+    "raw_extraction": {
+      "final_scene": {
+        "location_id": "ilya_cabinet",
+        "present_character_ids": [
+          "ilya",
+          "viktoria_solovyova"
+        ],
+        "elapsed_minutes": 1
+      },
+      "movements": [
+        {
+          "actor_id": "viktoria_solovyova",
+          "from_location_id": "salon_lak",
+          "to_location_id": "ilya_cabinet",
+          "assertion": "completed_arrival",
+          "actor_evidence": "Виктория Соловьёва",
+          "destination_evidence": "внутрь",
+          "evidence": "Виктория Соловьёва открыла дверь и вошла внутрь. Илья поднял голову.",
+          "destination_reference": "camera_location",
+          "anchor_location_id": "ilya_cabinet"
+        }
+      ]
+    },
+    "status": "error",
+    "error": "Runtime v3: Повествование сохранено, но приход участника не подтверждён. Повтори обработку состояния.",
+    "repairs": [
+      {
+        "repair_reason": "Runtime v3: Повествование сохранено, но приход участника не подтверждён. Повтори обработку состояния.",
+        "repair_error_type": "StructuralDeltaError",
+        "repair_error_code": "scene_arrival_unsupported",
+        "stage": "extraction_repair",
+        "entity": "viktoria_solovyova",
+        "from_location_id": "salon_lak",
+        "to_location_id": "ilya_cabinet",
+        "previous_present": [
+          "ilya"
+        ],
+        "final_present": [
+          "ilya",
+          "viktoria_solovyova"
+        ],
+        "movements": [
+          {
+            "actor_id": "viktoria_solovyova",
+            "from_location_id": "salon_lak",
+            "to_location_id": "ilya_cabinet",
+            "assertion": "completed_arrival",
+            "actor_evidence": "Виктория Соловьёва",
+            "destination_evidence": "внутрь",
+            "evidence": "Виктория Соловьёва открыла дверь и вошла внутрь. Илья поднял голову.",
+            "destination_reference": "camera_location",
+            "anchor_location_id": "ilya_cabinet"
+          }
+        ],
+        "evidence_requirement": "completed_arrival + actor_evidence + destination_evidence + matching origin",
+        "before_hash": "9e5ad999e7f09be4f5168364ded04b48b4dadcf6962761acc42ab83c097974ac",
+        "contract_version": "physical-arrival-v1",
+        "attempt": 0,
+        "attempt_epoch": 0,
+        "revision": 0
+      },
+      {
+        "repair_reason": "Runtime v3: Повествование сохранено, но приход участника не подтверждён. Повтори обработку состояния.",
+        "repair_error_type": "StructuralDeltaError",
+        "repair_error_code": "scene_arrival_unsupported",
+        "stage": "validation_failed",
+        "entity": "viktoria_solovyova",
+        "from_location_id": "salon_lak",
+        "to_location_id": "ilya_cabinet",
+        "previous_present": [
+          "ilya"
+        ],
+        "final_present": [
+          "ilya",
+          "viktoria_solovyova"
+        ],
+        "movements": [
+          {
+            "actor_id": "viktoria_solovyova",
+            "from_location_id": "salon_lak",
+            "to_location_id": "ilya_cabinet",
+            "assertion": "completed_arrival",
+            "actor_evidence": "Виктория Соловьёва",
+            "destination_evidence": "внутрь",
+            "evidence": "Виктория Соловьёва открыла дверь и вошла внутрь. Илья поднял голову.",
+            "destination_reference": "camera_location",
+            "anchor_location_id": "ilya_cabinet"
+          }
+        ],
+        "evidence_requirement": "completed_arrival + actor_evidence + destination_evidence + matching origin",
+        "before_hash": "9e5ad999e7f09be4f5168364ded04b48b4dadcf6962761acc42ab83c097974ac",
+        "contract_version": "physical-arrival-v1",
+        "attempt": 1,
+        "attempt_epoch": 0,
+        "revision": 0
+      }
+    ],
+    "canonical_unchanged": true,
+    "committed_turns": 0
+  }
+]

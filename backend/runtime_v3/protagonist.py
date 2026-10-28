@@ -36,6 +36,11 @@ def reconcile(state):
         meta['protagonist_required'] = True
         for period in meta.get('protagonist_periods', []):
             if period['until'] is None: period['until'] = meta['world_time']
+    # A restored background camera may refer to a boundary that is no longer visible.
+    camera['observed_character_ids'] = [cid for cid in camera.get('observed_character_ids', [])
+        if state['characters'].get(cid, {}).get('life_status') != 'dead'
+        and state['locations'].get(state['characters'].get(cid, {}).get('location_id'), {}).get('kind') == 'boundary'
+        and state['locations'][state['characters'][cid]['location_id']].get('parent_id') == camera['location_id']]
     actor = camera.get('controlled_actor_id')
     if actor and (meta.get('protagonist_required') or state['characters'][actor]['life_status']=='dead'):
         camera.update(controlled_actor_id=None,mode='observer',subject_id=camera.get('subject_id') or actor,
@@ -75,7 +80,7 @@ def transition(snapshot, operation, actor_id, operation_id, *, pov_actor_id=None
     before_camera=deepcopy(state['camera'])
     state['camera'].update(location_id=lid,present_character_ids=present,controlled_actor_id=controlled,
         subject_id=actor_id,pov_actor_id=pov,mode='actor' if controlled else 'observer',
-        situation=actor['situation'],remote_interactions=[])
+        situation=actor['situation'],remote_interactions=[],observed_character_ids=[])
     batch.state_changes.append(dict(kind='control_transition',entity=actor_id,before=before_camera,
         after=deepcopy(state['camera']),operation=operation,operation_id=operation_id,turn_id=meta['turn_id']))
     result['world_state'] = assert_world_state_v3_invariants(state)
