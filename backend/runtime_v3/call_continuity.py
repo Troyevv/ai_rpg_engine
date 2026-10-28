@@ -209,7 +209,8 @@ def project_physical(resolver, raw):
             resolver.state['camera']['situation']=resolver.before['camera']['situation']
             if not independent_situation:actor['situation']=resolver.before['characters'][resolver.protected_actor_id]['situation']
             resolver.warn('final_scene',0,'Описание ситуации не подтверждает физический переход; сохранена предыдущая сцена.',code='call_situation_retained')
-            if evidence:reconcile(resolver,'situation_unconfirmed')
+            if evidence or (scene.get('situation') and scene['situation'] in resolver.narrative):
+                reconcile(resolver,'situation_unconfirmed')
     # Sort by an existing evidence span when possible, otherwise retain accepted order.
     events.sort(key=lambda e:resolver.narrative.find(e.get('physical_excerpt','')) if e.get('physical_excerpt') else len(resolver.narrative))
     previous=resolver.before['meta']['world_time']

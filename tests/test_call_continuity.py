@@ -374,3 +374,19 @@ def test_optional_scene_recovery_preserves_accepted_character_situation(tmp_path
         return value
     jid,_=turn(repo,client,sid,OFFER,changed);saved(repo,jid)
     assert repo.get_snapshot(sid)['world_state']['characters']['qa_kirill']['situation']=='Слышит стук.'
+
+
+def test_scene_only_physical_claim_is_explicitly_reconciled(tmp_path):
+    repo,client,sid,cid=connected(tmp_path)
+    before=repo.get_snapshot(sid)['world_state']
+    claim='Дверь кабинета открылась.'
+    def scene_only(value,current):
+        value['final_scene']['situation']=claim
+        value['final_scene'].pop('situation_evidence',None)
+        return value
+    jid,calls=turn(repo,client,sid,'До свидания.',scene_only,narrative_extra='\n'+claim);saved(repo,jid)
+    assert calls==['narrative','extraction']
+    route=client.get(f'/api/saves/{sid}').json()['turns'][-1]['presentation']
+    assert route['physical_reconciliation']
+    assert route['physical_text']==''
+    assert repo.get_snapshot(sid)['world_state']['camera']['situation']==before['camera']['situation']

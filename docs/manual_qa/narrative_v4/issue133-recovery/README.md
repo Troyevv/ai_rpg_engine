@@ -43,6 +43,7 @@ calendar persistence. No retries, deadlines or skips were relaxed.
 ## Validation
 
 - `python -m pytest tests/test_call_continuity.py tests/test_phone122.py tests/test_remote_communication.py tests/test_memory* tests/test_pov_documents.py tests/test_pov_transitions.py -q`: 91 passed in 124.53s.
+- Final scene-only follow-up: `python -m pytest tests/test_call_continuity.py -q`: **29 passed in 49.71s**, including explicit reconciliation when a scene-only claim appears in narrative without an Event/evidence field.
 - `npm test`: 34 passed.
 - `npm run build`: passed.
 - `PLAYWRIGHT_EXECUTABLE_PATH=/tmp/issue133-browser/chrome-headless-shell-linux64/chrome-headless-shell npx playwright test call-continuity --reporter=line`: 8 passed (desktop/mobile).
