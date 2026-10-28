@@ -1,0 +1,146 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> ai-rpg-frontend@2.0.0 test:e2e
+> playwright test narrative-authority136.spec.ts call-continuity.spec.ts phone133.spec.ts runtime-handoff.spec.ts pov.spec.ts knowledge.spec.ts long-term.spec.ts commitments.spec.ts narrative-continuity.spec.ts npc-initiative.spec.ts narrative-pacing.spec.ts streaming72.spec.ts
+
+
+Running 52 tests using 1 worker
+
+(node:33) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [desktop] › e2e/call-continuity.spec.ts:4:45 › one world during and after NPC hangup: graphite (12.0s)
+  ✓   2 [desktop] › e2e/call-continuity.spec.ts:4:45 › one world during and after NPC hangup: parchment (10.9s)
+  ✓   3 [desktop] › e2e/call-continuity.spec.ts:59:57 › optional call extraction recovers: office-recovery (9.4s)
+  ✓   4 [desktop] › e2e/call-continuity.spec.ts:59:57 › optional call extraction recovers: office-rejected (7.5s)
+  ✓   5 [desktop] › e2e/commitments.spec.ts:4:1 › canonical commitments and interval projection survive read-only browsing and reload (2.3s)
+  ✓   6 [desktop] › e2e/knowledge.spec.ts:4:1 › grounded correction shows current and old beliefs after reload without gossip (5.1s)
+  ✓   7 [desktop] › e2e/long-term.spec.ts:4:1 › long-term advance preview, zero-budget commit, reload and responsive results (5.8s)
+  ✓   8 [desktop] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 entry: real jobs turn reload turn (6.4s)
+  ✓   9 [desktop] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 doorway: real jobs turn reload turn (6.8s)
+  ✓  10 [desktop] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 optional-annotation: real jobs turn reload turn (6.2s)
+  ✘  11 [desktop] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 semantic-retry: real jobs turn reload turn (5.5s)
+(node:305) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  12 [desktop] › e2e/narrative-authority136.spec.ts:71:1 › 136 complete journey: arrival, interaction, threshold, call, agreement, reload, next turn (11.2s)
+  ✓  13 [desktop] › e2e/narrative-continuity.spec.ts:3:1 › completed meeting does not restart after departure and reload (4.1s)
+  ✓  14 [desktop] › e2e/narrative-pacing.spec.ts:3:1 › story policy presets custom risk and outcome persist without creating a turn (4.1s)
+  ✓  15 [desktop] › e2e/npc-initiative.spec.ts:3:1 › NPC opens interaction without input; external refusal survives reload (4.4s)
+  ✓  16 [desktop] › e2e/pov.spec.ts:3:1 › POV, backstage and prompt versions (7.8s)
+  ✓  17 [desktop] › e2e/pov.spec.ts:46:1 › scenario and summary deletion keeps restorable versions and saves (2.2s)
+  ✓  18 [desktop] › e2e/runtime-handoff.spec.ts:6:1 › original export identities and rejected opening recover through real API then turn reload turn (11.0s)
+(node:499) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  19 [desktop] › e2e/phone133.spec.ts:7:45 › 133 A B E F graphite: messages, choices, call and continuation (16.7s)
+  ✓  20 [desktop] › e2e/phone133.spec.ts:7:45 › 133 A B E F parchment: messages, choices, call and continuation (16.5s)
+  ✓  21 [desktop] › e2e/phone133.spec.ts:56:1 › 133 D: semantic failure and Retry preserve one response, one minute and choices (6.0s)
+  ✓  22 [desktop] › e2e/phone133.spec.ts:78:1 › 133 canonical agency repair commits once without narrative confirmation (5.1s)
+  ✓  23 [desktop] › e2e/streaming72.spec.ts:10:35 › controlled streaming, commit, scroll and journal motion (37.2s)
+  ✓  24 [desktop] › e2e/streaming72.spec.ts:10:35 › controlled streaming, commit, scroll and journal reduced (28.4s)
+  ✓  25 [desktop] › e2e/streaming72.spec.ts:84:1 › real Start Game → ordinary turn → persisted reload → next ordinary turn (5.9s)
+  ✓  26 [desktop] › e2e/streaming72.spec.ts:96:1 › leave for authoring and return during generation without losing the stream or draft (3.6s)
+(node:753) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  27 [mobile] › e2e/call-continuity.spec.ts:4:45 › one world during and after NPC hangup: graphite (8.8s)
+  ✓  28 [mobile] › e2e/call-continuity.spec.ts:4:45 › one world during and after NPC hangup: parchment (7.8s)
+  ✓  29 [mobile] › e2e/call-continuity.spec.ts:59:57 › optional call extraction recovers: office-recovery (6.1s)
+  ✓  30 [mobile] › e2e/call-continuity.spec.ts:59:57 › optional call extraction recovers: office-rejected (6.1s)
+  ✓  31 [mobile] › e2e/commitments.spec.ts:4:1 › canonical commitments and interval projection survive read-only browsing and reload (2.4s)
+  ✓  32 [mobile] › e2e/knowledge.spec.ts:4:1 › grounded correction shows current and old beliefs after reload without gossip (5.2s)
+  ✓  33 [mobile] › e2e/long-term.spec.ts:4:1 › long-term advance preview, zero-budget commit, reload and responsive results (5.3s)
+  ✓  34 [mobile] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 entry: real jobs turn reload turn (5.8s)
+  ✓  35 [mobile] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 doorway: real jobs turn reload turn (6.9s)
+  ✓  36 [mobile] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 optional-annotation: real jobs turn reload turn (6.1s)
+  ✘  37 [mobile] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 semantic-retry: real jobs turn reload turn (6.2s)
+(node:1017) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  38 [mobile] › e2e/narrative-authority136.spec.ts:71:1 › 136 complete journey: arrival, interaction, threshold, call, agreement, reload, next turn (9.0s)
+  ✓  39 [mobile] › e2e/narrative-continuity.spec.ts:3:1 › completed meeting does not restart after departure and reload (3.8s)
+  ✓  40 [mobile] › e2e/narrative-pacing.spec.ts:3:1 › story policy presets custom risk and outcome persist without creating a turn (4.1s)
+  ✓  41 [mobile] › e2e/npc-initiative.spec.ts:3:1 › NPC opens interaction without input; external refusal survives reload (5.4s)
+  ✓  42 [mobile] › e2e/pov.spec.ts:3:1 › POV, backstage and prompt versions (6.2s)
+  ✓  43 [mobile] › e2e/pov.spec.ts:46:1 › scenario and summary deletion keeps restorable versions and saves (2.5s)
+  ✓  44 [mobile] › e2e/runtime-handoff.spec.ts:6:1 › original export identities and rejected opening recover through real API then turn reload turn (11.7s)
+(node:1202) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  45 [mobile] › e2e/phone133.spec.ts:7:45 › 133 A B E F graphite: messages, choices, call and continuation (16.6s)
+  ✓  46 [mobile] › e2e/phone133.spec.ts:7:45 › 133 A B E F parchment: messages, choices, call and continuation (13.6s)
+  ✓  47 [mobile] › e2e/phone133.spec.ts:56:1 › 133 D: semantic failure and Retry preserve one response, one minute and choices (5.4s)
+  ✓  48 [mobile] › e2e/phone133.spec.ts:78:1 › 133 canonical agency repair commits once without narrative confirmation (4.8s)
+  ✓  49 [mobile] › e2e/streaming72.spec.ts:10:35 › controlled streaming, commit, scroll and journal motion (46.1s)
+  ✓  50 [mobile] › e2e/streaming72.spec.ts:10:35 › controlled streaming, commit, scroll and journal reduced (39.3s)
+  ✓  51 [mobile] › e2e/streaming72.spec.ts:84:1 › real Start Game → ordinary turn → persisted reload → next ordinary turn (7.7s)
+  ✓  52 [mobile] › e2e/streaming72.spec.ts:96:1 › leave for authoring and return during generation without losing the stream or draft (4.1s)
+
+
+  1) [desktop] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 semantic-retry: real jobs turn reload turn
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: getByRole('dialog').locator('.delta-warnings')
+    Expected substring: "Применён исправленный результат Extraction."
+    Error: strict mode violation: getByRole('dialog').locator('.delta-warnings') resolved to 2 elements:
+        1) <details class="delta-warnings">…</details> aka getByRole('group').filter({ hasText: 'Аудит истории · ⚠ 37' })
+        2) <section class="delta-warnings">…</section> aka getByText('Предупреждения WorldState · ⚠ 2final_scene extraction_revised')
+
+    Call log:
+      - Expect "toContainText" getByRole('dialog').locator('.delta-warnings') with timeout 12000ms
+      - waiting for getByRole('dialog').locator('.delta-warnings')
+
+
+      40 |     const dialog=page.getByRole('dialog');
+      41 |     await dialog.getByRole('tab',{name:'Производительность',exact:true}).click();
+    > 42 |     await expect(dialog.locator('.delta-warnings')).toContainText('Применён исправленный результат Extraction.');
+         |                                                     ^
+      43 |     await expect(dialog.locator('.delta-warnings')).not.toContainText('Запись отброшена.');
+      44 |     await page.keyboard.press('Escape');
+      45 |    }
+        at /workspace/scratch/6ca917790660/ai_rpg_engine/frontend/e2e/narrative-authority136.spec.ts:42:53
+
+    Error Context: test-results/narrative-authority136-sce-68524--real-jobs-turn-reload-turn-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/narrative-authority136-sce-68524--real-jobs-turn-reload-turn-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/narrative-authority136-sce-68524--real-jobs-turn-reload-turn-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [mobile] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 semantic-retry: real jobs turn reload turn
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: getByRole('dialog').locator('.delta-warnings')
+    Expected substring: "Применён исправленный результат Extraction."
+    Error: strict mode violation: getByRole('dialog').locator('.delta-warnings') resolved to 2 elements:
+        1) <details class="delta-warnings">…</details> aka getByRole('group').filter({ hasText: 'Аудит истории · ⚠ 37' })
+        2) <section class="delta-warnings">…</section> aka getByText('Предупреждения WorldState · ⚠ 2final_scene extraction_revised')
+
+    Call log:
+      - Expect "toContainText" getByRole('dialog').locator('.delta-warnings') with timeout 12000ms
+      - waiting for getByRole('dialog').locator('.delta-warnings')
+
+
+      40 |     const dialog=page.getByRole('dialog');
+      41 |     await dialog.getByRole('tab',{name:'Производительность',exact:true}).click();
+    > 42 |     await expect(dialog.locator('.delta-warnings')).toContainText('Применён исправленный результат Extraction.');
+         |                                                     ^
+      43 |     await expect(dialog.locator('.delta-warnings')).not.toContainText('Запись отброшена.');
+      44 |     await page.keyboard.press('Escape');
+      45 |    }
+        at /workspace/scratch/6ca917790660/ai_rpg_engine/frontend/e2e/narrative-authority136.spec.ts:42:53
+
+    Error Context: test-results/narrative-authority136-sce-68524--real-jobs-turn-reload-turn-mobile/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/narrative-authority136-sce-68524--real-jobs-turn-reload-turn-mobile/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/narrative-authority136-sce-68524--real-jobs-turn-reload-turn-mobile/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2 failed
+    [desktop] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 semantic-retry: real jobs turn reload turn
+    [mobile] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 semantic-retry: real jobs turn reload turn
+  50 passed (8.4m)

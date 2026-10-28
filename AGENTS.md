@@ -18,6 +18,7 @@
 - Preserve separation of POV (camera/perspective) and Controlled Actor (player agency). Observing an NPC or using “World without protagonist” must not silently transfer control.
 - Do not let LLM-generated prose or extraction assign the controlled actor goals, intentions, Emotion, commitments, or decisions without evidence of explicit player input. Directed Relationship feelings may evolve autonomously only from accepted canonical interaction evidence with provenance and bounded changes (#107); explicit player overrides take priority. Narrative prose alone never proves feelings.
 - Respect character-specific knowledge and secrets. Do not leak omniscient information into a character's context.
+- DeepSeek authors NPC actions and narrative outcomes; Extraction alone interprets literary meaning. Runtime validates structure, canonical dependencies, agency and Knowledge, never exact prose anchors or Director permits. `final_scene.present_character_ids` owns physical membership; `observed_character_ids` is distinct visibility without mandatory boundary geography.
 - Validate extracted WorldDelta before applying it. Do not silently swallow unknown or dangerous semantic errors. Keep diagnostics for rejected or repaired changes.
 - Preserve turn/variant lineage, before/after snapshots, rollback behavior, and atomic persistence. Regeneration must use the recorded original context, not silently reconstructed later context.
 - Keep existing saves compatible. Do not rewrite historical snapshots as a migration shortcut.

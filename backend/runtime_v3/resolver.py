@@ -30,7 +30,7 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, relationship_query=None, relationship_receipts=None, remote_semantic_sources=None, call_sources=None):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, require_elapsed=False, relationship_query=None, relationship_receipts=None, remote_semantic_sources=None, call_sources=None):
         if mode not in ("turn", "background"):
             raise ValueError("Неизвестный режим StateResolver.")
         self.call_sources = call_sources or {}
@@ -47,6 +47,7 @@ class StateResolver:
         self.continuity_decision = continuity_decision
         self.mode = mode
         self.runtime_time_skip = runtime_time_skip
+        self.require_elapsed = require_elapsed
         self.protected_knowledge_actor_ids = set(protected_knowledge_actor_ids or [self.protected_actor_id])
         self.milestone_query = milestone_query
         self.development_query = development_query
@@ -70,12 +71,12 @@ class StateResolver:
         self.warnings.append(value)
 
     def supported(self, record):
-        quote = record.get('evidence')
-        remote = self.remote_semantic_sources.get(record.get('source_event_id')) if isinstance(record.get('source_event_id'),str) else None
-        sources = self.sources + ([normalized(remote['content'])] if remote else [])
-        if set(record) <= {'id','evidence','intentions_updates'} and record.get('intentions_updates'):
-            sources += [normalized(e['content']) for e in self.remote_semantic_sources.values() if e['sender_id']==record.get('id')]
-        return isinstance(quote,str) and bool(normalized(quote)) and any(normalized(quote) in source for source in sources)
+        """Extraction owns semantics. A current-turn record has turn provenance.
+
+        Player-owned evidence and external-source ownership are checked by their
+        domain handlers; this method never interprets literary wording.
+        """
+        return isinstance(record, dict) and isinstance(record.get('evidence', ''), str)
 
     def records(self, raw, section, *, evidence=True):
         seen=set()
@@ -93,32 +94,6 @@ class StateResolver:
                     seen.add(key)
                 yield i, item
 
-    def arrival_supported(self, item, cid, origin, target):
-        """Validate extraction's semantic assertion and its explicit identity anchors.
-
-        No verb matching or inference of movement from narrative. Ambiguous,
-        future, negated and remote actions must not be asserted as completed.
-        """
-        if not self.supported(item) or item.get('assertion')!='completed_arrival' or item.get('from_location_id')!=origin:
-            return False
-        def fold(value): return normalized(value).casefold().replace('ё','е')
-        quote=fold(item['evidence'])
-        subject=item.get('actor_evidence');destination=item.get('destination_evidence')
-        if not isinstance(subject,str) or not subject.strip() or not isinstance(destination,str) or not destination.strip(): return False
-        subject=fold(subject);destination=fold(destination)
-        labels=[self.actor_names.get(cid),self.before['characters'][cid].get('display_name')]
-        names={fold(name) for name in labels if isinstance(name,str) and name.strip()}
-        for name in list(names):
-            first=name.split()[0]
-            ambiguous=any(other!=cid and any(isinstance(label,str) and label.strip() and fold(label).split()[0]==first
-                for label in (self.actor_names.get(other),actor.get('display_name')))
-                for other,actor in self.before['characters'].items())
-            if not ambiguous:names.add(first)
-        if not names:names={fold(cid)}
-        place=self.state['locations'][target]
-        places={fold(v) for v in [place['name'],*place.get('aliases',[])] if v.strip()}
-        return subject in names and subject in quote and destination in places and destination in quote
-
     def remote_commitment_supported(self, record):
         from backend.runtime_v3.remote import commitment_sources
         from backend.runtime_v3.call_continuity import commitment_sources as voice_sources
@@ -132,6 +107,15 @@ class StateResolver:
         if not isinstance(value,str) or value not in self.state['characters']:
             fatal('неизвестный обязательный character_id', 'unknown_character', repairable=True, section=section,index=index)
         return value
+
+    def movement_authorized(self, item, raw):
+        quote = item.get('player_evidence')
+        if item.get('player_assertion') == 'explicit_choice':
+            return isinstance(quote, str) and bool(normalized(quote)) and normalized(quote) in normalized(self.player_input)
+        return item.get('player_assertion') == 'involuntary' and any(
+            isinstance(event, dict) and event.get('id') == item.get('source_event_id')
+            and isinstance(event.get('participants'), list) and self.protected_actor_id in event['participants']
+            for event in raw.records['events'])
 
     def typed(self, model, values, section, index):
         try:
@@ -170,7 +154,14 @@ class StateResolver:
             fatal('повреждены участники final_scene', 'camera_invalid', repairable=True)
         reserved = {ch['id'] for p in s['pregnancies'].values() if p['status']!='born' for ch in p['children']}
         if reserved & set(present): self.warn('final_scene',0,'Runtime adds children only after accepted birth.',code='birth_presence_deferred')
-        present = list(dict.fromkeys(cid for cid in present if cid not in reserved))
+        if len(set(present)) != len(present):
+            fatal('повторные участники final_scene', 'camera_invalid', repairable=True)
+        present = [cid for cid in present if cid not in reserved]
+        observed = scene.get('observed_character_ids', [])
+        if not isinstance(observed, list) or any(not isinstance(cid, str) for cid in observed) or len(set(observed)) != len(observed) or set(observed) & set(present):
+            fatal('повреждены наблюдаемые участники', 'camera_observed_invalid', repairable=True)
+        for cid in observed: self.actor(cid, 'final_scene', 0)
+        observed = [cid for cid in observed if s['characters'][cid]['life_status'] != 'dead']
         from backend.runtime_v3.life import capabilities
         dead_present = [cid for cid in present if s['characters'].get(cid, {}).get('life_status') == 'dead']
         for cid in dead_present:
@@ -184,6 +175,8 @@ class StateResolver:
         camera = deepcopy(s['camera'])
         if camera['mode']=='actor' and camera['controlled_actor_id'] not in present and s['characters'].get(camera['controlled_actor_id'], {}).get('life_status') != 'dead':
             fatal('controlled actor отсутствует в final_scene', 'camera_actor_missing', repairable=True)
+        if self.require_elapsed and 'elapsed_minutes' not in scene:
+            fatal('Extraction не указал elapsed_minutes.', 'elapsed_minutes_missing', repairable=True, section='final_scene', path='final_scene.elapsed_minutes')
         elapsed = scene.get('elapsed_minutes',0)
         if type(elapsed) is not int or not 0 <= elapsed <= 10080:
             fatal('некорректная длительность хода', 'invalid_time', repairable=True)
@@ -202,41 +195,43 @@ class StateResolver:
         remote = []
         claims = scene.get('remote_interactions', [])
         if not isinstance(claims, list):
-            claims = []
-            self.warn('final_scene', 0, 'remote_interactions должен быть списком')
+            fatal('remote_interactions должен быть списком.', 'camera_remote_invalid', repairable=True, section='final_scene', path='final_scene.remote_interactions')
         for index, interaction in enumerate(claims):
-            if not isinstance(interaction, dict) or not self.supported(interaction):
-                self.warn('final_scene', index, 'нет evidence удалённого взаимодействия'); continue
+            if not isinstance(interaction, dict):
+                fatal('Повреждена запись удалённого контакта.', 'camera_remote_invalid', repairable=True, section='final_scene', path=f'final_scene.remote_interactions[{index}]')
             cid = interaction.get('actor_id')
-            if not isinstance(cid, str) or cid not in s['characters'] or cid in present or any(r['actor_id'] == cid for r in remote):
-                self.warn('final_scene', index, 'некорректный remote actor'); continue
+            if not isinstance(cid, str) or cid not in s['characters'] or cid in present + observed or any(r['actor_id'] == cid for r in remote):
+                fatal('Неизвестный, повторный или физически доступный remote actor.', 'camera_remote_invalid', repairable=True, section='final_scene', path=f'final_scene.remote_interactions[{index}].actor_id')
             if not capabilities(s,cid)['can_act']:
                 self.warn('final_scene',index,'Участник недоступен для взаимодействия.'); continue
             from backend.runtime_v3.models import RemoteInteraction
             record = self.typed(RemoteInteraction, dict(actor_id=cid, channel=interaction.get('channel'),
                                 last_active_turn=self.turn_id), 'final_scene', index)
-            if record: remote.append(record)
+            if record is None:
+                fatal('Некорректный канал удалённого контакта.', 'camera_remote_invalid', repairable=True, section='final_scene', path=f'final_scene.remote_interactions[{index}].channel')
+            remote.append(record)
         from backend.runtime_v3.remote import active_call, participants
         call = active_call(s, camera['controlled_actor_id'])
         if any(s['meta']['communication'][channel] for channel in ('text_message','voice_call')):
             remote = [dict(actor_id=cid, channel='phone', last_active_turn=self.turn_id)
-                      for cid in sorted(participants(call) - set(present))] if call and call['status']=='answered' else []
+                      for cid in sorted(participants(call) - set(present) - set(observed))] if call and call['status']=='answered' else []
         camera['remote_interactions'] = remote
-        camera.update(location_id=lid,present_character_ids=present,situation=situation)
+        camera.update(location_id=lid,present_character_ids=present,observed_character_ids=observed,situation=situation)
         s['camera'] = camera
         s['meta'].update(turn_id=self.turn_id,world_time=s['meta']['world_time']+elapsed)
         moves = {}
         for i, item in self.records(raw,'movements'):
             cid = self.actor(item.get('actor_id'),'movements',i)
-            if not capabilities(s,cid)['can_move']:
-                self.warn('movements',i,'Персонаж не может самостоятельно перемещаться.',entity=cid); continue
             target = item.get('to_location_id')
             if not isinstance(target,str) or target not in s['locations']:
                 fatal('неизвестное конечное место перемещения','movement_endpoint_invalid',repairable=True,index=i)
+            initial_placement = self.before['meta']['turn_id'] == 0 and self.before['camera']['location_id'] is None
+            if cid == self.protected_actor_id and target != s['characters'][cid]['location_id'] and not initial_placement and not self.movement_authorized(item, raw):
+                fatal('Перемещение управляемого персонажа требует происхождения.', 'movement_agency', repairable=True, section='movements', index=i, entity=cid)
             order = item.get('order')
             if order is not None and (type(order) is not int or order < 0):
                 self.warn('movements',i,'некорректный необязательный order',field='order'); order = None
-            moves.setdefault(cid,[]).append((order,target,item['evidence']))
+            moves.setdefault(cid,[]).append((order,target,item['evidence'],item))
         for cid, route in moves.items():
             if len({r[1] for r in route}) > 1:
                 if any(r[0] is None for r in route) or len({r[0] for r in route}) != len(route):
@@ -247,34 +242,33 @@ class StateResolver:
                     fatal('конечное перемещение участника противоречит final_scene',
                           'scene_movement_conflict', repairable=True, entity=cid,
                           scene_location_id=lid, movement_location_id=route[-1][1])
-                continue  # Consistent redundant route; final_scene owns the endpoint.
             origin = s['characters'][cid]['location_id']
-            for order,target,evidence in route:
+            for order,target,evidence,item in route:
+                if 'from_location_id' in item and item['from_location_id'] != origin:
+                    fatal('Исходное место маршрута противоречит канону.', 'movement_origin_invalid', repairable=True, section='movements', entity=cid)
                 self.history.movements.append(dict(actor_id=cid,from_location_id=origin,to_location_id=target,
                     evidence=evidence,order=order,turn_id=self.turn_id))
                 origin = target
             s['characters'][cid]['location_id'] = origin
         for cid in present:
             origin = s['characters'][cid]['location_id']
-            # A new physical participant needs an actor-bound completed arrival,
-            # even for independent locations. A generic situation quote is not a route.
-            if cid in self.before['characters'] and cid not in self.before['camera']['present_character_ids'] and (origin is not None or s['locations'].get(lid,{}).get('parent_id')) and origin != lid:
-                candidates=[item for item in raw.records['movements'] if isinstance(item,dict) and item.get('actor_id')==cid and item.get('to_location_id')==lid]
-                if cid not in moves or not any(self.arrival_supported(item,cid,origin,lid) for item in candidates):
-                    fatal('Повествование сохранено, но приход участника не подтверждён. Повтори обработку состояния.',
-                          'scene_arrival_unsupported', repairable=True, entity=cid,
-                          from_location_id=origin,to_location_id=lid,
-                          previous_present=self.before['camera']['present_character_ids'], final_present=present,
-                          movements=candidates, evidence_requirement='completed_arrival + actor_evidence + destination_evidence + matching origin',
-                          before_hash=sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest(),
-                          contract_version='physical-arrival-v1')
+            initial_placement = self.before['meta']['turn_id'] == 0 and self.before['camera']['location_id'] is None
+            if self.before['characters'].get(cid, {}).get('location_id') != lid and cid == self.protected_actor_id and not initial_placement:
+                claims = [m for m in raw.records['movements'] if isinstance(m, dict)
+                          and m.get('actor_id') == cid and m.get('to_location_id') == lid]
+                if not any(self.movement_authorized(m, raw) for m in claims):
+                    fatal('Перемещение управляемого персонажа требует происхождения.', 'movement_agency', repairable=True, entity=cid)
 
             if origin != lid:
                 self.history.movements.append(dict(actor_id=cid,from_location_id=origin,to_location_id=lid,
                     derived_from='final_scene',turn_id=self.turn_id))
             s['characters'][cid]['location_id'] = lid
+        for cid in (set(self.before['camera']['present_character_ids']) | set(observed)) - set(present):
+            if cid not in moves and s['characters'][cid]['location_id'] == lid:
+                s['characters'][cid]['location_id'] = None
+                self.history.state_changes.append(dict(kind='scene_position', entity=cid, location_id=None, derived_from='final_scene', turn_id=self.turn_id))
         controlled=camera['controlled_actor_id']
-        if controlled is not None and self.supported({'evidence':scene.get('situation_evidence')}):
+        if controlled is not None and 'situation' in scene:
             s['characters'][controlled]['situation']=situation
         self.scene_character_situation=s['characters'].get(controlled,{}).get('situation')
         for i, item in self.records(raw,'facts'):
@@ -341,12 +335,17 @@ class StateResolver:
                 event['player_evidence'] = player_quote
             events[eid] = event
             self.history.events.append(event)
-        from backend.runtime_v3.initiative import validate_actions
-        validate_actions(self, raw, events)
+        for _, item in self.records(raw,'movements'):
+            if item.get('actor_id') == self.protected_actor_id and item.get('player_assertion') == 'involuntary':
+                cause=events.get(item.get('source_event_id'))
+                if cause is None or self.protected_actor_id not in cause['participants']:
+                    fatal('Нет принятого источника непроизвольного перемещения.', 'movement_agency', repairable=True, section='movements', source_ids=[item.get('source_event_id')])
         from backend.runtime_v3.knowledge import apply_knowledge
         apply_knowledge(self, raw, events)
         from backend.runtime_v3.life import apply_life
         apply_life(self,raw)
+        from backend.runtime_v3.initiative import validate_actions
+        validate_actions(self, raw, events)
         from backend.runtime_v3.residence import apply_residence
         apply_residence(self,raw)
         for i, item in self.records(raw,'character_changes',evidence=False):
@@ -362,7 +361,7 @@ class StateResolver:
                 try:
                     birth = item['birth_date']
                     date_parts(birth, profile_of(s))
-                    if not self.supported(item) or birth not in item.get('evidence',''):
+                    if not self.supported(item):
                         raise ValueError('birth date must be explicitly stated in evidence')
                     today = current_time(s)['date']
                     if today and birth > today: raise ValueError('birth date is in the future')
@@ -497,9 +496,4 @@ class StateResolver:
             choices = [dict(c, interaction_channel=c.get('interaction_channel',self.before['meta']['interaction_focus'])) for c in choices]
             if self.before['meta']['interaction_focus']=='call' and not any(e.get('physical_text') for e in self.history.events):
                 choices = [c for c in choices if c['interaction_channel']!='physical']
-            remote_call = active_call(self.before, controlled)
-            if remote_call:
-                remote_ids = participants(remote_call) - set(self.before['camera']['present_character_ids'])
-                if remote_ids & set(state['camera']['present_character_ids']):
-                    fatal('Звонок не переносит собеседника в физическую сцену.', 'remote_false_colocation')
         return ResolvedTurn(state,patch,self.history.to_dict(),self.warnings,choices,self.cards)

@@ -47,6 +47,15 @@ def test_meaningful_action_without_external_input(phase):
     assert snap == before
 
 
+def test_accepted_speech_before_same_turn_death_is_not_erased():
+    snap=snapshot();raw=payload(snap)
+    raw['life_changes']=[dict(id='b',life_status='dead')]
+    out=resolve(snap,raw,text='Борис успел заговорить, затем его дыхание оборвалось.')
+    assert out.state['characters']['b']['life_status']=='dead'
+    assert out.history['events'][0]['scene_action']['modality']=='speech'
+    assert 'b' not in out.state['camera']['present_character_ids']
+
+
 @pytest.mark.parametrize('text,modality',[
     ('Борис протягивает ладонь, предлагая взять его за руку.', 'physical'),
     ('Борис раскрывает объятия и ждёт.', 'physical'),
@@ -69,10 +78,17 @@ def test_adult_proposals_do_not_create_consent_or_reciprocity(text, modality):
     dict(adult=True,target_ids=['child']), dict(source_event_id='missing'),
     dict(knowledge_ids=['a:secret']), dict(evidence='Выдуманная цитата'),
 ])
-def test_unsupported_agency_is_atomic(changes):
-    snap = snapshot(); before = deepcopy(snap)
-    with pytest.raises(StructuralDeltaError): resolve(snap,payload(snap,**changes))
-    assert snap == before
+def test_optional_claim_does_not_create_agency_or_erase_event(changes):
+    snap=snapshot();before=deepcopy(snap)
+    out=resolve(snap,payload(snap,**changes))
+    assert len(out.history['events'])==1
+    assert out.state['knowledge']==snap['world_state']['knowledge']
+    assert out.state['characters']['a']['intentions']==[]
+    if changes.get('response')=='player_supplied' or 'knowledge_ids' in changes or changes.get('adult') or changes.get('actor_id')=='baby':
+        assert 'scene_action' not in out.history['events'][0]
+        assert any(w['section']=='scene_actions' and w['action']=='drop_record' for w in out.warnings)
+    assert snap==before
+
 
 
 def test_refusal_is_a_supplied_response_not_forced_reconciliation():
@@ -101,7 +117,10 @@ def test_temporary_control_and_observation_follow_camera_not_protagonist():
 def test_capabilities_constrain_actions_without_personality_gates(effect,modality):
     snap=snapshot();s=snap['world_state']
     s['conditions']['blocked']=Condition(id='blocked',actor_id='b',description='Ограничение',effects={effect:False}).model_dump()
-    with pytest.raises(StructuralDeltaError):resolve(snap,payload(snap,modality=modality))
+    out=resolve(snap,payload(snap,modality=modality))
+    assert len(out.history['events'])==1 and 'scene_action' not in out.history['events'][0]
+    assert any(w['code']=='initiative_capability_invalid' for w in out.warnings)
+    assert out.state['conditions']==s['conditions']
 
 
 def test_reference_does_not_open_remote_channel():
@@ -119,9 +138,11 @@ def test_reference_does_not_open_remote_channel():
 def test_actor_knowledge_is_not_world_truth(status,usage,allowed):
     snap=snapshot();snap['world_state']['facts']['secret']['character_ids']=['a','b'];snap['world_state']['knowledge']['b:secret']=Knowledge(actor_id='b',fact_id='secret',status=status).model_dump()
     raw=payload(snap,knowledge_ids=['b:secret'],knowledge_use=usage)
-    if allowed: assert resolve(snap,raw).history['events']
-    else:
-        with pytest.raises(StructuralDeltaError):resolve(snap,raw)
+    out=resolve(snap,raw)
+    assert len(out.history['events'])==1
+    assert ('scene_action' in out.history['events'][0]) == allowed
+    assert out.state['knowledge']==snap['world_state']['knowledge']
+    if not allowed: assert any(w['code']=='initiative_knowledge_invalid' for w in out.warnings)
 
 
 @given(st.sampled_from(['calm','moderate','dynamic','intense']),st.booleans())
@@ -140,11 +161,14 @@ def test_pacing_and_silence_never_require_or_forbid_ordinary_initiative(preset,q
 
 def test_budget_and_legacy_context_do_not_invent_permission():
     snap=snapshot();raw=payload(snap);raw['scene_actions']*=4
-    with pytest.raises(StructuralDeltaError):resolve(snap,raw)
+    out=resolve(snap,raw)
+    assert len(out.history['events'])==1 and len(out.warnings)==3
     assert recorded_plan([])=={}
-    with pytest.raises(StructuralDeltaError):StateResolver(snap['world_state'],TEXT,'',initiative_decision={}).resolve(payload(snap))
+    out=StateResolver(snap['world_state'],TEXT,'',initiative_decision={}).resolve(payload(snap))
+    assert out.history['events'][0]['scene_action']['actor_id']=='b'
     raw=payload(snap);raw.pop('scene_actions')
-    assert StateResolver(snap['world_state'],TEXT,'').resolve(raw).state
+    assert len(StateResolver(snap['world_state'],TEXT,'').resolve(raw).history['events'])==1
+
 
 
 def test_context_personality_emotion_intentions_relationships_and_permit_replay(tmp_path):
@@ -236,6 +260,10 @@ def test_initiative_cannot_supply_external_desires_or_agreement():
     raw['character_changes']=[dict(id='a',intentions=['Поцеловать Бориса.'],emotion='Влюблён.',evidence=TEXT)]
     raw['scheduled_event_changes']=[dict(id='date',description='Свидание',character_ids=['a','b'],
         temporal=dict(day_offset=1,time='19:00'),assertion='agreed',evidence=TEXT)]
+    before=deepcopy(snap)
+    with pytest.raises(StructuralDeltaError) as exc: resolve(snap,raw)
+    assert exc.value.code=='controlled_actor_unsupported' and snap==before
+    raw['scheduled_event_changes']=[]
     out=resolve(snap,raw)
     assert not out.state['characters']['a']['intentions'] and not out.state['characters']['a']['emotion']
     assert not out.state['scheduled_events']
@@ -263,24 +291,30 @@ def test_initiative_news_and_completed_intention_use_normal_provenance():
     assert out.state['characters']['a']['intentions']==[]
 
 
-def test_invalid_claim_fails_real_job_without_extra_repair_or_saved_state(tmp_path):
+def test_invalid_annotation_warns_real_job_without_extra_repair(tmp_path):
     from backend.repositories.preparation import Repository
     from devtools.narrative_test_world import load_fixture,ACTOR_ID
     from test_narrative_test_world import CONFIG,ordinary_job
     from runtime_v3_fixture import execute
     repo=Repository(tmp_path/'invalid.sqlite');sid=load_fixture(repo,'initiative')['save']
     ordinary_job(repo,sid,'start');before=repo.get_snapshot(sid);camera=before['world_state']['camera']
-    text='Вера обнимает Кирилла; тот добровольно отвечает объятием.'
+    text='Вера протягивает руку, предлагая поздороваться.'
     raw=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids']),
         events=[dict(id='bad',text=text,evidence=text,participants=['qa_vera',ACTOR_ID])],
         scene_actions=[dict(actor_id='qa_vera',target_ids=[ACTOR_ID],source_event_id='bad',phase='start',modality='physical',adult=True,interruptible=True,response='player_supplied',player_evidence='Обнимаю в ответ.',evidence=text)])
     job=repo.begin_job(sid,'Слушаю.','turn',CONFIG);calls=execute(repo,job,raw,text)
-    assert repo.get_job(job)['status']=='error'
-    assert len(calls)==2 and repo.get_snapshot(sid)==before
+    assert repo.get_job(job)['status']=='saved'
+    assert len(calls)==2
+    after=repo.get_snapshot(sid)
+    for field in ('goals','intentions','obligations','emotion'):
+        assert after['world_state']['characters'][ACTOR_ID][field]==before['world_state']['characters'][ACTOR_ID][field]
+    assert any(w['code']=='initiative_player_evidence_required' for w in json.loads(repo.get_job(job)['warnings_json']))
 
 
 def test_shared_event_cannot_overwrite_another_initiator():
     snap=snapshot();observer,_=transition(snap,'observe','b','watch')
     raw=payload(observer,response='none',interruptible=False)
     raw['scene_actions'].append(dict(raw['scene_actions'][0],actor_id='a',target_ids=['b']))
-    with pytest.raises(StructuralDeltaError):resolve(observer,raw)
+    out=resolve(observer,raw)
+    assert out.history['events'][0]['scene_action']['actor_id']=='b'
+    assert any(w['code']=='initiative_duplicate' for w in out.warnings)

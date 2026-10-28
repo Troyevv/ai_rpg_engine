@@ -72,6 +72,7 @@ def test_risk_seam_blocks_autonomous_death_but_allows_explicit_death_and_success
     raw['life_changes'][0]['source_event_id']='death'
     class Permitted:
         def permits_autonomous_death(self,state,actor): return True
+    s['world_state']['meta']['narrative_risk'].update(preset='custom',protagonist_death=True)
     allowed=StateResolver(s['world_state'],text,'',death_policy=Permitted()).resolve(raw)
     assert allowed.state['meta']['protagonist_required']
     assert allowed.state['camera']['controlled_actor_id'] is None

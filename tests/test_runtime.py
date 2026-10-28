@@ -156,7 +156,7 @@ def test_persistent_key_is_encrypted_and_not_returned(tmp_path,monkeypatch):
         assert client.delete('/api/credentials/deepseek').json()=={'deepseek':False}
 
 
-def test_invalid_plan_is_reported_without_blocking_valid_event(db):
+def test_extracted_thread_does_not_need_literal_quote(db):
     storage,_,sid=db
     job=storage.begin_job(sid,'','start',CONFIG)
     bad=result()
@@ -164,9 +164,9 @@ def test_invalid_plan_is_reported_without_blocking_valid_event(db):
     run(storage,job,bad)
     assert storage.get_job(job)['status']=='saved'
     state=storage.get_save(sid)['state']
-    assert not state.get('plans')
+    assert state['plans'][0]['id']=='p1'
     assert state['events'][-1]['text']==bad['events'][0]['text']
-    assert json.loads(storage.get_job(job)['warnings_json'])[0]['section']=='threads'
+    assert all(w['code']=='raw_unknown_field' for w in json.loads(storage.get_job(job)['warnings_json']))
 
 
 def test_retry_retains_historical_rollback_consent_with_new_model_config(db):

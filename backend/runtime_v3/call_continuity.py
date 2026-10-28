@@ -70,8 +70,7 @@ def apply_lifecycle(resolver, raw):
         call=active_call(resolver.state,resolver.protected_actor_id)
         if (not isinstance(item,dict) or not call or call['status']!='answered'
             or item.get('call_id')!=call['id'] or item.get('actor_id') not in participants(call)
-            or item.get('assertion')!='completed_end' or not resolver.supported(item)
-            or item['evidence'] not in resolver.narrative):
+            or item.get('assertion')!='completed_end' or not resolver.supported(item)):
             fatal('Не подтверждён фактический отбой звонка.', 'call_end_unsupported',repairable=True)
         actor=item['actor_id']
         if actor==resolver.protected_actor_id and (not isinstance(item.get('player_evidence'),str)
@@ -88,26 +87,6 @@ def apply_lifecycle(resolver, raw):
             getattr(resolver.history,section).extend(values)
 
 
-def repair_candidates(raw, accepted_events=()):
-    """Guard critical claims and already validated Events, not optional hints."""
-    result={section:[row for row in raw.records[section] if isinstance(row,dict)]
-        for section in ('scheduled_event_changes','call_lifecycle_changes')}
-    result['events']=[dict(id=e['local_id'],evidence=e['evidence']) for e in accepted_events
-        if e.get('interaction_channel')=='physical' and e.get('local_id')]
-    return result
-
-
-def validate_repair(previous, raw):
-    for section,rows in previous.items():
-        key='call_id' if section=='call_lifecycle_changes' else 'id'
-        for row in rows:
-            if not any(isinstance(other,dict) and ((row.get(key) is not None and other.get(key)==row[key])
-                or (row.get('evidence') and other.get('evidence')==row['evidence']))
-                for other in raw.records[section]):
-                fatal('Исправление удалило подтверждённое последствие телефонного хода.',
-                    'call_repair_omission',repairable=False,section=section)
-
-
 def reconcile(resolver, reason, quote=None):
     """Presentation audit, not another canonical state or a prose classifier."""
     audit=getattr(resolver,'physical_reconciliation',None)
@@ -120,34 +99,12 @@ def reconcile(resolver, reason, quote=None):
 
 
 def prepare_scene(resolver, raw):
-    """Discard ungrounded optional camera hints before they can move actors.
-
-    Explicit movements and unknown IDs still go through the strict domain guards.
-    A final_scene summary alone is not evidence of a physical relocation in a call.
-    """
+    """Sanitize the optional call summary; final_scene still owns membership."""
     if resolver.before['meta']['interaction_focus']!='call':return
     scene=raw.final_scene;before=resolver.before['camera']
-    movements=[m for m in raw.records['movements'] if isinstance(m,dict) and resolver.supported(m)]
     if not isinstance(scene.get('situation',before['situation']),str):
         scene['situation']=before['situation']
         resolver.warn('final_scene',0,'Некорректное необязательное описание заменено предыдущим.',code='call_situation_retained')
-    location=scene.get('location_id')
-    if location!=before['location_id'] and not any(m.get('actor_id')==resolver.protected_actor_id and m.get('to_location_id')==location for m in movements):
-        scene['location_id']=before['location_id']
-        scene['present_character_ids']=list(before['present_character_ids'])
-        resolver.warn('final_scene',0,'Неподтверждённое перемещение камеры не применено.',code='call_scene_hint_dropped')
-        reconcile(resolver,'scene_hint',scene.get('situation_evidence',scene.get('situation')))
-    present=scene['present_character_ids']
-    for cid in list(present):
-        origin=resolver.before['characters'].get(cid,{}).get('location_id')
-        if cid not in before['present_character_ids'] and origin!=scene.get('location_id'):
-            candidates=[m for m in raw.records['movements'] if isinstance(m,dict) and m.get('actor_id')==cid]
-            call=active_call(resolver.before,resolver.protected_actor_id)
-            if not candidates and cid not in (participants(call) if call else set()):
-                present.remove(cid)
-                resolver.warn('final_scene',0,'Неподтверждённый участник не добавлен в физическую сцену.',entity=cid,code='call_scene_hint_dropped')
-                reconcile(resolver,'scene_hint',scene.get('situation_evidence',scene.get('situation')))
-
 
 def evidence_span(narrative, evidence):
     """Find the already validated quote with harmless whitespace/quote variations."""
@@ -227,4 +184,4 @@ def project_physical(resolver, raw):
         resolver.warn('choices',0,'Физические подсказки отсутствуют; доступен свободный ввод, следующий обычный ход использует текущий мир.',code='physical_choices_unavailable')
 
 
-CONTRACT = '''Call continuity: one world and one clock. Keep final_scene.situation about the physical scene, not a summary of the conversation. During calls autonomous nearby events can occur. Extract meaningful observed physical events with interaction_channel=physical, witnesses including the observer, and exact evidence. Optionally supply physical_projections {event_id: local event ID, text: literary passage from completed_narrative containing its evidence}. Do not duplicate an Event merely to satisfy presentation: absent or invalid projections use accepted Event.text. Exclude remote dialogue and conversation details from that passage. Do not project unchanged scenery. Never invent a physical event for a card. When useful, supply choices tagged interaction_channel=physical for the resulting physical situation; missing suggestions do not invalidate a turn; call choices are separately tagged call. Base physical suggestions on final_scene and accepted consequences, not the last remote reply. Do not freeze elapsed_minutes during calls or advance time for displaying projections. A completed hang-up in completed_narrative requires call_lifecycle_changes {call_id: existing active_call, actor_id: actual initiator, assertion: completed_end, evidence: exact quote}. Goodbye, intention, silence or a proposed hang-up are NOT completed_end. EXTERNAL hang-up additionally needs player_evidence from actual input. For voice agreements use scheduled_event_changes with call_evidence [{source_id from call_sources, actor_id, quote, assertion: proposal|assent|cancellation|outcome}]. Both proposal and explicit assent are necessary, including player-origin proposal plus NPC assent, or NPC proposal plus player assent across turns. Preserve exact full player wording, player_source_id, player_evidence, player_assertion=explicit_choice. call_time_source_id references the original proposal; temporal is relative to that source's canonical time. Reuse existing commitment ID for reschedule/cancel. Narrator prose cannot prove a player decision. No agreement from an unaccepted proposal.'''
+CONTRACT = '''Call continuity: one world and one clock. Keep final_scene.situation about the physical scene, not a summary of the conversation. During calls autonomous nearby events can occur. Extract meaningful observed physical events with interaction_channel=physical and witnesses including the observer. Evidence is optional provenance; it is not an arrival permit. Optionally supply physical_projections {event_id: local event ID, text: literary passage from completed_narrative containing its evidence}. Do not duplicate an Event merely to satisfy presentation: absent or invalid projections use accepted Event.text. Exclude remote dialogue and conversation details from that passage. Do not project unchanged scenery. Never invent a physical event for a card. When useful, supply choices tagged interaction_channel=physical for the resulting physical situation; missing suggestions do not invalidate a turn; call choices are separately tagged call. Base physical suggestions on final_scene and accepted consequences, not the last remote reply. Do not freeze elapsed_minutes during calls or advance time for displaying projections. A completed hang-up in completed_narrative requires call_lifecycle_changes {call_id: existing active_call, actor_id: actual initiator, assertion: completed_end}; evidence is optional NPC provenance. Goodbye, intention, silence or a proposed hang-up are NOT completed_end. EXTERNAL hang-up additionally needs player_evidence from actual input. For voice agreements use scheduled_event_changes with call_evidence [{source_id from call_sources, actor_id, quote, assertion: proposal|assent|cancellation|outcome}]. Both proposal and explicit assent are necessary, including player-origin proposal plus NPC assent, or NPC proposal plus player assent across turns. Preserve exact full player wording, player_source_id, player_evidence, player_assertion=explicit_choice. call_time_source_id references the original proposal; temporal is relative to that source's canonical time. Reuse existing commitment ID for reschedule/cancel. Narrator prose cannot prove a player decision. No agreement from an unaccepted proposal.'''

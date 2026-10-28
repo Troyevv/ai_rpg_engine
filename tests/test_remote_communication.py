@@ -500,7 +500,10 @@ def test_message_agreement_uses_existing_commitment_pipeline_and_read_proof():
             )
         )
 
-    assert "remote-plan" not in resolve(s, record).state["scheduled_events"]
+    from backend.services.world_delta_errors import StructuralDeltaError
+    before=deepcopy(s)
+    with pytest.raises(StructuralDeltaError) as exc: resolve(s, record)
+    assert exc.value.code=='commitment_remote_unperceived' and s==before
     s = command(s, "read", event_id=second["id"])
     accepted = resolve(s, record)
     assert (
@@ -512,8 +515,9 @@ def test_message_agreement_uses_existing_commitment_pipeline_and_read_proof():
         == first["world_time"]
     )
     assert accepted.history["state_changes"]
-    invalid = resolve(s, dict(record, player_evidence="Я обещаю другое."))
-    assert "remote-plan" not in invalid.state["scheduled_events"]
+    with pytest.raises(StructuralDeltaError) as exc:
+        resolve(s, dict(record, player_evidence="Я обещаю другое."))
+    assert exc.value.code=='controlled_actor_unsupported'
 
 
 def test_endpoint_identity_establishment_is_lazy_address_bound_and_service_specific():

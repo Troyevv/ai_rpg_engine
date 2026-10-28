@@ -51,8 +51,10 @@ def test_original_export_reaches_game_api_with_all_identities(api):
 def test_wrong_actor_cannot_borrow_viktoria_arrival_evidence(api):
     client,app=api;sid=imported(client);s=app.state.repository.get_snapshot(sid)
     raw=arrival('marina_volkova');raw['movements'][0]['from_location_id']=s['world_state']['characters']['marina_volkova']['location_id']
-    with pytest.raises(StructuralDeltaError):
-        StateResolver(s['world_state'],NARRATIVE,'',actor_names={c['id']:c['name'] for c in s['character_cards']}).resolve(RawTurnResult.parse(raw))
+    # Runtime trusts typed identity; semantic actor accuracy belongs to Extraction QA.
+    out=StateResolver(s['world_state'],NARRATIVE,'').resolve(raw)
+    assert out.state['characters']['marina_volkova']['location_id']=='ilya_cabinet'
+    assert out.state['characters']['viktoria_solovyova']['location_id']==s['world_state']['characters']['viktoria_solovyova']['location_id']
 
 def submit(client,sid,kind='start',text=''):
     save=client.get(f'/api/saves/{sid}').json()
@@ -74,7 +76,7 @@ def test_real_start_repair_turn_reopen_next_turn(api):
             yield NARRATIVE if sum(not c.get('response_format') for c in calls)==1 else 'Виктория Соловьёва отвечает: «Скоро закончу».'
             return
         raw=provider_payload(kw)
-        if sum(bool(c.get('response_format')) for c in calls)==1:raw.pop('movements')
+        if sum(bool(c.get('response_format')) for c in calls)==1:raw['final_scene']['location_id']='unknown-room'
         yield json.dumps(raw,ensure_ascii=False)
     with patch('engine.chat_stream',side_effect=provider):
         jid=submit(client,sid);job=wait_job(client,jid)
@@ -101,7 +103,7 @@ def test_real_start_repair_turn_reopen_next_turn(api):
     assert {r['stage'] for r in requests}=={'narrative','extraction','extraction_repair'}
     assert all(r['status']!='running' for r in requests)
     assert all(r['cost_usd'] is None for r in requests)
-    assert 'scene_arrival_unsupported' in json.dumps(requests,ensure_ascii=False)
+    assert 'camera_location_invalid' in json.dumps(requests,ensure_ascii=False)
     # Both bounded extraction attempts receive exactly the saved narrative.
     for r in requests:
         if r['stage'].startswith('extraction'):assert NARRATIVE in json.dumps(r['messages'],ensure_ascii=False)
@@ -111,7 +113,7 @@ def test_failed_extraction_retry_after_repository_reopen_is_atomic(api):
     from storage import Storage
     client,app=api;sid=imported(client);repo=app.state.repository
     before=snapshot_state(repo,sid)
-    bad=arrival();bad.pop('movements')
+    bad=arrival();bad['final_scene']['location_id']='unknown-room'
     def rejected(**kw):yield json.dumps(bad) if kw.get('response_format') else NARRATIVE
     with patch('engine.chat_stream',side_effect=rejected):
         jid=submit(client,sid);job=wait_job(client,jid)
@@ -151,8 +153,11 @@ def test_failed_extraction_retry_after_repository_reopen_is_atomic(api):
 def test_arrival_evidence_boundaries_are_atomic(api,change):
     client,app=api;sid=imported(client);snap=app.state.repository.get_snapshot(sid);before=deepcopy(snap)
     raw=arrival();raw['movements'][0].update(change)
-    with pytest.raises(StructuralDeltaError):
-        StateResolver(snap['world_state'],NARRATIVE,'',actor_names={c['id']:c['name'] for c in snap['character_cards']}).resolve(raw)
+    if 'to_location_id' in change or 'from_location_id' in change:
+        with pytest.raises(StructuralDeltaError): StateResolver(snap['world_state'],NARRATIVE,'').resolve(raw)
+    else:
+        out=StateResolver(snap['world_state'],NARRATIVE,'').resolve(raw)
+        assert out.state['characters']['viktoria_solovyova']['location_id']=='ilya_cabinet'
     assert snap==before
 
 
@@ -166,7 +171,8 @@ def test_arrival_independent_of_hierarchy_and_start_time(api,parent,elapsed):
     raw=arrival();raw['final_scene']['elapsed_minutes']=elapsed
     assert StateResolver(s,NARRATIVE,'',actor_names=names).resolve(raw).state['characters']['viktoria_solovyova']['location_id']=='ilya_cabinet'
     raw.pop('movements');raw['final_scene']['situation_evidence']=NARRATIVE
-    with pytest.raises(StructuralDeltaError):StateResolver(s,NARRATIVE,'',actor_names=names).resolve(raw)
+    out=StateResolver(s,NARRATIVE,'',actor_names=names).resolve(raw)
+    assert out.state['characters']['viktoria_solovyova']['location_id']=='ilya_cabinet'
 
 
 def test_legacy_snapshot_projection_context_and_history_are_read_only():
@@ -221,6 +227,7 @@ def test_exact_handoff_preserves_authored_graph_and_values(api):
     # New default DOB field is the sole shape addition; the original export is untouched.
     for cid,actor in old['world_state']['characters'].items():actor.setdefault('birth_date_provenance',{})
     old['world_state']['meta'].setdefault('weather',None)  # Conservative optional environment profile.
+    old['world_state']['camera'].setdefault('observed_character_ids',[])
     assert current['world_state']==old['world_state']
     assert current['character_cards']==old['character_cards']
     assert current['authoring']==old['authoring']==source()['authoring']
@@ -464,11 +471,11 @@ def test_archive_negative_narratives_repair_without_inventing_presence(api,case_
             raw['movements'][0]['actor_evidence']='Виктория'
             if sum(bool(c.get('response_format')) for c in calls)==1:
                 # An outside unnamed man must not acquire an unrelated known ID.
-                raw['final_scene']['present_character_ids'].append('sergey_volkov')
+                raw['final_scene']['present_character_ids'].append('unknown-actor')
         else:
             raw=dict(final_scene=dict(location_id='ilya_cabinet',present_character_ids=['ilya'],elapsed_minutes=1))
             if sum(bool(c.get('response_format')) for c in calls)==1:
-                raw['final_scene'].update(present_character_ids=['ilya','viktoria_solovyova'],situation_evidence=narrative)
+                raw['final_scene']['location_id']='unknown-room'
         yield json.dumps(raw,ensure_ascii=False)
     with patch('engine.chat_stream',side_effect=provider):
         jid=submit(client,sid);job=wait_job(client,jid)

@@ -55,11 +55,12 @@ def test_100_persisted_turns_and_history_corruption(tmp_path):
         location='hall' if turn%2 else 'room'
         p=payload();p['facts'][0]['id']=f'f{turn}';p['events'][0]['fact_ids']=[f'f{turn}'];p['knowledge_gained'][0]['fact_id']=f'f{turn}'
         p['final_scene'].update(location_id=location,present_character_ids=[actor])
+        p['movements']=[dict(actor_id=actor,to_location_id=location,player_assertion='explicit_choice',player_evidence='Я перехожу в '+location+'.')]
         p['relationship_changes']=[dict(source_id='b',target_id='c',dimensions=dict(trust=turn),context='Разговор',evidence=QUOTE)]
         p['thread_changes']=[dict(id='thread',description='Найти письмо',character_ids=['a'],state=str(turn),evidence=QUOTE)]
         p['scheduled_event_changes']=[dict(id='schedule',description='Встреча',character_ids=['b'],temporal=dict(day_offset=0,time='16:40'),assertion='agreed',evidence=QUOTE)]
         if turn%7==0:p['knowledge_gained'][0]['source_event_id']='missing'
-        resolved=StateResolver(snapshot['world_state'],QUOTE,'').resolve(p)
+        resolved=StateResolver(snapshot['world_state'],QUOTE,'Я перехожу в '+location+'.').resolve(p)
         with db:
             snapshot=committed_snapshot(db,snapshot,resolved)
             db.execute('INSERT INTO snapshots(payload) VALUES(?)',(json.dumps(snapshot),))

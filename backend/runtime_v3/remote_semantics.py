@@ -138,7 +138,13 @@ def resolve(snapshot, source_id, response, diagnostics=None):
     authored = '\n'.join(e['content'] for e in rows if e['sender_id'] == actor)
     resolver = StateResolver(state, narrative, authored, turn_id=state['meta']['turn_id'], observed=False)
     resolver.remote_semantic_sources = by_id
-    result = resolver.resolve(raw)
+    from backend.services.world_delta_errors import StructuralDeltaError
+    try:
+        result = resolver.resolve(raw)
+    except StructuralDeltaError as exc:
+        if exc.path.get('section') != 'scheduled_event_changes': raise
+        raise SemanticValidationError([dict(exc.path,section='scheduled_events',code=exc.code,reason=str(exc))],
+            [r['id'] for r in raw.records['scheduled_event_changes'] if isinstance(r,dict) and isinstance(r.get('id'),str)]) from exc
     critical=[w for w in result.warnings if w.get('section') in ('scheduled_events','scheduled_event_changes') and w.get('code')!='commitment_duplicate']
     if critical:
         raise SemanticValidationError(critical,[r['id'] for r in raw.records['scheduled_event_changes'] if isinstance(r,dict) and isinstance(r.get('id'),str)])

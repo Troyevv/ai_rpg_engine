@@ -1,6 +1,7 @@
 """Tolerant input envelope. Optional records are validated independently downstream."""
 from dataclasses import dataclass
 from copy import deepcopy
+from functools import lru_cache
 import json
 from backend.runtime_v3.models import fatal
 from backend.services.relation_dimensions import RELATION_DIMENSIONS
@@ -12,6 +13,8 @@ SECTIONS = ('call_lifecycle_changes','physical_projections','scene_transitions',
             'development_evidence','personality_deltas','value_deltas',
             'reproductive_events','naming_decisions','births','appearance_deltas','possession_deltas')
 
+
+OPTIONAL_SECTIONS = frozenset(('physical_projections','scene_transitions','continuity_beats','scene_actions','narrative_developments','consequences'))
 
 @dataclass
 class RawTurnResult:
@@ -33,25 +36,64 @@ class RawTurnResult:
         if not isinstance(payload, dict) or not isinstance(payload.get('final_scene'), dict):
             fatal('ожидается объект RawTurnResult с final_scene', 'raw_root_invalid', repairable=True)
         warnings, records = [], {}
+        for field in set(payload['final_scene']) - input_fields()['final_scene']:
+            warnings.append(dict(section='final_scene', path='final_scene.'+field,
+                                 code='raw_unknown_field', action='ignore_field'))
+        for key, value in payload.items():
+            if key not in (*SECTIONS, 'final_scene', 'choices', 'metadata'):
+                if value not in (None, '', [], {}):
+                    fatal('неизвестное непустое поле Extraction', 'raw_unknown_field', repairable=True,
+                          section=key, path=key, severity='recoverable', action='extraction_repair')
+                warnings.append(dict(section=key, path=key, code='raw_unknown_field', action='ignore_empty'))
         for section in SECTIONS:
             values = payload.get(section, [])
             if not isinstance(values, list):
-                if section in ('call_lifecycle_changes','scene_transitions','continuity_beats','scene_actions','consequences','narrative_developments'):
-                    fatal('некорректная секция политики истории', 'narrative_policy_section_invalid', repairable=False, section=section)
+                if section not in OPTIONAL_SECTIONS and values not in (None, '', {}):
+                    fatal('повреждена существенная секция Extraction', 'raw_section_invalid', repairable=True, section=section, path=section, action='extraction_repair', severity='recoverable')
                 warnings.append(dict(section=section, code='optional_section_invalid', action='drop_section', reason='ожидался список'))
                 values = []
             if section == 'knowledge_gained' and len(values) > 64:
-                warnings.append(dict(section=section,code='knowledge_budget',action='truncate',reason='Превышен лимит 64 изменений знаний.'))
-                values = values[:64]
+                fatal('Превышен лимит изменений Knowledge.', 'knowledge_budget', repairable=True, section=section, path=section)
             if section in ('development_evidence','personality_deltas','value_deltas','appearance_deltas','possession_deltas') and len(values) > 24:
-                warnings.append(dict(section=section,code='development_budget',action='truncate',reason='Превышен лимит 24 записей.'))
-                values = values[:24]
+                fatal('Превышен лимит изменений домена.', 'development_budget', repairable=True, section=section, path=section)
             records[section] = deepcopy(values)
+            for index, item in enumerate(records[section]):
+                if isinstance(item, dict):
+                    for field in set(item) - input_fields().get(section, set()):
+                        path=f'{section}[{index}].{field}'
+                        legacy_metadata=section=='movements' and field in ('id','from_location','to_location','scene_id','minute')
+                        if section in ('life_changes','condition_changes','movements') and not legacy_metadata and item[field] not in (None,'',[],{}):
+                            fatal('Неизвестное поле существенного изменения.', 'raw_unknown_field', repairable=True, section=section, path=path)
+                        warnings.append(dict(section=section,index=index,path=path,code='raw_unknown_field',action='ignore_field'))
+                    if not isinstance(item.get('evidence', ''), str):
+                        warnings.append(dict(section=section, path=section+'.evidence', code='evidence_metadata_invalid', action='drop_field'))
+                        item['evidence']=''
+                    item.setdefault('evidence', '')
+                elif section not in OPTIONAL_SECTIONS and item not in (None, [], {}):
+                    fatal('Повреждена запись существенной секции.', 'raw_record_invalid', repairable=True, section=section, action='extraction_repair')
         choices = payload.get('choices', [])
         if not isinstance(choices, list):
             choices = []
         choices = [c for c in choices if isinstance(c, dict) and isinstance(c.get('action'),str) and isinstance(c.get('speech',''),str)][:6]
         return cls(deepcopy(payload['final_scene']), records, choices, warnings)
+
+
+def repair_revision_warnings(previous, current):
+    """Audit revised proposals, never adjudicate which Extraction is true.
+
+    A rejected attempt has no canonical outcomes, even if individual records
+    passed validation before a later failure. Committed before/History remain
+    protected by domain handlers and the existing transaction boundary.
+    Full old/new responses and their provenance live in the request log.
+    """
+    if previous is None: return []
+    sections = ['final_scene'] + [name for name in SECTIONS if name not in OPTIONAL_SECTIONS]
+    return [dict(type='extraction_revision', section=section, code='extraction_revised',
+                 action='use_revised_extraction',
+                 reason='Изменён предварительный результат Extraction; различие JSON не доказывает правильность интерпретации.')
+            for section in sections
+            if (previous.final_scene if section == 'final_scene' else previous.records[section]) !=
+               (current.final_scene if section == 'final_scene' else current.records[section])]
 
 
 def extraction_schema():
@@ -82,7 +124,7 @@ def extraction_schema():
             assertion={'enum':['grounded_feelings']},rationale=string,
             player_evidence=string,player_assertion={'enum':['explicit_directed_feelings']},
             dimensions=obj({d:{'type':'number','minimum':-100,'maximum':100} for d in RELATION_DIMENSIONS})), ('source_id','target_id','evidence')),
-        'movements':record(dict(actor_id=string,to_location_id=string,from_location_id={'type':['string','null']},assertion={'enum':['completed_arrival']},actor_evidence=string,destination_evidence=string,order={'type':'integer','minimum':0}), ('actor_id','to_location_id','evidence')),
+        'movements':record(dict(player_evidence=string,player_assertion={'enum':['explicit_choice','involuntary']},source_event_id=string,actor_id=string,to_location_id=string,from_location_id={'type':['string','null']},assertion={'enum':['completed_arrival']},actor_evidence=string,destination_evidence=string,order={'type':'integer','minimum':0}), ('actor_id','to_location_id','evidence')),
         'thread_changes':record(dict(id=string,description=string,character_ids=strings,status={'enum':['active','developing','dormant','resolved','paused']},state=string,relevance={'type':'number','minimum':0,'maximum':1}), ('id','evidence')),
         'scheduled_event_changes':record(dict(id=string,description=string,character_ids=strings,due_minute={'type':'integer','minimum':0},temporal=obj(dict(minute_offset={'type':'integer','minimum':0,'maximum':527040},date=string,weekday={'type':'integer','minimum':0,'maximum':13},day_offset={'type':'integer','minimum':-366,'maximum':366},time=string,day_period={'enum':['night','morning','afternoon','evening']})),status={'enum':['pending','resolved','cancelled']},condition=string,type=string), ('id','evidence')),
     }
@@ -176,26 +218,49 @@ def extraction_schema():
     definitions['possession_deltas'] = wire_schema(PossessionDelta.model_json_schema())
     for section in ('social_relation_changes','role_changes','residence_changes'):
         definitions[section]['properties']['consequence_outcome'] = {'enum':['loss','constructive']}
+    for section in ('life_changes','condition_changes','social_relation_changes','residence_changes','role_changes'):
+        definitions[section]['required'].remove('assertion')
     from backend.services.world import CARD_FIELDS
     definitions['promotions']['properties']['fields']=obj({key:string for key in CARD_FIELDS},CARD_FIELDS)
     from backend.services.player_agency import PLAYER_SOURCE_DESCRIPTION
     for field in ('emotion','goals','intentions','obligations'):
         definitions['character_changes']['properties'][field]=dict(definitions['character_changes']['properties'][field],description=PLAYER_SOURCE_DESCRIPTION)
     definitions['relationship_changes']['properties']['dimensions']['description']='Закрытый набор: '+', '.join(RELATION_DIMENSIONS)+'. Не добавляй ключи; иной смысл — в context.'
-    schema = obj(dict(final_scene=obj(dict(location_id={'type':['string','null']},present_character_ids=strings,
+    schema = obj(dict(metadata={'type':'object','additionalProperties':True},final_scene=obj(dict(location_id={'type':['string','null']},present_character_ids=strings,observed_character_ids=strings,
         remote_interactions={'type':'array','items':record(dict(actor_id=string,
             channel={'enum':['message','phone','video','radio','other']}), ('actor_id','channel','evidence')),
             'description':'Только продолжающееся в конце хода активное удалённое взаимодействие. Старое сообщение, план позвонить и упоминание не подходят. Повторно подтверди каждый ход; отсутствие/[] завершает взаимодействие.'},
         compression=Compression.model_json_schema(),situation=string,situation_evidence=evidence,elapsed_minutes={'type':'integer','minimum':0,'maximum':10080}), ('location_id','present_character_ids')),
         choices={'type':'array','items':obj(dict(action=string,speech=string,basis_ids=strings,kind={'enum':['question','proposal','information','decision','opportunity']}),('action','speech'))}, **{key:{'type':'array','items':value} for key,value in definitions.items()}), ('final_scene',))
     schema['description'] = ('RawTurnResult: только наблюдения и подтверждённые изменения. Не создавай StatePatch. '
-        'Final scene задаёт конечное положение участников. Новому участнику из другого места нужен movements с completed_arrival, from_location_id и точными actor_evidence/destination_evidence. '
+        'Final scene — авторитетный состав физической сцены; movements и цитаты прибытия не обязательны. observed — видимые вне сцены. '
         'Не копируй scene_id, last_event_id. Не придумывай время Event. '
         'Dimensions — закрытый набор; непредставимый смысл сохраняй в context.')
+    def optional_evidence(node):
+        if isinstance(node, dict):
+            if isinstance(node.get('required'), list):
+                node['required'] = [k for k in node['required'] if k != 'evidence']
+            for value in node.values(): optional_evidence(value)
+        elif isinstance(node, list):
+            for value in node: optional_evidence(value)
+    optional_evidence(schema)
     return schema
 
 
-def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=False, voice=False):
+@lru_cache(maxsize=1)
+def input_fields():
+    """Producer fields plus the conditional phone/LTA extensions of this schema."""
+    fields={key:set(value['items'].get('properties',{})) for key,value in extraction_schema()['properties'].items()
+            if key in SECTIONS}
+    fields['events'].add('interaction_channel')
+    fields['scheduled_event_changes'].update(('remote_source_ids','remote_time_source_id','player_source_id','call_time_source_id','call_evidence'))
+    fields['call_lifecycle_changes']={'call_id','actor_id','assertion','evidence','player_evidence'}
+    fields['physical_projections']={'event_id','text','evidence'}
+    fields['final_scene']=set(extraction_schema()['properties']['final_scene']['properties'])
+    return fields
+
+
+def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=False, voice=False, elapsed_required=False):
     """Validation-equivalent schema; prose lives once in the extraction contract."""
     from collections import Counter
     def structural(node):
@@ -216,6 +281,8 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
         return node
     # Keep properties named "description"; remove only JSON Schema annotations.
     schema = structural(extraction_schema())
+    if elapsed_required:
+        schema['properties']['final_scene']['required'].append('elapsed_minutes')
     if not relationship_evidence:
         for field in ('source_event_ids', 'assertion', 'rationale'):
             schema['properties']['relationship_changes']['items']['properties'].pop(field)
@@ -227,7 +294,7 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
         props['player_source_id']={'type':'string'}
         schema['properties']['choices']['items']['properties']['device_control']={'enum':['answer','decline','ignore','end']}
     if voice:
-        schema['properties']['call_lifecycle_changes']={'type':'array','maxItems':1,'items':{'type':'object','properties':{'call_id':{'type':'string'},'actor_id':{'type':'string'},'assertion':{'enum':['completed_end']},'evidence':{'type':'string'},'player_evidence':{'type':'string'}},'required':['call_id','actor_id','assertion','evidence']}}
+        schema['properties']['call_lifecycle_changes']={'type':'array','maxItems':1,'items':{'type':'object','properties':{'call_id':{'type':'string'},'actor_id':{'type':'string'},'assertion':{'enum':['completed_end']},'evidence':{'type':'string'},'player_evidence':{'type':'string'}},'required':['call_id','actor_id','assertion']}}
         schema['properties']['physical_projections']={'type':'array','items':{'type':'object','properties':{'event_id':{'type':'string'},'text':{'type':'string'}},'required':['event_id','text']}}
         props=schema['properties']['scheduled_event_changes']['items']['properties']
         props['call_time_source_id']={'type':'string'}
@@ -269,4 +336,5 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
 def repair_feedback(diagnostic, payload, before):
     """Retry-only context: never infer scene semantics from prose in Python."""
     return json.dumps(dict(diagnostic=diagnostic, original_extraction=payload,
-        previous_camera=before['camera'], known_locations=before['locations'], arrival_contract='physical-arrival-v1: для нового физического участника из другого места нужны movements: actor_id, from_location_id, to_location_id, assertion=completed_arrival, evidence, actor_evidence (точное имя или первое имя из карточки), destination_evidence (точное название или alias места). Все evidence — цитаты того же narrative. Обещание, отрицание, сообщение и упоминание не являются приходом. Не подтверждённого narrative участника исключи из final_scene; не сочиняй события.'), ensure_ascii=False)
+        previous_camera=before['camera'], known_locations=before['locations'],
+        contract='narrative-authority-v1: original_extraction — предварительный результат отклонённой попытки, не канон. Повторно интерпретируй то же полное повествование: исправь сообщённую ошибку и ошибочные классификации, сохрани все действительно произошедшие последствия и их зависимости. Не удаляй последствия только ради прохождения валидации. before/History — принятый канон; не переписывай его. final_scene present owns physical membership; observed is visible outside. Do not invent movements, consent or endpoints.'), ensure_ascii=False)

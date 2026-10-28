@@ -102,9 +102,7 @@ def apply_changes(resolver, item, cid, index, events):
                     reject('Источник не является принятым событием персонажа.'); continue
             if remote and old and status!=old['status'] and old.get('source_event_id')==remote['id']:
                 reject('Старая реплика не подтверждает новое состояние намерения.', 'motivation_remote_replay'); continue
-            quote=quote_normalized(change['evidence'])
-            if status in ('completed','failed','expired','blocked') and quote not in quote_normalized(resolver.narrative):
-                reject('Ввод с планом действия не доказывает его выполнение.', 'motivation_completion_source'); continue
+            quote=quote_normalized(change.get('evidence',''))
             player_quote=change.get('player_evidence','')
             explicit=(change.get('player_assertion')=='explicit_choice' and isinstance(player_quote,str)
                 and bool(quote_normalized(player_quote)) and (quote_normalized(player_quote) in quote_normalized(resolver.player_input) or remote is not None and remote['sender_id']==cid and quote_normalized(player_quote) in quote_normalized(remote['content'])))
@@ -124,7 +122,7 @@ def apply_changes(resolver, item, cid, index, events):
                     reject('Переоценка требует явного semantic assertion still_active/unblocked.'); continue
                 before=deepcopy(old)
                 signature,_=dependency_signature(resolver.state,dependencies)
-                proposed=dict(old,status=status,evidence=change['evidence'],source_sequence=resolver.turn_id-1,
+                proposed=dict(old,status=status,evidence=change.get('evidence',''),source_sequence=resolver.turn_id-1,
                     source_event_id=event['id'] if event else None,dependencies=deepcopy(dependencies),
                     review_required=[],reviewed_signature=signature if status!='active' or change.get('assertion') in ('still_active','unblocked') else old.get('reviewed_signature',''))
                 # An unchanged active record may attach links or acknowledge review;
@@ -140,9 +138,9 @@ def apply_changes(resolver, item, cid, index, events):
                 text = change.get('text')
                 if not isinstance(text, str) or not text.strip() or len(text)>4000 or status!='active':
                     reject('Новая запись требует непустой текст и active.'); continue
-                if controlled and not explicit and not supported_player_field(field,[text],[],resolver.player_input,[change['evidence']]):
+                if controlled and not explicit and not supported_player_field(field,[text],[],resolver.player_input,[change.get('evidence','')]):
                     reject('Новая мотивация не задана игроком.', 'motivation_agency'); continue
-                values = dict(id=identity(field,cid,resolver.turn_id,text), text=text, evidence=change['evidence'],
+                values = dict(id=identity(field,cid,resolver.turn_id,text), text=text, evidence=change.get('evidence',''),
                     source_sequence=resolver.turn_id-1, source_event_id=event['id'] if event else None,dependencies=dependencies)
                 if type(change.get('due_minute')) is int and change['due_minute'] >= 0: values['due_minute'] = change['due_minute']
                 if not any(r['id']==values['id'] or r['status'] in OPEN and normalized(r['text'])==normalized(text) for r in actor[field]):

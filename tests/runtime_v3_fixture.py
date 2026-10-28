@@ -57,6 +57,11 @@ def execute(repo,job,payload,narrative,repaired=None):
     import json
     from unittest.mock import patch
     import engine
+    payload=deepcopy(payload)
+    if isinstance(payload,dict) and 'final_scene' in payload:
+        payload['final_scene'].setdefault('elapsed_minutes',0)
+    if isinstance(repaired,dict) and 'final_scene' in repaired:
+        repaired=deepcopy(repaired);repaired['final_scene'].setdefault('elapsed_minutes',0)
     calls=[]
     def stream(**kw):
         calls.append(kw)

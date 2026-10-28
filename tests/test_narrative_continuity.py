@@ -56,7 +56,8 @@ def test_answered_beats_cannot_reopen_without_changed_basis(kind):
     snap['world_state']=out.state;p=permit(snap,out.history)
     assert p['recent_beats'][0]['status']=='rejected'
     raw=payload(out.state,continuity_beats=[beat('open',kind)])
-    with pytest.raises(StructuralDeltaError):StateResolver(out.state,'Разговор завершён.','',continuity_decision=p).resolve(raw)
+    repeated=StateResolver(out.state,'Разговор завершён.','',continuity_decision=p).resolve(raw)
+    assert repeated.history['events'] and any(w['code']=='continuity_repeated_beat' for w in repeated.warnings)
     snap['world_state']['threads']['meeting']['state']='Новые обстоятельства.'
     assert not permit(snap,out.history)['recent_beats']
 
@@ -86,7 +87,8 @@ def test_scene_transition_invalidates_only_linked_summaries_no_invented_travel()
     assert out.state['characters']['b']['location_id']==before['characters']['b']['location_id']
     assert s==before
     raw['scene_transitions'][0]['source_event_id']='missing'
-    with pytest.raises(StructuralDeltaError):StateResolver(s,'Разговор завершён.','').resolve(raw)
+    dropped=StateResolver(s,'Разговор завершён.','').resolve(raw)
+    assert dropped.history['events'] and any(w['code']=='scene_transition_evidence' for w in dropped.warnings)
 
 
 def test_closed_thread_requires_new_accepted_event():
@@ -101,12 +103,10 @@ def test_closed_thread_requires_new_accepted_event():
 def test_compression_bounded_and_canonical(minutes):
     snap=setup();s=snap['world_state'];p=permit(snap)
     raw=payload(s);raw['final_scene'].update(elapsed_minutes=minutes,compression=dict(kind='waiting',evidence='Разговор завершён.'))
-    if minutes>30:
-        with pytest.raises(StructuralDeltaError):StateResolver(s,'Разговор завершён.','',continuity_decision=p).resolve(raw)
-    else:
-        out=StateResolver(s,'Разговор завершён.','',continuity_decision=p).resolve(raw)
-        assert out.state['meta']['world_time']==s['meta']['world_time']+minutes
-        assert out.history['state_changes'][0]['kind']=='natural_compression'
+    out=StateResolver(s,'Разговор завершён.','',continuity_decision=p).resolve(raw)
+    assert out.state['meta']['world_time']==s['meta']['world_time']+minutes
+    assert out.history['state_changes'][0]['kind']=='natural_compression'
+
 
 
 @pytest.mark.parametrize('offset',[0,5,30,60])
@@ -114,21 +114,19 @@ def test_compression_stops_at_relevant_commitment_or_interruption(offset):
     snap=setup();s=snap['world_state'];s['meta']['world_time']=1000;now=s['meta']['world_time']
     s['scheduled_events']['due']=ScheduledEvent(id='due',description='Прерывание',character_ids=['b'],due_minute=now+offset,interrupts=True).model_dump()
     assert compression_limit(s,{'a'})['max_minutes']==min(30,offset)
-    p=permit(snap);raw=payload(s);raw['final_scene'].update(elapsed_minutes=min(30,offset)+1,compression=dict(kind='work',evidence='Разговор завершён.'))
+    p=permit(snap);raw=payload(s);raw['final_scene'].update(elapsed_minutes=offset+1,compression=dict(kind='work',evidence='Разговор завершён.'))
     with pytest.raises(StructuralDeltaError):StateResolver(s,'Разговор завершён.','',continuity_decision=p).resolve(raw)
+
 
 
 def test_compression_does_not_consume_external_response():
     snap=setup();s=snap['world_state'];p=permit(snap);p['pending_response_ids']=['question']
     raw=payload(s);raw['final_scene']['compression']=dict(kind='routine',evidence='Разговор завершён.')
-    with pytest.raises(StructuralDeltaError):StateResolver(s,'Разговор завершён.','',continuity_decision=p).resolve(raw)
-    raw['final_scene']['compression'].update(response_event_id='question',player_evidence='Нет.')
-    out=StateResolver(s,'Разговор завершён.','Нет.',continuity_decision=p).resolve(raw)
-    assert out.history['turns'][0]['continuity']['answered_response_ids']==['question']
-    assert out.history['state_changes'][0]['response_event_id']=='question'
-    p['pending_response_ids'].append('other')
-    with pytest.raises(StructuralDeltaError):
-        StateResolver(s,'Разговор завершён.','Нет.',continuity_decision=p).resolve(raw)
+    out=StateResolver(s,'Разговор завершён.','',continuity_decision=p).resolve(raw)
+    assert out.history['turns'][0]['continuity']['answered_response_ids']==[]
+    assert out.state['characters']['a']['intentions']==s['characters']['a']['intentions']
+    assert out.state['knowledge']==s['knowledge']
+
 
 
 def test_shared_history_is_relevant_but_not_disclosed_to_other_actors():
@@ -256,10 +254,14 @@ def test_response_reference_requires_pending_id_and_current_player_evidence(refe
     from test_npc_initiative import payload as action_payload, permit as action_permit
     snap=setup();before=deepcopy(snap)
     raw=action_payload(snap,response=response,player_evidence=evidence,response_event_id=reference)
-    with pytest.raises(StructuralDeltaError):
-        StateResolver(snap['world_state'],raw['events'][0]['text'],'Нет.',
-            initiative_decision=action_permit(snap),
-            continuity_decision={'pending_response_ids':['first','second']}).resolve(raw)
+    resolver=StateResolver(snap['world_state'],raw['events'][0]['text'],'Нет.',
+        initiative_decision=action_permit(snap), continuity_decision={'pending_response_ids':['first','second']})
+    out=resolver.resolve(raw)
+    assert out.history['turns'][0]['continuity']['answered_response_ids']==[]
+    assert len(out.history['events'])==1 and 'scene_action' not in out.history['events'][0]
+    expected='initiative_player_evidence_required' if evidence=='Да.' else 'initiative_response_reference_invalid'
+    assert any(w['code']==expected for w in out.warnings)
+    assert out.state['characters']==snap['world_state']['characters']
     assert snap==before
 
 

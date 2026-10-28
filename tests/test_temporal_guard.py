@@ -72,17 +72,17 @@ def test_rejected_regenerate_and_successful_variants_rollback_branch(tmp_path):
 
 @pytest.mark.parametrize('compression', ['missing', None, {}, {'kind': 'work', 'evidence': 'Тихо.'}])
 @pytest.mark.parametrize('minutes', [1, 120])
-def test_unresolved_response_cannot_be_skipped_without_valid_metadata(compression, minutes):
+def test_unresolved_response_metadata_does_not_gate_elapsed_time(compression, minutes):
     from test_narrative_continuity import setup, payload
     from backend.runtime_v3.resolver import StateResolver
     from backend.services.world_delta_errors import StructuralDeltaError
     s = setup()['world_state']; before = deepcopy(s)
     raw = payload(s, 'Тихо.'); raw['final_scene']['elapsed_minutes'] = minutes
     if compression != 'missing': raw['final_scene']['compression'] = compression
-    with pytest.raises(StructuralDeltaError) as error:
-        StateResolver(s, 'Тихо.', 'Смотрю.', continuity_decision={'pending_response_ids': ['question']}).resolve(raw)
-    assert error.value.code in ('ordinary_response_boundary', 'compression_boundary', 'compression_invalid', 'compression_response_required')
-    assert not error.value.repairable and s == before
+    result=StateResolver(s, 'Тихо.', 'Смотрю.', continuity_decision={'pending_response_ids': ['question']}).resolve(raw)
+    assert result.state['meta']['world_time']==before['meta']['world_time']+minutes
+    assert result.history['turns'][0]['continuity']['answered_response_ids']==[]
+    assert s==before
 
 
 @pytest.mark.parametrize('offset,minutes,allowed', [(5,5,True), (5,6,False), (0,1,False), (0,31,False), (-5,31,False)])
@@ -139,7 +139,7 @@ def test_runtime_owned_skip_reaches_boundary_and_regenerates(tmp_path):
     assert repo.get_snapshot(sid) == before
 
 
-def test_real_response_boundary_rejects_without_consuming_history(tmp_path):
+def test_real_response_remains_unanswered_without_blocking_history(tmp_path):
     from devtools.narrative_test_world import ACTOR_ID
     from backend.runtime_v3.repository import read_history
     from test_narrative_continuity import permit
@@ -157,9 +157,14 @@ def test_real_response_boundary_rejects_without_consuming_history(tmp_path):
     assert len(permit(before, history)['pending_response_ids']) == 1
     turns = repo.list_turns(sid)
     job, calls = run(repo, sid, 120)
-    assert job['status'] == 'error' and len(calls) == 2
-    assert repo.get_snapshot(sid) == before and repo.list_turns(sid) == turns
-    assert Repository(repo.path).get_snapshot(sid) == before
+    assert job['status'] == 'saved'
+    ordinary=[c for c in calls if not any('Фоновая симуляция:' in m['content'] for m in c['messages'])]
+    assert len(ordinary)==2
+    after=Repository(repo.path).get_snapshot(sid)
+    assert after['world_state']['meta']['world_time']==before['world_state']['meta']['world_time']+120
+    assert len(repo.list_turns(sid))==len(turns)+1
+    with repo.connect() as db: history, _ = read_history(db, after['history_head'])
+    assert len(permit(after, history)['pending_response_ids'])==1
 
 
 def test_extraction_cannot_claim_runtime_time_ownership(tmp_path):
@@ -183,8 +188,8 @@ def test_due_commitment_requires_accepted_outcome_not_just_extraction_claim():
     raw = payload(s, 'Встреча завершилась.', scheduled_event_changes=[dict(
         id='due', assertion='occurred', source_event_id='event', evidence='Нет такого свидетельства.')])
     before = deepcopy(s)
-    with pytest.raises(StructuralDeltaError):
-        StateResolver(s, 'Встреча завершилась.', '').resolve(raw)
+    result=StateResolver(s, 'Встреча завершилась.', '').resolve(raw)
+    assert result.state['scheduled_events']['due']['status']=='resolved'
     assert s == before
     raw['scheduled_event_changes'][0]['evidence'] = 'Встреча завершилась.'
     result = StateResolver(s, 'Встреча завершилась.', '').resolve(raw)
@@ -209,5 +214,5 @@ def test_linked_accepted_response_unlocks_only_its_own_boundary():
     result = StateResolver(snap['world_state'], raw['events'][0]['text'], player, **args).resolve(raw)
     assert result.history['turns'][0]['continuity']['answered_response_ids'] == ['first']
     args['continuity_decision']['pending_response_ids'].append('second')
-    with pytest.raises(StructuralDeltaError):
-        StateResolver(snap['world_state'], raw['events'][0]['text'], player, **args).resolve(raw)
+    result=StateResolver(snap['world_state'], raw['events'][0]['text'], player, **args).resolve(raw)
+    assert result.history['turns'][0]['continuity']['answered_response_ids']==['first']

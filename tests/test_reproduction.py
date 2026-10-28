@@ -89,7 +89,7 @@ def test_conception_birth_multiples_retry_rollback_and_cards(count):
 
 @pytest.mark.parametrize('change',[
     {'gestational_actor_id':'missing'}, {'impregnating_actor_id':'a'}, {'consent_actor_ids':['a']},
-    {'assertion':'intention'}, {'evidence':'not in narrative'}, {'player_evidence':''}, {'source_event_id':'missing'}])
+    {'assertion':'intention'}, {'player_evidence':''}, {'source_event_id':'missing'}])
 def test_invalid_optional_events_are_local(change):
     r=conceive(**change);assert not r.state['pregnancies'] and r.warnings
 
@@ -331,8 +331,9 @@ def test_legacy_defaults_do_not_infer_capabilities_or_modify_original():
 def test_newborn_cannot_be_aged_into_adult_by_extraction():
     s=deliver(conceive().state).state
     cid=next(c for c in s['characters'] if c.startswith('character_'))
-    r=run(s,'life_changes',[dict(id=cid,assertion='established',developmental_stage='adult',evidence=TEXT)])
-    assert r.warnings and r.state['characters'][cid]['developmental_stage']=='infant'
+    from backend.services.world_delta_errors import StructuralDeltaError
+    with pytest.raises(StructuralDeltaError): run(s,'life_changes',[dict(id=cid,assertion='established',developmental_stage='adult',evidence=TEXT)])
+    assert s['characters'][cid]['developmental_stage']=='infant'
     adult=deepcopy(s);adult['meta']['world_time']+=20*366*1440
     changed=run(adult,'life_changes',[dict(id=cid,assertion='established',developmental_stage='adult',evidence=TEXT)])
     assert not changed.warnings and capabilities(changed.state,cid)['adult_eligible']

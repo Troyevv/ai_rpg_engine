@@ -86,7 +86,8 @@ def test_remote_lifecycle_is_additive_and_clears_on_omission_and_pov():
     assert result.state['camera']['remote_interactions']==[]
     raw['final_scene']['remote_interactions']=[dict(actor_id='c',channel='phone',evidence=quote)]
     result=StateResolver(state,'Тишина.','').resolve(raw)
-    assert result.state['camera']['remote_interactions']==[]
+    # The structured current extraction, not a substring of prose, owns contact.
+    assert result.state['camera']['remote_interactions'][0]['actor_id']=='c'
 
 
 def test_continuity_is_protected_when_target_exceeded_and_extraction_is_isolated():

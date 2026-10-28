@@ -7,7 +7,7 @@ from backend.runtime_v3.resolver import StateResolver
 from backend.runtime_v3.history import audit_world_history
 from backend.services.world_delta_errors import StructuralDeltaError
 
-QUOTE='Я злюсь на неё. Люда рассказала о письме. Мы вышли в коридор.'
+QUOTE='Я злюсь на неё. Люда рассказала о письме. Люда вынесла меня в коридор.'
 
 
 def initial():
@@ -18,6 +18,7 @@ def initial():
 
 def payload():
     return dict(final_scene=dict(location_id='hall',present_character_ids=['a'],elapsed_minutes=5),
+        movements=[dict(actor_id='a',to_location_id='hall',player_assertion='involuntary',source_event_id='e')],
         facts=[dict(id='f',text='Есть письмо',evidence=QUOTE)],
         events=[dict(id='e',text='Разговор',participants=['a','b'],witnesses=['a','b'],fact_ids=['f'],medium='conversation',evidence=QUOTE)],
         knowledge_gained=[dict(actor_id='a',fact_id='f',source_event_id='e',evidence=QUOTE)])

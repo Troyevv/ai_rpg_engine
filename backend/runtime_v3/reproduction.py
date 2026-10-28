@@ -25,7 +25,7 @@ class ServiceClaim(StrictModel):
     consent_actor_ids: list[str] = Field(max_length=2)
     parent_ids: list[str] = Field(default_factory=list, max_length=8)
     assertion: Literal['completed_consensual_adult_event']
-    evidence: str = Field(min_length=1)
+    evidence: str = ""
     player_evidence: str = ''
     player_assertion: Literal['explicit_choice'] | None = None
 
@@ -38,7 +38,7 @@ class BirthClaim(StrictModel):
     disclosed_parent_ids: list[str] = Field(default_factory=list, max_length=8)
     # Explicit prose facts live on the existing card, not a child Appearance model.
     appearance: dict[str, str] = Field(default_factory=dict)
-    evidence: str = Field(min_length=1)
+    evidence: str = ""
 
 
 class NameClaim(StrictModel):
@@ -52,7 +52,7 @@ class NameClaim(StrictModel):
     delegated_to: str | None = None
     replaces: str | None = None
     source_event_id: str
-    evidence: str = Field(min_length=1)
+    evidence: str = ""
     player_evidence: str = ''
     player_assertion: Literal['explicit_choice'] | None = None
 
@@ -64,9 +64,7 @@ def unit(seed, purpose):
 def source(resolver, claim, events):
     from backend.runtime_v3.resolver import normalized
     event = events.get(claim['source_event_id'])
-    if (not event or not resolver.supported(claim) or
-            not normalized(claim['evidence']) or normalized(claim['evidence']) not in normalized(resolver.narrative) or
-            normalized(event['evidence']) not in normalized(resolver.narrative)):
+    if not event or not resolver.supported(claim):
         raise ValueError('current completed narrative event required')
     return event
 

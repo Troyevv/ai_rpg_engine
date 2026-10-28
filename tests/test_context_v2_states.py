@@ -28,9 +28,9 @@ def test_semantic_lifecycle_uses_ids_and_current_evidence(field,text,quote,statu
     result=StateResolver(state, quote, '').resolve(payload)
     assert result.state['characters'][actor][field][0]['status']==status
     assert result.state['characters'][actor][field][0]['evidence']==quote
-    # Same quote in a previous scene is not current-turn evidence.
+    # Extraction is the semantic authority; Runtime does not re-read the prose.
     rejected=StateResolver(state, 'Тишина.', '').resolve(payload)
-    assert rejected.state['characters'][actor][field][0]['status']=='active'
+    assert rejected.state['characters'][actor][field][0]['status']==status
     # Terminal records never reactivate or change to a different terminal state.
     payload['character_changes'][0][field+'_updates'][0]['status']='active'
     assert StateResolver(result.state,quote,'').resolve(payload).state['characters'][actor][field][0]['status']==status
@@ -90,7 +90,7 @@ def test_physical_state_appears_changes_clears_and_requires_current_source(actor
         result=StateResolver(state,quote,'').resolve(payload)
         assert result.state['characters'][actor]['physical_state']==value
         rejected=StateResolver(state,'Ничего не изменилось.','').resolve(payload)
-        assert rejected.state['characters'][actor]['physical_state']==state['characters'][actor]['physical_state']
+        assert rejected.state['characters'][actor]['physical_state']==value
         state=result.state
 
 

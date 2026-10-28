@@ -172,29 +172,18 @@ def validate_temporal_boundaries(resolver, elapsed):
     if elapsed > boundary['max_minutes']:
         fatal('Обычный ход пересекает временную границу договорённости.',
               'ordinary_temporal_boundary', repairable=False)
-    pending = set((resolver.continuity_decision or {}).get('pending_response_ids', []))
-    answered = set(turn_signal(resolver)['answered_response_ids'])
-    if pending - answered:
-        fatal('Обычный ход пропускает неразрешённую возможность ответа.',
-              'ordinary_response_boundary', repairable=False)
 
 
 def validate_compression(resolver, scene, elapsed):
     if 'compression' not in scene or resolver.mode == 'background' or resolver.runtime_time_skip: return
-    try: claim = Compression.model_validate(scene['compression'])
-    except (ValueError, TypeError): reject('compression_invalid')
-    permit = resolver.continuity_decision or {}
-    limit = min(permit.get('compression', {}).get('max_minutes', 0),
-                compression_limit(resolver.before, set(resolver.before['camera']['present_character_ids']))['max_minutes'])
-    if not 0 < elapsed <= limit or not resolver.supported(claim.model_dump()): reject('compression_boundary')
-    pending = permit.get('pending_response_ids', [])
-    if pending:
-        from backend.runtime_v3.resolver import normalized
-        if len(pending) != 1 or claim.response_event_id not in pending or not normalized(claim.player_evidence) or normalized(claim.player_evidence) not in normalized(resolver.player_input):
-            reject('compression_response_required')
+    try:
+        claim = Compression.model_validate(scene['compression'])
+    except (ValueError, TypeError):
+        resolver.warn('final_scene', 0, 'Необязательная аннотация сжатия отклонена.', 'compression', code='compression_invalid'); return
+    if elapsed <= 0:
+        resolver.warn('final_scene', 0, 'Нулевая длительность без сжатия.', 'compression', code='compression_boundary'); return
     resolver.history.state_changes.append(dict(kind='natural_compression', minutes=elapsed,
-        routine=claim.kind, evidence=claim.evidence, turn_id=resolver.turn_id,
-        response_event_id=claim.response_event_id if pending else None))
+        routine=claim.kind, evidence=claim.evidence, turn_id=resolver.turn_id))
 
 
 def apply(resolver, raw, events):
@@ -205,17 +194,17 @@ def apply(resolver, raw, events):
     """
     before, state = resolver.before, resolver.state
     if len(raw.records['scene_transitions']) > 8 or len(raw.records['continuity_beats']) > 8:
-        reject('continuity_budget')
+        resolver.warn('continuity_beats', 0, 'Превышен рекомендованный бюджет аннотаций.', code='continuity_budget')
     changed_actors, changed_threads = set(), set()
     for row in raw.records['scene_transitions']:
         try: claim = SceneTransition.model_validate(row)
-        except (ValueError, TypeError): reject('scene_transition_invalid')
+        except (ValueError, TypeError):
+            resolver.warn('scene_transitions', 0, 'Повреждена аннотация.', code='scene_transition_invalid'); continue
         event = events.get(claim.source_event_id)
         if not event or not resolver.supported(row) or not set(claim.actor_ids) <= set(event['participants']):
-            reject('scene_transition_evidence')
-        for tid in claim.thread_ids:
-            thread = state['threads'].get(tid)
-            if not thread or not set(claim.actor_ids) & set(thread['character_ids']): reject('scene_transition_thread')
+            resolver.warn('scene_transitions', 0, 'Нет связанного Event.', code='scene_transition_evidence'); continue
+        if any(tid not in state['threads'] or not set(claim.actor_ids) & set(state['threads'][tid]['character_ids']) for tid in claim.thread_ids):
+            resolver.warn('scene_transitions', 0, 'Нет связанной линии.', code='scene_transition_thread'); continue
         changed_actors.update(claim.actor_ids)
         changed_threads.update(claim.thread_ids)
         event['scene_transition'] = dict(phase=claim.phase, actor_ids=claim.actor_ids, thread_ids=claim.thread_ids)
@@ -244,11 +233,13 @@ def apply(resolver, raw, events):
     prior = {beat_key(r): r for r in (resolver.continuity_decision or {}).get('recent_beats', [])}
     for row in raw.records['continuity_beats']:
         try: claim = ContinuityBeat.model_validate(row)
-        except (ValueError, TypeError): reject('continuity_beat_invalid')
+        except (ValueError, TypeError):
+            resolver.warn('continuity_beats', 0, 'Повреждена аннотация.', code='continuity_beat_invalid'); continue
         event = events.get(claim.source_event_id)
         if not event or not resolver.supported(row) or not {claim.actor_id, *claim.target_ids} <= set(event['participants']):
-            reject('continuity_beat_evidence')
-        if any(key not in rows for key in claim.basis_ids): reject('continuity_basis_invalid')
+            resolver.warn('continuity_beats', 0, 'Нет связанного Event.', code='continuity_beat_evidence'); continue
+        if any(key not in rows for key in claim.basis_ids):
+            resolver.warn('continuity_beats', 0, 'Неизвестное основание аннотации.', code='continuity_basis_invalid'); continue
         if claim.actor_id == resolver.protected_actor_id or claim.decision_actor_id == resolver.protected_actor_id:
             from backend.runtime_v3.resolver import normalized
             if resolver.mode == 'background' or not normalized(claim.player_evidence) or normalized(claim.player_evidence) not in normalized(resolver.player_input):
@@ -261,7 +252,7 @@ def apply(resolver, raw, events):
         value.update(source_event_id=event['id'], basis_digest=fingerprint(rows, claim.basis_ids))
         old = prior.get(beat_key(value))
         if old and old['basis_digest'] == value['basis_digest'] and old['status'] in ('resolved', 'rejected') and claim.status == 'open':
-            reject('continuity_repeated_beat')
+            resolver.warn('continuity_beats', 0, 'Повторная аннотация.', code='continuity_repeated_beat'); continue
         event.setdefault('continuity', []).append(value)
         prior[beat_key(value)] = value
 

@@ -26,7 +26,7 @@ class AppearanceDelta(StrictModel):
     condition_id: str | None = None
     assertion: Literal['established_visual_outcome']
     transition: Literal['voluntary','involuntary','established_trait']
-    evidence: str = Field(min_length=1, max_length=1000)
+    evidence: str = Field(default="", max_length=1000)
     player_evidence: str = ''
     player_assertion: Literal['explicit_choice'] | None = None
 
@@ -127,7 +127,6 @@ def apply_appearance(r, raw, events):
             if c['fact_id'] not in event['fact_ids']: raise ValueError('Нет факта внешности в событии.')
             fact=r.state['facts'][c['fact_id']]
             if cid not in fact['character_ids']: raise ValueError('Факт относится к другому персонажу.')
-            if normalized(c['evidence']) not in normalized(r.narrative): raise ValueError('Нужен совершившийся результат в повествовании.')
             if c['kind'] not in KINDS[c['category']]: raise ValueError('Несогласованная категория внешности.')
             if c['kind'] in ('tattoo','piercing','hairstyle','facial_hair','cosmetic') and c['transition']!='voluntary':
                 raise ValueError('Косметическое изменение требует добровольного действия.')

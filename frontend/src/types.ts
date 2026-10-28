@@ -53,6 +53,7 @@ export interface Scene {
   time: string;
   location: string;
   present_ids: string[];
+  observed_ids?: string[];
 }
 export interface SocialRelation {
   id:string;kind:string;source_id:string;target_id:string;status:'active'|'closed';
