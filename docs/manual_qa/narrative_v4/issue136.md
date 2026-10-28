@@ -45,8 +45,10 @@ This clarification is recorded in `AGENTS.md`; its agency/source requirements re
   valid. Start/POV retain compatibility. Time Skip and background/LTA keep their
   existing deterministic clock owners. The old prose-based sleep override is removed.
 * Existing two-attempt Extraction repair uses the same before/context/narrative.
-  Classified vital outcome identity is retained across repair and manual Retry after
-  restart using existing request logs. Contradictory/omitting repair fails atomically.
+  Rejected Extraction attempts remain provisional, including individually validated
+  records in a failed transaction. Repair may correct classification; changed essential
+  sections produce diagnostics. Only committed before/History is canonical. Manual
+  Retry uses the latest failed response as feedback, never a union of alleged outcomes.
   No new mandatory LLM stage, hidden regeneration or larger retry/token budget exists.
 * Streaming text is visibly provisional until commit. Failed jobs preserve input,
   response and diagnostics but do not create a canonical turn. Existing revision,
@@ -77,7 +79,7 @@ For optional warnings, only the annotation is dropped and the domain after commi
 | pacing candidate, intensity budget, classification, happy preference | optional attribution/generation steering; never an outcome permit | narrative_pacing |
 | pacing explicit user risk exclusions / death policy | retained hard pre-commit restriction; no partial canon | narrative_pacing, protagonist |
 | initiative annotation IDs, budgets, response hints | malformed auxiliary attribution warns; actual accepted Event persists | npc_initiative |
-| initiative player source, adult/capability and Knowledge ownership | retained technical/agency boundary | npc_initiative, knowledge |
+| initiative player source, adult/capability and Knowledge annotations | reject the annotation locally; independent domain ownership/Knowledge/capability rules remain | npc_initiative, extraction_revision137, knowledge |
 | continuity beats/transitions/compression, pending-response hint | local warning/guidance; no manufactured response or elapsed-time gate | narrative_continuity, temporal_guard |
 | continuity canonical thread reopening / calendar boundary | retained source and chronology blocker | narrative_continuity, temporal_guard |
 | commitments sources, identity, assent, temporal/dependency graph | structural rejection now repairs, never saves an established agreement as no change | commitments, commitment_readiness, phone133_followup |
@@ -139,12 +141,12 @@ fix, not a claim that reducing prompt length improves model quality.
 | R01 | source inventory and disposition table above; baseline RED retained |
 | R02 | essential vs ancillary error paths; structured diagnostics; atomic rejection |
 | R03 | pacing/initiative/continuity and generation contracts; explicit risk tests |
-| R04 | life/conditions/social/roles/residences and repair outcome retention |
+| R04 | life/conditions/social/roles/residences and committed-outcome preservation |
 | R05 | scene reconciliation, explicit route history, unknown endpoint handling |
 | R06 | unchanged #133 phone ownership plus source-bound commitments/hangup regressions |
 | R07 | existing Knowledge/POV/player/canonical/revision tests; off-camera movement regression |
 | R08 | provisional JobView, real jobs and unchanged atomic commit boundary |
-| R09 | same-narrative two-attempt repair, persistent diagnostics and manual Retry outcome retention |
+| R09 | same-narrative two-attempt repair, persistent diagnostics and manual Retry reinterpretation; committed before/History protected |
 | R10 | default observed field, old-save/branch/rollback/regen/idempotence tests; no DB migration |
 | R11 | NPC literal anchors/permits removed; technical matching exceptions documented above |
 | R12 | root/nested diagnostics, essential envelope/type repair and overflow detection |
@@ -180,7 +182,7 @@ tests supplement them and are not presented as full-stack tests.
 | T15 | commitments, phone122/133_followup, remote_decision_contract; corpus agreement/decline/reschedule |
 | T16 | authority136 Start/interaction/reload/next; browser full journey |
 | T17 | authority136 structural repair one narrative/commit; repair_policy |
-| T18 | authority136 omission/atomic failure; runtime_handoff restart/stale/retry; provisional UI |
+| T18 | extraction_revision137 classification correction/atomic failure; runtime_handoff restart/stale/retry; provisional UI |
 | T19 | repair_policy variants; runtime_handoff old-save regenerate/variant/rollback; life_social |
 | T20 | protagonist, pov_transitions, npc_initiative, knowledge_lifecycle; browser POV |
 | T21 | temporal_guard, commitment_readiness, long_term_advance, background_time; browser LTA |
@@ -235,7 +237,7 @@ retain all 19 identities, prior Knowledge, one Extraction per turn and subsequen
 | G03 | optional annotation and projection regression suites |
 | G04 | tested outcomes and History agree atomically; arbitrary model omissions remain a live-quality limitation |
 | G05 | strict ownership/Knowledge/canon/risk/revision guards and negative tests retained |
-| G06 | bounded targeted repair, persisted diagnostics, restart/omission protection; no automatic infinite retry |
+| G06 | bounded targeted repair, persisted diagnostics, restart/canonical-state protection; no automatic infinite retry |
 | G07 | expectations updated to new authority contract, essential-loss assertions strengthened; no new skips |
 | G08 | actual API/SQLite, desktop/mobile and lineage/budget suites; live explicitly separate |
 | G09 | no SQLite schema migration or second store; default observed and historical-byte tests |
@@ -252,7 +254,7 @@ retain all 19 identities, prior Knowledge, one Extraction per turn and subsequen
 | G20 | explicit intermediate Events/routes and protected movement preserved |
 | G21 | E5/#78 real integration and desktop/mobile; #133 preserved, #135 untouched |
 
-## Results and compatibility
+## Initial delivery results and compatibility
 
 * Frontend `npm run build`: PASS (existing bundle-size warning only).
 * Frontend `npm test`: 34 passed across 3 files.
@@ -298,7 +300,7 @@ Actual real-device mobile browsers, production deployment and the original user'
 unavailable failed DB trace were not tested. Pixel 7 here is Chromium viewport emulation.
 
 
-## Delivery results (2026-10-28)
+## Initial delivery evidence (2026-10-28)
 
 Production code tested: `2abe43a81ba8af9f24b4833246ae66fba9c69862`, tree
 `e2710c413b5b5266e05f7a939c3d0cdb67dbbf27`. Subsequent commit
@@ -336,3 +338,101 @@ The local browser result is the explicitly listed 48-test acceptance matrix, not
 claim to have run every browser spec locally. GitHub's workflow runs its full browser
 projects separately; its live status is linked on PR #137. CI status is not used as
 proof of real-model Extraction quality or unobserved production behavior.
+
+
+## PR #137 P1 follow-up: annotations and provisional Extraction
+
+Starting HEAD: `6d57688e2363b79027c981739ae17c1d7943f4b7`; implementation commit
+`38e1313ea0feb1ac15c43c48dc71f56f52492dbf`, existing branch
+`codex/issue-136-narrative-extraction`. This section supersedes the initial delivery's
+claim that preserving first-attempt JSON establishes semantic correctness.
+
+* `initiative.validate_actions`: invalid player-source, Knowledge, capability and adult
+  annotations now use the same local warning/drop path as other invalid `scene_actions`.
+  Valid independently extracted Events and effects remain. This annotation cannot
+  create a player decision or knowledge. Domain handlers were not relaxed.
+* Removed `repair_outcomes` / `validate_repair_outcomes` and the analogous phone
+  `repair_candidates` / `validate_repair` locks. Passing an individual validation in
+  a later rejected transaction does not make that proposal canonical. No failed
+  attempt is partially committed. Existing phone source/call-lifecycle/agency rules
+  remain in place.
+* The existing bounded repair receives the same complete narrative, recorded before,
+  history and latest failed response. Feedback now explicitly permits correction of
+  a false semantic classification, while requiring all actual consequences and their
+  dependencies. Retry resumes the latest response; it does not union contradictory
+  claims from all failed attempts.
+* `repair_revision_warnings` compares provisional structures only for an audit notice
+  (`extraction_revised`), never as an acceptance/rejection condition. Essential changed
+  sections, including additions/removals between parseable attempts, are visible in
+  existing job/turn warnings. Malformed attempts retain their structural diagnostics;
+  raw responses and request provenance remain in the existing log. Diagnostics UI
+  labels these as a revised Extraction, not as a dropped canonical record.
+* Committed before/History remains protected by unchanged domain validation, immutable
+  sources, lineage/revision/epoch checks and atomic commit. Existing save format and
+  normal one-narrative/one-extraction path are unchanged. Repair still permits at most
+  one automatic retry. No extra provider, validator, store or mandatory call was added.
+
+**Limit of the guarantee:** a structurally valid revised Extraction can still be
+semantically wrong. A semantically wrong but technically valid first answer does not
+automatically trigger repair either. Neither equal JSON nor changed JSON proves what
+occurred in prose.
+If a genuinely described but previously uncommitted death is omitted from a repaired
+answer, the section change is diagnosed, but Python cannot reliably decide whether
+that is a correct retraction or a model omission. If every answer omits the consequence,
+there may be no structural signal at all. Differences in normalized parsed proposals
+can also reflect representation changes; the audit notice is not a semantic verdict. Semantic accuracy belongs to the existing
+Extractor and live quality evaluation; this patch does not claim a completeness proof.
+An already committed death/knowledge/agreement is not deleted merely because the next ordinary-turn
+Extraction omits it. Explicit contradictory changes still face their domain invariants.
+
+### Follow-up acceptance evidence
+
+`tests/test_extraction_revision137.py` uses actual API/jobs/Runtime/SQLite, substituting
+only `engine.chat_stream`. It covers all four optional annotation defects, unchanged
+player mental fields and Knowledge, rejected unauthorized movement/capability grants,
+false-positive and false-negative death correction, persistent raw requests, Retry
+with identical before/narrative/context, duplicate Retry rejection, accepted death
+through repair/reload/regenerate/variant selection/rollback, and rejection of resurrection.
+Existing initiative, repair, phone and authority tests were updated to the corrected
+transaction semantics; no test skips or weakened domain invariants were introduced.
+
+Browser fixtures add `optional-annotation` and `semantic-retry`: a real failed Start,
+reload, corrected Retry, next turns and diagnostics on both desktop and mobile.
+The original #136 entry/doorway/phone journey remains in the matrix.
+
+| Check | Result |
+|---|---|
+| Targeted authority/initiative/repair/phone/new API regression suite | **132 passed**, 149.19s |
+| Continuity suite after updating the obsolete annotation-fatal expectation | **25 passed**, 5.45s |
+| Complete backend suite | **2309 passed**, 790.84s (13:10), commit `02b861a` |
+| Frontend `npm test` | **34 passed**, 3 files |
+| Frontend `npm run build` | **PASS**, existing bundle-size warning only |
+| Final selected Playwright desktop/mobile matrix | **52 passed**, 8.8m |
+
+Reproduce from the repository root (browser commands from `frontend`, using the
+available Chromium via `PLAYWRIGHT_EXECUTABLE_PATH`):
+
+```bash
+python -m pytest -q tests/test_extraction_revision137.py tests/test_npc_initiative.py tests/test_narrative_authority136.py tests/test_repair_policy.py tests/test_call_continuity.py
+python -m pytest -q tests/test_narrative_continuity.py
+python -m pytest -q
+cd frontend
+npm run build
+npm test
+npm run test:e2e -- narrative-authority136.spec.ts call-continuity.spec.ts phone133.spec.ts runtime-handoff.spec.ts pov.spec.ts knowledge.spec.ts long-term.spec.ts commitments.spec.ts narrative-continuity.spec.ts npc-initiative.spec.ts narrative-pacing.spec.ts streaming72.spec.ts
+```
+
+Logs are in `issue137-p1-evidence/`. The first browser matrix had 50 passes and
+2 failures because the new diagnostics locator matched both legacy History audit
+and current-turn warnings. Commit `63ba1ac183d8d578d066a53df64e0c1c8f3fa540`
+scopes that locator to the current-turn section; both content assertions remain.
+The final complete selected matrix passed. The first full backend run was stopped
+after finding an obsolete continuity test expecting optional invalid player evidence
+to abort a turn. Commit `02b861ab95cf0473a402b09ee799b3fae3a7ef15` changes only that
+test: it now also checks that the Event survives and pending response IDs remain
+unanswered. The subsequent full backend run uses this commit. Production code has
+not changed since `38e1313`.
+
+
+Live DeepSeek remains **NOT RUN**: no safe user key/configuration. Synthetic provider
+replays are plumbing/regression evidence, not semantic model-quality measurements.
