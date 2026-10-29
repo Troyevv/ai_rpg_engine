@@ -8,7 +8,7 @@ import json
 import pytest
 from hypothesis import given, strategies as st
 from backend.services.draft_response import join_fragments, prefix_complete, response, TransportError
-from backend.services.draft_initial import prompt_schema
+from backend.services.draft_schema import world_state_schema
 from test_draft_response_v4 import JournalRepo, CONFIG, MESSAGES, part, run
 from test_initial_draft_v4 import api, rich, REMOTE, SHORT, wait_job
 
@@ -23,14 +23,14 @@ def journal():return json.loads(FIXTURE.read_bytes())
 def test_real_journal_boundary_and_idempotent_resume():
     assert hashlib.sha256(FIXTURE.read_bytes()).hexdigest()=='a72bbdb4f2861bea0a58e2935b131031aea60cc9801256209e82912845f2bfdd'
     j=journal();before=deepcopy(j);parts=j['responses']['world']['parts'];manifest={}
-    text=join_fragments(parts,manifest,schema=prompt_schema())
+    text=join_fragments(parts,manifest,schema=world_state_schema())
     assert len(text)==76395 and not prefix_complete(text)
     assert manifest['boundaries'][1]['removed_prefix']==51
     assert manifest['boundaries'][1]['rejected'][0]['overlap']==1
     assert 'вложенность' in manifest['boundaries'][1]['rejected'][0]['reason']
     assert text==parts[0]['text']+parts[1]['text'][51:]
     assert parts==before['responses']['world']['parts']
-    assert join_fragments(parts,deepcopy(manifest),schema=prompt_schema())==text
+    assert join_fragments(parts,deepcopy(manifest),schema=world_state_schema())==text
     calls=[]
     def suffix(messages,limit):
         calls.append(messages);assert messages[-2]['content']==text

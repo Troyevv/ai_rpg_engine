@@ -207,6 +207,10 @@ def stream(**kwargs):
     elif 'Каноническая JSON Schema WorldState' in full:
         from test_draft_world import fixture
         candidate=fixture()
+        if 'TEST_CONTACT_FREE_WORLD' in full:
+            phone_mode='silent'
+            candidate['world'].pop('contacts',None)
+            candidate['world']['communication']={'text_message':True,'voice_call':True,'presentation':'phone'}
         if 'TEST_MOTIVATION_OBJECTS' in full:
             from test_draft_motivations import motivated
             candidate,_=motivated()
@@ -451,7 +455,7 @@ if __name__ == '__main__':
         return {'world':seed['world'],'save':seed['save']}
 
     @app.post('/test/phone-seed')
-    def phone_seed(unread: bool = False, incoming: bool = True, decision: str = "silent", polish: bool = False, hidden: bool = False):
+    def phone_seed(unread: bool = False, incoming: bool = True, decision: str = "silent", polish: bool = False, hidden: bool = False, strangers: bool = False):
         global phone_mode
         phone_mode=decision
         from devtools.narrative_test_world import load_fixture
@@ -466,6 +470,8 @@ if __name__ == '__main__':
         snap=repo.get_snapshot(sid)
         from backend.runtime_v3.models import WorldHistoryV3
         batch=WorldHistoryV3().to_dict()
+        if strangers:
+            snap['world_state']['contacts'] = {}
         if polish:
             if hidden:
                 for contact in snap['world_state']['contacts'].values():

@@ -155,3 +155,37 @@ sources must be authored input, never narrator wording; player_source_id is mand
 original minute. Reschedules require fresh sources from both participants, cancellations
 a matching decision-author cancellation proof. ScheduledEvent remains the sole plan;
 no separate transcript, calendar, Runtime or extra generation call is introduced.
+
+## Universal canonical recipients (#129)
+
+`remote.recipient_eligible` is the shared eligibility boundary for current and future
+CommunicationProfile channel flags: the sender and target exist, differ, the channel
+is enabled, and the target is not canonically dead. Unknown/missing life status is
+permissive, matching the existing life capability fallback; no death is inferred.
+Recipient capability, acquaintance, device, address and saved contact are not gates.
+
+Send/call commands may supply `character_id` instead of a contact, conversation or
+service. Exactly one route is accepted. A direct conversation is created only on an
+actual send, using the existing identity and event/history pipeline. No contacts,
+relationships or Knowledge are synthesized. Delivery is still not read/consent;
+silence and declined/missed calls remain ordinary autonomous outcomes.
+
+Phone projection adds a read-only recipient directory and Runtime-derived
+`can_send`/`can_call` flags. The directory exposes only routing identity and the
+existing visible name/portrait projection. Hidden births retain a neutral subject;
+hidden contact identity is not linked to a message author. All private conversations,
+events, drafts and reads remain controlled-actor owned, regardless of camera POV.
+
+Legacy contacts, labels, blocking/availability annotations, unresolved/service
+addresses and history remain stored. For linked canonical people those annotations
+no longer prohibit an attempt. Dead members remain in group membership/history but
+are excluded from new deliveries; live members can continue the group. New direct
+attempts to dead people fail without deleting history.
+
+Ordinary Narrative extraction can route a single canonical recipient directly.
+The existing bounded event-first planner retains its opportunity selection and
+call budget; the directory does not add polling or LLM requests. Future transport
+delivery/presentation remains #130/#131, not a parallel implementation here.
+No database migration or historical snapshot rewrite is required.
+
+The phone uses one searchable recipient list, with saved labels first and direct message/call actions. Existing contact details, service endpoints and private conversation history remain available. New worlds do not need a phonebook: initial generation and completeness prompts explicitly exclude it, and the provider schema omits contacts. The editor/import contract still accepts and validates legacy contacts, including scoped repairs. Normalization supplies only the empty collection; migration/handoff never populate it from the cast.

@@ -599,14 +599,14 @@ def test_former_group_member_can_read_delivery_but_not_future_membership():
         command(s, "send", conversation_id=gid, content="После выхода")
 
 
-def test_existing_direct_conversation_does_not_bypass_contact_block():
+def test_existing_direct_conversation_ignores_legacy_contact_gate():
     s = command(phone(), "send", contact_id="a-b", content="Привет")
     gid = next(iter(s["world_state"]["conversations"]))
     s = command(s, "edit_contact", contact_id="a-b", blocked=True)
-    with pytest.raises(ValueError):
-        command(s, "send", conversation_id=gid, content="Заблокирован")
-    with pytest.raises(ValueError):
-        command(s, "call", conversation_id=gid)
+    sent = command(s, "send", conversation_id=gid, content="Доступен без контакта")
+    assert len(sent["world_state"]["remote_events"]) == 2
+    called = command(s, "call", conversation_id=gid)
+    assert list(called["world_state"]["remote_events"].values())[-1]["status"] == "ringing"
 
 
 def test_extraction_call_audibility_cannot_create_physical_witness_knowledge():

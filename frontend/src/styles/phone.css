@@ -422,3 +422,11 @@ button.phone-row {flex-wrap:wrap;gap:6px;text-align:left;}
  .game .composer .phone-screen .phone-body {flex:1 0 auto;overflow:visible;}
  .game .composer .phone-chat>.phone-messages {flex:none;max-height:8rem;}
 }
+
+/* Directory is a read-only projection, sharing the phone's skin and controls. */
+.phone-row.phone-recipient { display:grid; grid-template-columns:36px minmax(0,1fr) auto; gap:.5rem; align-items:center; }
+.phone-recipient .phone-contact-name { min-width:0; min-height:44px; text-align:left; overflow-wrap:anywhere; }
+.phone-recipient .phone-contact-name small { display:block; color:var(--muted); }
+.phone-row.phone-recipient > .phone-recipient-actions { display:flex; gap:.25rem; min-width:0; }
+.phone-screen .phone-recipient-actions button { display:inline-flex; align-items:center; justify-content:center; width:44px; height:44px; min-width:44px; padding:0; color:var(--text); background:var(--accent-soft); border:1px solid var(--border); border-radius:var(--radius-sm); }
+.phone-recipient-actions svg { flex-shrink:0; }

@@ -146,6 +146,9 @@ def prompt_schema():
         if not isinstance(v,dict):return v
         return {k:({name:compact(part) for name,part in x.items()} if k=='properties' else compact(x)) for k,x in v.items() if k not in ('description','title','$schema') and not (k=='additionalProperties' and x is True) and not (k=='required' and not x)}
     schema=compact(world_state_schema())
+    # Contacts remain an accepted legacy/editor extension, not generation work.
+    # Runtime derives recipients from canonical characters and enabled channels.
+    schema['properties']['world']['properties'].pop('contacts', None)
     # Explicit communication profile is injected by code, never generated twice.
     communication=schema['properties']['world']['properties']['communication']['properties']
     for key in ('profile_version','preset','letter','courier','telegram','landline','magic','delivery_policy','author_note'):

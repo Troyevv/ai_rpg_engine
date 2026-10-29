@@ -12,7 +12,10 @@ import { active, type Save, type Job, type ModelConfig } from "./types";
 import { CharacterAvatar, type PortraitSubject } from "./Portrait";
 import "./styles/phone.css";
 
+type Recipient = { id: string; search_name?: string; subject: PortraitSubject; can_send: boolean; can_call: boolean };
 type Contact = {
+  can_send?: boolean;
+  can_call?: boolean;
   id: string;
   label: string;
   address: string;
@@ -26,6 +29,7 @@ type Conversation = {
   group: boolean;
   contact_id: string | null;
   active: boolean;
+  can_send?: boolean;
   participants: PortraitSubject[];
 };
 type Event = {
@@ -49,6 +53,7 @@ export type PhoneState = {
   actor_id: string;
   capabilities: { text_message: boolean; voice_call: boolean; ring_timeout_minutes: number };
   contacts: Contact[];
+  recipients?: Recipient[];
   conversations: Conversation[];
   events: Event[];
   focus: "physical" | "call";
@@ -106,6 +111,7 @@ export function Phone({
   const autoReadAttempt = useRef<string | null>(null);
   const currentOwner = useRef(ownerKey); currentOwner.current = ownerKey;
   const [detail, setDetail] = useState<string | null>(null);
+  const [recipient, setRecipient] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [entry, setEntry] = useState(true);
   const messages = useRef<HTMLDivElement>(null);
@@ -126,15 +132,13 @@ export function Phone({
     onBusyChange(busy);
     return () => onBusyChange(false);
   }, [busy, onBusyChange]);
-  const [editContact, setEditContact] = useState<string | null>(null),
-    [contactKind, setContactKind] = useState("person");
-  const [label, setLabel] = useState(""),
-    [address, setAddress] = useState("");
+  const [editContact, setEditContact] = useState<string | null>(null);
+  const [label, setLabel] = useState("");
   const [adding, setAdding] = useState(false),
     [grouping, setGrouping] = useState(false);
   const [groupMembers, setGroupMembers] = useState<string[]>([]),
     [groupName, setGroupName] = useState("");
-  const messageKey = `${save.id}:${phone?.actor_id}:${conversation || contact || ""}`;
+  const messageKey = `${save.id}:${phone?.actor_id}:${conversation || contact || recipient || ""}`;
   const currentMessage = useRef(messageKey); currentMessage.current = messageKey;
   useEffect(() => {
     setText(drafts.current[messageKey] || sessionStorage.getItem(`phone-draft:${messageKey}`) || "");
@@ -177,6 +181,7 @@ export function Phone({
   useEffect(() => {
     setOwner(ownerKey);
     setDetail(null); setSearch(""); setEntry(true);
+    setRecipient(null);
     setOpen(false);
     setContact(null);
     setConversation(null);
@@ -186,8 +191,6 @@ export function Phone({
     setAdding(false);
     setTab("contacts");
     setLabel("");
-    setAddress("");
-    setContactKind("person");
     setGrouping(false);
     setGroupMembers([]);
     setGroupName("");
@@ -249,7 +252,23 @@ export function Phone({
   const unread = phone.events.filter((e) => e.unread).length;
   const selected = phone.conversations.find((c) => c.id === conversation);
   const target = phone.contacts.find((c) => c.id === contact);
+  const recipients = phone.recipients || [];
+  const savedRecipient = (r: Recipient) => phone.contacts.find(c => c.subject.id === r.id);
+  const matchesSearch = (value: string) => value.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase());
+  const visibleRecipients = [...recipients].sort((a,b) => Number(!!savedRecipient(b))-Number(!!savedRecipient(a)))
+    .filter(r => matchesSearch(r.subject.name + " " + (r.search_name || "") + " " + phone.contacts.filter(c=>c.subject.id===r.id).map(c=>c.label).join(" ")));
+  const legacyContacts = phone.contacts.filter(c => !recipients.some(r => r.id === c.subject.id));
+  const recipientTarget = recipients.find(r => r.id === recipient);
+  const canSend = selected ? selected.can_send !== false : recipient
+    ? !!recipientTarget?.can_send : target?.can_send !== false;
+  const chooseRecipient = (r: Recipient) => {
+    const existing = phone.conversations.find(c => !c.group && c.active && c.participants.some(p => p.id === r.id));
+    if (existing) { void openChat(existing); return; }
+    setRecipient(r.id); setContact(null); setConversation(null);
+    setTab("messages"); setEntry(false);
+  };
   const openChat = async (c: Conversation) => {
+    setRecipient(null);
     setConversation(c.id);
     setContact(null);
     setTab("messages");
@@ -263,7 +282,7 @@ export function Phone({
       content: text,
       ...(conversation
         ? { conversation_id: conversation }
-        : { contact_id: contact }),
+        : recipient ? { character_id: recipient } : { contact_id: contact }),
     });
     if (next) {
       const remaining=drafts.current[messageKey]===text?'':(drafts.current[messageKey]||'');
@@ -280,6 +299,7 @@ export function Phone({
         if(destination!==messageKey&&remaining){drafts.current[destination]=remaining;sessionStorage.setItem(`phone-draft:${destination}`,remaining)}
         setConversation(last.conversation_id);
         setContact(null);
+        setRecipient(null);
       }
     }
   };
@@ -361,8 +381,8 @@ export function Phone({
           {error && <p role="alert">{error}</p>}
           {jobHere&&active(job)&&<p className="phone-progress" role="status">{call?.status==='ringing'?t('dialing'):t('waiting')}</p>}
           {jobHere&&job&&['error','stopped'].includes(job.status)&&job.revision===save.revision&&<div role="alert" className="phone-progress"><p>{t('reactionFailed')}</p><button disabled={busy} onClick={async()=>{try{onJob(await api<Job>(`/jobs/${job.id}/retry`,{config,api_key:apiKey}))}catch{setError(t('failed'))}}}>{t('retry')}</button></div>}
-          {call&&tab==='messages'&&(conversation||contact)&&<button className="phone-call-link" onClick={()=>setTab('calls')}>{call.status==='ringing'?'Вызов':'Разговор'} · {call.label} →</button>}
-          {call && !(tab==='messages'&&(conversation||contact)) && (
+          {call&&tab==='messages'&&(conversation||contact||recipient)&&<button className="phone-call-link" onClick={()=>setTab('calls')}>{call.status==='ringing'?'Вызов':'Разговор'} · {call.label} →</button>}
+          {call && !(tab==='messages'&&(conversation||contact||recipient)) && (
             <section className="phone-call" aria-label="Текущий звонок">
               {avatar(call.subject)}
               <strong>{call.label}</strong>
@@ -399,33 +419,39 @@ export function Phone({
               )}
             </section>
           )}
-          <div className={`phone-body ${tab==='messages'&&(conversation||contact)?'phone-chat':''}`}>
+          <div className={`phone-body ${tab==='messages'&&(conversation||contact||recipient)?'phone-chat':''}`}>
             {entry&&unread>0&&<section className="phone-notifications"><h3>Новые сообщения · {unread}</h3>{phone.conversations.filter(c=>phone.events.some(e=>e.conversation_id===c.id&&e.unread)).map(c=><button key={c.id} onClick={()=>void openChat(c)}>{c.title}<small>Открыть сообщение</small></button>)}</section>}
             {tab === "contacts" && (
               <>
-                {!detail&&<label className="phone-search">Поиск контакта<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Имя или номер"/></label>}
-                {currentContact&&<button onClick={()=>setDetail(null)}>К контактам</button>}
-                {!detail&&<button
-                  onClick={() => {
-                    setEditContact(null);
-                    setLabel("");
-                    setAddress("");
-                    setContactKind("person");
-                    setAdding(!adding);
-                  }}
-                >
-                  Добавить контакт
-                </button>}
+                {!detail&&<>
+                  <label className="phone-search">{t("searchRecipient")}<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("searchPlaceholder")}/></label>
+                  <section className="phone-directory" aria-label={t("directory")}>
+                    {visibleRecipients.map(r=>{
+                      const saved = savedRecipient(r);
+                      return <article className="phone-row phone-recipient" key={r.id}>
+                        {avatar(r.subject)}
+                        <button className="phone-contact-name" disabled={locked||(!saved&&!r.can_send)} onClick={()=>{if(saved){setDetail(saved.id);setEntry(false)}else chooseRecipient(r)}}>
+                          <strong>{saved?.label || r.subject.name}</strong>
+                          {saved && saved.label !== r.subject.name && <small>{r.subject.name}</small>}
+                        </button>
+                        <div className="phone-recipient-actions">
+                          {phone.capabilities.text_message&&<button title={t("write")} aria-label={t("writeTo")+" "+r.subject.name} disabled={locked||!r.can_send} onClick={()=>chooseRecipient(r)}><MessageCircle size={18} aria-hidden="true"/></button>}
+                          {phone.capabilities.voice_call&&<button title={t("call")} aria-label={t("callTo")+" "+r.subject.name} disabled={locked||!!call||!r.can_call} onClick={()=>void perform({action:"call",character_id:r.id})}><PhoneIcon size={18} aria-hidden="true"/></button>}
+                        </div>
+                      </article>;
+                    })}
+                    {!visibleRecipients.length&&!legacyContacts.some(c=>matchesSearch(c.label+' '+c.address))&&<p role="status">{t("noRecipients")}</p>}
+                  </section>
+                </>}
+                {currentContact&&<button onClick={()=>{setDetail(null);setAdding(false)}}>{t("backToRecipients")}</button>}
                 {adding && (
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
                       void perform({
-                        action: editContact ? "edit_contact" : "add_contact",
+                        action: "edit_contact",
                         contact_id: editContact,
                         label,
-                        address,
-                        kind: contactKind,
                         blocked:
                           phone.contacts.find((c) => c.id === editContact)
                             ?.blocked || false,
@@ -433,7 +459,6 @@ export function Phone({
                         if (next) {
                           setAdding(false);
                           setLabel("");
-                          setAddress("");
                         }
                       });
                     }}
@@ -447,39 +472,10 @@ export function Phone({
                         required
                       />
                     </label>
-                    {!editContact && (
-                      <>
-                        <label>
-                          Тип контакта
-                          <select
-                            value={contactKind}
-                            onChange={(e) => setContactKind(e.target.value)}
-                          >
-                            <option value="person">Человек</option>
-                            <option value="service">Служба</option>
-                            <option value="shared">
-                              Общий номер организации
-                            </option>
-                          </select>
-                        </label>
-                        <label>
-                          Номер или адрес
-                          <input
-                            value={address}
-                            onChange={(e) => setAddress(e.target.value)}
-                            maxLength={160}
-                            required
-                          />
-                        </label>
-                      </>
-                    )}
                     <button disabled={locked}>Сохранить контакт</button>
                   </form>
                 )}
-                {phone.contacts.length === 0 && (
-                  <p>Сохранённых контактов нет.</p>
-                )}
-                {phone.contacts.filter(c=>detail?c.id===detail:(c.label+' '+c.address).toLocaleLowerCase().includes(search.toLocaleLowerCase())).map((c) => (
+                {(detail?phone.contacts.filter(c=>c.id===detail):legacyContacts.filter(c=>matchesSearch(c.label+' '+c.address))).map((c) => (
                   <article className={`phone-row ${detail?'phone-contact-detail':''}`} key={c.id}>
                     {avatar(c.subject)}
                     <div>
@@ -496,7 +492,7 @@ export function Phone({
                     {detail===c.id&&<div className="phone-contact-actions">
                       {phone.capabilities.text_message && (
                         <button
-                          disabled={locked || c.blocked || !c.available}
+                          disabled={locked || c.can_send === false}
                           onClick={() => {
                             const existing = phone.conversations.find(
                               (t) =>
@@ -510,6 +506,7 @@ export function Phone({
                             if (existing) {
                               void openChat(existing);
                             } else {
+                              setRecipient(null);
                               setContact(c.id);
                               setConversation(null);
                               setText("");
@@ -523,7 +520,7 @@ export function Phone({
                       {phone.capabilities.voice_call && (
                         <button
                           disabled={
-                            locked || !!call || c.blocked || !c.available
+                            locked || !!call || c.can_call === false
                           }
                           onClick={() =>
                             void perform({ action: "call", contact_id: c.id })
@@ -577,8 +574,9 @@ export function Phone({
             )}
             {tab === "messages" && (
               <>
-                {!conversation && !contact ? (
+                {!conversation && !contact && !recipient ? (
                   <>
+                    <button onClick={()=>{setTab("contacts");setDetail(null);setSearch("")}}>{t("newMessage")}</button>
                     <button onClick={() => setGrouping(!grouping)}>
                       Создать группу
                     </button>
@@ -608,11 +606,9 @@ export function Phone({
                           />
                         </label>
                         <fieldset>
-                          <legend>Участники из контактов</legend>
-                          {phone.contacts
-                            .filter(
-                              (c) => c.subject.id && !c.blocked && c.available,
-                            )
+                          <legend>{t("directory")}</legend>
+                          {recipients
+                            .filter((c) => c.can_send)
                             .map((c) => (
                               <label key={c.id}>
                                 <input
@@ -628,7 +624,7 @@ export function Phone({
                                     )
                                   }
                                 />
-                                {c.label}
+                                {c.subject.name}
                               </label>
                             ))}
                         </fieldset>
@@ -664,20 +660,21 @@ export function Phone({
                     <button
                       onClick={() => {
                         setContact(null);
+                        setRecipient(null);
                         setConversation(null);
                         setText("");
                       }}
                     >
                       К перепискам
                     </button>
-                    <h3>{selected?.title || target?.label}</h3>
+                    <h3>{selected?.title || target?.label || recipientTarget?.subject.name}</h3>
                     <div
                       className="phone-avatars"
                       aria-label="Участники переписки"
                     >
                       {(
                         selected?.participants ||
-                        (target ? [target.subject] : [])
+                        (target ? [target.subject] : recipientTarget ? [recipientTarget.subject] : [])
                       ).map((p, i) => (
                         <span key={i}>
                           {avatar(p)}
@@ -705,12 +702,10 @@ export function Phone({
                               Удалить: {p.name}
                             </button>
                           ))}
-                        {phone.contacts
+                        {recipients
                           .filter(
                             (c) =>
-                              c.subject.id &&
-                              !c.blocked &&
-                              c.available &&
+                              c.can_send &&
                               !selected.participants.some(
                                 (p) => p.id === c.subject.id,
                               ),
@@ -727,7 +722,7 @@ export function Phone({
                                 })
                               }
                             >
-                              Добавить: {c.label}
+                              Добавить: {c.subject.name}
                             </button>
                           ))}
                       </fieldset></details>
@@ -792,6 +787,7 @@ export function Phone({
                           </article>
                         ))}
                     </div>
+                    {!canSend&&<p className="muted" role="status">{t("recipientUnavailable")}</p>}
                     {phone.capabilities.text_message &&
                       (!selected || selected.active) && (
                         <form className="phone-composer"
@@ -814,7 +810,7 @@ export function Phone({
                               maxLength={4000}
                             />
                           </label>
-                          <button disabled={locked || !text.trim()}>
+                          <button disabled={locked || !canSend || !text.trim()}>
                             Отправить сообщение
                           </button>
                           <small className="muted">1 игровая минута · ответ не гарантирован</small>

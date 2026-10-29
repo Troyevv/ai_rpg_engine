@@ -116,7 +116,9 @@ def test_t07_existing_thread_groups_and_unknown_identity():
 
 def test_t07_explicit_new_contact_uses_remote_contract_no_inferred_address():
     snap=phone();del snap['world_state']['contacts']['b-a']
-    with pytest.raises(StructuralDeltaError):resolve(snap,[message()])
+    direct=resolve(snap,[message()])
+    assert direct.state['contacts']==snap['world_state']['contacts']
+    assert next(iter(direct.state['remote_events'].values()))['recipient_ids']==['a']
     out=resolve(snap,[message(established_contact=dict(label='Сохранённый адрес',address='explicit-123'))])
     created=[c for c in out.state['contacts'].values() if c['owner_id']=='b']
     assert len(created)==1 and created[0]['address']=='explicit-123' and created[0]['character_id']=='a'

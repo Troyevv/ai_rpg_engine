@@ -21,7 +21,8 @@ FIXTURE=Path(__file__).parent/'fixtures/initial_world/generation_response_review
 def saved():return json.loads(FIXTURE.read_bytes())
 def reconstruct():
     j=saved();slot=j['responses']['world']
-    text=join_fragments(slot['parts'],slot['assembly'],schema=initial.prompt_schema())
+    from backend.services.draft_schema import world_state_schema
+    text=join_fragments(slot['parts'],slot['assembly'],schema=world_state_schema())
     state,report=initial.inspect_candidate(json.loads(text))
     assert not report['diagnostics']
     return state

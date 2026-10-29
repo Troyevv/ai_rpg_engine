@@ -122,6 +122,7 @@ class RemoteCommand(RemoteModel):
 
 class RemoteProposal(RemoteModel):
     actor_id: str
+    character_id: str | None = None
     action: Literal["send", "call", "answer", "decline", "read", "end", "identify"]
     contact_id: str | None = None
     conversation_id: str | None = None

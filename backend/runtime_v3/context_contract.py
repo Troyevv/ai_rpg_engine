@@ -523,8 +523,9 @@ remote_events: new occurred NPC TEXT_MESSAGE/VOICE_CALL, chronological order; ca
 sender_id/recipient_ids, exact message content copied from completed_narrative, never composed.
 No Director permit. Intentions, negations, offers, dreams, rumours and past quotations are
 NOT new deliveries. Actual delivery without text: include empty content for targeted repair.
-Use sender-owned contact_id OR conversation_id with exact members; omitted IDs resolve only
-an existing direct route. established_contact={label,address} only for an explicitly newly
+Use sender-owned contact_id OR conversation_id with exact members. Without either ID,
+one living canonical recipient is directly reachable on an enabled channel; no contact,
+number, device or acquaintance is required. established_contact={label,address} only for an explicitly newly
 established sender-owned address to one recipient. Never invent addresses/identities/membership.
 minute=absolute canonical time within this turn; preserve equal-time order. Omit only if
 unspecified (diagnosed end-of-turn fallback). No second elapsed. TEXT_MESSAGE=delivered,

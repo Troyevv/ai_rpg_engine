@@ -24,6 +24,33 @@ from backend.runtime_v3.life import capabilities
 OPEN_CALL = {"ringing", "answered"}
 
 
+# Same profile keys for present and future transports; this does not implement
+# delivery for the historical channels owned by #130.
+CHANNELS = {"text_message", "voice_call", "letter", "courier", "telegram", "landline", "magic"}
+
+
+def recipient_eligible(state, sender, target, channel):
+    """Reachability is not consent, perception, device ownership or acquaintance.
+
+    Canonical unknown/missing life status is permissive, like life.capabilities;
+    only an explicit death prohibits a new attempt.
+    """
+    key = channel.lower()
+    return (
+        key in CHANNELS
+        and bool(state["meta"]["communication"].get(key))
+        and sender in state["characters"]
+        and target in state["characters"]
+        and target != sender
+        and state["characters"][target].get("life_status") != "dead"
+    )
+
+
+def require_recipient(state, sender, target, channel):
+    if not recipient_eligible(state, sender, target, channel):
+        raise ValueError("Адресат недоступен для нового обращения по этому каналу.")
+
+
 def members(conversation):
     return {m["actor_id"] for m in conversation["members"] if m["left_at"] is None}
 
@@ -252,17 +279,11 @@ def apply(snapshot, command, *, actor_id=None, autonomous=False):
             )
         )
     elif cmd.action == "create_group":
-        known = {
-            c["character_id"]
-            for c in state["contacts"].values()
-            if c["owner_id"] == actor
-            and not c["blocked"]
-            and c["available"]
-            and c["identity_visible"]
-        }
         ids = set(cmd.member_ids) | {actor}
-        if not ids - {actor} <= known or not 2 <= len(ids) <= 16:
-            raise ValueError("Группа требует явно доступных участников из контактов.")
+        if not 2 <= len(ids) <= 16:
+            raise ValueError("Группа требует от 2 до 16 участников.")
+        for target in ids - {actor}:
+            require_recipient(state, actor, target, "TEXT_MESSAGE")
         gid = identity("conversation", actor, cmd.operation_id)
         state["conversations"][gid] = Conversation(
             id=gid,
@@ -285,19 +306,11 @@ def apply(snapshot, command, *, actor_id=None, autonomous=False):
         if not conversation or not conversation["group"]:
             raise ValueError("Группа не найдена.")
         targets = set(cmd.member_ids) if cmd.action != "leave" else {actor}
-        known = {
-            c["character_id"]
-            for c in state["contacts"].values()
-            if c["owner_id"] == actor
-            and c["identity_visible"]
-            and not c["blocked"]
-            and c["available"]
-        }
         previous = deepcopy(conversation)
         for target in targets:
             if cmd.action == "join":
                 if (
-                    target not in known
+                    not recipient_eligible(state, actor, target, "TEXT_MESSAGE")
                     or target in members(conversation)
                     or len(members(conversation)) >= 16
                 ):
@@ -332,8 +345,10 @@ def apply(snapshot, command, *, actor_id=None, autonomous=False):
             raise ValueError("Персонаж не может говорить.")
         if cmd.action == "send" and not cmd.content.strip():
             raise ValueError("Сообщение пустое.")
-        if contact and (contact["blocked"] or not contact["available"]):
+        if contact and not contact["character_id"] and (contact["blocked"] or not contact["available"]):
             raise ValueError("Контакт недоступен или заблокирован.")
+        if sum(bool(v) for v in (cmd.service, conversation, contact, cmd.character_id)) != 1:
+            raise ValueError("Выбери один адресный маршрут.")
         if cmd.service:
             if (
                 cmd.action != "call"
@@ -349,24 +364,20 @@ def apply(snapshot, command, *, actor_id=None, autonomous=False):
             if cmd.action == "call" and conversation["group"]:
                 raise ValueError("Групповые звонки не поддерживаются.")
             recipients = sorted(members(conversation) - {actor})
+            if conversation["group"]:
+                # Dead members remain in membership/history, not new deliveries.
+                recipients = [t for t in recipients if recipient_eligible(state, actor, t, channel)]
+                if not recipients:
+                    raise ValueError("В группе нет доступных адресатов.")
             destination = conversation["id"]
         elif contact:
             destination = contact["address"]
             recipients = [contact["character_id"]] if contact["character_id"] else []
         else:
-            raise ValueError("Выбери контакт, переписку или настроенную службу.")
+            recipients = [cmd.character_id]
+            destination = cmd.character_id
         for target in recipients:
-            if any(
-                c["blocked"]
-                and (
-                    c["owner_id"] == target
-                    and c["character_id"] == actor
-                    or c["owner_id"] == actor
-                    and c["character_id"] == target
-                )
-                for c in state["contacts"].values()
-            ):
-                raise ValueError("Канал заблокирован получателем.")
+            require_recipient(state, actor, target, channel)
         if cmd.action == "call" and any(
             active_call(state, a) for a in [actor, *recipients]
         ):
@@ -556,9 +567,33 @@ def projection(snapshot):
             return dict(id=cid, name=names.get(cid, cid), **portrait(state, cid))
         if c:
             return dict(id=cid, name=c["label"], **portrait(state, cid))
+        if cid in state["characters"] and not any(
+            c["character_id"] == cid and not c["identity_visible"] for c in own
+        ):
+            return directory_subject(cid)
         return dict(
             id="", name="Неизвестный участник", portrait=None, silhouette="neutral"
         )
+
+    def directory_subject(cid):
+        # Existing name/birth visibility rules; hidden identities keep a stable
+        # routing ID but never gain a portrait, biography or private facts.
+        if not known_birth(state, cid, actor):
+            return dict(id=cid, name="Неизвестный участник", portrait=None, silhouette="neutral")
+        return dict(id=cid, name=known[cid]["label"] if cid in known else
+                    visible_name(state, cid, actor, names.get(cid, cid)),
+                    **portrait(state, cid))
+
+    def allowed(target, channel):
+        return recipient_eligible(state, actor, target, channel)
+
+    recipients = [
+        dict(id=cid, subject=directory_subject(cid),
+             search_name=names.get(cid, directory_subject(cid)["name"]),
+             can_send=allowed(cid, "TEXT_MESSAGE"), can_call=allowed(cid, "VOICE_CALL"))
+        for cid in state["characters"]
+        if any(allowed(cid, channel) for channel in CHANNELS)
+    ]
 
     contacts = []
     for c in own:
@@ -569,6 +604,8 @@ def projection(snapshot):
             if cid and c["identity_visible"]
             else dict(id="", name=c["label"], portrait=None, silhouette="neutral")
         )
+        item["can_send"] = allowed(cid, "TEXT_MESSAGE") if cid else bool(cfg["text_message"] and not c["blocked"] and c["available"])
+        item["can_call"] = allowed(cid, "VOICE_CALL") if cid else bool(cfg["voice_call"] and not c["blocked"] and c["available"])
         contacts.append(item)
     events = []
     for e in sorted(
@@ -650,9 +687,8 @@ def projection(snapshot):
                 title=c["title"]
                 or next(
                     (
-                        known[a]["label"]
-                        for a in visible_members - {actor}
-                        if a in known
+                        subject(a)["name"]
+                        for a in sorted(visible_members - {actor})
                     ),
                     "Переписка",
                 ),
@@ -661,6 +697,13 @@ def projection(snapshot):
                 if c["contact_id"] in {r["id"] for r in own}
                 else None,
                 active=actor in members(c),
+                can_send=actor in members(c) and (
+                    any(allowed(a, "TEXT_MESSAGE") for a in members(c) - {actor})
+                    if members(c) - {actor}
+                    else bool(cfg["text_message"] and c["contact_id"] in state["contacts"]
+                              and not state["contacts"][c["contact_id"]]["blocked"]
+                              and state["contacts"][c["contact_id"]]["available"])
+                ),
                 participants=[subject(a) for a in sorted(visible_members)],
             )
         )
@@ -668,6 +711,7 @@ def projection(snapshot):
         actor_id=actor,
         capabilities=cfg,
         contacts=contacts,
+        recipients=recipients,
         conversations=conversations,
         events=events,
         focus=state["meta"]["interaction_focus"],

@@ -131,6 +131,10 @@ def request(raw,errors,author_context=None):
     if any(e.get('category')=='semantic_completeness' for e in errors):
         from backend.services.draft_initial import prompt_schema
         schema=prompt_schema()
+        # A legacy contact can still need a scoped repair after import.
+        if value.get('world',{}).get('contacts'):
+            from backend.services.draft_schema import world_state_schema
+            schema['properties']['world']['properties']['contacts']=world_state_schema()['properties']['world']['properties']['contacts']
         # Include only the affected section schemas, not the full world schema.
         payload['entities']={
             'characters':[{'id':c['id'],'name':c['name']} for c in value.get('characters',[])],
