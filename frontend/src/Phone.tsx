@@ -12,7 +12,7 @@ import { active, type Save, type Job, type ModelConfig } from "./types";
 import { CharacterAvatar, type PortraitSubject } from "./Portrait";
 import "./styles/phone.css";
 
-type Recipient = { id: string; subject: PortraitSubject; can_send: boolean; can_call: boolean };
+type Recipient = { id: string; search_name?: string; subject: PortraitSubject; can_send: boolean; can_call: boolean };
 type Contact = {
   can_send?: boolean;
   can_call?: boolean;
@@ -112,7 +112,6 @@ export function Phone({
   const currentOwner = useRef(ownerKey); currentOwner.current = ownerKey;
   const [detail, setDetail] = useState<string | null>(null);
   const [recipient, setRecipient] = useState<string | null>(null);
-  const [directory, setDirectory] = useState(false);
   const [search, setSearch] = useState("");
   const [entry, setEntry] = useState(true);
   const messages = useRef<HTMLDivElement>(null);
@@ -133,10 +132,8 @@ export function Phone({
     onBusyChange(busy);
     return () => onBusyChange(false);
   }, [busy, onBusyChange]);
-  const [editContact, setEditContact] = useState<string | null>(null),
-    [contactKind, setContactKind] = useState("person");
-  const [label, setLabel] = useState(""),
-    [address, setAddress] = useState("");
+  const [editContact, setEditContact] = useState<string | null>(null);
+  const [label, setLabel] = useState("");
   const [adding, setAdding] = useState(false),
     [grouping, setGrouping] = useState(false);
   const [groupMembers, setGroupMembers] = useState<string[]>([]),
@@ -184,7 +181,7 @@ export function Phone({
   useEffect(() => {
     setOwner(ownerKey);
     setDetail(null); setSearch(""); setEntry(true);
-    setRecipient(null); setDirectory(false);
+    setRecipient(null);
     setOpen(false);
     setContact(null);
     setConversation(null);
@@ -194,8 +191,6 @@ export function Phone({
     setAdding(false);
     setTab("contacts");
     setLabel("");
-    setAddress("");
-    setContactKind("person");
     setGrouping(false);
     setGroupMembers([]);
     setGroupName("");
@@ -258,6 +253,11 @@ export function Phone({
   const selected = phone.conversations.find((c) => c.id === conversation);
   const target = phone.contacts.find((c) => c.id === contact);
   const recipients = phone.recipients || [];
+  const savedRecipient = (r: Recipient) => phone.contacts.find(c => c.subject.id === r.id);
+  const matchesSearch = (value: string) => value.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase());
+  const visibleRecipients = [...recipients].sort((a,b) => Number(!!savedRecipient(b))-Number(!!savedRecipient(a)))
+    .filter(r => matchesSearch(r.subject.name + " " + (r.search_name || "") + " " + phone.contacts.filter(c=>c.subject.id===r.id).map(c=>c.label).join(" ")));
+  const legacyContacts = phone.contacts.filter(c => !recipients.some(r => r.id === c.subject.id));
   const recipientTarget = recipients.find(r => r.id === recipient);
   const canSend = selected ? selected.can_send !== false : recipient
     ? !!recipientTarget?.can_send : target?.can_send !== false;
@@ -424,47 +424,34 @@ export function Phone({
             {tab === "contacts" && (
               <>
                 {!detail&&<>
-                  <div className="phone-directory-tabs" role="group" aria-label={t("directory")}>
-                    <button aria-pressed={!directory} onClick={()=>setDirectory(false)}>{t("savedContacts")}</button>
-                    <button aria-pressed={directory} onClick={()=>setDirectory(true)}>{t("allRecipients")} <span>{recipients.length}</span></button>
-                  </div>
-                  <label className="phone-search">{t("searchRecipient")}<input value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("searchPlaceholder")}/></label>
+                  <label className="phone-search">{t("searchRecipient")}<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder={t("searchPlaceholder")}/></label>
+                  <section className="phone-directory" aria-label={t("directory")}>
+                    {visibleRecipients.map(r=>{
+                      const saved = savedRecipient(r);
+                      return <article className="phone-row phone-recipient" key={r.id}>
+                        {avatar(r.subject)}
+                        <button className="phone-contact-name" disabled={locked||(!saved&&!r.can_send)} onClick={()=>{if(saved){setDetail(saved.id);setEntry(false)}else chooseRecipient(r)}}>
+                          <strong>{saved?.label || r.subject.name}</strong>
+                          {saved && saved.label !== r.subject.name && <small>{r.subject.name}</small>}
+                        </button>
+                        <div className="phone-recipient-actions">
+                          {phone.capabilities.text_message&&<button title={t("write")} aria-label={t("writeTo")+" "+r.subject.name} disabled={locked||!r.can_send} onClick={()=>chooseRecipient(r)}><MessageCircle size={18} aria-hidden="true"/></button>}
+                          {phone.capabilities.voice_call&&<button title={t("call")} aria-label={t("callTo")+" "+r.subject.name} disabled={locked||!!call||!r.can_call} onClick={()=>void perform({action:"call",character_id:r.id})}><PhoneIcon size={18} aria-hidden="true"/></button>}
+                        </div>
+                      </article>;
+                    })}
+                    {!visibleRecipients.length&&!legacyContacts.some(c=>matchesSearch(c.label+' '+c.address))&&<p role="status">{t("noRecipients")}</p>}
+                  </section>
                 </>}
-                {directory&&!detail&&<section className="phone-directory" aria-label={t("allRecipients")}>
-                  <p className="muted small">{t("directoryHint")}</p>
-                  {recipients.filter(r=>r.subject.name.toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(r=>
-                    <article className="phone-row phone-recipient" key={r.id}>
-                      {avatar(r.subject)}
-                      <strong>{r.subject.name}</strong>
-                      <div className="phone-recipient-actions">
-                        {phone.capabilities.text_message&&<button aria-label={t("writeTo")+" "+r.subject.name} disabled={locked||!r.can_send} onClick={()=>chooseRecipient(r)}><MessageCircle size={16}/>{t("write")}</button>}
-                        {phone.capabilities.voice_call&&<button aria-label={t("callTo")+" "+r.subject.name} disabled={locked||!!call||!r.can_call} onClick={()=>void perform({action:"call",character_id:r.id})}><PhoneIcon size={16}/>{t("call")}</button>}
-                      </div>
-                    </article>)}
-                  {!recipients.some(r=>r.subject.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()))&&<p role="status">{t("noRecipients")}</p>}
-                </section>}
-                {currentContact&&<button onClick={()=>setDetail(null)}>К контактам</button>}
-                {!detail&&!directory&&<button
-                  onClick={() => {
-                    setEditContact(null);
-                    setLabel("");
-                    setAddress("");
-                    setContactKind("person");
-                    setAdding(!adding);
-                  }}
-                >
-                  Добавить контакт
-                </button>}
+                {currentContact&&<button onClick={()=>{setDetail(null);setAdding(false)}}>{t("backToRecipients")}</button>}
                 {adding && (
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
                       void perform({
-                        action: editContact ? "edit_contact" : "add_contact",
+                        action: "edit_contact",
                         contact_id: editContact,
                         label,
-                        address,
-                        kind: contactKind,
                         blocked:
                           phone.contacts.find((c) => c.id === editContact)
                             ?.blocked || false,
@@ -472,7 +459,6 @@ export function Phone({
                         if (next) {
                           setAdding(false);
                           setLabel("");
-                          setAddress("");
                         }
                       });
                     }}
@@ -486,39 +472,10 @@ export function Phone({
                         required
                       />
                     </label>
-                    {!editContact && (
-                      <>
-                        <label>
-                          Тип контакта
-                          <select
-                            value={contactKind}
-                            onChange={(e) => setContactKind(e.target.value)}
-                          >
-                            <option value="person">Человек</option>
-                            <option value="service">Служба</option>
-                            <option value="shared">
-                              Общий номер организации
-                            </option>
-                          </select>
-                        </label>
-                        <label>
-                          Номер или адрес
-                          <input
-                            value={address}
-                            onChange={(e) => setAddress(e.target.value)}
-                            maxLength={160}
-                            required
-                          />
-                        </label>
-                      </>
-                    )}
                     <button disabled={locked}>Сохранить контакт</button>
                   </form>
                 )}
-                {!directory && phone.contacts.length === 0 && (
-                  <p>Сохранённых контактов нет.</p>
-                )}
-                {phone.contacts.filter(c=>directory&&!detail?false:detail?c.id===detail:(c.label+' '+c.address).toLocaleLowerCase().includes(search.toLocaleLowerCase())).map((c) => (
+                {(detail?phone.contacts.filter(c=>c.id===detail):legacyContacts.filter(c=>matchesSearch(c.label+' '+c.address))).map((c) => (
                   <article className={`phone-row ${detail?'phone-contact-detail':''}`} key={c.id}>
                     {avatar(c.subject)}
                     <div>
@@ -619,7 +576,7 @@ export function Phone({
               <>
                 {!conversation && !contact && !recipient ? (
                   <>
-                    <button onClick={()=>{setTab("contacts");setDirectory(true);setDetail(null);setSearch("")}}>{t("newMessage")}</button>
+                    <button onClick={()=>{setTab("contacts");setDetail(null);setSearch("")}}>{t("newMessage")}</button>
                     <button onClick={() => setGrouping(!grouping)}>
                       Создать группу
                     </button>
@@ -649,7 +606,7 @@ export function Phone({
                           />
                         </label>
                         <fieldset>
-                          <legend>{t("allRecipients")}</legend>
+                          <legend>{t("directory")}</legend>
                           {recipients
                             .filter((c) => c.can_send)
                             .map((c) => (

@@ -589,6 +589,7 @@ def projection(snapshot):
 
     recipients = [
         dict(id=cid, subject=directory_subject(cid),
+             search_name=names.get(cid, directory_subject(cid)["name"]),
              can_send=allowed(cid, "TEXT_MESSAGE"), can_call=allowed(cid, "VOICE_CALL"))
         for cid in state["characters"]
         if any(allowed(cid, channel) for channel in CHANNELS)

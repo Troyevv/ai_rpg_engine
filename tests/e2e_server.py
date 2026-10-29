@@ -207,6 +207,10 @@ def stream(**kwargs):
     elif 'Каноническая JSON Schema WorldState' in full:
         from test_draft_world import fixture
         candidate=fixture()
+        if 'TEST_CONTACT_FREE_WORLD' in full:
+            phone_mode='silent'
+            candidate['world'].pop('contacts',None)
+            candidate['world']['communication']={'text_message':True,'voice_call':True,'presentation':'phone'}
         if 'TEST_MOTIVATION_OBJECTS' in full:
             from test_draft_motivations import motivated
             candidate,_=motivated()

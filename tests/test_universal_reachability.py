@@ -75,7 +75,7 @@ def test_t05_switch_does_not_transfer_messages_or_knowledge():
     assert 'Приватное письмо' not in json.dumps(view, ensure_ascii=False)
     assert {r['id'] for r in view['recipients']} == {'a', 'b', 'baby'}
     assert other['world_state']['knowledge'] == before
-    assert all(set(r) == {'id', 'subject', 'can_send', 'can_call'} for r in view['recipients'])
+    assert all(set(r) == {'id', 'subject', 'search_name', 'can_send', 'can_call'} for r in view['recipients'])
 
 
 def test_t06_t07_group_legacy_labels_and_dead_members():
@@ -246,3 +246,11 @@ def test_incoming_npc_without_contact_is_event_first_and_unread():
     assert event['read_by'] == []
     assert projection(after)['events'][0]['content'] is None
     assert after['world_state']['knowledge'] == s['world_state']['knowledge']
+
+
+def test_saved_label_keeps_visible_canonical_search_name():
+    s=phone()
+    view=projection(s)
+    recipient=next(r for r in view['recipients'] if r['id']=='b')
+    assert recipient['subject']['name']=='Saved b'
+    assert recipient['search_name']==next(c['name'] for c in s['character_cards'] if c['id']=='b')

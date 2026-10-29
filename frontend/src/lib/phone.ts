@@ -1,7 +1,7 @@
 import {gameLocale} from '../gameDate';
 // Same locale-keyed label convention as dossier/social. No runtime semantics depend on labels.
 const ru = {
-  directory:'Адресаты', savedContacts:'Сохранённые', allRecipients:'Все персонажи',
+  directory:'Адресаты', backToRecipients:'К адресатам',
   searchRecipient:'Поиск адресата', searchPlaceholder:'Имя или сохранённая подпись',
   directoryHint:'Можно обратиться без знакомства и сохранённого контакта. Ответ остаётся за собеседником.',
   noRecipients:'Адресаты не найдены.', write:'Написать', call:'Позвонить',
@@ -24,7 +24,7 @@ const ru = {
   reactionFailed:'Не удалось получить ответ. Можно повторить.',retry:'Повторить',
 };
 const en:typeof ru={
-  directory:'Recipients', savedContacts:'Saved', allRecipients:'All characters',
+  directory:'Recipients', backToRecipients:'Back to recipients',
   searchRecipient:'Find a recipient', searchPlaceholder:'Name or saved label',
   directoryHint:'No introduction or saved contact needed. The recipient may choose not to reply.',
   noRecipients:'No recipients found.', write:'Message', call:'Call',

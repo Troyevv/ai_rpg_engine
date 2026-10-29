@@ -221,8 +221,10 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
     if not record['complete']:record['output_limit']=output_limit
     schema=None
     if slot=='world':
-        from backend.services.draft_initial import prompt_schema
-        schema=prompt_schema()
+        # Resume may assemble a historical provider response containing contacts.
+        # Acceptance is broader than the contract for new generation.
+        from backend.services.draft_schema import world_state_schema
+        schema=world_state_schema()
     def assemble():
         manifest=record.setdefault('assembly',{})
         try:

@@ -37,3 +37,7 @@ Do not fill regional source/version/overrides or duplicate public holidays in
 observances. Preserve explicit author-created cultural/personal dates and fictional
 seasons when compatible. Holidays, seasons, calendar arithmetic, start date and
 birth dates are separate choices; do not change one to satisfy another.
+
+Связь: не генерируй телефонную книгу, записи contacts или номера персонажей.
+Доступность живых канонических персонажей через включённые каналы определяет Runtime;
+знакомство, наличие устройства и сохранённого контакта для обращения не требуются.

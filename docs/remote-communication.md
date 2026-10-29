@@ -187,3 +187,5 @@ The existing bounded event-first planner retains its opportunity selection and
 call budget; the directory does not add polling or LLM requests. Future transport
 delivery/presentation remains #130/#131, not a parallel implementation here.
 No database migration or historical snapshot rewrite is required.
+
+The phone uses one searchable recipient list, with saved labels first and direct message/call actions. Existing contact details, service endpoints and private conversation history remain available. New worlds do not need a phonebook: initial generation and completeness prompts explicitly exclude it, and the provider schema omits contacts. The editor/import contract still accepts and validates legacy contacts, including scoped repairs. Normalization supplies only the empty collection; migration/handoff never populate it from the cast.

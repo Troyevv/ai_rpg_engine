@@ -29,6 +29,7 @@ def messages_for(repo,job,config):
         if settings.communication is not None:instructions+='\nТехнологии связи communication заданы явно: не меняй каналы, доставку и дату по жанру или эпохе. author_note — антураж, не разрешение включить канал.'
         instructions+='\nЦелевой состав NPC: '+json.dumps(settings.cast_targets([]),ensure_ascii=False)
         instructions+='\nЧисла NPC — ориентир, не квота. Именованные NPC входят в состав. Выразительность меняет подачу, а не характер. Темп и риск не создают предысторию.'
+        instructions+='\nНе генерируй телефонную книгу, contacts и номера персонажей: Runtime определяет адресатов из живых канонических NPC независимо от знакомства, контактов и устройств.'
         instructions+='\nНе выводи пустые технические defaults (dependencies, review_required, reviewed_signature) и производные поля, когда схема позволяет их опустить. Непустые метаданные Motivation, факты, биографии и тайны сохраняй полностью.'
         instructions+='\nРазработай пригодный для немедленной игры мир. Недостающие детали концепции дополни самостоятельно; исходная идея не является исчерпывающей спецификацией.'
         from backend.services.draft_initial import prompt_schema
