@@ -124,7 +124,7 @@ def test_group_shares_budget_and_does_not_touch_other_source():
     assert report['accepted']==['read','send']
     assert report['elapsed_minutes']==1
     s=command(s,'edit_contact',contact_id='a-b',blocked=True)
-    assert all(o['actor_id']!='b' for o in options_for(s,eid,set()))
+    assert any(o['actor_id']=='b' for o in options_for(s,eid,set()))  # legacy annotation is not eligibility
 
 
 def test_regenerate_variants_and_stale_retry(tmp_path):

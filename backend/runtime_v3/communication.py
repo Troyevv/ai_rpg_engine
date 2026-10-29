@@ -51,8 +51,6 @@ def options_for(snapshot, source_id, replied):
         caps = capabilities(s, actor)
         if actor == owner or not caps["can_act"] or not caps["can_perceive"]:
             continue
-        if any((c["blocked"] or not c["available"]) and {c["owner_id"], c["character_id"]} == {actor, owner} for c in s["contacts"].values()):
-            continue
         base = dict(actor_id=actor, basis_ids=[source_id])
         if e["channel"] == "VOICE_CALL":
             if e["status"] == "ringing":

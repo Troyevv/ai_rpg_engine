@@ -9,7 +9,7 @@ from backend.runtime_v3.remote_decision import RemoteDecision, parse as parse_de
 from copy import deepcopy
 from backend.runtime_v3.models import identity, Character, WorldHistoryV3
 from backend.runtime_v3.remote_models import RemoteCommand, RemoteProposal
-from backend.runtime_v3.remote import apply, active_call, members, participants
+from backend.runtime_v3.remote import apply, active_call, members, participants, recipient_eligible
 from backend.runtime_v3.life import capabilities
 
 
@@ -98,8 +98,10 @@ def opportunities(state):
                 )
                 if len(result) >= 4:
                     return result[:4]
-    # Select from established intentions/threads, then test explicit paths. A
-    # contact is eligibility, not a reason to invent a social interaction.
+    # Established intentions/threads motivate initiative. Existing remote
+    # history/contacts bound this optional planner's attention, not eligibility:
+    # ordinary Narrative can author a direct canonical attempt without either.
+    # Enumerating the directory must not add planning calls or per-NPC polling.
     basis = {}
     for cid, c in state["characters"].items():
         if cid == external or not capabilities(state, cid)["can_act"]:
@@ -127,7 +129,10 @@ def opportunities(state):
                 if cid not in latest or latest[cid]["ordinal"] < e["ordinal"]:
                     basis.setdefault(cid, []).append(e["id"])
     for cid, ids in sorted(basis.items()):
-        if not capabilities(state,cid)["can_act"] or any(c["blocked"] and {c["owner_id"],c["character_id"]} == {cid,external} for c in state["contacts"].values()):
+        if not capabilities(state,cid)["can_act"] or not any(
+            recipient_eligible(state, cid, external, channel)
+            for channel in ("TEXT_MESSAGE", "VOICE_CALL")
+        ):
             continue
         recent = latest.get(cid)
         if recent and (
@@ -140,8 +145,6 @@ def opportunities(state):
             for c in state["contacts"].values()
             if c["owner_id"] == cid
             and c["character_id"] == external
-            and c["available"]
-            and not c["blocked"]
         ]
         paths += [
             dict(conversation_id=c["id"])
@@ -267,6 +270,7 @@ def accept(snapshot, proposal, options, operation_id):
         if not any(
             path.get("contact_id") == p.contact_id
             and path.get("conversation_id") == p.conversation_id
+            and path.get("character_id") == p.character_id
             for path in permitted.get("paths", [])
         ):
             raise ValueError("remote_unreachable")
@@ -281,6 +285,7 @@ def accept(snapshot, proposal, options, operation_id):
         operation_id=operation_id,
         action=p.action,
         contact_id=p.contact_id,
+        character_id=p.character_id,
         conversation_id=p.conversation_id,
         event_id=p.event_id,
         content=p.content,

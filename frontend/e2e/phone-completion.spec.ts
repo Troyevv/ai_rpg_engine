@@ -1,5 +1,4 @@
 import {test,expect} from '@playwright/test';
-test.use({video:'on'});
 const screen=(page:any)=>page.getByRole('region',{name:'Телефон персонажа'});
 async function seed(page:any,request:any,query='incoming=false&decision=answer'){
  const selected=await(await request.post(`/test/phone-seed?${query}`)).json();

@@ -142,7 +142,8 @@ def apply_extracted_remote(resolver, raw, events):
                             and c['available'] and not c['blocked']), None)
                 command(dict(action='send' if row.channel == 'TEXT_MESSAGE' else 'call',
                     operation_id=operation, contact_id=contact_id,
-                    conversation_id=conversation_id, content=row.content), actor)
+                    conversation_id=conversation_id, content=row.content,
+                    character_id=row.recipient_ids[0] if not contact_id and not conversation_id and len(recipients) == 1 else None), actor)
                 event = state['remote_events'][eid]
                 if set(event['recipient_ids']) != recipients:
                     reject(index, 'Получатели не совпадают с каноническим адресатом/составом беседы.', 'recipient_ids')
