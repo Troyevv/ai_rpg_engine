@@ -4,11 +4,12 @@ import {nav} from './navigation';
 import type {Job,Save,Turn} from '../src/types';
 const baseline=process.env.STREAM_BASELINE==='1';
 const evidence=process.env.STREAM_EVIDENCE||'../docs/manual_qa/narrative_v4/issue72-evidence';
-test.use({video:'on'});
+const capture=process.env.UI_EVIDENCE==='1';
+test.use({video:capture?'on':'off'});
 const narrative=Array.from({length:18},(_,i)=>`Абзац ${i+1}. Персонаж 1 открывает книгу. Вечерний свет падает на стол, и разговор продолжается спокойно, без спешки. 🕯️`).join('\n\n')+'\n\n**Тихий вечер** продолжается. [Книга](https://example.com) остаётся открытой.\n\n- Чашка на столе\n- Свет у окна';
 async function frames(page:Page,n=20){await page.evaluate(n=>new Promise<void>(resolve=>{let count=0;const tick=()=>++count>=n?resolve():requestAnimationFrame(tick);requestAnimationFrame(tick)}),n)}
 for(const reduced of [false,true])test(`controlled streaming, commit, scroll and journal ${reduced?'reduced':'motion'}`,async({page,request},info)=>{
- test.setTimeout(120000);await mkdir(evidence,{recursive:true});
+ test.setTimeout(120000);if(capture)await mkdir(evidence,{recursive:true});
  await page.emulateMedia({reducedMotion:reduced?'reduce':'no-preference'});
  const s=await(await request.post(reduced?'/test/phone-seed?unread=true':'/test/seed')).json();
  let save:Save=await(await request.get(`/api/saves/${s.save}`)).json();
@@ -77,8 +78,8 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
  await nav(page,'Мир');await page.keyboard.press('Escape');await expect(page.getByLabel('Своё действие или реплика')).toHaveValue('Черновик не потерять');
  const metrics=await page.evaluate(()=>{const w=window as any;w.sampling=false;return {samples:w.samples,longTasks:w.longTasks,inputLatencies:w.inputLatencies,oldMutations:w.oldMutations,heap:(performance as any).memory?.usedJSHeapSize}});
  const name=`${baseline?'before':'after'}-${info.project.name}-${reduced?'reduced':'motion'}`;
- await writeFile(`${evidence}/${name}.json`,JSON.stringify({...metrics,markdown:streamedRequests,stable,up,upAfter,viewport:page.viewportSize(),cpuThrottle:4},null,2));
- await page.screenshot({path:`${evidence}/${name}.png`});await page.close();await copyFile((await page.video()!.path()),`${evidence}/${name}.webm`);
+ if(capture)await writeFile(`${evidence}/${name}.json`,JSON.stringify({...metrics,markdown:streamedRequests,stable,up,upAfter,viewport:page.viewportSize(),cpuThrottle:4},null,2));
+ if(capture)await page.screenshot({path:`${evidence}/${name}.png`});await page.close();if(capture)await copyFile((await page.video()!.path()),`${evidence}/${name}.webm`);
 });
 
 test('real Start Game → ordinary turn → persisted reload → next ordinary turn',async({page,request},info)=>{
@@ -90,7 +91,7 @@ test('real Start Game → ordinary turn → persisted reload → next ordinary t
  await page.getByLabel('Своё действие или реплика').fill('Черновик следующего хода');await page.reload();await expect(page.locator('.turn')).toHaveCount(2);await expect(page.getByLabel('Своё действие или реплика')).toHaveValue('Черновик следующего хода');
  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();await expect(page.locator('.turn')).toHaveCount(3);await expect(page.locator('.choices button')).toHaveCount(6);
  const after=await(await request.get(`/api/saves/${s.save}`)).json();expect(after.revision).toBeGreaterThan(stored.revision);
- await mkdir(evidence,{recursive:true});await page.close();await copyFile(await page.video()!.path(),`${evidence}/smoke-${info.project.name}.webm`);
+ if(capture)await mkdir(evidence,{recursive:true});await page.close();if(capture)await copyFile(await page.video()!.path(),`${evidence}/smoke-${info.project.name}.webm`);
 });
 
 test('leave for authoring and return during generation without losing the stream or draft',async({page,request},info)=>{
@@ -117,5 +118,5 @@ test('leave for authoring and return during generation without losing the stream
  await expect(page.getByText('Обновляет состояние мира',{exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'Отправить действие',exact:true})).toBeDisabled();
  await expect(page.locator('.narrative-text')).toContainText('Абзац 18.');
- await mkdir(evidence,{recursive:true});await page.close();await copyFile(await page.video()!.path(),`${evidence}/navigation-${info.project.name}.webm`);
+ if(capture)await mkdir(evidence,{recursive:true});await page.close();if(capture)await copyFile(await page.video()!.path(),`${evidence}/navigation-${info.project.name}.webm`);
 });

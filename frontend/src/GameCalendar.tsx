@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useWorkspaceView, type WorkspaceView } from "./lib/workspaceView";
 import { DayPicker, DayButton } from "react-day-picker";
 import { ru, enUS } from "react-day-picker/locale";
 import "react-day-picker/style.css";
@@ -41,11 +42,11 @@ const parse = (value: string) => {
   date.setHours(12, 0, 0, 0);
   return date;
 };
-export function GameCalendar({ save }: { save: Save }) {
+export function GameCalendar({ save, viewState }: { save: Save; viewState?: WorkspaceView }) {
   const today = save.state.world_clock?.projection?.date;
-  const [month, setMonth] = useState(today?.slice(0, 7) || ""),
-    [selected, setSelected] = useState(today || ""),
-    [yearView, setYearView] = useState(false);
+  const [month, setMonth] = useWorkspaceView(viewState, "month", today?.slice(0, 7) || ""),
+    [selected, setSelected] = useWorkspaceView(viewState, "selected", today || ""),
+    [yearView, setYearView] = useWorkspaceView(viewState, "year", false);
   const dataKey=`${save.id}:${save.revision}:${save.state.controlled_actor_id}:${month}`;
   const [record, setRecord] = useState<{key:string;value:Projection|null}>({key:"",value:null}),
     [error, setError] = useState("");
