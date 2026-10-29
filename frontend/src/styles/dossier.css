@@ -45,3 +45,15 @@ html[data-skin="paper"]{--sex-male:#195b91;--sex-female:#96385f;--dossier-overvi
 
 .family-graph .react-flow__node{transition:none}
 .dossier-name{display:flex;align-items:baseline;gap:8px;min-width:0}.dossier-name h2{min-width:0}.dossier-name .dossier-sex{flex-shrink:0}
+
+/* A fact within the existing identity, not another card or status chip. */
+.dossier-personal{margin:10px 0 8px;font:13px/1.5 var(--ui-font);color:var(--text);min-width:0}
+.dossier-personal-label{display:flex;align-items:center;gap:6px;color:var(--text-secondary);font-size:11px}
+.dossier-personal-label svg{flex:none;color:var(--dossier-relationships)}
+.dossier-personal ul{list-style:none;margin:2px 0 0;padding:0}
+.dossier-personal li{display:flex;align-items:baseline;flex-wrap:wrap;column-gap:5px;min-width:0}
+.dossier-personal .dossier-partner-link{display:inline-block;min-height:44px;max-width:100%;padding:10px 0;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--accent);font:inherit;text-align:left;white-space:normal;overflow-wrap:anywhere;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;cursor:pointer}
+.dossier-personal .dossier-partner-link:hover{color:var(--text);text-decoration-thickness:2px}
+.dossier-personal .dossier-partner-link:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.dossier-personal .dossier-partner-link:active{color:var(--text-secondary)}
+.dossier-personal-empty{margin:4px 0 0;color:var(--text-secondary)}

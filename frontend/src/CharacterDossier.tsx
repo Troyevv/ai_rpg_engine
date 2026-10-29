@@ -1,3 +1,5 @@
+import {personalRelationships} from './lib/personalRelationships';
+import {personalRelationshipLabel} from './lib/dossier';
 import {phoneText} from './lib/phone';
 import {useId, type ReactNode} from 'react';
 import {UserRound,Brain,HeartHandshake,Users,BookOpen,MapPin,ArrowUpRight} from 'lucide-react';
@@ -23,13 +25,16 @@ export function DossierFact({label,children}:{label:string;children:ReactNode}){
 function Prose({text}:{text?:string}){
  return !text?<DossierEmpty/>:text.length>400?<Reveal title={brief(text,180)} text={text} preview={false}/>:<Markdown text={text}/>;
 }
-export function CharacterView({state,card,save,refresh,tab='overview',setTab=()=>{},onCharacter}:{state:State;card:Character;save?:Save|null;refresh?:()=>void;tab?:DossierTab;setTab?:(t:DossierTab)=>void;onCharacter?:(id:string)=>void}){
+export function CharacterView({state,card,save,refresh,tab='overview',setTab=()=>{},onCharacter}:{state:State;card:Character;save?:Save|null;refresh?:()=>void;tab?:DossierTab;setTab?:(t:DossierTab)=>void;onCharacter:(id:string)=>void}){
  const panelId=useId();
  const c=state.world?.characters[card.id];
  const main=state.protagonist_id||state.characters.find(c=>c.is_player)?.id;
  const actor=state.controlled_actor_id===undefined?main:state.controlled_actor_id;
  const knowledge=Object.values(state.world?.knowledge||{}).filter(k=>k.actor_id===card.id&&k.status!=='unknown');
  const sex=card.dossier?.sex;
+ const personal=personalRelationships(card.id,state.objective_relations,state.characters);
+ const deceased=state.genealogy?.nodes.some(c=>c.id===card.id&&c.life_status==='dead');
+ const partners=new Map(state.characters.map(c=>[c.id,c]));
  const age=c?.age??card.fields['Возраст'];
  const special=new Set(['Возраст','Пол','Статус','Место','Время','Сейчас','Чего хочет','Намерения','Обязательства','Физическое состояние']);
  const fields=Object.entries(card.fields).filter(([k])=>!special.has(k)&&!k.startsWith('Отношение к '));
@@ -42,6 +47,12 @@ export function CharacterView({state,card,save,refresh,tab='overview',setTab=()=
    {save&&refresh?<PortraitControl key={`${save.id}:${actor}:${card.id}`} card={card} save={save} refresh={refresh}/>:<CharacterAvatar subject={card} size="var(--dossier-portrait-size)"/>}
    <div className="dossier-identity"><p className="eyebrow">{t('dossier')}</p><div className="dossier-name"><h2>{card.name}</h2>{(sex==='male'||sex==='female')&&<span className={`dossier-sex ${sex}`} role="img" aria-label={t(sex)} title={t(sex)}>{sex==='male'?'♂':'♀'}</span>}</div>
     <div className="inspect-chips">{card.id===main&&<span className="pill">{t('protagonist')}</span>}{card.id===actor&&<span className="pill">{t('controlled')}</span>}{card.id===state.camera?.subject_id&&state.camera.mode==='observer'&&<span className="pill">{t('observed')}</span>}{age!==undefined&&age!==''&&<span className="pill">{t('age')}: {age}</span>}</div>
+    {tab==='overview'&&<div className="dossier-personal" role="group" aria-label={t('personal')}>
+     <div className="dossier-personal-label"><HeartHandshake size={15} aria-hidden="true"/><span>{t('personal')}</span></div>
+     {personal.length?<ul>{personal.map(row=><li key={'partnerId' in row?row.partnerId:row.kind}>
+      <span>{row.kind==='widowed'&&deceased?t('marriageEnded'):personalRelationshipLabel(row.kind,sex)}</span>{'partnerId' in row&&<button type="button" className="dossier-partner-link" data-partner-id={row.partnerId} aria-label={`${t('open')}: ${partners.get(row.partnerId)!.name}`} onClick={()=>onCharacter(row.partnerId)}>{partners.get(row.partnerId)!.name}</button>}
+     </li>)}</ul>:<p className="dossier-personal-empty">{t('noPersonal')}</p>}
+    </div>}
     {card.fields['Статус']&&<p className="character-lead">{brief(card.fields['Статус'],150)}</p>}
     <p className="dossier-location"><MapPin size={15} aria-hidden="true"/>{c?.location||card.fields['Место']||t('unknown')}</p>
    </div>
