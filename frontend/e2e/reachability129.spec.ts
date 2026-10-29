@@ -56,6 +56,10 @@ test('directory search, localization and two skins at large text size', async ({
   await expect(phone.getByRole('status')).toHaveText('Адресаты не найдены.');
   await phone.getByLabel('Поиск адресата').fill('');
   await expect(phone.locator('.phone-recipient').first()).toBeVisible();
+  const largeTextAction = phone.locator('.phone-recipient').first().getByRole('button').first();
+  await largeTextAction.scrollIntoViewIfNeeded();
+  expect((await largeTextAction.boundingBox())!.width).toBeGreaterThan(200);
+  if(process.env.REACHABILITY_QA) await page.screenshot({path:`/tmp/reachability129-${info.project.name}-large-text.png`,animations:'disabled'});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
   await page.evaluate(()=>{document.documentElement.lang='en';});
   await phone.getByLabel('Поиск адресата').fill('zzzz');
