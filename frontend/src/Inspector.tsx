@@ -24,7 +24,7 @@ import { localDate } from "./dates";
 import { ThemeSelector } from "./ThemeProvider";
 import { CharacterView } from "./CharacterDossier";
 import { CharacterAvatar } from "./Portrait";
-import { type DossierTab } from "./lib/dossier";
+import { dossierText, type DossierTab } from "./lib/dossier";
 import { it, panelLabel, inspectorSections, type Panel } from "./lib/inspector";
 import { Reveal } from "./InspectorViews";
 import {
@@ -282,13 +282,30 @@ export function Inspector({
     panel: Panel;
     focus: HTMLElement | null;
   } | null>(null);
+  const [characterHistory, setCharacterHistory] = useState<{
+    id: string; tab: DossierTab; query: string; near: boolean; scroll: number;
+    partnerId?: string;
+  }[]>([]);
+  const focusOnCharacter = useRef(false);
+  const pendingReturn = useRef<{scroll: number; partnerId?: string} | null>(null);
   const scrolls = useRef(new Map<string, number>());
   const scrollRef = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const key = `${panel}:${panel === "Персонажи" ? `${character}:${dossierTab}` : ""}`;
   useLayoutEffect(() => {
     if (open && scrollRef.current) {
-      scrollRef.current.scrollTop = scrolls.current.get(key) || 0;
+      const returning = pendingReturn.current;
+      scrollRef.current.scrollTop = returning?.scroll ?? scrolls.current.get(key) ?? 0;
+      if (returning) {
+        pendingReturn.current = null;
+        focusOnCharacter.current = false;
+        const link = [...scrollRef.current.querySelectorAll<HTMLButtonElement>('[data-partner-id]')]
+          .find(el => el.dataset.partnerId === returning.partnerId);
+        (link || heading.current)?.focus({preventScroll: true});
+      } else if (focusOnCharacter.current) {
+        focusOnCharacter.current = false;
+        heading.current?.focus({preventScroll: true});
+      }
     }
   }, [open, key]);
   useEffect(() => {
@@ -298,8 +315,11 @@ export function Inspector({
     if (open) setVisited((v) => new Set([...v, panel]));
   }, [open, panel]);
   useEffect(() => {
-    if (panel !== "Персонажи") setOrigin(null);
-  }, [panel]);
+    if (panel !== "Персонажи" || !open) {
+      setOrigin(null);
+      setCharacterHistory([]);
+    }
+  }, [panel, open]);
   const cards = (state?.characters || []).filter(
     (c) =>
       (!near || meta?.present_ids.includes(c.id) || meta?.observed_ids?.includes(c.id)) &&
@@ -308,16 +328,29 @@ export function Inspector({
         .toLocaleLowerCase()
         .includes(query.toLocaleLowerCase()),
   );
-  const selected = cards.find((c) => c.id === character) || cards[0];
+  const knownSelection = !character || state?.characters.some(c => c.id === character);
+  const selected = cards.find(c => c.id === character) || (knownSelection ? cards[0] : undefined);
   useEffect(() => {
     if (open && panel === "Персонажи" && selected && selected.id !== character)
       setCharacter(selected.id);
   }, [open, panel, selected?.id, character, setCharacter]);
   const openCharacter = (id: string) => {
-    if (panel !== "Персонажи")
+    if (!state?.characters.some(c => c.id === id)) return;
+    if (panel === "Персонажи" && selected?.id === id) return;
+    if (scrollRef.current) scrolls.current.set(key, scrollRef.current.scrollTop);
+    if (panel !== "Персонажи") {
       setOrigin({ panel, focus: document.activeElement as HTMLElement });
+    } else if (selected) {
+      setCharacterHistory(rows => [...rows, {
+        id: selected.id, tab: dossierTab, query, near,
+        scroll: scrollRef.current?.scrollTop || 0,
+        partnerId: (document.activeElement as HTMLElement)?.dataset.partnerId,
+      }]);
+    }
+    focusOnCharacter.current = true;
     setQuery("");
     setNear(false);
+    setDossierTab("overview");
     setCharacter(id);
     setPanel("Персонажи");
   };
@@ -325,7 +358,17 @@ export function Inspector({
     // A scroll event can still be queued when Escape/Back hides the surface.
     // Capture the current DOM position before that event loses its open owner.
     if (scrollRef.current) scrolls.current.set(key, scrollRef.current.scrollTop);
-    if (origin) {
+    const history = characterHistory.filter(row => state?.characters.some(c => c.id === row.id));
+    const previous = history.at(-1);
+    if (previous) {
+      setCharacterHistory(history.slice(0, -1));
+      pendingReturn.current = previous;
+      setQuery(previous.query);
+      setNear(previous.near);
+      setDossierTab(previous.tab);
+      setCharacter(previous.id);
+    } else if (origin) {
+      setCharacterHistory([]);
       const from = origin;
       setOrigin(null);
       setPanel(from.panel);
@@ -359,6 +402,7 @@ export function Inspector({
     return () => window.removeEventListener("keydown", escape);
   }, [open]);
   if (!world || !state) return null;
+  const previousCharacter = [...characterHistory].reverse().map(row => state.characters.find(c => c.id === row.id)).find(Boolean);
   const props = {
     state,
     meta,
@@ -410,12 +454,12 @@ export function Inspector({
           <Button
             variant="ghost"
             size="sm"
-            aria-label={it("close")}
+            aria-label={previousCharacter ? `${dossierText("returnDossier")}: ${previousCharacter.name}` : it("close")}
             onClick={back}
           >
             <ArrowLeft size={17} />
             <span>
-              {origin ? it("backTo") + panelLabel(origin.panel) : it("back")}
+              {previousCharacter ? dossierText("backDossier") : origin ? it("backTo") + panelLabel(origin.panel) : it("back")}
             </span>
           </Button>
         </header>
@@ -492,7 +536,7 @@ export function Inspector({
                           meta,
                           save,
                           character,
-                          setCharacter,
+                          setCharacter: (id: string) => {setCharacterHistory([]);setCharacter(id)},
                           query,
                           setQuery,
                           near,

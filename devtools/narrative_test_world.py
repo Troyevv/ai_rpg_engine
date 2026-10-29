@@ -821,6 +821,26 @@ def _ui_dossier(state):
 CHECKPOINTS['ui-dossier']=_ui_dossier
 
 
+def _ui_personal(state):
+    """#141: known concurrent romance and a suspected relation, using #78 data."""
+    from backend.runtime_v3.models import ObjectiveRelation
+    state = _ui_dossier(state)
+    world = state['world']
+    for cid, kind, certainty in [('qa_elena', 'partner', 'known'), ('qa_marina', 'engaged', 'suspected')]:
+        rid = 'ui-personal-' + cid
+        world['facts'][rid] = dict(id=rid, text='Личные отношения установлены.', secret=True,
+                                  character_ids=[ACTOR_ID, cid], evidence=['QA'])
+        world['knowledge'][ACTOR_ID + ':' + rid] = dict(actor_id=ACTOR_ID, fact_id=rid, status=certainty)
+        a, b = sorted((ACTOR_ID, cid))
+        world['objective_relations'][rid] = ObjectiveRelation(id=rid, kind=kind, source_id=a,
+            target_id=b, fact_id=rid, since=0, evidence='QA', source_turn=0).model_dump()
+    return state
+
+
+CHECKPOINTS['ui-personal'] = _ui_personal
+
+
+
 def _ui_portrait_polish(state):
     """#121: shared dossier/phone regression fixture, canonical identities only."""
     from backend.runtime_v3.remote_models import Contact
