@@ -59,3 +59,12 @@ Narrative тесты проверяют интеграцию; полный suite
 качество ответов реального провайдера оценивают по этому ручному протоколу.
 Сохраняйте preset/custom значения, snapshot, candidate ID, source Event,
 diagnostics/usage и фактический текст для воспроизводимости.
+
+## GenrePolicy #110
+
+Тот же checkpoint `pacing`: [сценарий жанров](../../genre-policy.md#reproducible-qa).
+Основной/дополнительные/custom, смена в игре, save/reload и исходный контекст
+regenerate/rollback/branch. На одинаковом WorldState жанры меняют инструкции,
+но не Director eligibility/ranking и не принятие события. Автотесты:
+`tests/test_genre_policy.py`, `frontend/e2e/genre-policy.spec.ts`.
+Базовая фикстура #78 не изменена.

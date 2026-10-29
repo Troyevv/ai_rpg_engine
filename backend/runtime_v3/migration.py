@@ -16,6 +16,8 @@ class MigrationResult:
 def migrate_v2(original):
     if original.get('schema_version') == 3:
         original = deepcopy(original)
+        from backend.runtime_v3.genre import initialize as initialize_genre
+        initialize_genre(original)
         from backend.runtime_v3.pacing import salvage_policy
         salvage_policy(original['world_state'])
         from backend.runtime_v3.personality import salvage_profiles
@@ -196,6 +198,8 @@ def migrate_v2(original):
     snapshot = dict(schema_version=3, world_state=state, character_cards=cards,
         campaign={key:deepcopy(old[key]) for key in retained if key in old},
         memory=deepcopy(old.get('memory', {})), history_head=None)
+    from backend.runtime_v3.genre import initialize as initialize_genre
+    initialize_genre(snapshot, old.get('creation_settings'))
     from backend.runtime_v3.personality import initialize_profiles
     initialize_profiles(snapshot)
     from backend.runtime_v3.appearance import initialize_profiles as initialize_appearance

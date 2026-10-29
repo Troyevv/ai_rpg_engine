@@ -183,7 +183,11 @@ class WeatherProfile(StrictModel):
     regions: dict[str, WeatherRegion] = Field(default_factory=dict, max_length=100)
 
 
+from backend.runtime_v3.genre import GenreConfig
+
+
 class Meta(StrictModel):
+    genre: GenreConfig | None = None
     weather: WeatherProfile | None = None
     npc_expressiveness: Literal["realistic", "expressive", "hyperbolized"] = "realistic"
     communication: CommunicationCapabilities = Field(default_factory=CommunicationCapabilities)
