@@ -415,6 +415,9 @@ def chat_stream(
         if stream is None and getattr(exc,'status_code',None) is not None:
             raise ProviderHTTPError(deepseek_error(exc),exc.status_code,
                 provider_rejection(exc,messages,max_tokens,response_format)) from None
+        if on_private_result is not None:
+            # SDK/transport exceptions may echo received argument bytes.
+            raise RuntimeError('private_artifact_transport_failed') from None
         if remote and not isinstance(exc, RuntimeError):
             raise RuntimeError(deepseek_error(exc)) from None
         raise

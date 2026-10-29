@@ -239,7 +239,7 @@ def test_provider_transport_fail_closed_all_chunk_boundaries(monkeypatch,fault):
             yield NS(choices=[NS(delta=NS(content=SECRET,tool_calls=None),finish_reason='stop')]);return
         for i,char in enumerate(value):
             yield NS(choices=[NS(delta=NS(content=None,tool_calls=[NS(index=1 if fault=='multiple' else 0,function=NS(name='publish_narrative' if i==0 else None,arguments=char))]),finish_reason=None)])
-        if fault=='disconnect':raise RuntimeError('fixture disconnected')
+        if fault=='disconnect':raise RuntimeError('fixture disconnected: '+SECRET)
         yield NS(choices=[NS(delta=NS(content=None,tool_calls=[]),finish_reason='stop' if fault=='wrong_finish' else 'tool_calls')])
     stream=MagicMock();stream.__iter__.side_effect=chunks
     client=MagicMock();client.chat.completions.create.return_value=stream
