@@ -15,9 +15,6 @@
   .document {
     padding: 20px;
   }
-  .story {
-    padding: 35px 28px 45px;
-  }
   .scene-bar {
     gap: 12px;
     padding: 13px 22px;
@@ -87,44 +84,8 @@
     font-size: 10px;
     padding: 3px 8px;
   }
-  .story {
-    padding: 27px 20px 35px;
-  }
-  .story-heading {
-    margin-bottom: 30px;
-  }
-  .story-heading h1 {
-    font-size: 30px;
-  }
   .story .prose {
     font-size: 0.94em;
-  }
-  .choices {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-  .choices > button {
-    padding: 12px;
-    font-size: 12px;
-  }
-  .turn {
-    margin-bottom: 27px;
-  }
-  .composer {
-    padding: 10px 12px 8px;
-  }
-  .composer-footer {
-    font-size: 9px;
-  }
-  .composer-footer > span {
-    max-width: 60%;
-  }
-  .composer-inner textarea {
-    font-size: 16px;
-  }
-  .composer-inner {
-    gap: 4px;
-    padding: 5px 7px;
   }
   .welcome {
     padding: 22px;
@@ -223,20 +184,7 @@
  .mobile-pov button {min-height:44px;font-size:13px;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
  .mobile-scene-line {display:block;width:100%;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:44px;font-size:12px;color:var(--text-muted)}
  .story-scroll {min-height:0;flex:1;overflow-y:auto;overscroll-behavior-y:contain;overflow-anchor:none}
- .story {padding:12px 14px 18px;width:100%;max-width:100%!important;overflow-wrap:anywhere}
- .story .prose {font-size:1em;line-height:inherit}.story .prose p {margin:0 0 1em}
- .story-heading {margin-bottom:12px}.story-heading h1,.story-heading .chapter-rule {display:none}.story-heading .eyebrow{font-size:10px;margin:4px 0}
- .mobile-story-tools {font:12px var(--ui-font);margin:0 0 4px}.mobile-story-tools summary{min-height:44px;display:flex;align-items:center}
- .turn {margin-bottom:18px}.turn-number{font-size:10px;margin:12px 0}.player-action{padding:10px 12px;margin:12px 0}
- .mobile-variants {display:flex;align-items:center;gap:2px;font:13px var(--ui-font);margin:0 0 8px}.variant-step{display:flex;align-items:center;gap:4px}
- .mobile-variants button {min-width:44px;min-height:44px}
- .composer {flex-shrink:0;padding:6px 8px max(6px,env(safe-area-inset-bottom));background:var(--bg);border-top:1px solid var(--border)}
- .composer-inner {padding:3px 4px;align-items:flex-end;gap:4px;border-radius:18px}
- .composer-inner textarea {min-height:40px;max-height:132px;resize:none;overflow-y:auto;font:16px/22px var(--ui-font);padding:9px 8px}
- .composer-inner button {min-width:44px;min-height:44px;align-self:flex-end}
- .composer-footer {margin:0;justify-content:flex-end}.composer-footer>span{display:none}.composer-footer button{min-height:44px;font-size:12px}
- .choices{grid-template-columns:1fr;gap:6px}.choices>button{min-height:44px;font-size:14px;padding:10px}
- .turn-actions{gap:2px}.turn-actions button{min-height:44px;font-size:11px}
+ .story .prose {font-size:1em;line-height:inherit}.story .prose p {margin:0 0 1em}.variant-step{display:flex;align-items:center;gap:4px}
  .mobile-sheet {position:fixed!important;top:auto!important;bottom:0!important;left:0!important;transform:none!important;width:100%!important;max-width:100%!important;max-height:var(--app-height,90dvh);border-radius:20px 20px 0 0;padding:20px 16px max(20px,env(safe-area-inset-bottom));overflow-y:auto}
  .mobile-nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px}.mobile-nav button{display:flex;flex-direction:column;align-items:center;gap:6px;min-height:64px;min-width:0;font-size:12px}
  .mobile-menu-tools,.actor-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}.actor-list button{min-height:44px;text-align:left;padding:10px}
@@ -317,18 +265,7 @@
  .button-icon { width:44px; height:44px; }
  .section-tabs { max-width:100%; }
  .diagnostics .diagnostic-tabs button { padding:10px 5px; font-size:12px; }
- .story { padding:18px 18px 26px; }
- .story-heading { margin:0 0 22px; }
- .story-heading h1 { display:block; font-size:23px; margin:12px 0; }
- .story-heading .chapter-rule { display:none; }
- .story-heading .eyebrow { font-size:10px; }
- .choices > button { padding:14px; border-radius:var(--radius-md); }
- .composer { background:var(--bg); padding-bottom:max(8px,env(safe-area-inset-bottom)); }
- .composer-inner { border-radius:var(--radius-lg); }
- .composer-inner textarea { font-family:var(--story-font); }
  .mobile-context { background:var(--surface-1); }
- .mobile-story-tools { margin:0; }
- .mobile-story-tools summary { color:var(--text-muted); font-size:11px; }
  .camera-cast article { padding:14px; }
  .camera-actions { flex-wrap:wrap; }
  .camera-tabs.section-tabs { flex-wrap:wrap; }

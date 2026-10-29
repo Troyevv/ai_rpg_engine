@@ -4,7 +4,8 @@ import {Markdown} from './Markdown';
 import {revealEnd} from './narrativePresentation';
 
 /** One local animation loop, isolated from Game and the historical journal. */
-export const NarrativeText = memo(function NarrativeText({text, complete, identity, onPresented, ...markdown}: {
+export const NarrativeText = memo(function NarrativeText({text, complete, identity, onPresented, deferFormatting=false, ...markdown}: {
+  deferFormatting?:boolean;
   text:string; complete:boolean; identity:string; onPresented:(id:string)=>void;
   saveId:number; worldId:number; links:boolean; onCharacter:(id:string)=>void;
 }) {
@@ -36,6 +37,6 @@ export const NarrativeText = memo(function NarrativeText({text, complete, identi
   const displayed=reduced?text:shown;
   const ready=useCallback(()=>onPresented(identity),[identity,onPresented]);
   return <div className="narrative-text" data-revealing={displayed!==text}>
-    <Markdown {...markdown} onReady={ready} text={displayed} streaming={!complete||displayed!==text}/>
+    <Markdown {...markdown} deferFormatting={deferFormatting} onReady={ready} text={displayed} streaming={!complete||displayed!==text}/>
   </div>;
 });

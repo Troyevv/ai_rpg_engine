@@ -1,0 +1,93 @@
+
+Running 72 tests using 1 worker
+
+(node:20) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/72] [desktop] › e2e/current-game.spec.ts:4:1 › date-only formatting is independent of timezone
+[2/72] [desktop] › e2e/current-game.spec.ts:13:1 › calendar, genealogy, policy and weather stay save-scoped and responsive
+[3/72] [desktop] › e2e/current-game.spec.ts:88:1 › one phone device preserves unsent chat drafts across collapse and modal
+[4/72] [desktop] › e2e/current-game.spec.ts:152:1 › incapacitation blocks keyboard and submit while observation remains available
+[5/72] [desktop] › e2e/current-game.spec.ts:190:1 › death automatically opens mandatory continuation and Escape cannot dismiss it
+[6/72] [desktop] › e2e/current-game.spec.ts:222:1 › explicit climate survives reload and matches the canonical calendar
+[7/72] [desktop] › e2e/current-game.spec.ts:262:1 › phone leaves composer reachable with keyboard-sized viewport and enlarged text
+[8/72] [desktop] › e2e/mobile-layout.spec.ts:2:38 › mobile story layout 360px
+[9/72] [desktop] › e2e/mobile-layout.spec.ts:2:38 › mobile story layout 390px
+[10/72] [desktop] › e2e/mobile-layout.spec.ts:2:38 › mobile story layout 412px
+[11/72] [desktop] › e2e/mobile-layout.spec.ts:2:38 › mobile story layout 430px
+[12/72] [desktop] › e2e/mobile-layout.spec.ts:38:1 › PWA manifest, worker and offline recovery
+[13/72] [desktop] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 entry: real jobs turn reload turn
+[14/72] [desktop] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 doorway: real jobs turn reload turn
+[15/72] [desktop] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 optional-annotation: real jobs turn reload turn
+[16/72] [desktop] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 semantic-retry: real jobs turn reload turn
+[17/72] [desktop] › e2e/narrative-authority136.spec.ts:71:1 › 136 complete journey: arrival, interaction, threshold, call, agreement, reload, next turn
+[18/72] [desktop] › e2e/narrative-phone138.spec.ts:4:2 › 138 narrative message and incoming call: graphite
+[19/72] [desktop] › e2e/narrative-phone138.spec.ts:4:2 › 138 narrative message and incoming call: parchment
+[20/72] [desktop] › e2e/narrative-skins.spec.ts:4:1 › all skins, four mobile widths, time skip and rollback
+[21/72] [desktop] › e2e/narrative-skins.spec.ts:45:1 › skin artwork is visible, distinct and outside the reading surface
+[22/72] [desktop] › e2e/parity.spec.ts:4:1 › scenario → summary → world → save → start → action → regenerate → rollback
+[23/72] [desktop] › e2e/parity.spec.ts:97:1 › streaming survives disconnect; stop keeps a draft and cannot save it as a world
+[24/72] [desktop] › e2e/pov.spec.ts:3:1 › POV, backstage and prompt versions
+[25/72] [desktop] › e2e/pov.spec.ts:46:1 › scenario and summary deletion keeps restorable versions and saves
+[26/72] [desktop] › e2e/runtime.spec.ts:3:1 › persistent key, thinking, memory, visible player actions, variants and accounting
+[27/72] [desktop] › e2e/tabletop.spec.ts:28:1 › generated campaign, quest, combat, loot, expansion and real server restart
+[28/72] [desktop] › e2e/tabletop.spec.ts:284:1 › invalid generated draft shows all diagnostics and requires explicit correction
+[29/72] [desktop] › e2e/tabletop.spec.ts:339:1 › AI DM check and choice have durable mechanical controls
+[30/72] [desktop] › e2e/tabletop.spec.ts:403:1 › point buy and AI portrait are reviewed before character creation
+[31/72] [desktop] › e2e/tabletop.spec.ts:456:1 › wizard creator and spellbook keep casting pending across reload
+[32/72] [desktop] › e2e/world-camera.spec.ts:3:1 › camera, observer continuation, timeline and immutable playback
+(node:650) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[33/72] [desktop] › e2e/phone133.spec.ts:7:45 › 133 A B E F graphite: messages, choices, call and continuation
+[34/72] [desktop] › e2e/phone133.spec.ts:7:45 › 133 A B E F parchment: messages, choices, call and continuation
+[35/72] [desktop] › e2e/phone133.spec.ts:56:1 › 133 D: semantic failure and Retry preserve one response, one minute and choices
+[36/72] [desktop] › e2e/phone133.spec.ts:78:1 › 133 canonical agency repair commits once without narrative confirmation
+(node:824) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[37/72] [mobile] › e2e/current-game.spec.ts:4:1 › date-only formatting is independent of timezone
+[38/72] [mobile] › e2e/current-game.spec.ts:13:1 › calendar, genealogy, policy and weather stay save-scoped and responsive
+[39/72] [mobile] › e2e/current-game.spec.ts:88:1 › one phone device preserves unsent chat drafts across collapse and modal
+[40/72] [mobile] › e2e/current-game.spec.ts:152:1 › incapacitation blocks keyboard and submit while observation remains available
+[41/72] [mobile] › e2e/current-game.spec.ts:190:1 › death automatically opens mandatory continuation and Escape cannot dismiss it
+[42/72] [mobile] › e2e/current-game.spec.ts:222:1 › explicit climate survives reload and matches the canonical calendar
+[43/72] [mobile] › e2e/current-game.spec.ts:262:1 › phone leaves composer reachable with keyboard-sized viewport and enlarged text
+[44/72] [mobile] › e2e/mobile-layout.spec.ts:2:38 › mobile story layout 360px
+[45/72] [mobile] › e2e/mobile-layout.spec.ts:2:38 › mobile story layout 390px
+[46/72] [mobile] › e2e/mobile-layout.spec.ts:2:38 › mobile story layout 412px
+[47/72] [mobile] › e2e/mobile-layout.spec.ts:2:38 › mobile story layout 430px
+[48/72] [mobile] › e2e/mobile-layout.spec.ts:38:1 › PWA manifest, worker and offline recovery
+[49/72] [mobile] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 entry: real jobs turn reload turn
+[50/72] [mobile] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 doorway: real jobs turn reload turn
+[51/72] [mobile] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 optional-annotation: real jobs turn reload turn
+[52/72] [mobile] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 semantic-retry: real jobs turn reload turn
+[53/72] [mobile] › e2e/narrative-authority136.spec.ts:71:1 › 136 complete journey: arrival, interaction, threshold, call, agreement, reload, next turn
+[54/72] [mobile] › e2e/narrative-phone138.spec.ts:4:2 › 138 narrative message and incoming call: graphite
+[55/72] [mobile] › e2e/narrative-phone138.spec.ts:4:2 › 138 narrative message and incoming call: parchment
+[56/72] [mobile] › e2e/narrative-skins.spec.ts:4:1 › all skins, four mobile widths, time skip and rollback
+[57/72] [mobile] › e2e/narrative-skins.spec.ts:45:1 › skin artwork is visible, distinct and outside the reading surface
+[58/72] [mobile] › e2e/parity.spec.ts:4:1 › scenario → summary → world → save → start → action → regenerate → rollback
+[59/72] [mobile] › e2e/parity.spec.ts:97:1 › streaming survives disconnect; stop keeps a draft and cannot save it as a world
+[60/72] [mobile] › e2e/pov.spec.ts:3:1 › POV, backstage and prompt versions
+[61/72] [mobile] › e2e/pov.spec.ts:46:1 › scenario and summary deletion keeps restorable versions and saves
+[62/72] [mobile] › e2e/runtime.spec.ts:3:1 › persistent key, thinking, memory, visible player actions, variants and accounting
+[63/72] [mobile] › e2e/tabletop.spec.ts:28:1 › generated campaign, quest, combat, loot, expansion and real server restart
+[64/72] [mobile] › e2e/tabletop.spec.ts:284:1 › invalid generated draft shows all diagnostics and requires explicit correction
+[65/72] [mobile] › e2e/tabletop.spec.ts:339:1 › AI DM check and choice have durable mechanical controls
+[66/72] [mobile] › e2e/tabletop.spec.ts:403:1 › point buy and AI portrait are reviewed before character creation
+[67/72] [mobile] › e2e/tabletop.spec.ts:456:1 › wizard creator and spellbook keep casting pending across reload
+[68/72] [mobile] › e2e/world-camera.spec.ts:3:1 › camera, observer continuation, timeline and immutable playback
+(node:1410) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[69/72] [mobile] › e2e/phone133.spec.ts:7:45 › 133 A B E F graphite: messages, choices, call and continuation
+[70/72] [mobile] › e2e/phone133.spec.ts:7:45 › 133 A B E F parchment: messages, choices, call and continuation
+[71/72] [mobile] › e2e/phone133.spec.ts:56:1 › 133 D: semantic failure and Retry preserve one response, one minute and choices
+[72/72] [mobile] › e2e/phone133.spec.ts:78:1 › 133 canonical agency repair commits once without narrative confirmation
+  5 skipped
+  67 passed (9.0m)

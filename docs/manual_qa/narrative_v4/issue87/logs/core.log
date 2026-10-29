@@ -1,0 +1,67 @@
+
+Running 46 tests using 1 worker
+
+(node:20) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/46] [desktop] › e2e/phone122-streaming.spec.ts:7:35 › 122 call bursty SSE and independent anchors motion
+[2/46] [desktop] › e2e/phone122-streaming.spec.ts:7:35 › 122 call bursty SSE and independent anchors reduced
+[3/46] [desktop] › e2e/phone122-streaming.spec.ts:85:1 › 133 call stop restores unsaved speech without hanging up
+[4/46] [desktop] › e2e/streaming72.spec.ts:10:35 › controlled streaming, commit, scroll and journal motion
+[5/46] [desktop] › e2e/streaming72.spec.ts:10:35 › controlled streaming, commit, scroll and journal reduced
+[6/46] [desktop] › e2e/streaming72.spec.ts:86:1 › real Start Game → ordinary turn → persisted reload → next ordinary turn
+[7/46] [desktop] › e2e/streaming72.spec.ts:98:1 › leave for authoring and return during generation without losing the stream or draft
+(node:249) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[8/46] [desktop] › e2e/reading87-context.spec.ts:7:1 › 87 1000-turn reading, panels, draft selection, resize and performance
+[9/46] [desktop] › e2e/reading87-context.spec.ts:52:29 › 87 0 choices, long speech, exact dispatch and eligibility
+[10/46] [desktop] › e2e/reading87-context.spec.ts:52:29 › 87 1 choices, long speech, exact dispatch and eligibility
+[11/46] [desktop] › e2e/reading87-context.spec.ts:52:29 › 87 9 choices, long speech, exact dispatch and eligibility
+[12/46] [desktop] › e2e/reading87-context.spec.ts:81:1 › 87 authorized character link returns to the same reading anchor and draft
+[13/46] [desktop] › e2e/reading87-landscape.spec.ts:2:68 › 87 landscape 844x393
+[14/46] [desktop] › e2e/reading87-landscape.spec.ts:2:68 › 87 landscape 1024x768
+[15/46] [desktop] › e2e/reading87.spec.ts:5:84 › 87 reading 360 graphite
+[16/46] [desktop] › e2e/reading87.spec.ts:5:84 › 87 reading 360 parchment
+[17/46] [desktop] › e2e/reading87.spec.ts:5:84 › 87 reading 393 graphite
+[18/46] [desktop] › e2e/reading87.spec.ts:5:84 › 87 reading 393 parchment
+[19/46] [desktop] › e2e/reading87.spec.ts:5:84 › 87 reading 768 graphite
+[20/46] [desktop] › e2e/reading87.spec.ts:5:84 › 87 reading 768 parchment
+[21/46] [desktop] › e2e/reading87.spec.ts:5:84 › 87 reading 1440 graphite
+[22/46] [desktop] › e2e/reading87.spec.ts:5:84 › 87 reading 1440 parchment
+[23/46] [desktop] › e2e/reading87.spec.ts:36:1 › 87 real failed Extraction has no phantom incoming event; Retry commits once
+(node:566) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[24/46] [mobile] › e2e/phone122-streaming.spec.ts:7:35 › 122 call bursty SSE and independent anchors motion
+[25/46] [mobile] › e2e/phone122-streaming.spec.ts:7:35 › 122 call bursty SSE and independent anchors reduced
+[26/46] [mobile] › e2e/phone122-streaming.spec.ts:85:1 › 133 call stop restores unsaved speech without hanging up
+[27/46] [mobile] › e2e/streaming72.spec.ts:10:35 › controlled streaming, commit, scroll and journal motion
+[28/46] [mobile] › e2e/streaming72.spec.ts:10:35 › controlled streaming, commit, scroll and journal reduced
+[29/46] [mobile] › e2e/streaming72.spec.ts:86:1 › real Start Game → ordinary turn → persisted reload → next ordinary turn
+[30/46] [mobile] › e2e/streaming72.spec.ts:98:1 › leave for authoring and return during generation without losing the stream or draft
+(node:1286) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[31/46] [mobile] › e2e/reading87-context.spec.ts:7:1 › 87 1000-turn reading, panels, draft selection, resize and performance
+[32/46] [mobile] › e2e/reading87-context.spec.ts:52:29 › 87 0 choices, long speech, exact dispatch and eligibility
+[33/46] [mobile] › e2e/reading87-context.spec.ts:52:29 › 87 1 choices, long speech, exact dispatch and eligibility
+[34/46] [mobile] › e2e/reading87-context.spec.ts:52:29 › 87 9 choices, long speech, exact dispatch and eligibility
+[35/46] [mobile] › e2e/reading87-context.spec.ts:81:1 › 87 authorized character link returns to the same reading anchor and draft
+[36/46] [mobile] › e2e/reading87-landscape.spec.ts:2:68 › 87 landscape 844x393
+[37/46] [mobile] › e2e/reading87-landscape.spec.ts:2:68 › 87 landscape 1024x768
+[38/46] [mobile] › e2e/reading87.spec.ts:5:84 › 87 reading 360 graphite
+[39/46] [mobile] › e2e/reading87.spec.ts:5:84 › 87 reading 360 parchment
+[40/46] [mobile] › e2e/reading87.spec.ts:5:84 › 87 reading 393 graphite
+[41/46] [mobile] › e2e/reading87.spec.ts:5:84 › 87 reading 393 parchment
+[42/46] [mobile] › e2e/reading87.spec.ts:5:84 › 87 reading 768 graphite
+[43/46] [mobile] › e2e/reading87.spec.ts:5:84 › 87 reading 768 parchment
+[44/46] [mobile] › e2e/reading87.spec.ts:5:84 › 87 reading 1440 graphite
+[45/46] [mobile] › e2e/reading87.spec.ts:5:84 › 87 reading 1440 parchment
+[46/46] [mobile] › e2e/reading87.spec.ts:36:1 › 87 real failed Extraction has no phantom incoming event; Retry commits once
+  10 skipped
+  36 passed (7.2m)

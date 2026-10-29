@@ -167,3 +167,16 @@ it('animation frames do not commit renders in the historical journal',async()=>{
  await render(<>{history}<NarrativeText {...props} text={text}/></>);historical.mockClear();
  await advance(5000);expect(historical).not.toHaveBeenCalled();
 });
+
+it('historical prose stays readable but formats links only near the reading viewport',async()=>{
+ let intersect:IntersectionObserverCallback=()=>{};
+ const disconnect=vi.fn();
+ vi.stubGlobal('IntersectionObserver',class {constructor(callback:IntersectionObserverCallback){intersect=callback}observe(){}disconnect=disconnect});
+ await render(<NarrativeText text="Длинная архивная сцена." identity="archive87" complete deferFormatting onPresented={noop} saveId={1} worldId={1} links onCharacter={noop}/>);
+ await advance(200);
+ expect(host.textContent).toContain('Длинная архивная сцена.');expect(fetch).not.toHaveBeenCalled();
+ await act(()=>intersect([{isIntersecting:true}] as IntersectionObserverEntry[],{} as IntersectionObserver));
+ await advance(100);
+ expect(fetch).toHaveBeenCalledTimes(1);expect(disconnect).toHaveBeenCalled();
+ expect(host.querySelector('[data-character-id="npc"]')).not.toBeNull();
+});

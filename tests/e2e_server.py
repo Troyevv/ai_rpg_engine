@@ -48,9 +48,10 @@ review_protocol_attempts={}
 fragment_attempts={}
 handoff_provider=None
 phone_mode="silent"
+reading87_failures=0
 
 def stream(**kwargs):
-    global phone_mode
+    global phone_mode, reading87_failures
     from backend.services.draft_completeness import MARKER
     if kwargs['messages'][0]['content'].startswith(MARKER):
         request=json.loads(kwargs['messages'][1]['content'])
@@ -124,6 +125,9 @@ def stream(**kwargs):
         from narrative_phone138_fixture import response
         task=json.loads(next(m['content'].split('\n',1)[1] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')))
         value=response(current_phone,task,bool(kwargs.get('response_format')))
+        if reading87_failures and isinstance(value,dict) and value.get('remote_events'):
+            reading87_failures-=1
+            raise RuntimeError('Reading87 controlled Extraction outage')
         yield json.dumps(value,ensure_ascii=False) if isinstance(value,dict) else value
         return
     if current_phone.get('communication'):
@@ -441,6 +445,12 @@ if __name__ == '__main__':
         engine.run_job(app.state.repository.path,job,engine.Worker())
         assert app.state.repository.get_job(job)['status']=='saved'
         return {'world':result['world'],'save':result['save']}
+
+    @app.post('/test/reading87-extraction-failure')
+    def reading87_extraction_failure():
+        global reading87_failures
+        reading87_failures=1
+        return {'armed':True}
 
     @app.post('/test/narrative-phone138-seed')
     def narrative_phone138_seed():

@@ -22,7 +22,9 @@ for(const reduced of [false,true])test(`controlled streaming, commit, scroll and
  const Real=window.EventSource;
  (window as any).EventSource=class extends EventTarget {onopen:any;onerror:any; constructor(url:string){super();if(!url.includes('stream72'))return new Real(url) as any;(window as any).testStream=this;queueMicrotask(()=>this.onopen?.(new Event('open')))}close(){}};
  },s);
- let markdown=0;page.on('request',r=>{if(r.url().endsWith('/markdown'))markdown++});
+ // #87 formats historical entries on approach; scrolling to them is not a
+ // streamed-text request. Retain the <=2 budget for this new turn itself.
+ let markdown=0;page.on('request',r=>{if(r.url().endsWith('/markdown')&&[narrative,job.user_text].includes(r.postDataJSON()?.text))markdown++});
  await page.goto('/');await expect(page.locator('.turn')).toHaveCount(60);await frames(page,60);
  const beforeRequests=markdown;
  const cdp=await page.context().newCDPSession(page);await cdp.send('Emulation.setCPUThrottlingRate',{rate:4});

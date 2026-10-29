@@ -15,7 +15,7 @@ import {NarrativeTurn} from "./NarrativeTurn";
 import {useStableEvent} from "./hooks";
 import {useStoryScroll} from "./useStoryScroll";
 import {presentationEntries,surfaceEntries,physicalChoiceTurn} from "./presentationEntries";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   BookOpen,
@@ -175,7 +175,15 @@ export function Game({
     const j=await api<Job>(`/saves/${save.id}/camera`,{actor_id:actor,scene_id:scene,revision:save.revision,config:prefs.game,api_key:apiKey});
     setSubmitted(j);jumpToLatest();
   });
-  useEffect(()=>{if(!mobile||!input.current)return;const el=input.current;el.style.height='auto';el.style.height=Math.min(el.scrollHeight,132)+'px'},[draft,mobile]);
+  // Grow on desktop as well as mobile, including width/font changes. The existing
+  // story ResizeObserver remains the only owner of reading-position adjustments.
+  useLayoutEffect(()=>{
+    const el=input.current;if(!el)return;
+    const resize=()=>{el.style.height='0px';el.style.height=Math.min(el.scrollHeight,132)+'px'};
+    resize();let width=el.clientWidth;
+    const observer=new ResizeObserver(()=>{if(el.clientWidth!==width){width=el.clientWidth;resize()}});
+    observer.observe(el);return()=>observer.disconnect();
+  },[draft,mobile,prefs.font_size,save?.id]);
 
   const stableRun=useStableEvent(run);
   const stableTurn=useStableEvent(turn);
@@ -186,7 +194,8 @@ export function Game({
   }));
   const allEntries=presentationEntries(save,job);
   const entries=surfaceEntries(allEntries,'physical');
-  const renderEntry=(entry:typeof allEntries[number],toolsOnly=false)=>world&&save?<NarrativeTurn toolsOnly={toolsOnly} showTools={toolsOnly||entry.turn.presentation?.surface!=='call'} key={entry.identity} identity={entry.identity} t={entry.turn} i={save.turns.findIndex(t=>t.id===entry.turn.id)} save={save} world={world} prefs={prefs} mobile={mobile} busy={busy} running={pending} mainActor={mainActor} turn={stableTurn} run={stableRun} setSubmitted={setSubmitted} refresh={refresh} setDiagnosticJob={setDiagnosticJob} setDiagnostics={setDiagnostics} openCharacter={openCharacter} job={entry.job} reconnecting={entry.job?reconnecting:false} stop={stopJob} committed={entry.committed} onPresented={onPresented}/>:null;
+  const turnIndices=useMemo(()=>new Map(save?.turns.map((t,i)=>[t.id,i])),[save?.turns]);
+  const renderEntry=(entry:typeof allEntries[number],toolsOnly=false)=>world&&save?<NarrativeTurn toolsOnly={toolsOnly} showTools={toolsOnly||entry.turn.presentation?.surface!=='call'} key={entry.identity} identity={entry.identity} t={entry.turn} i={turnIndices.get(entry.turn.id)??-1} save={save} world={world} prefs={prefs} mobile={mobile} busy={busy} running={pending} mainActor={mainActor} turn={stableTurn} run={stableRun} setSubmitted={setSubmitted} refresh={refresh} setDiagnosticJob={setDiagnosticJob} setDiagnostics={setDiagnostics} openCharacter={openCharacter} job={entry.job} reconnecting={entry.job?reconnecting:false} stop={stopJob} committed={entry.committed} onPresented={onPresented}/>:null;
   const retry=job&&unapplied?<Button disabled={busy||job.live} onClick={()=>void run(async()=>{setSubmitted(await api<Job>(`/jobs/${job.id}/retry`,{config:prefs.game,api_key:apiKey}))})}>{t('retry')}</Button>:null;
   const meta = save?.scene_meta ?? world?.scene_meta;
   const state = save?.state ?? world?.state;
@@ -262,15 +271,9 @@ export function Game({
         </div>
       </div>
       </>}
-      {!!save?.state.world_clock?.nearby?.length&&<details className="skip-diagnostics"><summary>Ближайшие даты</summary><p className="muted small">Дата в календаре не означает, что запланировано празднование.</p>{save.state.world_clock.nearby.map(e=><p key={e.id}>{calendarDate(e.date)} · {e.kind==='birthday'?`День рождения: ${e.character_ids.map(id=>save.state.characters.find(c=>c.id===id)?.name||id).join(', ')}`:e.name}</p>)}</details>}
-      {save?.state.last_long_term_advance&&<details className="skip-diagnostics" open><summary>Длительный переход{save.state.last_long_term_advance.interruption?' · прерван':''}</summary>
-        <p>Обращений к модели: {save.state.last_long_term_advance.llm_calls} / {save.state.last_long_term_advance.max_llm_calls}. Нерешённых причин: {save.state.last_long_term_advance.unresolved.length}.</p>
-        {save.state.last_long_term_advance.accepted.length>0&&<><strong>События вне сцены — сведения для игрока</strong><p>Герой не узнаёт эти сведения автоматически.</p><ul>{save.state.last_long_term_advance.accepted.flatMap(g=>g.summaries).map((text,i)=><li key={i}>{text}</li>)}</ul></>}
-        {save.state.last_long_term_advance.decisions.length>0&&<><strong>Требуется твоё решение</strong><ul>{save.state.last_long_term_advance.decisions.map(c=><li key={c.id}>{c.context||'Есть нерешённая возможность или обязательство героя.'}{c.domains?.length?` — ${c.domains.map(advanceDomainLabel).join(', ')}`:''}</li>)}</ul><p>Продолжи обычный ход, чтобы принять решение.</p></>}
-      </details>}
-      {save?.state.last_time_skip&&<details className="skip-diagnostics"><summary>Пропуск времени: {save.state.last_time_skip.elapsed_minutes} мин{save.state.last_time_skip.interrupted?' · прерван':''}</summary><p>Запрошено: {save.state.last_time_skip.requested_duration} мин · Кандидатов: {save.state.last_time_skip.background_candidates} · Симуляций: {save.state.last_time_skip.simulated_candidates||0} · Объединено: {save.state.last_time_skip.merged_candidates||0} · Пропущено: {save.state.last_time_skip.skipped_candidates||0} · LLM мира: {save.state.last_time_skip.living_world_llm_calls||0}</p></details>}
       <div
         className="story-scroll"
+        role="region" aria-label="История" tabIndex={0}
         ref={scroll}
         onScroll={onScroll}
       >
@@ -282,6 +285,13 @@ export function Game({
             lineHeight: prefs.line_height,
           }}
         >
+      {!!save?.state.world_clock?.nearby?.length&&<details className="skip-diagnostics"><summary>Ближайшие даты</summary><p className="muted small">Дата в календаре не означает, что запланировано празднование.</p>{save.state.world_clock.nearby.map(e=><p key={e.id}>{calendarDate(e.date)} · {e.kind==='birthday'?`День рождения: ${e.character_ids.map(id=>save.state.characters.find(c=>c.id===id)?.name||id).join(', ')}`:e.name}</p>)}</details>}
+      {save?.state.last_long_term_advance&&<details className="skip-diagnostics" open><summary>Длительный переход{save.state.last_long_term_advance.interruption?' · прерван':''}</summary>
+        <p>Обращений к модели: {save.state.last_long_term_advance.llm_calls} / {save.state.last_long_term_advance.max_llm_calls}. Нерешённых причин: {save.state.last_long_term_advance.unresolved.length}.</p>
+        {save.state.last_long_term_advance.accepted.length>0&&<><strong>События вне сцены — сведения для игрока</strong><p>Герой не узнаёт эти сведения автоматически.</p><ul>{save.state.last_long_term_advance.accepted.flatMap(g=>g.summaries).map((text,i)=><li key={i}>{text}</li>)}</ul></>}
+        {save.state.last_long_term_advance.decisions.length>0&&<><strong>Требуется твоё решение</strong><ul>{save.state.last_long_term_advance.decisions.map(c=><li key={c.id}>{c.context||'Есть нерешённая возможность или обязательство героя.'}{c.domains?.length?` — ${c.domains.map(advanceDomainLabel).join(', ')}`:''}</li>)}</ul><p>Продолжи обычный ход, чтобы принять решение.</p></>}
+      </details>}
+      {save?.state.last_time_skip&&<details className="skip-diagnostics"><summary>Пропуск времени: {save.state.last_time_skip.elapsed_minutes} мин{save.state.last_time_skip.interrupted?' · прерван':''}</summary><p>Запрошено: {save.state.last_time_skip.requested_duration} мин · Кандидатов: {save.state.last_time_skip.background_candidates} · Симуляций: {save.state.last_time_skip.simulated_candidates||0} · Объединено: {save.state.last_time_skip.merged_candidates||0} · Пропущено: {save.state.last_time_skip.skipped_candidates||0} · LLM мира: {save.state.last_time_skip.living_world_llm_calls||0}</p></details>}
           {save&&mobile&&<details className="mobile-story-tools"><summary>Диагностика</summary><Button size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Диагностика</Button></details>}{save&&!mobile&&<Button className="story-diagnostics" size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(undefined);setDiagnostics(true)}}>Диагностика</Button>}
           <div className="story-heading">
             <SkinHeader pack={decoration}/>
@@ -314,8 +324,7 @@ export function Game({
               {!save.turns.length && !job && (
                 <div className="empty-state">
                   <p>
-                    Всё готово. Ведущий разыграет первую сцену и предложит шесть
-                    действий.
+                    Всё готово. Начни историю — ведущий разыграет первую сцену.
                   </p>
                 </div>
               )}
@@ -353,7 +362,7 @@ export function Game({
                     <label>Продолжить за персонажа…<select aria-label="Участник фоновой сцены" value="" disabled={busy||pending} onChange={e=>switchActor(e.target.value,save.turns.at(-1)!.id)}><option value="">Выбрать участника</option>{save.state.characters.filter(c=>JSON.parse(save.turns.at(-1)?.audience_json||'[]').includes(c.id)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
                   </div>}
                   {save.state.actor_capabilities?.can_act===false&&<div><p role="status">Персонаж сейчас не может действовать. Можно продолжить течение времени или наблюдать за миром.</p>{actorId&&<Button disabled={busy||pending} onClick={()=>observe(actorId)}>Продолжить наблюдать за героем</Button>}</div>}
-                  <motion.div className="choices" key={choiceKey} variants={choicesMotion} initial={reduced||initialChoice.current===choiceKey?false:"hidden"} animate="visible">
+                  <motion.div aria-label="Варианты действия" role="group" className="choices" key={choiceKey} variants={choicesMotion} initial={reduced||initialChoice.current===choiceKey?false:"hidden"} animate="visible">
                     {(save.state.actor_capabilities?.can_act!==false&&(choiceTurn?.pov_actor_id||mainActor)===actorId?choiceTurn?.choices:[])?.filter(c=>(c.interaction_channel||"physical")==="physical").map((c, i) => (
                       <motion.button
                         variants={choiceMotion}
@@ -367,10 +376,10 @@ export function Game({
                           );}
                         }
                       >
-                        <span className="choice-index">0{i + 1}</span>
-                        <span>
+                        <span className="choice-index" aria-hidden="true">{String(i + 1).padStart(2,"0")}</span>
+                        <span className="choice-copy">
                           <strong>{c.action}</strong>
-                          {c.speech && <>: «{c.speech}»</>}
+                          {c.speech && <span className="choice-speech">«{c.speech}»</span>}
                         </span>
                       </motion.button>
                     ))}
@@ -379,11 +388,12 @@ export function Game({
                     <Button
                       variant="ghost"
                       size="sm"
+                      aria-label="Перегенерировать последний ход"
                       disabled={busy||!save.turns.at(-1)?.variants?.some(v=>v.can_regenerate)}
                       onClick={() => turn("regenerate", "")}
                     >
                       <RotateCcw size={14} />
-                      Перегенерировать последний ход
+                      <span className="regenerate-long">Перегенерировать последний ход</span><span className="regenerate-short" aria-hidden="true">Ещё вариант</span>
                     </Button>
                     <Button
                       variant="ghost"
@@ -417,10 +427,11 @@ export function Game({
       {save && (
         <div className="composer">
           <Phone save={save} onBusyChange={setPhoneBusy} disabled={busy||pending} onCommit={refreshControl} config={prefs.game} apiKey={apiKey} onJob={setSubmitted} job={job}/>
-          <div className="composer-inner">
+          <form className="composer-inner" onSubmit={e=>{e.preventDefault();if(canSubmit&&draft.trim())void turn("turn")}}>
             <Textarea
               ref={input}
               rows={1}
+              aria-describedby="narrative-composer-hint"
               aria-label="Своё действие или реплика"
               value={draft}
               onChange={(e) => {
@@ -433,6 +444,7 @@ export function Game({
                 if (
                   e.key === "Enter" &&
                   (e.ctrlKey || e.metaKey) &&
+                  !e.nativeEvent.isComposing &&
                   canSubmit &&
                   draft.trim()
                 ) {
@@ -445,13 +457,13 @@ export function Game({
               aria-label="Отправить действие"
               size="icon"
               disabled={!canSubmit || !draft.trim()}
-              onClick={() => turn("turn")}
+              type="submit"
             >
               <Send size={19} />
             </Button>
-          </div>
+          </form>
           <div className="composer-footer">
-            <span>Твоё действие всегда важнее предложенных вариантов.</span>
+            <span id="narrative-composer-hint">Свободное действие <kbd>Ctrl / ⌘ + Enter</kbd></span>
             {away&&<button
               onClick={jumpToLatest}
             >

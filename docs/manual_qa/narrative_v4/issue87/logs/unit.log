@@ -1,0 +1,16 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> ai-rpg-frontend@2.0.0 test
+> vitest run
+
+
+ RUN  v5.0.5 /workspace/scratch/6bc0b25e96ca/ai_rpg_engine/frontend
+
+
+ Test Files  3 passed (3)
+      Tests  35 passed (35)
+   Start at  02:00:28
+   Duration  13.86s (environment 65%, import 27%, tests 4%, transform 2%, setup 1%, worker 1%)
+
+    Isolate  3 workers spawned · ~3.52s startup each (spawn + environment, per file)
+             at least ~7.04s faster with isolate: false — reuses workers across files instead of one per file

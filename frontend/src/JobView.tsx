@@ -33,8 +33,8 @@ export function JobView({
   if (!job) return null;
   if (job.status === "saved") return null;
   return (
-    <section className={`job ${job.narrative ? "job-streaming" : ""}`}>
-      {job.narrative && <p className="muted" role="status">Предварительная сцена — изменения ещё не сохранены в мире.</p>}
+    <section className={`job ${job.narrative ? "job-streaming" : ""} ${statusOnly ? "job-status-only" : ""}`}>
+      {job.narrative && <p className="job-provisional muted" role="status">Предварительная сцена — изменения ещё не сохранены в мире.</p>}
       <details open>
         <summary>
           <span className="job-label" role="status" aria-live="polite">
