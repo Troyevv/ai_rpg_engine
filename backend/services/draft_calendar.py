@@ -211,6 +211,9 @@ def fill_birth_dates(state):
 def manual_edit(state, path, old_minute=None):
     paths=state.setdefault('authoring',{}).setdefault('manual_paths',[])
     if path and path not in paths:paths.append(path)
+    if path=='/world/communication' or path.startswith('/world/communication/'):
+        from backend.services.communication_profile import edit_profile
+        state=edit_profile(state,state['world']['communication'])
     meta = state.get('authoring', {}).get('calendar_completion')
     if path.startswith('/world/characters/') and path.endswith('/birth_date'):
         cid = path.split('/')[3].replace('~1','/').replace('~0','~')

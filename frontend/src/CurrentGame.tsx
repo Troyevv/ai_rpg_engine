@@ -1,3 +1,4 @@
+import {CommunicationSettings} from "./CommunicationSettings";
 import { WeatherSettings } from "./WeatherSettings";
 import { useEffect, useState, useRef } from "react";
 import {
@@ -190,6 +191,7 @@ export function CurrentGame({
                     />{" "}
                     Показывать изменения отношений
                   </label>
+                  <CommunicationSettings value={save.state.communication_profile||null}/>
                   <WeatherSettings save={save} refresh={refresh} />
                 </section>
               )}

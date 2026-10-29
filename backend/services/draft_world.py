@@ -473,6 +473,7 @@ def player_view(state):
     public['campaign']['description']=public['campaign'].get('public_description','')
     public['campaign']['rules']=''
     public['world']={**{kind:{} for kind in KINDS},'version':2}
+    if 'communication' in world:public['world']['communication']=deepcopy(world['communication'])
     scene=world['scenes'].get(state.get('camera',{}).get('scene_id'),{})
     public['scene']=scene.get('text','');public['scene_meta']={**meta,'present_ids':scene.get('participants',[])}
     public['characters']=[c for c in public['characters'] if not c.get('hidden') or c['id']==actor or c['id'] in scene.get('participants',[]) or actor in c.get('visible_to_ids',[])]

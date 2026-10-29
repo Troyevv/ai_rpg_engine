@@ -233,6 +233,11 @@ def test_exact_handoff_preserves_authored_graph_and_values(api, genres):
     # is untouched and the complete WorldState comparison remains strict.
     for cid,actor in old['world_state']['characters'].items():actor.setdefault('birth_date_provenance',{})
     old['world_state']['meta'].setdefault('weather',None)  # Conservative optional environment profile.
+    # #128 adds only neutral profile metadata/channels to the same owner.
+    # Keep the legacy artifact and every pre-existing capability value untouched.
+    old['world_state']['meta']['communication'].update(profile_version=1,preset='unspecified',
+        letter=False,courier=False,telegram=False,landline=False,magic=False,
+        delivery_policy={},author_note='')
     old['world_state']['meta']['genre'] = dict(primary_genre='slice_of_life',
         secondary_genres=['family_saga','romance','drama'], custom_genre='') if genres else None
     old['world_state']['camera'].setdefault('observed_character_ids',[])
