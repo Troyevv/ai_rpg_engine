@@ -6,6 +6,14 @@
 - Follow the GitHub issue/PR acceptance criteria. If they conflict with these instructions, explain the conflict rather than silently overriding either.
 - Keep changes focused; do not opportunistically rewrite unrelated modules.
 
+## Incidental defects discovered during a task
+- Stay alert for defects, architectural violations, and regression risks discovered while implementing the assigned task, including in adjacent services and modules.
+- Fix defects directly related to the requested behavior or necessary for a correct implementation within the same PR. Small, obvious defects in code already being changed may also be fixed when the change is localized, low-risk, and does not expand the architectural scope.
+- For unrelated P0/P1 defects threatening Runtime integrity, persistence, Knowledge, security, or user data, report the finding and its impact promptly. Do not expand the PR to fix them without explicit approval unless they directly block the assigned task.
+- Do not independently fix unrelated defects, perform opportunistic refactors, rewrite modules, or change public contracts. Record out-of-scope findings in the final report with location, evidence, severity, impact, and recommended remediation.
+- Distinguish confirmed defects from hypotheses. Do not weaken tests or validation to hide discovered problems.
+- Keep the final report's out-of-scope findings separate from changes actually implemented.
+
 ## Architecture
 - The application uses a FastAPI backend, SQLite persistence, and a React + TypeScript frontend built with Vite.
 - Keep domain logic out of HTTP handlers and UI components. Preserve existing service, persistence, provider, and runtime boundaries; inspect actual module layout before choosing files.
