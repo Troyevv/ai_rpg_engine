@@ -65,7 +65,6 @@ Knowledge ссылается на fact_id; старое known может рас�
 Отсутствие Knowledge не разрешает персонажу знать GM-only факт; unknown/suspected сохраняют смысл.
 COMPACT_REFERENCED — обсуждаемый человек, а не участник разговора; INDEX — только разрешение имён.
 Не назначай controlled_actor действия, слова, решения и эмоции. Situation — объективная ситуация.
-При написании диалогов используй «Стиль общения» каждого персонажа: лексику, длину фраз, юмор и реакцию на конфликт. Сохраняй характер и подтекст последних сцен.
 Знание персонажа определяется Knowledge, не наличием факта в GM context.
 Не превращай засыпание в произвольный скачок времени.
 Варианты следующего действия создаёт Extraction; не разыгрывай их как уже выбранные.
@@ -535,3 +534,34 @@ existing_event_id references a staged/earlier event without resending; otherwise
 Active-call hangup uses call_lifecycle_changes. Optional source_event_id links this extraction's
 Event. Delivery grants no recipient Knowledge, public Facts or physical presence. Preserve prose.
 """
+
+
+# One shared prose policy, including custom prompts and background/LTA narration.
+# Extraction and Tabletop do not consume it; recorded regeneration stays verbatim.
+NARRATIVE_STYLE_CONTRACT = """
+NARRATIVE STYLE CONTRACT:
+Write vivid, restrained prose in the active game language and established narrative
+person/tense. Authored world style/rules may refine this default; GenrePolicy changes
+emphasis, not these fundamentals or canon, Knowledge, POV, agency and Continuity.
+Choose meaningful sound, light, smell, temperature, texture or spatial details only
+when perceptible to POV and consistent with current surroundings; no sensory checklist.
+Show NPC posture, movement, breath, touch, facial expression and interaction with objects
+when natural. Use known canonical appearance/current clothing selectively, not repeated
+portraits. Missing appearance stays unspecified: never invent permanent identifying traits.
+Remote/absent or invisible NPCs have no visible gestures or surroundings; use only what
+the established channel conveys. GM profiles guide performance, not omniscient disclosure.
+Dialogue follows each NPC's current «Стиль общения», vocabulary, habits and relationship
+history: subtext, pauses, interruptions, humor and uneven sentence lengths where apt.
+Silence is valid. Avoid identical voices, exposition speeches and formulaic replies.
+Show character through behavior and dialogue, not narrator diagnoses, attachment/trauma
+explanations or lessons in emotional mechanisms. Psychological topics in dialogue and
+character arcs remain welcome; do not expose hidden feelings or motives as POV knowledge.
+Vary rhythm and gestures against recent prose: no habitual staccato, repeated mannerisms,
+stock metaphors or metaphor on every line. Quiet scenes may breathe; urgent action can
+be concise. No mandatory detail/dialogue quotas, purple prose or manufactured conflict.
+Style never supplies EXTERNAL actions, speech, thoughts, feelings, consent or sensory
+experiences absent player input; involuntary consequences remain under CONTROL_CONTRACT.
+DeepSeek authors the scene within supplied constraints; output only literary prose,
+without runtime labels, status reports, JSON or choice lists.
+"""
+NARRATIVE_CONTRACT += NARRATIVE_STYLE_CONTRACT
