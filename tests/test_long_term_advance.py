@@ -180,7 +180,8 @@ def test_month_end_and_time_skip_boundary():
         AdvanceRequest(amount=True, unit="years")
 
 
-def test_accepted_role_and_secret_residence_use_resolver_without_broadcast():
+@pytest.mark.parametrize("custom_prompt", [False, True])
+def test_accepted_role_and_secret_residence_use_resolver_without_broadcast(custom_prompt):
     before = fixture()
     s = before["world_state"]
     s["threads"]["education"] = Thread(
@@ -229,12 +230,21 @@ def test_accepted_role_and_secret_residence_use_resolver_without_broadcast():
         )
     ]
 
-    def generate(stage, *args, **kwargs):
+    from test_narrative_style import assert_style
+    stages = []
+    def generate(stage, messages, *args, **kwargs):
+        stages.append(stage)
+        assert_style(messages, 0 if "extraction" in stage else 1)
+        if custom_prompt and "extraction" not in stage:
+            assert "CUSTOM LTA" in str(messages)
         return iter([json.dumps(raw) if "extraction" in stage else text])
 
+    config = {"_prompts": {"background_prompt.md": {"content": "CUSTOM LTA"}}} if custom_prompt else {}
     after, batch, report = run(
-        before, dict(amount=5, unit="years", max_llm_calls=2), generate=generate
+        before, dict(amount=5, unit="years", max_llm_calls=2), generate=generate, config=config
     )
+    assert stages == ["long_term_narrative", "long_term_extraction"]
+    assert report["llm_calls"] == 2
     assert report["accepted"], report["diagnostics"]
     assert after["world_state"]["roles"]["study"]["status"] == "active"
     assert after["world_state"]["residences"]["secret-home"]["status"] == "active"
