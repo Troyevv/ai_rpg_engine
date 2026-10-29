@@ -481,6 +481,13 @@ if __name__ == '__main__':
         letter130_provider.rows=[extracted(a)]
         return {'ready':True}
 
+    @app.post('/test/letter130-reset')
+    def letter130_reset():
+        global phone_mode, letter130_provider
+        phone_mode='silent'
+        letter130_provider=None
+        return {'ready':True}
+
     @app.post('/test/narrative-phone138-seed')
     def narrative_phone138_seed():
         global phone_mode

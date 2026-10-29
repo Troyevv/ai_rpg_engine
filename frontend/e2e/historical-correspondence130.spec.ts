@@ -1,5 +1,9 @@
 import {test,expect} from '@playwright/test';
 
+test.afterEach(async({request})=>{
+  expect((await request.post('/test/letter130-reset')).ok()).toBeTruthy();
+});
+
 test('130 sealed correspondence stays outside public DOM and SSE until explicit read', async({page,request})=>{
   const secret='SEALED-130: Встреча у башни, пароль — янтарь.';
   const seed=await(await request.post('/test/letter130-seed')).json();
