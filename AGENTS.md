@@ -53,3 +53,12 @@
 - Never claim tests passed if they were not run. Report exact commands, results, and blockers.
 - In the final report, summarize changed files, behavioral impact, compatibility/migration implications, tests, and remaining risks.
 - Do not create unrelated PRs, merge branches, or modify issue scope without explicit instruction.
+
+## UI/UX testing and artifact policy
+- Verify UI/UX changes in a real browser, not solely through builds or unit tests. Check a minimal representative set of relevant viewports, skins, and interaction states.
+- Screenshots may be captured temporarily for internal visual comparison, but do not commit them by default. Keep temporary screenshots, logs, videos, and performance traces outside the repository or in ignored paths.
+- Do not generate or retain video recordings unless explicitly requested or needed to diagnose a specific animation, streaming, or interaction defect.
+- Avoid exhaustive combinations of screenshot fixtures and duplicate QA artifacts. Expand coverage only when a specific risk or failure justifies it.
+- Commit only necessary source changes, focused automated tests, and concise documentation. Summarize browser checks and outcomes in the PR description rather than attaching bulk evidence.
+- If an issue explicitly requires visual evidence, provide the smallest set needed for acceptance. If its artifact requirements conflict with this policy, follow the issue and call out the extra cost or propose reducing the scope before generating bulk artifacts.
+- Prioritize implementation quality and functional regression coverage over the volume of QA documentation. Do not skip necessary testing merely to reduce artifact output.
