@@ -382,6 +382,8 @@ def chat_stream(
                 for call in getattr(delta, 'tool_calls', None) or []:
                     if call.index != 0:
                         raise RuntimeError('private_artifact_transport_invalid')
+                    if call.function is None:
+                        continue
                     if call.function.name: private_name += call.function.name
                     if call.function.arguments:
                         private_parts.append(call.function.arguments)

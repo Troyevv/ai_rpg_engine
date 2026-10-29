@@ -663,6 +663,10 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
             claims = {e["id"]: e for e in raw.records["events"] if isinstance(e, dict)}
             accepted_ids = set()
             for event in resolved.history["events"]:
+                # Remote delivery/read receipts are canonical audit events, not
+                # additional literary claims with local Extraction IDs.
+                if event.get('remote_interaction_id'):
+                    continue
                 links = claims[event["local_id"]]["advance_candidate_ids"]
                 event["advance_source_ids"] = [
                     c.source_id for c in group if c.id in links
@@ -683,7 +687,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                     candidate_ids=sorted(accepted_ids),
                     minute=minute,
                     event_ids=[e["id"] for e in resolved.history["events"]],
-                    summaries=[e["text"] for e in resolved.history["events"]],
+                    summaries=[e["text"] for e in resolved.history["events"] if not e.get("remote_interaction_id")],
                 )
             )
             report["diagnostics"].extend(resolved.warnings)

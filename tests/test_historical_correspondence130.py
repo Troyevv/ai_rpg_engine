@@ -314,3 +314,37 @@ def test_variant_branch_restores_original_payload_without_redelivery(api):
     repo.select_variant(sid,node['id'],alternate,repo.get_save(sid)['revision'])
     assert not repo.get_snapshot(sid)['world_state']['remote_events']
     assert_private(c,sid,job['id'])
+
+
+def test_long_term_authored_send_and_private_npc_read_receipts():
+    from backend.runtime_v3.long_term import run
+    from backend.runtime_v3.models import Thread
+    s=letters();s['world_state']['threads']['post']=Thread(id='post',description='Написать письмо',character_ids=['b'],relevance=1).model_dump()
+    s,_=apply(s,dict(action='send',channel='LETTER',character_id='b',content=SECRET,operation_id='letter-to-npc130'))
+    original=next(iter(s['world_state']['remote_events'].values()))
+    advance_clock(s,original['delivery_due_at'],WorldHistoryV3().to_dict())
+    a=artifact(sender='b',recipient='child')
+    calls=[]
+    def generate(stage,messages,limit,temp,**kw):
+        calls.append(stage)
+        if stage=='long_term_narrative':
+            kw['on_private_result']([a]);return iter([PUBLIC])
+        current=json.loads(next(m['content'].split('\n',1)[1] for m in messages if m['content'].startswith('Текущее состояние / GM-only\n')))
+        return iter([json.dumps(dict(final_scene=dict(location_id=current['camera']['location_id'],present_character_ids=['b'],elapsed_minutes=0),
+            events=[dict(id='write',text=PUBLIC,participants=['b'],witnesses=['b'],medium='action',advance_candidate_ids=kw['context_key'])],
+            remote_events=[dict(sender_id='a',recipient_ids=['b'],channel='LETTER',existing_event_id=original['id'],reader_id='b'),extracted(a)]))])
+    after,batch,report=run(s,dict(amount=10,unit='weeks',max_llm_calls=2),generate=generate,config=CONFIG)
+    assert report['accepted'],report['diagnostics']
+    assert len(calls)==2
+    assert len(after['world_state']['remote_events'])==2
+    assert after['world_state']['remote_events'][original['id']]['read_by']==['b']
+    assert SECRET not in json.dumps(report,ensure_ascii=False)
+
+
+def test_invalid_saved_payload_errors_do_not_echo_private_input():
+    from backend.runtime_v3.models import assert_world_state_v3_invariants
+    s=letters();out=send(s);state=out.state
+    next(iter(state['remote_events'].values()))['content']=SECRET*200
+    with pytest.raises(StructuralDeltaError) as err:assert_world_state_v3_invariants(state)
+    assert SECRET not in str(err.value)
+    assert 'remote_events' in str(err.value) and 'string_too_long' in str(err.value)
