@@ -34,7 +34,7 @@ def visible_views(snapshot, turns, kind):
 
 
 def canonical_slice(state, scope, extraction=False, query=""):
-    current = dict(meta={k:v for k,v in state['meta'].items() if k not in ('weather','calendar','current_protagonist_id','protagonist_required','protagonist_periods','narrative_pacing','narrative_risk','outcome_preference','pacing_recent','communication','interaction_focus')},
+    current = dict(meta={k:v for k,v in state['meta'].items() if k not in ('genre','weather','calendar','current_protagonist_id','protagonist_required','protagonist_periods','narrative_pacing','narrative_risk','outcome_preference','pacing_recent','communication','interaction_focus')},
         weather=weather_at(state),
         current_time=current_time(state), calendar_context=nearby_calendar(state, scope.relevant_actor_ids), camera=deepcopy(state['camera']),
         locations={lid: deepcopy(state['locations'][lid]) for lid in scope.location_ids},
@@ -276,7 +276,7 @@ class NarrativeContextBuilder:
             elif len(index) < 64:
                 index.append(dict(id=card['id'], name=card['name'], role=card.get('fields', {}).get('Роль', card.get('role', ''))))
         for card in cards: card.pop('is_player',None)
-        messages = [block('Кампания / GM-only', dict(campaign=campaign.get('campaign', {}),
+        messages = [block('Кампания / GM-only', dict(campaign={k:v for k,v in campaign.get('campaign', {}).items() if k != 'genre'},
                     story_notes=campaign.get('story_notes', ''), tone=campaign.get('sections', {}).get('tone', ''))),
                     block('ContextScope / GM-only', scope.summary()),
                     block('Текущее состояние / GM-only', current),
@@ -288,6 +288,9 @@ class NarrativeContextBuilder:
                     block('Память', dict(strategy='canonical_history', llm_calls=0)),
                     block('Недавняя история / GM-only', scope.history_events),
                     block('Director / GM-only', plan(state, kind, scope=scope))]
+        from backend.runtime_v3.genre import guidance
+        genre = guidance(state['meta'].get('genre'))
+        if genre: messages.append(block('Genre / soft creative guidance', genre))
         legacy = legacy_knowledge(snapshot, scope)
         if legacy: messages.append(block('Legacy knowledge / GM-only, ownership unknown', legacy))
         # Knowledge rows are projected once into their ownership blocks.
@@ -814,6 +817,8 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         semantic=scope.semantic_diagnostics, entities=entities, character_total=len(state['characters']), sections=sections,
         narrative_continuity=0 if builder.extraction else len(views), previous_player_inputs=0 if builder.extraction else len(views),
         target_context_budget=target, hard_context_limit=hard_context_limit, target_exceeded=estimate(messages)>target)
+    if not builder.extraction:
+        diagnostics['genre_guidance'] = contents('Genre / soft creative guidance') or None
     if builder.extraction:
         choices = contents('Choice context / controlled actor')
         diagnostics['choice_context'] = dict(enabled=choices['enabled'], actor_id=choices.get('actor_id'),

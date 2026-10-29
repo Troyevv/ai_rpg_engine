@@ -1,0 +1,9 @@
+.genre-settings { display:grid; gap:12px; min-width:0; }
+.genre-settings p { margin:0; font-size:13px; line-height:1.5; color:var(--text-secondary); }
+.genre-settings label { margin:0; }
+.genre-settings select,.genre-settings textarea { width:100%; }
+.genre-settings .genre-secondary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 12px; border:0; padding:0; margin:0; }
+.genre-secondary legend { padding:0; margin-bottom:6px; }
+.genre-secondary .check { display:flex; min-height:44px; margin:0; gap:8px; }
+.genre-secondary input { flex-shrink:0; }
+.genre-secondary label:has(input:disabled) { opacity:.55; }

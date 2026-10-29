@@ -1,3 +1,4 @@
+import {genreLabels} from './GenreSettings';
 import { useState, type ReactNode } from "react";
 import {
   ArrowRight,
@@ -502,7 +503,7 @@ export function WorldSection(props: Props & { world: World }) {
       <section className="inspector-card inspector-world-hero">
         <div>
           <div className="inspector-people">
-            {[state.campaign?.era, state.campaign?.genre]
+            {[state.campaign?.era, ...(state.narrative_policy?.genre ? [state.narrative_policy.genre.primary_genre, ...state.narrative_policy.genre.secondary_genres].filter((id): id is string=>Boolean(id)).map(id=>genreLabels()[id]||id) : [state.campaign?.genre])]
               .filter(Boolean)
               .map((v) => (
                 <span className="pill" key={v}>

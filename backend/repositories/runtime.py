@@ -322,7 +322,7 @@ class RuntimeStorage:
 
     def update_narrative_policy(self, save_id, revision, policy):
         from backend.services.narrative_policy import PolicyUpdate
-        validated=PolicyUpdate.model_validate(dict(policy,revision=revision)).model_dump(exclude={'revision'})
+        validated=PolicyUpdate.model_validate(dict(policy,revision=revision)).model_dump(exclude={'revision'} | ({'genre'} if 'genre' not in policy else set()))
         self._update_game_policy(save_id, revision, validated, 'narrative_policy_changed')
 
     def configure_weather(self, save_id, revision, profile):
