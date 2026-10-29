@@ -322,7 +322,12 @@ class ExtractionContextBuilder:
         saved = (prompts or {}).get('state_update_prompt.md', {}).get('content')
         # Preserve user overrides, but do not send the bundled generic contract twice.
         rules = (saved + '\n' if saved and saved.strip() != default.strip() else '') + EXTRACTION_CONTRACT
+        from backend.services.private_artifacts import enabled as historical_enabled
+        historical = historical_enabled(snapshot['world_state'])
         if current.get('communication'): rules += REMOTE_EXTRACTION_CONTRACT
+        if historical:
+            from backend.runtime_v3.context_contract import HISTORICAL_EXTRACTION_CONTRACT
+            rules += HISTORICAL_EXTRACTION_CONTRACT
         if current.get('relationship_evidence'):
             from backend.runtime_v3.context_contract import RELATIONSHIP_EVIDENCE_CONTRACT
             rules += RELATIONSHIP_EVIDENCE_CONTRACT
@@ -342,7 +347,7 @@ class ExtractionContextBuilder:
                        block('Choice context / controlled actor', choice_context(snapshot, scope, current, views, kind)),
                        block('Entity IDs', [dict(id=c['id'], name=c['name'], aliases=c.get('aliases', []))
                             for c in snapshot['character_cards'] if c['id'] in scope.relevant_actor_ids]),
-                       block('JSON Schema', prompt_schema(elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
+                       block('JSON Schema', prompt_schema(historical=historical, elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
 
 
 def choice_context(snapshot, scope, current, views, kind):
@@ -455,7 +460,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     scope = RelevanceResolver().resolve(snapshot, user_text, all_views[-3:], world_history, extraction_text)
     observer = scope.pov_actor_id or scope.controlled_actor_id
     remote_private = {identity('communicated_text', e['id']) for e in state.get('remote_events', {}).values()
-                      if e['channel']=='TEXT_MESSAGE' and observer not in e['read_by'] and observer != e['sender_id']}
+                      if e['channel']!='VOICE_CALL' and observer not in e['read_by'] and observer != e['sender_id']}
     scope.fact_ids = [fid for fid in scope.fact_ids if fid not in remote_private]
     scope.knowledge_ids = [key for key in scope.knowledge_ids if state['knowledge'][key]['fact_id'] not in remote_private]
     from backend.runtime_v3.scope import string_ids
@@ -487,6 +492,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         ('letter', 'courier', 'telegram', 'landline', 'magic') if cfg.get(key)})
     delivery = {key: value for key,value in cfg.get('delivery_policy', {}).items() if cfg.get(key)}
     if delivery: current['communication_capabilities']['delivery_policy'] = delivery
+    if cfg.get('delivery_minutes'): current['communication_capabilities']['delivery_minutes'] = cfg['delivery_minutes']
     if cfg.get('author_note'): current['communication_capabilities']['author_note'] = cfg['author_note']
     if cfg['voice_call']:
         current['communication_capabilities']['ring_timeout_minutes'] = cfg['ring_timeout_minutes']

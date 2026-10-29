@@ -202,7 +202,7 @@ def plan(snapshot, request, history=None):
     ):
         recipients = (
             message["read_by"]
-            if message["channel"] == "TEXT_MESSAGE"
+            if message["channel"] != "VOICE_CALL"
             else message["recipient_ids"]
             if message["status"] in ("answered", "ended")
             else []
@@ -529,15 +529,10 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 pacing_decision=group_policy,
             )
             report["llm_calls"] += 1
-            narrative = "".join(
-                generate(
-                    "long_term_narrative",
-                    messages,
-                    config.get("max_tokens", 2000),
-                    config.get("temperature", 0.8),
-                    context_key=[c.id for c in group],
-                )
-            )
+            from backend.services.private_artifacts import generate_result, extraction_context, enabled
+            narrative, artifacts = generate_result(generate, "long_term_narrative", messages,
+                config.get("max_tokens", 2000), config.get("temperature", 0.8), camera['world_state'],
+                context_key=[c.id for c in group])
             if cancelled is not None and cancelled.is_set():
                 return None
             if not narrative.strip():
@@ -556,6 +551,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 world_history=history,
             )
             report["llm_calls"] += 1
+            if enabled(camera['world_state']): messages.append(extraction_context(artifacts))
             payload = "".join(
                 generate(
                     "long_term_extraction",
@@ -614,6 +610,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 camera["world_state"],
                 narrative,
                 "",
+                private_artifacts=artifacts,
                 turn_id=turn,
                 observed=False,
                 mode="background",

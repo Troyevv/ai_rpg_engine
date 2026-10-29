@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import engine
 import llm
+provider_chat_stream = llm.chat_stream
 import backend.services.preparation as preparation
 from backend.api.app import create_app
 from test_worlds import summary
@@ -48,9 +49,20 @@ review_protocol_attempts={}
 fragment_attempts={}
 handoff_provider=None
 phone_mode="silent"
+letter130_provider=None
 
 def stream(**kwargs):
     global phone_mode
+    if phone_mode == 'letter130':
+        from unittest.mock import MagicMock, patch
+        client = MagicMock()
+        client.chat.completions.create.side_effect = letter130_provider.create
+        with patch('llm.OpenAI', return_value=client):
+            yield from provider_chat_stream(**kwargs)
+        if kwargs.get('response_format'):
+            letter130_provider.artifacts=[]
+            letter130_provider.rows=[]
+        return
     from backend.services.draft_completeness import MARKER
     if kwargs['messages'][0]['content'].startswith(MARKER):
         request=json.loads(kwargs['messages'][1]['content'])
@@ -445,6 +457,29 @@ if __name__ == '__main__':
         engine.run_job(app.state.repository.path,job,engine.Worker())
         assert app.state.repository.get_job(job)['status']=='saved'
         return {'world':result['world'],'save':result['save']}
+
+    @app.post('/test/letter130-seed')
+    def letter130_seed():
+        global phone_mode, letter130_provider
+        phone_mode='letter130'
+        from test_historical_correspondence130 import HTTPProvider
+        from devtools.narrative_test_world import load_fixture
+        letter130_provider=HTTPProvider()
+        repo=app.state.repository
+        seed=load_fixture(repo,'phone')
+        with repo.connect() as db:
+            snap=json.loads(db.execute('SELECT state_json FROM saves WHERE id=?',(seed['save'],)).fetchone()[0])
+            snap['world_state']['meta']['communication'].update(letter=True,delivery_minutes={'letter':10})
+            db.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(snap),seed['save']))
+        return {'world':seed['world'],'save':seed['save']}
+
+    @app.post('/test/letter130-arm')
+    def letter130_arm():
+        from test_historical_correspondence130 import artifact, extracted
+        a=artifact('qa_vera','qa_kirill')
+        letter130_provider.artifacts=[a]
+        letter130_provider.rows=[extracted(a)]
+        return {'ready':True}
 
     @app.post('/test/narrative-phone138-seed')
     def narrative_phone138_seed():

@@ -44,6 +44,7 @@ def cost(inp,out,cached,pricing):
 def tracked_stream(storage, stream_fn, job_id, stage, config, messages, diagnostics=None, **kwargs):
     from llm import thinking_options, OutputLimitReached, ProviderHTTPError
     effective = dict(config, thinking=thinking_options(config.get('provider','local'),config['model'],config.get('thinking','off'))[0])
+    if kwargs.get('on_private_result') is not None: effective['private_artifacts'] = True
     effective.update({k:kwargs[k] for k in ('max_tokens','temperature','response_format') if k in kwargs})
     rid = storage.begin_request(job_id,stage,effective,messages,diagnostics or {'estimated_tokens':estimate(messages),'parts':[]})
     started=time.perf_counter()

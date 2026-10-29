@@ -8,12 +8,14 @@ from pydantic import ValidationError
 from backend.runtime_v3.models import WorldHistoryV3, fatal, identity
 from backend.services.world_delta_errors import StructuralDeltaError
 from backend.runtime_v3.remote import apply, advance, members, resolve_identity
-from backend.runtime_v3.remote_models import ExtractedRemoteEvent
+from backend.runtime_v3.remote_models import ExtractedRemoteEvent, HISTORICAL_CHANNELS
 
 
 def apply_extracted_remote(resolver, raw, events):
     records = raw.records.get('remote_events', [])
     batch_history = WorldHistoryV3()
+    if not records and resolver.private_artifacts:
+        fatal("Private artifact has no accepted send.", "private_artifact_unbound", repairable=True)
     if not records:
         return batch_history
     state = resolver.state
@@ -21,6 +23,7 @@ def apply_extracted_remote(resolver, raw, events):
     finish = state['meta']['world_time']
     previous_minute = start
     seen = set()
+    used_artifacts = set()
     endings = []
 
     def reject(index, message, field='', code='remote_extraction_invalid'):
@@ -65,6 +68,18 @@ def apply_extracted_remote(resolver, raw, events):
         except ValidationError as exc:
             reject(index, 'Повреждено событие связи.', '.'.join(map(str, exc.errors()[0]['loc'])))
         actor, recipients = row.sender_id, set(row.recipient_ids)
+        if row.channel in HISTORICAL_CHANNELS and not row.existing_event_id:
+            artifact = resolver.private_artifacts.get(row.artifact_id)
+            if (not artifact or row.artifact_id in used_artifacts or row.content
+                    or artifact['sender_id'] != actor or [artifact['recipient_id']] != row.recipient_ids
+                    or artifact['channel'] != row.channel or row.status is not None or row.ended_at is not None):
+                reject(index, 'Нет соответствующего авторского артефакта письма.', 'artifact_id', 'private_artifact_missing')
+            used_artifacts.add(row.artifact_id)
+            row.content = artifact['content']
+        elif row.artifact_id:
+            reject(index, 'Артефакт допустим только для нового письма.', 'artifact_id')
+        if row.reader_id and (not row.existing_event_id or row.channel not in HISTORICAL_CHANNELS):
+            reject(index, 'Чтение требует существующего письма.', 'reader_id')
         if actor not in state['characters'] or recipients - state['characters'].keys():
             reject(index, 'Неизвестный участник связи.', 'sender_id')
         if actor in recipients or len(recipients) != len(row.recipient_ids):
@@ -76,12 +91,22 @@ def apply_extracted_remote(resolver, raw, events):
         # A continuing/staged interaction references its canonical identity. Never
         # turn its depiction into another send, read, answer or lifecycle action.
         if row.existing_event_id:
+            if row.reader_id:
+                advance(state, batch_history)
             event = state['remote_events'].get(row.existing_event_id)
             if (not event or event['sender_id'] != actor or set(event['recipient_ids']) != recipients
                     or event['channel'] != row.channel or row.content and event['content'] != row.content
                     or row.status and event['status'] != row.status
                     or row.minute is not None and event['world_time'] != row.minute):
                 reject(index, 'Ссылка противоречит принятому событию связи.', 'existing_event_id')
+            if row.reader_id:
+                if row.reader_id == resolver.protected_actor_id or row.reader_id not in recipients:
+                    reject(index, 'Недопустимое автономное чтение.', 'reader_id', 'remote_extraction_agency')
+                try:
+                    command(dict(action='read', event_id=event['id'], operation_id=identity('letter_read', event['id'], row.reader_id)), row.reader_id)
+                except ValueError:
+                    reject(index, 'Письмо ещё недоступно для чтения.', 'reader_id')
+                event = state['remote_events'][row.existing_event_id]
         else:
             if actor == resolver.protected_actor_id:
                 reject(index, 'Extraction не отправляет сообщения и не звонит за игрока.', 'sender_id', 'remote_extraction_agency')
@@ -131,7 +156,9 @@ def apply_extracted_remote(resolver, raw, events):
                         batch_history.state_changes[-1]['after'] = dict(state['contacts'][contact_id])
                 if contact_id and conversation_id:
                     reject(index, 'Укажи один адресный маршрут.', 'contact_id')
-                if not contact_id and not conversation_id:
+                if row.channel in HISTORICAL_CHANNELS and (contact_id or conversation_id or row.established_contact):
+                    reject(index, 'Письмо адресуется каноническому персонажу.', 'recipient_ids')
+                if row.channel not in HISTORICAL_CHANNELS and not contact_id and not conversation_id:
                     # Canonical IDs only; no name matching, invented reverse
                     # address or mass contact creation. Prefer a direct thread.
                     conversation_id = next((c['id'] for c in state['conversations'].values()
@@ -140,7 +167,8 @@ def apply_extracted_remote(resolver, raw, events):
                         contact_id = next((c['id'] for c in state['contacts'].values()
                             if c['owner_id'] == actor and c['character_id'] in recipients
                             and c['available'] and not c['blocked']), None)
-                command(dict(action='send' if row.channel == 'TEXT_MESSAGE' else 'call',
+                command(dict(action='call' if row.channel == 'VOICE_CALL' else 'send',
+                    channel=row.channel if row.channel != 'VOICE_CALL' else 'TEXT_MESSAGE',
                     operation_id=operation, contact_id=contact_id,
                     conversation_id=conversation_id, content=row.content,
                     character_id=row.recipient_ids[0] if not contact_id and not conversation_id and len(recipients) == 1 else None), actor)
@@ -161,8 +189,8 @@ def apply_extracted_remote(resolver, raw, events):
         sources = [events[row.source_event_id]] if row.source_event_id else [e for e in events.values()
             if e['medium'] == 'message' and actor in e['participants'] and recipients & set(e['participants'])]
         for source in sources:
-            if event['channel'] == 'TEXT_MESSAGE' and source['medium'] == 'message':
-                unread = set(event['delivered_to']) - set(event['read_by'])
+            if event['channel'] != 'VOICE_CALL' and source['medium'] == 'message':
+                unread = set(event['recipient_ids']) - set(event['read_by'])
                 if any(k.get('source_event_id') == source['local_id'] and k.get('actor_id') in unread
                        for k in raw.records['knowledge_gained'] if isinstance(k, dict)):
                     reject(index, 'Доставка не даёт Knowledge до чтения.', 'source_event_id', 'remote_unread_knowledge')
@@ -171,5 +199,7 @@ def apply_extracted_remote(resolver, raw, events):
                     if state['facts'][fid]['visibility'] != 'secret':
                         reject(index, 'Содержание сообщения не является общедоступным фактом.', 'source_event_id', 'remote_private_fact')
 
+    if used_artifacts != resolver.private_artifacts.keys():
+        fatal('Private artifact has no accepted send.', 'private_artifact_unbound', repairable=True)
     settle_endings(finish)
     return batch_history

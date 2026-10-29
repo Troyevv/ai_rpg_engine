@@ -536,6 +536,13 @@ Active-call hangup uses call_lifecycle_changes. Optional source_event_id links t
 Event. Delivery grants no recipient Knowledge, public Facts or physical presence. Preserve prose.
 """
 
+HISTORICAL_EXTRACTION_CONTRACT = """
+Historical LETTER/COURIER_LETTER/TELEGRAM: content is an already authored private artifact,
+not completed_narrative. Reference artifact_id and matching sender/recipient/channel; omit content.
+Never compose a missing letter or fabricate one from public prose. Runtime owns sent_at/due/delivery.
+NPC read: existing_event_id plus reader_id, only after delivery. EXTERNAL reads remain explicit UI commands.
+"""
+
 
 # One shared prose policy, including custom prompts and background/LTA narration.
 # Extraction and Tabletop do not consume it; recorded regeneration stays verbatim.

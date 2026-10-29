@@ -3,7 +3,7 @@
 History records their transitions; it is not an independent messenger database.
 """
 
-from typing import Literal
+from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -21,6 +21,7 @@ class CommunicationCapabilities(RemoteModel):
     landline: bool = False
     magic: bool = False
     delivery_policy: dict[Literal["text_message", "voice_call", "letter", "courier", "telegram", "landline", "magic"], Literal["instant", "delayed", "live"]] = Field(default_factory=dict)
+    delivery_minutes: dict[Literal["letter", "courier", "telegram"], Annotated[int, Field(ge=1, le=5256000)]] = Field(default_factory=dict)
     author_note: str = Field(default="", max_length=2000)
     text_message: bool = False
     voice_call: bool = False
@@ -62,10 +63,15 @@ class Conversation(RemoteModel):
     provenance: str
 
 
+HISTORICAL_CHANNELS = {"LETTER", "COURIER_LETTER", "TELEGRAM"}
+TextChannel = Literal["TEXT_MESSAGE", "LETTER", "COURIER_LETTER", "TELEGRAM"]
+RemoteChannel = Literal["TEXT_MESSAGE", "VOICE_CALL", "LETTER", "COURIER_LETTER", "TELEGRAM"]
+
+
 class RemoteEvent(RemoteModel):
     id: str
     ordinal: int = Field(default=0, ge=0)
-    channel: Literal["TEXT_MESSAGE", "VOICE_CALL"]
+    channel: RemoteChannel
     sender_id: str
     recipient_ids: list[str] = Field(default_factory=list, max_length=16)
     contact_id: str | None = None
@@ -73,11 +79,12 @@ class RemoteEvent(RemoteModel):
     service: Literal["medical", "police", "fire"] | None = None
     conversation_id: str | None = None
     content: str = Field(default="", max_length=4000)
+    delivery_due_at: int | None = Field(default=None, ge=0)
     world_time: int = Field(ge=0)
     updated_at: int = Field(ge=0)
     turn_id: int = Field(ge=0)
     status: Literal[
-        "sent", "delivered", "ringing", "answered", "declined", "missed", "ended"
+        "sent", "in_transit", "delivered", "undeliverable", "ringing", "answered", "declined", "missed", "ended"
     ]
     delivered_to: list[str] = Field(default_factory=list, max_length=16)
     read_by: list[str] = Field(default_factory=list, max_length=16)
@@ -87,6 +94,7 @@ class RemoteEvent(RemoteModel):
 
 
 class RemoteCommand(RemoteModel):
+    channel: TextChannel = "TEXT_MESSAGE"
     operation_id: str = Field(min_length=8, max_length=100)
     action: Literal[
         "send",
@@ -144,7 +152,7 @@ class ExtractedRemoteEvent(RemoteModel):
     """Ordinary Extraction input to Remote, not a second persistent event model."""
     sender_id: str
     recipient_ids: list[str] = Field(min_length=1, max_length=16)
-    channel: Literal["TEXT_MESSAGE", "VOICE_CALL"]
+    channel: RemoteChannel
     content: str = Field(default="", max_length=4000)
     minute: int | None = Field(default=None, ge=0)
     status: Literal["delivered", "ringing", "missed", "ended"] | None = None
@@ -153,5 +161,7 @@ class ExtractedRemoteEvent(RemoteModel):
     conversation_id: str | None = None
     established_contact: EstablishedContact | None = None
     existing_event_id: str | None = None
+    reader_id: str | None = None
+    artifact_id: str | None = None
     source_event_id: str | None = None
     evidence: str = ""

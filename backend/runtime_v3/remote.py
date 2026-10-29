@@ -13,6 +13,7 @@ from backend.runtime_v3.models import (
     assert_world_state_v3_invariants,
 )
 from backend.runtime_v3.remote_models import (
+    HISTORICAL_CHANNELS,
     Contact,
     Conversation,
     RemoteEvent,
@@ -35,10 +36,10 @@ def recipient_eligible(state, sender, target, channel):
     Canonical unknown/missing life status is permissive, like life.capabilities;
     only an explicit death prohibits a new attempt.
     """
-    key = channel.lower()
+    key = "courier" if channel == "COURIER_LETTER" else channel.lower()
     return (
         key in CHANNELS
-        and bool(state["meta"]["communication"].get(key))
+        and bool(state["meta"]["communication"].get(key) or key == "voice_call" and state["meta"]["communication"].get("landline"))
         and sender in state["characters"]
         and target in state["characters"]
         and target != sender
@@ -119,6 +120,12 @@ def validate_state(state):
             for field in ("recipient_ids", "delivered_to", "read_by")
         ):
             raise ValueError("Повторные получатели события.")
+        if e["channel"] in HISTORICAL_CHANNELS:
+            if (len(e["recipient_ids"]) != 1 or not e["content"].strip()
+                    or e["delivery_due_at"] is None or e["delivery_due_at"] < e["world_time"]
+                    or e["status"] not in {"in_transit", "delivered", "undeliverable"}
+                    or e["status"] != "delivered" and (e["delivered_to"] or e["read_by"])):
+                raise ValueError("Некорректное состояние корреспонденции.")
         if e["channel"] == "VOICE_CALL" and e["status"] not in OPEN_CALL | {
             "declined",
             "missed",
@@ -144,7 +151,7 @@ def _event_history(batch, state, event, previous=None):
             remote_interaction_id=event["id"],
             remote=deepcopy(event),
             text="",
-            medium="message" if event["channel"] == "TEXT_MESSAGE" else "conversation",
+            medium="conversation" if event["channel"] == "VOICE_CALL" else "message",
             participants=sorted(participants(event)),
             witnesses=[],
             fact_ids=[],
@@ -175,6 +182,8 @@ def _read(state, event, actor, batch):
     previous = deepcopy(event)
     event["read_by"].append(actor)
     event["updated_at"] = state["meta"]["world_time"]
+    if event['channel'] in HISTORICAL_CHANNELS:
+        event['fact_ids'] = [identity('communicated_text', event['id'])]
     _event_history(batch, state, event, previous)
     # This is testimony about authored text, not proof that its assertions are true.
     fid = identity("communicated_text", event["id"])
@@ -208,7 +217,7 @@ def apply(snapshot, command, *, actor_id=None, autonomous=False):
         raise ValueError("Персонаж сейчас не может пользоваться связью.")
     cfg = state["meta"]["communication"]
     now = state["meta"]["world_time"]
-    if not (cfg["text_message"] or cfg["voice_call"]):
+    if not any(cfg.get(k) for k in CHANNELS):
         raise ValueError("Связь недоступна в этом сеттинге.")
     provenance = (
         "npc_initiative:" if autonomous else "player_action:"
@@ -338,9 +347,12 @@ def apply(snapshot, command, *, actor_id=None, autonomous=False):
             )
         )
     elif cmd.action in {"send", "call"}:
-        channel = "TEXT_MESSAGE" if cmd.action == "send" else "VOICE_CALL"
-        if not cfg["text_message" if cmd.action == "send" else "voice_call"]:
+        channel = cmd.channel if cmd.action == "send" else "VOICE_CALL"
+        key = "courier" if channel == "COURIER_LETTER" else channel.lower()
+        if not cfg.get(key) and not (channel == "VOICE_CALL" and cfg.get("landline")):
             raise ValueError("Этот канал связи недоступен.")
+        if channel in HISTORICAL_CHANNELS and (not cmd.character_id or contact or conversation or cmd.service):
+            raise ValueError("Корреспонденция требует одного канонического адресата.")
         if cmd.action == "call" and not caps["can_speak"]:
             raise ValueError("Персонаж не может говорить.")
         if cmd.action == "send" and not cmd.content.strip():
@@ -382,7 +394,7 @@ def apply(snapshot, command, *, actor_id=None, autonomous=False):
             active_call(state, a) for a in [actor, *recipients]
         ):
             raise ValueError("Участник уже занят звонком.")
-        if cmd.action == "send" and not conversation:
+        if cmd.action == "send" and channel == "TEXT_MESSAGE" and not conversation:
             # Shared stable direct container for linked identities; unresolved address stays owned.
             gid = (
                 identity("direct", *sorted([actor, *recipients]))
@@ -428,21 +440,27 @@ def apply(snapshot, command, *, actor_id=None, autonomous=False):
             contact_id=cid,
             conversation_id=conversation["id"] if conversation else None,
             content=cmd.content if cmd.action == "send" else "",
+            delivery_due_at=now + delivery_delay(cfg, channel) if channel in HISTORICAL_CHANNELS else None,
             world_time=now,
             updated_at=now,
             turn_id=state["meta"]["turn_id"],
-            status="ringing"
+            status="in_transit" if channel in HISTORICAL_CHANNELS else "ringing"
             if cmd.action == "call"
             else "delivered"
             if recipients
             else "sent",
-            delivered_to=recipients if cmd.action == "send" else [],
+            delivered_to=recipients if channel == "TEXT_MESSAGE" else [],
             provenance=provenance,
             operation_id=cmd.operation_id,
         ).model_dump()
         state["remote_events"][eid] = event
         _event_history(batch, state, event)
+        if channel in HISTORICAL_CHANNELS and event["delivery_due_at"] == now:
+            advance(state, batch)
     elif cmd.action == "read":
+        requested = state['remote_events'].get(cmd.event_id)
+        if requested and requested['channel'] in HISTORICAL_CHANNELS and actor not in requested['delivered_to']:
+            raise ValueError('Письмо не доставлено этому адресату.')
         if not caps["can_perceive"]:
             raise ValueError("Персонаж не может прочитать сообщение.")
         events = (
@@ -453,7 +471,7 @@ def apply(snapshot, command, *, actor_id=None, autonomous=False):
         for event in events:
             if (
                 event
-                and event["channel"] == "TEXT_MESSAGE"
+                and (event["channel"] == "TEXT_MESSAGE" or event["channel"] in HISTORICAL_CHANNELS and cmd.event_id is not None)
                 and actor in event["delivered_to"]
                 and (
                     cmd.event_id
@@ -609,7 +627,7 @@ def projection(snapshot):
         contacts.append(item)
     events = []
     for e in sorted(
-        state["remote_events"].values(), key=lambda e: (e["world_time"], e["ordinal"])
+        (e for e in state["remote_events"].values() if e["channel"] not in HISTORICAL_CHANNELS), key=lambda e: (e["world_time"], e["ordinal"])
     ):
         if actor not in participants(e):
             continue
@@ -731,7 +749,7 @@ def context_projection(state):
     actor = state["camera"]["controlled_actor_id"]
     call = active_call(state, actor)
     if not any(
-        state["meta"]["communication"][k] for k in ("voice_call", "text_message")
+        state["meta"]["communication"][k] for k in ("voice_call", "text_message", "landline", "letter", "courier", "telegram")
     ):
         return None
     rows = []
@@ -749,11 +767,11 @@ def context_projection(state):
                 "world_time",
             )
         }
-        if e["channel"] == "TEXT_MESSAGE":
+        if e["channel"] != "VOICE_CALL":
             row["read"] = actor in e["read_by"] or e["sender_id"] == actor
             row["read_by"] = e["read_by"]
             if row["read"]:
-                row["content"] = e["content"][:400]
+                row["content"] = e["content"] if e["channel"] in HISTORICAL_CHANNELS else e["content"][:400]
         rows.append(row)
         if len(rows) >= 6:
             break
@@ -791,10 +809,27 @@ def context_projection(state):
     )
 
 
+def deliver_due(state, batch, *, before=None):
+    """Resolve only due correspondence, ordered by canonical deadline."""
+    now = state['meta']['world_time']
+    due = sorted((e for e in state["remote_events"].values()
+                  if e["channel"] in HISTORICAL_CHANNELS and e["status"] == "in_transit"
+                  and e["delivery_due_at"] <= now and (before is None or e["delivery_due_at"] < before)), key=lambda e: (e["delivery_due_at"], e["ordinal"], e["id"]))
+    for event in due:
+        previous = deepcopy(event)
+        alive = all(state["characters"][a].get("life_status") != "dead" for a in event["recipient_ids"])
+        event.update(status="delivered" if alive else "undeliverable",
+                     delivered_to=list(event["recipient_ids"]) if alive else [], updated_at=event["delivery_due_at"])
+        state["meta"]["world_time"] = event["delivery_due_at"]
+        _event_history(batch, state, event, previous)
+    state["meta"]["world_time"] = now
+
+
 def advance(state, batch):
-    """Only canonical time, never prose or physical actions, expires ringing."""
+    """Canonical time settles correspondence and expires ringing."""
     now = state["meta"]["world_time"]
     timeout = state["meta"]["communication"]["ring_timeout_minutes"]
+    deliver_due(state, batch)
     for event in state["remote_events"].values():
         if (
             event["channel"] == "VOICE_CALL"
@@ -832,7 +867,7 @@ def commitment_sources(state, record, *, delivered=False):
         return []
     for eid in ids:
         e = state["remote_events"].get(eid)
-        if not e or e["channel"] != "TEXT_MESSAGE":
+        if not e or e["channel"] not in ({"TEXT_MESSAGE"} | HISTORICAL_CHANNELS):
             return []
         # The agreement's participants must actually have perceived each cited
         # utterance; delivery or a later group join is insufficient.
@@ -901,3 +936,27 @@ def visible_commitments(state, observer, history=None):
                 result[eid]=old;hidden.remove(eid)
         if not hidden:break
     return result
+
+
+def delivery_delay(config, channel):
+    key = "courier" if channel == "COURIER_LETTER" else channel.lower()
+    if config.get("delivery_policy", {}).get(key) == "instant":
+        return 0
+    return config.get("delivery_minutes", {}).get(key, {"letter": 4320, "courier": 1440, "telegram": 60}[key])
+
+
+def correspondence_projection(snapshot):
+    state = snapshot['world_state']
+    actor = state['camera']['controlled_actor_id']
+    rows = []
+    for e in sorted(state['remote_events'].values(), key=lambda e: (e['world_time'], e['ordinal'])):
+        if e['channel'] not in HISTORICAL_CHANNELS or actor not in participants(e):
+            continue
+        if actor != e['sender_id'] and actor not in e['delivered_to']:
+            continue
+        row = {k: e[k] for k in ('id','channel','world_time','delivery_due_at','status')}
+        row.update(outgoing=actor == e['sender_id'], unread=actor in e['delivered_to'] and actor not in e['read_by'])
+        if actor == e['sender_id'] or actor in e['read_by']:
+            row['content'] = e['content']
+        rows.append(row)
+    return rows

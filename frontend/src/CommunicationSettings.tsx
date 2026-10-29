@@ -20,6 +20,7 @@ export type CommunicationProfile = Partial<Record<Channel, boolean>> & {
   preset?: string;
   presentation?: "none" | "phone";
   delivery_policy?: Partial<Record<Channel, Policy>>;
+  delivery_minutes?: Partial<Record<"letter" | "courier" | "telegram", number>>;
   author_note?: string;
   region?: string;
   ring_timeout_minutes?: number;

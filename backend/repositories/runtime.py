@@ -38,7 +38,7 @@ class RuntimeStorage:
             for table, columns in {
                 'llm_requests': {'response_text':'TEXT','duration':'REAL','finish_reason':'TEXT'},
                 'turns': {'pov_actor_id':'TEXT', 'audience_json':"TEXT NOT NULL DEFAULT '[]'", 'node_id': 'TEXT', 'active_variant_id': 'TEXT', 'memory_archived': 'INTEGER NOT NULL DEFAULT 0', 'timing_json':'TEXT'},
-                'game_jobs': {'repair_diagnostics_json':"TEXT NOT NULL DEFAULT '[]'", 'pov_actor_id':'TEXT', 'audience_json':"TEXT NOT NULL DEFAULT '[]'", 'context_json': 'TEXT', 'memory_before_json': 'TEXT', 'warnings_json': "TEXT NOT NULL DEFAULT '[]'", 'session_id': 'TEXT', 'timing_json':'TEXT'},
+                'game_jobs': {'private_artifacts_json':"TEXT NOT NULL DEFAULT '[]'", 'repair_diagnostics_json':"TEXT NOT NULL DEFAULT '[]'", 'pov_actor_id':'TEXT', 'audience_json':"TEXT NOT NULL DEFAULT '[]'", 'context_json': 'TEXT', 'memory_before_json': 'TEXT', 'warnings_json': "TEXT NOT NULL DEFAULT '[]'", 'session_id': 'TEXT', 'timing_json':'TEXT'},
             }.items():
                 existing = {r['name'] for r in db.execute(f'PRAGMA table_info({table})')}
                 for name, declaration in columns.items():
@@ -376,7 +376,8 @@ class RuntimeStorage:
         from backend.runtime_v3.milestones import stable_id
         from backend.repositories.living_world import project
         command = RemoteCommand.model_validate(command).model_dump()
-        digest = stable_id('remote_command', command)
+        digest_command = {k:v for k,v in command.items() if k != 'channel' or v != 'TEXT_MESSAGE'}
+        digest = stable_id('remote_command', digest_command)
         row = db.execute('SELECT * FROM saves WHERE id=?', (save_id,)).fetchone()
         if not row: raise ValueError('Прохождение не найдено.')
         source = json.loads(row['state_json'])
@@ -403,3 +404,9 @@ class RuntimeStorage:
         project(db, save_id, after)
         db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?', (dump(after),save_id))
         return after
+
+    def uses_private_transport(self, save_id):
+        from backend.services.private_artifacts import enabled
+        if enabled(self.get_snapshot(save_id)['world_state']): return True
+        with self.connect() as db:
+            return db.execute("SELECT 1 FROM llm_requests WHERE save_id=? AND json_extract(config_json, '$.private_artifacts')=1 LIMIT 1", (save_id,)).fetchone() is not None
