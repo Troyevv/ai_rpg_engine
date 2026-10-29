@@ -1,0 +1,83 @@
+.communication-settings {
+  margin-block: 1.25rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  min-width: 0;
+}
+.communication-settings h4 {
+  margin: 0 0 0.5rem;
+}
+.communication-settings p,
+.communication-settings small {
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.communication-settings fieldset {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.communication-presets,
+.communication-channels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  gap: 0.5rem;
+  margin-block: 1rem;
+}
+.communication-presets button {
+  text-align: start;
+  padding: 0.65rem 0.8rem;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  white-space: normal;
+}
+.communication-presets button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.communication-channel {
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.communication-channel label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 32px;
+}
+.communication-channel input {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+}
+.communication-channel span {
+  display: block;
+  margin-inline-start: 1.7rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+.communication-settings textarea {
+  width: 100%;
+  margin-block: 0.5rem;
+}
+.communication-settings button:focus-visible,
+.communication-settings input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.communication-settings fieldset > label {
+  display: block;
+  margin-block: 1rem 0.5rem;
+}
+.communication-settings .communication-channel label {
+  margin: 0;
+  padding: 0;
+  font-size: 0.9rem;
+}
+.communication-settings input {
+  accent-color: var(--accent);
+}

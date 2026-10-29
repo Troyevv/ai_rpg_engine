@@ -175,7 +175,7 @@ def apply(raw,reply,paths):
             closing=(field=='status' and proposed=='closed') or (field in ('until','until_date','outcome') and proposed not in (None,''))
             if prior!=proposed and closing and patch['path'] not in paths.close_paths:
                 raise ValueError('Закрытие проживания требует отдельного смыслового решения о завершении, а не количества цитат.')
-        if isinstance(paths,RepairScope) and (patch['path'].startswith(('/authoring','/creation_settings','/world_clock')) or
+        if isinstance(paths,RepairScope) and (patch['path'].startswith(('/authoring','/creation_settings','/world_clock','/world/communication')) or
                 ('/birth_provenance' in patch['path'] or '/birth_date_provenance' in patch['path']) or patch['path'].endswith(('/birth_date','/time_semantics'))):
             from backend.services.draft_completeness import pointer
             if patch.get('op') or pointer(original,patch['path'])!=patch.get('value'):

@@ -1,10 +1,11 @@
+import {CommunicationSettings,type CommunicationProfile} from './CommunicationSettings';
 import {GenreSettings} from './GenreSettings';
 import {useState} from 'react';
 import {api} from './api';
 import {PresetPreview,type Preview} from './CalendarPresets';
 import {CalendarStartSettings,defaultCalendarStart} from './CalendarStartSettings';
 import {Textarea} from './components/ui/textarea';
-export const defaultCreation={calendar_start:defaultCalendarStart,primary_genre:null as string|null,secondary_genres:[] as string[],custom_genre:'',npc_expressiveness:'expressive',cast_preset:'medium',core_npcs:6,secondary_npcs:12,world_type:'unspecified',geography:'',narrative_pacing:{preset:'moderate'},narrative_risk:{preset:'realistic'}};
+export const defaultCreation={communication:{preset:'none',presentation:'none'} as CommunicationProfile|null,calendar_start:defaultCalendarStart,primary_genre:null as string|null,secondary_genres:[] as string[],custom_genre:'',npc_expressiveness:'expressive',cast_preset:'medium',core_npcs:6,secondary_npcs:12,world_type:'unspecified',geography:'',narrative_pacing:{preset:'moderate'},narrative_risk:{preset:'realistic'}};
 export type Creation=typeof defaultCreation;
 export const castCounts=(value:Creation)=>value.cast_preset==='custom'?[value.core_npcs,value.secondary_npcs]:value.cast_preset==='small'?[3,5]:value.cast_preset==='large'?[10,25]:[6,12];
 const expressions:Record<string,string>={
@@ -17,6 +18,7 @@ export function WorldCreationSettings({value,onChange,disabled=false}:{value:Cre
  const change=(patch:Partial<Creation>)=>onChange({...value,...patch});
  return <details className="workshop-detail"><summary>Настройки генератора</summary><fieldset disabled={disabled}>
  <p>Настройки заполняют пробелы замысла. Заданные персонажи сохраняются независимо от размера мира.</p>
+ <CommunicationSettings value={value.communication} onChange={communication=>change({communication})} disabled={disabled}/>
  <GenreSettings value={value} onChange={genre=>change(genre)} disabled={disabled} creation/>
  <label>Выразительность NPC<select aria-label="Выразительность NPC" value={value.npc_expressiveness} onChange={e=>change({npc_expressiveness:e.target.value})}><option value="realistic">Реалистичная</option><option value="expressive">Выразительная</option><option value="hyperbolized">Гиперболизированная</option></select></label><p aria-label="Пример выразительности">{expressions[value.npc_expressiveness]}</p><p>Меняет речь, жесты и эмоциональную подачу, сохраняя характер, знания и самостоятельность NPC.</p>
  <label>Масштаб состава<select aria-label="Масштаб состава" value={value.cast_preset} onChange={e=>change({cast_preset:e.target.value})}><option value="small">Камерный · 3 важных и 5 второстепенных NPC</option><option value="medium">Средний · 6 и 12 NPC</option><option value="large">Большой · 10 и 25 NPC</option><option value="custom">Настроить количество</option></select></label>

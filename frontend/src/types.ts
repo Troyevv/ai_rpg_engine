@@ -75,6 +75,7 @@ export interface State {
   campaign?: {title?:string;setting?:string;era?:string;genre?:string;description?:string;public_description?:string};
   world_summary?:string;
   summary?:string;
+  communication_profile?: import('./CommunicationSettings').CommunicationProfile;
   phone?: import('./Phone').PhoneState|null;
   residence_roles?:{residences:ResidenceRoleView[];roles:ResidenceRoleView[]};
   life_state?:{life_status:string;conditions:{id:string;description:string;status:string;duration:string}[];names:{previous:string;current:string;date:string|null;minute:number}[]}|null;

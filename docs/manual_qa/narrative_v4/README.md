@@ -206,3 +206,26 @@ Checkpoint `initiative` и [протокол инициативы](initiative.md
 #116 runtime handoff: [DOB identity, original export and first-scene recovery](runtime_handoff.md).
 The [acceptance report](acceptance_report_template.md) distinguishes the immutable
 user evidence from controlled provider responses and baseline save replicas.
+
+## Технологии связи (#128)
+
+Профиль расширяет существующий `meta.communication`, без второго Runtime.
+`tests/test_communication_profile.py` использует прежние draft/phone fixtures:
+1350 + смартфоны, 1939 + письма/телеграф/стационарный телефон, 2026 + гонцы,
+смешанная магия/письма/телефон, отсутствие удалённой связи. Проверяются импорт
+JSON и экспортированный TXT/MD, ручная правка, защита explicit inputs, Resume,
+Start Game → ход → reload → ход, варианты History DAG и rollback.
+
+Ручная проверка: Quick Creation / Scenario → «Настройки генератора» →
+«Технологии связи»; выбрать пресет, включить дополнительные каналы, добавить
+описание. В «Автор мира» → «Начало» изменить и сохранить профиль, перезагрузить.
+После Start Game открыть «Управление игрой» → «Настройки»: профиль read-only.
+Проверить два скина, 360–393px/desktop, клавиатуру, английский язык и 200% текст.
+При «Без удалённой связи» телефон скрыт, физический ход доступен.
+
+Поля `text_message`/`voice_call` сохраняют прежнюю семантику. `letter`, `courier`,
+`telegram`, `landline`, `magic` пока описывают технологии мира; доставка и новый
+интерфейс принадлежат #129–#132. `delivery_policy` задаёт семантику выбранных
+каналов, `preset` — происхождение выбора, `author_note` — только описание.
+Неизвестный legacy профиль остаётся `unspecified`, без определения технологий
+по дате/жанру. SQL-миграции и переписывание исторических снимков не требуются.

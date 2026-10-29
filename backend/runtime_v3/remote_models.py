@@ -12,6 +12,16 @@ class RemoteModel(BaseModel):
 
 
 class CommunicationCapabilities(RemoteModel):
+    # The existing capability flags remain the single source of channel availability.
+    profile_version: Literal[1] = 1
+    preset: Literal["unspecified", "none", "letters", "1939", "modern", "fantastic", "custom"] = "unspecified"
+    letter: bool = False
+    courier: bool = False
+    telegram: bool = False
+    landline: bool = False
+    magic: bool = False
+    delivery_policy: dict[Literal["text_message", "voice_call", "letter", "courier", "telegram", "landline", "magic"], Literal["instant", "delayed", "live"]] = Field(default_factory=dict)
+    author_note: str = Field(default="", max_length=2000)
     text_message: bool = False
     voice_call: bool = False
     presentation: Literal["none", "phone"] = "none"

@@ -481,6 +481,13 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     remote = remote_context(state)
     cfg = state['meta']['communication']
     current['communication_capabilities'] = {key: cfg[key] for key in ('text_message', 'voice_call')}
+    # Preserve the legacy context budget: absent/disabled future channels and
+    # empty optional metadata do not consume tokens on every ordinary turn.
+    current['communication_capabilities'].update({key: True for key in
+        ('letter', 'courier', 'telegram', 'landline', 'magic') if cfg.get(key)})
+    delivery = {key: value for key,value in cfg.get('delivery_policy', {}).items() if cfg.get(key)}
+    if delivery: current['communication_capabilities']['delivery_policy'] = delivery
+    if cfg.get('author_note'): current['communication_capabilities']['author_note'] = cfg['author_note']
     if cfg['voice_call']:
         current['communication_capabilities']['ring_timeout_minutes'] = cfg['ring_timeout_minutes']
     if remote:

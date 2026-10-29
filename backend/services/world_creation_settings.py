@@ -37,7 +37,10 @@ class CalendarStart(StrictModel):
         return self
 
 
+from backend.runtime_v3.remote_models import CommunicationCapabilities
+
 class CreationSettings(GenreConfig):
+    communication: CommunicationCapabilities | None = None
     calendar_start: CalendarStart = Field(default_factory=CalendarStart)
     narrative_pacing: NarrativePacingProfile = Field(default_factory=NarrativePacingProfile)
     narrative_risk: NarrativeRiskProfile = Field(default_factory=NarrativeRiskProfile)

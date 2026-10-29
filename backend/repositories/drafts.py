@@ -240,6 +240,19 @@ class DraftStorage:
             self._write_draft(db,job['workspace_id'],state,job['kind'],config.get('_draft_source',config.get('_draft_input','')) if config['_draft_task']=='world' else record.get('source',''),record.get('warnings',[]),outline=outline if config['_draft_task']=='world' else record.get('outline',''),generated=config['_draft_task']=='world' or record.get('generated',False),origin_job=jid if config['_draft_task']=='world' else record.get('origin_job'),review=review_metadata(record) if config['_draft_task']=='world' else (dict(review_metadata(record),status='stale',reason='Кандидат изменён.') if review_metadata(record) else None))
             db.execute("UPDATE preparation_jobs SET status='saved' WHERE id=?",(jid,))
 
+    def apply_communication_profile(self,wid,revision,profile):
+        from backend.services.communication_profile import edit_profile
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            self._draft_workspace(db,wid,revision)
+            head=self._draft_head(db,wid)
+            if not head:raise ValueError('Сначала создайте мир.')
+            record=json.loads(head['content'])
+            record['state']=edit_profile(record['state'],profile)
+            if review_metadata(record):record['review']=dict(review_metadata(record),status='stale',reason='Технологии связи изменены автором.')
+            self._record_document(db,'world_draft',wid,dump(record),True,'communication_profile',None)
+            db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))
+
     def apply_calendar_presets(self,wid,revision,choice):
         from backend.services.calendar_presets import apply
         from backend.services.draft_initial import inspect_candidate

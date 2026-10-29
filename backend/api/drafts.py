@@ -23,6 +23,11 @@ class Change(Revision):
 
 from backend.services.world_creation_settings import CreationSettings, CalendarPresets
 
+from backend.runtime_v3.remote_models import CommunicationCapabilities
+
+class ApplyCommunication(Revision):
+    profile: CommunicationCapabilities
+
 class ApplyPresets(Revision):
     presets: CalendarPresets
 
@@ -63,6 +68,16 @@ class Confirm(Revision):
 
 
 def install(app,repo,preparation,credentials,job):
+    @app.get('/api/communication/presets')
+    def communication_presets():
+        from backend.services.communication_profile import catalog
+        return catalog()
+
+    @app.post('/api/workspaces/{wid}/draft/communication')
+    def communication_profile(wid:str,body:ApplyCommunication):
+        repo.apply_communication_profile(wid,body.revision,body.profile.model_dump())
+        return repo.draft(wid,True)
+
     @app.post('/api/calendar/preview')
     def creation_calendar_preview(body:CreationSettings):
         from backend.services.calendar_presets import apply, preview

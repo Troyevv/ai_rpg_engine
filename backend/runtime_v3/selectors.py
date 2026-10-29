@@ -207,6 +207,7 @@ def ui_view(snapshot, history=None):
             elif predicate=='child_count': f['text']='Количество детей: '+claim['value']
             elif predicate=='child_sex': f['text']='Пол ребёнка: '+{'female':'женский','male':'мужской'}.get(claim['value'],claim['value'])
     from backend.runtime_v3.remote import projection as phone_projection
+    result['communication_profile'] = deepcopy(state['meta']['communication'])
     result['phone'] = phone_projection(dict(snapshot,world_state=state))
     result['runtime_version']=3
     report = snapshot.get('last_long_term_advance')

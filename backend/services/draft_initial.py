@@ -146,6 +146,10 @@ def prompt_schema():
         if not isinstance(v,dict):return v
         return {k:({name:compact(part) for name,part in x.items()} if k=='properties' else compact(x)) for k,x in v.items() if k not in ('description','title','$schema') and not (k=='additionalProperties' and x is True) and not (k=='required' and not x)}
     schema=compact(world_state_schema())
+    # Explicit communication profile is injected by code, never generated twice.
+    communication=schema['properties']['world']['properties']['communication']['properties']
+    for key in ('profile_version','preset','letter','courier','telegram','landline','magic','delivery_policy','author_note'):
+        communication.pop(key,None)
     profile=schema['properties']['world_clock']['properties']['calendar']['properties']['profile']
     for field in ('regional','regional_overrides','seasons_enabled'):
         profile['properties'].pop(field,None) # Server-owned presets never consume primary generation context.
@@ -258,6 +262,7 @@ def validate_typed(state, *, advisory_age=False):
                     location=('start_weekday',) if 'start_weekday' in e['msg'] else ('start_date',)
                 suffix='/'.join(str(x).replace('~','~0').replace('/','~1') for x in location)
                 problems.append(error(path+('/'+suffix if suffix else ''),e['msg'],e['type']))
+    if 'communication' in world:check(m.CommunicationCapabilities,world['communication'],'/world/communication')
     calendar=None
     if state['world_clock'].get('calendar') is not None:
         calendar=check(m.Calendar,state['world_clock']['calendar'],'/world_clock/calendar')
