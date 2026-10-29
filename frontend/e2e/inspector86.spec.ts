@@ -10,7 +10,8 @@ const sections = [
   "Тайны",
 ];
 const out = process.env.INSPECTOR_EVIDENCE_DIR || "../docs/manual_qa/narrative_v4/issue86-evidence";
-test.use({ video: "on" });
+const capture=process.env.UI_EVIDENCE==='1';
+test.use({ video:capture?'on':'off' });
 for (const width of [1440, 768, 393, 360])
   test(`seven sections, skins, widths ${width}`, async ({
     page,
@@ -53,7 +54,7 @@ for (const width of [1440, 768, 393, 360])
           .all()) {
           expect((await input.boundingBox())!.width).toBeGreaterThan(100);
         }
-        await page.screenshot({
+        if(capture)await page.screenshot({
           path: `${out}/after-${width}-${skin}-${section}-expanded.png`,
           animations: "disabled",
         });
@@ -69,7 +70,7 @@ for (const width of [1440, 768, 393, 360])
             .all()) {
             expect((await input.boundingBox())!.width).toBeGreaterThan(100);
           }
-          await page.screenshot({
+          if(capture)await page.screenshot({
             path: `${out}/after-${width}-${skin}-${section}-compact.png`,
             animations: "disabled",
           });

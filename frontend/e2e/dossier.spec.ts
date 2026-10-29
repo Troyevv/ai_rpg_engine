@@ -1,7 +1,8 @@
 import {test,expect,type Page} from '@playwright/test';
 import {nav,pickCharacter,searchCharacter} from './navigation';
 import {writeFile} from 'node:fs/promises';
-test.use({video:'on'});
+const capture=process.env.UI_EVIDENCE==='1';
+test.use({video:capture?'on':'off'});
 const evidence=process.env.DOSSIER_EVIDENCE||'../docs/manual_qa/narrative_v4/issue83-evidence';
 const tabs=['Обзор','Личность','Отношения','Семья','История'];
 async function expectFitted(page:Page){
@@ -35,7 +36,7 @@ for(const width of [360,393,768,1440])test(`five tabs, widths, two skins and pre
  if(i===2)await expect(d.getByRole('button',{name:'+ Добавить отношение',exact:true})).toBeVisible();
  if(i===3)await expect(d.getByRole('button',{name:'Открыть родословную',exact:true})).toBeVisible();
  await d.locator('.inspector-scroll').evaluate(el=>el.scrollTop=0);
- await page.screenshot({path:`${evidence}/after-${width}-${skin}-${i}.png`,animations:'disabled'});
+ if(capture)await page.screenshot({path:`${evidence}/after-${width}-${skin}-${i}.png`,animations:'disabled'});
  }
  // Arrow keys and restoration after close/reopen; width changes do not remount editors.
  await d.getByRole('tab',{name:'История',exact:true}).press('Home');await expect(d.getByRole('tab',{name:'Обзор',exact:true})).toBeFocused();
@@ -43,7 +44,7 @@ for(const width of [360,393,768,1440])test(`five tabs, widths, two skins and pre
  await d.getByRole('button',{name:'Закрыть',exact:true}).click();await open(page);await expect(d.getByRole('tab',{name:'Личность',exact:true})).toHaveAttribute('aria-selected','true');
  await pickCharacter(page,'qa_vera');await d.getByRole('tab',{name:'Обзор',exact:true}).click();
  await expect(d.getByRole('img',{name:'Женский пол',exact:true})).toBeVisible();await expect(d).not.toContainText('PRIVATE');await expect(d).toContainText('Нет данных');
- if(width>=768){await d.getByRole('button',{name:'Компактная панель'}).click();await expect(d.locator('.inspector-scroll')).toHaveClass(/inspector-compact/);expect((await d.locator('.inspector-page').boundingBox())!.width).toBeLessThanOrEqual(680);await page.screenshot({path:`${evidence}/after-${width}-${skin}-compact.png`,animations:'disabled'})}
+ if(width>=768){await d.getByRole('button',{name:'Компактная панель'}).click();await expect(d.locator('.inspector-scroll')).toHaveClass(/inspector-compact/);expect((await d.locator('.inspector-page').boundingBox())!.width).toBeLessThanOrEqual(680);if(capture)await page.screenshot({path:`${evidence}/after-${width}-${skin}-compact.png`,animations:'disabled'})}
  }
  expect(errors).toEqual([]);
 });
@@ -55,12 +56,12 @@ test('public family opens dossier and returns to graph, no speculative nodes, bo
  await page.goto('/');await page.getByLabel('Своё действие или реплика').fill('Сохранить мой черновик');await nav(page,'Родословная');
  const area=page.locator('.save-workspace');const start=Date.now();await area.getByLabel('Семья персонажа').selectOption('qa_timur');await expect(area.locator('.react-flow__node')).toHaveCount(80);
  const metrics=await page.evaluate(()=>({nodes:document.querySelectorAll('.react-flow__node').length,heap:(performance as any).memory?.usedJSHeapSize||null}));
- await writeFile(`${evidence}/performance-${info.project.name}.json`,JSON.stringify({...metrics,render_ms:Date.now()-start,viewport:page.viewportSize()},null,2));
+ if(capture)await writeFile(`${evidence}/performance-${info.project.name}.json`,JSON.stringify({...metrics,render_ms:Date.now()-start,viewport:page.viewportSize()},null,2));
  // Node rectangles have fixed geometry and cannot overlap, even with long names.
  const boxes=await area.locator('.react-flow__node').evaluateAll(nodes=>nodes.map(n=>{const r=n.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height}}));
  for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const a=boxes[i],b=boxes[j];expect(a.x+a.w<=b.x+1||b.x+b.w<=a.x+1||a.y+a.h<=b.y+1||b.y+b.h<=a.y+1).toBe(true)}
  await area.getByRole('button',{name:'Увеличить',exact:true}).click();await area.getByRole('button',{name:'Вся семья',exact:true}).click();
- await expectFitted(page);await page.screenshot({path:`${evidence}/after-family-dense-${info.project.name}.png`,animations:'disabled'});
+ await expectFitted(page);if(capture)await page.screenshot({path:`${evidence}/after-family-dense-${info.project.name}.png`,animations:'disabled'});
  await area.getByRole('button',{name:'Список',exact:true}).click();await area.getByRole('button',{name:'Открыть досье: Тимур Серов',exact:true}).click();
  await expect(page.locator('.character-header')).toContainText('Тимур Серов');await page.keyboard.press('Escape');await expect(area).toBeVisible();
  await area.getByLabel('Семья персонажа').selectOption('qa_oleg');await area.getByRole('button',{name:'Дерево',exact:true}).click();await expect(area.locator('.react-flow__node')).toHaveCount(1);await expect(area.locator('.react-flow__edge')).toHaveCount(0);
@@ -80,7 +81,7 @@ test('start, ordinary turn, dossier name link, persistent reload, next turn',asy
  const stored=await(await request.get(`/api/saves/${s.save}`)).json();expect(stored.turns).toHaveLength(2);
  await page.reload();await expect(page.locator('.turn')).toHaveCount(2);await page.locator('.choices button').first().click();await expect(page.locator('.turn')).toHaveCount(3);
  const last=await(await request.get(`/api/saves/${s.save}`)).json();expect(last.turns).toHaveLength(3);expect(last.revision).toBeGreaterThan(stored.revision);
- await page.screenshot({path:`${evidence}/smoke-${info.project.name}.png`,animations:'disabled'});
+ if(capture)await page.screenshot({path:`${evidence}/smoke-${info.project.name}.png`,animations:'disabled'});
 });
 
 test('family gestures, two skins, reduced motion and unchanged game state',async({page,request},info)=>{
@@ -109,9 +110,9 @@ test('family gestures, two skins, reduced motion and unchanged game state',async
  }
  await expect.poll(()=>viewport.getAttribute('style')).not.toBe(before);
  await area.getByRole('button',{name:'Вся семья',exact:true}).click();
- await expectFitted(page);await page.screenshot({path:`${evidence}/after-family-${info.project.name}-${skin}.png`,animations:'disabled'});
+ await expectFitted(page);if(capture)await page.screenshot({path:`${evidence}/after-family-${info.project.name}-${skin}.png`,animations:'disabled'});
  await area.getByRole('button',{name:'Список',exact:true}).click();await expect(area).toContainText('Усыновление');await expect(area).toContainText('Развод');
- await page.screenshot({path:`${evidence}/after-family-list-${info.project.name}-${skin}.png`,animations:'disabled'});
+ if(capture)await page.screenshot({path:`${evidence}/after-family-list-${info.project.name}-${skin}.png`,animations:'disabled'});
  }
  await touchSession?.detach();
  const last=await(await request.get(`/api/saves/${s.save}`)).json();expect(last.revision).toBe(saved.revision);expect(last.state.world_clock).toEqual(saved.state.world_clock);

@@ -392,3 +392,22 @@ button.phone-row {flex-wrap:wrap;gap:6px;text-align:left;}
 }
 
 .phone-progress{max-height:35%;overflow:auto}
+
+/* Dock to the composer's actual border, including textarea and safe-area changes.
+   Fixed viewport coordinates cannot follow the mobile visualViewport reliably. */
+@media (max-width:767px) {
+ .game {--phone-bezel:5px;--phone-peek-height:44px;--phone-lip-height:calc(var(--phone-peek-height) + var(--phone-bezel));}
+ .game .composer {position:relative;}
+ .game .composer .phone-device {
+  position:absolute;bottom:100%;right:8px;border-width:var(--phone-bezel);
+  width:calc(100% - 16px);
+  transform:translateY(calc(100% - var(--phone-lip-height)));
+  clip-path:inset(0 0 calc(100% - var(--phone-lip-height)) 0);
+ }
+ .game .composer .phone-device.is-open {transform:translateY(0);clip-path:inset(0);}
+ .game .composer .phone-peek {height:var(--phone-peek-height);}
+ .game .composer .phone-screen {height:calc(100% - var(--phone-peek-height));}
+ .game:has(.phone-device) .story-scroll {padding-bottom:var(--phone-lip-height);}
+ /* Keep the phone above the composer on short/keyboard viewports too. */
+ .game .composer .phone-device.is-open:has(.phone-chat) {height:min(650px,calc(var(--app-height,100dvh) - var(--phone-dock-bottom,120px) - 56px));}
+}

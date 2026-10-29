@@ -24,7 +24,6 @@ import { Game } from "./Game";
 import { Tabletop } from "./Tabletop";
 
 import {useMobile,useMobileViewport,MobileNavigation} from './mobile';
-import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from './components/ui/dialog';
 const GameCalendar=lazy(()=>import('./GameCalendar').then(m=>({default:m.GameCalendar})));
 const Genealogy=lazy(()=>import('./Genealogy').then(m=>({default:m.Genealogy})));
 export default function App() {
@@ -32,14 +31,15 @@ export default function App() {
   const changeMode=(mode:string)=>{setGameMode(mode);localStorage.setItem('game-mode',mode);};
   const mobile=useMobile();useMobileViewport(mobile);
   const [mobileMenu,setMobileMenu]=useState(false);
+  const mobileMenuVisible=useRef(mobileMenu);mobileMenuVisible.current=mobileMenu;
   const [workspace,setWorkspace]=useState<"calendar"|"family"|null>(null);
+  const [visitedWorkspaces,setVisitedWorkspaces]=useState<Array<"calendar"|"family">>([]);
   const [familyRoot,setFamilyRoot]=useState<string|undefined>();
   const workspaceTrigger=useRef<HTMLElement|null>(null);
   const closeWorkspace=()=>{setWorkspace(null);requestAnimationFrame(()=>{const target=workspaceTrigger.current?.isConnected?workspaceTrigger.current:document.querySelector<HTMLElement>(".current-game-entry button");target?.focus()})};
-  const openWorkspace=(section:"calendar"|"family",root?:string)=>{workspaceTrigger.current=document.activeElement as HTMLElement;closeInspector();setView("game");setFamilyRoot(root);setWorkspace(section);window.dispatchEvent(new Event("save-workspace-opened"))};
+  const openWorkspace=(section:"calendar"|"family",root?:string)=>{workspaceTrigger.current=document.activeElement as HTMLElement;closeInspector();setView("game");if(root)setFamilyRoot(root);setVisitedWorkspaces(items=>items.includes(section)?items:[...items,section]);setWorkspace(section);window.dispatchEvent(new Event("save-workspace-opened"))};
   useEffect(()=>{const open=(e:Event)=>{const d=(e as CustomEvent).detail;openWorkspace(d.section,d.root)};window.addEventListener('save-workspace',open);return()=>window.removeEventListener('save-workspace',open)},[]);
-  useEffect(()=>{if(!workspace)return;requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('.save-workspace header button')?.focus());const key=(e:KeyboardEvent)=>{if(e.key==='Escape'&&!e.defaultPrevented&&!document.querySelector('[role="dialog"],.inspector-workspace:not([hidden])')){e.preventDefault();closeWorkspace()}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)},[workspace]);
-  const [branches,setBranches]=useState(false);
+  useEffect(()=>{if(!workspace)return;requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>('.save-workspace:not([hidden]) header button')?.focus());const key=(e:KeyboardEvent)=>{if(e.key==='Escape'&&!e.defaultPrevented&&!document.querySelector('[role="dialog"],.inspector-workspace:not([hidden])')){e.preventDefault();closeWorkspace()}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)},[workspace]);
   const [view, setView] = useState<"game" | "prepare">("game");
   const [library, setLibrary] = useState(false);
   const [settings, setSettings] = useState(false);
@@ -48,7 +48,7 @@ export default function App() {
   const inspectorTrigger=useRef<HTMLElement|null>(null);
   const inspectorVisible=useRef(inspector);inspectorVisible.current=inspector;
   useEffect(()=>{const back=()=>{
-    if(!inspectorVisible.current)return;
+    if(mobileMenuVisible.current||!inspectorVisible.current)return;
     // Keep one same-document entry while a nested dialog/source owns Back.
     history.pushState({...history.state,inspectorOpen:true},'');
     const dialog=document.querySelector<HTMLButtonElement>('[role="dialog"] .dialog-close');
@@ -63,6 +63,7 @@ export default function App() {
   const [apiKey, setApiKey] = useState("");
   const [world, setWorld] = useState<World | null>(null);
   const [save, setSave] = useState<Save | null>(null);
+  useEffect(()=>{setVisitedWorkspaces([]);setFamilyRoot(undefined);setWorkspace(null)},[save?.id,save?.state.controlled_actor_id]);
   const [selection, setSelection] = useState<{ world?: number; save?: number }>(
     () => {
       try {
@@ -202,7 +203,7 @@ export default function App() {
             </span>
             <span className="muted">⌄</span>
           </button>
-          {mobile&&!inspector?<MobileNavigation activePanel={inspector?panel:undefined} workspace={openWorkspace} open={mobileMenu} setOpen={setMobileMenu} world={!!world} go={v=>{setWorkspace(null);closeInspector();setView(v)}} inspect={inspect} settings={()=>setSettings(true)} reading={reading} toggleReading={()=>setReading(!reading)} branches={()=>setBranches(true)}/>:<div className="topbar-actions">
+          {mobile&&!inspector?<MobileNavigation activePanel={inspector?panel:undefined} workspace={openWorkspace} open={mobileMenu} setOpen={setMobileMenu} world={world} save={save} go={v=>{setWorkspace(null);closeInspector();setView(v)}} inspect={inspect} settings={()=>setSettings(true)} reading={reading} toggleReading={()=>setReading(!reading)}/>:<div className="topbar-actions">
             {view === "game" && (
               <Button
                 variant="ghost"
@@ -269,8 +270,7 @@ export default function App() {
           /></div>
         )}
       </div>
-      {workspace&&save&&<section className="save-workspace" inert={inspector} aria-label={workspace==='calendar'?'Календарь':'Родословная'}><header><button onClick={closeWorkspace}><ArrowLeft size={18}/>Вернуться в историю</button><h1>{workspace==='calendar'?'Календарь':'Родословная'}</h1></header><Suspense fallback={<p role="status">Загрузка…</p>}>{workspace==='calendar'?<GameCalendar key={`${save.id}:${save.state.controlled_actor_id}`} save={save}/>:<Genealogy key={`${save.id}:${save.state.controlled_actor_id}`} save={save} rootId={familyRoot} onCharacter={openCharacter}/>}</Suspense></section>}
-      <Dialog open={branches} onOpenChange={setBranches}><DialogContent className={mobile?'mobile-sheet':''}><DialogHeader><DialogTitle>Ветки истории</DialogTitle><DialogDescription>Варианты ответов доступны под сценами. Смена старого варианта требует отката зависимых ходов. Именованные ветки пока не реализованы.</DialogDescription></DialogHeader></DialogContent></Dialog>
+      {save&&visitedWorkspaces.map(section=><section key={`${save.id}:${save.state.controlled_actor_id}:${section}`} hidden={workspace!==section} style={workspace!==section?{display:"none"}:undefined} className="save-workspace" inert={inspector||workspace!==section} aria-label={section==='calendar'?'Календарь':'Родословная'}><header><button onClick={closeWorkspace}><ArrowLeft size={18}/>Вернуться в историю</button><h1>{section==='calendar'?'Календарь':'Родословная'}</h1></header><Suspense fallback={<p role="status">Загрузка…</p>}>{section==='calendar'?<GameCalendar key={`${save.id}:${save.state.controlled_actor_id}`} save={save}/>:<Genealogy key={`${save.id}:${save.state.controlled_actor_id}`} save={save} rootId={familyRoot} onCharacter={openCharacter}/>}</Suspense></section>)}
       <Settings
         open={settings}
         onOpenChange={setSettings}
@@ -292,7 +292,7 @@ export default function App() {
         key={`${selection.world}:${selection.save}:${save?.state.controlled_actor_id}:${save?.state.camera?.pov_actor_id}:${save?.state.camera?.mode}`}
         infoOpen={worldInfo}
         setInfoOpen={setWorldInfo}
-        navigation={mobile&&inspector?<MobileNavigation activePanel={inspector?panel:undefined} workspace={openWorkspace} open={mobileMenu} setOpen={setMobileMenu} world={!!world} go={v=>{setWorkspace(null);closeInspector();setView(v)}} inspect={inspect} settings={()=>setSettings(true)} reading={reading} toggleReading={()=>setReading(!reading)} branches={()=>setBranches(true)}/>:undefined}
+        navigation={mobile&&inspector?<MobileNavigation activePanel={inspector?panel:undefined} workspace={openWorkspace} open={mobileMenu} setOpen={setMobileMenu} world={world} save={save} go={v=>{setWorkspace(null);closeInspector();setView(v)}} inspect={inspect} settings={()=>setSettings(true)} reading={reading} toggleReading={()=>setReading(!reading)}/>:undefined}
         world={world}
         save={save}
         open={inspector}

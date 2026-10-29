@@ -849,20 +849,6 @@
 .inspector-settings {
   width: min(760px, calc(100vw - 24px));
 }
-.inspector-mobile-group {
-  grid-column: 1/-1;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-.inspector-mobile-group p {
-  grid-column: 1/-1;
-  font-size: 10px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin: 12px 0 0;
-}
 .inspector-page button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
@@ -1107,7 +1093,7 @@
   }
 }
 
-.inspector-mobile-group button.current {
+.mobile-menu-card[aria-current="page"] {
   background: var(--accent-soft);
   color: var(--accent);
 }
@@ -1188,8 +1174,8 @@ html[data-theme="parchment"] .inspector-workspace {
 /* Selection must retain its warm identity when the pointer remains after a click. */
 .narrative-shell.inspector-open .nav-links button.current,
 .narrative-shell.inspector-open .nav-links button.current:hover,
-.inspector-mobile-palette .mobile-nav button.current,
-.inspector-mobile-palette .mobile-nav button.current:hover {
+.inspector-mobile-palette .mobile-menu-card[aria-current="page"],
+.inspector-mobile-palette .mobile-menu-card[aria-current="page"]:hover {
   background: var(--accent-soft);
   color: var(--accent);
 }
