@@ -397,9 +397,12 @@ button.phone-row {flex-wrap:wrap;gap:6px;text-align:left;}
    Fixed viewport coordinates cannot follow the mobile visualViewport reliably. */
 @media (max-width:767px) {
  .game {--phone-bezel:5px;--phone-peek-height:44px;--phone-lip-height:calc(var(--phone-peek-height) + var(--phone-bezel));}
- .game .composer {position:relative;}
+ /* Draw the separator inside the padding box: the absolute dock and the
+    visible composer edge now have the same origin (no border-width overlap). */
+ .game .composer {position:relative;border-top:0;box-shadow:inset 0 1px var(--border);}
  .game .composer .phone-device {
   position:absolute;bottom:100%;right:8px;border-width:var(--phone-bezel);
+  container:phone-device / size;
   width:calc(100% - 16px);
   transform:translateY(calc(100% - var(--phone-lip-height)));
   clip-path:inset(0 0 calc(100% - var(--phone-lip-height)) 0);
@@ -410,4 +413,12 @@ button.phone-row {flex-wrap:wrap;gap:6px;text-align:left;}
  .game:has(.phone-device) .story-scroll {padding-bottom:var(--phone-lip-height);}
  /* Keep the phone above the composer on short/keyboard viewports too. */
  .game .composer .phone-device.is-open:has(.phone-chat) {height:min(650px,calc(var(--app-height,100dvh) - var(--phone-dock-bottom,120px) - 56px));}
+}
+
+@container phone-device (max-height:450px) {
+ /* The dock stays above the action composer. On keyboard-sized viewports the
+    phone content scrolls, rather than overflowing its clipped device shell. */
+ .game .composer .phone-screen {overflow-y:auto;overscroll-behavior:contain;}
+ .game .composer .phone-screen .phone-body {flex:1 0 auto;overflow:visible;}
+ .game .composer .phone-chat>.phone-messages {flex:none;max-height:8rem;}
 }

@@ -30,8 +30,10 @@ test('menu: all destinations, draft, anchor, nested Back and workspace state',as
  await expect(page.locator('.inspector-workspace')).toBeVisible();
  await page.evaluate(()=>history.back());await expect(page.locator('.inspector-workspace')).toBeHidden();
  for(const section of ['Календарь','Родословная']){
-  await nav(page,section);await expect(page.locator('.save-workspace:visible h1')).toHaveText(section);
-  await page.getByRole('button',{name:'Вернуться в историю',exact:true}).click();
+  await nav(page,section);await expect(page.locator('.save-workspace h1')).toHaveText(section);
+  await expect(page.locator('.save-workspace')).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.save-workspace')).toHaveCount(0);
  }
  await nav(page,'Календарь');
  const year=page.getByRole('button',{name:'Год',exact:true});
@@ -40,6 +42,24 @@ test('menu: all destinations, draft, anchor, nested Back and workspace state',as
  await page.getByRole('button',{name:'Вернуться в историю',exact:true}).click();
  await nav(page,'Календарь');await expect(page.getByRole('button',{name:'Месяц',exact:true})).toHaveAttribute('aria-pressed','true');
  await page.getByRole('button',{name:'Вернуться в историю',exact:true}).click();
+ // A menu above the calendar consumes only its own Back entry.
+ await nav(page,'Календарь');
+ await menu(page);await page.evaluate(()=>history.back());
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ await expect(page.locator('.save-workspace')).toHaveCount(1);
+ await page.evaluate(()=>history.back());
+ await expect(page.locator('.save-workspace')).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Меню игры'})).toBeFocused();
+ // Leaving the Inspector for a workspace must finish its pending popstate first.
+ await nav(page,'Персонажи');await nav(page,'Родословная');
+ await expect(page.locator('.save-workspace h1')).toHaveText('Родословная');
+ await page.evaluate(()=>history.back());await expect(page.locator('.save-workspace')).toHaveCount(0);
+ await page.locator('.current-game-entry button').click();
+ await page.getByRole('dialog').getByRole('button',{name:'Календарь',exact:true}).click();
+ await expect(page.locator('.save-workspace')).toHaveCount(1);
+ await page.keyboard.press('Escape');
+ await expect(page.locator('.save-workspace')).toHaveCount(0);
+ await expect(page.locator('.current-game-entry button')).toBeFocused();
  await nav(page,'Создать');await expect(page.locator('.world-workshop')).toBeVisible();
  await menu(page);await page.locator('.mobile-menu-resume').click();await expect(page.locator('.game')).toBeVisible();
  await nav(page,'Настройки');await expect(page.locator('.settings-dialog')).toBeVisible();await page.keyboard.press('Escape');
@@ -101,14 +121,25 @@ test('phone dock: textarea, keyboard, viewport and safe area stay attached',asyn
  await page.locator('.phone-peek').click();await expect(page.locator('.phone-device')).toHaveClass(/is-open/);
  await expect.poll(async()=>{const p=await page.locator('.phone-device').boundingBox();const c=await page.locator('.composer').boundingBox();return Math.abs(p!.y+p!.height-c!.y)}).toBeLessThanOrEqual(1);
  await page.locator('.phone-peek').click();await expect(page.locator('.phone-device')).not.toHaveClass(/is-open/);
+ // Resize the visual viewport with the chat already focused, as an OS keyboard does.
+ await page.getByLabel('Своё действие или реплика').fill('');
+ await page.setViewportSize({width:393,height:850});
+ await page.locator('.phone-peek').click();
+ const phone=page.getByRole('region',{name:'Телефон персонажа'});
+ await phone.getByRole('button',{name:'Вера работа',exact:true}).click();
+ await phone.getByRole('button',{name:'Написать',exact:true}).click();
+ await phone.getByLabel('Сообщение в телефоне').fill('Черновик при открытии клавиатуры');
+ await page.evaluate(()=>{Object.defineProperty(visualViewport,'height',{configurable:true,value:440});Object.defineProperty(visualViewport,'offsetTop',{configurable:true,value:12});visualViewport!.dispatchEvent(new Event('resize'))});
+ await expect(phone.getByLabel('Сообщение в телефоне')).toBeInViewport({ratio:1});
+ await expect(phone.getByRole('button',{name:'Отправить сообщение',exact:true})).toBeInViewport({ratio:1});
+ await expect.poll(async()=>{const device=await page.locator('.phone-device').boundingBox();const composer=await page.locator('.composer').boundingBox();return device!.y>=0&&device!.y+device!.height<=composer!.y}).toBe(true);
+ await page.keyboard.press('Escape');await expect(page.locator('.phone-peek')).toBeFocused();
 });
 
 test('menu: empty save and English focus/keyboard controls',async({page})=>{
  await page.emulateMedia({reducedMotion:'reduce'});
  await page.setViewportSize({width:320,height:640});await page.goto('/');
  await page.evaluate(()=>document.documentElement.lang='en');
- // Re-render the mobile shell after changing the existing locale source.
- await page.setViewportSize({width:800,height:640});await page.setViewportSize({width:320,height:640});
  await page.getByRole('button',{name:'Game menu'}).click();
  const dialog=page.getByRole('dialog',{name:'Game menu'});
  await expect(dialog).toContainText('No world selected');await expect(dialog).toContainText('No active playthrough');

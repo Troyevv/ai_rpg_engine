@@ -139,6 +139,14 @@ export function Phone({
   useEffect(() => {
     setText(drafts.current[messageKey] || sessionStorage.getItem(`phone-draft:${messageKey}`) || "");
   }, [messageKey]);
+  const revealComposer = () => {
+    const viewport = screen.current;
+    const form = viewport?.querySelector<HTMLFormElement>('.phone-composer');
+    if (!viewport || !form?.contains(document.activeElement) || !matchMedia('(max-width:767px)').matches) return;
+    const bounds = viewport.getBoundingClientRect(), content = form.getBoundingClientRect();
+    if (content.bottom > bounds.bottom) viewport.scrollTop += content.bottom - bounds.bottom;
+    else if (content.top < bounds.top) viewport.scrollTop -= bounds.top - content.top;
+  };
   const close = () => {
     setOpen(false);
     trigger.current?.focus();
@@ -146,8 +154,11 @@ export function Phone({
   useEffect(() => {
     if (!open) return;
     screen.current?.focus();
+    const resize = new ResizeObserver(revealComposer);
+    if (screen.current) resize.observe(screen.current);
     const escape = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        e.preventDefault();
         e.stopPropagation();
         close();
       }
@@ -160,6 +171,7 @@ export function Phone({
     return () => {
       document.removeEventListener("keydown", escape);
       modal.disconnect();
+      resize.disconnect();
     };
   }, [open]);
   useEffect(() => {
@@ -783,6 +795,7 @@ export function Phone({
                     {phone.capabilities.text_message &&
                       (!selected || selected.active) && (
                         <form className="phone-composer"
+                          onFocusCapture={revealComposer}
                           onSubmit={(e) => {
                             e.preventDefault();
                             void send();

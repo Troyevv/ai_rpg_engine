@@ -32,10 +32,15 @@ const menuCopy = {
  en: {title:'Game menu', subtitle:'World, characters and story controls', resume:'Continue story', events:'Story & events', tools:'Tools', create:'Create world', settings:'Settings', reading:'Reading mode', calendar:'Calendar', family:'Genealogy', noWorld:'No world selected', noSave:'No active playthrough', observer:'No controlled character', unknownActor:'Character not recorded', location:'Location not recorded', time:'Time not recorded', day:'Day', close:'Close', navigation:'Mobile navigation'},
 };
 export function MobileNavigation({activePanel,workspace,open,setOpen,world,save,go,inspect,settings,reading,toggleReading}:{activePanel?:Panel;workspace:(section:"calendar"|"family")=>void;open:boolean;setOpen:(v:boolean)=>void;world:World|null;save:Save|null;go:(v:'game'|'prepare')=>void;inspect:(v:Panel)=>void;settings:()=>void;reading:boolean;toggleReading:()=>void}){
- const copy=menuCopy[gameLocale().startsWith('en')?'en':'ru'];
+ const [locale,setLocale]=useState(gameLocale);
+ useEffect(()=>{
+  const observer=new MutationObserver(()=>setLocale(gameLocale()));
+  observer.observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
+  return()=>observer.disconnect();
+ },[]);
+ const copy=menuCopy[locale.startsWith('en')?'en':'ru'];
  const trigger=useRef<HTMLButtonElement>(null);
  const pending=useRef<(()=>void)|null>(null);
- const navigating=useRef(false);
  // Consume the menu's own history entry before opening another workspace.
  // Capture prevents the Inspector beneath it from also consuming Android Back.
  useEffect(()=>{
@@ -44,16 +49,14 @@ export function MobileNavigation({activePanel,workspace,open,setOpen,world,save,
   const back=(event:PopStateEvent)=>{
    event.stopImmediatePropagation();
    setOpen(false);
-   const action=pending.current;pending.current=null;
-   if(action)requestAnimationFrame(action);
   };
   window.addEventListener('popstate',back,true);
   return()=>window.removeEventListener('popstate',back,true);
  },[open,setOpen]);
  const close=(action?:()=>void)=>{
-  pending.current=action||null;navigating.current=!!action;
+  pending.current=action||null;
   if(history.state?.mobileMenu)history.back();
-  else {setOpen(false);action?.()}
+  else setOpen(false);
  };
  const state=save?.state;
  const actorId=state?.controlled_actor_id===undefined?(state?.protagonist_id||state?.characters.find(c=>c.is_player)?.id):state.controlled_actor_id;
@@ -62,8 +65,14 @@ export function MobileNavigation({activePanel,workspace,open,setOpen,world,save,
  const time=clock?.projection;
  const date=time?.date?profileDate(time.date,(clock?.calendar as {profile?:Parameters<typeof profileDate>[1]})?.profile,'weekday'):time?`${copy.day} ${time.day}`:'';
  const sections=(group:'worldGroup'|'storyGroup')=>inspectorSections.filter(s=>s.group===group).map(({id,key,icon:Icon})=><button key={id} disabled={!world} aria-current={activePanel===id?'page':undefined} className={`mobile-menu-card menu-${key}`} onClick={()=>close(()=>inspect(id))}><span className="mobile-menu-icon"><Icon aria-hidden="true"/></span><span>{panelLabel(id)}</span></button>);
- return <><Button ref={trigger} size="icon" variant="ghost" aria-label={copy.title} onClick={()=>{navigating.current=false;setOpen(true)}}><Menu/></Button>
- <Dialog open={open} onOpenChange={value=>value?setOpen(true):close()}><DialogContent className="mobile-game-menu inspector-mobile-palette" onCloseAutoFocus={event=>{event.preventDefault();if(!navigating.current)trigger.current?.focus({preventScroll:true})}}>
+ return <><Button ref={trigger} data-mobile-menu-trigger size="icon" variant="ghost" aria-label={copy.title} onClick={()=>setOpen(true)}><Menu/></Button>
+ <Dialog open={open} onOpenChange={value=>value?setOpen(true):close()}><DialogContent className="mobile-game-menu inspector-mobile-palette" onCloseAutoFocus={event=>{
+  event.preventDefault();
+  // Wait for Radix to remove the exiting dialog/focus trap before opening
+  // the destination; a requestAnimationFrame can still precede that removal.
+  const action=pending.current;pending.current=null;
+  if(action)action();else trigger.current?.focus({preventScroll:true});
+ }}>
  <header className="mobile-menu-brand"><BookOpen aria-hidden="true"/><div><small>NARRATIVE WORLD</small><strong>{world?.name||copy.noWorld}</strong></div><DialogClose className="mobile-menu-close" aria-label={copy.close}><X aria-hidden="true"/></DialogClose></header>
  <div className="mobile-menu-scroll">
  <DialogHeader><DialogTitle>{copy.title}</DialogTitle><DialogDescription>{copy.subtitle}</DialogDescription></DialogHeader>

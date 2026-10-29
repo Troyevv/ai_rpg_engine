@@ -91,7 +91,7 @@ export function CurrentGame({
   refresh: (s: Save) => void;
 }) {
   const trigger = useRef<HTMLButtonElement>(null);
-  const transitioning = useRef(false);
+  const pendingAction = useRef<(()=>void)|null>(null);
   const [open, setOpen] = useState(false),
     [tab, setTab] = useState("time");
   useEffect(() => setOpen(false), [save.id]);
@@ -99,20 +99,19 @@ export function CurrentGame({
     if (disabled) setOpen(false);
   }, [disabled]);
   const act = (fn: () => void) => {
-    transitioning.current = true;
+    pendingAction.current = fn;
     setOpen(false);
-    fn();
   };
   return (
     <>
       <div className="current-game-entry">
-        <Button ref={trigger} variant="outline" onClick={() => { transitioning.current = false; setOpen(true); }}>
+        <Button ref={trigger} variant="outline" onClick={() => { pendingAction.current = null; setOpen(true); }}>
           <Settings2 size={16} />
           Управление игрой
         </Button>
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="current-game-panel" onCloseAutoFocus={event => { event.preventDefault(); if (!transitioning.current) trigger.current?.focus(); }}>
+        <DialogContent className="current-game-panel" onCloseAutoFocus={event => { event.preventDefault(); const action=pendingAction.current;pendingAction.current=null;if(action)action();else trigger.current?.focus(); }}>
           <DialogTitle>Текущая игра</DialogTitle>
           <DialogDescription>
             Время, персонажи и настройки этого прохождения.
@@ -131,7 +130,7 @@ export function CurrentGame({
               <button
                 key={key}
                 aria-pressed={key === tab}
-                onClick={() => {if(key==="calendar"||key==="family"){setOpen(false);window.dispatchEvent(new CustomEvent("save-workspace",{detail:{section:key}}))}else setTab(key)}}
+                onClick={() => {if(key==="calendar"||key==="family"){act(()=>window.dispatchEvent(new CustomEvent("save-workspace",{detail:{section:key,returnFocus:trigger.current}})))}else setTab(key)}}
               >
                 <Icon size={16} />
                 {label}

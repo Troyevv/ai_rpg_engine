@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, memo } from "react";
+import { useEffect, useMemo, useState, useRef, memo } from "react";
+import { useWorkspaceView, type WorkspaceView } from "./lib/workspaceView";
 import {
   ReactFlow,
   Background,
@@ -71,7 +72,7 @@ function Fit({ version, arcMargin }: { version: string; arcMargin:number }) {
   }, [version, initialized, arcMargin]);
   return <Controls showInteractive={false} showFitView={false}><ControlButton title="Вся семья" aria-label="Вся семья" onClick={()=>void fit()}><Maximize/></ControlButton></Controls>;
 }
-export function Genealogy({ save, rootId, onCharacter }: { save: Save; rootId?: string; onCharacter?:(id:string)=>void }) {
+export function Genealogy({ save, rootId, onCharacter, viewState }: { save: Save; rootId?: string; onCharacter?:(id:string)=>void; viewState?: WorkspaceView }) {
   const [retry,setRetry]=useState(0);
   const [rootsError,setRootsError]=useState('');
   const dataKey=`${save.id}:${save.revision}:${save.state.controlled_actor_id}`;
@@ -79,20 +80,24 @@ export function Genealogy({ save, rootId, onCharacter }: { save: Save; rootId?: 
   const roots=rootData.key===dataKey?rootData.items:[];
   const setRoots=(items:{id:string;name:string}[])=>setRootData({key:dataKey,items});
   useEffect(()=>{let live=true;setRootsError('');setRoots([]);api<{id:string;name:string}[]>(`/saves/${save.id}/genealogy-roots`).then(r=>{if(live)setRoots(r)}).catch(e=>{if(live)setRootsError(e.message)});return()=>{live=false}},[save.id,save.revision,save.state.controlled_actor_id,retry]);
-  const [search,setSearch]=useState("");
-  const [view,setView]=useState<'graph'|'list'>('graph');
-  const [root, setRoot] = useState(
+  const [search,setSearch]=useWorkspaceView(viewState, "search", "");
+  const [view,setView]=useWorkspaceView<'graph'|'list'>(viewState, 'view', 'graph');
+  const [root, setRoot] = useWorkspaceView(viewState, "root",
       rootId || save.state.controlled_actor_id || save.state.protagonist_id || save.state.characters[0]?.id || "",
     ),
-    [depth, setDepth] = useState(3),
+    [depth, setDepth] = useWorkspaceView(viewState, "depth", 3),
     [graphData, setGraphData] = useState<{key:string;value:Graph|null}>({key:"",value:null}),
     [error, setError] = useState(""),
-    [selected, setSelected] = useState<string | null>(null);
+    [selected, setSelected] = useWorkspaceView<string | null>(viewState, "selected", null);
   const matchingRoots=roots.filter(c=>c.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
   const graphKey=`${dataKey}:${root}:${depth}`;
   const graph=graphData.key===graphKey?graphData.value:null;
   const setGraph=(value:Graph|null)=>setGraphData({key:graphKey,value});
+  const rootScope = `${save.id}:${save.state.controlled_actor_id}:${rootId}`;
+  const previousRootScope = useRef(rootScope);
   useEffect(() => {
+    if (previousRootScope.current === rootScope) return;
+    previousRootScope.current = rootScope;
     setRoot(rootId || save.state.controlled_actor_id || save.state.protagonist_id || save.state.characters[0]?.id || "");
     setGraph(null);
   }, [rootId, save.id, save.state.controlled_actor_id]);
