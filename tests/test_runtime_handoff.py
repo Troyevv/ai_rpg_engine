@@ -219,14 +219,22 @@ def test_dob_metadata_is_not_birth_permission(metadata):
     assert visible_name(s,'b','a','Обычный ребёнок')=='Обычный ребёнок'
 
 
-def test_exact_handoff_preserves_authored_graph_and_values(api):
+@pytest.mark.parametrize('genres', [True, False])
+def test_exact_handoff_preserves_authored_graph_and_values(api, genres):
     from backend.runtime_v3.repository import read_history
-    client,app=api;sid=imported(client);repo=app.state.repository
+    value=source()
+    if not genres:
+        value['creation_settings'].update(primary_genre=None,secondary_genres=[],custom_genre='')
+        value['campaign'].pop('genre',None)
+    client,app=api;sid=imported(client,value);repo=app.state.repository
     old=json.loads((ROOT/'legacy_snapshot.json').read_text());current=repo.get_snapshot(sid)
     # Baseline artifact was created using the real import/confirm API at 58c8e29.
-    # New default DOB field is the sole shape addition; the original export is untouched.
+    # Add exact expectations for subsequent schema additions; the original export
+    # is untouched and the complete WorldState comparison remains strict.
     for cid,actor in old['world_state']['characters'].items():actor.setdefault('birth_date_provenance',{})
     old['world_state']['meta'].setdefault('weather',None)  # Conservative optional environment profile.
+    old['world_state']['meta']['genre'] = dict(primary_genre='slice_of_life',
+        secondary_genres=['family_saga','romance','drama'], custom_genre='') if genres else None
     old['world_state']['camera'].setdefault('observed_character_ids',[])
     assert current['world_state']==old['world_state']
     assert current['character_cards']==old['character_cards']

@@ -3,6 +3,7 @@ from backend.runtime_v3.narrative_policy_models import NarrativePacingProfile, N
 
 
 from backend.services.narrative_policy import PolicyUpdate
+from backend.runtime_v3.genre import GenreConfig
 
 from backend.api.schemas import Revision
 from backend.runtime_v3.models import WeatherProfile
@@ -25,7 +26,10 @@ def install(app, repo):
         if snapshot.get('mode')=='tabletop' or 'world_state' not in snapshot:
             raise ValueError('Настройки доступны только в Narrative.')
         meta=snapshot['world_state']['meta']
-        return dict(current={k:meta[k] for k in ('narrative_pacing','narrative_risk','outcome_preference','genre')},
+        current={k:meta[k] for k in ('narrative_pacing','narrative_risk','outcome_preference')}
+        # Form projection only: reads must not materialize neutral policy in canon.
+        current['genre']=meta.get('genre') or GenreConfig().model_dump()
+        return dict(current=current,
             pacing_presets={k:NarrativePacingProfile(preset=k).model_dump() for k in PACING_PRESETS},
             risk_presets={k:NarrativeRiskProfile(preset=k).model_dump() for k in RISK_PRESETS},
             schema=PolicyUpdate.model_json_schema())

@@ -46,7 +46,7 @@ def test_legacy_migration_preserves_source_and_explicit_neutral(legacy):
     migrated = migrate_v2(s).snapshot
     assert s == original
     genre = migrated['world_state']['meta']['genre']
-    assert genre == (config() if not legacy else config('romance') if legacy == 'romance' else config('custom', custom=legacy))
+    assert genre == (None if not legacy else config('romance') if legacy == 'romance' else config('custom', custom=legacy))
     migrated['world_state']['meta']['genre'] = config()
     assert migrate_v2(migrated).snapshot['world_state']['meta']['genre'] == config()
 
@@ -157,3 +157,80 @@ def test_invalid_location_is_never_authorized_by_genre(genre):
     s=snapshot_fixture()['world_state'];s['meta']['genre']=genre
     payload=raw(s);payload['final_scene']['location_id']='unknown_location'
     with pytest.raises(StructuralDeltaError): StateResolver(s,'Внезапный поворот.','').resolve(payload)
+
+
+@pytest.mark.parametrize('neutral', [None, config()])
+def test_neutral_migration_preserves_exact_world_and_source(neutral):
+    from backend.runtime_v3.genre import initialize
+    s=migrate_v2(snapshot_fixture()).snapshot
+    s['campaign']={}
+    s['world_state']['meta']['genre']=deepcopy(neutral)
+    original=deepcopy(s)
+    initialize(s)
+    assert s==original
+    for _ in range(3):
+        migrated=migrate_v2(json.loads(json.dumps(s)))
+        assert migrated.snapshot==original
+        assert not migrated.history['events']
+        s=migrated.snapshot
+    assert guidance(s['world_state']['meta']['genre']) is None
+    messages=build_context(s, [], '', 'turn', 32768, 2000)
+    assert not any(m['content'].startswith('Genre /') for m in messages)
+
+
+def test_missing_genre_uses_model_default_without_initialization():
+    from backend.runtime_v3.genre import initialize
+    from backend.runtime_v3.models import Meta
+    s=migrate_v2(snapshot_fixture()).snapshot
+    s['campaign']={};s['world_state']['meta'].pop('genre')
+    original=deepcopy(s)
+    initialize(s)
+    assert s==original  # no genre was authored; no config should be manufactured
+    migrated=migrate_v2(s).snapshot
+    assert migrated['world_state']['meta']['genre'] is Meta().genre is None
+    expected=deepcopy(original);expected['world_state']['meta']['genre']=None
+    assert migrated==expected
+    assert migrate_v2(migrated).snapshot==migrated
+    assert s==original
+
+
+@pytest.mark.parametrize('neutral', [None, config()])
+def test_neutral_save_read_and_rollback_preserve_stored_snapshots(api, neutral):
+    from devtools.narrative_test_world import load_fixture
+    from test_narrative_test_world import ordinary_job
+    client,app=api;repo=app.state.repository
+    sid=load_fixture(repo,'pacing')['save']
+    before=repo.get_snapshot(sid)
+    before['campaign'].get('campaign',{}).pop('genre',None)
+    before['campaign'].pop('genre',None)
+    before['world_state']['meta']['genre']=deepcopy(neutral)
+    encoded=json.dumps(before,ensure_ascii=False)
+    with repo.connect() as db:
+        db.execute('UPDATE saves SET state_json=? WHERE id=?',(encoded,sid))
+    def stored():
+        with repo.connect() as db:
+            return db.execute('SELECT state_json FROM saves WHERE id=?',(sid,)).fetchone()[0]
+    for _ in range(3):
+        assert repo.get_snapshot(sid)==before
+        response=client.get(f'/api/saves/{sid}/narrative-policy')
+        assert response.status_code==200
+        assert response.json()['current']['genre']==config()  # disposable form defaults
+        assert stored()==encoded
+    ordinary_job(repo,sid,'start');after_start=repo.get_snapshot(sid)
+    first_turn=repo.list_turns(sid)[-1]
+    with repo.connect() as db:
+        stored_before=db.execute('SELECT before_json FROM turns WHERE id=?',(first_turn['id'],)).fetchone()[0]
+    assert json.loads(stored_before)==before
+    ordinary_job(repo,sid)
+    repo.rollback_last(sid)
+    assert repo.get_snapshot(sid)==after_start
+    assert repo.list_turns(sid)[-1]==first_turn
+    repo.rollback_last(sid)
+    assert json.loads(stored())==before
+    assert repo.get_snapshot(sid)==before
+    assert before['world_state']['meta']['genre']==neutral
+    # A neutral form can be submitted (no null/GenreConfig validation mismatch).
+    current=client.get(f'/api/saves/{sid}/narrative-policy').json()['current']
+    response=client.put(f'/api/saves/{sid}/narrative-policy',json=dict(current,revision=repo.get_save(sid)['revision']))
+    assert response.status_code==200,response.text
+    assert repo.get_snapshot(sid)['world_state']['meta']['genre']==config()

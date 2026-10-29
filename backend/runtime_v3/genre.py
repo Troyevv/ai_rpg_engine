@@ -44,6 +44,8 @@ def initialize(snapshot, creation=None):
 
     Free text is preserved as custom guidance, without guessing labels from prose.
     An explicit neutral configuration wins over all legacy metadata thereafter.
+    No authored genre means no initialization: preserve Meta's neutral None and
+    exact committed-state identity across read, handoff and rollback.
     """
     meta = snapshot['world_state']['meta']
     if meta.get('genre') is not None:
@@ -54,8 +56,10 @@ def initialize(snapshot, creation=None):
         campaign = snapshot.get('campaign', {})
         text = campaign.get('campaign', {}).get('genre') or campaign.get('genre') or ''
         text = text.strip() if isinstance(text, str) else ''
+        if not text:
+            return
         config = (GenreConfig(primary_genre=text) if text in THEMES else
-                  GenreConfig(primary_genre='custom', custom_genre=text[:2000]) if text else GenreConfig())
+                  GenreConfig(primary_genre='custom', custom_genre=text[:2000]))
     meta['genre'] = config.model_dump()
 
 

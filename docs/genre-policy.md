@@ -107,3 +107,30 @@ Limitations: no live DeepSeek run or claim of improved literary quality; primary
 emphasis is a prompt preference, not a measurable guarantee. No full unrelated
 Tabletop suite was run. Imported very long legacy genre text is bounded as described
 above. Existing history and original source metadata are retained.
+
+## CI regression correction: neutral snapshot identity
+
+Run 40876090744 exposed two distinct comparisons. Meta defaults to `genre=None`,
+but `initialize()` previously manufactured an empty GenreConfig when no genre was
+authored. Reading a committed snapshot therefore changed its WorldState shape.
+Initialization now leaves absent/None configuration alone unless creation settings
+or retained legacy genre supply an actual genre. Explicit empty configuration still
+wins over legacy text; configured genres and their guidance are unchanged.
+
+The policy GET endpoint projects empty form defaults without storing them. This
+keeps the editable GET/PUT contract valid for neutral saves while preserving exact
+stored snapshot identity on read. No historical rows, fixtures, rollback code,
+resolver, Director or Extraction checks are changed.
+
+The exact handoff fixture predates genre metadata but its source world contains
+slice_of_life + family_saga/romance/drama. Its test now adds that exact expected
+configuration alongside other explicit schema additions; it does not drop fields
+or normalize away differences. The original fixture is unchanged. A second
+parameterization removes authored genres and requires exact neutral handoff.
+Additional regression tests cover absent/None/explicit-neutral initialization,
+repeated migration, unchanged stored bytes on reads, form roundtrip and exact
+start/turn/rollback snapshots. Full comparisons remain intact.
+
+Focused reproduction/regression: 30 passed. Frontend build and 10 relevant
+Playwright desktop/mobile checks passed. Full-suite and GitHub Actions results
+for this correction are recorded in the PR description after completion.
