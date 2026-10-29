@@ -63,7 +63,13 @@ def test_current_scene_voices_reach_gm_without_all_npc_cards():
     assert 'Говорит рублеными фразами' in gm
     assert 'Исключительный голос отсутствующего персонажа' not in gm
     assert 'Характер' in gm and 'Биография' in gm
-    assert 'При написании диалогов используй «Стиль общения»' in str(context)
+    from backend.runtime_v3.context_contract import NARRATIVE_STYLE_CONTRACT
+    rules='\n'.join(m['content'] for m in context if m['role']=='system')
+    # Check the shared instruction's purpose and wiring, not its former Russian sentence.
+    assert rules.count(NARRATIVE_STYLE_CONTRACT.strip())==1
+    assert all(term in NARRATIVE_STYLE_CONTRACT for term in ('Dialogue', 'NPC', 'Стиль общения'))
+    cards={card['id']:card for card in json.loads(gm.split('\n',1)[1])}
+    assert cards[b]['fields']['Стиль общения']==state['characters'][1]['fields']['Стиль общения']
     assert [x['id'] for x in json.loads(gm.split('\n',1)[1])]==[a,b]
 
 
