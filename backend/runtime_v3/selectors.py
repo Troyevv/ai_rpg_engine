@@ -32,7 +32,7 @@ def ui_view(snapshot, history=None):
         if len(rows)>=24 or not visible_appearance(state,cid,dict(source_event_id=True,fact_id=change.get('fact_id')),camera['controlled_actor_id']): continue
         old=change.get('before') or {};new=change.get('after') or {}
         rows.append(dict(before=old.get('text') if visible_appearance(state,cid,old,camera['controlled_actor_id']) else None,after=new.get('text'),minute=change['minute']))
-    from backend.runtime_v3.dossier import details as dossier_details
+    from backend.runtime_v3.dossier import details as dossier_details, personal_relations
     for card in cards:
         card['dossier'] = dossier_details(state, card['id'])
         card['appearance_history']=appearance_history[card['id']]
@@ -163,6 +163,7 @@ def ui_view(snapshot, history=None):
         if camera['controlled_actor_id'] else None)
     result['genealogy'] = genealogy(dict(snapshot,world_state=state))
     result['objective_relations'] = visible_relations(state,camera['controlled_actor_id'])
+    result['dossier_personal_relations'] = personal_relations(state)
     result['actor_capabilities'] = capabilities(state,camera['controlled_actor_id']) if camera['controlled_actor_id'] else None
     from backend.runtime_v3.residence import visible_social_state
     result['residence_roles'] = visible_social_state(state,camera['controlled_actor_id'])

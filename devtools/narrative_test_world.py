@@ -899,3 +899,21 @@ def _phone_office(state):
 
 
 CHECKPOINTS['phone-office']=_phone_office
+
+
+def _ui_canonical_personal(state):
+    """#150: authoring canon exists without any observer knowledge fact."""
+    from backend.runtime_v3.models import ObjectiveRelation
+    state = _ui_dossier(state)
+    names = {'qa_marina': 'Марина Волкова', 'qa_timur': 'Сергей Волков'}
+    for card in state['characters']:
+        if card['id'] in names:
+            card['name'] = names[card['id']]
+    # This checkpoint intentionally starts before any marriage/closure phases.
+    state['world']['objective_relations'] = {
+        'volkov-marriage': ObjectiveRelation(id='volkov-marriage', kind='spouse',
+            source_id='qa_marina', target_id='qa_timur', since_date='1999-06-12').model_dump()}
+    return state
+
+
+CHECKPOINTS['ui-canonical-personal'] = _ui_canonical_personal

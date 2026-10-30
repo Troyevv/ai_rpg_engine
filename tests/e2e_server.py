@@ -258,7 +258,9 @@ def stream(**kwargs):
         task=json.loads(next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод')).split('\n',1)[1])
         present=camera['present_character_ids']
         location_id=camera['location_id'];locations=[]
-        if task['kind']=='start' or (observer and location_id is None):
+        # QA worlds have authored IDs/locations; generic character_1/2 belong
+        # only to the original small transport fixture.
+        if (task['kind']=='start' or (observer and location_id is None)) and 'qa_kirill' not in state['characters']:
             from backend.runtime_v3.models import identity
             place='Подвал' if observer else 'Кухня'
             location_id=identity('location',place.casefold())
@@ -552,6 +554,11 @@ if __name__ == '__main__':
             snap['history_head']=append_history(db,snap.get('history_head'),batch)
             db.execute('UPDATE saves SET state_json=?,revision=revision+1 WHERE id=?',(json.dumps(snap,ensure_ascii=False),sid))
         return {'world':result['world'],'save':sid}
+
+    @app.post('/test/dossier-authoring')
+    def dossier_authoring():
+        from devtools.narrative_test_world import build_fixture
+        return build_fixture('ui-canonical-personal')
 
     @app.post('/test/ui-completion-seed')
     def ui_completion_seed(checkpoint: str = 'ui-calendar'):

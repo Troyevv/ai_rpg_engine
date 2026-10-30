@@ -59,6 +59,8 @@ export interface SocialRelation {
   id:string;kind:string;source_id:string;target_id:string;status:'active'|'closed';
   certainty:'known'|'suspected';outcome:string;since?:number|null;since_date?:string|null;until?:number|null;until_date?:string|null;
 }
+/** Canonical dossier directory; not an actor Knowledge projection. */
+export type DossierPersonalRelation = Omit<SocialRelation, 'certainty'>;
 export interface Genealogy {
   nodes:{id:string;name:string;life_status:string;birth_date?:string|null;portrait?:import("./Portrait").PortraitRef|null;silhouette?:string}[];
   edges:SocialRelation[];
@@ -82,6 +84,7 @@ export interface State {
   genealogy?:Genealogy;
   protagonist_periods?:{actor_id:string;since:number;until:number|null}[];
   objective_relations?:SocialRelation[];
+  dossier_personal_relations?:DossierPersonalRelation[];
   actor_capabilities?:{can_act:boolean;can_speak:boolean;can_move:boolean;conscious:boolean;can_perceive:boolean}|null;
   protagonist_required?:boolean;
   protagonist_id?: string;
