@@ -71,7 +71,7 @@ def test_invalid_optional_intention_does_not_discard_meeting_or_messages(tmp_pat
 
 
 @pytest.mark.parametrize('missing_field',['player_assertion','id'])
-def test_repair_cannot_erase_rejected_meeting_and_retry_replays_only_repair(tmp_path,missing_field):
+def test_repair_omission_is_journaled_and_regeneration_recovers_optional_plan(tmp_path,missing_field):
     repo,client,sid=setup(tmp_path);jid=dispatch(repo,client,sid)
     before=deepcopy(repo.get_snapshot(sid));attempt=0
     def invalid(value,data):
@@ -81,13 +81,14 @@ def test_repair_cannot_erase_rejected_meeting_and_retry_replays_only_repair(tmp_
         else:value['scheduled_event_changes']=[]
         return value
     assert execute(repo,jid,transform=invalid)==['decision','decision','semantic','semantic']
-    assert repo.get_job(jid)['status']=='error'
-    assert 'commitment_repair_omission' in repo.get_job(jid)['error']
-    assert repo.get_snapshot(sid)==before
-    with patch('engine.launch'):
-        r=client.post(f'/api/jobs/{jid}/retry',json={'config':CONFIG})
-    assert r.status_code==200,r.text
-    assert execute(repo,jid)==['semantic']
+    assert repo.get_job(jid)['status']=='saved'
+    journal=json.loads(repo.get_job(jid)['context_json'])[-1]
+    assert journal['repair_validation_errors'][0]['code']=='commitment_repair_omission'
+    assert journal['deferred'] and journal['response'] and journal['repair_response']
+    state=repo.get_snapshot(sid)['world_state']
+    assert len(state['remote_events'])==2 and not state['scheduled_events']
+    jid=repo.begin_job(sid,'','regenerate',CONFIG)
+    assert execute(repo,jid)==['decision','decision','semantic']
     assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
     state=repo.get_snapshot(sid)['world_state']
     assert len(state['remote_events'])==2 and len(state['scheduled_events'])==1
@@ -177,9 +178,13 @@ def test_canonical_identity_does_not_invent_player_choice(tmp_path,proof):
             row['player_evidence']='через два часа'
         return value
     assert execute(repo,jid,transform=unsupported)==['decision','decision','semantic','semantic']
-    assert repo.get_job(jid)['status']=='error'
-    assert 'controlled_actor_unsupported' in repo.get_job(jid)['error']
-    assert repo.get_snapshot(sid)==before
+    assert repo.get_job(jid)['status']=='saved'
+    assert 'controlled_actor_unsupported' in repo.get_job(jid)['warnings_json']
+    state=repo.get_snapshot(sid)['world_state']
+    assert not state['scheduled_events'] and len(state['remote_events'])==2
+    actor=state['camera']['controlled_actor_id']
+    assert state['characters'][actor]==before['world_state']['characters'][actor]
+    assert all(c['intentions']==before['world_state']['characters'][cid]['intentions'] for cid,c in state['characters'].items())
 
 
 @pytest.mark.parametrize('invalid',['envelope','scene'])

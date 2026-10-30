@@ -101,6 +101,7 @@ def execute(storage, job, handle, chat_stream):
         storage.save_communication_context(job['id'], captured, before)
         storage.job_progress(job['id'], 'extracting', complete=True)
         from backend.runtime_v3.remote_semantics import SemanticValidationError
+        from backend.services.world_delta_errors import StructuralDeltaError
         def generate_semantics(stage, outgoing):
             if estimate(outgoing) > config['context_length'] - config['update_tokens'] - 512:
                 raise ValueError('Контекст исправления договорённости не помещается в окно модели.')
@@ -138,20 +139,42 @@ def execute(storage, job, handle, chat_stream):
                 storage.record_repair(job['id'],dict(stage='remote_semantics_repair',repair_error_code='remote_semantic_validation',
                     repair_error_type=type(rejection).__name__,repair_reason=str(rejection)))
                 storage.save_communication_context(job['id'],captured,before)
-                repaired=generate_semantics('remote_semantics_repair',repair)
+                try:
+                    repaired=generate_semantics('remote_semantics_repair',repair)
+                except RuntimeError as repair_error:
+                    if handle.cancelled.is_set(): return
+                    # The accepted exchange is independent of this optional
+                    # correction. Provider diagnostics remain in request logs.
+                    frame['repair_failure_type'] = type(repair_error).__name__
+                    repaired = None
                 frame['repair_response']=repaired
                 storage.save_communication_context(job['id'],captured,before)
                 if handle.cancelled.is_set():return
-                from backend.runtime_v3.raw import RawTurnResult
-                records=RawTurnResult.parse(repaired).records['scheduled_event_changes']
-                ids={r.get('id') for r in records if isinstance(r,dict) and isinstance(r.get('id'),str)}
-                original_records=RawTurnResult.parse(response).records['scheduled_event_changes']
-                if len(records)<len(original_records) or not set(rejection.candidate_ids)<=ids:
-                    raise SemanticValidationError([dict(code='commitment_repair_omission',section='scheduled_events',action='reject_repair')],rejection.candidate_ids)
-                warnings=[]
-                resolved,consequences=semantic_resolve(after,report['source_event_id'],repaired,warnings)
-                frame['initial_response']=response
-                frame['response']=repaired
+                try:
+                    if repaired is None:
+                        raise SemanticValidationError([dict(section='scheduled_events', code='remote_semantic_repair_unavailable')], rejection.candidate_ids)
+                    from backend.runtime_v3.raw import RawTurnResult
+                    records=RawTurnResult.parse(repaired).records['scheduled_event_changes']
+                    ids={r.get('id') for r in records if isinstance(r,dict) and isinstance(r.get('id'),str)}
+                    original_records=RawTurnResult.parse(response).records['scheduled_event_changes']
+                    if len(records)<len(original_records) or not set(rejection.candidate_ids)<=ids:
+                        raise SemanticValidationError([dict(code='commitment_repair_omission',section='scheduled_events',action='reject_repair')],rejection.candidate_ids)
+                    warnings=[]
+                    resolved,consequences=semantic_resolve(after,report['source_event_id'],repaired,warnings)
+                    frame['initial_response']=response
+                    frame['response']=repaired
+                except (SemanticValidationError, StructuralDeltaError) as unresolved:
+                    if isinstance(unresolved, StructuralDeltaError) and not unresolved.code.startswith('raw_'):
+                        raise
+                    from backend.runtime_v3.remote_semantics import resolve_optional
+                    frame['repair_validation_errors'] = unresolved.warnings if isinstance(unresolved, SemanticValidationError) else [unresolved.diagnostic('remote_semantics_repair')]
+                    # An invalid repair has no accepted changes. Isolate the
+                    # original candidates, preserving original valid records.
+                    candidate = response
+                    warnings = []
+                    resolved, consequences = resolve_optional(after, report['source_event_id'], candidate, warnings)
+                    frame['deferred'] = True
+                    frame['response'] = candidate
             after=resolved
             for section, records in consequences.items(): batch[section].extend(records)
             frame['warnings']=warnings
@@ -165,6 +188,8 @@ def execute(storage, job, handle, chat_stream):
     batch["state_changes"].append(dict(kind="communication_receipt", request_id=config["communication"]["request_id"], job_id=job["id"]))
     labels = {"answered": "Собеседник ответил. Разговор доступен в сцене.", "declined": "Собеседник отклонил вызов.", "missed": "Вызов завершён без ответа."}
     text = labels.get(report["outcome"], "Обработка сообщения завершена. Переписка доступна в телефоне.")
+    if prompts and frame.get('deferred'):
+        text += ' Часть последствий не подтверждена проверкой; переписка сохранена, диагностика доступна в журнале.'
     if report.get('unavailable'):
         text = 'Собеседник сейчас недоступен для связи. Обработка завершена.'
     if report["rejected"]:

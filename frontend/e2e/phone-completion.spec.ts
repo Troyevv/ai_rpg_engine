@@ -41,7 +41,7 @@ test('T15 T18 outgoing call and automatic read reply through real jobs',async({p
  await expect(screen(page).getByText('Прочитано: 1 из 1')).toBeVisible();
  await page.screenshot({path:info.outputPath('chat-reply-after.png'),animations:'disabled'});
  await screen(page).getByLabel('Сообщение в телефоне').fill('Ещё один черновик');
- await page.keyboard.press('Escape');
+ await screen(page).getByRole('button',{name:'Свернуть телефон'}).click();
  await page.reload();
  await page.getByRole('button',{name:/^Телефон/}).click();
  await screen(page).getByRole('button',{name:'Переписки',exact:true}).click();
@@ -118,7 +118,7 @@ test('T14 T17 T25 incoming call preserves physical turn and phone draft in two s
   await screen(page).getByRole('button',{name:'Звонки',exact:true}).click();
   await screen(page).getByRole('button',{name:'Переписки',exact:true}).click();
   await expect(screen(page).getByLabel('Сообщение в телефоне')).toHaveValue('Черновик на время входящего вызова');
-  await page.keyboard.press('Escape');
+  await screen(page).getByRole('button',{name:'Свернуть телефон'}).click();
  }
  await page.getByLabel('Своё действие или реплика').fill('Смотрю в окно, не отвечая на звонок.');
  await page.getByLabel('Своё действие или реплика').press('Control+Enter');

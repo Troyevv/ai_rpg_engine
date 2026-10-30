@@ -113,23 +113,28 @@ test("one phone device preserves unsent chat drafts across collapse and modal", 
   await phone
     .getByRole("button", { name: "К перепискам", exact: true })
     .click();
-  await phone.locator(".phone-row").filter({ hasText: "Вера работа" }).click();
+  await phone.locator(".phone-thread").filter({ hasText: "Вера работа" }).click();
   await expect(phone.getByLabel("Сообщение в телефоне")).toHaveValue(
     "Несохранённый ответ",
   );
-  await page.keyboard.press("Escape");
+  await phone.getByRole("button", { name: "Свернуть телефон", exact: true }).click();
+  await expect(device).not.toHaveClass(/is-open/);
   await expect(device).toHaveAttribute("data-identity", "same");
   await page.getByRole("button", { name: /^Телефон/ }).click();
   await expect(phone.getByLabel("Сообщение в телефоне")).toHaveValue(
     "Несохранённый ответ",
   );
+  await phone.getByRole("button", { name: "Свернуть телефон", exact: true }).click();
   await page.locator(".current-game-entry button").click();
+  await expect(page.getByRole("dialog")).toBeVisible();
   await expect(device).not.toHaveClass(/is-open/);
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: /^Телефон/ }).click();
   await expect(phone.getByLabel("Сообщение в телефоне")).toHaveValue(
     "Несохранённый ответ",
   );
+  await expect(device).toHaveAttribute("data-identity", "same");
+  await expect(device).toHaveCount(1);
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -229,9 +234,47 @@ test("explicit climate survives reload and matches the canonical calendar", asyn
       (l: any) => l.name === before.state.scene_meta.location,
     )?.id || before.state.locations[0].id;
   await menu.getByLabel("Регион климата").selectOption(location);
+  // Hold the real post-commit projection response. A fast local refresh used
+  // to hide the race where the revision guard dismissed the settings dialog.
+  let releaseRefresh!: () => void;
+  const refreshGate = new Promise<void>((resolve) => { releaseRefresh = resolve; });
+  let refreshArrived!: () => void;
+  const refreshStarted = new Promise<void>((resolve) => { refreshArrived = resolve; });
+  await page.route(`**/api/saves/${selected.save}`, async (route) => {
+    const response = await route.fetch();
+    refreshArrived();
+    await refreshGate;
+    await route.fulfill({ response });
+  }, { times: 1 });
+  const putResponse = page.waitForResponse((response) =>
+    response.url().endsWith(`/api/saves/${selected.save}/weather`) &&
+    response.request().method() === "PUT",
+  );
   await menu
     .getByRole("button", { name: "Установить климат", exact: true })
     .click();
+  const committed = await putResponse;
+  expect(committed.ok()).toBe(true);
+  const payload = committed.request().postDataJSON();
+  expect(payload.revision).toBe(before.revision);
+  expect(payload.profile.regions[location]).toEqual({ climate: "temperate", hemisphere: "north" });
+  const updated = await committed.json();
+  expect(updated.revision).toBe(before.revision + 1);
+  expect(updated.state.scene_meta.weather.temperature).not.toBeNull();
+  const profile = await (await request.get(`/api/saves/${selected.save}/weather`)).json();
+  expect(profile.regions[location].climate).toBe("temperate");
+  expect(profile.seed).toBe(payload.profile.seed);
+  const persisted = await (await request.get(`/api/saves/${selected.save}`)).json();
+  expect(persisted.revision).toBe(updated.revision);
+  expect(persisted.state.scene_meta.weather).toEqual(updated.state.scene_meta.weather);
+  try {
+    await refreshStarted;
+    await expect(menu.getByRole("button", { name: "Политика истории" })).toBeDisabled();
+    await expect(menu.getByText(/Климат установлен/)).toBeVisible();
+  } finally {
+    releaseRefresh();
+  }
+  await expect(menu.getByRole("button", { name: "Политика истории" })).toBeEnabled();
   await expect(menu.getByText(/Климат установлен/)).toBeVisible();
   await page.keyboard.press("Escape");
   const configured = await (
@@ -275,11 +318,38 @@ test('phone leaves composer reachable with keyboard-sized viewport and enlarged 
  const selected=await(await request.post('/test/phone-seed?unread=true')).json();
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selected);
  await page.emulateMedia({reducedMotion:'reduce'});
- await page.setViewportSize({width:393,height:500});await page.goto('/');
+ await page.setViewportSize({width:info.project.name==='mobile'?393:1024,height:500});await page.goto('/');
+ const narrative=page.getByLabel('Своё действие или реплика');
+ await narrative.fill('Черновик основной сцены');
  await page.getByRole('button',{name:/^Телефон/}).click();
- await expect(page.getByRole('region',{name:'Телефон персонажа'})).toBeVisible();
- await expect.poll(async()=>{const device=await page.getByTestId('phone-device').boundingBox();const composer=await page.locator('.composer').boundingBox();return !!device&&!!composer&&device.y>=0&&device.y+device.height<=composer.y;}).toBe(true);
- await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:/^Телефон/})).toBeFocused();
+ const phone=page.getByRole('region',{name:'Телефон персонажа'});
+ const device=page.getByTestId('phone-device');
+ await expect(phone).toBeVisible();
+ await expect.poll(async()=>{
+  const bounds=await device.boundingBox();const composer=await page.locator('.composer').boundingBox();
+  if(!bounds||!composer)return false;
+  if(info.project.name==='mobile')return Math.abs(bounds.x)<1&&Math.abs(bounds.y)<1&&Math.abs(bounds.width-393)<1&&Math.abs(bounds.height-500)<1;
+  return bounds.y>=0&&bounds.y+bounds.height<=composer.y&&bounds.width<=400;
+ }).toBe(true);
+ await phone.getByRole('button',{name:'Вера работа',exact:true}).click();
+ await phone.getByRole('button',{name:'Написать',exact:true}).click();
+ const message=phone.getByLabel('Сообщение в телефоне');
+ await message.fill('Черновик в телефоне');
+ await expect(message).toBeInViewport();
+ await phone.getByRole('button',{name:'Отправить сообщение',exact:true}).click({trial:true});
+ if(info.project.name==='mobile'){
+  // Fullscreen phone intentionally covers Narrative; it must own pointer hits.
+  expect(await narrative.evaluate(el=>{const r=el.getBoundingClientRect();return !!document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('[data-testid="phone-device"]')})).toBe(true);
+ }else{
+  await narrative.click({trial:true});
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click({trial:true});
+ }
+ await phone.getByRole('button',{name:'Свернуть телефон',exact:true}).click();
+ await expect(page.getByRole('button',{name:/^Телефон/})).toBeFocused();
+ await expect(device).not.toHaveClass(/is-open/);
+ await expect(narrative).toHaveValue('Черновик основной сцены');
+ await narrative.click({trial:true});
+ await page.getByRole('button',{name:'Отправить действие',exact:true}).click({trial:true});
  await page.setViewportSize({width:820,height:1000});
  await page.locator('.current-game-entry button').click();
  await page.keyboard.press('Escape');

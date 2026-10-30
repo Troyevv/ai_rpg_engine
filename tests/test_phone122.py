@@ -158,11 +158,16 @@ def test_full_message_evidence_survives_long_thread_and_invalid_semantic_is_atom
         value['scheduled_event_changes'][0]['character_ids'].append('unknown')
         return value
     execute(repo,jid,transform=invalid)
-    assert repo.get_job(jid)['status']=='error'
-    assert repo.get_snapshot(sid)==before
-    repo.retry_job(jid,CONFIG);execute(repo,jid)
+    assert repo.get_job(jid)['status']=='saved'
+    state=repo.get_snapshot(sid)['world_state']
+    assert not state['scheduled_events'] and len(state['remote_events'])==2
+    assert state['camera']==before['world_state']['camera']
+    assert len(next(e['content'] for e in state['remote_events'].values() if e['sender_id']=='qa_kirill'))>1000
+    assert json.loads(repo.get_job(jid)['warnings_json'])
+    jid=repo.begin_job(sid,'','regenerate',CONFIG);execute(repo,jid)
     assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
     assert len(repo.get_snapshot(sid)['world_state']['scheduled_events'])==1
+
 
 
 @pytest.mark.parametrize('outcome,text', [('silent','Встретимся через два часа?'),('read_only','Встретимся через два часа?'),('answer','Может быть, как-нибудь встретимся?')])

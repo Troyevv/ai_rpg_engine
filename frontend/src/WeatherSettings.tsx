@@ -4,9 +4,11 @@ import type { Save } from "./types";
 export function WeatherSettings({
   save,
   refresh,
+  disabled = false,
 }: {
   save: Save;
   refresh: (s: Save) => void;
+  disabled?: boolean;
 }) {
   const [configured, setConfigured] = useState<boolean | null>(null),
     [error, setError] = useState(""),
@@ -55,6 +57,7 @@ export function WeatherSettings({
         <form
           onSubmit={async (e) => {
             e.preventDefault();
+            if (busy || disabled) return;
             setBusy(true);
             setError("");
             try {
@@ -141,7 +144,7 @@ export function WeatherSettings({
               <option>F</option>
             </select>
           </label>
-          <button disabled={busy || !region}>
+          <button disabled={busy || disabled || !region}>
             {busy ? "Сохранение…" : "Установить климат"}
           </button>
         </form>

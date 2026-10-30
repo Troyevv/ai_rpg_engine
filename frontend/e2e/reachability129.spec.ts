@@ -100,7 +100,7 @@ test('saved labels share the directory with unsaved NPCs and remain editable', a
   await phone.getByLabel('Сохранённое имя').fill('Коллега');
   await phone.getByRole('button',{name:'Сохранить контакт',exact:true}).click();
   await expect(phone.getByRole('button',{name:'Коллега',exact:true})).toBeVisible();
-  await phone.getByRole('button',{name:'К адресатам',exact:true}).click();
+  await phone.getByRole('button',{name:'Назад',exact:true}).click();
   // Canonical name still finds an arbitrarily renamed saved label.
   await phone.getByLabel('Поиск адресата').fill('Вера');
   await expect(phone.getByRole('button',{name:'Коллега',exact:true})).toBeVisible();

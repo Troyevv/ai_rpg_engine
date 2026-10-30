@@ -120,8 +120,8 @@ test('phone dock: textarea, keyboard, viewport and safe area stay attached',asyn
  await page.evaluate(()=>{delete (visualViewport as any).height;delete (visualViewport as any).offsetTop;visualViewport!.dispatchEvent(new Event('resize'))});
  await page.getByLabel('Своё действие или реплика').blur();
  await page.locator('.phone-peek').click();await expect(page.locator('.phone-device')).toHaveClass(/is-open/);
- await expect.poll(async()=>{const p=await page.locator('.phone-device').boundingBox();const c=await page.locator('.composer').boundingBox();return Math.abs(p!.y+p!.height-c!.y)}).toBeLessThanOrEqual(1);
- await page.locator('.phone-peek').click();await expect(page.locator('.phone-device')).not.toHaveClass(/is-open/);
+ await expect.poll(async()=>{const p=await page.locator('.phone-device').boundingBox();return p!.y===0&&p!.width===page.viewportSize()!.width}).toBe(true);
+ await page.getByRole('button',{name:'Свернуть телефон'}).click();await expect(page.locator('.phone-device')).not.toHaveClass(/is-open/);
  // Resize the visual viewport with the chat already focused, as an OS keyboard does.
  await page.getByLabel('Своё действие или реплика').fill('');
  await page.setViewportSize({width:393,height:850});
@@ -133,7 +133,8 @@ test('phone dock: textarea, keyboard, viewport and safe area stay attached',asyn
  await page.evaluate(()=>{Object.defineProperty(visualViewport,'height',{configurable:true,value:440});Object.defineProperty(visualViewport,'offsetTop',{configurable:true,value:12});visualViewport!.dispatchEvent(new Event('resize'))});
  await expect(phone.getByLabel('Сообщение в телефоне')).toBeInViewport({ratio:1});
  await expect(phone.getByRole('button',{name:'Отправить сообщение',exact:true})).toBeInViewport({ratio:1});
- await expect.poll(async()=>{const device=await page.locator('.phone-device').boundingBox();const composer=await page.locator('.composer').boundingBox();return device!.y>=0&&device!.y+device!.height<=composer!.y}).toBe(true);
+ await expect.poll(async()=>{const device=await page.locator('.phone-device').boundingBox();return device!.y===12&&device!.height===440}).toBe(true);
+ await page.keyboard.press('Escape');await expect(phone.locator('.phone-conversations')).toBeVisible();
  await page.keyboard.press('Escape');await expect(page.locator('.phone-peek')).toBeFocused();
 });
 

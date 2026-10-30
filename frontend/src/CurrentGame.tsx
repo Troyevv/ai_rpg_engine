@@ -227,9 +227,9 @@ export function CurrentGame({
     setOpen(false);
     setQuery("");
   }, [save.id]);
-  useEffect(() => {
-    if (disabled) setOpen(false);
-  }, [disabled]);
+  // A successful settings commit temporarily disables commands while the new
+  // revision loads. Keep this read surface (and its confirmation) mounted.
+  // Individual mutation controls retain their disabled guards.
   const act = (fn: () => void) => {
     pendingAction.current = fn;
     setOpen(false);
@@ -379,7 +379,7 @@ export function CurrentGame({
                   />
                 </div>
                 <div className="management-card management-weather">
-                  <WeatherSettings save={save} refresh={refresh} />
+                  <WeatherSettings save={save} refresh={refresh} disabled={disabled} />
                 </div>
               </section>
             )}
