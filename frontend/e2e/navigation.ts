@@ -37,7 +37,7 @@ export async function gameAction(page:Page,name:string){
  const menu=page.getByRole('dialog').filter({has:page.getByRole('heading',{name:'Текущая игра',exact:true})});
  if(!await menu.isVisible())await page.locator('.current-game-entry button').click();
  const section=name==='Политика истории'?'Настройки':name==='Сменить главного героя'?'Персонажи':'Время';
- await menu.getByRole('navigation',{name:'Разделы текущей игры'}).getByRole('button',{name:section,exact:true}).click();
+ await menu.getByRole('tablist',{name:'Разделы текущей игры'}).getByRole('tab',{name:section,exact:true}).click();
  await menu.getByRole('button',{name,exact:true}).click();
 }
 
