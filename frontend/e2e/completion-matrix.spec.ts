@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 import {nav,pickCharacter} from './navigation';
-test.use({video:'on'});
+test.use({video:'off'});
 async function seed(page:any,request:any,checkpoint:string){
  const response=await request.post(`/test/ui-completion-seed?checkpoint=${checkpoint}`);expect(response.ok()).toBe(true);
  const selected=await response.json();await page.addInitScript((s:any)=>localStorage.setItem('selection',JSON.stringify(s)),selected);return selected;
@@ -13,30 +13,31 @@ test('T04-T08 calendar agenda, empty dates, private observance and two skins',as
  for(const skin of ['graphite','parchment']){
   await request.put(`/api/worlds/${s.world}/presentation`,{data:{theme_id:skin}});await page.goto('/');
   await nav(page,'Календарь');const area=page.locator('.save-workspace');
-  await expect(area.getByText('Годовщина первой восстановленной карты',{exact:true})).toBeVisible();
-  await expect(area.getByText('Завершено',{exact:false})).toBeVisible();
-  await expect(area.getByText('Отменено',{exact:false})).toBeVisible();
-  await expect(area.getByText('срок прошёл',{exact:false})).toBeVisible();
-  await page.screenshot({path:info.outputPath(`calendar-events-${skin}.png`),animations:'disabled'});
+  await area.getByRole('button',{name:'Сегодня в игре',exact:true}).click();
+  await expect(area.locator('.calendar-detail').getByText('Годовщина первой восстановленной карты',{exact:true})).toBeVisible();
+  await expect(area.locator('.calendar-detail').getByText('Завершено',{exact:false})).toBeVisible();
+  await expect(area.locator('.calendar-detail').getByText('Отменено',{exact:false})).toBeVisible();
+  await expect(area.locator('.calendar-detail').getByText('срок прошёл',{exact:false})).toBeVisible();
+  if(process.env.CALENDAR_VISUAL)await page.screenshot({path:info.outputPath(`calendar-events-${skin}.png`),animations:'disabled'});
   await area.getByLabel('Следующий месяц',{exact:true}).click();await expect(area.getByText('Известных событий нет.',{exact:true})).toBeVisible();
-  await page.screenshot({path:info.outputPath(`calendar-empty-${skin}.png`),animations:'disabled'});
+  if(process.env.CALENDAR_VISUAL)await page.screenshot({path:info.outputPath(`calendar-empty-${skin}.png`),animations:'disabled'});
   await area.getByLabel('Предыдущий месяц',{exact:true}).click();await expect(area.locator('.calendar-detail h4')).toContainText('1 октября');
   await area.getByRole('button',{name:'Год',exact:true}).click();await expect(area.locator('.calendar-mini')).toHaveCount(12);
-  await page.screenshot({path:info.outputPath(`calendar-year-${skin}.png`),animations:'disabled'});
+  if(process.env.CALENDAR_VISUAL)await page.screenshot({path:info.outputPath(`calendar-year-${skin}.png`),animations:'disabled'});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  }
  const after=await(await request.get(`/api/saves/${s.save}`)).json();expect(after.revision).toBe(before.revision);expect(after.state.world_clock).toEqual(before.state.world_clock);
 });
 test('T06 custom calendar has two months, five weekdays and a real year boundary',async({page,request},info)=>{
  const s=await seed(page,request,'ui-calendar-custom');await page.goto('/');await nav(page,'Календарь');const area=page.locator('.save-workspace');
- await expect(area.getByText('Годовщина клятвы',{exact:true})).toBeVisible();
+ await expect(area.locator('.calendar-detail').getByText('Годовщина клятвы',{exact:true})).toBeVisible();
  await expect(area.locator('.custom-calendar>small')).toHaveCount(5);
  await area.getByLabel('Следующий месяц',{exact:true}).click();await expect(area.getByRole('heading',{name:'Свет · 43',exact:true})).toBeVisible();
  await expect(area.locator('.custom-calendar>button')).toHaveCount(20);
  await area.getByRole('button',{name:'Год',exact:true}).click();await expect(area.locator('.calendar-mini')).toHaveCount(2);
  await expect(area.locator('.calendar-mini').first().getByRole('button')).toHaveCount(20);
  await expect(area.locator('.calendar-mini').last().getByRole('button')).toHaveCount(25);
- await page.screenshot({path:info.outputPath('custom-year-after.png'),animations:'disabled'});
+ if(process.env.CALENDAR_VISUAL)await page.screenshot({path:info.outputPath('custom-year-after.png'),animations:'disabled'});
  const after=await(await request.get(`/api/saves/${s.save}`)).json();expect(after.state.world_clock.projection.date).toBe('0042-02-25');
 });
 test('T10-T13 separate family, known empty family, secrecy and accessible graph',async({page,request},info)=>{
