@@ -1,6 +1,4 @@
 """Selection/gate regression tests; no application behavior is mocked or weakened."""
-import importlib.util
-import json
 from pathlib import Path
 import sys
 import pytest
@@ -49,7 +47,7 @@ def test_smoke_cannot_disappear():
 
 
 def reports():
-    rows = [dict(file=f, project=p, status='passed', retry=0) for p in ['desktop', 'mobile'] for f in POLICY['smoke']]
+    rows = [dict(file=f, project=p, status='passed', retry=0, title=POLICY['critical_tests'][f]) for p in ['desktop', 'mobile'] for f in POLICY['smoke']]
     return [dict(status='passed', rows=rows[i::4]) for i in range(4)]
 
 
@@ -72,3 +70,10 @@ def test_gate_rejects_missing_empty_skipped_smoke_and_retry():
         elif mutation == 'empty': data[0]['rows'] = []
         else: data[0]['rows'][0]['retry'] = 1
         with pytest.raises(ValueError): validate(data)
+
+
+def test_other_passes_cannot_mask_skipped_critical_scenario():
+    data = reports()
+    data[0]['rows'][0]['title'] = 'some other test in the same file'
+    with pytest.raises(ValueError, match='critical scenario missing'):
+        validate(data)

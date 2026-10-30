@@ -16,6 +16,11 @@ def validate(reports, expected_reports=4):
         missing = set(POLICY['smoke']) - passed
         if missing:
             raise ValueError(f'{project}: critical suites did not execute successfully: {sorted(missing)}')
+    for project in ('desktop', 'mobile'):
+        for file, title in POLICY['critical_tests'].items():
+            if not any(r['project'] == project and r['file'] == file and
+                       r['status'] == 'passed' and r.get('title', '').endswith(title) for r in rows):
+                raise ValueError(f'{project}: critical scenario missing/skipped: {file} / {title}')
     if any(r['status'] not in ('passed', 'skipped') or r['retry'] for r in rows):
         raise ValueError('Unexpected failures or retries')
     return len(rows)
