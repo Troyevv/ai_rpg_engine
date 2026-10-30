@@ -54,12 +54,13 @@ test('menu: all destinations, draft, anchor, nested Back and workspace state',as
  await nav(page,'Персонажи');await nav(page,'Родословная');
  await expect(page.locator('.save-workspace h1')).toHaveText('Родословная');
  await page.evaluate(()=>history.back());await expect(page.locator('.save-workspace')).toHaveCount(0);
- await page.locator('.current-game-entry button').click();
- await page.getByRole('dialog').getByRole('button',{name:'Календарь',exact:true}).click();
+ // Calendar is a primary navigation destination, not a Current Game tab (#154).
+ await nav(page,'Календарь');
+ await expect(page.locator('.save-workspace h1')).toHaveText('Календарь');
  await expect(page.locator('.save-workspace')).toHaveCount(1);
  await page.keyboard.press('Escape');
  await expect(page.locator('.save-workspace')).toHaveCount(0);
- await expect(page.locator('.current-game-entry button')).toBeFocused();
+ await expect(page.getByRole('button',{name:'Меню игры',exact:true})).toBeFocused();
  await nav(page,'Создать');await expect(page.locator('.world-workshop')).toBeVisible();
  await menu(page);await page.locator('.mobile-menu-resume').click();await expect(page.locator('.game')).toBeVisible();
  await nav(page,'Настройки');await expect(page.locator('.settings-dialog')).toBeVisible();await page.keyboard.press('Escape');
