@@ -32,11 +32,17 @@ test('known partners, keyboard/touch, nested Back, tabs, search and scroll',asyn
  await page.goBack();await expect(d.getByRole('combobox',{name:'Персонаж',exact:true})).toHaveAttribute('data-value','qa_kirill');
  // Existing relationship links keep their tab and local scroll on return.
  await d.getByRole('tab',{name:'Отношения',exact:true}).click();
- const link=d.locator('.dossier-person').first();await link.scrollIntoViewIfNeeded();
+ const relation=d.locator('.relationship-card[data-source="qa_kirill"][data-target="qa_vera"]');
+ await expect(relation).toHaveCount(1);
+ const link=relation.getByRole('button',{name:'Открыть досье: Вера Ларина',exact:true});
+ await link.scrollIntoViewIfNeeded();
  const scroll=await d.locator('.inspector-scroll').evaluate(el=>el.scrollTop);
  await link.click();await expect(d.getByRole('tab',{name:'Обзор',exact:true})).toHaveAttribute('aria-selected','true');
+ await expect(d.getByRole('combobox',{name:'Персонаж',exact:true})).toHaveAttribute('data-value','qa_vera');
  await page.keyboard.press('Escape');await expect(d.getByRole('tab',{name:'Отношения',exact:true})).toHaveAttribute('aria-selected','true');
+ await expect(d.getByRole('combobox',{name:'Персонаж',exact:true})).toHaveAttribute('data-value','qa_kirill');
  await expect.poll(()=>d.locator('.inspector-scroll').evaluate(el=>el.scrollTop)).toBe(scroll);
+ await expect(link).toBeFocused();
  await page.keyboard.press('Escape');await nav(page,'Сцена');
  await d.locator('.inspector-person-row').filter({hasText:'Кирилл Ларин'}).click();
  await partner(page,'qa_vera').click();await page.keyboard.press('Escape');

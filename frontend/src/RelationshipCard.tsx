@@ -25,6 +25,7 @@ export function RelationshipPair({
       <button
         type="button"
         className="relationship-person"
+        data-dossier-link={JSON.stringify([source, target, id])}
         disabled={!onCharacter}
         onClick={() => onCharacter?.(id)}
         aria-label={`Открыть досье: ${c.name}`}

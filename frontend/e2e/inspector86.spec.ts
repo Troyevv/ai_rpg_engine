@@ -178,14 +178,41 @@ test("real directed filters, thread statuses, memory search and scene save retry
   await page.goto("/");
   await nav(page, "Отношения");
   const area = page.locator(".inspector-workspace");
-  await expect(area.locator(".inspector-relation")).toHaveCount(2);
+  // The shared card also exists in the collapsed editor. Only the main
+  // projection belongs to the direction/search filter under test.
+  const relations = area.locator(".inspector-stack > .inspector-relation");
+  const editor = area.locator(".inspector-editor-disclosure");
+  const actor = before.state.controlled_actor_id;
+  const canonical = Object.values(before.state.world.relationships) as {
+    source_id: string; target_id: string;
+  }[];
+  const pairs = (rows: typeof canonical) => rows.map(r => `${r.source_id}->${r.target_id}`).sort();
+  const outgoing = pairs(canonical.filter(r => r.source_id === actor));
+  const incoming = pairs(canonical.filter(r => r.target_id === actor));
+  const renderedPairs = () => relations.evaluateAll(rows => rows.map(r =>
+    `${r.getAttribute("data-source")}->${r.getAttribute("data-target")}`).sort());
+  expect(outgoing).toEqual(["qa_kirill->qa_timur", "qa_kirill->qa_vera"]);
+  expect(incoming).toEqual(["qa_oleg->qa_kirill", "qa_vera->qa_kirill"]);
+  await expect(relations).toHaveCount(2);
+  await expect.poll(renderedPairs).toEqual(outgoing);
+  // Explain the former broad selector's extra matches: two non-visible editor
+  // representations of these same API records, not additional logical edges.
+  await expect(editor).not.toHaveAttribute("open");
+  const editorRelations = editor.locator(".inspector-relation");
+  await expect(editorRelations).toHaveCount(2);
+  await expect(editorRelations.first()).toBeHidden();
+  expect(await editorRelations.evaluateAll(rows => rows.map(r =>
+    `${r.getAttribute("data-source")}->${r.getAttribute("data-target")}`).sort())).toEqual(outgoing);
+  await expect(area.locator(".inspector-relation:visible")).toHaveCount(2);
   await area.getByRole("button", { name: "От других", exact: true }).click();
-  await expect(
-    area.locator(".inspector-relation").filter({ hasText: "не согласна" }),
-  ).toContainText("-20");
-  await expect(
-    area.locator(".inspector-relation").filter({ hasText: "не согласна" }),
-  ).toContainText("45");
+  await expect(relations).toHaveCount(2);
+  await expect.poll(renderedPairs).toEqual(incoming);
+  const reverse = relations.filter({has: page.locator('[data-dimension="respect"]')}).filter({hasText:"не согласна"});
+  await expect(reverse).toHaveCount(1);
+  await expect(reverse).toHaveAttribute("data-source", "qa_vera");
+  await expect(reverse).toHaveAttribute("data-target", "qa_kirill");
+  await expect(reverse.locator('[data-dimension="trust"] meter')).toHaveAttribute("value", "-20");
+  await expect(reverse.locator('[data-dimension="respect"] meter')).toHaveAttribute("value", "45");
   await nav(page, "Сюжет");
   await area.getByRole("button", { name: "На паузе", exact: true }).click();
   await expect(area.locator(".inspector-thread")).toHaveCount(1);
