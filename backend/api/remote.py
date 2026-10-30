@@ -26,6 +26,24 @@ class Dispatch(Credential):
 
 
 def install(app, repo):
+    @app.get("/api/saves/{sid}/correspondence")
+    def correspondence(sid: int):
+        from backend.runtime_v3.remote import correspondence_projection
+        return correspondence_projection(repo.get_snapshot(sid))
+
+    @app.post("/api/saves/{sid}/correspondence")
+    def correspondence_action(sid: int, body: Command):
+        from backend.runtime_v3.remote import correspondence_projection
+        from backend.runtime_v3.remote_models import HISTORICAL_CHANNELS
+        snapshot = repo.get_snapshot(sid)
+        cmd = body.command
+        event = snapshot['world_state']['remote_events'].get(cmd.event_id, {})
+        if not (cmd.action == 'send' and cmd.channel in HISTORICAL_CHANNELS or
+                cmd.action == 'read' and event.get('channel') in HISTORICAL_CHANNELS):
+            raise ValueError('Ожидается отправка или открытие письма.')
+        repo.remote_action(sid, body.revision, cmd.model_dump())
+        return correspondence_projection(repo.get_snapshot(sid))
+
     @app.post("/api/saves/{sid}/phone")
     def action(sid: int, body: Command):
         repo.remote_action(sid, body.revision, body.command.model_dump())

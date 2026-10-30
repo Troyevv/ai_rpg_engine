@@ -445,7 +445,19 @@ def create_app(db_path=None, recover=True):
 
     @app.get('/api/saves/{sid}/accounting')
     def accounting(sid: int):
-        return repo.accounting(sid)
+        value = repo.accounting(sid)
+        if repo.uses_private_transport(sid):
+            def public_request(row):
+                result = {k:v for k,v in row.items() if k not in ('messages','response_text','diagnostics')}
+                result.update(messages=[], response_text=None, diagnostics={'estimated_tokens':row.get('diagnostics',{}).get('estimated_tokens',0), 'parts':[]})
+                return result
+            value['requests'] = [public_request(r) for r in value['requests']]
+            for turn in value['turns']:
+                turn['requests'] = [public_request(r) for r in turn['requests']]
+                turn['repairs'] = []
+                turn['warnings'] = []
+                turn['derivations'] = []
+        return value
 
     @app.post('/api/saves/{sid}/sessions')
     def new_session(sid: int):
@@ -465,7 +477,11 @@ def create_app(db_path=None, recover=True):
     def archive(sid: int):
         repo.get_save(sid)
         with repo.connect() as db:
-            return [dict(r) for r in db.execute('SELECT * FROM archived_turns WHERE save_id=? ORDER BY id', (sid,))]
+            rows = [dict(r) for r in db.execute('SELECT * FROM archived_turns WHERE save_id=? ORDER BY id', (sid,))]
+        if repo.uses_private_transport(sid):
+            rows = [{**{k:v for k,v in row.items() if k in ('id','save_id','created_at','reason')},
+                     'payload':json.dumps({k:v for k,v in json.loads(row['payload']).items() if k in ('sequence','user_text','assistant_text')},ensure_ascii=False)} for row in rows]
+        return rows
 
     @app.get('/api/settings/{profile}')
     def settings(profile: str):

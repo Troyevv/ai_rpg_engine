@@ -97,6 +97,7 @@ def physical_choice_source(turns, state, after_for=None):
 def visible_changes(changes, state, actor):
     """Read-only diagnostics summary must not preload unread phone consequences."""
     from copy import deepcopy
+    from backend.runtime_v3.models import identity
     from backend.runtime_v3.remote import commitment_visible, authored_record_visible
     result=deepcopy(changes)
     raw=result.get('raw_turn_result', {})
@@ -107,6 +108,16 @@ def visible_changes(changes, state, actor):
         if 'intentions_updates' in r:
             r['intentions_updates']=[v for v in r['intentions_updates'] if authored_record_visible(state,v,actor)]
     upserts=result.get('state_patch',{}).get('upserts',{})
+    from backend.runtime_v3.remote_models import HISTORICAL_CHANNELS
+    for event in upserts.get('remote_events', {}).values():
+        if event.get('channel') in HISTORICAL_CHANNELS:
+            event.pop('content', None)
+    # Facts acquired from correspondence are available only through Knowledge;
+    # diagnostic patches must not expose another actor's private read.
+    private_facts = {identity('communicated_text', e['id']) for e in state.get('remote_events', {}).values()
+                     if e['channel'] in HISTORICAL_CHANNELS and actor != e['sender_id'] and actor not in e['read_by']}
+    if 'facts' in upserts:
+        upserts['facts'] = {k:v for k,v in upserts['facts'].items() if k not in private_facts}
     if 'scheduled_events' in upserts:
         upserts['scheduled_events']={k:v for k,v in upserts['scheduled_events'].items() if commitment_visible(state,v,actor)}
     for c in upserts.get('characters',{}).values():

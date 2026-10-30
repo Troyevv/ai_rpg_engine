@@ -322,7 +322,12 @@ class ExtractionContextBuilder:
         saved = (prompts or {}).get('state_update_prompt.md', {}).get('content')
         # Preserve user overrides, but do not send the bundled generic contract twice.
         rules = (saved + '\n' if saved and saved.strip() != default.strip() else '') + EXTRACTION_CONTRACT
+        from backend.services.letter_sources import enabled as historical_enabled
+        historical = historical_enabled(snapshot['world_state'])
         if current.get('communication'): rules += REMOTE_EXTRACTION_CONTRACT
+        if historical:
+            from backend.runtime_v3.context_contract import HISTORICAL_EXTRACTION_CONTRACT
+            rules += HISTORICAL_EXTRACTION_CONTRACT
         if current.get('relationship_evidence'):
             from backend.runtime_v3.context_contract import RELATIONSHIP_EVIDENCE_CONTRACT
             rules += RELATIONSHIP_EVIDENCE_CONTRACT
@@ -342,7 +347,7 @@ class ExtractionContextBuilder:
                        block('Choice context / controlled actor', choice_context(snapshot, scope, current, views, kind)),
                        block('Entity IDs', [dict(id=c['id'], name=c['name'], aliases=c.get('aliases', []))
                             for c in snapshot['character_cards'] if c['id'] in scope.relevant_actor_ids]),
-                       block('JSON Schema', prompt_schema(elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
+                       block('JSON Schema', prompt_schema(historical=historical, elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
 
 
 def choice_context(snapshot, scope, current, views, kind):
@@ -455,7 +460,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     scope = RelevanceResolver().resolve(snapshot, user_text, all_views[-3:], world_history, extraction_text)
     observer = scope.pov_actor_id or scope.controlled_actor_id
     remote_private = {identity('communicated_text', e['id']) for e in state.get('remote_events', {}).values()
-                      if e['channel']=='TEXT_MESSAGE' and observer not in e['read_by'] and observer != e['sender_id']}
+                      if e['channel']!='VOICE_CALL' and observer not in e['read_by'] and observer != e['sender_id']}
     scope.fact_ids = [fid for fid in scope.fact_ids if fid not in remote_private]
     scope.knowledge_ids = [key for key in scope.knowledge_ids if state['knowledge'][key]['fact_id'] not in remote_private]
     from backend.runtime_v3.scope import string_ids
@@ -487,6 +492,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         ('letter', 'courier', 'telegram', 'landline', 'magic') if cfg.get(key)})
     delivery = {key: value for key,value in cfg.get('delivery_policy', {}).items() if cfg.get(key)}
     if delivery: current['communication_capabilities']['delivery_policy'] = delivery
+    if cfg.get('delivery_minutes'): current['communication_capabilities']['delivery_minutes'] = cfg['delivery_minutes']
     if cfg.get('author_note'): current['communication_capabilities']['author_note'] = cfg['author_note']
     if cfg['voice_call']:
         current['communication_capabilities']['ring_timeout_minutes'] = cfg['ring_timeout_minutes']
@@ -574,8 +580,20 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     messages.insert(0, dict(role='system', content='Постоянные правила\n'+rules))
     messages.append(block('Текущий ввод', dict(kind=kind, player_input=user_text)))
     if extraction_text is not None: messages.append(block('completed_narrative', extraction_text))
+    # Authoring support participates in the same token budget as every other
+    # Narrative source. It must never be appended after context selection.
+    from backend.services.letter_sources import enabled as letters_enabled, author_context
+    letter_context_index = None
+    if not builder.extraction and letters_enabled(state):
+        letter_context_index = len(messages)
+        messages.append(author_context(state))
     hard_context_limit = context_length - reserve - 256
     target = min(target_context_budget, hard_context_limit)
+    if letter_context_index is not None:
+        for limit in range(5, -1, -1):
+            if estimate(messages) <= target: break
+            messages[letter_context_index] = author_context(state, limit)
+
 
     def replace_block(title, value):
         for i, message in enumerate(messages):

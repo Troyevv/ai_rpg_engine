@@ -1,4 +1,5 @@
 """Strict persisted models; no historical pointers in the current world."""
+import json
 from copy import deepcopy
 from dataclasses import dataclass, field
 from hashlib import sha256
@@ -665,7 +666,10 @@ def assert_world_state_v3_invariants(state, before=None):
     try:
         value = WorldStateV3.model_validate(state).model_dump()
     except ValidationError as exc:
-        fatal(str(exc), 'current_state_schema_invalid')
+        # A nested error may contain a sealed letter (or another private fact).
+        # Keep actionable structural paths/types, never serialize input values.
+        details = [{'loc': list(e['loc']), 'type': e['type']} for e in exc.errors(include_input=False, include_context=False)]
+        fatal('Некорректная схема WorldState: ' + json.dumps(details, ensure_ascii=False), 'current_state_schema_invalid')
     actors, locations = value['characters'], value['locations']
     meta = value['meta']
     if meta['current_protagonist_id'] is not None and meta['current_protagonist_id'] not in actors:

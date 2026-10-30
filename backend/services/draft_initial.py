@@ -151,7 +151,7 @@ def prompt_schema():
     schema['properties']['world']['properties'].pop('contacts', None)
     # Explicit communication profile is injected by code, never generated twice.
     communication=schema['properties']['world']['properties']['communication']['properties']
-    for key in ('profile_version','preset','letter','courier','telegram','landline','magic','delivery_policy','author_note'):
+    for key in ('profile_version','preset','letter','courier','telegram','landline','magic','delivery_policy','delivery_minutes','author_note'):
         communication.pop(key,None)
     profile=schema['properties']['world_clock']['properties']['calendar']['properties']['profile']
     for field in ('regional','regional_overrides','seasons_enabled'):

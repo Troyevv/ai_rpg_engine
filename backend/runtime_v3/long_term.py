@@ -202,7 +202,7 @@ def plan(snapshot, request, history=None):
     ):
         recipients = (
             message["read_by"]
-            if message["channel"] == "TEXT_MESSAGE"
+            if message["channel"] != "VOICE_CALL"
             else message["recipient_ids"]
             if message["status"] in ("answered", "ended")
             else []
@@ -529,15 +529,10 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 pacing_decision=group_policy,
             )
             report["llm_calls"] += 1
-            narrative = "".join(
-                generate(
-                    "long_term_narrative",
-                    messages,
-                    config.get("max_tokens", 2000),
-                    config.get("temperature", 0.8),
-                    context_key=[c.id for c in group],
-                )
-            )
+            from backend.services.letter_sources import generate_result
+            narrative, artifacts = generate_result(generate, "long_term_narrative", messages,
+                config.get("max_tokens", 2000), config.get("temperature", 0.8), camera['world_state'],
+                context_key=[c.id for c in group])
             if cancelled is not None and cancelled.is_set():
                 return None
             if not narrative.strip():
@@ -614,6 +609,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 camera["world_state"],
                 narrative,
                 "",
+                letter_sources=artifacts,
                 turn_id=turn,
                 observed=False,
                 mode="background",
@@ -666,6 +662,10 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
             claims = {e["id"]: e for e in raw.records["events"] if isinstance(e, dict)}
             accepted_ids = set()
             for event in resolved.history["events"]:
+                # Remote delivery/read receipts are canonical audit events, not
+                # additional literary claims with local Extraction IDs.
+                if event.get('remote_interaction_id'):
+                    continue
                 links = claims[event["local_id"]]["advance_candidate_ids"]
                 event["advance_source_ids"] = [
                     c.source_id for c in group if c.id in links
@@ -686,7 +686,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                     candidate_ids=sorted(accepted_ids),
                     minute=minute,
                     event_ids=[e["id"] for e in resolved.history["events"]],
-                    summaries=[e["text"] for e in resolved.history["events"]],
+                    summaries=[e["text"] for e in resolved.history["events"] if not e.get("remote_interaction_id")],
                 )
             )
             report["diagnostics"].extend(resolved.warnings)

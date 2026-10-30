@@ -71,7 +71,12 @@ def ui_view(snapshot, history=None):
         world['characters'][cid]=dict(c,age=age_on(c.get('birth_date'),current_time(state)['date'],profile_of(state)),goals=active_texts(c['goals']),intentions=active_texts(c['intentions']),obligations=active_texts(c['obligations']),lifecycle={k:c[k] for k in ('goals','intentions','obligations')},location=place(c['location_id']) if c['location_id'] else None,
             scene_id=sid if cid in camera['present_character_ids'] else 'view:'+c['location_id'] if c['location_id'] else None,
             minute=now,last_event_id=None,short_goal='\n'.join(active_texts(c['goals'])))
-    for fid,f in state['facts'].items():world['facts'][fid]=dict(f,secret=f['visibility']=='secret',evidence=[])
+    from backend.runtime_v3.remote_models import HISTORICAL_CHANNELS
+    private_facts = {identity('communicated_text', e['id']) for e in state['remote_events'].values()
+                     if e['channel'] in HISTORICAL_CHANNELS and camera['controlled_actor_id'] != e['sender_id'] and camera['controlled_actor_id'] not in e['read_by']}
+    for fid,f in state['facts'].items():
+        if fid not in private_facts: world['facts'][fid]=dict(f,secret=f['visibility']=='secret',evidence=[])
+    world['knowledge']={k:v for k,v in world['knowledge'].items() if v['fact_id'] not in private_facts}
     from backend.runtime_v3.remote import visible_commitments
     for eid,e in visible_commitments(state,camera['controlled_actor_id'],history).items():
         view = commitment_view(state, e)
@@ -187,7 +192,7 @@ def ui_view(snapshot, history=None):
     # subview, otherwise a hidden condition resurfaces through fact text/counts.
     # This deliberately does not change the public family directory.
     protected |= {c['fact_id'] for c in state.get('conditions',{}).values() if c.get('fact_id')}
-    protected |= {identity('communicated_text',e['id']) for e in state.get('remote_events',{}).values() if e['channel']=='TEXT_MESSAGE' and observer != e['sender_id']}
+    protected |= {identity('communicated_text',e['id']) for e in state.get('remote_events',{}).values() if e['channel']!='VOICE_CALL' and observer != e['sender_id']}
     hidden_facts={fid for fid in protected if state['knowledge'].get(str(observer)+':'+fid,{}).get('status')!='known'}
     world['facts']={k:v for k,v in world['facts'].items() if k not in hidden_facts}
     result['facts']=[f for f in result['facts'] if f['id'] not in hidden_facts]
