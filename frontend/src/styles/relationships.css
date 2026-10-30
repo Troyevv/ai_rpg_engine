@@ -1,0 +1,230 @@
+.relationship-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.relationship-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.relationship-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  background: none;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  padding: 0;
+}
+.relationship-person:disabled {
+  opacity: 1;
+  cursor: default;
+}
+.relationship-person span:last-child {
+  min-width: 0;
+  font-weight: 650;
+}
+.relationship-person:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 8px;
+}
+.relationship-context {
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  max-height: 22rem;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+.relationship-card .inspector-metric > div {
+  font-size: 0.85rem;
+}
+.relationship-card .inspector-metric meter {
+  height: 9px;
+}
+.relationship-card .inspector-card-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+}
+.relationship-card .inspector-card-footer p {
+  margin-right: auto;
+}
+.relationship-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.relationship-tools label {
+  flex: 1 1 160px;
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+.relationship-tools input,
+.relationship-tools select,
+.relationship-fields select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.relationship-editor {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.dialog-content.relationship-dialog {
+  width: min(760px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 24px;
+  gap: 16px;
+}
+.relationship-dialog .dialog-header {
+  flex: none;
+  padding-right: 20px;
+  margin-bottom: 0;
+}
+.relationship-form-scroll {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 2px 6px 10px;
+  scrollbar-gutter: stable;
+  overflow-wrap: anywhere;
+}
+.relationship-fields {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+}
+.relationship-fields > label {
+  display: grid;
+  gap: 6px;
+}
+.relationship-fields textarea {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  line-height: 1.6;
+}
+.relationship-dimensions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 155px), 1fr));
+  gap: 12px;
+}
+.relationship-dialog .relationship-dimension {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  margin: 0;
+}
+.relationship-dialog .relationship-dimension input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  font: inherit;
+}
+.relationship-dialog .relationship-dimension small {
+  color: var(--text-muted);
+}
+.relationship-form-actions {
+  display: flex;
+  flex: none;
+  gap: 10px;
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.relationship-form-actions button {
+  min-height: 44px;
+  white-space: normal;
+}
+.relationship-discard {
+  padding: 14px;
+  border: 1px solid var(--warning);
+  border-radius: 12px;
+  margin-top: 12px;
+}
+.relationship-discard .actions {
+  flex-wrap: wrap;
+}
+@media (max-width: 600px) {
+  .relationship-card {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .relationship-person {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .relationship-pair {
+    gap: 8px;
+  }
+  .dialog-content.relationship-dialog {
+    padding: 18px 12px;
+    gap: 12px;
+  }
+  .relationship-form-actions > * {
+    flex: 1;
+  }
+  .relationship-dimensions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .relationship-dialog .relationship-dimension {
+    padding: 8px;
+  }
+}
+
+.relationship-dialog .relationship-fields > label {
+  margin: 0;
+}
+.relationship-dialog .relationship-dimension {
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: stretch;
+  align-items: start;
+  font-size: 0.9rem;
+}
+.relationship-dialog .relationship-dimension input {
+  margin: 0;
+}
+.relationship-tools label {
+  margin: 0;
+}
+.relationship-tools input {
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  color: var(--text);
+  font: inherit;
+}
+.relationship-tools select {
+  min-height: 44px;
+}
+.relationship-tools input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

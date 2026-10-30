@@ -142,7 +142,7 @@ export default function App() {
   selectedRef.current = selection;
   const refresh = useCallback(() => {
     if (!selection.world) return;
-    Promise.all([
+    return Promise.all([
       api<World>(`/worlds/${selection.world}`),
       selection.save
         ? api<Save>(`/saves/${selection.save}`)
@@ -154,7 +154,7 @@ export default function App() {
           setSave(s);
         }
       })
-      .catch((e) => toast.error(e.message));
+      .catch((e) => { toast.error(e.message); return false; });
   }, [selection]);
   useEffect(() => {
     localStorage.setItem("selection", JSON.stringify(selection));

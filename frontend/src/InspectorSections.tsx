@@ -31,7 +31,8 @@ import { Markdown } from "./Markdown";
 import { Reveal, brief } from "./InspectorViews";
 import { SocialStateView } from "./SocialStateView";
 import { RelationshipEditor } from "./RelationshipEditor";
-import { relationshipLabel } from "./lib/relationships";
+import {RelationshipCard} from "./RelationshipCard";
+import {relationshipRows} from "./lib/relationshipRows";
 import { worldTime } from "./lib/worldTime";
 import { socialLabel } from "./lib/social";
 import { gameLocale } from "./gameDate";
@@ -756,32 +757,7 @@ export function RelationsSection(props: Props & { refresh: () => void }) {
   const [person, setPerson] = useState(controlled || "");
   const [query, setQuery] = useState("");
   const [direction, setDirection] = useState("out");
-  const structured = Object.values(state.world?.relationships || {});
-  const rows = structured.map((r) => ({
-    source: r.source_id,
-    target: r.target_id,
-    text: r.context,
-    dimensions: r.dimensions,
-    change: state.relationships.find(
-      (v) => v.source_id === r.source_id && v.target_id === r.target_id,
-    )?.change,
-  }));
-  for (const r of state.relationships)
-    if (
-      !structured.some(
-        (x) =>
-          x.source_id === r.source_id &&
-          (x.target_id === r.target_id ||
-            nameOf(state, x.target_id) === r.target_name),
-      )
-    )
-      rows.push({
-        source: r.source_id,
-        target: r.target_id || r.target_name || it("unknown"),
-        text: r.text,
-        dimensions: {},
-        change: r.change,
-      });
+  const rows=relationshipRows(state).map(r=>({...r,source:r.source_id,target:r.target_id,text:r.context}));
   const filtered = rows.filter(
     (r) =>
       (!person ||
@@ -825,59 +801,7 @@ export function RelationsSection(props: Props & { refresh: () => void }) {
         <Bounded
           rows={filtered}
           render={(r, i) => (
-            <article
-              key={`${r.source}:${r.target}:${i}`}
-              className="inspector-card inspector-relation"
-            >
-              <div>
-                <div className="inspector-pair">
-                  <People {...props} ids={[r.source]} />
-                  <ArrowRight size={15} />
-                  <People {...props} ids={[r.target]} />
-                </div>
-                <h2>
-                  {nameOf(state, direction === "in" ? r.source : r.target)}
-                </h2>
-                <Markdown text={r.text} />
-              </div>
-              <div className="inspector-metrics">
-                {Object.entries(r.dimensions).map(([key, value]) => (
-                  <div key={key} data-dimension={key} className="inspector-metric">
-                    <div>
-                      <span>{relationshipLabel(key)}</span>
-                      <strong>
-                        {typeof value === "number" ? value : it("change")}
-                      </strong>
-                    </div>
-                    {typeof value === "number" ? (
-                      <meter
-                        min={-100}
-                        max={100}
-                        value={value}
-                        aria-label={`${relationshipLabel(key)}: ${value}; ${it("range")}`}
-                      />
-                    ) : (
-                      <p>
-                        {value.direction === "up"
-                          ? "↑"
-                          : value.direction === "down"
-                            ? "↓"
-                            : "→"}{" "}
-                        {value.reason}
-                      </p>
-                    )}
-                  </div>
-                ))}
-                {Object.values(r.dimensions).some(
-                  (v) => typeof v === "number",
-                ) && <small className="muted">{it("range")}</small>}
-              </div>
-              {r.change && (
-                <footer className="inspector-card-footer">
-                  {r.change.direction === "up" ? "↑" : "↓"} {r.change.reason}
-                </footer>
-              )}
-            </article>
+            <RelationshipCard key={`${r.source}:${r.target}:${i}`} state={state} relation={r} saveId={save?.id} onCharacter={props.onCharacter} change={r.change}/>
           )}
         />
       </div>
