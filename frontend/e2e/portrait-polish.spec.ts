@@ -1,8 +1,8 @@
-import {test,expect,type Page,type APIRequestContext} from '@playwright/test';
+import {test,expect,type Page,type APIRequestContext,type Locator} from '@playwright/test';
 import {nav,actor,pickCharacter} from './navigation';
-const evidence=process.env.PORTRAIT_EVIDENCE||'../docs/manual_qa/narrative_v4/pr121-polish-evidence';
+const evidence=process.env.PORTRAIT_EVIDENCE||'/tmp/portrait-polish-evidence';
 const phase=process.env.PR121_BEFORE?'before':'after';
-test.use({video:'on'});
+test.use({video:'off'});
 async function seed(page:Page,request:APIRequestContext,hidden=false){
  const r=await request.post(`/test/phone-seed?incoming=false&polish=true&hidden=${hidden}`);expect(r.ok(),await r.text()).toBeTruthy();const s=await r.json();
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),s);return s;
@@ -13,6 +13,26 @@ async function upload(page:Page,request:APIRequestContext,s:any){
   const data=await page.evaluate(i=>{const c=document.createElement('canvas');c.width=300;c.height=400;const x=c.getContext('2d')!;x.fillStyle=['#3478aa','#b64e76','#548756'][i];x.fillRect(0,0,300,400);x.fillStyle='#f8e0c5';x.beginPath();x.arc(150,140,70,0,Math.PI*2);x.fill();x.fillStyle='#233042';x.fillRect(60,220,180,180);x.fillStyle='white';x.font='48px sans-serif';x.fillText(['К','В','Т'][i],132,315);return c.toDataURL('image/png').split(',')[1]},i);
   const save=await(await request.get(`/api/saves/${s.save}`)).json();
   const r=await request.post(`/api/saves/${s.save}/characters/${cid}/portraits?revision=${save.revision}`,{data:Buffer.from(data,'base64'),headers:{'Content-Type':'image/png'}});expect(r.ok(),await r.text()).toBeTruthy();
+ }
+}
+// #158 keeps portraits in identity surfaces, not in every message bubble.
+async function portrait(image:Locator,cid:string){
+ await expect(image).toHaveCount(1);
+ await expect(image).toHaveAttribute('src',new RegExp(`/${cid}/`));
+ await image.scrollIntoViewIfNeeded();
+ await expect(image).toBeVisible();
+ await expect.poll(()=>image.evaluate((e:HTMLImageElement)=>e.complete&&e.naturalWidth>0)).toBe(true);
+}
+async function authors(phone:Locator,request:APIRequestContext,saveId:number,ids:string[],group=false){
+ const save=await(await request.get(`/api/saves/${saveId}`)).json();
+ const messages=phone.locator('.phone-message');await expect(messages).toHaveCount(ids.length);
+ for(const [i,cid] of ids.entries()){
+  const message=messages.nth(i),id=await message.getAttribute('data-event-id');
+  const event=save.state.phone.events.find((e:any)=>e.id===id);
+  expect(event).toBeTruthy();expect(event.sender.id).toBe(cid);
+  expect(event.outgoing).toBe(cid===save.state.phone.actor_id);
+  await expect(message).toHaveClass(new RegExp(event.outgoing?'outgoing':'incoming'));
+  if(group&&!event.outgoing)await expect(message.locator('.phone-message-sender')).toHaveText(event.sender.name);
  }
 }
 for(const width of [360,393,768,1440])test(`polish visual matrix ${width}`,async({page,request},info)=>{
@@ -43,24 +63,24 @@ for(const width of [360,393,768,1440])test(`polish visual matrix ${width}`,async
  await upload(page,request,s);
  for(const skin of ['graphite','parchment']){
  await request.put(`/api/worlds/${s.world}/presentation`,{data:{theme_id:skin}});await page.reload();const d=await dossier(page);await pickCharacter(page,'qa_kirill');await d.getByRole('tab',{name:'Обзор',exact:true}).click();
- await expect.poll(()=>d.locator('.portrait-control img').evaluate((e:HTMLImageElement)=>e.complete&&e.naturalWidth>0)).toBe(true);
+ await portrait(d.locator('.portrait-control img'),'qa_kirill');
  await page.screenshot({path:`${evidence}/${phase}-${width}-${skin}-uploaded.png`});await page.keyboard.press('Escape');
  await page.getByRole('button',{name:/^Телефон/}).click();const phone=page.getByRole('region',{name:'Телефон персонажа'});
- await phone.getByRole('button',{name:'Переписки',exact:true}).click();await phone.getByRole('button').filter({hasText:'Вера Ларина'}).click();
+ await phone.getByRole('button',{name:'Контакты',exact:true}).click();
+ for(const [cid,name] of [['qa_vera','Вера Ларина'],['qa_timur','Тимур Серов']])await portrait(phone.locator('.phone-recipient').filter({hasText:name}).locator('img'),cid);
+ await phone.getByRole('button',{name:'Переписки',exact:true}).click();
+ const thread=phone.locator('.phone-thread').filter({hasText:'Вера Ларина'});
+ await portrait(thread.locator('img'),'qa_vera');await thread.click();
  await expect(phone.locator('.phone-message')).toHaveCount(2);
- if(phase==='after'){
-  await expect(phone.locator('.phone-message.outgoing img')).toHaveAttribute('src',new RegExp(`/qa_kirill/`));
-  await expect(phone.locator('.phone-message:not(.outgoing) img')).toHaveAttribute('src',new RegExp(`/qa_vera/`));
- }
+ await portrait(phone.locator('.phone-header-avatar img'),'qa_vera');
+ await authors(phone,request,s.save,['qa_kirill','qa_vera']);
  await expect(phone).not.toContainText('Непрочитанное сообщение');
  await phone.locator('.phone-messages').evaluate(e=>e.scrollTop=0);
- await expect.poll(()=>phone.locator('.phone-message img').evaluateAll(es=>es.every(e=>(e as HTMLImageElement).complete&&(e as HTMLImageElement).naturalWidth>0))).toBe(true);
  await page.screenshot({path:`${evidence}/${phase}-${width}-${skin}-phone-direct.png`});
  await phone.getByRole('button',{name:'К перепискам',exact:true}).click();await phone.getByRole('button').filter({hasText:'Общая переписка'}).click();
  await expect(phone.locator('.phone-message')).toHaveCount(3);
- if(phase==='after')for(const [i,cid] of ['qa_kirill','qa_vera','qa_timur'].entries())await expect(phone.locator('.phone-message').nth(i).locator('img')).toHaveAttribute('src',new RegExp(`/${cid}/`));
+ await authors(phone,request,s.save,['qa_kirill','qa_vera','qa_timur'],true);
  await phone.locator('.phone-messages').evaluate(e=>e.scrollTop=0);
- await expect.poll(()=>phone.locator('.phone-message img').evaluateAll(es=>es.every(e=>(e as HTMLImageElement).complete&&(e as HTMLImageElement).naturalWidth>0))).toBe(true);
  await page.screenshot({path:`${evidence}/${phase}-${width}-${skin}-phone-group.png`});
  if(phase==='after'&&[393,1440].includes(width))for(let i=0;i<3;i++){await phone.locator('.phone-message').nth(i).evaluate(el=>el.scrollIntoView({block:'start'}));await page.screenshot({path:`${evidence}/${phase}-${width}-${skin}-group-author-${i}.png`})}
  await page.keyboard.press('Escape');
@@ -70,6 +90,7 @@ for(const width of [360,393,768,1440])test(`polish visual matrix ${width}`,async
 test('portrait viewer, editor, error recovery, semantic tabs and resize drafts',async({page,request},info)=>{
  test.skip(phase==='before');test.setTimeout(120000);const s=await seed(page,request);await page.goto('/');await upload(page,request,s);await page.reload();
  const d=await dossier(page);const main=d.locator('.portrait-control>.character-avatar');
+ await portrait(main.locator('img'),'qa_kirill');
  await main.click();await expect(page.getByRole('heading',{name:'Портрет в полном размере'})).toBeVisible();await page.keyboard.press('Escape');
  await d.getByRole('button',{name:'Редактировать портрет',exact:true}).click();const editor=page.getByRole('dialog').filter({has:page.getByRole('heading',{name:'Портрет персонажа',exact:true})});
  await expect(editor).toBeVisible();await expect(page.getByRole('heading',{name:'Портрет в полном размере'})).toHaveCount(0);
@@ -92,11 +113,21 @@ test('portrait viewer, editor, error recovery, semantic tabs and resize drafts',
  await page.unroute('**/qa_kirill/portraits/assets/*');await pickCharacter(page,'qa_kirill');await expect(again.locator('.portrait-control img')).toBeVisible();
  await page.evaluate(()=>document.documentElement.style.fontSize='24px');expect(await again.evaluate(e=>e.scrollWidth<=e.clientWidth+1)).toBe(true);
  await page.screenshot({path:`${evidence}/after-${info.project.name}-large-text.png`});
- await page.keyboard.press('Escape');await page.getByRole('button',{name:/^Телефон/}).click();const phone=page.getByRole('region',{name:'Телефон персонажа'});await phone.getByRole('button',{name:'Переписки',exact:true}).click();await phone.locator('button.phone-row').filter({hasText:'Вера Ларина'}).click();await expect(phone.locator('.phone-message.outgoing img')).toHaveAttribute('src',/qa_kirill/);
+ await page.keyboard.press('Escape');await page.getByRole('button',{name:/^Телефон/}).click();const phone=page.getByRole('region',{name:'Телефон персонажа'});await phone.getByRole('button',{name:'Переписки',exact:true}).click();await phone.locator('button.phone-thread').filter({hasText:'Вера Ларина'}).click();await portrait(phone.locator('.phone-header-avatar img'),'qa_vera');
+ await authors(phone,request,s.save,['qa_kirill','qa_vera']);
+ const draft=phone.getByLabel('Сообщение в телефоне');await draft.fill('Черновик после увеличения текста');
+ await page.setViewportSize({width:393,height:800});await expect(draft).toHaveValue('Черновик после увеличения текста');
+ await phone.getByRole('button',{name:'Свернуть телефон',exact:true}).click();
+ await page.getByRole('button',{name:/^Телефон/}).click();
+ await expect(draft).toHaveValue('Черновик после увеличения текста');await portrait(phone.locator('.phone-header-avatar img'),'qa_vera');
+ await page.keyboard.press('Escape');await expect(phone.locator('.phone-conversations')).toBeVisible();
+ const restored=phone.locator('.phone-thread').filter({hasText:'Вера Ларина'});await portrait(restored.locator('img'),'qa_vera');await restored.click();
+ await expect(draft).toHaveValue('Черновик после увеличения текста');await authors(phone,request,s.save,['qa_kirill','qa_vera']);
 });
 
 test('temporary phone owner and real outgoing API use its portrait',async({page,request},info)=>{
  test.skip(phase==='before');const s=await seed(page,request);await page.goto('/');await upload(page,request,s);
+ await page.reload();const owner=await dossier(page);await pickCharacter(page,'qa_vera');await portrait(owner.locator('.portrait-control img'),'qa_vera');await page.keyboard.press('Escape');
  let save=await(await request.get(`/api/saves/${s.save}`)).json();
  const switched=await request.post(`/api/saves/${s.save}/protagonist`,{data:{revision:save.revision,operation_id:'polish-temporary',operation:'temporary',actor_id:'qa_vera'}});expect(switched.ok(),await switched.text()).toBeTruthy();save=await switched.json();
  const sent=await request.post(`/api/saves/${s.save}/phone`,{data:{revision:save.revision,command:{action:'send',operation_id:'polish-owner-send',contact_id:'phone-qa_vera-qa-kirill',content:'Я временный владелец телефона.'}}});expect(sent.ok(),await sent.text()).toBeTruthy();
@@ -116,13 +147,13 @@ test('temporary phone owner and real outgoing API use its portrait',async({page,
   if(value.revision>=readRevision){viewArrived();await viewGate;}
   await route.fulfill({response});
  });
- await page.reload();await page.getByRole('button',{name:/^Телефон/}).click();const phone=page.getByRole('region',{name:'Телефон персонажа'});await phone.getByRole('button',{name:'Переписки',exact:true}).click();await phone.locator('button.phone-row').filter({hasText:'Кирилл Ларин'}).click();
- const message=phone.locator('.phone-message').filter({hasText:'Я временный владелец телефона.'});await expect(message).toContainText('Ты');await expect(message.locator('img')).toHaveAttribute('src',/\/qa_vera\//);
- await expect.poll(()=>message.locator('img').evaluate((e:HTMLImageElement)=>e.complete&&e.naturalWidth>0)).toBe(true);
+ await page.reload();await page.getByRole('button',{name:/^Телефон/}).click();const phone=page.getByRole('region',{name:'Телефон персонажа'});await phone.getByRole('button',{name:'Переписки',exact:true}).click();await phone.locator('button.phone-thread').filter({hasText:'Кирилл Ларин'}).click();
+ const message=phone.locator('.phone-message').filter({hasText:'Я временный владелец телефона.'});await expect(message).toHaveClass(/outgoing/);await expect(message).toHaveAttribute('data-event-id',row.id);
+ await portrait(phone.locator('.phone-header-avatar img'),'qa_kirill');
  await page.screenshot({path:`${evidence}/after-${info.project.name}-temporary-owner.png`});
  await readReady;
  try {
-  await page.keyboard.press('Escape');
+  await phone.getByRole('button',{name:'Свернуть телефон',exact:true}).click();
   const control=info.project.name==='mobile'?page.locator('.mobile-pov button').first():page.getByLabel('Управляемый персонаж',{exact:true});
   await expect(control).toBeDisabled();
   await expect(page.getByRole('button',{name:'Мир без ГГ',exact:true})).toBeDisabled();
@@ -138,7 +169,8 @@ test('temporary phone owner and real outgoing API use its portrait',async({page,
   await actor(page,id,name);
   expect(await page.getByRole('dialog').count()).toBe(0);
  }
- await page.getByRole('button',{name:/^Телефон/}).click();await phone.getByRole('button',{name:'Переписки',exact:true}).click();await phone.locator('button.phone-row').filter({hasText:'Вера Ларина'}).click();await expect(phone.locator('.phone-message.outgoing img').first()).toHaveAttribute('src',/qa_kirill/);
+ await page.getByRole('button',{name:/^Телефон/}).click();await phone.getByRole('button',{name:'Переписки',exact:true}).click();await phone.locator('button.phone-thread').filter({hasText:'Вера Ларина'}).click();await portrait(phone.locator('.phone-header-avatar img'),'qa_vera');
+ await authors(phone,request,s.save,['qa_kirill','qa_vera','qa_vera']);
 });
 
 test('fallback geometry, neutral identity and long text at each size',async({page,request},info)=>{
@@ -166,6 +198,6 @@ test('hidden canonical sender stays anonymous despite public directory and uploa
  test.skip(phase==='before');const s=await seed(page,request,true);await page.goto('/');await upload(page,request,s);await page.reload();
  const saved=await(await request.get(`/api/saves/${s.save}`)).json();expect(saved.state.characters.some((c:any)=>c.id==='qa_timur')).toBe(true);
  const row=saved.state.phone.events.find((e:any)=>e.content===null&&e.conversation_id==='qa-group'&&e.sender.id==='');expect(row.sender).toEqual({id:'',name:'Неизвестный участник',portrait:null,silhouette:'neutral'});
- await page.getByRole('button',{name:/^Телефон/}).click();const phone=page.getByRole('region',{name:'Телефон персонажа'});await phone.getByRole('button',{name:'Переписки',exact:true}).click();await phone.locator('button.phone-row').filter({hasText:'Общая переписка'}).click();
- const message=phone.locator('.phone-message').nth(2);await expect(message).toContainText('Неизвестный участник');await expect(message.locator('img')).toHaveCount(0);await expect(message.locator('svg')).toHaveAttribute('data-silhouette','neutral');await message.scrollIntoViewIfNeeded();await page.screenshot({path:`${evidence}/after-${info.project.name}-hidden-sender.png`});
+ await page.getByRole('button',{name:/^Телефон/}).click();const phone=page.getByRole('region',{name:'Телефон персонажа'});await phone.getByRole('button',{name:'Переписки',exact:true}).click();await phone.locator('button.phone-thread').filter({hasText:'Общая переписка'}).click();
+ const message=phone.locator('.phone-message').nth(2);await expect(message).toContainText('Неизвестный участник');await expect(message.locator('img')).toHaveCount(0);await expect(message.locator('.phone-message-sender')).toHaveText('Неизвестный участник');await expect(message).not.toContainText('Тимур');await message.scrollIntoViewIfNeeded();await page.screenshot({path:`${evidence}/after-${info.project.name}-hidden-sender.png`});
 });
