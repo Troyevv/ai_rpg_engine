@@ -56,7 +56,7 @@ test('six generations retain all supplied relations and fit with fixed portrait 
  for(let i=0;i<18;i+=3)edges.push({id:`test-partners-${i}`,source_id:nodes[i].id,target_id:nodes[i+1].id,kind:'spouse',certainty:'known',status:i===0?'closed':'active',outcome:i===0?'divorced':''});
  await page.route('**/genealogy?*',r=>r.fulfill({json:{nodes,edges,kinship:[],truncated:true}}));
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),s);await page.goto('/');await nav(page,'Родословная');
- const area=page.locator('.save-workspace');await expect(area.locator('.family-node')).toHaveCount(18);await expect(area.locator('.react-flow__edge')).toHaveCount(edges.length);
+ const area=page.locator('.save-workspace');await expect(area.locator('.family-node')).toHaveCount(18);await expect(area.locator('.family-accessible-list>p')).toHaveCount(edges.length);
  await expect(area.locator('.family-generation')).toHaveCount(6);await expect(area).toContainText('Показана часть семьи');
  await area.getByRole('button',{name:'Вся семья',exact:true}).click();
  await expect.poll(()=>area.locator('.family-graph').evaluate(el=>{const a=el.getBoundingClientRect();return [...el.querySelectorAll('.react-flow__node')].every(n=>{const b=n.getBoundingClientRect();return b.left>=a.left&&b.right<=a.right&&b.top>=a.top&&b.bottom<=a.bottom})})).toBe(true);
@@ -77,4 +77,31 @@ test('newborn family opens the standalone tree without mutating the save',async(
  await area.getByRole('button',{name:'Список',exact:true}).click();await expect(area.locator('.family-list-person')).toHaveCount(graph.nodes.length);
  await page.reload();await nav(page,'Родословная');await expect(area.locator('.family-node')).toHaveCount(graph.nodes.length);
  const after=await(await request.get(`/api/saves/${s.save}`)).json();expect(after.state).toEqual(before.state);expect(after.revision).toBe(before.revision);expect(writes).toEqual([]);
+});
+
+test('screenshot family reads without legend and restores the selected central person',async({page,request},info)=>{
+ const {screenshotFamily}=await import('../tests/fixtures/genealogy');
+ const s=await(await request.post('/test/ui-completion-seed?checkpoint=ui-family')).json();
+ await request.put(`/api/worlds/${s.world}/presentation`,{data:{theme_id:info.project.name==='mobile'?'parchment':'graphite'}});
+ await page.route('**/genealogy-roots',r=>r.fulfill({json:screenshotFamily.nodes.map(n=>({id:n.id,name:n.name}))}));
+ await page.route('**/genealogy?*',r=>r.fulfill({json:screenshotFamily}));
+ await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),s);
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await page.setViewportSize({width:info.project.name==='mobile'?393:1440,height:1000});
+ await page.goto('/');await nav(page,'Родословная');const area=page.locator('.save-workspace');
+ await area.getByLabel('Семья персонажа').selectOption('marina');
+ await expect(area.locator('.family-node')).toHaveCount(6);
+ await expect(area.locator('.family-root')).toContainText('Марина Волкова');
+ await expect(area.locator('.react-flow__edge')).toHaveCount(2);
+ await expect(area.locator('.family-connection-label',{hasText:'Брак'})).toBeVisible();
+ await expect(area.locator('.family-connection-label',{hasText:'Общие дети'})).toBeVisible();
+ const care=area.locator('[data-relation-id="care"]');await expect(care).toContainText('Опека');await expect(care).toContainText('Опекун');await expect(care).toContainText('Подопечный');await expect(care).toContainText('Марина Волкова');await expect(care).toContainText('Илья Александров');
+ await expect(area.locator('.family-legend')).toHaveCount(0);
+ await expect(area.locator('.family-accessible-list>p')).toHaveCount(screenshotFamily.edges.length);
+ if(process.env.GENEALOGY_QA==='1'){await area.locator('.family-tree-layout').scrollIntoViewIfNeeded();await page.screenshot({path:`/tmp/161-family-${info.project.name}.png`})}
+ await area.getByRole('button',{name:'В центре родословной: Катя Волкова',exact:true}).click();
+ await expect(area.locator('.family-root')).toContainText('Катя Волкова');await expect(area.locator('.family-root')).toBeInViewport();
+ await area.getByRole('button',{name:'Вернуться в историю',exact:true}).click();await nav(page,'Родословная');
+ await expect(area.getByLabel('Семья персонажа')).toHaveValue('katya');await expect(area.locator('.family-root')).toContainText('Катя Волкова');
+ await area.locator('.family-sibling-summary summary').click();await expect(area.locator('.family-sibling-summary')).toContainText('Соня Величкина');await expect(area.locator('.family-sibling-summary')).toContainText('Тимур Волков');
 });

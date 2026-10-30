@@ -3,6 +3,7 @@ import { useWorkspaceView, type WorkspaceView } from "./lib/workspaceView";
 import {
   ReactFlow,
   ViewportPortal,
+  EdgeLabelRenderer,
   BaseEdge,
 
   type EdgeProps,
@@ -15,7 +16,7 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import { Maximize } from "lucide-react";
-import { genealogyLayout, roundedPath, relationPattern, lateral, PERSON_WIDTH, PERSON_HEIGHT } from "./lib/genealogyLayout";
+import { genealogyLayout, roundedPath, relationText, PERSON_WIDTH, PERSON_HEIGHT } from "./lib/genealogyLayout";
 import "./styles/genealogy.css";
 import "@xyflow/react/dist/style.css";
 import { useReducedMotion } from "framer-motion";
@@ -49,11 +50,13 @@ const nodeTypes = {
 const edgeTypes = {
   familyArc: ({ id, style, data, selected }: EdgeProps) => <g className={`family-line ${selected?'is-selected':''}`}>
     <title>{String(data?.description)}</title>
-    <BaseEdge id={id} path={String(data?.path || '')} style={{...style, strokeWidth:selected?4:2}} interactionWidth={18}/>
+    <BaseEdge id={id} path={String(data?.path || '')} style={{...style, strokeWidth:selected?3:2}} interactionWidth={18}/>
+    <EdgeLabelRenderer><span className="family-connection-label" style={{transform:`translate(-50%, -50%) translate(${(data?.at as {x:number}).x}px,${(data?.at as {y:number}).y}px)`}}>{String(data?.description)}</span></EdgeLabelRenderer>
   </g>,
 };
-const relationLabel = (e: Graph['edges'][number]) => `${({ parent: "Родитель", adoptive_parent: "Усыновление", guardian: "Опека" } as Record<string, string>)[e.kind] || socialLabel(e.kind)}${e.certainty === "suspected" ? " ?" : ""}${e.status === "closed" ? ` · ${socialLabel(e.outcome)}` : ""}`;
-function Fit({ version, arcMargin, cache, reset }: { version: string; arcMargin:number; cache?: WorkspaceView; reset:number }) {
+const relationLabel = relationText;
+const familyRoles:Record<string,[string,string]>={parent:['Родитель','Ребёнок'],adoptive_parent:['Приёмный родитель','Ребёнок'],guardian:['Опекун','Подопечный'],foster_parent:['Приёмный родитель','Ребёнок'],step_parent:['Отчим / мачеха','Ребёнок']};
+function Fit({ version, arcMargin, cache, reset, focusX, focusY }: { version: string; arcMargin:number; cache?: WorkspaceView; reset:number; focusX:number; focusY:number }) {
   const flow = useReactFlow();
   const reduced = useReducedMotion();
   const fit=()=>{
@@ -63,7 +66,13 @@ function Fit({ version, arcMargin, cache, reset }: { version: string; arcMargin:
   useEffect(() => {
     if (!flow.viewportInitialized) return;
     const id = requestAnimationFrame(
-      () => {const stored=cache?.get(`viewport:${version}`) as Viewport|undefined; if(stored)void flow.setViewport(stored);else void fit()},
+      () => {const stored=cache?.get(`viewport:${version}`) as Viewport|undefined; if(stored)void flow.setViewport(stored);else {
+        const bounds=flow.getNodesBounds(flow.getNodes());
+        const width=document.querySelector('.family-graph')?.clientWidth || 1000;
+        // A phone starts at a readable scale. The explicit overview button still
+        // fits the whole family, and its chosen viewport is restored verbatim.
+        if(width<600&&bounds.width>width/0.85)void flow.setCenter(focusX,focusY,{zoom:Math.min(0.85,(width-32)/(PERSON_WIDTH+340))});else void fit();
+      }},
     );
     return () => cancelAnimationFrame(id);
   }, [version, flow.viewportInitialized, arcMargin, reset]);
@@ -125,22 +134,21 @@ export function Genealogy({ save, rootId, onCharacter, viewState }: { save: Save
       nodes: graph.nodes.map(n=>({id:n.id,type:'person',position:geometry.positions.get(n.id)!,
         data:{label:n.name,subject:n,status:n.life_status,saveId:save.id,root:n.id===root,onCenter:()=>center(n.id)},
         width:PERSON_WIDTH,height:PERSON_HEIGHT,ariaLabel:`${n.name}. Открыть досье`,})),
-      edges: graph.edges.filter(e=>geometry.routes.has(e.id)).map(e=>({id:e.id,source:e.source_id,target:e.target_id,type:'familyArc',
-        sourceHandle:lateral(e.kind)?'top-source':'bottom',targetHandle:'top',
-        ariaLabel:`${graph.nodes.find(n=>n.id===e.source_id)?.name} — ${relationLabel(e)} — ${graph.nodes.find(n=>n.id===e.target_id)?.name}`,
-        data:{path:roundedPath(geometry.routes.get(e.id)!),description:relationLabel(e)},
-        style:{stroke:e.kind==='parent'?'var(--accent)':'var(--text-secondary)',strokeDasharray:relationPattern(e)},
+      edges: geometry.connections.map(c=>({id:c.id,source:c.source,target:c.target,type:'familyArc',
+        sourceHandle:'bottom',targetHandle:'top',
+        ariaLabel:c.relationIds.map(id=>{const e=graph.edges.find(e=>e.id===id)!;return `${graph.nodes.find(n=>n.id===e.source_id)?.name} — ${relationLabel(e)} — ${graph.nodes.find(n=>n.id===e.target_id)?.name}`}).join('; '),
+        data:{path:c.paths.map(roundedPath).join(' '),description:c.label,at:c.at},
+        style:{stroke:c.kind==='parents'?'var(--accent)':'var(--text-secondary)'},
       })),
     };
   }, [graph, geometry, save.id, root]);
-  const routeTop=geometry?Math.min(0,...[...geometry.routes.values()].flat().map(p=>p.y)):0;
-  const activeEdge=graph?.edges.find(e=>e.id===edgeDetail);
+  const activeIds=geometry?.connections.find(c=>c.id===edgeDetail)?.relationIds || (edgeDetail?[edgeDetail]:[]);
+  const activeEdges=graph?.edges.filter(e=>activeIds.includes(e.id)) || [];
+  const personLink=(id:string)=>{const n=graph?.nodes.find(n=>n.id===id);return n&&<button className="family-relative" onClick={()=>{setSelected(id);if(save.state.characters.some(c=>c.id===id))onCharacter?.(id)}} key={id}><CharacterAvatar subject={n} saveId={save.id} size={32}/><span>{n.name}</span></button>};
   return (
     <section className="genealogy" aria-label="Родословная"><div className="family-toolbar"><label>Найти персонажа<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Имя персонажа"/></label><label>Семья персонажа<select value={matchingRoots.some(c=>c.id===root)?root:""} onChange={e=>{setGraph(null);setSelected(null);setRoot(e.target.value)}}><option value="" disabled>{matchingRoots.length?"Выбери персонажа":"Персонаж не найден"}</option>{matchingRoots.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label></div>
-      <details className="family-legend"><summary>Семейные связи · обозначения</summary><p className="muted">
-        Линии показывают только связи из семейной справки. Выбери линию для подробностей; полный текст доступен в списке.
-      </p><ul className="family-legend-items">{[['parent','Биологическое родство'],['adoptive_parent','Усыновление'],['guardian','Опека'],['foster_parent','Приёмная семья'],['step_parent','Отчим / мачеха'],['spouse','Брак'],['partner','Партнёрство'],['engaged','Помолвка'],['sibling','Братья / сёстры'],['suspected','Предположение'],['closed','Завершённая связь']].map(([kind,label])=><li key={kind}><svg width="40" height="12" aria-hidden="true"><path d="M0 6 H40" stroke="currentColor" strokeWidth="2" strokeDasharray={relationPattern({kind,certainty:kind==='suspected'?'suspected':'known',status:kind==='closed'?'closed':'active'})}/></svg>{label}</li>)}</ul><p className="muted">Поколения — расположение семейных ветвей, а не доказательство биологического родства.
-      </p></details>
+      <p className="family-touch-hint">Перемещай дерево пальцем. Кнопка «Вся семья» покажет общий обзор.</p>
+      <p className="family-reading-hint">Родители сверху, дети снизу. Общая ветвь объединяет только подтверждённых биологических родителей. Остальные связи подписаны отдельно.</p>
       <div className="family-view-tools"><div className="family-view-toggle" role="group" aria-label="Вид родословной"><button aria-pressed={view==='graph'} onClick={()=>setView('graph')}>Дерево</button><button aria-pressed={view==='list'} onClick={()=>setView('list')}>Список</button></div><label>
         Глубина ветвей{" "}
         <input
@@ -161,6 +169,7 @@ export function Genealogy({ save, rootId, onCharacter, viewState }: { save: Save
         <p>Семейные связи не указаны.</p>
       ) : (
         <>
+          <div className={`family-tree-layout ${view==='graph'&&geometry?.cards.length?'has-relations':''}`}>
           {graph.edges.length===0&&<p>Семейные связи не указаны.</p>}{view==='graph'&&<div className="family-graph" onKeyDownCapture={e=>{const edge=(e.target as Element).closest('.react-flow__edge')?.getAttribute('data-id');if(edge&&(e.key==='Enter'||e.key===' ')){e.preventDefault();setEdgeDetail(edge);return}const id=(e.target as Element).closest('.react-flow__node')?.getAttribute('data-id');if(id&&!(e.target as HTMLElement).closest('button')&&(e.key==='Enter'||e.key===' ')){e.preventDefault();e.stopPropagation();setSelected(id);if(save.state.characters.some(c=>c.id===id))onCharacter?.(id)}}}>
             <ReactFlow
               nodes={layout.nodes}
@@ -191,11 +200,18 @@ export function Genealogy({ save, rootId, onCharacter, viewState }: { save: Save
                 "controls.fitView.ariaLabel": "Вся семья",
               }}
             >
-              <Fit version={graphKey} cache={viewState} reset={fitReset} arcMargin={Math.abs(routeTop)+40} />
+              <Fit version={graphKey} cache={viewState} reset={fitReset} focusX={geometry?.connections.find(c=>c.kind==='parents'&&c.relationIds.some(id=>graph.edges.some(e=>e.id===id&&e.source_id===root)))?.at.x ?? ((geometry?.positions.get(root)?.x || 0)+PERSON_WIDTH/2)} focusY={(geometry?.positions.get(root)?.y || 0)+PERSON_HEIGHT/2+(graph.edges.some(e=>e.kind==='parent'&&e.source_id===root)?200:0)} arcMargin={60} />
               <ViewportPortal><div className="family-generations" aria-hidden="true">{geometry?.generations.map((y,i)=><div key={y} className="family-generation" style={{top:y-32,left:-24,width:Math.max(...[...geometry.positions.values()].map(p=>p.x))+PERSON_WIDTH+48,height:PERSON_HEIGHT+56}}><span>Поколение {i+1}</span></div>)}</div></ViewportPortal>
             </ReactFlow>
           </div>}
-          {activeEdge && <div className="family-relationship-detail" role="status"><strong>{graph.nodes.find(n=>n.id===activeEdge.source_id)?.name} — {relationLabel(activeEdge)} — {graph.nodes.find(n=>n.id===activeEdge.target_id)?.name}</strong><button aria-label="Закрыть сведения о связи" onClick={()=>setEdgeDetail(null)}>×</button></div>}
+          {view==='graph'&&!!geometry?.cards.length&&<section className="family-relation-cards" aria-label="Другие семейные связи">{geometry.cards.map(card=>{
+            if(card.parents)return <article className="family-relation-card" key={card.id}><strong>Родители и дети · отдельная ветвь</strong><div>{card.parents.map(personLink)}</div><span>Дети</span><div>{card.children?.map(personLink)}</div></article>;
+            const e=graph.edges.find(e=>e.id===card.relationIds[0])!;
+            return <article className="family-relation-card" data-relation-id={e.id} key={card.id}><strong>{relationLabel(e)}</strong><div><div className="family-relation-endpoint">{familyRoles[e.kind]&&<small>{familyRoles[e.kind][0]}</small>}{personLink(e.source_id)}</div><span aria-hidden="true">{['spouse','partner','engaged','sibling'].includes(e.kind)?'↔':'→'}</span><div className="family-relation-endpoint">{familyRoles[e.kind]&&<small>{familyRoles[e.kind][1]}</small>}{personLink(e.target_id)}</div></div></article>;
+          })}</section>}
+          </div>
+          {!!geometry?.redundantSiblings.length&&<details className="family-sibling-summary"><summary>Братья и сёстры · общая родительская ветвь</summary>{graph.edges.filter(e=>geometry.redundantSiblings.includes(e.id)).map(e=><p key={e.id}>{graph.nodes.find(n=>n.id===e.source_id)?.name} — {relationLabel(e)} — {graph.nodes.find(n=>n.id===e.target_id)?.name}</p>)}</details>}
+          {!!activeEdges.length && <div className="family-relationship-detail" role="status"><div>{activeEdges.map(e=><p key={e.id}>{graph.nodes.find(n=>n.id===e.source_id)?.name} — {relationLabel(e)} — {graph.nodes.find(n=>n.id===e.target_id)?.name}</p>)}</div><button aria-label="Закрыть сведения о связи" onClick={()=>setEdgeDetail(null)}>×</button></div>}
           {selected && graph.nodes.find((n) => n.id === selected) && (
             <div className="family-preview">
               <CharacterAvatar

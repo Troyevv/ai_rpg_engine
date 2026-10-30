@@ -38,3 +38,22 @@
  .genealogy .family-view-tools{gap:8px}
  .genealogy .family-preview{flex-wrap:wrap;overflow-wrap:anywhere}
 }
+.family-connection-label{position:absolute;pointer-events:none;max-width:136px;padding:4px 10px;border:1px solid var(--border-strong);border-radius:20px;background:var(--bg);color:var(--text);font-size:12px;line-height:18px;white-space:nowrap;box-shadow:0 0 0 4px var(--bg)}
+.genealogy .family-reading-hint{font-size:12px;line-height:1.6;color:var(--text-secondary);margin:12px 0}
+.genealogy .family-relation-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,310px),1fr));gap:12px;margin-top:16px}
+.genealogy .family-relation-card{border:1px solid var(--border-strong);border-radius:var(--radius-md);background:var(--surface-1);padding:12px 16px;min-width:0}
+.genealogy .family-relation-card>strong{display:block;font-size:13px;color:var(--accent);margin-bottom:8px}
+.genealogy .family-relation-card>div{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.genealogy .family-relative{display:inline-flex;gap:8px;align-items:center;min-height:44px;min-width:0;max-width:100%;text-align:left;font-size:12px;color:var(--text);border-radius:8px}
+.genealogy .family-relative>span:last-child{overflow-wrap:anywhere}
+.genealogy .family-relative:hover{color:var(--accent)}
+.genealogy .family-sibling-summary{font-size:13px;margin-top:12px;color:var(--text-secondary)}
+.genealogy .family-sibling-summary>summary{min-height:44px;padding:12px 0}
+.genealogy .family-tree-layout{min-width:0}
+.genealogy .family-tree-layout.has-relations{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:16px;align-items:start}
+.genealogy .has-relations .family-relation-cards{display:grid;grid-template-columns:minmax(0,1fr);margin:0;max-height:62dvh;overflow:auto}
+@container family (max-width:850px){.genealogy .family-tree-layout.has-relations{grid-template-columns:minmax(0,1fr)}.genealogy .has-relations .family-relation-cards{max-height:none;overflow:visible}}
+.genealogy .family-touch-hint{display:none}
+@container family (max-width:600px){.genealogy .family-touch-hint{display:block;color:var(--text-secondary);font-size:12px;line-height:1.5;margin:10px 0}}
+.genealogy .family-relation-endpoint{min-width:0;max-width:100%}
+.genealogy .family-relation-endpoint>small{display:block;color:var(--text-secondary);font-size:11px}

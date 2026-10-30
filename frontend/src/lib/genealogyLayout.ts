@@ -5,11 +5,9 @@ export const PERSON_WIDTH = 184;
 export const PERSON_HEIGHT = 224;
 export type Point = { x: number; y: number };
 export const lateral = (kind: string) => ['spouse', 'partner', 'engaged', 'sibling'].includes(kind);
-export function relationPattern(e: Pick<SocialRelation, 'kind' | 'certainty' | 'status'>) {
-  if (e.certainty === 'suspected') return '2 6';
-  if (e.status === 'closed') return '10 5 2 5';
-  return ({ parent: undefined, adoptive_parent: '10 5', guardian: '2 5', foster_parent: '12 4 3 4', step_parent: '5 3 1 3', spouse: '16 3', partner: '8 4', engaged: '8 3 2 3', sibling: '4 4' } as Record<string, string | undefined>)[e.kind];
-}
+export type FamilyConnection = {id:string;source:string;target:string;relationIds:string[];paths:Point[][];label:string;at:Point;kind:'parents'|'partners'};
+export type FamilyCard = {id:string;relationIds:string[];parents?:string[];children?:string[]};
+export const relationText = (e: SocialRelation) => `${({parent:'Родитель',adoptive_parent:'Усыновление',guardian:'Опека',foster_parent:'Приёмная семья',step_parent:'Отчим / мачеха',spouse:'Брак',partner:'Партнёры',engaged:'Помолвка',sibling:'Брат / сестра'} as Record<string,string>)[e.kind] || e.kind}${e.certainty==='suspected'?' · предположение':''}${e.status==='closed'?` · ${({divorced:'Развод',widowed:'Вдовство',revoked:'Прекращено',ended:'Завершено'} as Record<string,string>)[e.outcome] || 'завершено'}`:''}`;
 // Rounded orthogonal segments: corners stay inside a clear routing corridor.
 export function roundedPath(points: Point[]) {
   if (!points.length) return '';
@@ -26,67 +24,80 @@ export function roundedPath(points: Point[]) {
 }
 
 export function genealogyLayout(graph: Genealogy) {
-  const ids = new Set(graph.nodes.map(n => n.id));
-  const edges = graph.edges.filter(e => ids.has(e.source_id) && ids.has(e.target_id)).slice().sort((a,b)=>a.id.localeCompare(b.id));
-  const descendants = new Map<string, Set<string>>();
-  for (const id of [...ids].sort()) {
-    const seen = new Set<string>(), todo = [id];
-    while (todo.length) {
-      const current = todo.pop()!;
-      for (const e of edges) if (!lateral(e.kind) && e.source_id === current && !seen.has(e.target_id)) { seen.add(e.target_id); todo.push(e.target_id); }
-    }
-    descendants.set(id, seen);
-  }
-  let groups = [...ids].sort().map(id => [id]);
-  for (const e of edges.filter(e=>lateral(e.kind))) {
-    const a=groups.find(g=>g.includes(e.source_id))!, b=groups.find(g=>g.includes(e.target_id))!;
-    if(a===b || a.some(x=>b.some(y=>descendants.get(x)?.has(y)||descendants.get(y)?.has(x)))) continue;
-    groups=groups.filter(g=>g!==a&&g!==b); groups.push([...a,...b].sort());
-  }
-  groups.sort((a,b)=>a[0].localeCompare(b[0]));
+  const ids = new Set(graph.nodes.map(n=>n.id));
+  const edges = graph.edges.filter(e=>ids.has(e.source_id)&&ids.has(e.target_id)).slice().sort((a,b)=>a.id.localeCompare(b.id));
+  const biological = edges.filter(e=>e.kind==='parent'&&e.certainty==='known'&&e.status==='active');
+  const parentsOf = new Map<string,string[]>();
+  for(const e of biological) parentsOf.set(e.target_id,[...new Set([...(parentsOf.get(e.target_id)||[]),e.source_id])].sort());
+  // A family unit is a view of existing parent edges, NOT a marriage or a new
+  // canonical entity. Different parent sets must never share a descent trunk.
+  const families = new Map<string,{parents:string[];children:string[];edges:SocialRelation[]}>();
+  for(const [child,parents] of parentsOf){const key=JSON.stringify(parents);const f=families.get(key)||{parents,children:[],edges:[]};f.children.push(child);f.edges.push(...biological.filter(e=>e.target_id===child));families.set(key,f)}
+  const descendants=new Map<string,Set<string>>();
+  for(const id of ids){const seen=new Set<string>(),todo=[id];while(todo.length){const next=todo.pop()!;for(const e of edges)if(!lateral(e.kind)&&e.source_id===next&&!seen.has(e.target_id)){seen.add(e.target_id);todo.push(e.target_id)}}descendants.set(id,seen)}
+  let groups=[...ids].sort().map(id=>[id]);
+  const join=(x:string,y:string)=>{const a=groups.find(g=>g.includes(x))!,b=groups.find(g=>g.includes(y))!;if(a===b||a.some(i=>b.some(j=>descendants.get(i)?.has(j)||descendants.get(j)?.has(i))))return;groups=groups.filter(g=>g!==a&&g!==b);groups.push([...a,...b].sort())};
+  for(const f of families.values()) for(const p of f.parents.slice(1))join(f.parents[0],p);
+  for(const e of edges.filter(e=>lateral(e.kind)&&e.kind!=='sibling'))join(e.source_id,e.target_id);
+  // Place partners next to each other where possible; never let sibling edges
+  // force unrelated partners into an enormous same-generation component.
+  groups=groups.map(members=>{
+    const ordered:string[]=[];const remaining=new Set(members);
+    while(remaining.size){const last=ordered.at(-1);const adjacent=edges.find(e=>e.kind!=='sibling'&&lateral(e.kind)&&((e.source_id===last&&remaining.has(e.target_id))||(e.target_id===last&&remaining.has(e.source_id))));const next=adjacent?(adjacent.source_id===last?adjacent.target_id:adjacent.source_id):[...remaining].sort()[0];ordered.push(next);remaining.delete(next)}return ordered;
+  }).sort((a,b)=>a[0].localeCompare(b[0]));
   const groupOf=new Map<string,string>();
-  const g=new dagre.graphlib.Graph({multigraph:true}).setGraph({rankdir:'TB',nodesep:64,ranksep:160}).setDefaultEdgeLabel(()=>({}));
-  groups.forEach((members,i)=>{g.setNode(String(i),{width:members.length*240-56,height:PERSON_HEIGHT});members.forEach(id=>groupOf.set(id,String(i)))});
-  for(const e of edges) {const a=groupOf.get(e.source_id)!, b=groupOf.get(e.target_id)!;if(a!==b)g.setEdge(a,b,{},e.id)}
+  const g=new dagre.graphlib.Graph({multigraph:true}).setGraph({rankdir:'TB',nodesep:70,ranksep:180}).setDefaultEdgeLabel(()=>({}));
+  const step=340;
+  groups.forEach((members,i)=>{g.setNode(String(i),{width:(members.length-1)*step+PERSON_WIDTH,height:PERSON_HEIGHT});members.forEach(id=>groupOf.set(id,String(i)))});
+  for(const e of edges.filter(e=>!lateral(e.kind))){const a=groupOf.get(e.source_id)!,b=groupOf.get(e.target_id)!;if(a!==b)g.setEdge(a,b,{},e.id)}
   dagre.layout(g);
   const positions=new Map<string,Point>();
-  groups.forEach((members,i)=>{const n=g.node(String(i));members.forEach((id,index)=>positions.set(id,{x:n.x-(members.length*240-56)/2+index*240,y:n.y-PERSON_HEIGHT/2}))});
-  // Interval coloring assigns lanes by actual occupied span, never edge index.
-  const lanes: {y:number; spans:[number,number][] }[]=[];
-  const routes=new Map<string,Point[]>();
-  const rects=[...positions.values()];
-  for(const e of edges) {
-    const a=positions.get(e.source_id)!, b=positions.get(e.target_id)!;
-    const sx=a.x+PERSON_WIDTH/2, tx=b.x+PERSON_WIDTH/2;
-    const same=lateral(e.kind);
-    const sy=a.y+(same?0:PERSON_HEIGHT), ty=b.y;
-    const low=Math.min(sx,tx), high=Math.max(sx,tx);
-    let y=same?Math.min(a.y,b.y)-48:(sy+ty)/2;
-    while(lanes.some(l=>Math.abs(l.y-y)<18&&l.spans.some(([l,r])=>low<=r+16&&high>=l-16))) y-=24;
-    // A middle-generation node may intersect a long lineage. Route around the
-    // full occupied envelope instead of drawing through people or inventing hubs.
-    const segmentHits=(x1:number,y1:number,x2:number,y2:number)=>rects.some(r=>Math.max(x1,x2)>r.x-12&&Math.min(x1,x2)<r.x+PERSON_WIDTH+12&&Math.max(y1,y2)>r.y-12&&Math.min(y1,y2)<r.y+PERSON_HEIGHT+12);
-    const start={x:sx,y:sy+(same?-24:24)}, end={x:tx,y:ty-24};
-    let middle=[start,{x:sx,y},{x:tx,y},end];
-    if(middle.slice(1).some((p,i)=>segmentHits(middle[i].x,middle[i].y,p.x,p.y))) {
-      // Visibility grid: only node gutters and endpoint coordinates are needed.
-      const xs=[...new Set([start.x,end.x,...rects.flatMap(r=>[r.x-24,r.x+PERSON_WIDTH+24])])].sort((a,b)=>a-b);
-      const ys=[...new Set([start.y,end.y,y,...rects.flatMap(r=>[r.y-24,r.y+PERSON_HEIGHT+24])])].sort((a,b)=>a-b);
-      const key=(x:number,y:number)=>y*xs.length+x;
-      const origin=key(xs.indexOf(start.x),ys.indexOf(start.y)), goal=key(xs.indexOf(end.x),ys.indexOf(end.y));
-      const queue=[origin], prev=new Map<number,number>(), seen=new Set([origin]);
-      for(let q=0;q<queue.length&&!seen.has(goal);q++) {
-        const current=queue[q], ix=current%xs.length, iy=Math.floor(current/xs.length);
-        const next=[[ix+1,iy],[ix-1,iy],[ix,iy+1],[ix,iy-1]].filter(([x,y])=>x>=0&&y>=0&&x<xs.length&&y<ys.length);
-        next.sort(([x,y],[xx,yy])=>Math.abs(xs[x]-end.x)+Math.abs(ys[y]-end.y)-Math.abs(xs[xx]-end.x)-Math.abs(ys[yy]-end.y));
-        for(const [x,y] of next){const k=key(x,y);if(!seen.has(k)&&!segmentHits(xs[ix],ys[iy],xs[x],ys[y])){seen.add(k);prev.set(k,current);queue.push(k)}}
-      }
-      if(seen.has(goal)) {const path:Point[]=[];let k=goal;while(k!==origin){path.push({x:xs[k%xs.length],y:ys[Math.floor(k/xs.length)]});k=prev.get(k)!}path.push(start);middle=path.reverse()}
-    }
-    const points=[{x:sx,y:sy},...middle,{x:tx,y:ty}].filter((p,i,all)=>!i||p.x!==all[i-1].x||p.y!==all[i-1].y);
-    routes.set(e.id,points.filter((p,i)=>!i||i===points.length-1||!((points[i-1].x===p.x&&p.x===points[i+1].x)||(points[i-1].y===p.y&&p.y===points[i+1].y))));
-    lanes.push({y,spans:[[low,high]]});
+  groups.forEach((members,i)=>{const n=g.node(String(i));members.forEach((id,index)=>positions.set(id,{x:n.x-((members.length-1)*step+PERSON_WIDTH)/2+index*step,y:n.y-PERSON_HEIGHT/2}))});
+  const connections:FamilyConnection[]=[],cards:FamilyCard[]=[],redundantSiblings:string[]=[];
+  const occupied:Point[][]=[];
+  const labels:{x:number;y:number;width:number;height:number}[]=[];
+  const segmentHits=(a:Point,b:Point,r:{x:number;y:number;width:number;height:number})=>Math.max(a.x,b.x)>r.x&&Math.min(a.x,b.x)<r.x+r.width&&Math.max(a.y,b.y)>r.y&&Math.min(a.y,b.y)<r.y+r.height;
+  const crosses=(a:Point,b:Point,c:Point,d:Point)=>{
+    if(a.x===b.x&&c.x===d.x)return a.x===c.x&&Math.max(Math.min(a.y,b.y),Math.min(c.y,d.y))<Math.min(Math.max(a.y,b.y),Math.max(c.y,d.y));
+    if(a.y===b.y&&c.y===d.y)return a.y===c.y&&Math.max(Math.min(a.x,b.x),Math.min(c.x,d.x))<Math.min(Math.max(a.x,b.x),Math.max(c.x,d.x));
+    const v=a.x===b.x?[a,b]:[c,d],h=a.x===b.x?[c,d]:[a,b];return v[0].x>=Math.min(h[0].x,h[1].x)&&v[0].x<=Math.max(h[0].x,h[1].x)&&h[0].y>=Math.min(v[0].y,v[1].y)&&h[0].y<=Math.max(v[0].y,v[1].y);
+  };
+  const accept=(connection:FamilyConnection)=>{
+    const rect={x:connection.at.x-68,y:connection.at.y-13,width:136,height:26};
+    const people=[...positions.values()].map(p=>({...p,width:PERSON_WIDTH,height:PERSON_HEIGHT}));
+    const segments=connection.paths.flatMap(path=>path.slice(1).map((p,i)=>[path[i],p]));
+    const collision=segments.some(([a,b])=>people.some(r=>segmentHits(a,b,r))||labels.some(r=>segmentHits(a,b,r))||occupied.some(path=>path.slice(1).some((d,i)=>crosses(a,b,path[i],d))))||labels.concat(people).some(r=>rect.x<r.x+r.width&&rect.x+rect.width>r.x&&rect.y<r.y+r.height&&rect.y+rect.height>r.y)||occupied.some(path=>path.slice(1).some((p,i)=>segmentHits(path[i],p,rect)));
+    if(collision)return false;
+    connections.push(connection);occupied.push(...connection.paths);labels.push(rect);return true;
+  };
+  // Local horizontal partnership connectors, at portrait level, with words.
+  for(const e of edges.filter(e=>['spouse','partner','engaged'].includes(e.kind))){
+    let a=positions.get(e.source_id)!,b=positions.get(e.target_id)!;if(a.x>b.x)[a,b]=[b,a];
+    const adjacent=a.y===b.y&&b.x-a.x===step;
+    const paths=[[{x:a.x+PERSON_WIDTH,y:a.y+60},{x:b.x,y:b.y+60}]];
+    if(!adjacent||relationText(e).length>19||!accept({id:e.id,source:e.source_id,target:e.target_id,relationIds:[e.id],paths,label:relationText(e),at:{x:(a.x+PERSON_WIDTH+b.x)/2,y:a.y+60},kind:'partners'}))cards.push({id:e.id,relationIds:[e.id]});
   }
-  const generations=[...new Set([...positions.values()].map(p=>p.y))].sort((a,b)=>a-b);
-  return {positions,routes,generations};
+  const represented=new Set(connections.flatMap(c=>c.relationIds).concat(cards.flatMap(c=>c.relationIds)));
+  for(const [key,f] of [...families.entries()].sort((a,b)=>b[1].children.length-a[1].children.length||a[0].localeCompare(b[0]))){
+    f.children.sort((a,b)=>positions.get(a)!.x-positions.get(b)!.x);
+    const parents=f.parents.map(id=>positions.get(id)!),children=f.children.map(id=>positions.get(id)!);
+    const top=Math.max(...parents.map(p=>p.y+PERSON_HEIGHT)),bottom=Math.min(...children.map(p=>p.y));
+    const px=parents.map(p=>p.x+PERSON_WIDTH/2),cx=children.map(p=>p.x+PERSON_WIDTH/2);
+    const hub=(Math.min(...px)+Math.max(...px))/2,joinY=top+30,branchY=bottom-40;
+    const paths:Point[][]=parents.map((p,i)=>[{x:px[i],y:p.y+PERSON_HEIGHT},{x:px[i],y:joinY}]);
+    if(px.length>1)paths.push([{x:Math.min(...px),y:joinY},{x:Math.max(...px),y:joinY}]);
+    paths.push([{x:hub,y:joinY},{x:hub,y:branchY}]);
+    paths.push([{x:Math.min(hub,...cx),y:branchY},{x:Math.max(hub,...cx),y:branchY}]);
+    children.forEach((p,i)=>paths.push([{x:cx[i],y:branchY},{x:cx[i],y:p.y}]));
+    const relationIds=f.edges.map(e=>e.id);relationIds.forEach(id=>represented.add(id));
+    if(bottom-top<120||!accept({id:`family:${key}`,source:f.parents[0],target:f.children[0],relationIds,paths,label:f.parents.length>1?'Общие дети':'Дети',at:{x:hub,y:(joinY+branchY)/2},kind:'parents'}))cards.push({id:`family:${key}`,relationIds,parents:f.parents,children:f.children});
+  }
+  for(const e of edges.filter(e=>!represented.has(e.id))){
+    if(e.kind==='sibling'&&e.certainty==='known'&&e.status==='active'&&(parentsOf.get(e.source_id)||[]).some(p=>parentsOf.get(e.target_id)?.includes(p))){redundantSiblings.push(e.id);continue}
+    cards.push({id:e.id,relationIds:[e.id]});
+  }
+  // Difficult/non-planar and care relationships are always visible as labelled
+  // endpoint cards, not anonymous detours through unrelated people. Every API
+  // relation is accounted for by a connector, a card or the sibling disclosure.
+  return {positions,connections,cards,redundantSiblings,generations:[...new Set([...positions.values()].map(p=>p.y))].sort((a,b)=>a-b)};
 }
