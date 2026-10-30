@@ -2,12 +2,11 @@ import {personalRelationships} from './lib/personalRelationships';
 import {personalRelationshipLabel} from './lib/dossier';
 import {phoneText} from './lib/phone';
 import {useId, type ReactNode} from 'react';
-import {UserRound,Brain,HeartHandshake,Users,BookOpen,MapPin,ArrowUpRight} from 'lucide-react';
+import {UserRound,Brain,HeartHandshake,Users,BookOpen,MapPin} from 'lucide-react';
 import {CharacterAvatar,PortraitControl} from './Portrait';
 import {SectionTabs} from './components/ui/section-tabs';
 import {Reveal,KnowledgeRows,RelationsView,brief} from './InspectorViews';
 import {MotivationEditor} from './MotivationEditor';
-import {RelationshipEditor} from './RelationshipEditor';
 import {SocialStateView} from './SocialStateView';
 import {Markdown} from './Markdown';
 import {calendarDate} from './gameDate';
@@ -78,9 +77,7 @@ export function CharacterView({state,card,save,refresh,tab='overview',setTab=()=
     </DossierSection>
    </div>}
    {tab==='relationships'&&<DossierSection title={t('relationships')}>
-    <div className="dossier-people">{Array.from(new Set(state.relationships.filter(r=>r.source_id===card.id||r.target_id===card.id).map(r=>r.source_id===card.id?r.target_id:r.source_id))).map(id=>state.characters.find(c=>c.id===id)).filter((c):c is Character=>!!c).map(other=><button className="dossier-person" key={other.id} onClick={()=>onCharacter?.(other.id)}><CharacterAvatar subject={other} saveId={save?.id} size={40}/><span>{other.name}</span><ArrowUpRight size={16}/></button>)}</div>
-    {save&&refresh&&card.id===actor&&<RelationshipEditor key={`${save.id}:${card.id}`} save={save} card={card} refresh={refresh}/>}
-    <RelationsView state={state} actor={card.id} excludeSource={save&&refresh&&card.id===actor?actor:undefined}/>
+    <RelationsView key={`${save?.id}:${card.id}:${actor}`} state={state} actor={card.id} save={save} refresh={refresh} onCharacter={onCharacter}/>
    </DossierSection>}
    {tab==='family'&&<SocialStateView state={state} actor={card.id} saveId={save?.id} mode="family"/>}
    {tab==='history'&&<div className="dossier-grid">

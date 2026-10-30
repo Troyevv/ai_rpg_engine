@@ -285,9 +285,10 @@ export function Inspector({
   const [characterHistory, setCharacterHistory] = useState<{
     id: string; tab: DossierTab; query: string; near: boolean; scroll: number;
     partnerId?: string;
+    relationshipLink?: string;
   }[]>([]);
   const focusOnCharacter = useRef(false);
-  const pendingReturn = useRef<{scroll: number; partnerId?: string} | null>(null);
+  const pendingReturn = useRef<{scroll: number; partnerId?: string; relationshipLink?: string} | null>(null);
   const scrolls = useRef(new Map<string, number>());
   const scrollRef = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -299,8 +300,13 @@ export function Inspector({
       if (returning) {
         pendingReturn.current = null;
         focusOnCharacter.current = false;
-        const link = [...scrollRef.current.querySelectorAll<HTMLButtonElement>('[data-partner-id]')]
-          .find(el => el.dataset.partnerId === returning.partnerId);
+        // Relationship cards remount when returning to a dossier, so restore
+        // the exact source/target button by identity, not a detached DOM node.
+        const link = returning.relationshipLink
+          ? [...scrollRef.current.querySelectorAll<HTMLButtonElement>('[data-dossier-link]')]
+              .find(el => el.dataset.dossierLink === returning.relationshipLink)
+          : [...scrollRef.current.querySelectorAll<HTMLButtonElement>('[data-partner-id]')]
+              .find(el => el.dataset.partnerId === returning.partnerId);
         (link || heading.current)?.focus({preventScroll: true});
       } else if (focusOnCharacter.current) {
         focusOnCharacter.current = false;
@@ -345,6 +351,7 @@ export function Inspector({
         id: selected.id, tab: dossierTab, query, near,
         scroll: scrollRef.current?.scrollTop || 0,
         partnerId: (document.activeElement as HTMLElement)?.dataset.partnerId,
+        relationshipLink: (document.activeElement as HTMLElement)?.dataset.dossierLink,
       }]);
     }
     focusOnCharacter.current = true;

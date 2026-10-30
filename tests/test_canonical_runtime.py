@@ -75,3 +75,29 @@ def test_context_separates_current_knowledge_from_provenance_and_keeps_static_st
     current=json.loads(next(m['content'] for m in messages if m['content'].startswith('Текущее состояние')).split('\n',1)[1])
     assert 'scenes' not in current and 'events' not in current
     assert all('source_event_id' not in k for k in current['knowledge'])
+
+
+def test_manual_relationship_exact_dimensions_conflict_and_projection(api):
+    client, app = api
+    _, save = new_save(client)
+    actor = save['state']['controlled_actor_id']
+    target = next(c['id'] for c in save['state']['characters'] if c['id'] != actor)
+    url = f"/api/saves/{save['id']}/characters/{actor}/relationships"
+    body = dict(revision=save['revision'], target_id=target, context='Точный ручной ввод',
+                dimensions={'trust': 0, 'respect': 100, 'fear': -100})
+    response = client.patch(url, json=body)
+    assert response.status_code == 200
+    saved = response.json()
+    assert client.patch(url, json=body).status_code == 409
+    for bad in (101, -101):
+        assert client.patch(url, json={**body, 'revision': saved['revision'],
+                                     'dimensions': {'trust': bad}}).status_code == 409
+    current = client.get(f"/api/saves/{save['id']}").json()
+    assert current['revision'] == saved['revision']
+    key = actor + ':' + target
+    assert current['state']['world']['relationships'][key]['dimensions'] == body['dimensions']
+    projection = next(r for r in current['state']['relationships'] if r['source_id'] == actor and r['target_id'] == target)
+    assert projection['dimensions'] == body['dimensions']
+    response = client.patch(url, json={**body, 'revision': saved['revision'], 'dimensions': {'trust': 0}})
+    assert response.status_code == 200
+    assert response.json()['state']['world']['relationships'][key]['dimensions'] == {'trust': 0}

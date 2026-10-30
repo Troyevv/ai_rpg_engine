@@ -1,4 +1,5 @@
-import {relationshipLabel} from './lib/relationships';
+import {RelationshipCard} from './RelationshipCard';
+import {relationshipRows} from './lib/relationshipRows';
 import { useState, type ReactNode } from 'react';
 import type { State, Knowledge, Save } from './types';
 import {RelationshipEditor} from './RelationshipEditor';
@@ -29,13 +30,143 @@ export function KnowledgeRows({state, rows}: {state:State;rows:Knowledge[]}) {
     const retired=rows.filter(k=>['outdated','refuted','superseded'].includes(k.status));
     return <><Items items={current.map(render)}/>{retired.length>0&&<details><summary>Прежние убеждения · {retired.length}</summary><Items items={retired.map(render)}/></details>}</>;
 }
-export function RelationsView({ state, actor, save, refresh, excludeSource }: {
-    state: State;
-    actor?: string;
-    excludeSource?:string;
-    save?:Save|null;
-    refresh?:()=>void;
-}) { const controlled=state.controlled_actor_id===undefined ? state.protagonist_id || state.characters.find(c=>c.is_player)?.id : state.controlled_actor_id; const card=save&&refresh ? state.characters.find(c=>c.id===controlled) : undefined; const structured = Object.values(state.world?.relationships || {}); const rows = structured.map(r => ({ source: r.source_id, target: r.target_id, text: r.context, dimensions: r.dimensions, change: state.relationships.find(old => old.source_id === r.source_id && old.target_id === r.target_id)?.change })); for (const r of state.relationships) {
-    if (!structured.some(x => x.source_id === r.source_id && (x.target_id === r.target_id || nameOf(state, x.target_id) === r.target_name)))
-        rows.push({ source: r.source_id, target: r.target_id || r.target_name || 'Неизвестно', text: r.text, dimensions: {}, change: r.change });
-} return <div className="inspector-content">{card&&save&&refresh&&<RelationshipEditor key={`${save.id}-${card.id}`} save={save} card={card} refresh={refresh}/>}<Items items={rows.filter(r => (!actor || r.source === actor || r.target === actor) && (!card || r.source!==card.id) && r.source!==excludeSource).map((r, i) => <Reveal key={i} info={Object.entries(r.dimensions).map(([k, v]) => `${relationshipLabel(k)}: ${typeof v === 'number' ? v : v.direction === 'up' ? '↑' : v.direction === 'down' ? '↓' : '→'}`).join(' · ')} title={`${nameOf(state, r.source)} → ${nameOf(state, r.target)}`} text={r.text}><div className="inspect-chips">{Object.entries(r.dimensions).map(([key, value]) => <span className="pill" key={key}>{relationshipLabel(key)}: {typeof value === 'number' ? value : <span className={value.direction === 'up' ? 'positive' : value.direction === 'down' ? 'negative' : ''}>{value.direction === 'up' ? '↑' : value.direction === 'down' ? '↓' : '→'} {value.reason}</span>}</span>)}</div>{r.change && <p className={r.change.direction === 'up' ? 'positive' : 'negative'}>{r.change.direction === 'up' ? '↑' : '↓'} {r.change.reason}</p>}</Reveal>)}/>{!rows.length && <Empty>Отношения пока не записаны.</Empty>}</div>; }
+export function RelationsView({
+  state,
+  actor,
+  save,
+  refresh,
+  onCharacter,
+}: {
+  state: State;
+  actor?: string;
+  save?: Save | null;
+  refresh?: () => void;
+  onCharacter?: (id: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [person, setPerson] = useState("");
+  const [direction, setDirection] = useState("both");
+  const controlled =
+    state.controlled_actor_id === undefined
+      ? state.protagonist_id || state.characters.find((c) => c.is_player)?.id
+      : state.controlled_actor_id;
+  const card =
+    save && refresh && (!actor || actor === controlled)
+      ? state.characters.find((c) => c.id === controlled)
+      : undefined;
+  const rows = relationshipRows(state).filter(
+    (r) =>
+      (!actor || r.source_id === actor || r.target_id === actor) &&
+      (!person || r.source_id === person || r.target_id === person) &&
+      (!actor ||
+        direction === "both" ||
+        (direction === "out"
+          ? r.source_id === actor
+          : r.target_id === actor)) &&
+      [nameOf(state, r.source_id), nameOf(state, r.target_id), r.context]
+        .join(" ")
+        .toLocaleLowerCase()
+        .includes(query.trim().toLocaleLowerCase()),
+  );
+  const render = (
+    actions?: (r: (typeof rows)[number]) => ReactNode,
+    add?: ReactNode,
+  ) => (
+    <>
+      <div className="relationship-tools">
+        <label>
+          Поиск
+          <input
+            aria-label="Поиск отношений"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Имя или описание"
+          />
+        </label>
+        <label>
+          Персонаж
+          <select
+            aria-label="Участник отношений"
+            value={person}
+            onChange={(e) => setPerson(e.target.value)}
+          >
+            <option value="">Все персонажи</option>
+            {state.characters
+              .filter((c) => c.id !== actor)
+              .map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+          </select>
+        </label>
+        {person && onCharacter && (
+          <button
+            className="inspector-link"
+            onClick={() => onCharacter(person)}
+          >
+            Открыть досье: {nameOf(state, person)}
+          </button>
+        )}
+        {add}
+      </div>
+      {actor && (
+        <div
+          className="inspector-segments"
+          role="group"
+          aria-label="Направление отношений"
+        >
+          {[
+            ["both", "Все направления"],
+            ["out", "К другим"],
+            ["in", "От других"],
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              aria-pressed={direction === key}
+              onClick={() => setDirection(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      <p className="muted small">
+        Стрелка показывает, кто к кому относится. Обратное направление —
+        отдельная запись.
+      </p>
+      <div className="inspector-stack">
+        {rows.map((r, i) => (
+          <RelationshipCard
+            key={`${r.source_id}:${r.target_id}:${i}`}
+            state={state}
+            relation={r}
+            saveId={save?.id}
+            onCharacter={onCharacter}
+            change={r.change}
+            actions={actions?.(r)}
+          />
+        ))}
+        {!rows.length && (
+          <p role="status" className="dossier-empty">
+            {query || person
+              ? "Отношения не найдены."
+              : "Отношения пока не записаны."}
+          </p>
+        )}
+      </div>
+    </>
+  );
+  return card && save && refresh ? (
+    <RelationshipEditor
+      key={`${save.id}:${card.id}`}
+      save={save}
+      card={card}
+      refresh={refresh}
+    >
+      {({ actions, add }) => render(actions, add)}
+    </RelationshipEditor>
+  ) : (
+    render()
+  );
+}
