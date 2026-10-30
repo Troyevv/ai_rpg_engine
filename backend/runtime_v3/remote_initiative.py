@@ -86,7 +86,7 @@ def opportunities(state):
         if e["channel"] != "TEXT_MESSAGE":
             continue
         conversation = state['conversations'].get(e['conversation_id'])
-        if conversation and conversation['group'] and e['sender_id'] != external:
+        if conversation and conversation['group']:
             # Series owns explicit reads by its speakers. Never drain an NPC
             # group backlog through one additional LLM decision per message.
             continue
@@ -400,7 +400,7 @@ def _identify_endpoint(snapshot, proposal, operation_id):
     return result, batch.to_dict()
 
 
-def stage(snapshot, generate, operation_id, *, context_limit=32768):
+def stage(snapshot, generate, operation_id, *, context_limit=32768, history_events=()):
     if "_remote_batch" in snapshot:
         return snapshot
     from backend.runtime_v3.group_planning import opportunities as group_options, context as group_context
@@ -408,17 +408,21 @@ def stage(snapshot, generate, operation_id, *, context_limit=32768):
     from backend.runtime_v3.remote_decision import RemoteStageDecision, decode
 
     options = opportunities(snapshot['world_state'])
-    groups = group_options(snapshot['world_state'])
+    groups = group_options(snapshot['world_state'], history_events)
     if not options and not groups:
         return snapshot
     messages = planning_context(snapshot, options)
     if groups:
         messages[0]['content'] = messages[0]['content'].split('Schema: ', 1)[0] + (
-            ' Alternatively choose ONE optional group_series, or null for no meaningful reason. '
+            ' Alternatively choose ONE optional group_series, or null if no conversation is appropriate. '
+            'New canonical context permits an attempt immediately; its importance is YOUR creative judgment. '
+            'Spontaneous conversation needs no new event or prior intention: everyday life, work, relationships, '
+            'rumours, humour, invitations and old topics are welcome. The conversation ID in basis is a scheduling '
+            'opportunity only, never factual evidence. Cooldown limits attempts, not subject matter. '
             'A short series uses different autonomous speakers; never author the controlled actor. '
             'Each speaker may use ONLY their own knowledge and read history. Subsequent speakers '
             'must set read_previous=true to perceive preceding messages in this series; cite the initiating basis IDs. '
-            'gm_story_context is author-only context, NEVER character knowledge. A thread ID is a planning cue, '
+            'event_cues and gm_story_context are author-only context, NEVER character knowledge. A thread ID is a planning cue, '
             'not proof the speaker knows its secrets. Use it to motivate an inquiry, not to assert unknown information. '
             'No filler or mandatory reply. No physical movement. Schema: '
             + json.dumps(RemoteStageDecision.model_json_schema(), ensure_ascii=False))
@@ -430,7 +434,8 @@ def stage(snapshot, generate, operation_id, *, context_limit=32768):
     if groups and estimate(messages) + 2400 + 512 > context_limit:
         result = deepcopy(snapshot)
         batch = {'state_changes':[dict(kind='remote_deferred', code='group_context_budget')]}
-        record_attempt(result, groups[0]['conversation_id'], operation_id, batch)
+        record_attempt(result, groups[0]['conversation_id'], operation_id, batch,
+            event_ids=[e['id'] for e in groups[0].get('event_cues', [])])
         result['_remote_batch'] = batch
         return result
     answer = ''.join(generate('remote_initiative', messages, 2400 if groups else 1200, 0.2,
@@ -484,6 +489,7 @@ def stage(snapshot, generate, operation_id, *, context_limit=32768):
             code='group_provider_failed' if isinstance(exc, RuntimeError) else 'decision_runtime',
             error_type=type(exc).__name__)]}
     if attempted:
-        record_attempt(result, attempted, operation_id, batch)
+        record_attempt(result, attempted, operation_id, batch,
+            event_ids=[e['id'] for g in groups if g['conversation_id']==attempted for e in g.get('event_cues', [])])
     result['_remote_batch'] = batch
     return result

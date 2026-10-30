@@ -505,11 +505,13 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
             if extraction_text is not None:
                 remote['call_sources']=list(call_sources(state,world_history,extraction_text,user_text,snapshot.get('_resolver_turn_id',state['meta']['turn_id']+1)).values())
         if extraction_text is not None and snapshot.get('_remote_batch'):
-            from backend.runtime_v3.remote_semantics import staged_sources
+            from backend.runtime_v3.remote_semantics import staged_sources, relationship_sources
             sources=staged_sources(snapshot)
             if sources:
                 remote['accepted_semantic_messages']=list(sources.values())
-                remote['constraints'] += (' Extract consequences of these accepted messages into scheduled_event_changes and explicit intentions_updates. '
+                remote['relationship_sources']=[e for e in relationship_sources(snapshot) if e['id'] in sources]
+                remote['constraints'] += (' Extract consequences of these accepted messages through the normal locations, threads, scheduled_event_changes, '
+                    'relationship_changes (canonical relationship_sources and grounded_feelings), and explicit intentions_updates. '
                     'A proposal requires actual assent; cite remote_source_ids and remote_time_source_id. Unread confirmation can establish GM truth, never recipient Knowledge. '
                     'Group requests to the controlled actor use group_request_changes with canonical source_event_id, '
                     'target_id, exact evidence and expires_at. Only explicit answers/refusals authored by that actor in the same '

@@ -1,135 +1,174 @@
-# Autonomous group conversations (#152)
+# Autonomous group conversations — #152 / PR #166
 
-Base: `b775f055cf8c76193bba96c8ad2fee49e89168cd` (master, includes merged #163).
-Reviewed AGENTS.md, #36/#69/#70/#122/#127/#129/#138/#158. Open #119 shares
-`remote.py` but owns call incapacitation; this change does not replace its call
-lifecycle. #118 shares only the fixture server and owns world authoring. #33 is
-Tabletop. No changes from those branches were included.
+Base master: `b775f055cf8c76193bba96c8ad2fee49e89168cd`, including #163.
+Initial implementation reviewed AGENTS.md, #36/#69/#70/#122/#127/#129/#138/#158
+and open #119/#118/#33. The follow-up updates the existing PR166 branch; it does
+not import those other PRs or create another PR.
 
-## Invariants and ownership
+## Ownership and invariants
 
-- Canonical WorldState/RemoteEvents remain authoritative. Every message goes
-  through `remote.apply`; no alternate scheduler, message table or endpoint.
-- No controlled-actor speech, decisions, goals, consent or physical relocation.
-  Delivery does not grant Knowledge; canonical reads grant testimony, not truth.
-- Intentions, goals, directed relationships, actor-specific Knowledge, read
-  history and GM story context inform selection. A thread can motivate a
-  spontaneous inquiry without a pre-existing intention. GM context is explicitly
-  not speaker knowledge. Actual prose compliance remains an LLM responsibility.
-- Existing job revisions, immutable before snapshots, variants and SQLite commit
-  own atomicity. Rejected series leave no partial messages or Knowledge.
+Canonical WorldState and RemoteEvents remain authoritative. Each message and
+read goes through `remote.apply`. There is no second scheduler, message journal,
+NPC runtime or API. Conversation pacing and event-bound response requests live
+in the existing snapshots, so revision, retry, variants, rollback and reload use
+the existing transaction/history boundaries.
 
-## R01–R09 implementation
+No NPC authors player speech, consent, goals or movement. Delivery is not reading;
+reading creates testimony about the message, not proof that its claims are true.
+Existing Knowledge and `basis_ids` validation, including continuation basis
+handling, are unchanged by this follow-up (the separate P1 review is out of scope).
+A conversation ID supplies a scheduling basis when an actor has no prior
+intention/thread/event. It does not establish factual knowledge.
 
-`remote_initiative.stage` extends the existing optional Director stage. A pure
-`group_planning` helper selects up to two eligible groups and four relevant NPCs
-per group. The model may choose one group or the old single-action contract, or
-no action. There is no requirement to fill the budget.
+## Initiative and pacing
 
-A chosen series contains up to three separate messages (a computational batch,
-not a literary length limit). One author request plans the whole series, then
-one source-bound Extraction request classifies questions/requests for the
-controlled actor. Each message is separately applied. Later speakers must read
-accepted earlier messages through Remote before continuing. Sender capabilities,
-membership, current basis, Knowledge and pause are checked again. NPC group
-backlogs do not trigger one extra LLM read decision per message.
+The existing `remote_initiative` offers at most two eligible groups and four
+speakers per group to its one author request. The author may choose a short
+series, a legacy action, or silence. The Runtime does not classify literary
+importance or impose topics.
 
-Pause is derived from `RemoteEvent.response_request`: target, exact evidence,
-semantic provenance, relevance deadline, optional canonical response ID and
-closure reason. The first active request stops the rest of the series. Concurrent already accepted
-questions retain separate source identities; each needs its own explicit resolution
-or expiry. Repeated annotations never overwrite an outstanding request. Other
-groups/direct conversations retain their own eligibility. Mere mentions do not
-create a request. The phone's existing semantic extraction resolves explicit
-answers/refusals using source IDs, author identity, same-group order, prior read
-and quoted evidence. Read, silence and ordinary turns alone cannot resolve it.
+`Conversation.initiative_pacing` stores the latest attempt time/turn, a digest of
+canonical inputs, and considered canonical History event IDs. Changed intentions,
+goals, relationships, Knowledge, plans, messages or threads permit a new attempt
+without waiting 30 minutes. History events involving group NPCs also qualify,
+including offscreen events. GM event/story context is explicitly not NPC knowledge.
+The author decides whether any of this warrants conversation in the same request.
 
-Expiry is evaluated against canonical world time without inventing an answer.
-Death/departure closes the request; leaving and rejoining does not resurrect it.
-The semantic model chooses relevance deadlines. No regex/NLP heuristics classify
-message meaning. Phone-generated group requests use the same lifecycle.
+Without changed context, a spontaneous attempt becomes eligible after **30 world
+minutes**. No intention, thread or new message is required. Everyday conversation,
+news, rumours, work, jokes, relationships and personal plans are allowed; silence
+is valid. The old two-turn and global five-minute gates are removed.
 
-`Conversation.initiative_pacing` records the last consultation, including silence
-and rejected proposals. Per-group cooldown is 30 world minutes **and** two turns;
-global allowance is one series per turn, at least five world minutes apart.
-Time Skip and Long-term Advance do not run this stage. Returning after a large
-jump produces at most one current series, never replay of missed intervals.
+At most one autonomous attempt/series runs globally per Narrative turn. Null and
+rejected results also consume the attempt. Inputs are consumed after the accepted
+series, including its own read transitions, so its output cannot immediately
+trigger itself. An event is not replayed on every subsequent turn. New canonical
+consequences can motivate another conversation. Time Skip and Long-term Advance
+do not run this stage; returning from a jump permits one current attempt, never
+one attempt per missed interval.
 
-Both fields have explicit nullable Pydantic defaults for legacy saves. No SQL
-migration or historical-snapshot rewrite. Existing snapshots/History own rollback
-and regenerate; canonical event/operation IDs survive replay. Completed request
-text uses the existing usage journal, including source-identical reuse. A failed
-optional group semantic provider request defers the whole series with diagnostics.
-A later Narrative extraction Retry reuses already staged messages and does not
-repeat their LLM calls.
+A nonempty autonomous series remains a small batch of at most three messages:
+one author call and one request-annotation Extraction call. Later speakers must
+explicitly read previous accepted messages. The ordinary Narrative Extraction
+also receives these accepted sources and applies consequences; there is no
+additional autonomous consequence-extraction call.
 
-Phone UI adds only “Ждут твоего ответа” in the group preview/composer area. The
-indicator is hidden until the controlled actor reads the source. Existing themes,
-Back, drafts, scrolling and calls are preserved. The pre-existing 4000-character
-modern-message cap is removed so this feature does not reject authored prose;
-provider output/context budgets still bound computation. Oversized optional group
-context is deferred without truncating canonical text.
+## Player group messages and waiting
 
-## T01–T12 acceptance
+The existing communication job now offers **one group reaction**, with several
+NPCs and returning speakers allowed. NPCs may answer the player and one another.
+There is no fixed reply-count cap: the author output/context token budgets bound
+processing. Empty replies are valid. Selected speakers read the source through
+Remote; later speakers also read preceding replies. Direct chats and calls retain
+the original communication cycle.
 
-| Tests | Evidence |
+A player message bypasses autonomous cooldown. If the group is waiting for a
+voluntary decision, the same phone Extraction adapter first interprets only the
+player's answer/refusal against canonical request IDs. Only then can the group
+author run. This conditional gate is necessary to keep `remote.apply`'s existing
+pause enforcement intact; no Runtime guard is disabled. It is not an urgency
+classifier or a per-NPC call. The usual consequence Extraction follows even if
+NPCs choose silence: explicit agreement must still reach the calendar.
+
+Pause remains derived from `RemoteEvent.response_request`: target, evidence,
+provenance, deadline, resolution source and closure reason. Read, silence,
+mentions and Narrative turns are not answers. Only the relevant autonomous group
+pauses; other groups and direct chats remain eligible. Expiry/death/departure can
+close a request without supplying an answer. Authoring ends at a player decision;
+autonomous acceptance stops immediately at its annotated request.
+
+Communication consumes its source/context once, preventing a second autonomous
+response job for that message. Accepted author frames are reused on retry.
+Recorded legacy group journals retain their original decision contract when
+retried/regenerated. New pacing fields have defaults; no SQL migration or rewrite
+of old snapshots is required.
+
+## Consequences
+
+The existing phone adapter passes meetings, locations, intentions, threads and
+directed relationships to the common Extraction/StateResolver/domain handlers.
+Proposals are not agreement; agreement is not occurrence. Player consent remains
+source-bound. Intention and thread changes require accepted message provenance.
+Explicit player-directed feelings must refer to the current player message.
+
+For #107 relationships, a projection of accepted, actually perceived RemoteEvents
+supplies canonical interaction evidence to the existing relationship reader.
+Stable RemoteEvent IDs prevent delivery/read transitions from counting as fresh
+relationship evidence. Existing immutable History receipts enforce consumption,
+player override fences and the common step budget. No new relationship store.
+
+The physical scene and NPC locations remain unchanged. Phone UI retains the
+existing unobtrusive “Ждут твоего ответа” indicator, shown after reading, along
+with navigation, skins, drafts, scrolling, calls and desktop/mobile layout.
+
+## Acceptance and tests
+
+`tests/test_group166.py` covers the follow-up, alongside `tests/test_group152.py`.
+Only the external LLM provider is deterministic; API, jobs, Remote, Resolver,
+SQLite and history/variants are real.
+
+| Follow-up checks | Evidence |
 |---|---|
-| T01–T02 | NPC↔NPC initiation, NPC-only group, 3-message order/senders/recipients, read transitions, no physical changes |
-| T03 | No basis → zero calls; null → cooldown; interval/turn budgets; no per-message backlog polling; context budget |
-| T04–T05 | Question stops at its source; other group/direct chat independent; mention fixture does not pause |
-| T06 | Read and ordinary Resolver turn preserve pause; explicit answer/refusal clears it; wrong-chat source rejected |
-| T07 | Deadline without answer; source idempotence; concurrent source identities; expired requests do not bloat semantic context |
-| T08–T09 | Unread/private projections; no actor transfer; stale membership/death/incapacity/channel/topic; leave/rejoin |
-| T10 | Real API/jobs/SQLite, duplicate completed job, concurrent command rejected, reload, rollback, regenerate, extraction Retry, legacy defaults |
-| T11 | Large jump capped; real one-year Long-term job with zero extra calls; week Time Skip without group replay |
-| T12 | Start → turn → series → wait → refusal → continuation → reload → next turn; Chromium desktop/mobile |
+| 1–2: new/consumed cause | Changed thread, relationship, intention, message; offscreen canonical event; consumed event does not repeat |
+| 3–4: spontaneous/silence | No intention/thread/event; two NPC messages; null consumes cooldown |
+| 5–6: group reaction | Six replies including returning speakers in one author call; explicit reads and NPC↔NPC replies |
+| 7–9: waiting | Immediate answer/refusal path; read and Narrative preserve pause; another group works without a global time gate |
+| 10–11: agreement | Invitation creates no plan; explicit assent creates pending calendar entry, including when NPCs decline to reply |
+| 12: persistence | Retry after provider failure reuses author; completed-job replay, reload, rollback, regenerate, variants and legacy journals |
+| 13–14: load | Week Time Skip and year-long advance without backlog; one current series; bounded calls/context/output |
 
-Main tests: `tests/test_group152.py`; external provider only is replaced in
-`tests/group152_provider.py`. Browser tests use the real fixture server, API,
-workers and SQLite, not mocked routes/Remote/Resolver.
+Integration: **Start → player group message → three NPC replies → spontaneous
+continuation → invitation → wait → read/silence → explicit assent → immediate
+reaction (or silence) → calendar agreement → reload → next turn → rollback**.
 
-## Cost measurements
+Verification runs (overlapping, not additive):
 
-Deterministic provider, existing `llm_requests` accounting:
+- `python -m pytest tests/test_group166.py tests/test_group152.py tests/test_communication_cycle.py tests/test_phone122.py -q -s`: **62 passed** before the final two follow-up cases.
+- `python -m pytest tests/test_group166.py tests/test_group152.py -q -s`: **37 passed** with those cases.
+- Final `python -m pytest tests/test_group166.py -q -s`: **11 passed** after tightening current-source relationship evidence.
+- `python -m pytest tests/test_group166.py::test_relationship_and_thread_consequences_use_common_resolver_and_receipts tests/test_relationship_evidence.py -q`: **22 passed**.
+- Broader targeted run included phone163 and remote communication. Its 15 failures identified the SQL projection defect and outdated group test provider; both were corrected and affected tests rerun above. It had 111 passing tests; it is not represented as an all-green run.
+- `npm run build --prefix frontend`: passed; existing bundle-size warning.
+- `npm test --prefix frontend -- phone158.test.tsx phone122.test.tsx callActivity.test.tsx`: **23 passed**.
+- `PLAYWRIGHT_EXECUTABLE_PATH=/tmp/chromium npm run test:e2e --prefix frontend -- group152.spec.ts phone163.spec.ts --output=/tmp/group166-ui-fixed`: **8 passed**.
+- Chromium desktop/mobile, graphite/parchment: group reaction, waiting, assent,
+  calendar and reload. Screenshots inspected at 1440×1000 and 360×800 CSS pixels.
+  Initial browser test incorrectly treated the calendar map as an array; fixed
+  the assertion and reran. No screenshots/videos committed.
+- `git diff --check`: passed. No full repository-wide local E2E run.
 
-| Series | Estimated input tokens (author + group extraction) | Output characters (author + extraction) |
-|---|---:|---:|
-| Initial question | 4292 + 1415 = 5707 | 516 + 131 = 647 |
-| Continuation after refusal | 4968 + 1521 = 6489 | 741 + 16 = 757 |
-| First series after a year | 5384 + 1480 = 6864 | 648 + 16 = 664 |
+## Measured cost
 
-These input counts are the repository estimator, **not provider-reported usage**.
-Mock provider token usage is null, recorded local cost is $0. No paid calls.
-Production billing uses actual usage and the existing provider pricing snapshot.
-There are zero new calls without a group opportunity, one consultation on silence,
-and two calls for a nonempty series regardless of its speakers/messages. Relative
-to the existing one-decision planner, a chosen group adds at most one extraction
-call. Output limits: 2400 + 1200 tokens; no per-NPC calls or retries for semantic
-annotation failure. Existing explicit phone command continuation/semantic costs
-remain separate and unchanged.
+Repository input estimator and existing `llm_requests` instrumentation, final
+fixture run; these are **not provider-reported tokens**:
 
-## Verification and limitations
+| Path | Calls | Estimated input tokens | Configured output ceiling |
+|---|---:|---:|---:|
+| Spontaneous autonomous invitation | 2 | 5052 + 1661 = **6713** | 2400 + 1200 |
+| Player message → three NPC replies | 2 | 2086 + 10416 = **12502** | 2400 + 4096 |
+| Answer to pending question → three NPC replies | 3 | 2543 + 3279 + 12527 = **18349** | 1200 + 2400 + 4096 |
+| Answer to pending question → NPC silence | 3 | 2543 + 3279 + 11581 = **17403** | 1200 + 2400 + 4096 |
 
-- Focused backend results and exact commands are in the PR description.
-- Production frontend build and 23 existing phone/call component tests pass.
-- 26 Chromium regressions: group152, phone158, phone163, call-continuity, both
-  desktop/mobile. Final group152 smoke: 4 passed (graphite/parchment).
-- Actual screenshots inspected at 1440×1000 and 360×800: waiting indicator,
-  canonical authors, readable messages, reachable composer; no Narrative copies.
-  Screenshots remain temporary; no videos or bulk QA artifacts committed.
-- Live DeepSeek, physical Android/iOS and natural-language quality across arbitrary
-  settings are NOT tested. Fixtures establish structural/transactional behavior,
-  not semantic accuracy. Cooldown constants may need tuning from real play.
-- No full repository-wide local suite; CI owns that broader regression gate.
+The conditional wait gate adds one call, 2543 estimated input tokens in this
+fixture, capped at 1200 output tokens. Without waiting, batch group replies use
+one author instead of one decision per read/speaker. Autonomous silence costs
+one author call; an ineligible/cooldown attempt costs zero group calls. Ordinary
+Narrative generation/Extraction is separate. The existing bounded phone
+commitment-repair mechanism remains available for invalid optional plans; no new
+autonomous repair loop was added. Retry reuses accepted author output; regeneration
+is an explicit new user request and may generate new output.
 
-## Changed files
+Mock usage is null, recorded local cost is **$0**, and no paid provider was called.
+Actual DeepSeek cost/quality and physical Android/iOS remain untested. Production
+usage/cost continues through the existing pricing/accounting mechanism. Semantic
+correctness in arbitrary prose remains dependent on the model; fixtures establish
+structural, agency, persistence and UI behavior. The separately excluded P1
+Knowledge/basis review remains outside this follow-up.
 
-Runtime: `group_planning.py`, `remote_initiative.py`, `remote_decision.py`,
-`remote_models.py`, `remote.py`, `communication.py`, `remote_semantics.py`,
-`raw.py`, `resolver.py`, `context.py` (all under `backend/runtime_v3/`).
-Pipeline/accounting: `engine.py`, `backend/services/usage.py`.
-UI: `frontend/src/Phone.tsx`, `frontend/src/PhoneContent.tsx`,
-`frontend/src/styles/phone.css`.
-Tests: `tests/test_group152.py`, `tests/group152_provider.py`,
-`tests/test_historical_correspondence130.py`, `tests/e2e_server.py`,
-`frontend/e2e/group152.spec.ts`. Documentation: this file.
+## Follow-up files
+
+Runtime: `backend/runtime_v3/{communication,context,group_planning,remote_initiative,
+remote_models,remote_semantics,repository}.py`.
+Pipeline: `backend/services/{communication,usage}.py`, `engine.py`.
+Tests: `tests/{test_group166,test_group152,group152_provider,test_communication_cycle}.py`,
+`frontend/e2e/group152.spec.ts`. Documentation: `docs/group152.md`.

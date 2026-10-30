@@ -4,12 +4,13 @@ No scheduler or message store. Canonical conversations own attempt pacing;
 RemoteEvents own request annotations. All writes are staged in the existing job.
 """
 from copy import deepcopy
+import hashlib
+import json
 from pydantic import Field
 from backend.runtime_v3.remote_models import RemoteModel, GroupResponseChange, GroupRequestChange, ResponseRequest
 from backend.runtime_v3.life import capabilities
 
 COOLDOWN_MINUTES = 30
-COOLDOWN_TURNS = 2
 MAX_MESSAGES = 3
 MAX_GROUPS = 2
 
@@ -20,6 +21,11 @@ class GroupMessage(RemoteModel):
     basis_ids: list[str] = Field(min_length=1, max_length=8)
     knowledge_ids: list[str] = Field(default_factory=list, max_length=8)
     read_previous: bool = False
+
+
+class GroupReaction(RemoteModel):
+    # Output/context token budgets bound processing, not a literary reply count.
+    messages: list[GroupMessage] = Field(default_factory=list)
 
 
 class GroupSeries(RemoteModel):
@@ -65,26 +71,59 @@ def available(state, actor):
     return actor != state['camera']['controlled_actor_id'] and caps['can_act'] and caps['can_perceive']
 
 
-def ready(state, group):
+def stimulus(state, group):
+    """Identity of canonical inputs, not a classifier of literary importance.
+
+    Exclude clock/turn and delivery bookkeeping. The author decides whether a
+    change warrants speech. Record after acceptance so our own series cannot
+    recursively trigger itself. No world facts are granted to any speaker.
+    """
+    from backend.runtime_v3.remote import members
+    actors = members(group) - {state['camera']['controlled_actor_id']}
+    inputs = dict(
+        characters={a: {k: state['characters'][a][k] for k in
+                    ('goals', 'intentions', 'life_status')} for a in sorted(actors)},
+        relationships={k:v for k,v in state['relationships'].items()
+                       if v['source_id'] in actors or v['target_id'] in actors},
+        threads={k:v for k,v in state['threads'].items() if actors.intersection(v['character_ids'])},
+        knowledge={k:v for k,v in state['knowledge'].items() if v['actor_id'] in actors},
+        plans={k:v for k,v in state['scheduled_events'].items() if actors.intersection(v['character_ids'])},
+        messages={k: {f:v[f] for f in ('sender_id', 'content', 'response_request')}
+                  for k,v in state['remote_events'].items() if v['conversation_id'] == group['id']})
+    return hashlib.sha256(json.dumps(inputs, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def ready(state, group, events=()):
     if not group['group'] or pending(state, group['id']):
         return False
     now, turn = state['meta']['world_time'], state['meta']['turn_id']
-    pacing = group.get('initiative_pacing')
-    if pacing and (now - pacing['world_time'] < COOLDOWN_MINUTES or turn - pacing['turn_id'] < COOLDOWN_TURNS):
-        return False
-    # One series globally per turn and short interval, including declined offers.
     recent = [c['initiative_pacing'] for c in state['conversations'].values() if c.get('initiative_pacing')]
-    return not any(p['turn_id'] == turn or now - p['world_time'] < 5 for p in recent)
+    if any(p['turn_id'] == turn for p in recent):
+        return False
+    pacing = group.get('initiative_pacing')
+    event_ids = {e['id'] for e in events}
+    return (not pacing or bool(event_ids - set(pacing.get('event_ids', [])))
+            or now - pacing['world_time'] >= COOLDOWN_MINUTES
+            or pacing.get('stimulus') is not None and pacing['stimulus'] != stimulus(state, group))
 
 
-def opportunities(state):
+def history_cues(state, group, events):
+    from backend.runtime_v3.remote import members
+    actors = members(group) - {state['camera']['controlled_actor_id']}
+    return [e for e in events if e.get('id') and not e.get('remote_interaction_id')
+            and actors.intersection(e.get('participants', []))][-64:]
+
+
+def opportunities(state, history_events=()):
     from backend.runtime_v3.remote import members
     if not state['meta']['communication']['text_message']:
         return []
     result = []
     for group in sorted(state['conversations'].values(), key=lambda c: (
             (c.get('initiative_pacing') or {}).get('world_time', -1), c['id'])):
-        if not ready(state, group):
+        # Structural participation selects context, never importance or meaning.
+        events = history_cues(state, group, history_events)
+        if not ready(state, group, events):
             continue
         actors = sorted(a for a in members(group) if available(state, a))
         if len(actors) < 2:
@@ -106,11 +145,16 @@ def opportunities(state):
                     and len(set(state['facts'][k['fact_id']]['character_ids']) & set(actors)) >= 2]
             if ids:
                 basis[actor] = list(dict.fromkeys(ids))[-8:]
-        if not basis:
-            continue
-        actors = sorted(actors, key=lambda a: (a not in basis, a))[:4]
+        motivated = set(basis)
+        # Conversation identity permits a spontaneous attempt; it is not
+        # evidence of a fact or a substitute for the speaker's Knowledge.
+        for actor in actors:
+            basis.setdefault(actor, [group['id']])
+        actors = sorted(actors, key=lambda a: (a not in motivated, a))[:4]
         basis = {a: ids for a, ids in basis.items() if a in actors}
-        result.append(dict(conversation_id=group['id'], actor_ids=actors, basis=basis))
+        result.append(dict(conversation_id=group['id'], actor_ids=actors, basis=basis, event_cues=events,
+            initiative='changed_context' if (group.get('initiative_pacing') or {}).get('stimulus') not in
+                (None, stimulus(state, group)) else 'spontaneous'))
         if len(result) == MAX_GROUPS:
             break
     return result
@@ -191,13 +235,14 @@ def resolve_responses(resolver, raw):
             resolver.warn('group_response_changes', index, 'Ответ не подтверждён источником.', code='group_response_source')
 
 
-def accept_series(snapshot, series, annotations, options, operation_id):
+def accept_series(snapshot, series, annotations, options, operation_id, *, source_id=None):
     """Sequential Remote commands, with eligibility/pause checks after every event."""
     from backend.runtime_v3.remote import apply, members
     from backend.runtime_v3.models import WorldHistoryV3, identity
     from backend.runtime_v3.remote_initiative import accept
     offered = next((o for o in options if o['conversation_id'] == series.conversation_id), None)
-    permitted = next((o for o in opportunities(snapshot['world_state']) if o['conversation_id'] == series.conversation_id), None)
+    permitted = (reaction_option(snapshot['world_state'], source_id) if source_id else
+        next((o for o in opportunities(snapshot['world_state'], offered.get('event_cues', ()) if offered else ()) if o['conversation_id'] == series.conversation_id), None))
     if not offered or not permitted:
         raise ValueError('group_series_stale')
     requests = {r.message_index:r for r in annotations.requests}
@@ -216,6 +261,10 @@ def accept_series(snapshot, series, annotations, options, operation_id):
         # Continuation is grounded in the accepted earlier message, not a
         # fabricated intention. A speaker must choose to read it first.
         allowed = permitted['basis'].get(item.actor_id, [])
+        if source_id and item.actor_id not in state['remote_events'][source_id]['read_by']:
+            result, delta = apply(result, dict(action='read', operation_id=f'{operation_id}:source:{index}',
+                event_id=source_id), actor_id=item.actor_id, autonomous=True)
+            for section, rows in delta.items(): batch[section].extend(rows)
         if index and not item.read_previous:
             raise ValueError('group_continuation_requires_read')
         if index and item.read_previous:
@@ -250,11 +299,39 @@ def accept_series(snapshot, series, annotations, options, operation_id):
     return result, batch
 
 
-def record_attempt(snapshot, group_id, operation_id, batch):
+def reaction_option(state, source_id):
+    from backend.runtime_v3.remote import members
+    source = state['remote_events'][source_id]
+    group = state['conversations'][source['conversation_id']]
+    actors = sorted(a for a in members(group) if available(state, a) and a in source['delivered_to'])
+    return dict(conversation_id=group['id'], actor_ids=actors, basis={a:[source_id] for a in actors})
+
+
+def reaction_context(snapshot, source_id):
+    state = snapshot['world_state']
+    option = reaction_option(state, source_id)
+    source = state['remote_events'][source_id]
+    return [dict(role='system', content=(
+        'Group communication reaction/1. Author an optional natural conversation in response to the supplied '
+        'player message, using the existing communication job. Return {"messages":[]} for silence. '
+        'Several NPCs may answer the player AND each other, including returning speakers. '
+        'Do not author the player, invent agreement or move anyone physically. Each selected speaker '
+        'chooses to read the delivered source message before speaking; subsequent speakers must set '
+        'read_previous=true to read preceding accepted replies. Use the source ID as basis_ids. '
+        'Preserve per-speaker Knowledge. Rumours are not canonical facts. End at an explicit request '
+        'for a voluntary player decision; do not invent its answer. No mandatory reply. Schema: '
+        + json.dumps(GroupReaction.model_json_schema(), ensure_ascii=False))),
+        dict(role='user', content=json.dumps(dict(groups=context(snapshot, [option]),
+            source_message={k:source[k] for k in ('id','sender_id','content','world_time')},
+            controlled_actor_id=state['camera']['controlled_actor_id']), ensure_ascii=False))]
+
+
+def record_attempt(snapshot, group_id, operation_id, batch, *, event_ids=None):
     group = snapshot['world_state']['conversations'][group_id]
     before = deepcopy(group)
     state = snapshot['world_state']
-    group['initiative_pacing'] = dict(world_time=state['meta']['world_time'], turn_id=state['meta']['turn_id'], operation_id=operation_id)
+    group['initiative_pacing'] = dict(world_time=state['meta']['world_time'], turn_id=state['meta']['turn_id'], operation_id=operation_id, stimulus=stimulus(state, group),
+        event_ids=list(event_ids) if event_ids is not None else (before.get('initiative_pacing') or {}).get('event_ids', []))
     batch.setdefault('state_changes', []).append(dict(kind='group_initiative_attempt', entity=group_id,
         before=before, after=deepcopy(group), operation_id=operation_id))
 

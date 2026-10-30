@@ -37,14 +37,33 @@ def evidence_slice(state, source_id):
     return rows
 
 
-def messages(snapshot, source_id):
+def messages(snapshot, source_id, *, response_only=False):
     state = snapshot['world_state']
     rows = evidence_slice(state, source_id)
     if not rows:
         return None
+    if response_only:
+        # Same source-bound Extraction contract, restricted to releasing the
+        # existing wait before authoring. Consequences follow once, afterwards.
+        schema = extraction_schema()
+        schema['properties'] = {k:v for k,v in schema['properties'].items()
+                                if k in ('final_scene','group_response_changes')}
+        scene=dict(location_id=state['camera']['location_id'],
+            present_character_ids=state['camera']['present_character_ids'], elapsed_minutes=0)
+        return [dict(role='system', content=(
+            'Remote semantic extraction/1. Interpret ONLY explicit answers or refusals to pending_group_requests. '
+            'Return final_scene unchanged and group_response_changes with canonical request_event_id, '
+            'response_event_id, assertion answered/refused and exact evidence. Reading, silence, mentions '
+            'and unrelated messages are not answers. Do not extract other consequences in this phase.')),
+            dict(role='user',content=json.dumps(dict(schema=schema,final_scene=scene,
+                controlled_actor_id=state['camera']['controlled_actor_id'],
+                pending_group_requests=[dict(event_id=e['id'], **e['response_request'])
+                    for e in rows if e.get('response_request') and not e['response_request']['resolved_by']],
+                accepted_messages=[{k:e[k] for k in ('id','sender_id','content','ordinal','world_time')}
+                    for e in rows if e['sender_id']==state['camera']['controlled_actor_id'] or e.get('response_request')]),ensure_ascii=False))]
     ids = set().union(*(participants(e) for e in rows))
     schema = extraction_schema()
-    allowed = ('final_scene', 'locations', 'scheduled_event_changes', 'character_changes', 'group_response_changes','group_request_changes')
+    allowed = ('final_scene', 'locations', 'scheduled_event_changes', 'character_changes', 'group_response_changes','group_request_changes','thread_changes','relationship_changes')
     schema['properties'] = {k:v for k,v in schema['properties'].items() if k in allowed}
     character=schema['properties']['character_changes']['items']
     character['properties']={k:v for k,v in character['properties'].items() if k in ('id','evidence','intentions_updates')}
@@ -88,9 +107,16 @@ def messages(snapshot, source_id):
              'authored by the target in this same group. Cite request_event_id, response_event_id, assertion '
              'answered/refused and exact evidence from the answer. Reading, silence, unrelated messages and '
              'ordinary Narrative are not answers. No invented consent. '
+             'Threads may develop from accepted speech; cite source_event_id and evidence, never fabricate completed actions. '
+             'Directed relationships use the common grounded_feelings contract with source_event_ids from '
+             'relationship_sources, rationale and bounded dimension changes. Sources require actual reading, '
+             'not mere delivery. Explicit player-directed feelings must be quoted from the current source_event_id, '
+             'not a historical player message. A proposed meeting is never evidence of consent or an occurrence. '
              'Empty changes are valid when no consequences are established.')
     return [dict(role='system', content=rules), dict(role='user', content=json.dumps(dict(
         pending_group_requests=[dict(event_id=e['id'], **e['response_request']) for e in rows if e.get('response_request')],
+        relationship_sources=[e for e in relationship_sources(snapshot) if e['id'] in {r['id'] for r in rows}],
+        relationships=state['relationships'], threads=state['threads'],
         source_event_id=source_id, controlled_actor_id=state['camera']['controlled_actor_id'],
         current_time=current_time(state), calendar=state['meta']['calendar'],
         final_scene=dict(location_id=state['camera']['location_id'],
@@ -106,14 +132,14 @@ def messages(snapshot, source_id):
         schema=schema), ensure_ascii=False))]
 
 
-def resolve(snapshot, source_id, response, diagnostics=None):
+def resolve(snapshot, source_id, response, diagnostics=None, *, relationship_query=None, relationship_receipts=None):
     state = snapshot['world_state']
     rows = evidence_slice(state, source_id)
     raw = RawTurnResult.parse(response)
     expected = dict(location_id=state['camera']['location_id'],
                     present_character_ids=state['camera']['present_character_ids'], elapsed_minutes=0)
     if raw.final_scene != expected or raw.choices or any(v for k,v in raw.records.items()
-            if k not in ('locations','scheduled_event_changes','character_changes','group_response_changes','group_request_changes')):
+            if k not in ('locations','scheduled_event_changes','character_changes','group_response_changes','group_request_changes','thread_changes','relationship_changes')):
         raise ValueError('Телефонное извлечение пытается изменить физическую сцену или неподдерживаемый раздел.')
     by_id = {e['id']:e for e in rows}
     actor = state['camera']['controlled_actor_id']
@@ -132,6 +158,19 @@ def resolve(snapshot, source_id, response, diagnostics=None):
                 item['player_source_id']=matches[0]['id']
                 item['player_evidence']=matches[0]['content']
     optional_warnings=[]
+    scoped_relationships=[]
+    for index,item in enumerate(raw.records['relationship_changes']):
+        ids=item.get('source_event_ids', []) if isinstance(item,dict) else None
+        owned=isinstance(item,dict) and item.get('player_assertion')=='explicit_directed_feelings'
+        quote=item.get('player_evidence') if isinstance(item,dict) else None
+        current=by_id[source_id]
+        if (not isinstance(ids,list) or any(not isinstance(eid,str) for eid in ids)
+                or not set(ids) <= by_id.keys() or owned and (current['sender_id']!=actor
+                    or not isinstance(quote,str) or not quote.strip() or quote not in current['content'])):
+            optional_warnings.append(dict(section='relationships',index=index,code='remote_relationship_source',action='drop_record'))
+        else:
+            scoped_relationships.append(item)
+    raw.records['relationship_changes']=scoped_relationships
     valid_characters=[]
     for index,item in enumerate(raw.records['character_changes']):
         if not isinstance(item, dict) or set(item) - {'id','evidence','intentions_updates'}:
@@ -150,10 +189,21 @@ def resolve(snapshot, source_id, response, diagnostics=None):
             valid.append(change)
         if valid: valid_characters.append(dict(item,intentions_updates=valid))
     raw.records['character_changes']=valid_characters
+    threads=[]
+    for index,item in enumerate(raw.records['thread_changes']):
+        source=item.get('source_event_id') if isinstance(item,dict) else None
+        event=by_id.get(source) if isinstance(source,str) else None
+        if not event or not isinstance(item.get('evidence'),str) or not item['evidence'] or item['evidence'] not in event['content']:
+            optional_warnings.append(dict(section='threads',index=index,code='remote_thread_source',action='drop_record'))
+        else:
+            threads.append(item)
+    raw.records['thread_changes']=threads
     narrative = '\n'.join(e['content'] for e in rows)
     authored = '\n'.join(e['content'] for e in rows if e['sender_id'] == actor)
     resolver = StateResolver(state, narrative, authored, turn_id=state['meta']['turn_id'], observed=False)
     resolver.remote_semantic_sources = by_id
+    resolver.relationship_query = relationship_query
+    resolver.relationship_receipts = relationship_receipts or []
     from backend.services.world_delta_errors import StructuralDeltaError
     try:
         result = resolver.resolve(raw)
@@ -185,7 +235,7 @@ def staged_sources(snapshot):
     return result
 
 
-def resolve_optional(snapshot, source_id, response, diagnostics):
+def resolve_optional(snapshot, source_id, response, diagnostics, **resolver_options):
     """Quarantine only identified optional plans after one unsuccessful repair.
 
     Every attempt starts from the same snapshot and runs the common Resolver.
@@ -198,7 +248,7 @@ def resolve_optional(snapshot, source_id, response, diagnostics):
     # Each rejection must remove at least one candidate: bounded, no LLM retries.
     while True:
         try:
-            return resolve(snapshot, source_id, payload, diagnostics)
+            return resolve(snapshot, source_id, payload, diagnostics, **resolver_options)
         except SemanticValidationError as exc:
             records = payload['scheduled_event_changes']
             indices = {w['index'] for w in exc.warnings
@@ -226,3 +276,16 @@ def resolve_optional(snapshot, source_id, response, diagnostics):
                 else:
                     retained.append(location)
             payload['locations'] = retained
+
+
+def relationship_sources(snapshot, source_ids=None):
+    """Canonical utterances perceived by participants, using common #107 evidence.
+
+    Stable RemoteEvent IDs prevent consuming successive delivery/read transitions
+    as independent evidence. This is a projection, not another event journal.
+    """
+    return [dict(id=e['id'], turn_id=e['turn_id'], participants=sorted({e['sender_id'], *e['read_by']}),
+        scene_action=dict(actor_id=e['sender_id'], modality='speech', phase='completed'),
+        evidence=e['content'], remote_interaction_id=e['id'])
+        for e in snapshot['world_state']['remote_events'].values()
+        if e['channel']=='TEXT_MESSAGE' and e['read_by'] and (source_ids is None or e['id'] in source_ids)]
