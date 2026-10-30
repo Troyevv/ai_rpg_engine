@@ -23,12 +23,13 @@ jobs:
     env:
       CI: 'true'
       E2E_SHARD: ${{ inputs.artifact-prefix }}-${{ matrix.project }}-${{ matrix.shard }}
-      E2E_DB_PATH: ${{ runner.temp }}/e2e-${{ inputs.artifact-prefix }}-${{ matrix.project }}-${{ matrix.shard }}.sqlite3
       # Each job has a separate VM/network namespace, including legacy 8013/8014 servers.
       E2E_PORT: '8011'
       E2E_OUTPUT: test-results
       E2E_SUMMARY: test-results/ci-summary.json
     steps:
+      - name: Allocate shard database
+        run: echo "E2E_DB_PATH=$RUNNER_TEMP/e2e-$E2E_SHARD.sqlite3" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
