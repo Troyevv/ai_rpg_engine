@@ -234,9 +234,47 @@ test("explicit climate survives reload and matches the canonical calendar", asyn
       (l: any) => l.name === before.state.scene_meta.location,
     )?.id || before.state.locations[0].id;
   await menu.getByLabel("Регион климата").selectOption(location);
+  // Hold the real post-commit projection response. A fast local refresh used
+  // to hide the race where the revision guard dismissed the settings dialog.
+  let releaseRefresh!: () => void;
+  const refreshGate = new Promise<void>((resolve) => { releaseRefresh = resolve; });
+  let refreshArrived!: () => void;
+  const refreshStarted = new Promise<void>((resolve) => { refreshArrived = resolve; });
+  await page.route(`**/api/saves/${selected.save}`, async (route) => {
+    const response = await route.fetch();
+    refreshArrived();
+    await refreshGate;
+    await route.fulfill({ response });
+  }, { times: 1 });
+  const putResponse = page.waitForResponse((response) =>
+    response.url().endsWith(`/api/saves/${selected.save}/weather`) &&
+    response.request().method() === "PUT",
+  );
   await menu
     .getByRole("button", { name: "Установить климат", exact: true })
     .click();
+  const committed = await putResponse;
+  expect(committed.ok()).toBe(true);
+  const payload = committed.request().postDataJSON();
+  expect(payload.revision).toBe(before.revision);
+  expect(payload.profile.regions[location]).toEqual({ climate: "temperate", hemisphere: "north" });
+  const updated = await committed.json();
+  expect(updated.revision).toBe(before.revision + 1);
+  expect(updated.state.scene_meta.weather.temperature).not.toBeNull();
+  const profile = await (await request.get(`/api/saves/${selected.save}/weather`)).json();
+  expect(profile.regions[location].climate).toBe("temperate");
+  expect(profile.seed).toBe(payload.profile.seed);
+  const persisted = await (await request.get(`/api/saves/${selected.save}`)).json();
+  expect(persisted.revision).toBe(updated.revision);
+  expect(persisted.state.scene_meta.weather).toEqual(updated.state.scene_meta.weather);
+  try {
+    await refreshStarted;
+    await expect(menu.getByRole("button", { name: "Политика истории" })).toBeDisabled();
+    await expect(menu.getByText(/Климат установлен/)).toBeVisible();
+  } finally {
+    releaseRefresh();
+  }
+  await expect(menu.getByRole("button", { name: "Политика истории" })).toBeEnabled();
   await expect(menu.getByText(/Климат установлен/)).toBeVisible();
   await page.keyboard.press("Escape");
   const configured = await (
