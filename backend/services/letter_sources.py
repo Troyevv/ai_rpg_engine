@@ -40,7 +40,7 @@ def parse(narrative):
         # The newline before the closing fence is Markdown syntax.
         if content.endswith('\r\n'): content = content[:-2]
         elif content.endswith('\n'): content = content[:-1]
-        if not content.strip() or len(content) > 4000 or len(result) >= 16:
+        if not content.strip():
             raise StructuralDeltaError('Недопустимый полный текст письма.', 'letter_source_invalid', repairable=False)
         result.append(dict(id=f'letter-{len(result)+1}', type='letter', content=content))
     return result

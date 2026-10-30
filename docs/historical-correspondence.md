@@ -39,8 +39,12 @@ existing letter does not use a new `letter` fence and does not create a send.
 `letter_sources.parse` uses the existing CommonMark parser, accepts only closed
 top-level letter fences, and copies the full original body between delimiters.
 Only the framing newline before the closing fence is excluded. Empty,
-unclosed, nested, oversized and unbound sources are rejected. There is no regex
-inference over arbitrary literary prose. Sources receive local IDs `letter-1`,
+unclosed, nested and unbound sources are rejected. There is no regex
+inference over arbitrary literary prose. Neither source count nor historical
+letter length has an application limit. Canonical text is never truncated;
+Context Builder selects input within the model budget without rewriting stored
+letters. Infrastructure/context exhaustion is a technical error, not a
+literary validation failure. Sources receive local IDs `letter-1`,
 `letter-2`, etc. Extraction interprets sender/recipient/channel and binds the
 source ID; Runtime copies the full body. Extractor-supplied content cannot
 replace it, and a summary or missing body cannot become a fictitious send.

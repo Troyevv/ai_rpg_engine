@@ -47,3 +47,37 @@ test('130 reader sees authored letter but character reads canonical text only af
   expect(opened.ok()).toBeTruthy();
   expect((await(await request.get(`/api/saves/${seed.save}/correspondence`)).json())[0].content).toBe(secret);
 });
+
+test('130 long authored letter survives rendering reload and canonical reading without truncation', async({page,request})=>{
+  const seed=await(await request.post('/test/letter130-seed')).json();
+  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),seed);
+  const view=async()=>await(await request.get(`/api/saves/${seed.save}`)).json();
+  await page.goto('/');
+  await page.getByRole('button',{name:'Начать игру',exact:true}).click();
+  await expect.poll(async()=>(await view()).job?.status).toBe('saved');
+  const {content}=await(await request.post('/test/letter130-arm?size=35000')).json();
+  await request.post('/test/letter130-release');
+  const config={model:'handoff-test',provider:'local',context_length:131072,max_tokens:8000,update_tokens:8000};
+  const start=await request.post(`/api/saves/${seed.save}/turns`,{data:{kind:'turn',text:'Жду.',revision:(await view()).revision,config}});
+  expect(start.ok()).toBeTruthy();const jid=(await start.json()).id;
+  await expect.poll(async()=>(await(await request.get(`/api/jobs/${jid}`)).json()).status).toBe('saved');
+  await page.reload();
+  const letter=page.locator('.narrative-letter');
+  await expect(letter).toBeVisible();
+  const displayed=content.replace(/\r\n/g,'\n')+'\n';
+  await expect.poll(()=>letter.textContent()).toBe(displayed);
+  await expect(page.locator('code.language-letter')).toHaveCount(0);
+  const skip=await request.post(`/api/saves/${seed.save}/turns`,{data:{kind:'turn',text:'Жду почту.',revision:(await view()).revision,config,time_skip:{duration:20,reason:'Жду почту'}}});
+  expect(skip.ok()).toBeTruthy();const skipId=(await skip.json()).id;
+  await expect.poll(async()=>(await(await request.get(`/api/jobs/${skipId}`)).json()).status).toBe('saved');
+  const mail=await(await request.get(`/api/saves/${seed.save}/correspondence`)).json();
+  expect(mail[0].content).toBeUndefined();
+  const revision=(await view()).revision;
+  for(let i=0;i<2;i++) {
+    const opened=await request.post(`/api/saves/${seed.save}/correspondence`,{data:{revision,command:{action:'read',event_id:mail[0].id,operation_id:'open-long-browser130'}}});
+    expect(opened.ok()).toBeTruthy();
+    expect((await(await request.get(`/api/saves/${seed.save}/correspondence`)).json())[0].content).toBe(content);
+  }
+  await page.reload();
+  await expect.poll(()=>page.locator('.narrative-letter').textContent()).toBe(displayed);
+});

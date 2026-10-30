@@ -475,14 +475,18 @@ if __name__ == '__main__':
         return {'world':seed['world'],'save':seed['save']}
 
     @app.post('/test/letter130-arm')
-    def letter130_arm():
-        from test_historical_correspondence130 import artifact, extracted
+    def letter130_arm(size: int = 0):
+        from test_historical_correspondence130 import artifact, extracted, long_letter
         import threading
         letter130_provider.finish_gate=threading.Event()
         a=artifact('qa_vera','qa_kirill')
+        if size:
+            a['content']=long_letter(size)
+            letter130_provider.chunk_size=1000
+            letter130_provider.delay=0.01
         letter130_provider.artifacts=[a]
         letter130_provider.rows=[extracted(a)]
-        return {'ready':True}
+        return {'ready':True, 'content':a['content']}
 
     @app.post('/test/letter130-release')
     def letter130_release():

@@ -104,7 +104,7 @@ def test_batch_year_chronology_death_and_no_forced_reply():
 
 class HTTPProvider:
     def __init__(self):
-        self.artifacts=[];self.rows=[];self.elapsed=1;self.fail_extraction=False;self.bad=False;self.calls=[];self.gate=None;self.entered=None;self.delay=0;self.finish_gate=None
+        self.artifacts=[];self.rows=[];self.elapsed=1;self.fail_extraction=False;self.bad=False;self.calls=[];self.gate=None;self.entered=None;self.delay=0;self.finish_gate=None;self.chunk_size=7
     def create(self, **kw):
         extraction=bool(kw.get('response_format'))
         self.calls.append('extraction' if extraction else 'narrative')
@@ -123,9 +123,9 @@ class HTTPProvider:
                 if self.gate is not None:
                     self.entered.set()
                     assert self.gate.wait(10)
-                for i in range(len(PUBLIC)+2,len(value),7):
+                for i in range(len(PUBLIC)+2,len(value),self.chunk_size):
                     if self.delay:time.sleep(self.delay)
-                    yield NS(choices=[NS(delta=NS(content=value[i:i+7]),finish_reason=None)])
+                    yield NS(choices=[NS(delta=NS(content=value[i:i+self.chunk_size]),finish_reason=None)])
                 if self.finish_gate is not None: assert self.finish_gate.wait(30)
                 yield NS(choices=[NS(delta=NS(content=''),finish_reason='stop')])
             chunks=prose()
@@ -146,7 +146,7 @@ def api(tmp_path,monkeypatch):
             snap['world_state']['meta']['communication'].update(letter=True,delivery_minutes={'letter':10})
             db.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(snap),sid))
         def turn(kind='turn',**extra):
-            r=c.post(f'/api/saves/{sid}/turns',json=dict(kind=kind,text='' if kind=='start' else 'Жду.',revision=repo.get_save(sid)['revision'],config=CONFIG,**extra))
+            r=c.post(f'/api/saves/{sid}/turns',json=dict(kind=kind,text='' if kind=='start' else 'Жду.',revision=repo.get_save(sid)['revision'],config=extra.pop('config',CONFIG),**extra))
             assert r.status_code==200,r.text
             return wait(repo,r.json()['id'])
         yield repo,c,sid,p,turn
@@ -253,7 +253,7 @@ def test_year_real_job_reload_and_rollback(api):
     assert repo.get_snapshot(sid)['world_state']==before['world_state']
 
 
-@pytest.mark.parametrize('text', ['```letter\n', '```letter\ntext', '```letter\n\n```', '```letter\n'+('x'*4001)+'\n```'])
+@pytest.mark.parametrize('text', ['```letter\n', '```letter\ntext', '```letter\n\n```'])
 def test_full_letter_source_required(text):
     with pytest.raises(StructuralDeltaError):parse(text)
 
@@ -397,10 +397,10 @@ def test_long_term_authored_send_and_npc_read_receipts():
 def test_structural_errors_keep_existing_safe_diagnostics():
     from backend.runtime_v3.models import assert_world_state_v3_invariants
     s=letters();out=send(s);state=out.state
-    next(iter(state['remote_events'].values()))['content']=SECRET*200
+    next(iter(state['remote_events'].values()))['content']={'invalid_type':SECRET}
     with pytest.raises(StructuralDeltaError) as err:assert_world_state_v3_invariants(state)
     assert SECRET not in str(err.value)
-    assert 'remote_events' in str(err.value) and 'string_too_long' in str(err.value)
+    assert 'remote_events' in str(err.value) and 'string_type' in str(err.value)
 
 
 def test_old_private_checkpoint_retries_without_regenerating_letter(api):
@@ -438,14 +438,16 @@ def test_author_correspondence_is_inside_the_context_budget():
     from context_builder import estimate
     snap=letters()
     for _ in range(6):
-        a=artifact(recipient='child');a['content']='Полный текст для адресата. '*140
+        a=artifact(recipient='child');a['content']='Полный текст для адресата. '*1400
         snap['world_state']=send(snap,a).state
     advance_clock(snap,snap['world_state']['meta']['world_time']+100,WorldHistoryV3().to_dict())
+    original = deepcopy(snap)
     messages=build_context(snap,[],'Жду.','turn',24000,2000)
     assert estimate(messages)<=24000-2000-256
     author=next(m for m in messages if m['content'].startswith(CONTRACT))
     assert len(author['content'])<len(author_context(snap['world_state'])['content'])
     assert sum(CONTRACT in m['content'] for m in messages)==1
+    assert snap == original
 
 
 @pytest.mark.parametrize('source_id', ['letter-0', 'letter-2', 'letter-01', 'missing'])
@@ -458,9 +460,9 @@ def test_invalid_source_id_cannot_create_letter(source_id):
     assert snap == before
 
 
-def test_multiple_full_sources_and_maximum_length_are_bound_without_loss():
+def test_multiple_full_sources_are_bound_without_loss():
     snap = letters()
-    first = artifact(); first['content'] = 'Я' * 3997 + '\n\nЯ'
+    first = artifact(); first['content'] = 'Я' * 30997 + '\n\nЯ'
     second = artifact(channel='TELEGRAM', aid='letter-2')
     second['content'] = '  Привет, друг!\r\n\r\nДо встречи.  '
     text = authored(first) + '\n\n```python\nignored\n```\n\n' + authored(second)
@@ -480,3 +482,89 @@ def test_letter_rendering_is_literal_prose_not_code():
     assert '**Literal** &amp; `text`' in html
     assert 'language-letter' not in html and '```letter' not in html
     assert '<code class="language-python">' in html
+
+
+def long_letter(size):
+    suffix = '\nКонец.  \r\n'
+    return ('  Дорогой друг!\r\n\r\n' + ('Жизнь — не список ограничений. 🕯️\n' * size))[:size-len(suffix)] + suffix
+
+
+@pytest.mark.parametrize('channel', ['LETTER', 'COURIER_LETTER', 'TELEGRAM'])
+@pytest.mark.parametrize('size', [10000, 35000])
+def test_unlimited_player_letters_api_sqlite_and_repeated_send(api, channel, size):
+    repo, c, sid, provider, turn = api
+    with repo.connect() as db:
+        snap = repo.get_snapshot(sid)
+        snap['world_state']['meta']['communication'].update(courier=True, telegram=True)
+        db.execute('UPDATE saves SET state_json=? WHERE id=?', (json.dumps(snap), sid))
+    content = long_letter(size)
+    command = dict(action='send', channel=channel, character_id='qa_vera', content=content,
+                   operation_id='long-player-letter130')
+    revision = repo.get_save(sid)['revision']
+    for _ in range(2):
+        response = c.post(f'/api/saves/{sid}/correspondence', json=dict(command=command, revision=revision))
+        assert response.status_code == 200, response.text
+    mail = c.get(f'/api/saves/{sid}/correspondence').json()
+    assert len(mail) == 1 and mail[0]['content'] == content
+    fresh = Repository(repo.path).get_snapshot(sid)
+    assert next(iter(fresh['world_state']['remote_events'].values()))['content'] == content
+    assert provider.calls == []
+
+
+def test_dozen_long_npc_letters_one_job_exact_lifecycle_reload_and_rollback(api):
+    repo, c, sid, provider, turn = api
+    assert turn('start')['status'] == 'saved'
+    before = repo.get_snapshot(sid)
+    sources = [dict(artifact('qa_vera', 'qa_kirill', aid=f'letter-{i+1}'),
+                    content=long_letter(10000 if i == 0 else 35000) if i < 2 else f'  Письмо {i}.\nПодпись.  ')
+               for i in range(40)]
+    provider.artifacts = sources
+    provider.rows = [extracted(a) for a in sources]
+    job = turn()
+    assert job['status'] == 'error' and 'Контекст v3 не помещается' in job['error']
+    assert job['narrative'] == authored(*sources) and repo.get_snapshot(sid) == before
+    narrative_calls = provider.calls.count('narrative')
+    large_config = dict(CONFIG, context_length=131072)
+    response = c.post(f"/api/jobs/{job['id']}/retry", json={'config':large_config})
+    assert response.status_code == 200, response.text
+    job = wait(repo, job['id'])
+    assert job['status'] == 'saved', job['error']
+    assert provider.calls.count('narrative') == narrative_calls
+    sent = repo.get_snapshot(sid)
+    expected = [a['content'] for a in sources]
+    events = list(sent['world_state']['remote_events'].values())
+    assert [e['content'] for e in events] == expected
+    assert len(events) == 40 and all(e['provenance'] and e['operation_id'] for e in events)
+    assert sent['world_state']['knowledge'] == before['world_state']['knowledge']
+    assert job['narrative'] == authored(*sources)
+    fresh = Repository(repo.path)
+    assert fresh.get_snapshot(sid) == sent
+    assert fresh.list_turns(sid)[-1]['assistant_text'] == authored(*sources)
+    provider.artifacts = []; provider.rows = []
+    assert turn(config=large_config, time_skip={'duration':20, 'reason':'Жду доставку'})['status'] == 'saved'
+    calls = list(provider.calls)
+    for e, content in zip(events, expected):
+        revision = repo.get_save(sid)['revision']
+        command = dict(action='read', event_id=e['id'], operation_id='open-long-'+e['id'])
+        for _ in range(2):
+            response = c.post(f'/api/saves/{sid}/correspondence', json=dict(revision=revision, command=command))
+            assert response.status_code == 200, response.text
+        mail = c.get(f'/api/saves/{sid}/correspondence').json()
+        assert next(x for x in mail if x['id'] == e['id'])['content'] == content
+    assert provider.calls == calls
+    saved = Repository(repo.path).get_snapshot(sid)
+    assert [e['content'] for e in saved['world_state']['remote_events'].values()] == expected
+    assert all(e['read_by'] == ['qa_kirill'] for e in saved['world_state']['remote_events'].values())
+    repo.rollback_last(sid)
+    assert repo.get_snapshot(sid)['world_state'] == sent['world_state']
+    repo.rollback_last(sid)
+    assert repo.get_snapshot(sid)['world_state'] == before['world_state']
+
+
+def test_modern_message_length_policy_is_unchanged():
+    from pydantic import ValidationError
+    from backend.runtime_v3.remote_models import RemoteCommand, ExtractedRemoteEvent
+    with pytest.raises(ValidationError):
+        RemoteCommand(action='send', operation_id='modern-limit130', content='x'*4001)
+    with pytest.raises(ValidationError):
+        ExtractedRemoteEvent(channel='TEXT_MESSAGE', sender_id='b', recipient_ids=['a'], content='x'*4001)

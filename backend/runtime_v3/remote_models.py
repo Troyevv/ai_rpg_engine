@@ -4,7 +4,7 @@ History records their transitions; it is not an independent messenger database.
 """
 
 from typing import Annotated, Literal
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class RemoteModel(BaseModel):
@@ -68,7 +68,18 @@ TextChannel = Literal["TEXT_MESSAGE", "LETTER", "COURIER_LETTER", "TELEGRAM"]
 RemoteChannel = Literal["TEXT_MESSAGE", "VOICE_CALL", "LETTER", "COURIER_LETTER", "TELEGRAM"]
 
 
-class RemoteEvent(RemoteModel):
+class ChannelContent(RemoteModel):
+    """Historical authored text has no literary size policy."""
+    content: str = ""
+
+    @model_validator(mode="after")
+    def modern_message_size(self):
+        if self.channel not in HISTORICAL_CHANNELS and len(self.content) > 4000:
+            raise ValueError("Modern message content exceeds 4000 characters.")
+        return self
+
+
+class RemoteEvent(ChannelContent):
     id: str
     ordinal: int = Field(default=0, ge=0)
     channel: RemoteChannel
@@ -78,7 +89,6 @@ class RemoteEvent(RemoteModel):
     destination: str
     service: Literal["medical", "police", "fire"] | None = None
     conversation_id: str | None = None
-    content: str = Field(default="", max_length=4000)
     delivery_due_at: int | None = Field(default=None, ge=0)
     world_time: int = Field(ge=0)
     updated_at: int = Field(ge=0)
@@ -93,7 +103,7 @@ class RemoteEvent(RemoteModel):
     operation_id: str
 
 
-class RemoteCommand(RemoteModel):
+class RemoteCommand(ChannelContent):
     channel: TextChannel = "TEXT_MESSAGE"
     operation_id: str = Field(min_length=8, max_length=100)
     action: Literal[
@@ -117,7 +127,6 @@ class RemoteCommand(RemoteModel):
     conversation_id: str | None = None
     event_id: str | None = None
     service: Literal["medical", "police", "fire"] | None = None
-    content: str = Field(default="", max_length=4000)
     label: str = Field(default="", max_length=160)
     address: str = Field(default="", max_length=160)
     kind: Literal["person", "service", "shared"] = "person"
@@ -148,12 +157,11 @@ class EstablishedContact(RemoteModel):
     address: str = Field(min_length=1, max_length=160)
 
 
-class ExtractedRemoteEvent(RemoteModel):
+class ExtractedRemoteEvent(ChannelContent):
     """Ordinary Extraction input to Remote, not a second persistent event model."""
     sender_id: str
     recipient_ids: list[str] = Field(min_length=1, max_length=16)
     channel: RemoteChannel
-    content: str = Field(default="", max_length=4000)
     minute: int | None = Field(default=None, ge=0)
     status: Literal["delivered", "ringing", "missed", "ended"] | None = None
     ended_at: int | None = Field(default=None, ge=0)
