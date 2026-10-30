@@ -20,3 +20,16 @@ def details(state, cid):
     # NPC capability from a concealed condition (including its mere existence).
     restrictions = [k for k, v in actor.get('capabilities', {}).items() if v is False] if cid == observer else []
     return dict(sex=silhouette(state, cid), conditions=rows, restrictions=restrictions)
+
+
+def personal_relations(state):
+    """Disposable canonical directory for dossier identity, never actor knowledge.
+
+    Explicit allowlist excludes facts, evidence and provenance. Nothing is stored
+    back into WorldState; legacy saves acquire this view on every read.
+    """
+    fields = ('id', 'kind', 'source_id', 'target_id', 'status', 'outcome',
+              'since', 'since_date', 'until', 'until_date')
+    return [{key: row.get(key) for key in fields}
+            for row in state.get('objective_relations', {}).values()
+            if row['kind'] in ('spouse', 'partner', 'engaged')]

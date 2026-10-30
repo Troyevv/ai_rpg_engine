@@ -5,10 +5,10 @@ import type {SocialRelation} from '../src/types';
 const cards=[{id:'a',name:'Александр'},{id:'b',name:'Вера'},{id:'c',name:'Ася'}];
 const relation=(overrides:Partial<SocialRelation>={}):SocialRelation=>({id:'r',kind:'partner',source_id:'a',target_id:'b',status:'active',certainty:'known',outcome:'',...overrides});
 afterEach(()=>{document.documentElement.lang='ru'});
-describe('authorized personal relationship presentation',()=>{
- it('T01/T08: absence and suspicion do not establish single status',()=>{
+describe('canonical personal relationship presentation',()=>{
+ it('T01/T08: absence does not establish single status; certainty does not gate canon',()=>{
   expect(select('a',undefined,cards)).toEqual([]);
-  expect(select('a',[relation({certainty:'suspected'})],cards)).toEqual([]);
+  expect(select('a',[relation({certainty:'suspected'})],cards)).toEqual([{kind:'partner',partnerId:'b'}]);
   expect(select('a',[relation({kind:'friend'})],cards)).toEqual([]);
   expect(dossierText('noPersonal')).toBe('Нет сведений');
  });
@@ -48,6 +48,16 @@ describe('authorized personal relationship presentation',()=>{
   const rows=[relation({kind:'spouse',status:'closed',outcome:'widowed'}),relation({id:'other',kind:'spouse',status:'closed',outcome:'divorced'})];
   expect(select('a',rows,cards)).toEqual([]);
   expect(select('a',rows.map(r=>({...r,until:12})),cards)).toEqual([]);
+ });
+ it('canonical date-only closures and contradictory active phases are conservative',()=>{
+  const old=relation({kind:'spouse',status:'closed',outcome:'widowed',until_date:'1999-06-12'});
+  const recent=relation({id:'recent',kind:'spouse',status:'closed',outcome:'divorced',until_date:'2005-01-01'});
+  expect(select('a',[old,recent],cards)).toEqual([{kind:'divorced'}]);
+  expect(select('a',[recent,old],cards)).toEqual([{kind:'divorced'}]);
+  expect(select('a',[recent,relation({kind:'spouse'})],cards)).toEqual([]);
+  expect(select('a',[recent,relation({kind:'spouse',since_date:'1999-06-12'})],cards)).toEqual([]);
+  expect(select('a',[recent,relation({kind:'spouse',since_date:'2006-01-01'})],cards)).toEqual([{kind:'spouse',partnerId:'b'}]);
+  expect(select('a',[old,{...recent,until_date:null,until:10}],cards)).toEqual([]);
  });
  it('T02–T06: RU/EN and known/unknown sex use safe names without declension',()=>{
   expect(label('engaged','male')).toBe('Помолвлен с:');

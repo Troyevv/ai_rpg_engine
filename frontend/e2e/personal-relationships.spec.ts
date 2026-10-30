@@ -13,8 +13,8 @@ test('known partners, keyboard/touch, nested Back, tabs, search and scroll',asyn
  const d=dossier(page);const before=await(await request.get(`/api/saves/${s.save}`)).json();
  await expect(d.locator('.dossier-personal')).toContainText('В браке с:');
  await expect(d.locator('.dossier-personal')).toContainText('Встречается с:');
- await expect(d.locator('.dossier-partner-link')).toHaveCount(2);
- await expect(partner(page,'qa_marina')).toHaveCount(0);
+ await expect(d.locator('.dossier-partner-link')).toHaveCount(3);
+ await expect(partner(page,'qa_marina')).toBeVisible();
  await searchCharacter(page,'Кирилл');
  await partner(page,'qa_vera').focus();await page.keyboard.press('Enter');
  await expect(d.locator('.dossier-name')).toHaveText(/Вера Ларина/);
@@ -51,14 +51,14 @@ test('responsive identity in graphite, parchment and terminal with long names',a
  const s=await seed(page,request);
  await page.route(`**/api/saves/${s.save}`,async route=>{
   const response=await route.fetch();const data=await response.json();
-  for(const c of data.state.characters)if(['qa_vera','qa_elena'].includes(c.id))c.name+=' Александровна Константинопольская-Рождественская';
+  for(const c of data.state.characters)if(['qa_vera','qa_elena','qa_marina'].includes(c.id))c.name+=' Александровна Константинопольская-Рождественская';
   await route.fulfill({response,json:data});
  });
  for(const [width,skin] of [[360,'parchment'],[393,'graphite'],[768,'parchment'],[1440,'graphite'],[1440,'terminal']] as const){
   await page.setViewportSize({width,height:900});await page.emulateMedia({reducedMotion:'reduce'});
   const response=await request.put(`/api/worlds/${s.world}/presentation`,{data:{theme_id:skin}});expect(response.ok()).toBe(true);
   await page.goto('/');await nav(page,'Персонажи');const d=dossier(page);
-  await expect(d.locator('.dossier-partner-link')).toHaveCount(2);await expect(d.getByRole('tab')).toHaveCount(5);
+  await expect(d.locator('.dossier-partner-link')).toHaveCount(3);await expect(d.getByRole('tab')).toHaveCount(5);
   for(const compact of width>=768?[false,true]:[false]){
    const toggle=d.getByRole('button',{name:compact?'Компактная панель':'Расширить панель',exact:true});
    if(await toggle.isVisible())await toggle.click();
@@ -78,11 +78,11 @@ test('fresh API projections, unavailable IDs, unknown closure, rename and POV',a
  const s=await seed(page,request);let mode='original';
  await page.route(`**/api/saves/${s.save}`,async route=>{
   const response=await route.fetch();const data=await response.json();
-  const spouse=data.state.objective_relations.find((r:any)=>r.id==='qa_marriage');
-  // A newer hidden World State closure must not override this authorized projection.
+  const spouse=data.state.dossier_personal_relations.find((r:any)=>r.id==='qa_marriage');
+  // Dossier consumes its explicit contract, never an accidental raw world field.
   if(spouse&&mode!=='original'){
    data.state.world.objective_relations={qa_marriage:{...spouse,status:'closed',outcome:'divorced'}};
-   data.state.objective_relations=[spouse];
+   data.state.dossier_personal_relations=[spouse];
    if(mode==='missing')spouse.target_id='unavailable-person';
    if(mode==='divorced'){spouse.status='closed';spouse.outcome='divorced'}
    if(mode==='suspected')spouse.certainty='suspected';
@@ -90,13 +90,13 @@ test('fresh API projections, unavailable IDs, unknown closure, rename and POV',a
   }
   await route.fulfill({response,json:data});
  });
- for(const [next,expected] of [['hidden','В браке с:'],['rename','Вера Новая'],['missing','Нет сведений'],['divorced','Разведён'],['suspected','Нет сведений']]){
+ for(const [next,expected] of [['hidden','В браке с:'],['rename','Вера Новая'],['missing','Нет сведений'],['divorced','Разведён'],['suspected','В браке с:']]){
   mode=next;await page.reload();await nav(page,'Персонажи');await expect(dossier(page).locator('.dossier-personal')).toContainText(expected);
-  if(['missing','divorced','suspected'].includes(next))await expect(dossier(page).locator('.dossier-partner-link')).toHaveCount(0);
+  if(['missing','divorced'].includes(next))await expect(dossier(page).locator('.dossier-partner-link')).toHaveCount(0);
  }
  mode='original';await page.reload();await expect(page.locator('.pov-controls,.mobile-pov')).toBeVisible();await actor(page,'qa_vera','Вера Ларина');await nav(page,'Персонажи');await pickCharacter(page,'qa_kirill');
- await expect(dossier(page).locator('.dossier-partner-link')).toHaveCount(1);
- await expect(partner(page,'qa_vera')).toBeVisible();await expect(partner(page,'qa_elena')).toHaveCount(0);
+ await expect(dossier(page).locator('.dossier-partner-link')).toHaveCount(3);
+ await expect(partner(page,'qa_vera')).toBeVisible();await expect(partner(page,'qa_elena')).toBeVisible();
 });
 
 test('genealogy and narrative entry, partner return, draft and persisted next turn',async({page,request})=>{
@@ -119,4 +119,37 @@ test('genealogy and narrative entry, partner return, draft and persisted next tu
  await page.keyboard.press('Escape');await page.reload();await expect(page.locator('.turn')).toHaveCount(turns+1);
  await page.locator('.choices button').first().click();await expect(page.locator('.turn')).toHaveCount(turns+2);
  const saved=await(await request.get(`/api/saves/${s.save}`)).json();expect(saved.turns).toHaveLength(turns+2);
+});
+
+test('Volkov canon: real editor import, Start Game, partner navigation, POV and reload',async({page,request})=>{
+ test.setTimeout(120000);
+ const source=await(await request.post('/test/dossier-authoring')).json();
+ const w=await(await request.post('/api/workspaces',{data:{name:'Марина и Сергей'}})).json();
+ const imported=await request.post(`/api/workspaces/${w.id}/draft/import`,{data:{revision:w.revision,format:'json',text:JSON.stringify(source)}});
+ expect(imported.ok()).toBe(true);
+ await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),w.id);
+ await page.goto('/');await nav(page,'Создать');
+ await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
+ await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+ await page.getByRole('button',{name:'Начать игру',exact:true}).click();
+ await expect(page.locator('.turn')).toHaveCount(1,{timeout:60000});
+ const check=async()=>{
+  await nav(page,'Персонажи');await pickCharacter(page,'qa_marina');
+  await expect(dossier(page).locator('.dossier-name')).toContainText('Марина Волкова');
+  await expect(dossier(page).locator('.dossier-personal')).toContainText('В браке с:');
+  await expect(partner(page,'qa_timur')).toHaveText('Сергей Волков');
+  await partner(page,'qa_timur').click();
+  await expect(dossier(page).locator('.dossier-name')).toContainText('Сергей Волков');
+  await expect(partner(page,'qa_marina')).toHaveText('Марина Волкова');
+  await page.keyboard.press('Escape');
+  await expect(dossier(page).locator('.dossier-name')).toContainText('Марина Волкова');
+  await page.keyboard.press('Escape');
+ };
+ await check();
+ await actor(page,'qa_vera','Вера Ларина');await check();
+ await page.reload();await check();
+ await page.getByLabel('Своё действие или реплика').fill('Осмотреть комнату.');
+ await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
+ await expect(page.locator('.turn')).toHaveCount(2);
+ await page.reload();await check();
 });
