@@ -1,4 +1,4 @@
-export type WorldCalendar={start_minute:number;start_weekday:number;start_date?:string|null;labels?:Record<string,string>};
+export type WorldCalendar={start_minute:number;start_weekday:number;start_date?:string|null;profile?:{system?:string;month_names?:string[]};labels?:Record<string,string>};
 export function worldTime(minute:number|null|undefined,calendar?:WorldCalendar){
  if(minute==null)return 'Время не зафиксировано';
  if(calendar?.labels?.[String(minute)])return calendar.labels[String(minute)];

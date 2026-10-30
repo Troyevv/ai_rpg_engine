@@ -144,8 +144,8 @@ for (const skin of ["graphite", "parchment"])
         has: page.getByRole("heading", { name: "Текущая игра", exact: true }),
       });
     await settings
-      .getByRole("navigation", { name: "Разделы текущей игры" })
-      .getByRole("button", { name: "Настройки", exact: true })
+      .getByRole("tablist", { name: "Разделы текущей игры" })
+      .getByRole("tab", { name: "Настройки", exact: true })
       .click();
     const readonly = settings.getByRole("region", { name: "Технологии связи" });
     await expect(readonly).toContainText("Магическая связь");

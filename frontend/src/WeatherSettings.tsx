@@ -11,12 +11,15 @@ export function WeatherSettings({
   const [configured, setConfigured] = useState<boolean | null>(null),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
+  const [retry, setRetry] = useState(0);
   const [region, setRegion] = useState(""),
     [climate, setClimate] = useState("temperate"),
     [hemisphere, setHemisphere] = useState("north"),
     [unit, setUnit] = useState("C");
   useEffect(() => {
     let live = true;
+    setConfigured(null);
+    setError("");
     api<any>(`/saves/${save.id}/weather`)
       .then((p) => {
         if (live) setConfigured(!!p);
@@ -27,13 +30,22 @@ export function WeatherSettings({
     return () => {
       live = false;
     };
-  }, [save.id, save.revision]);
+  }, [save.id, save.revision, retry]);
   return (
     <details>
       <summary>Климат и погода</summary>
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <div role="alert">
+          <p>{error}</p>
+          <button type="button" onClick={() => setRetry((v) => v + 1)}>
+            Повторить загрузку погоды
+          </button>
+        </div>
+      )}
       {configured === null ? (
-        <p>Загрузка…</p>
+        error ? null : (
+          <p role="status">Загрузка…</p>
+        )
       ) : configured ? (
         <p>
           Климат установлен. Погода следует времени и региону мира; просмотр

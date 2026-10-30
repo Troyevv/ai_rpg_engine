@@ -1,3 +1,4 @@
+import {nav} from './navigation';
 import { test, expect } from "@playwright/test";
 import { calendarDate } from "../src/gameDate";
 
@@ -30,10 +31,11 @@ test("calendar, genealogy, policy and weather stay save-scoped and responsive", 
     await page.goto("/");
     await page.locator(".current-game-entry button").click();
     const menu = page.getByRole("dialog");
-    const tabs = menu.getByRole("navigation", { name: "Разделы текущей игры" });
-    await tabs
-      .getByRole("button", { name: "Родословная", exact: true })
-      .click();
+    const tabs = menu.getByRole("tablist", { name: "Разделы текущей игры" });
+    await expect(tabs.getByRole("tab")).toHaveCount(4);
+    await expect(tabs).not.toContainText("Родословная");
+    await page.keyboard.press("Escape");
+    await nav(page,"Родословная");
     const family=page.locator(".save-workspace");
     await expect(family.locator(".react-flow__node").first()).toBeVisible();
     // PR #120 makes all canonical families public, independent of Knowledge.
@@ -41,14 +43,10 @@ test("calendar, genealogy, policy and weather stay save-scoped and responsive", 
     await family.getByLabel("Семья персонажа").selectOption("qa_zoya");
     await expect(family.locator(".family-node").filter({hasText:"Зоя"})).toBeVisible();
     await family.getByRole("button", { name: "Вся семья", exact: true }).click();
-    await page.screenshot({
-      path: info.outputPath(`family-${skin}.png`),
-      animations: "disabled",
-    });
     await page.keyboard.press("Escape");
     await page.locator(".current-game-entry button").click();
-    await tabs.getByRole("button", { name: "Настройки", exact: true }).click();
-    await menu.getByLabel("Показывать изменения отношений").uncheck();
+    await tabs.getByRole("tab", { name: "Настройки", exact: true }).click();
+    await menu.getByRole("switch",{name:/Показывать изменения отношений/}).uncheck();
     expect(
       await page.evaluate(() => localStorage.getItem("relationship-notices")),
     ).toBe("off");
@@ -61,15 +59,13 @@ test("calendar, genealogy, policy and weather stay save-scoped and responsive", 
   ).json();
   await page.locator(".current-game-entry button").click();
   const menu = page.getByRole("dialog");
-  const tabs = menu.getByRole("navigation", { name: "Разделы текущей игры" });
-  await tabs.getByRole("button", { name: "Календарь", exact: true }).click();
+  const tabs = menu.getByRole("tablist", { name: "Разделы текущей игры" });
+  await expect(tabs).not.toContainText("Календарь");
+  await page.keyboard.press("Escape");
+  await nav(page,"Календарь");
   const calendarArea=page.locator(".save-workspace");
   await expect(calendarArea.locator(".rdp-root")).toBeVisible();
   await expect(calendarArea).toContainText("Октябрь 2026");
-  await page.screenshot({
-    path: info.outputPath("calendar.png"),
-    animations: "disabled",
-  });
   await calendarArea.getByLabel("Следующий месяц", { exact: true }).click();
   await expect(calendarArea).toContainText("Ноябрь 2026");
   await calendarArea.getByRole("button", { name: "Год", exact: true }).click();
@@ -105,10 +101,6 @@ test("one phone device preserves unsent chat drafts across collapse and modal", 
   await device.evaluate(
     (el) => ((el as HTMLElement).dataset.identity = "same"),
   );
-  await page.screenshot({
-    path: info.outputPath("phone-resting.png"),
-    animations: "disabled",
-  });
   await page.getByRole("button", { name: /^Телефон/ }).click();
   const phone = page.getByRole("region", { name: "Телефон персонажа" });
   await phone.getByRole("button",{name:"Вера работа",exact:true}).click();
@@ -118,10 +110,6 @@ test("one phone device preserves unsent chat drafts across collapse and modal", 
     .getByRole("button", { name: "Написать", exact: true })
     .click();
   await phone.getByLabel("Сообщение в телефоне").fill("Несохранённый ответ");
-  await page.screenshot({
-    path: info.outputPath("phone-expanded.png"),
-    animations: "disabled",
-  });
   await phone
     .getByRole("button", { name: "К перепискам", exact: true })
     .click();
@@ -231,7 +219,7 @@ test("explicit climate survives reload and matches the canonical calendar", asyn
   await page.goto("/");
   await page.locator(".current-game-entry button").click();
   const menu = page.getByRole("dialog");
-  await menu.getByRole("button", { name: "Настройки", exact: true }).click();
+  await menu.getByRole("tab", { name: "Настройки", exact: true }).click();
   await menu.getByText("Климат и погода", { exact: true }).click();
   const before = await (
     await request.get(`/api/saves/${selected.save}`)
@@ -255,7 +243,8 @@ test("explicit climate survives reload and matches the canonical calendar", asyn
       .scene_meta.weather,
   ).toEqual(configured.state.scene_meta.weather);
   await page.locator(".current-game-entry button").click();
-  await menu.getByRole("button", { name: "Календарь", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await nav(page,"Календарь");
   await expect(page.locator(".save-workspace .weather-badge").first()).toBeVisible();
 });
 
@@ -267,14 +256,13 @@ test('phone leaves composer reachable with keyboard-sized viewport and enlarged 
  await page.getByRole('button',{name:/^Телефон/}).click();
  await expect(page.getByRole('region',{name:'Телефон персонажа'})).toBeVisible();
  await expect.poll(async()=>{const device=await page.getByTestId('phone-device').boundingBox();const composer=await page.locator('.composer').boundingBox();return !!device&&!!composer&&device.y>=0&&device.y+device.height<=composer.y;}).toBe(true);
- await page.screenshot({path:info.outputPath('phone-short-viewport.png'),animations:'disabled'});
  await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:/^Телефон/})).toBeFocused();
  await page.setViewportSize({width:820,height:1000});
  await page.locator('.current-game-entry button').click();
- await page.getByRole('dialog').getByRole('button',{name:'Календарь',exact:true}).click();
+ await page.keyboard.press('Escape');
+ await nav(page,'Календарь');
  await expect(page.locator('.rdp-root')).toBeVisible();
  await page.evaluate(()=>document.documentElement.style.fontSize='20px');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
- await page.screenshot({path:info.outputPath('calendar-tablet-large-text.png'),animations:'disabled'});
- await page.keyboard.press('Escape');await expect(page.locator('.current-game-entry button')).toBeFocused();
+ await page.keyboard.press('Escape');await expect(page.locator('.save-workspace')).toHaveCount(0);
 });

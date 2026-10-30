@@ -9,6 +9,7 @@ test('long-term advance preview, zero-budget commit, reload and responsive resul
   await gameAction(page,'Длительный переход');
   const dialog=page.getByRole('dialog').last();
   await dialog.getByLabel('Количество единиц перехода').fill('15');
+  await dialog.getByText(/Подробности симуляции/).click();
   await dialog.getByLabel('Лимит обращений к модели').fill('0');
   const submit=dialog.getByRole('button',{name:'Подтвердить длительный переход'});
   await expect(submit).toBeEnabled();
