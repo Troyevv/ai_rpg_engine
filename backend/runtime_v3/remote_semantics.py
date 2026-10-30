@@ -43,7 +43,7 @@ def messages(snapshot, source_id):
         return None
     ids = set().union(*(participants(e) for e in rows))
     schema = extraction_schema()
-    allowed = ('final_scene', 'scheduled_event_changes', 'character_changes')
+    allowed = ('final_scene', 'locations', 'scheduled_event_changes', 'character_changes')
     schema['properties'] = {k:v for k,v in schema['properties'].items() if k in allowed}
     character=schema['properties']['character_changes']['items']
     character['properties']={k:v for k,v in character['properties'].items() if k in ('id','evidence','intentions_updates')}
@@ -64,6 +64,11 @@ def messages(snapshot, source_id):
              'participant; never include every group member automatically. Use scheduled_event_changes with assertion '
              'agreed/rescheduled/cancelled/occurred, exact evidence, remote_source_ids and remote_time_source_id. '
              'Anchor relative dates to the original proposal timestamp using temporal.minute_offset for hours/minutes, day_offset for tomorrow, weekday/day_period for imprecise windows; never invented due_minute. '
+             'Use known_locations canonical IDs when a place already exists, matching names and aliases. '
+             'For a new place established in accepted messages, emit locations with id, name and evidence '
+             'using the common contract; reference that ID in the plan in this same response. '
+             'Never invent a place to fill a plan: use location_id=null when no specific meeting place was agreed. '
+             'A speaker being at an office does not establish it as the meeting place. '
              'Reuse existing plan IDs on reschedule/cancellation/completion; due does not mean occurred. '
              'For EXTERNAL participant require player_assertion=explicit_choice AND player_source_id identifying their '
              'own explicit proposal/assent/change in remote_source_ids. Copy its entire content as player_evidence; '
@@ -83,7 +88,9 @@ def messages(snapshot, source_id):
                          present_character_ids=state['camera']['present_character_ids'], elapsed_minutes=0),
         example_json_output=dict(final_scene=dict(location_id=state['camera']['location_id'],
             present_character_ids=state['camera']['present_character_ids'], elapsed_minutes=0),
-            scheduled_event_changes=[], character_changes=[]),
+            locations=[], scheduled_event_changes=[], character_changes=[]),
+        known_locations=[{k:place[k] for k in ('id','name','aliases','parent_id')}
+                         for place in state['locations'].values()],
         accepted_messages=[{k:e[k] for k in ('id','ordinal','sender_id','recipient_ids','conversation_id','world_time','content','read_by','delivered_to')} for e in rows],
         characters={cid:dict(id=cid, intentions=state['characters'][cid]['intentions']) for cid in sorted(ids)},
         existing_plans=[commitment_view(state,e) for e in state['scheduled_events'].values() if ids.intersection(e['character_ids'])],
@@ -97,13 +104,13 @@ def resolve(snapshot, source_id, response, diagnostics=None):
     expected = dict(location_id=state['camera']['location_id'],
                     present_character_ids=state['camera']['present_character_ids'], elapsed_minutes=0)
     if raw.final_scene != expected or raw.choices or any(v for k,v in raw.records.items()
-            if k not in ('scheduled_event_changes','character_changes')):
+            if k not in ('locations','scheduled_event_changes','character_changes')):
         raise ValueError('Телефонное извлечение пытается изменить физическую сцену или неподдерживаемый раздел.')
     by_id = {e['id']:e for e in rows}
     actor = state['camera']['controlled_actor_id']
-    for item in raw.records['scheduled_event_changes']:
+    for index, item in enumerate(raw.records['scheduled_event_changes']):
         if not isinstance(item, dict) or not isinstance(item.get('remote_source_ids'), list) or not item['remote_source_ids'] or any(not isinstance(eid,str) or eid not in by_id for eid in item['remote_source_ids']):
-            raise SemanticValidationError([dict(section='scheduled_events',code='commitment_remote_source',entity=item.get('id') if isinstance(item,dict) else None)],
+            raise SemanticValidationError([dict(section='scheduled_events',index=index,code='commitment_remote_source',entity=item.get('id') if isinstance(item,dict) else None)],
                 [r['id'] for r in raw.records['scheduled_event_changes'] if isinstance(r,dict) and isinstance(r.get('id'),str)])
         # Resolve declared identity, not meaning: explicit_choice still belongs
         # to Extraction and is mandatory. Never infer consent from message presence.
@@ -167,3 +174,46 @@ def staged_sources(snapshot):
         if eid in state['remote_events'] and state['remote_events'][eid]['channel']=='TEXT_MESSAGE':
             result.update({e['id']:e for e in evidence_slice(state,eid)})
     return result
+
+
+def resolve_optional(snapshot, source_id, response, diagnostics):
+    """Quarantine only identified optional plans after one unsuccessful repair.
+
+    Every attempt starts from the same snapshot and runs the common Resolver.
+    Canonical/envelope errors still propagate. Rejected proposals remain in the
+    durable job journal; existing canonical plans are never deleted or edited.
+    """
+    raw = RawTurnResult.parse(response)
+    payload = dict(final_scene=raw.final_scene, choices=raw.choices, **raw.records)
+    original_indices = list(range(len(payload['scheduled_event_changes'])))
+    # Each rejection must remove at least one candidate: bounded, no LLM retries.
+    while True:
+        try:
+            return resolve(snapshot, source_id, payload, diagnostics)
+        except SemanticValidationError as exc:
+            records = payload['scheduled_event_changes']
+            indices = {w['index'] for w in exc.warnings
+                       if isinstance(w.get('index'), int) and 0 <= w['index'] < len(records)}
+            if not indices:
+                raise  # No proven safe isolation boundary.
+            rejected = [r for i, r in enumerate(records) if i in indices]
+            payload['scheduled_event_changes'] = [r for i, r in enumerate(records) if i not in indices]
+            diagnostics.extend(dict(w, index=original_indices[w['index']], action='defer_record',
+                remote_source_ids=[e['id'] for e in evidence_slice(snapshot['world_state'], source_id)])
+                for w in exc.warnings if w.get('index') in indices)
+            original_indices = [i for position, i in enumerate(original_indices) if position not in indices]
+            # Do not commit a newly proposed place solely attached to a rejected
+            # plan. Shared places needed by valid plans remain in that transaction.
+            unused = {r.get('location_id') for r in rejected if isinstance(r, dict) and isinstance(r.get('location_id'), str)}
+            used = {r.get('location_id') for r in payload['scheduled_event_changes'] if isinstance(r, dict) and isinstance(r.get('location_id'), str)}
+            used.update(r['parent_id'] for r in payload['locations']
+                        if isinstance(r, dict) and isinstance(r.get('parent_id'), str))
+            retained = []
+            for location in payload['locations']:
+                lid = location.get('id') if isinstance(location, dict) else None
+                if isinstance(lid, str) and lid in unused - used:
+                    diagnostics.append(dict(section='locations', entity=lid, code='remote_deferred_plan_location',
+                        action='defer_record', source_event_id=source_id))
+                else:
+                    retained.append(location)
+            payload['locations'] = retained

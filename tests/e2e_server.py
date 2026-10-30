@@ -81,6 +81,8 @@ def stream(**kwargs):
         data=json.loads(kwargs['messages'][1]['content']);value=extract(data)
         if phone_mode=='agency_missing_once' and 'repair' not in data and value.get('scheduled_event_changes'):
             value['scheduled_event_changes'][0].pop('player_assertion')
+        if phone_mode=='unknown_place' and value.get('scheduled_event_changes'):
+            value['scheduled_event_changes'][0]['location_id']='missing-place'
         yield json.dumps(value,ensure_ascii=False);return
     full='\n'.join(m['content'] for m in kwargs['messages'])
     if handoff_provider is not None and 'ilya_cabinet' in full:
@@ -126,7 +128,7 @@ def stream(**kwargs):
         if phone_mode=='decline' and action=='answer':action='decline'
         p=dict(actor_id=o['actor_id'],action=action,basis_ids=o['basis_ids'])
         if 'event_id' in o:p['event_id']=o['event_id']
-        if action=='send':p.update(o['paths'][0],content='Да, договорились.' if phone_mode=='meeting' else 'Привет. Ещё в офисе, разгребаю бумаги. А что, есть планы?' if phone_mode=='greeting' else 'Да, увидимся завтра. Напиши, когда освободишься.')
+        if action=='send':p.update(o['paths'][0],content='Да, договорились, в кафе «Липа».' if phone_mode=='new_place' else 'Да, договорились.' if phone_mode in ('meeting','unknown_place') else 'Привет. Ещё в офисе, разгребаю бумаги. А что, есть планы?' if phone_mode=='greeting' else 'Да, увидимся завтра. Напиши, когда освободишься.')
         if action=='identify':p.update(speaker_name='Дежурный оператор')
         yield json.dumps(dict(action=p),ensure_ascii=False)
         return

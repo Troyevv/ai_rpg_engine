@@ -18,4 +18,8 @@ def extract(data):
         result['character_changes']=[dict(id=e['sender_id'],evidence=e['content'],intentions_updates=[dict(
             text=e['content'],status='active',evidence=e['content'],source_event_id=e['id'],
             player_assertion='explicit_choice',player_evidence=e['content'])])]
+    if result.get('scheduled_event_changes') and any('кафе «Липа»' in e['content'] for e in rows):
+        evidence = next(e['content'] for e in rows if 'кафе «Липа»' in e['content'])
+        result['locations'] = [dict(id='cafe-lipa', name='Кафе «Липа»', aliases=['Липа'], evidence=evidence)]
+        result['scheduled_event_changes'][0]['location_id'] = 'cafe-lipa'
     return result
