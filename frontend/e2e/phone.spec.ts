@@ -130,7 +130,7 @@ test("group membership and protagonist-owned contacts", async ({
   await expect(
     dialog.getByText("Только участникам группы.", { exact: true }),
   ).toBeVisible();
-  await dialog.locator("details summary").filter({hasText:"Управление участниками"}).click();
+  await dialog.getByRole("button",{name:"Управление участниками"}).click();
   await dialog
     .getByRole("button", { name: "Удалить: Вера работа", exact: true })
     .click();
@@ -143,7 +143,7 @@ test("group membership and protagonist-owned contacts", async ({
   await expect(
     dialog.getByRole("button", { name: "Удалить: Вера работа", exact: true }),
   ).toBeVisible();
-  await page.keyboard.press("Escape");
+  await dialog.getByRole("button",{name:"Свернуть телефон"}).click();
   await gameAction(page,'Сменить главного героя');
   await page.getByRole("dialog").getByLabel("Новый главный герой").selectOption("qa_vera");
   await page.getByRole("dialog").getByRole("button", { name: "Проверить и посмотреть" }).click();

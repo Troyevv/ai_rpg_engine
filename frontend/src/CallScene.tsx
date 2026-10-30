@@ -29,7 +29,13 @@ export function CallScene({save,disabled,children,submit,end,callId,onSelect,rec
  useEffect(()=>{
    if(minimized)return;
    panel.current?.focus();
-   if(history.state?.phoneCall!==scope)history.pushState({...history.state,phoneCall:scope},'');
+   if(history.state?.phoneCall!==scope){
+     const {phoneUI, ...state}=history.state||{};
+     // Hand the phone's existing Back entry to the call; do not leave a ghost
+     // phone screen below the independent call surface.
+     if(phoneUI)history.replaceState({...state,phoneCall:scope},'');
+     else history.pushState({...state,phoneCall:scope},'');
+   }
    return()=>{if(history.state?.phoneCall===scope&&!history.state?.inspectorOpen)history.back()};
  },[minimized,scope]);
  useEffect(()=>{
