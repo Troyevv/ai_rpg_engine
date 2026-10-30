@@ -75,12 +75,13 @@ NOT been enabled by this change.
 4. Re-read protection/required checks or verify them in Settings. A green workflow
    alone does not prove merge protection. Test a failing PR cannot merge.
 
-Nightly failure is a failed visible workflow/check, not continue-on-error. Enable
-GitHub Actions failure notifications for this workflow in repository Watch → Custom
-→ Actions (and account notification preferences). A red nightly blocks declaring
-master healthy: keep selective rollout disabled/revert it, triage the failed test,
-fix and rerun full before resuming. This PR does not claim email delivery or a
-cross-run branch-health lock; GitHub PR checks only govern their own commit.
+Nightly failure is a failed visible workflow/check and creates or updates the open
+`CI: nightly regression on master` issue. The dedicated scheduled-only alert job
+has issues:write, no checkout and no execution of artifacts or PR code. Subscribe
+to that issue/repository for notification delivery; email delivery is not proven.
+A red nightly blocks declaring master healthy: disable selective rollout, triage,
+fix and rerun full before resuming. There is no cross-run branch-health lock;
+GitHub PR checks only govern their own commit.
 
 ## Failure diagnostics and security
 
@@ -99,8 +100,9 @@ configured timeout and logs. Generic “operation was canceled” is insufficien
 prove the initiator. Interrupted work never counts as success.
 
 Workflow runs untrusted PR code only under pull_request, with contents:read,
-no inherited secrets and checkout persist-credentials:false. Reporting gets only
-actions:read and never executes PR content. No pull_request_target, write token,
+no inherited secrets and checkout persist-credentials:false. Timing reporting gets
+only actions:read; the scheduled-only issue alert gets issues:write. Neither
+executes PR content. No pull_request_target, PR write token,
 cache of world state or workflow_run execution of downloaded code is used. Fork PR
 approval remains GitHub's normal policy; it does not bypass the required gates.
 
