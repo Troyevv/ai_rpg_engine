@@ -18,6 +18,7 @@ import "./styles/phone.css";
 type Recipient = { id: string; search_name?: string; subject: PortraitSubject; can_send: boolean; can_call: boolean };
 type Contact = {
   can_send?: boolean;
+  awaiting_response?: boolean;
   can_call?: boolean;
   id: string;
   label: string;
@@ -33,6 +34,7 @@ export type Conversation = {
   contact_id: string | null;
   active: boolean;
   can_send?: boolean;
+  awaiting_response?: boolean;
   participants: PortraitSubject[];
 };
 export type PhoneEvent = {
@@ -763,6 +765,7 @@ export function Phone({
                       <PhoneMessages events={phone.events.filter(e=>e.channel==='TEXT_MESSAGE'&&!!conversation&&e.conversation_id===conversation)} group={!!selected?.group} locked={locked} read={id=>void perform({action:'read',event_id:id})}/>
                     </div>
                     {away && <button className="phone-latest" onClick={()=>{const el=messages.current;if(el){el.scrollTop=el.scrollHeight;reading.current[messageKey]={top:el.scrollTop,pinned:true};setAway(false)}}}><ArrowDown size={16}/>К последнему сообщению</button>}
+                    {selected?.awaiting_response&&<p className="phone-response-wait" role="status">Ждут твоего ответа</p>}
                     {!canSend&&<p className="muted" role="status">{t("recipientUnavailable")}</p>}
                     {phone.capabilities.text_message &&
                       (!selected || selected.active) && (

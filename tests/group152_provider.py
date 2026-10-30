@@ -1,0 +1,44 @@
+"""Deterministic external provider fixture shared by API and Chromium acceptance."""
+import json
+
+FIRST = 'Олег, фотографии карты готовы. Покажешь альбом?'
+QUESTION = 'Покажу завтра. Кирилл, ты придёшь?'
+ANSWER = 'Нет, завтра не приду.'
+CONTINUED = 'Тогда обсудим фотографии вдвоём.'
+
+
+def response(messages, structured=False):
+    system = messages[0]['content']
+    if system.startswith('Group response extraction/'):
+        data=json.loads(messages[1]['content'])
+        requests=[dict(message_index=i,target_id=data['controlled_actor_id'], evidence=QUESTION,
+            expires_at=data['world_time']+180) for i,m in enumerate(data['series']['messages']) if m['content']==QUESTION]
+        return json.dumps(dict(requests=requests),ensure_ascii=False)
+    if system.startswith('Select at most ONE'):
+        data=json.loads(messages[1]['content'])
+        if data.get('groups'):
+            group=data['groups'][0]
+            answered=any(ANSWER in h['content'] for a in group['actors'] for h in a['history'])
+            basis=group['basis']['qa_timur']
+            return json.dumps(dict(action=None,group_series=dict(conversation_id=group['conversation_id'],messages=[
+                dict(actor_id='qa_timur',content=CONTINUED if answered else FIRST,basis_ids=basis),
+                dict(actor_id='qa_oleg',content='Договорились, возьму альбом.' if answered else QUESTION,
+                     basis_ids=basis,read_previous=True),
+                dict(actor_id='qa_timur',content='Отлично.',basis_ids=basis,read_previous=True)])),ensure_ascii=False)
+        option=next((o for o in data['options'] if 'read' in o['actions']),None)
+        return json.dumps(dict(action=dict(actor_id=option['actor_id'],action='read',event_id=option['event_id'],basis_ids=option['basis_ids']) if option else None))
+    if system.startswith('Remote semantic extraction/'):
+        data=json.loads(messages[1]['content'])
+        value=dict(final_scene=data['final_scene'])
+        answers=[e for e in data['accepted_messages'] if e['content']==ANSWER and e['sender_id']==data['controlled_actor_id']]
+        if answers:
+            value['group_response_changes']=[dict(request_event_id=r['event_id'],response_event_id=answers[-1]['id'],
+                assertion='refused',evidence=ANSWER) for r in data.get('pending_group_requests',[]) if not r['resolved_by']]
+        return json.dumps(value,ensure_ascii=False)
+    current=json.loads(next(m['content'].split('\n',1)[1] for m in messages if m['content'].startswith('Текущее состояние / GM-only\n')))
+    if not structured:
+        return 'За окном шёл дождь. В комнате было тихо.'
+    camera=current['camera']
+    return json.dumps(dict(final_scene=dict(location_id=camera['location_id'],
+        present_character_ids=camera['present_character_ids'],elapsed_minutes=0 if any('Фоновая симуляция:' in m['content'] for m in messages) else 31),
+        choices=[dict(action='Посмотреть в окно',speech=''),dict(action='Рассмотреть карту',speech='')]),ensure_ascii=False)

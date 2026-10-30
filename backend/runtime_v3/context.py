@@ -347,7 +347,7 @@ class ExtractionContextBuilder:
                        block('Choice context / controlled actor', choice_context(snapshot, scope, current, views, kind)),
                        block('Entity IDs', [dict(id=c['id'], name=c['name'], aliases=c.get('aliases', []))
                             for c in snapshot['character_cards'] if c['id'] in scope.relevant_actor_ids]),
-                       block('JSON Schema', prompt_schema(historical=historical, elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
+                       block('JSON Schema', prompt_schema(historical=historical, elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), groups=any(c['group'] for c in snapshot['world_state']['conversations'].values()), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
 
 
 def choice_context(snapshot, scope, current, views, kind):
@@ -511,6 +511,9 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                 remote['accepted_semantic_messages']=list(sources.values())
                 remote['constraints'] += (' Extract consequences of these accepted messages into scheduled_event_changes and explicit intentions_updates. '
                     'A proposal requires actual assent; cite remote_source_ids and remote_time_source_id. Unread confirmation can establish GM truth, never recipient Knowledge. '
+                    'Group requests to the controlled actor use group_request_changes with canonical source_event_id, '
+                    'target_id, exact evidence and expires_at. Only explicit answers/refusals authored by that actor in the same '
+                    'group use group_response_changes. Reading, silence and Narrative turns are not answers. '
                     'Keep original authored wording and source_event_id for intentions. Relative minute_offset is anchored to the original proposal, not this turn. ')
 
     if kind == 'background' and not camera.get('pov_actor_id'):

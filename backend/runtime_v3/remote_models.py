@@ -4,7 +4,7 @@ History records their transitions; it is not an independent messenger database.
 """
 
 from typing import Annotated, Literal
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class RemoteModel(BaseModel):
@@ -54,12 +54,42 @@ class Membership(RemoteModel):
     provenance: str
 
 
+class GroupPacing(RemoteModel):
+    world_time: int = Field(ge=0)
+    turn_id: int = Field(ge=0)
+    operation_id: str
+
+
+class ResponseRequest(RemoteModel):
+    target_id: str
+    expires_at: int = Field(ge=0)
+    evidence: str = Field(min_length=1)
+    provenance: str = Field(min_length=1)
+    resolved_by: str | None = None
+    closed_reason: Literal["membership", "death"] | None = None
+
+
+class GroupRequestChange(RemoteModel):
+    source_event_id: str
+    target_id: str
+    expires_at: int = Field(ge=0)
+    evidence: str = Field(min_length=1)
+
+
+class GroupResponseChange(RemoteModel):
+    request_event_id: str
+    response_event_id: str
+    assertion: Literal["answered", "refused"]
+    evidence: str = Field(min_length=1)
+
+
 class Conversation(RemoteModel):
     id: str
     title: str = Field(default="", max_length=160)
     group: bool = False
     members: list[Membership] = Field(default_factory=list, max_length=128)
     contact_id: str | None = None
+    initiative_pacing: GroupPacing | None = None
     provenance: str
 
 
@@ -69,14 +99,8 @@ RemoteChannel = Literal["TEXT_MESSAGE", "VOICE_CALL", "LETTER", "COURIER_LETTER"
 
 
 class ChannelContent(RemoteModel):
-    """Historical authored text has no literary size policy."""
+    """Authored text is preserved; compute budgets belong to generation."""
     content: str = ""
-
-    @model_validator(mode="after")
-    def modern_message_size(self):
-        if self.channel not in HISTORICAL_CHANNELS and len(self.content) > 4000:
-            raise ValueError("Modern message content exceeds 4000 characters.")
-        return self
 
 
 class RemoteEvent(ChannelContent):
@@ -101,6 +125,7 @@ class RemoteEvent(ChannelContent):
     fact_ids: list[str] = Field(default_factory=list, max_length=8)
     provenance: str
     operation_id: str
+    response_request: ResponseRequest | None = None
 
 
 class RemoteCommand(ChannelContent):
@@ -144,7 +169,7 @@ class RemoteProposal(RemoteModel):
     contact_id: str | None = None
     conversation_id: str | None = None
     event_id: str | None = None
-    content: str = Field(default="", max_length=4000)
+    content: str = ""
     basis_ids: list[str] = Field(default_factory=list, max_length=8)
     knowledge_ids: list[str] = Field(default_factory=list, max_length=8)
     speaker_name: str = Field(default="", max_length=160)

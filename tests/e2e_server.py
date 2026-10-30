@@ -53,6 +53,10 @@ letter130_provider=None
 
 def stream(**kwargs):
     global phone_mode
+    if phone_mode == 'group152':
+        from group152_provider import response
+        yield response(kwargs['messages'], bool(kwargs.get('response_format')))
+        return
     if phone_mode == 'letter130':
         from unittest.mock import MagicMock, patch
         client = MagicMock()
@@ -505,6 +509,14 @@ if __name__ == '__main__':
         phone_mode='silent'
         letter130_provider=None
         return {'ready':True}
+
+    @app.post('/test/group152-seed')
+    def group152_seed():
+        global phone_mode
+        phone_mode='group152'
+        from devtools.narrative_test_world import load_fixture
+        seed=load_fixture(app.state.repository,'phone')
+        return {'world':seed['world'],'save':seed['save']}
 
     @app.post('/test/narrative-phone138-seed')
     def narrative_phone138_seed():

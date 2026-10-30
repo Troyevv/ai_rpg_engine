@@ -46,6 +46,7 @@ def options_for(snapshot, source_id, replied):
     # Endpoint identification is offered only for this actual attempt.
     if not e["recipient_ids"]:
         return [o for o in opportunities(dict(s, remote_events={source_id:e})) if o.get("event_id") == source_id][:1]
+    from backend.runtime_v3.group_planning import pending
     result = []
     for actor in e["recipient_ids"]:
         caps = capabilities(s, actor)
@@ -61,7 +62,7 @@ def options_for(snapshot, source_id, replied):
                 continue
             if actor in e["delivered_to"] and actor not in e["read_by"]:
                 result.append(dict(base, event_id=source_id, actions=["read"]))
-            elif actor in e["read_by"] and actor not in replied:
+            elif actor in e["read_by"] and actor not in replied and not pending(s, conv['id']):
                 result.insert(0, dict(base, paths=[dict(conversation_id=conv["id"])], actions=["send"]))
     return result[:4]
 

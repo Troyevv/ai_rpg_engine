@@ -185,6 +185,13 @@ def run_job(path, job_id, handle):
                       'cancel_event': handle.cancelled, 'on_stream': on_stream,
                       'provider': config.get('provider', 'local'), 'api_key': handle.api_key}
             def generate(stage, messages, limit, temperature, **extra):
+                if stage in ('remote_initiative', 'remote_group_semantics'):
+                    # Reuse a completed source-identical request after a later
+                    # provider failure; the existing usage journal owns the text.
+                    for attempt in storage.request_log(job_id=job_id):
+                        if (attempt['stage'] == stage and attempt['status'] == 'complete'
+                                and attempt['messages'] == messages and attempt.get('response_text')):
+                            return iter([attempt['response_text']])
                 return tracked_stream(storage, chat_stream, job_id, stage, config, messages,
                                       describe_context(messages), temperature=temperature,
                                       max_tokens=limit, **extra, **common)
@@ -205,7 +212,7 @@ def run_job(path, job_id, handle):
                     if job['kind'] not in ('background', 'pov') and not skip_result:
                         from backend.runtime_v3.remote_initiative import stage as stage_remote
                         before['_interaction_input_channel'] = before['world_state']['meta']['interaction_focus']
-                        before = stage_remote(before, generate, 'job-' + job_id)
+                        before = stage_remote(before, generate, 'job-' + job_id, context_limit=context)
                     messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
                 last_write = 0.0
                 stage_started=time.perf_counter()

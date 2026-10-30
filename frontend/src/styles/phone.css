@@ -114,3 +114,5 @@
 
 .phone-contact-actions>button {background:var(--accent-soft);color:var(--accent);border:1px solid var(--border);}
 .phone-contact-detail .phone-contact-name {cursor:default;}
+
+.phone-response-wait { margin: 0; padding: .4rem .8rem; color: var(--text-muted); font-size: .8rem; text-align: center; }

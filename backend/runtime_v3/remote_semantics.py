@@ -29,7 +29,8 @@ def evidence_slice(state, source_id):
     # Never cut an authored message at the old 400-character preview boundary.
     linked = {eid for plan in state['scheduled_events'].values()
               if plan['status'] == 'pending' for eid in plan.get('remote_source_ids', [])}
-    required = {source_id, *[e['id'] for e in thread[-24:]]}
+    from backend.runtime_v3.group_planning import pending
+    required = {source_id, *[e['id'] for e in thread[-24:]], *[e['id'] for e in pending(state, source['conversation_id'])]}
     rows = [e for e in thread if e['id'] in required or e['id'] in linked]
     if len(rows) > 48 or sum(len(e['content']) for e in rows) > 64000:
         raise ValueError('Контекст договорённости слишком велик; исходные сообщения сохранены.')
@@ -43,7 +44,7 @@ def messages(snapshot, source_id):
         return None
     ids = set().union(*(participants(e) for e in rows))
     schema = extraction_schema()
-    allowed = ('final_scene', 'locations', 'scheduled_event_changes', 'character_changes')
+    allowed = ('final_scene', 'locations', 'scheduled_event_changes', 'character_changes', 'group_response_changes','group_request_changes')
     schema['properties'] = {k:v for k,v in schema['properties'].items() if k in allowed}
     character=schema['properties']['character_changes']['items']
     character['properties']={k:v for k,v in character['properties'].items() if k in ('id','evidence','intentions_updates')}
@@ -80,8 +81,16 @@ def messages(snapshot, source_id):
              'may use character_changes.intentions_updates; preserve their exact wording, source_event_id and evidence. '
              'Do not create an intention for a recipient. Existing intention lifecycle uses fresh evidence, not time. '
              'Return final_scene exactly as supplied, including zero elapsed_minutes. No choices. '
+             'For an explicit request addressed to controlled_actor_id in an accepted group message, '
+             'emit group_request_changes with source_event_id, target_id, exact evidence, expires_at '
+             '(canonical minute when the request becomes stale). Mentions alone do not request answers. '
+             'For pending_group_requests, emit group_response_changes ONLY for an explicit answer or refusal '
+             'authored by the target in this same group. Cite request_event_id, response_event_id, assertion '
+             'answered/refused and exact evidence from the answer. Reading, silence, unrelated messages and '
+             'ordinary Narrative are not answers. No invented consent. '
              'Empty changes are valid when no consequences are established.')
     return [dict(role='system', content=rules), dict(role='user', content=json.dumps(dict(
+        pending_group_requests=[dict(event_id=e['id'], **e['response_request']) for e in rows if e.get('response_request')],
         source_event_id=source_id, controlled_actor_id=state['camera']['controlled_actor_id'],
         current_time=current_time(state), calendar=state['meta']['calendar'],
         final_scene=dict(location_id=state['camera']['location_id'],
@@ -104,7 +113,7 @@ def resolve(snapshot, source_id, response, diagnostics=None):
     expected = dict(location_id=state['camera']['location_id'],
                     present_character_ids=state['camera']['present_character_ids'], elapsed_minutes=0)
     if raw.final_scene != expected or raw.choices or any(v for k,v in raw.records.items()
-            if k not in ('locations','scheduled_event_changes','character_changes')):
+            if k not in ('locations','scheduled_event_changes','character_changes','group_response_changes','group_request_changes')):
         raise ValueError('Телефонное извлечение пытается изменить физическую сцену или неподдерживаемый раздел.')
     by_id = {e['id']:e for e in rows}
     actor = state['camera']['controlled_actor_id']
