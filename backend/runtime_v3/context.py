@@ -580,8 +580,20 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     messages.insert(0, dict(role='system', content='Постоянные правила\n'+rules))
     messages.append(block('Текущий ввод', dict(kind=kind, player_input=user_text)))
     if extraction_text is not None: messages.append(block('completed_narrative', extraction_text))
+    # Authoring support participates in the same token budget as every other
+    # Narrative source. It must never be appended after context selection.
+    from backend.services.letter_sources import enabled as letters_enabled, author_context
+    letter_context_index = None
+    if not builder.extraction and letters_enabled(state):
+        letter_context_index = len(messages)
+        messages.append(author_context(state))
     hard_context_limit = context_length - reserve - 256
     target = min(target_context_budget, hard_context_limit)
+    if letter_context_index is not None:
+        for limit in range(5, -1, -1):
+            if estimate(messages) <= target: break
+            messages[letter_context_index] = author_context(state, limit)
+
 
     def replace_block(title, value):
         for i, message in enumerate(messages):

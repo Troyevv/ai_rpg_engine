@@ -31,14 +31,13 @@ def simulate(before_snapshot, snapshot, history_batch, context_length, config, g
     messages=build_context(camera,[],instruction,'background',context_length,config['max_tokens'],prompts=config.get('_prompts'),world_history=world_history)
     pacing_decision=messages.selection['pacing']
     initiative_decision=messages.selection['initiative']
-    from backend.services.letter_sources import generate_result, extraction_context, enabled
+    from backend.services.letter_sources import generate_result
     narrative, artifacts = generate_result(generate, 'world_simulation',messages,config['max_tokens'],config.get('temperature',0.8), camera['world_state'])
     if cancelled.is_set():return snapshot,history_batch
     if not narrative.strip():raise ValueError('Фоновая симуляция вернула пустой текст.')
     feedback=None
     for attempt in range(2):
         messages=build_context(camera,[],instruction,'background',context_length,config['update_tokens'],extraction_text=narrative,validation_feedback=feedback,pacing_decision=pacing_decision,initiative_decision=initiative_decision,prompts=config.get('_prompts'),world_history=world_history)
-        if enabled(camera['world_state']): messages.append(extraction_context(artifacts))
         payload=''.join(generate('world_simulation_delta' if attempt==0 else 'world_simulation_repair',messages,config['update_tokens'],0.1,response_format={'type':'json_object'}))
         if cancelled.is_set():return snapshot,history_batch
         try:

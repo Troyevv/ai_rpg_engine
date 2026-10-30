@@ -50,19 +50,19 @@ def metadata(artifacts):
     return [{k:v for k,v in a.items() if k != 'content'} for a in artifacts]
 
 
-def author_context(state):
+def author_context(state, limit=6):
     """Bounded GM input, not a public projection or Character Knowledge grant."""
     from backend.runtime_v3.remote_models import HISTORICAL_CHANNELS
     controlled = state['camera']['controlled_actor_id']
     rows = []
     for e in sorted(state['remote_events'].values(), key=lambda e: (-e['world_time'], e['id'])):
+        if len(rows) >= limit: break
         if e['channel'] not in HISTORICAL_CHANNELS:
             continue
         row = {k: e[k] for k in ('id','channel','sender_id','recipient_ids','status','read_by','delivered_to')}
         if controlled == e['sender_id'] or controlled in e['read_by'] or any(a != controlled for a in e['delivered_to']):
             row['content'] = e['content']
         rows.append(row)
-        if len(rows) == 6: break
     return {'role':'system', 'content':CONTRACT + '\nGM-only correspondence: ' + json.dumps(rows,ensure_ascii=False) +
         '\nNPCs may explicitly read delivered letters, or leave them unread. An optional response must be a new authored letter block. '
         'Reader visibility is not character Knowledge; never let a character act on an unread letter. Reference existing letter IDs when depicting reads; never duplicate sends.'}
@@ -77,9 +77,5 @@ def extraction_context(artifacts):
 
 
 def generate_result(generate, stage, messages, limit, temperature, state, **kwargs):
-    if enabled(state):
-        from copy import copy
-        messages = copy(messages)
-        messages.append(author_context(state))
     narrative = ''.join(generate(stage, messages, limit, temperature, **kwargs))
     return narrative, parse(narrative) if enabled(state) else []

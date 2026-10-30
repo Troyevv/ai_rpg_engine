@@ -314,7 +314,9 @@ def test_npc_read_does_not_grant_controlled_actor_knowledge():
     s,h=apply(s,dict(action='read',event_id=e['id'],operation_id='npc-read-only130'),actor_id='child',autonomous=True)
     assert SECRET not in json.dumps(ui_view(s,h),ensure_ascii=False)
     messages=build_context(s,[],'Жду.','turn',131072,4096)
-    assert SECRET not in json.dumps(messages,ensure_ascii=False)
+    pov=next(m for m in messages if m['content'].startswith('Знания POV'))
+    assert SECRET not in pov['content']
+    assert SECRET in next(m['content'] for m in messages if m['content'].startswith('LETTER AUTHORING CONTRACT:'))
     changes={'state_patch':{'upserts':{'remote_events':s['world_state']['remote_events'],'facts':s['world_state']['facts']}}}
     assert SECRET not in json.dumps(visible_changes(changes,s['world_state'],'a'),ensure_ascii=False)
 
@@ -421,3 +423,19 @@ def test_player_api_send_preserves_exact_authorship_without_llm(api):
     events=repo.get_snapshot(sid)['world_state']['remote_events']
     assert len(events)==1 and next(iter(events.values()))['content']==content
     assert not next(iter(events.values()))['read_by']
+
+
+def test_author_correspondence_is_inside_the_context_budget():
+    from backend.runtime_v3.context import build_context
+    from backend.services.letter_sources import author_context, CONTRACT
+    from context_builder import estimate
+    snap=letters()
+    for _ in range(6):
+        a=artifact(recipient='child');a['content']='Полный текст для адресата. '*140
+        snap['world_state']=send(snap,a).state
+    advance_clock(snap,snap['world_state']['meta']['world_time']+100,WorldHistoryV3().to_dict())
+    messages=build_context(snap,[],'Жду.','turn',24000,2000)
+    assert estimate(messages)<=24000-2000-256
+    author=next(m for m in messages if m['content'].startswith(CONTRACT))
+    assert len(author['content'])<len(author_context(snap['world_state'])['content'])
+    assert sum(CONTRACT in m['content'] for m in messages)==1

@@ -45,7 +45,9 @@ replace it, and a summary or missing body cannot become a fictitious send.
 The complete Narrative is already checkpointed by the existing job system.
 Retry reconstructs the same source blocks from those recorded bytes, without a
 new Narrative call. Background simulation and bounded LTA use the same source
-contract. Source validation does not judge literary meaning or require optional
+contract. GM correspondence support is included in the common Context Builder
+token budget; older optional rows are removed under pressure, never appended
+after budget selection. Source validation does not judge literary meaning or require optional
 semantic annotations. Player letters use explicitly supplied Remote command
 content; model-authored controlled-actor sends/reads remain prohibited.
 

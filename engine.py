@@ -173,7 +173,8 @@ def run_job(path, job_id, handle):
             skip_result = plan_skip(before['world_state'], skip_request) if skip_request else None
             if skip_result: before['_time_skip'] = skip_result
             narrative = job['narrative']
-            letter_sources = json.loads(job.get('private_artifacts_json') or '[]')
+            legacy_letter_sources = json.loads(job.get('private_artifacts_json') or '[]')
+            letter_sources = legacy_letter_sources
 
             def on_stream(stream):
                 handle.stream = stream
@@ -208,11 +209,14 @@ def run_job(path, job_id, handle):
                     messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
                 last_write = 0.0
                 stage_started=time.perf_counter()
-                from backend.services.letter_sources import enabled, author_context
+                from backend.services.letter_sources import enabled, CONTRACT
                 if enabled(before['world_state']) and not any('LETTER AUTHORING CONTRACT:' in str(m.get('content','')) for m in messages):
                     from copy import copy
                     messages = copy(messages)
-                    messages.append(author_context(before['world_state']))
+                    # Compatibility for recorded pre-change contexts only.
+                    messages.append({'role':'system','content':CONTRACT})
+                    if estimate(messages)>context-config['max_tokens']-256:
+                        raise ValueError('Сохранённый контекст с контрактом письма не помещается в выбранную модель.')
                 storage.save_context(job_id,messages,before)
                 for chunk in generate('narrative',messages,config['max_tokens'],config.get('temperature',0.8)):
                     if handle.cancelled.is_set():
@@ -267,9 +271,11 @@ def run_job(path, job_id, handle):
                 messages = build_context(before, history, job['user_text'], job['kind'], context,
                                          config['update_tokens'], extraction_text=narrative,
                                          validation_feedback=feedback, pacing_decision=narrative_policy, initiative_decision=initiative_plan,continuity_decision=continuity_plan, recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
-                from backend.services.letter_sources import enabled, extraction_context
-                if letter_sources or enabled(before['world_state']):
-                    messages.append(extraction_context(letter_sources))
+                if legacy_letter_sources:
+                    from backend.services.letter_sources import extraction_context
+                    messages.append(extraction_context(legacy_letter_sources))
+                    if estimate(messages)>context-config['update_tokens']-256:
+                        raise ValueError('Контекст восстановления старого письма не помещается в выбранную модель.')
                 stage_started=time.perf_counter()
                 result = ''.join(generate('extraction' if attempt==0 else 'extraction_repair',messages,config['update_tokens'],0.1,
                                           response_format={'type':'json_object'}))
