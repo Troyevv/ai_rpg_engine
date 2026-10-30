@@ -306,7 +306,6 @@ def chat_stream(
     thinking='off',
     on_usage=None,
     on_finish=None,
-    on_private_result=None,
 ):
     if provider not in PROVIDERS:
         raise ValueError('Неизвестный провайдер модели.')
@@ -322,23 +321,12 @@ def chat_stream(
     finish_reason = None
     from backend.services.answer_stream import AnswerStream
     answer = AnswerStream()
-    private_parts = []
-    private_size = 0
-    private_name = ""
-    unexpected_content = False
     try:
         extra = {"response_format": response_format} if response_format else {}
-        if on_private_result is not None:
-            from backend.services.private_artifacts import tool_spec
-            extra.update(tools=[tool_spec()], tool_choice={'type':'function', 'function':{'name':'publish_narrative'}})
         if spec.extra_body:
             extra['extra_body'] = spec.extra_body
         effective_thinking, thinking_args = thinking_options(provider,model,thinking)
         extra.update(thinking_args)
-        if on_private_result is not None and provider == 'deepseek' and effective_thinking != 'off':
-            # DeepSeek rejects forced tool_choice in thinking mode. Preserve
-            # the user's thinking setting, require a valid tool result locally.
-            extra['tool_choice'] = 'auto'
         if remote:
             extra['stream_options'] = {'include_usage': True}
         if effective_thinking == 'off':
@@ -377,33 +365,11 @@ def chat_stream(
                 None,
             )
 
-            if on_private_result is not None:
-                if content and content.strip(): unexpected_content = True
-                for call in getattr(delta, 'tool_calls', None) or []:
-                    if call.index != 0:
-                        raise RuntimeError('private_artifact_transport_invalid')
-                    if call.function is None:
-                        continue
-                    if call.function.name: private_name += call.function.name
-                    if call.function.arguments:
-                        private_parts.append(call.function.arguments)
-                        private_size += len(call.function.arguments)
-                    if private_size > 200000:
-                        raise RuntimeError('private_artifact_payload_too_large')
-                continue
             if content:
                 visible = answer.feed(content)
                 if visible:
                     yield visible
 
-        if on_private_result is not None:
-            if unexpected_content or private_name != 'publish_narrative' or finish_reason != 'tool_calls':
-                raise RuntimeError('private_artifact_transport_invalid')
-            from backend.services.private_artifacts import parse
-            result = parse(''.join(private_parts))
-            on_private_result(result.model_dump()['artifacts'])
-            yield result.narrative
-            return
         tail = answer.feed("", final=True)
         if tail:
             yield tail
@@ -415,9 +381,6 @@ def chat_stream(
         if stream is None and getattr(exc,'status_code',None) is not None:
             raise ProviderHTTPError(deepseek_error(exc),exc.status_code,
                 provider_rejection(exc,messages,max_tokens,response_format)) from None
-        if on_private_result is not None:
-            # SDK/transport exceptions may echo received argument bytes.
-            raise RuntimeError('private_artifact_transport_failed') from None
         if remote and not isinstance(exc, RuntimeError):
             raise RuntimeError(deepseek_error(exc)) from None
         raise

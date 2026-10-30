@@ -322,7 +322,7 @@ class ExtractionContextBuilder:
         saved = (prompts or {}).get('state_update_prompt.md', {}).get('content')
         # Preserve user overrides, but do not send the bundled generic contract twice.
         rules = (saved + '\n' if saved and saved.strip() != default.strip() else '') + EXTRACTION_CONTRACT
-        from backend.services.private_artifacts import enabled as historical_enabled
+        from backend.services.letter_sources import enabled as historical_enabled
         historical = historical_enabled(snapshot['world_state'])
         if current.get('communication'): rules += REMOTE_EXTRACTION_CONTRACT
         if historical:

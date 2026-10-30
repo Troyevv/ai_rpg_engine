@@ -14,7 +14,7 @@ from backend.runtime_v3.remote import apply, advance, correspondence_projection
 from backend.runtime_v3.resolver import StateResolver
 from backend.runtime_v3.long_term import advance_clock
 from backend.runtime_v3.repository import read_history
-from backend.services.private_artifacts import parse
+from backend.services.letter_sources import parse
 from backend.services.world_delta_errors import StructuralDeltaError
 from devtools.narrative_test_world import load_fixture
 from test_remote_communication import phone
@@ -23,6 +23,9 @@ from test_narrative_test_world import CONFIG
 
 SECRET = 'SEALED-130: Встреча у башни, пароль — янтарь.'
 PUBLIC = 'Гонец забрал запечатанное письмо.'
+
+def authored(*artifacts):
+    return PUBLIC + ''.join('\n\n```letter\n'+a['content']+'\n```' for a in artifacts)
 
 
 def letters():
@@ -42,7 +45,8 @@ def extracted(a):
 
 def send(snap, a=None):
     a=a or artifact()
-    return StateResolver(snap['world_state'],PUBLIC,'Жду.',private_artifacts=[a]).resolve(payload(snap['world_state'],[extracted(a)]))
+    a = dict(a, id='letter-1')
+    return StateResolver(snap['world_state'],authored(a),'Жду.').resolve(payload(snap['world_state'],[extracted(a)]))
 
 
 @pytest.mark.parametrize('channel,delay',[('LETTER',30),('COURIER_LETTER',20),('TELEGRAM',5)])
@@ -73,10 +77,11 @@ def test_missing_payload_author_agency_and_no_extractor_authorship():
         StateResolver(s,PUBLIC,'').resolve(payload(s,[dict(extracted(a),content=SECRET)]))
     with pytest.raises(StructuralDeltaError):send(letters(),artifact(sender='a',recipient='b'))
     with pytest.raises(StructuralDeltaError):
-        StateResolver(s,PUBLIC,'',private_artifacts=[a]).resolve(payload(s,[]))
-    with pytest.raises(ValueError,match='private_artifact_payload_invalid') as err:
-        parse('{"narrative":"ok","artifacts":'+SECRET)
-    assert SECRET not in str(err.value)
+        StateResolver(s,PUBLIC,'',letter_sources=[a]).resolve(payload(s,[]))
+    with pytest.raises(StructuralDeltaError):
+        parse('```letter\n'+SECRET)
+    assert parse(PUBLIC)==[]
+    assert parse(authored(a))[0]['content']==SECRET
 
 
 def test_batch_year_chronology_death_and_no_forced_reply():
@@ -99,7 +104,7 @@ def test_batch_year_chronology_death_and_no_forced_reply():
 
 class HTTPProvider:
     def __init__(self):
-        self.artifacts=[];self.rows=[];self.elapsed=1;self.fail_extraction=False;self.bad=False;self.calls=[]
+        self.artifacts=[];self.rows=[];self.elapsed=1;self.fail_extraction=False;self.bad=False;self.calls=[];self.gate=None;self.entered=None;self.delay=0
     def create(self, **kw):
         extraction=bool(kw.get('response_format'))
         self.calls.append('extraction' if extraction else 'narrative')
@@ -108,14 +113,21 @@ class HTTPProvider:
             if self.fail_extraction:raise RuntimeError('fixture extraction failure')
             value=json.dumps(dict(final_scene=dict(location_id=current['camera']['location_id'],present_character_ids=current['camera']['present_character_ids'],elapsed_minutes=self.elapsed),remote_events=self.rows),ensure_ascii=False)
             chunks=[NS(choices=[NS(delta=NS(content=value),finish_reason='stop')])]
-        elif kw.get('tools'):
-            value=json.dumps(dict(narrative=PUBLIC,artifacts=self.artifacts),ensure_ascii=False)
-            if self.bad:value=value[:-2]
-            # Split inside UTF-8 text, JSON escapes, field names, private content.
-            chunks=[NS(choices=[NS(delta=NS(content=None,tool_calls=[NS(index=0,function=NS(name='publish_narrative' if i==0 else None,arguments=value[i:i+7]))]),finish_reason=None)]) for i in range(0,len(value),7)]
-            chunks.append(NS(choices=[NS(delta=NS(content=None,tool_calls=[]),finish_reason='tool_calls')]))
         else:
-            chunks=[NS(choices=[NS(delta=NS(content=PUBLIC),finish_reason='stop')])]
+            assert 'tools' not in kw and 'tool_choice' not in kw
+            value=authored(*self.artifacts)
+            if self.bad:value=value[:-3]
+            def prose():
+                import time
+                yield NS(choices=[NS(delta=NS(content=PUBLIC+'\n\n'),finish_reason=None)])
+                if self.gate is not None:
+                    self.entered.set()
+                    assert self.gate.wait(10)
+                for i in range(len(PUBLIC)+2,len(value),7):
+                    if self.delay:time.sleep(self.delay)
+                    yield NS(choices=[NS(delta=NS(content=value[i:i+7]),finish_reason=None)])
+                yield NS(choices=[NS(delta=NS(content=''),finish_reason='stop')])
+            chunks=prose()
         stream=MagicMock();stream.__iter__.return_value=iter(chunks);return stream
 
 
@@ -139,10 +151,12 @@ def api(tmp_path,monkeypatch):
         yield repo,c,sid,p,turn
 
 
-def assert_private(c,sid,jid):
-    for url in (f'/api/saves/{sid}',f'/api/jobs/{jid}',f'/api/jobs/{jid}/events',f'/api/saves/{sid}/accounting',f'/api/saves/{sid}/archive',f'/api/saves/{sid}/correspondence'):
-        r=c.get(url);assert r.status_code==200,r.text
-        assert SECRET not in r.text,(url,r.text)
+def assert_unread(c,sid,jid):
+    # Reader-visible prose is allowed. The character's mail and Knowledge are gated.
+    mail=c.get(f'/api/saves/{sid}/correspondence').json()
+    assert all('content' not in e for e in mail if not e.get('outgoing'))
+    view=c.get(f'/api/saves/{sid}').json()
+    assert SECRET not in json.dumps(view.get('world',{}),ensure_ascii=False)
 
 
 def test_api_jobs_provider_sqlite_retry_regenerate_rollback_and_open(api):
@@ -150,7 +164,7 @@ def test_api_jobs_provider_sqlite_retry_regenerate_rollback_and_open(api):
     job=turn('start');assert job['status']=='saved',job['error']
     a=artifact('qa_vera','qa_kirill');p.artifacts=[a];p.rows=[extracted(a)];p.fail_extraction=True
     before=repo.get_snapshot(sid);job=turn();assert job['status']=='error',job
-    assert_private(c,sid,job['id'])
+    assert_unread(c,sid,job['id'])
     assert repo.get_snapshot(sid)==before
     p.fail_extraction=False;calls=p.calls.count('narrative')
     r=c.post(f"/api/jobs/{job['id']}/retry",json={'config':CONFIG});assert r.status_code==200,r.text
@@ -158,7 +172,7 @@ def test_api_jobs_provider_sqlite_retry_regenerate_rollback_and_open(api):
     assert p.calls.count('narrative')==calls
     first=repo.get_snapshot(sid);e=next(iter(first['world_state']['remote_events'].values()))
     assert e['content']==SECRET and e['status']=='in_transit'
-    assert_private(c,sid,job['id'])
+    assert_unread(c,sid,job['id'])
     fresh=Repository(repo.path);assert fresh.get_snapshot(sid)==first
     job=turn('regenerate');assert job['status']=='saved',job['error']
     assert repo.get_snapshot(sid)['world_state']['remote_events']==first['world_state']['remote_events']
@@ -168,25 +182,28 @@ def test_api_jobs_provider_sqlite_retry_regenerate_rollback_and_open(api):
     job=turn(time_skip={'duration':5,'reason':'Жду почту'});assert job['status']=='saved',job['error']
     assert next(iter(repo.get_snapshot(sid)['world_state']['remote_events'].values()))['status']=='in_transit'
     job=turn(time_skip={'duration':10,'reason':'Жду почту'});assert job['status']=='saved',job['error']
-    assert_private(c,sid,job['id'])
+    assert_unread(c,sid,job['id'])
     current=repo.get_snapshot(sid);e=next(iter(current['world_state']['remote_events'].values()))
     assert e['status']=='delivered' and not e['read_by']
     command=dict(action='read',event_id=e['id'],operation_id='open-canonical-letter')
     revision=repo.get_save(sid)['revision']
+    read_calls=list(p.calls)
     for _ in range(2):
         r=c.post(f'/api/saves/{sid}/phone',json=dict(revision=revision,command=command));assert r.status_code==200,r.text
+    assert p.calls==read_calls
     assert c.get(f'/api/saves/{sid}/correspondence').json()[0]['content']==SECRET
     with repo.connect() as db:h,_=read_history(db,repo.get_snapshot(sid)['history_head'])
     assert len([x for x in h['events'] if x.get('remote',{}).get('status')=='delivered' and not x['remote']['read_by']])==1
     job=turn();assert job['status']=='saved',job['error']
 
 
-def test_malformed_private_transport_never_commits_or_publishes(api):
+def test_incomplete_letter_never_commits_a_fictitious_send(api):
     repo,c,sid,p,turn=api;p.bad=True;p.artifacts=[artifact('qa_vera','qa_kirill')]
     before=repo.get_snapshot(sid);job=turn('start')
-    assert job['status']=='error' and not job['narrative_complete']
+    assert job['status']=='error'
+    assert SECRET in job['narrative']
     assert repo.get_snapshot(sid)==before
-    assert_private(c,sid,job['id'])
+    assert_unread(c,sid,job['id'])
 
 
 def test_npc_explicit_read_reply_or_silence_and_player_invitation():
@@ -212,7 +229,7 @@ def test_npc_explicit_read_reply_or_silence_and_player_invitation():
 def test_year_real_job_reload_and_rollback(api):
     repo,c,sid,p,turn=api
     assert turn('start')['status']=='saved'
-    p.artifacts=[artifact('qa_vera','qa_kirill',aid=str(i)) for i in range(3)]
+    p.artifacts=[artifact('qa_vera','qa_kirill',aid=f'letter-{i+1}') for i in range(3)]
     p.rows=[extracted(a) for a in p.artifacts]
     job=turn();assert job['status']=='saved',job['error']
     before=repo.get_snapshot(sid)
@@ -223,32 +240,59 @@ def test_year_real_job_reload_and_rollback(api):
     after=repo.get_snapshot(sid)
     assert after['last_long_term_advance']['llm_calls']==0
     assert all(e['status']=='delivered' and not e['read_by'] for e in after['world_state']['remote_events'].values())
-    assert_private(c,sid,jid)
+    assert_unread(c,sid,jid)
     assert Repository(repo.path).get_snapshot(sid)==after
     repo.rollback_last(sid)
     assert repo.get_snapshot(sid)['world_state']==before['world_state']
 
 
-@pytest.mark.parametrize('fault',['raw','truncated','multiple','wrong_finish','disconnect','duplicate_key'])
-def test_provider_transport_fail_closed_all_chunk_boundaries(monkeypatch,fault):
-    value=json.dumps(dict(narrative=PUBLIC,artifacts=[artifact()]),ensure_ascii=False)
-    if fault=='truncated':value=value[:-1]
-    if fault=='duplicate_key':value='{"narrative":"'+PUBLIC+'","narrative":"'+SECRET+'","artifacts":[]}'
-    def chunks():
-        if fault=='raw':
-            yield NS(choices=[NS(delta=NS(content=SECRET,tool_calls=None),finish_reason='stop')]);return
-        for i,char in enumerate(value):
-            yield NS(choices=[NS(delta=NS(content=None,tool_calls=[NS(index=1 if fault=='multiple' else 0,function=NS(name='publish_narrative' if i==0 else None,arguments=char))]),finish_reason=None)])
-        if fault=='disconnect':raise RuntimeError('fixture disconnected: '+SECRET)
-        yield NS(choices=[NS(delta=NS(content=None,tool_calls=[]),finish_reason='stop' if fault=='wrong_finish' else 'tool_calls')])
-    stream=MagicMock();stream.__iter__.side_effect=chunks
-    client=MagicMock();client.chat.completions.create.return_value=stream
-    monkeypatch.setattr(llm,'OpenAI',lambda **kw:client)
-    emitted=[];artifacts=[]
-    with pytest.raises((RuntimeError,ValueError)) as err:
-        for chunk in llm.chat_stream('model',[],on_private_result=artifacts.extend,require_complete=True):emitted.append(chunk)
-    assert emitted==[] and artifacts==[] and SECRET not in str(err.value)
-    stream.close.assert_called_once()
+@pytest.mark.parametrize('text', ['```letter\n', '```letter\ntext', '```letter\n\n```', '```letter\n'+('x'*4001)+'\n```'])
+def test_full_letter_source_required(text):
+    with pytest.raises(StructuralDeltaError):parse(text)
+
+
+def test_markdown_source_is_complete_literal_and_not_prose_guessing():
+    text='Dear friend,\n\n«Quotation», punctuation and `inline code`.\nYours, NPC'
+    assert parse('He wrote: "a summary".')==[]
+    assert parse('```python\nnot a letter\n```')==[]
+    assert parse(authored(dict(content=text)))[0]['content']==text
+
+
+@pytest.mark.parametrize('with_letter',[False,True])
+@pytest.mark.parametrize('historical_only',[False,True])
+def test_real_job_streams_before_provider_finishes_without_granting_knowledge(api,with_letter,historical_only):
+    import threading
+    repo,c,sid,p,turn=api
+    if historical_only:
+        with repo.connect() as db:
+            snap=repo.get_snapshot(sid)
+            snap['world_state']['meta']['communication'].update(text_message=False,voice_call=False)
+            db.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(snap),sid))
+    assert turn('start')['status']=='saved'
+    if with_letter:
+        a=artifact('qa_vera','qa_kirill');p.artifacts=[a];p.rows=[extracted(a)]
+    p.gate=threading.Event();p.entered=threading.Event()
+    before=repo.get_snapshot(sid)
+    response=c.post(f'/api/saves/{sid}/turns',json=dict(kind='turn',text='Жду.',revision=repo.get_save(sid)['revision'],config=CONFIG))
+    jid=response.json()['id']
+    try:
+        assert p.entered.wait(5)
+        job=c.get(f'/api/jobs/{jid}').json()
+        assert PUBLIC in job['narrative'] and not job['narrative_complete']
+        assert repo.get_snapshot(sid)==before
+    finally:p.gate.set()
+    job=wait(repo,jid);assert job['status']=='saved',job['error']
+    assert (SECRET in job['narrative']) == with_letter
+    assert repo.get_snapshot(sid)['world_state']['knowledge']==before['world_state']['knowledge']
+    events=repo.get_snapshot(sid)['world_state']['remote_events']
+    assert len(events)==int(with_letter)
+    if with_letter:assert next(iter(events.values()))['content']==SECRET
+
+
+def test_legacy_completed_private_job_payload_can_still_bind():
+    s=letters()['world_state'];a=artifact()
+    out=StateResolver(s,PUBLIC,'',letter_sources=[a]).resolve(payload(s,[extracted(a)]))
+    assert next(iter(out.state['remote_events'].values()))['content']==SECRET
 
 
 def test_landline_reuses_voice_runtime_without_contact():
@@ -259,7 +303,7 @@ def test_landline_reuses_voice_runtime_without_contact():
     assert e['channel']=='VOICE_CALL' and e['status']=='ringing'
 
 
-def test_npc_only_correspondence_does_not_leak_through_fact_or_patch_projection():
+def test_npc_read_does_not_grant_controlled_actor_knowledge():
     from backend.runtime_v3.selectors import ui_view
     from backend.runtime_v3.surfaces import visible_changes
     from backend.runtime_v3.context import build_context
@@ -313,10 +357,10 @@ def test_variant_branch_restores_original_payload_without_redelivery(api):
     assert repo.get_snapshot(sid)['world_state']==first['world_state']
     repo.select_variant(sid,node['id'],alternate,repo.get_save(sid)['revision'])
     assert not repo.get_snapshot(sid)['world_state']['remote_events']
-    assert_private(c,sid,job['id'])
+    assert_unread(c,sid,job['id'])
 
 
-def test_long_term_authored_send_and_private_npc_read_receipts():
+def test_long_term_authored_send_and_npc_read_receipts():
     from backend.runtime_v3.long_term import run
     from backend.runtime_v3.models import Thread
     s=letters();s['world_state']['threads']['post']=Thread(id='post',description='Написать письмо',character_ids=['b'],relevance=1).model_dump()
@@ -328,7 +372,7 @@ def test_long_term_authored_send_and_private_npc_read_receipts():
     def generate(stage,messages,limit,temp,**kw):
         calls.append(stage)
         if stage=='long_term_narrative':
-            kw['on_private_result']([a]);return iter([PUBLIC])
+            return iter([authored(a)])
         current=json.loads(next(m['content'].split('\n',1)[1] for m in messages if m['content'].startswith('Текущее состояние / GM-only\n')))
         return iter([json.dumps(dict(final_scene=dict(location_id=current['camera']['location_id'],present_character_ids=['b'],elapsed_minutes=0),
             events=[dict(id='write',text=PUBLIC,participants=['b'],witnesses=['b'],medium='action',advance_candidate_ids=kw['context_key'])],
@@ -338,13 +382,42 @@ def test_long_term_authored_send_and_private_npc_read_receipts():
     assert len(calls)==2
     assert len(after['world_state']['remote_events'])==2
     assert after['world_state']['remote_events'][original['id']]['read_by']==['b']
-    assert SECRET not in json.dumps(report,ensure_ascii=False)
+    assert any(e['content']==SECRET for e in after['world_state']['remote_events'].values())
 
 
-def test_invalid_saved_payload_errors_do_not_echo_private_input():
+def test_structural_errors_keep_existing_safe_diagnostics():
     from backend.runtime_v3.models import assert_world_state_v3_invariants
     s=letters();out=send(s);state=out.state
     next(iter(state['remote_events'].values()))['content']=SECRET*200
     with pytest.raises(StructuralDeltaError) as err:assert_world_state_v3_invariants(state)
     assert SECRET not in str(err.value)
     assert 'remote_events' in str(err.value) and 'string_too_long' in str(err.value)
+
+
+def test_old_private_checkpoint_retries_without_regenerating_letter(api):
+    repo,c,sid,p,turn=api
+    assert turn('start')['status']=='saved'
+    a=artifact('qa_vera','qa_kirill');p.artifacts=[a];p.rows=[extracted(a)];p.fail_extraction=True
+    job=turn();assert job['status']=='error' and job['narrative_complete']
+    with repo.connect() as db:
+        db.execute('UPDATE game_jobs SET narrative=?,private_artifacts_json=? WHERE id=?',(PUBLIC,json.dumps([a]),job['id']))
+    p.fail_extraction=False;calls=p.calls.count('narrative')
+    assert c.post(f"/api/jobs/{job['id']}/retry",json={'config':CONFIG}).status_code==200
+    job=wait(repo,job['id']);assert job['status']=='saved',job['error']
+    assert p.calls.count('narrative')==calls
+    assert next(iter(repo.get_snapshot(sid)['world_state']['remote_events'].values()))['content']==SECRET
+
+
+def test_player_api_send_preserves_exact_authorship_without_llm(api):
+    repo,c,sid,p,turn=api
+    assert turn('start')['status']=='saved'
+    calls=list(p.calls);content='Мой текст.\n\nБез продолжения за меня.\nПодпись игрока.'
+    revision=repo.get_save(sid)['revision']
+    command=dict(action='send',channel='LETTER',character_id='qa_vera',content=content,operation_id='player-exact-130')
+    for _ in range(2):
+        r=c.post(f'/api/saves/{sid}/correspondence',json=dict(revision=revision,command=command))
+        assert r.status_code==200,r.text
+    assert p.calls==calls
+    events=repo.get_snapshot(sid)['world_state']['remote_events']
+    assert len(events)==1 and next(iter(events.values()))['content']==content
+    assert not next(iter(events.values()))['read_by']

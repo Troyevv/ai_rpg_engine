@@ -465,6 +465,7 @@ if __name__ == '__main__':
         from test_historical_correspondence130 import HTTPProvider
         from devtools.narrative_test_world import load_fixture
         letter130_provider=HTTPProvider()
+        letter130_provider.delay=0.15
         repo=app.state.repository
         seed=load_fixture(repo,'phone')
         with repo.connect() as db:

@@ -173,7 +173,7 @@ def run_job(path, job_id, handle):
             skip_result = plan_skip(before['world_state'], skip_request) if skip_request else None
             if skip_result: before['_time_skip'] = skip_result
             narrative = job['narrative']
-            private_artifacts = json.loads(job.get('private_artifacts_json') or '[]')
+            letter_sources = json.loads(job.get('private_artifacts_json') or '[]')
 
             def on_stream(stream):
                 handle.stream = stream
@@ -206,18 +206,15 @@ def run_job(path, job_id, handle):
                         before['_interaction_input_channel'] = before['world_state']['meta']['interaction_focus']
                         before = stage_remote(before, generate, 'job-' + job_id)
                     messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
-                    storage.save_context(job_id,messages,before)
                 last_write = 0.0
                 stage_started=time.perf_counter()
-                from backend.services.private_artifacts import enabled, author_context
-                private_options = {}
-                if enabled(before['world_state']):
-                    def capture_private(value):
-                        nonlocal private_artifacts
-                        private_artifacts = value
-                    private_options['on_private_result'] = capture_private
-                    messages = [*messages, author_context(before['world_state'])]
-                for chunk in generate('narrative',messages,config['max_tokens'],config.get('temperature',0.8), **private_options):
+                from backend.services.letter_sources import enabled, author_context
+                if enabled(before['world_state']) and not any('LETTER AUTHORING CONTRACT:' in str(m.get('content','')) for m in messages):
+                    from copy import copy
+                    messages = copy(messages)
+                    messages.append(author_context(before['world_state']))
+                storage.save_context(job_id,messages,before)
+                for chunk in generate('narrative',messages,config['max_tokens'],config.get('temperature',0.8)):
                     if handle.cancelled.is_set():
                         return
                     narrative += chunk
@@ -227,13 +224,14 @@ def run_job(path, job_id, handle):
                 timings['narrative']=time.perf_counter()-stage_started
                 if not narrative.strip():
                     raise ValueError('Модель вернула пустую сцену.')
-                # Payload and completion must share a transaction; a retry never
-                # sees a completed public scene without its private authoring result.
+                # New letters are recovered directly from the recorded Narrative.
+                # Keep the old column only for pre-change completed job recovery.
                 with storage.connect() as db:
-                    db.execute("UPDATE game_jobs SET private_artifacts_json=? WHERE id=? AND status='generating' AND attempt_epoch=?",
-                        (json.dumps(private_artifacts, ensure_ascii=False), job_id, job['attempt_epoch']))
                     db.execute("UPDATE game_jobs SET status='extracting', narrative=?, narrative_complete=1 WHERE id=? AND status='generating' AND attempt_epoch=?",
                         (narrative, job_id, job['attempt_epoch']))
+            if not letter_sources:
+                from backend.services.letter_sources import parse, enabled
+                letter_sources = parse(narrative) if enabled(before['world_state']) else []
             if handle.cancelled.is_set() or storage.get_job(job_id)['status'] != 'extracting':
                 return
             # Use exactly the policy supplied to this narrative, including retry /
@@ -269,9 +267,9 @@ def run_job(path, job_id, handle):
                 messages = build_context(before, history, job['user_text'], job['kind'], context,
                                          config['update_tokens'], extraction_text=narrative,
                                          validation_feedback=feedback, pacing_decision=narrative_policy, initiative_decision=initiative_plan,continuity_decision=continuity_plan, recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
-                from backend.services.private_artifacts import enabled, extraction_context
-                if private_artifacts or enabled(before['world_state']):
-                    messages.append(extraction_context(private_artifacts))
+                from backend.services.letter_sources import enabled, extraction_context
+                if letter_sources or enabled(before['world_state']):
+                    messages.append(extraction_context(letter_sources))
                 stage_started=time.perf_counter()
                 result = ''.join(generate('extraction' if attempt==0 else 'extraction_repair',messages,config['update_tokens'],0.1,
                                           response_format={'type':'json_object'}))
@@ -291,7 +289,7 @@ def run_job(path, job_id, handle):
                     if skip_result: raw.final_scene['elapsed_minutes'] = skip_result['elapsed_minutes']
                     from backend.runtime_v3.remote_semantics import staged_sources
                     from backend.runtime_v3.call_continuity import sources as call_sources
-                    resolver=StateResolver(before['world_state'],narrative,job['user_text'],pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_plan,continuity_decision=continuity_plan,runtime_time_skip=bool(skip_result),require_elapsed=job['kind']=='turn' and not skip_result,turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),relationship_query=world_history.get('_relationship_query'),actor_names={c['id']:c['name'] for c in before['character_cards']},private_artifacts=private_artifacts,remote_semantic_sources=staged_sources(before),call_sources=call_sources(before['world_state'],world_history,narrative,job['user_text'],sequence+1))
+                    resolver=StateResolver(before['world_state'],narrative,job['user_text'],pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_plan,continuity_decision=continuity_plan,runtime_time_skip=bool(skip_result),require_elapsed=job['kind']=='turn' and not skip_result,turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),relationship_query=world_history.get('_relationship_query'),actor_names={c['id']:c['name'] for c in before['character_cards']},letter_sources=letter_sources,remote_semantic_sources=staged_sources(before),call_sources=call_sources(before['world_state'],world_history,narrative,job['user_text'],sequence+1))
                     resolved=resolver.resolve(raw)
                     if before['world_state']['meta'].get('interaction_focus')=='call':
                         rejected=[w for w in resolved.warnings if w.get('section')=='scheduled_events']

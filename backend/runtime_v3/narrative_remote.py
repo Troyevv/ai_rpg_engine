@@ -14,8 +14,8 @@ from backend.runtime_v3.remote_models import ExtractedRemoteEvent, HISTORICAL_CH
 def apply_extracted_remote(resolver, raw, events):
     records = raw.records.get('remote_events', [])
     batch_history = WorldHistoryV3()
-    if not records and resolver.private_artifacts:
-        fatal("Private artifact has no accepted send.", "private_artifact_unbound", repairable=True)
+    if not records and resolver.letter_sources:
+        fatal("Authored letter has no accepted send.", "letter_source_unbound", repairable=True)
     if not records:
         return batch_history
     state = resolver.state
@@ -69,11 +69,12 @@ def apply_extracted_remote(resolver, raw, events):
             reject(index, 'Повреждено событие связи.', '.'.join(map(str, exc.errors()[0]['loc'])))
         actor, recipients = row.sender_id, set(row.recipient_ids)
         if row.channel in HISTORICAL_CHANNELS and not row.existing_event_id:
-            artifact = resolver.private_artifacts.get(row.artifact_id)
+            artifact = resolver.letter_sources.get(row.artifact_id)
             if (not artifact or row.artifact_id in used_artifacts or row.content
-                    or artifact['sender_id'] != actor or [artifact['recipient_id']] != row.recipient_ids
-                    or artifact['channel'] != row.channel or row.status is not None or row.ended_at is not None):
-                reject(index, 'Нет соответствующего авторского артефакта письма.', 'artifact_id', 'private_artifact_missing')
+                    or 'sender_id' in artifact and artifact['sender_id'] != actor
+                    or 'recipient_id' in artifact and [artifact['recipient_id']] != row.recipient_ids
+                    or 'channel' in artifact and artifact['channel'] != row.channel or row.status is not None or row.ended_at is not None):
+                reject(index, 'Нет соответствующего авторского артефакта письма.', 'artifact_id', 'letter_source_missing')
             used_artifacts.add(row.artifact_id)
             row.content = artifact['content']
         elif row.artifact_id:
@@ -199,7 +200,7 @@ def apply_extracted_remote(resolver, raw, events):
                     if state['facts'][fid]['visibility'] != 'secret':
                         reject(index, 'Содержание сообщения не является общедоступным фактом.', 'source_event_id', 'remote_private_fact')
 
-    if used_artifacts != resolver.private_artifacts.keys():
-        fatal('Private artifact has no accepted send.', 'private_artifact_unbound', repairable=True)
+    if used_artifacts != resolver.letter_sources.keys():
+        fatal('Authored letter has no accepted send.', 'letter_source_unbound', repairable=True)
     settle_endings(finish)
     return batch_history

@@ -406,7 +406,5 @@ class RuntimeStorage:
         return after
 
     def uses_private_transport(self, save_id):
-        from backend.services.private_artifacts import enabled
-        if enabled(self.get_snapshot(save_id)['world_state']): return True
         with self.connect() as db:
             return db.execute("SELECT 1 FROM llm_requests WHERE save_id=? AND json_extract(config_json, '$.private_artifacts')=1 LIMIT 1", (save_id,)).fetchone() is not None

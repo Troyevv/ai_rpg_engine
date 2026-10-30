@@ -30,10 +30,12 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, require_elapsed=False, relationship_query=None, relationship_receipts=None, remote_semantic_sources=None, call_sources=None, private_artifacts=None):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, require_elapsed=False, relationship_query=None, relationship_receipts=None, remote_semantic_sources=None, call_sources=None, letter_sources=None):
         if mode not in ("turn", "background"):
             raise ValueError("Неизвестный режим StateResolver.")
-        self.private_artifacts = {a["id"]: a for a in private_artifacts or []}
+        from backend.services.letter_sources import parse, enabled
+        sources = letter_sources if letter_sources is not None else parse(narrative) if enabled(before) else []
+        self.letter_sources = {a["id"]: a for a in sources}
         self.call_sources = call_sources or {}
         self.remote_semantic_sources = remote_semantic_sources or {}
         self.minimal_promotion_ids = set(minimal_promotion_ids or ())

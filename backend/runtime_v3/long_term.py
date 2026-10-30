@@ -529,7 +529,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 pacing_decision=group_policy,
             )
             report["llm_calls"] += 1
-            from backend.services.private_artifacts import generate_result, extraction_context, enabled
+            from backend.services.letter_sources import generate_result, extraction_context, enabled
             narrative, artifacts = generate_result(generate, "long_term_narrative", messages,
                 config.get("max_tokens", 2000), config.get("temperature", 0.8), camera['world_state'],
                 context_key=[c.id for c in group])
@@ -610,7 +610,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 camera["world_state"],
                 narrative,
                 "",
-                private_artifacts=artifacts,
+                letter_sources=artifacts,
                 turn_id=turn,
                 observed=False,
                 mode="background",
