@@ -1,0 +1,22 @@
+{
+  "smoke": ["dossier.spec.ts", "runtime.spec.ts", "knowledge.spec.ts", "pov.spec.ts", "protagonist.spec.ts", "phone.spec.ts", "call-continuity.spec.ts", "calendar.spec.ts", "genealogy156.spec.ts", "mobile-menu126.spec.ts"],
+  "domains": {
+    "phone": {
+      "sources": ["frontend/src/Phone*.tsx", "frontend/src/CallScene.tsx", "frontend/src/lib/phone*.ts", "frontend/src/styles/phone.css"],
+      "suites": ["*phone*.spec.ts", "call*.spec.ts", "current-game.spec.ts", "reachability*.spec.ts", "portrait*.spec.ts", "communication-profile.spec.ts", "historical-correspondence*.spec.ts", "mobile-menu*.spec.ts"]
+    },
+    "calendar": {
+      "sources": ["frontend/src/*Calendar*.tsx", "frontend/src/calendarView.ts", "frontend/src/styles/game-calendar.css"],
+      "suites": ["calendar*.spec.ts", "current-game.spec.ts", "completion-matrix.spec.ts", "commitments.spec.ts", "phone*.spec.ts", "mobile-menu*.spec.ts"]
+    },
+    "genealogy": {
+      "sources": ["frontend/src/Genealogy.tsx", "frontend/src/lib/genealogy*.ts", "frontend/src/styles/genealogy.css"],
+      "suites": ["genealogy*.spec.ts", "dossier*.spec.ts", "family.spec.ts", "newborn.spec.ts", "personal-relationships.spec.ts", "inspector*.spec.ts", "mobile-menu*.spec.ts"]
+    },
+    "relationships": {
+      "sources": ["frontend/src/Relationship*.tsx", "frontend/src/lib/*elationship*.ts", "frontend/src/styles/relationships.css"],
+      "suites": ["*relationship*.spec.ts", "inspector*.spec.ts", "dossier*.spec.ts", "genealogy*.spec.ts", "runtime-v2.spec.ts", "portrait*.spec.ts"]
+    }
+  },
+  "documentation": ["docs/*.md", "README.md", "AGENTS.md"]
+}
