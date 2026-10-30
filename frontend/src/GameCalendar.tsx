@@ -1,270 +1,636 @@
 import { useEffect, useState } from "react";
-import { useWorkspaceView, type WorkspaceView } from "./lib/workspaceView";
+import {
+  ChevronLeft,
+  ChevronRight,
+  CalendarDays,
+  Cake,
+  Flag,
+  Handshake,
+  Clock,
+  CalendarRange,
+} from "lucide-react";
 import { DayPicker, DayButton } from "react-day-picker";
 import { ru, enUS } from "react-day-picker/locale";
 import "react-day-picker/style.css";
+import "./styles/game-calendar.css";
+import { useWorkspaceView, type WorkspaceView } from "./lib/workspaceView";
 import { api } from "./api";
 import type { Save } from "./types";
 import { calendarDate, profileDate, gameLocale } from "./gameDate";
-import { WeatherBadge, type Weather } from "./SceneClock";
-type Item = {
-  id: string;
-  date: string;
-  end_date?: string;
-  kind: string;
-  name: string | null;
-  character_ids: string[];
-  status?: string;
-  window?: { exact_time?: string; relevance?: string };
-  interval_state?: string;
-};
-type Day = {
-  date: string;
-  day: number;
-  weekday: number;
-  month: number;
-  year: number;
-  weather?: Weather;
-};
-type Projection = {
-  days: Day[];
-  events: Item[];
-  scheduled: { items: Item[]; truncated: boolean };
-  notices: string[];
-  profile: { system: string; month_names?: string[]; weekday_names?: string[] };
-};
-const iso = (date: Date) =>
-  `${String(date.getFullYear()).padStart(4, "0")}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-const parse = (value: string) => {
-  const [y, m, d] = value.split("-").map(Number);
+import { WeatherBadge } from "./SceneClock";
+import {
+  category,
+  statusLabel,
+  monthCount,
+  monthLength,
+  shiftMonth,
+  projectionItems,
+  itemsOnDay,
+  upcomingItems,
+  type CalendarProfile,
+  type CalendarItem as Item,
+  type CalendarProjection as Projection,
+} from "./calendarView";
+const iso = (d: Date) =>
+  `${String(d.getFullYear()).padStart(4, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const parse = (v: string) => {
+  const [y, m, d] = v.split("-").map(Number);
   const date = new Date(0);
   date.setFullYear(y, m - 1, d);
   date.setHours(12, 0, 0, 0);
   return date;
 };
-export function GameCalendar({ save, viewState }: { save: Save; viewState?: WorkspaceView }) {
-  const today = save.state.world_clock?.projection?.date;
-  const [month, setMonth] = useWorkspaceView(viewState, "month", today?.slice(0, 7) || ""),
-    [selected, setSelected] = useWorkspaceView(viewState, "selected", today || ""),
-    [yearView, setYearView] = useWorkspaceView(viewState, "year", false);
-  const dataKey=`${save.id}:${save.revision}:${save.state.controlled_actor_id}:${month}`;
-  const [record, setRecord] = useState<{key:string;value:Projection|null}>({key:"",value:null}),
-    [error, setError] = useState("");
-  const data=record.key===dataKey?record.value:null;
-  const setData=(value:Projection|null)=>setRecord({key:dataKey,value});
-  const profile = (save.state.world_clock?.calendar as any)?.profile;
-  const custom = profile?.system === "custom";
-  const monthCount = custom ? profile.month_lengths.length : 12;
-  const year = Number(month.slice(0, 4)),
-    number = Number(month.slice(5, 7));
-  const length = custom
-    ? profile.month_lengths[number - 1]
-    : new Date(year, number, 0).getDate();
-  useEffect(() => {
-    if (!month) return;
-    let live = true;
-    setData(null);
-    setError("");
-    api<Projection>(
-      `/saves/${save.id}/calendar?start_date=${month}-01&end_date=${month}-${String(length).padStart(2, "0")}`,
-    )
-      .then((d) => {
-        if (live) setData(d);
-      })
-      .catch((e) => {
-        if (live) setError(e.message);
-      });
-    return () => {
-      live = false;
-    };
-  }, [save.id, save.revision, save.state.controlled_actor_id, month, length]);
-  if (!today)
-    return (
-      <p>
-        Календарная дата не установлена. Относительное время мира сохраняется.
-      </p>
-    );
-  const move = (delta: number) => {
-    const offset = (year - 1) * monthCount + number - 1 + delta;
-    const y = Math.floor(offset / monthCount) + 1;
-    if (y < 1 || y > 9999) return;
-    setSelected(`${String(y).padStart(4,"0")}-${String((offset % monthCount)+1).padStart(2,"0")}-01`);
-    setMonth(
-      `${String(y).padStart(4, "0")}-${String((offset % monthCount) + 1).padStart(2, "0")}`,
-    );
-  };
-  const items = [...(data?.events || []), ...(data?.scheduled.items || [])];
-  const onDay = (date: string) =>
-    items.filter((e) => e.date <= date && (e.end_date || e.date) >= date);
-  const title = custom
-    ? `${profile.month_names?.[number - 1] || number} · ${year}`
-    : calendarDate(month + "-01", "month");
-  const itemName = (e: Item) =>
-    e.kind === "birthday"
-      ? `День рождения: ${e.name || e.character_ids.map((id) => save.state.characters.find((c) => c.id === id)?.name || "Персонаж").join(", ")}`
-      : e.name || "Дата";
+const weekdays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+const weekdayLabels = (profile: CalendarProfile) =>
+  profile.weekday_names?.length
+    ? profile.weekday_names
+    : gameLocale().startsWith("ru")
+      ? weekdays
+      : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const icons = {
+  birthday: Cake,
+  observance: Flag,
+  personal: Flag,
+  commitment: Handshake,
+  scheduled_event: Clock,
+  interval: CalendarRange,
+};
+function EventIcon({ kind }: { kind: string }) {
+  const Icon = icons[kind as keyof typeof icons] || CalendarDays;
+  return <Icon size={14} aria-hidden="true" />;
+}
+function itemName(e: Item, save: Save) {
+  return e.kind === "birthday"
+    ? `День рождения: ${e.name || e.character_ids.map((id) => save.state.characters.find((c) => c.id === id)?.name || "Персонаж").join(", ")}`
+    : e.name || category(e.kind);
+}
+function Markers({
+  items,
+  save,
+  mini = false,
+}: {
+  items: Item[];
+  save: Save;
+  mini?: boolean;
+}) {
+  if (!items.length) return null;
   return (
-    <section className="game-calendar" aria-label="Календарь игры">
-      <div className="calendar-toolbar">
-        <button
-          aria-label="Предыдущий месяц"
-          onClick={() => move(yearView ? -monthCount : -1)}
-        >
-          ‹
-        </button>
-        <h3>{yearView ? year : title}</h3>
-        <button
-          aria-label="Следующий месяц"
-          onClick={() => move(yearView ? monthCount : 1)}
-        >
-          ›
-        </button>
-        <button
-          onClick={() => {
-            setMonth(today.slice(0, 7));
-            setSelected(today);
-          }}
-        >
-          Сегодня в игре
-        </button>
-        <button aria-pressed={yearView} onClick={() => setYearView(!yearView)}>
-          {yearView ? "Месяц" : "Год"}
-        </button>
-      </div>
-      {yearView ? (
-        <CalendarYear key={`${save.id}:${save.revision}:${save.state.controlled_actor_id}:${year}`} save={save} year={year} profile={profile} today={today} choose={(date)=>{setMonth(date.slice(0,7));setSelected(date);setYearView(false)}}/>
-      ) : (
-        <div className="calendar-layout">
-          {error ? (
-            <p role="alert">{error}</p>
-          ) : !data ? (
-            <p role="status">Загрузка календаря…</p>
-          ) : custom ? (
-            <div
-              className="custom-calendar"
-              style={{
-                gridTemplateColumns: `repeat(${data.profile.weekday_names?.length || 7},minmax(0,1fr))`,
-              }}
-            >
-              {(
-                data.profile.weekday_names || [
-                  "Пн",
-                  "Вт",
-                  "Ср",
-                  "Чт",
-                  "Пт",
-                  "Сб",
-                  "Вс",
-                ]
-              ).map((d, i) => (
-                <small key={i}>{d}</small>
-              ))}
-              {Array.from({ length: data.days[0]?.weekday || 0 }, (_, i) => (
-                <span key={"blank" + i} />
-              ))}
-              {data.days.map((d) => (
-                <button
-                  key={d.date}
-                  aria-current={d.date === today ? "date" : undefined}
-                  aria-pressed={d.date === selected}
-                  onClick={() => setSelected(d.date)}
-                >
-                  {d.day}
-                  {onDay(d.date).length > 0 && (
-                    <span aria-label="Есть события"> •</span>
-                  )}
-                  <WeatherBadge weather={d.weather} compact />
-                </button>
-              ))}
-            </div>
-          ) : (
-            <DayPicker
-              mode="single"
-              month={parse(month + "-01")}
-              onMonthChange={(d) => {setMonth(iso(d).slice(0, 7));setSelected(iso(d).slice(0,7)+"-01")}}
-              selected={parse(selected)}
-              onSelect={(d) => d && setSelected(iso(d))}
-              today={parse(today)}
-              locale={gameLocale().startsWith("ru") ? ru : enUS}
-              weekStartsOn={1}
-              hideNavigation
-              modifiers={{
-                events: data.days
-                  .filter((d) => onDay(d.date).length)
-                  .map((d) => parse(d.date)),
-              }}
-              modifiersClassNames={{ events: "calendar-has-events" }}
-              components={{
-                DayButton: ({ day, modifiers, ...props }) => (
-                  <DayButton day={day} modifiers={modifiers} {...props}>
-                    <span>{day.date.getDate()}</span>
-                    <WeatherBadge
-                      compact
-                      weather={
-                        data.days.find((d) => d.date === iso(day.date))?.weather
-                      }
-                    />
-                  </DayButton>
-                ),
-              }}
-            />
-          )}
-          <section className="calendar-detail" aria-label="События дня">
-            <h4>{profileDate(selected, profile, "weekday")}</h4>
-            <WeatherBadge
-              weather={data?.days.find((d) => d.date === selected)?.weather}
-            />
-            {data && onDay(selected).length === 0 && (
-              <p className="muted">Известных событий нет.</p>
-            )}
-            {onDay(selected).map((e) => (
-              <article key={e.id} data-status={e.status || "date"}>
-                <small className="calendar-category">{({birthday:"День рождения",observance:"Памятная дата",commitment:"Договорённость",scheduled_event:"План",interval:"Период"} as Record<string,string>)[e.kind]||"Событие"}</small><strong>{itemName(e)}</strong>{e.end_date&&e.end_date!==e.date&&<p>{profileDate(e.date,profile)} → {profileDate(e.end_date,profile)}</p>}
-                {e.status && (
-                  <p>
-                    {{
-                      pending: "Запланировано",
-                      resolved: "Завершено",
-                      cancelled: "Отменено",
-                    }[e.status] || e.status}
-                    {e.status === "pending" && e.window?.relevance === "overdue"
-                      ? " · срок прошёл"
-                      : ""}
-                    {e.window?.exact_time ? ` · ${e.window.exact_time}` : ""}
-                  </p>
-                )}
-                {e.kind !== "birthday" && e.character_ids.length > 0 && (
-                  <small>
-                    {e.character_ids
-                      .map(
-                        (id) =>
-                          save.state.characters.find((c) => c.id === id)
-                            ?.name || "Персонаж",
-                      )
-                      .join(", ")}
-                  </small>
-                )}
-              </article>
-            ))}
-          </section>
-        </div>
+    <span
+      className={`calendar-markers${mini ? " is-mini" : ""}`}
+      aria-hidden="true"
+    >
+      <span className="calendar-event-count">{items.length}</span>
+      {!mini &&
+        items.slice(0, 2).map((e) => (
+          <span className="calendar-event-label" key={e.id} data-kind={e.kind}>
+            <EventIcon kind={e.kind} />
+            <span>{itemName(e, save)}</span>
+          </span>
+        ))}
+      {!mini && items.length > 2 && (
+        <span className="calendar-event-more">Ещё {items.length - 2}</span>
       )}
-      {data?.notices.map((n) => (
-        <p role="status" key={n}>
+    </span>
+  );
+}
+function Notices({ data }: { data: Projection }) {
+  return (
+    <>
+      {data.notices.map((n) => (
+        <p className="calendar-notice" role="status" key={n}>
           {n}
         </p>
       ))}
-      {data?.scheduled.truncated && (
-        <p>Показана часть событий. Выбери более узкий период.</p>
+      {data.scheduled.truncated && (
+        <p className="calendar-notice" role="status">
+          Показана часть событий. Список и индикаторы могут быть неполными.
+        </p>
+      )}
+    </>
+  );
+}
+function EventCard({
+  item,
+  save,
+  profile,
+}: {
+  item: Item;
+  save: Save;
+  profile?: CalendarProfile;
+}) {
+  return (
+    <article data-status={item.status || "date"} data-kind={item.kind}>
+      <small className="calendar-category">
+        <EventIcon kind={item.kind} />
+        {category(item.kind)}
+        {item.window?.exact_time && <time>{item.window.exact_time}</time>}
+      </small>
+      <strong>{itemName(item, save)}</strong>
+      {item.end_date && item.end_date !== item.date && (
+        <p>
+          {profileDate(item.date, profile)} →{" "}
+          {profileDate(item.end_date, profile)}
+        </p>
+      )}
+      {statusLabel(item) && (
+        <p className="calendar-event-status">{statusLabel(item)}</p>
+      )}
+      {item.kind !== "birthday" && item.character_ids.length > 0 && (
+        <small>
+          {item.character_ids
+            .map(
+              (id) =>
+                save.state.characters.find((c) => c.id === id)?.name ||
+                "Персонаж",
+            )
+            .join(", ")}
+        </small>
+      )}
+    </article>
+  );
+}
+// UI preference only. Never persist events, weather, or other actor-projected data.
+function storedView(key: string, today: string, profile?: CalendarProfile) {
+  try {
+    const v = JSON.parse(localStorage.getItem(key) || "null");
+    if (
+      v &&
+      /^\d{4}-\d{2}-\d{2}$/.test(v.selected) &&
+      v.month === v.selected.slice(0, 7) &&
+      +v.month.slice(0, 4) > 0 &&
+      +v.month.slice(5) <= monthCount(profile) &&
+      +v.month.slice(5) > 0 &&
+      +v.selected.slice(8) > 0 &&
+      +v.selected.slice(8) <= monthLength(v.month, profile)
+    )
+      return {
+        month: v.month as string,
+        selected: v.selected as string,
+        year: v.year === true,
+      };
+  } catch {
+    /* Storage can be unavailable. In-memory navigation still works. */
+  }
+  return { month: today.slice(0, 7), selected: today, year: false };
+}
+export function GameCalendar({
+  save,
+  viewState,
+}: {
+  save: Save;
+  viewState?: WorkspaceView;
+}) {
+  const today = save.state.world_clock?.projection?.date || "";
+  const profile = (
+    save.state.world_clock?.calendar as
+      { profile?: CalendarProfile } | undefined
+  )?.profile;
+  const custom = profile?.system === "custom";
+  const storageKey = `calendar-view:${save.id}:${save.state.controlled_actor_id || "none"}`;
+  const initial = storedView(storageKey, today, profile);
+  const [month, setMonth] = useWorkspaceView(viewState, "month", initial.month),
+    [selected, setSelected] = useWorkspaceView(
+      viewState,
+      "selected",
+      initial.selected,
+    ),
+    [yearView, setYearView] = useWorkspaceView(viewState, "year", initial.year);
+  const [retry, setRetry] = useState(0);
+  const key = `${save.id}:${save.revision}:${save.state.controlled_actor_id}:${month}:${retry}`;
+  const [record, setRecord] = useState<{
+    key: string;
+    data?: Projection;
+    error?: string;
+  }>({ key: "" });
+  const data = record.key === key ? record.data : undefined,
+    error = record.key === key ? record.error : undefined;
+  const length = month ? monthLength(month, profile) : 0;
+  useEffect(() => {
+    try {
+      if (today)
+        localStorage.setItem(
+          storageKey,
+          JSON.stringify({ month, selected, year: yearView }),
+        );
+    } catch {
+      /* Optional UI storage. */
+    }
+  }, [storageKey, month, selected, yearView, today]);
+  useEffect(() => {
+    if (!month || yearView) return;
+    const controller = new AbortController();
+    setRecord({ key });
+    api<Projection>(
+      `/saves/${save.id}/calendar?start_date=${month}-01&end_date=${month}-${String(length).padStart(2, "0")}`,
+      undefined,
+      undefined,
+      controller.signal,
+    )
+      .then((data) => {
+        if (!controller.signal.aborted) setRecord({ key, data });
+      })
+      .catch((e) => {
+        if (!controller.signal.aborted) setRecord({ key, error: e.message });
+      });
+    return () => controller.abort();
+  }, [key, month, length, yearView, save.id]);
+  if (!today)
+    return (
+      <p className="calendar-empty">
+        Календарная дата не установлена. Относительное время мира сохраняется.
+      </p>
+    );
+  const choose = (date: string) => {
+    setMonth(date.slice(0, 7));
+    setSelected(date);
+    setYearView(false);
+  };
+  const move = (delta: number) => {
+    const next = shiftMonth(month, delta, profile);
+    if (next) {
+      setMonth(next);
+      setSelected(next + "-01");
+    }
+  };
+  const year = +month.slice(0, 4),
+    number = +month.slice(5, 7),
+    step = yearView ? monthCount(profile) : 1;
+  const title = custom
+    ? `${profile?.month_names?.[number - 1] || number} · ${year}`
+    : calendarDate(month + "-01", "month");
+  const items = projectionItems(data),
+    onDay = (date: string) => itemsOnDay(items, date);
+  const agenda = upcomingItems(items, today);
+  const dayLabel = (date: string) =>
+    `${profileDate(date, profile)}, событий: ${onDay(date).length}${date === today ? ", сегодня в игре" : ""}${data?.scheduled.truncated ? ", список неполный" : ""}`;
+  return (
+    <section
+      className="game-calendar calendar-screen"
+      aria-label="Календарь игры"
+    >
+      <div className="calendar-toolbar">
+        <div className="calendar-period">
+          <button
+            aria-label={yearView ? "Предыдущий год" : "Предыдущий месяц"}
+            disabled={!shiftMonth(month, -step, profile)}
+            onClick={() => move(-step)}
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <h3 aria-live="polite">{yearView ? year : title}</h3>
+          <button
+            aria-label={yearView ? "Следующий год" : "Следующий месяц"}
+            disabled={!shiftMonth(month, step, profile)}
+            onClick={() => move(step)}
+          >
+            <ChevronRight size={20} />
+          </button>
+        </div>
+        <button className="calendar-today" onClick={() => choose(today)}>
+          <CalendarDays size={17} />
+          Сегодня в игре
+        </button>
+        <div
+          className="calendar-view-switch"
+          role="group"
+          aria-label="Представление календаря"
+        >
+          <button aria-pressed={!yearView} onClick={() => setYearView(false)}>
+            Месяц
+          </button>
+          <button aria-pressed={yearView} onClick={() => setYearView(true)}>
+            Год
+          </button>
+        </div>
+      </div>
+      <div className="calendar-context">
+        <span>Сегодня · {profileDate(today, profile)}</span>
+        <span>Известные даты и планы · время мира не меняется</span>
+      </div>
+      {yearView ? (
+        <CalendarYear
+          key={`${key}:${year}`}
+          save={save}
+          year={year}
+          profile={profile}
+          today={today}
+          selected={selected}
+          choose={choose}
+        />
+      ) : (
+        <div className="calendar-layout">
+          <div className="calendar-main">
+            {error ? (
+              <div role="alert" className="calendar-empty">
+                <strong>Не удалось загрузить календарь</strong>
+                <p>{error}</p>
+                <button onClick={() => setRetry((v) => v + 1)}>
+                  Повторить
+                </button>
+              </div>
+            ) : !data ? (
+              <p className="calendar-empty" role="status">
+                Загрузка календаря…
+              </p>
+            ) : (
+              <>
+                {custom ? (
+                  <div
+                    className="custom-calendar"
+                    style={{
+                      gridTemplateColumns: `repeat(${data.profile.weekday_names?.length || 7},minmax(0,1fr))`,
+                    }}
+                  >
+                    {weekdayLabels(data.profile).map((d, i) => (
+                      <small key={i} title={d}>
+                        {d}
+                      </small>
+                    ))}
+                    {Array.from(
+                      { length: data.days[0]?.weekday || 0 },
+                      (_, i) => (
+                        <span key={"b" + i} />
+                      ),
+                    )}
+                    {data.days.map((d) => (
+                      <button
+                        key={d.date}
+                        aria-label={dayLabel(d.date)}
+                        aria-current={d.date === today ? "date" : undefined}
+                        aria-pressed={d.date === selected}
+                        data-past={d.date < today}
+                        onClick={() => setSelected(d.date)}
+                      >
+                        <span className="calendar-day-number">
+                          {d.day}
+                          <WeatherBadge weather={d.weather} compact />
+                        </span>
+                        <Markers items={onDay(d.date)} save={save} />
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <DayPicker
+                    mode="single"
+                    month={parse(month + "-01")}
+                    onMonthChange={(d) => choose(iso(d).slice(0, 7) + "-01")}
+                    selected={parse(selected)}
+                    onSelect={(d) => d && setSelected(iso(d))}
+                    today={parse(today)}
+                    locale={gameLocale().startsWith("ru") ? ru : enUS}
+                    weekStartsOn={1}
+                    hideNavigation
+                    startMonth={parse("0001-01-01")}
+                    endMonth={parse("9999-12-01")}
+                    components={{
+                      DayButton: ({ day, modifiers, ...props }) => (
+                        <DayButton
+                          day={day}
+                          modifiers={modifiers}
+                          {...props}
+                          aria-label={dayLabel(iso(day.date))}
+                          aria-pressed={iso(day.date) === selected}
+                          data-past={iso(day.date) < today}
+                        >
+                          <span className="calendar-day-number">
+                            {day.date.getDate()}
+                            <WeatherBadge
+                              compact
+                              weather={
+                                data.days.find((d) => d.date === iso(day.date))
+                                  ?.weather
+                              }
+                            />
+                          </span>
+                          <Markers items={onDay(iso(day.date))} save={save} />
+                        </DayButton>
+                      ),
+                    }}
+                  />
+                )}
+                <div
+                  className="calendar-legend"
+                  aria-label="Обозначения событий"
+                >
+                  {Object.keys(icons).map((kind) => (
+                    <span key={kind}>
+                      <EventIcon kind={kind} />
+                      {category(kind)}
+                    </span>
+                  ))}
+                </div>
+                <Notices data={data} />
+                <section
+                  className="calendar-agenda"
+                  aria-label="Ближайшие известные события"
+                >
+                  <header>
+                    <h4>Ближайшие события</h4>
+                    <span>В пределах: {title}</span>
+                  </header>
+                  <p className="muted">
+                    Даты и незавершённые планы с сегодняшнего дня. План не
+                    означает, что событие состоялось.
+                  </p>
+                  {agenda.length ? (
+                    agenda.map((e) => (
+                      <button
+                        key={e.id}
+                        onClick={() =>
+                          setSelected(
+                            e.date < month + "-01" ? month + "-01" : e.date,
+                          )
+                        }
+                      >
+                        <span className="calendar-agenda-date">
+                          {profileDate(e.date, profile)}
+                        </span>
+                        <span>
+                          <span className="calendar-category">
+                            <EventIcon kind={e.kind} />
+                            {category(e.kind)}
+                            {e.window?.exact_time &&
+                              ` · ${e.window.exact_time}`}
+                          </span>
+                          <strong>{itemName(e, save)}</strong>
+                          {statusLabel(e) && <small>{statusLabel(e)}</small>}
+                        </span>
+                        <ChevronRight size={16} />
+                      </button>
+                    ))
+                  ) : (
+                    <p className="calendar-empty">
+                      В этом месяце нет известных предстоящих событий.
+                    </p>
+                  )}
+                </section>
+              </>
+            )}
+          </div>
+          <section
+            className="calendar-detail"
+            aria-label="События дня"
+            aria-busy={!data && !error}
+          >
+            <header>
+              <span className="calendar-eyebrow">
+                {selected === today ? "Сегодня в игре" : "Выбранный день"}
+              </span>
+              <h4>{profileDate(selected, profile, "weekday")}</h4>
+              <WeatherBadge
+                weather={data?.days.find((d) => d.date === selected)?.weather}
+              />
+              {data?.days.find((d) => d.date === selected)?.weather
+                ?.forecast && (
+                <small className="calendar-forecast">Прогноз погоды</small>
+              )}
+            </header>
+            {error ? (
+              <p>События недоступны. Повторите загрузку.</p>
+            ) : !data ? (
+              <p role="status">Загрузка событий…</p>
+            ) : (
+              <>
+                <p className="calendar-detail-count">
+                  Событий: {onDay(selected).length}
+                  {data.scheduled.truncated ? " · список неполный" : ""}
+                </p>
+                {!onDay(selected).length && (
+                  <p className="calendar-empty">
+                    {data.scheduled.truncated
+                      ? "В загруженной части событий нет."
+                      : "Известных событий нет."}
+                  </p>
+                )}
+                {onDay(selected).map((e) => (
+                  <EventCard
+                    key={e.id}
+                    item={e}
+                    save={save}
+                    profile={profile}
+                  />
+                ))}
+              </>
+            )}
+          </section>
+        </div>
       )}
     </section>
   );
 }
-
-function CalendarYear({save,year,profile,today,choose}:{save:Save;year:number;profile:any;today:string;choose:(date:string)=>void}){
- const [months,setMonths]=useState<Projection[]>([]),[error,setError]=useState("");
- const custom=profile?.system==='custom';const count=custom?profile.month_lengths.length:12;
- useEffect(()=>{let live=true;setMonths([]);setError("");Promise.all(Array.from({length:count},(_,i)=>{const prefix=`${String(year).padStart(4,'0')}-${String(i+1).padStart(2,'0')}`;const length=custom?profile.month_lengths[i]:new Date(year,i+1,0).getDate();return api<Projection>(`/saves/${save.id}/calendar?start_date=${prefix}-01&end_date=${prefix}-${String(length).padStart(2,'0')}`)})).then(rows=>{if(live)setMonths(rows)}).catch(e=>{if(live)setError(e.message)});return()=>{live=false}},[save.id,save.revision,year]);
- if(error)return <p role="alert">{error}</p>;if(!months.length)return <p role="status">Загрузка года…</p>;
- return <div className="calendar-year">{months.map((month,i)=><section className="calendar-mini" key={i}><h4>{custom?profile.month_names?.[i]||i+1:calendarDate(month.days[0].date,'month')}</h4><div style={{display:'grid',gridTemplateColumns:`repeat(${month.profile.weekday_names?.length||7},minmax(0,1fr))`}}>{(month.profile.weekday_names||['Пн','Вт','Ср','Чт','Пт','Сб','Вс']).map((w,j)=><small key={j}>{w}</small>)}{Array.from({length:month.days[0].weekday||0},(_,j)=><span key={'b'+j}/>)}{month.days.map(day=><button key={day.date} aria-label={custom?day.date:calendarDate(day.date)} aria-current={day.date===today?'date':undefined} onClick={()=>choose(day.date)}>{day.day}{[...month.events,...month.scheduled.items].some(e=>e.date<=day.date&&(e.end_date||e.date)>=day.date)&&<i aria-label="Есть события">•</i>}</button>)}</div></section>)}</div>
+function CalendarYear({
+  save,
+  year,
+  profile,
+  today,
+  selected,
+  choose,
+}: {
+  save: Save;
+  year: number;
+  profile?: CalendarProfile;
+  today: string;
+  selected: string;
+  choose: (d: string) => void;
+}) {
+  const [months, setMonths] = useState<Projection[]>([]),
+    [error, setError] = useState(""),
+    [retry, setRetry] = useState(0);
+  const count = monthCount(profile);
+  useEffect(() => {
+    const controller = new AbortController();
+    setMonths([]);
+    setError("");
+    Promise.all(
+      Array.from({ length: count }, (_, i) => {
+        const prefix = `${String(year).padStart(4, "0")}-${String(i + 1).padStart(2, "0")}`;
+        return api<Projection>(
+          `/saves/${save.id}/calendar?start_date=${prefix}-01&end_date=${prefix}-${String(monthLength(prefix, profile)).padStart(2, "0")}`,
+          undefined,
+          undefined,
+          controller.signal,
+        );
+      }),
+    )
+      .then((rows) => {
+        if (!controller.signal.aborted) setMonths(rows);
+      })
+      .catch((e) => {
+        if (!controller.signal.aborted) setError(e.message);
+      });
+    return () => controller.abort();
+  }, [
+    save.id,
+    save.revision,
+    save.state.controlled_actor_id,
+    year,
+    count,
+    profile,
+    retry,
+  ]);
+  if (error)
+    return (
+      <div className="calendar-empty" role="alert">
+        <p>{error}</p>
+        <button onClick={() => setRetry((n) => n + 1)}>Повторить</button>
+      </div>
+    );
+  if (!months.length)
+    return (
+      <p role="status" className="calendar-empty">
+        Загрузка года…
+      </p>
+    );
+  return (
+    <div className="calendar-year">
+      {months.map((month, i) => {
+        const items = projectionItems(month);
+        return (
+          <section className="calendar-mini" key={i}>
+            <h4>
+              {profile?.system === "custom"
+                ? profile.month_names?.[i] || i + 1
+                : calendarDate(month.days[0]?.date, "month")}
+            </h4>
+            <p className="calendar-mini-summary">
+              Событий: {items.length}
+              {month.scheduled.truncated ? " · не все" : ""}
+            </p>
+            <div
+              className="calendar-mini-grid"
+              style={{
+                gridTemplateColumns: `repeat(${month.profile.weekday_names?.length || 7},minmax(0,1fr))`,
+              }}
+            >
+              {weekdayLabels(month.profile).map((w, j) => (
+                <small key={j} title={w}>
+                  {w}
+                </small>
+              ))}
+              {Array.from({ length: month.days[0]?.weekday || 0 }, (_, j) => (
+                <span key={"b" + j} />
+              ))}
+              {month.days.map((day) => {
+                const events = itemsOnDay(items, day.date);
+                return (
+                  <button
+                    key={day.date}
+                    aria-label={`${profileDate(day.date, profile)}, событий: ${events.length}${month.scheduled.truncated ? ", список неполный" : ""}`}
+                    aria-current={day.date === today ? "date" : undefined}
+                    aria-pressed={day.date === selected}
+                    data-past={day.date < today}
+                    onClick={() => choose(day.date)}
+                  >
+                    {day.day}
+                    <Markers items={events} save={save} mini />
+                  </button>
+                );
+              })}
+            </div>
+            <Notices data={month} />
+          </section>
+        );
+      })}
+    </div>
+  );
 }

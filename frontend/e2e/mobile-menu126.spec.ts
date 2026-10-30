@@ -40,7 +40,7 @@ test('menu: all destinations, draft, anchor, nested Back and workspace state',as
  await year.click();
  await expect(page.locator('.calendar-year')).toBeVisible();
  await page.getByRole('button',{name:'Вернуться в историю',exact:true}).click();
- await nav(page,'Календарь');await expect(page.getByRole('button',{name:'Месяц',exact:true})).toHaveAttribute('aria-pressed','true');
+ await nav(page,'Календарь');await expect(page.getByRole('button',{name:'Год',exact:true})).toHaveAttribute('aria-pressed','true');
  await page.getByRole('button',{name:'Вернуться в историю',exact:true}).click();
  // A menu above the calendar consumes only its own Back entry.
  await nav(page,'Календарь');

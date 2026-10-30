@@ -244,8 +244,31 @@ test("explicit climate survives reload and matches the canonical calendar", asyn
   ).toEqual(configured.state.scene_meta.weather);
   await page.locator(".current-game-entry button").click();
   await page.keyboard.press("Escape");
+  const sceneWeatherLabel = await page
+    .locator(".scene-bar .weather-badge, .mobile-scene-line .weather-badge")
+    .first()
+    .getAttribute("aria-label");
+  expect(sceneWeatherLabel).toBeTruthy();
+  const today = configured.state.world_clock.projection.date;
+  const calendarResponse = await request.get(
+    `/api/saves/${selected.save}/calendar?start_date=${today}&end_date=${today}`,
+  );
+  expect(calendarResponse.ok()).toBe(true);
+  const calendar = await calendarResponse.json();
+  const canonicalWeather = calendar.days.find((day: any) => day.date === today).weather;
+  expect(canonicalWeather).toEqual(configured.state.scene_meta.weather);
   await nav(page,"Календарь");
-  await expect(page.locator(".save-workspace .weather-badge").first()).toBeVisible();
+  await page.getByRole("button", { name: "Сегодня в игре", exact: true }).click();
+  // Mobile hides compact grid icons; the selected-day panel owns full weather.
+  const dayWeather = page
+    .getByRole("region", { name: "События дня", exact: true })
+    .locator(".weather-badge");
+  await expect(dayWeather).toBeVisible();
+  await expect(dayWeather).toHaveAttribute("aria-label", sceneWeatherLabel!);
+  expect(canonicalWeather.temperature).not.toBeNull();
+  await expect(dayWeather).toContainText(
+    `${canonicalWeather.temperature}°${canonicalWeather.unit}`,
+  );
 });
 
 test('phone leaves composer reachable with keyboard-sized viewport and enlarged text',async({page,request},info)=>{
