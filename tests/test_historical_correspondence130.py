@@ -1,4 +1,4 @@
-"""Private transport + real resolver/API/jobs/SQLite; only provider HTTP is faked."""
+"""Public authored sources + real resolver/API/jobs/SQLite; only provider HTTP is faked."""
 import json
 from copy import deepcopy
 from types import SimpleNamespace as NS
@@ -104,7 +104,7 @@ def test_batch_year_chronology_death_and_no_forced_reply():
 
 class HTTPProvider:
     def __init__(self):
-        self.artifacts=[];self.rows=[];self.elapsed=1;self.fail_extraction=False;self.bad=False;self.calls=[];self.gate=None;self.entered=None;self.delay=0
+        self.artifacts=[];self.rows=[];self.elapsed=1;self.fail_extraction=False;self.bad=False;self.calls=[];self.gate=None;self.entered=None;self.delay=0;self.finish_gate=None
     def create(self, **kw):
         extraction=bool(kw.get('response_format'))
         self.calls.append('extraction' if extraction else 'narrative')
@@ -126,6 +126,7 @@ class HTTPProvider:
                 for i in range(len(PUBLIC)+2,len(value),7):
                     if self.delay:time.sleep(self.delay)
                     yield NS(choices=[NS(delta=NS(content=value[i:i+7]),finish_reason=None)])
+                if self.finish_gate is not None: assert self.finish_gate.wait(30)
                 yield NS(choices=[NS(delta=NS(content=''),finish_reason='stop')])
             chunks=prose()
         stream=MagicMock();stream.__iter__.return_value=iter(chunks);return stream
@@ -172,6 +173,12 @@ def test_api_jobs_provider_sqlite_retry_regenerate_rollback_and_open(api):
     assert p.calls.count('narrative')==calls
     first=repo.get_snapshot(sid);e=next(iter(first['world_state']['remote_events'].values()))
     assert e['content']==SECRET and e['status']=='in_transit'
+    revision = repo.get_save(sid)['revision']
+    turns = repo.list_turns(sid)
+    with pytest.raises(ValueError, match='уже сохранён'):
+        repo.commit_job(job['id'], first, [], {})
+    assert repo.get_snapshot(sid) == first
+    assert repo.get_save(sid)['revision'] == revision and repo.list_turns(sid) == turns
     assert_unread(c,sid,job['id'])
     fresh=Repository(repo.path);assert fresh.get_snapshot(sid)==first
     job=turn('regenerate');assert job['status']=='saved',job['error']
@@ -439,3 +446,37 @@ def test_author_correspondence_is_inside_the_context_budget():
     author=next(m for m in messages if m['content'].startswith(CONTRACT))
     assert len(author['content'])<len(author_context(snap['world_state'])['content'])
     assert sum(CONTRACT in m['content'] for m in messages)==1
+
+
+@pytest.mark.parametrize('source_id', ['letter-0', 'letter-2', 'letter-01', 'missing'])
+def test_invalid_source_id_cannot_create_letter(source_id):
+    snap = letters(); before = deepcopy(snap)
+    a = artifact()
+    with pytest.raises(StructuralDeltaError):
+        StateResolver(snap['world_state'], authored(a), '').resolve(
+            payload(snap['world_state'], [dict(extracted(a), artifact_id=source_id)]))
+    assert snap == before
+
+
+def test_multiple_full_sources_and_maximum_length_are_bound_without_loss():
+    snap = letters()
+    first = artifact(); first['content'] = 'Я' * 3997 + '\n\nЯ'
+    second = artifact(channel='TELEGRAM', aid='letter-2')
+    second['content'] = '  Привет, друг!\r\n\r\nДо встречи.  '
+    text = authored(first) + '\n\n```python\nignored\n```\n\n' + authored(second)
+    sources = parse(text)
+    assert [x['content'] for x in sources] == [first['content'], second['content']]
+    result = StateResolver(snap['world_state'], text, '').resolve(
+        payload(snap['world_state'], [extracted(first), extracted(second)]))
+    assert sorted(e['content'] for e in result.state['remote_events'].values()) == sorted([first['content'], second['content']])
+
+
+def test_letter_rendering_is_literal_prose_not_code():
+    from character_links import linked_markdown
+    text = '<script>alert(1)</script>\n**Literal** & `text`'
+    html = linked_markdown(authored(dict(content=text)) + '\n\n```python\nx = 1\n```', [])
+    assert '<blockquote class="narrative-letter"' in html
+    assert '&lt;script&gt;' in html and '<script>' not in html
+    assert '**Literal** &amp; `text`' in html
+    assert 'language-letter' not in html and '```letter' not in html
+    assert '<code class="language-python">' in html

@@ -23,10 +23,15 @@ test('130 reader sees authored letter but character reads canonical text only af
   await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
   await expect.poll(async()=>{const v=await view();return v.job?.status==='generating' && v.job?.narrative?.includes('Гонец');}).toBeTruthy();
   await expect.poll(async()=>{const v=await view();return v.job?.status==='generating' && (await page.locator('body').innerText()).includes('SEALED-130');}).toBeTruthy();
+  await expect(page.locator('.narrative-letter').filter({hasText:'SEALED-130'})).toBeVisible();
+  await expect(page.locator('.narrative-text').last()).not.toContainText('```letter');
+  expect((await request.post('/test/letter130-release')).ok()).toBeTruthy();
   await expect.poll(async()=>(await view()).revision).toBeGreaterThan(initial);
   await expect.poll(async()=>(await view()).job.status).toBe('saved');
   await expect(page.locator('body')).toContainText(secret);
   await expect.poll(()=>received.join('\n')).toContain(secret);
+  await expect(page.locator('.narrative-letter').filter({hasText:secret})).toBeVisible();
+  await expect(page.locator('code.language-letter')).toHaveCount(0);
   let v=await view();
   const response=await request.post(`/api/saves/${seed.save}/turns`,{data:{kind:'turn',text:'Жду почту.',revision:v.revision,config:{model:'test-model',provider:'local',context_length:131072,max_tokens:8000,update_tokens:8000},time_skip:{duration:20,reason:'Жду почту'}}});
   expect(response.ok()).toBeTruthy();

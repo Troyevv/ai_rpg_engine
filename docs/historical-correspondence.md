@@ -27,7 +27,10 @@ in an optional top-level Markdown fence with the language `letter`:
 ```
 ~~~~
 
-This ordinary, reader-visible Markdown is streamed unchanged. No special block
+This ordinary, reader-visible Markdown is streamed unchanged. The reader sees
+letter fences as literal literary quotations, not code blocks, both during
+streaming and after reload. Rendering does not alter the authored source; other
+Markdown fences keep their usual behavior. No special block
 is required on a turn without a new letter; SMS and calls keep their formats.
 The scene may describe writing without quoting the text a second time, but a
 completed letter must have a complete authored source block. Quoting/reading an
@@ -109,5 +112,5 @@ variant branches and fresh-repository reload.
 The desktop/mobile browser test checks visible authoring while the job is still
 generating, reader-visible letter text, unread canonical mail, reload, and exact
 API reading. Existing SMS/group/CallScene and streaming suites remain in CI.
-Live DeepSeek adherence is NOT RUN without a safely available key; provider
+Live DeepSeek adherence is NOT VERIFIED (NOT RUN without a safely available key); provider
 fixtures prove transport and lifecycle, not semantic adherence by a live model.

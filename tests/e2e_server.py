@@ -465,7 +465,7 @@ if __name__ == '__main__':
         from test_historical_correspondence130 import HTTPProvider
         from devtools.narrative_test_world import load_fixture
         letter130_provider=HTTPProvider()
-        letter130_provider.delay=0.15
+        letter130_provider.delay=0.05
         repo=app.state.repository
         seed=load_fixture(repo,'phone')
         with repo.connect() as db:
@@ -477,14 +477,23 @@ if __name__ == '__main__':
     @app.post('/test/letter130-arm')
     def letter130_arm():
         from test_historical_correspondence130 import artifact, extracted
+        import threading
+        letter130_provider.finish_gate=threading.Event()
         a=artifact('qa_vera','qa_kirill')
         letter130_provider.artifacts=[a]
         letter130_provider.rows=[extracted(a)]
         return {'ready':True}
 
+    @app.post('/test/letter130-release')
+    def letter130_release():
+        letter130_provider.finish_gate.set()
+        return {'ready':True}
+
     @app.post('/test/letter130-reset')
     def letter130_reset():
         global phone_mode, letter130_provider
+        if letter130_provider and letter130_provider.finish_gate:
+            letter130_provider.finish_gate.set()
         phone_mode='silent'
         letter130_provider=None
         return {'ready':True}

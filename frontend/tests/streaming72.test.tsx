@@ -167,3 +167,17 @@ it('animation frames do not commit renders in the historical journal',async()=>{
  await render(<>{history}<NarrativeText {...props} text={text}/></>);historical.mockClear();
  await advance(5000);expect(historical).not.toHaveBeenCalled();
 });
+
+it('letter streams as literal prose while ordinary code fences remain ordinary',async()=>{
+ const body='Привет!\n\n<script>text</script> **буквально**';
+ for(const tail of ['', '\n```']) {
+  await render(<Markdown text={'Сцена.\n\n```letter\n'+body+tail} streaming/>);
+  expect(host.querySelector('blockquote')!.textContent).toContain(body);
+  expect(host.textContent).not.toContain('```letter');
+  expect(host.querySelector('pre, code, script')).toBeNull();
+ }
+ await render(<Markdown text={'```python\nx = 1\n```'} streaming/>);
+ expect(host.querySelector('blockquote')).toBeNull();
+ expect(host.textContent).toContain('```python');
+ expect(fetch).not.toHaveBeenCalled();
+});
