@@ -172,3 +172,58 @@ remote_models,remote_semantics,repository}.py`.
 Pipeline: `backend/services/{communication,usage}.py`, `engine.py`.
 Tests: `tests/{test_group166,test_group152,group152_provider,test_communication_cycle}.py`,
 `frontend/e2e/group152.spec.ts`. Documentation: `docs/group152.md`.
+
+## CI regression repair — run 41145293753
+
+Reproduced the exact six backend failures on `a771b4a`, plus the disabled group
+member-removal button in Chromium. Confirmed causes:
+
+- **Legacy checkpoint:** `backend/services/communication.py` filtered decisions by
+  `stage == communication`, dropping historical frames without `stage`. It now
+  normalizes only that missing metadata. Original prompt/response, schema/runtime
+  validation, rejected-frame handling and source-bound reuse remain unchanged.
+  Added real SQLite reload tests for flat and enveloped legacy group decisions
+  plus cached semantic extraction: zero provider calls and exactly one plan.
+- **Three semantic-repair tests:** repair was functioning; the call-count assertion
+  still required separate read/send author calls for groups. Updated only the
+  expected author count (one group batch vs two direct decisions). All exact
+  evidence/agency diagnostics, repair-source equality, time, calendar, reload
+  and message-count assertions remain.
+- **Two missing `one-hour` plans:** the shared test provider's new group branch
+  serialized Cyrillic with default `ensure_ascii=True`. Existing fixture reply
+  substitution therefore left “Да, увидимся завтра.” unchanged instead of emitting
+  the offer/assent required by the scenario. Restored UTF-8 fixture output as in
+  its direct branch. The two meeting tests and production Extraction are unchanged.
+- **E2E removal:** the fixture server did not recognize `Group communication
+  reaction/1`; it returned Narrative `scene/choices/world_delta` JSON. Runtime
+  correctly rejected it. Captured dispatch returned HTTP 200; subsequent Save API
+  returned `job.status=error`, `narrative_complete=1`, revision 5. DOM showed
+  “Не удалось получить ответ. Можно повторить”, `aria-busy=false`, and disabled
+  membership buttons. `Game.pending` was protecting an unapplied failed job;
+  there was no stuck loading flag. The deterministic provider now implements the
+  group response contract, including silence. Production UI/Runtime guards were
+  not changed. E2E additionally requires saved job, one outgoing event, busy=false,
+  no error alert and an enabled removal button before the original remove/add
+  and protagonist/privacy assertions.
+
+Validation:
+
+- Reproduction: `python -m pytest tests/test_phone133_followup.py tests/test_remote_decision_contract.py -q` → **6 failed, 41 passed**; after correction → **47 passed**.
+- `python -m pytest tests/test_phone133_followup.py tests/test_remote_decision_contract.py tests/test_phone122.py tests/test_phone163.py tests/test_communication_cycle.py tests/test_group166.py -q` → **100 passed**, including all six original failures and three additional regression cases.
+- `E2E_DB_PATH=/tmp/reg166-fixed.sqlite3 PLAYWRIGHT_EXECUTABLE_PATH=/tmp/chromium npm run test:e2e --prefix frontend -- phone.spec.ts --output=/tmp/reg166-phone` → **8 passed**, desktop/mobile.
+- Inspected the resulting SQLite: both group jobs saved, exactly one author and
+  one semantic request each, accepted frames, no unfinished/error jobs or extra
+  group calls. No force-click, increased timeout or removed assertion.
+- New real API/jobs/SQLite integration: player group message → two NPC replies →
+  controlled Extraction outage → repository reload → Retry reuses the NPC series
+  → one agreement/calendar entry → save/reload → duplicate worker is a no-op;
+  retrying the already saved job is rejected. Exactly one author call and two
+  Extraction attempts including the deliberately failed one. Physical scene and
+  consent participants remain correct.
+
+Repair files: `backend/services/communication.py`, `tests/test_communication_cycle.py`,
+`tests/test_phone133_followup.py`, `tests/test_remote_decision_contract.py`,
+`tests/e2e_server.py`, `frontend/e2e/phone.spec.ts`, and this document.
+No changes to spontaneous/event pacing, `remote_initiative.stage()`, Knowledge,
+`basis_ids`, group multi-speaker support, source-bound Extraction or production UI.
+No full repository-wide E2E run; all provider responses were deterministic.

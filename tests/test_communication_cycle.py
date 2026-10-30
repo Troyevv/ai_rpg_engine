@@ -16,7 +16,7 @@ def decision(messages, outcome='answer'):
         data=json.loads(messages[1]['content'])
         actors=data['groups'][0]['actor_ids']
         actor='qa_vera' if 'qa_vera' in actors else actors[0]
-        return json.dumps(dict(messages=[dict(actor_id=actor,content='Да, увидимся завтра.',basis_ids=[data['source_message']['id']])]))
+        return json.dumps(dict(messages=[dict(actor_id=actor,content='Да, увидимся завтра.',basis_ids=[data['source_message']['id']])]),ensure_ascii=False)
     options = json.loads(messages[1]['content'])['options']
     o = options[0]
     action = o['actions'][0]

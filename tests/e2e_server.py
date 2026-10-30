@@ -115,6 +115,14 @@ def stream(**kwargs):
     if kwargs['messages'][0]['content'].startswith('Один необязательный пакет') and 'TEST_RELEASE_QUALITY' in full:
         yield '{"patches":[],"preserved_unknown":null}';return
     observer='Тип хода: background' in full or 'Режим observer:' in full or 'mode=observer' in full
+    if kwargs['messages'][0]['content'].startswith('Group communication reaction/'):
+        # Same deterministic phone modes, new group wire contract. Do not fall
+        # through to Narrative JSON: a silent reaction is a completed job.
+        if phone_mode in ('silent','read_only','narrative138'):
+            yield '{"messages":[]}';return
+        from test_communication_cycle import decision
+        yield decision(kwargs['messages'])
+        return
     if kwargs['messages'][0]['content'].startswith('Select at most ONE optional grounded autonomous remote action.'):
         options=json.loads(kwargs['messages'][1]['content'])['options']
         if phone_mode in ('silent','narrative138') or not options:

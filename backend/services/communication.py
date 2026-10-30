@@ -10,7 +10,10 @@ def execute(storage, job, handle, chat_stream):
     config = json.loads(job["config_json"])
     before = json.loads(job["memory_before_json"] or job["before_json"])
     journal = json.loads(job["context_json"] or "[]")
-    frames = [f for f in journal if f.get("stage") == "communication"]
+    # Pre-stage journals contain decision frames without a stage tag. Normalize
+    # metadata only; replay still validates the original response and context.
+    frames = [dict(f, stage="communication") for f in journal
+              if f.get("stage", "communication") == "communication"]
     captured = []
     # Mark the durable command boundary retryable even if the provider fails
     # before returning any text. No fabricated player utterance is inserted.
