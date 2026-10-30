@@ -1,65 +1,222 @@
 name: Verify RPG Engine
 on:
   pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 1 * * *'
 permissions:
   contents: read
 concurrency:
-  group: verify-${{ github.ref }}
-  cancel-in-progress: true
+  group: verify-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  verify:
+  plan:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
+    outputs:
+      full: ${{ steps.select.outputs.full }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: pip install -r requirements.txt -r requirements-dev.txt
-      - run: python -m pytest -q
-      - run: npm ci
-        working-directory: frontend
-      - run: npm test
-        working-directory: frontend
-      - run: npm run build
-        working-directory: frontend
-  browser:
-    needs: verify
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        project: [desktop, mobile]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: pip install -r requirements.txt -r requirements-dev.txt
-      - run: npm ci
-        working-directory: frontend
-      - run: npm run build
-        working-directory: frontend
-      - run: npx playwright install --with-deps chromium
-        working-directory: frontend
-      - run: npx playwright test --project=${{ matrix.project }} --reporter=line
-        working-directory: frontend
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select dependencies (fail safe)
+        id: select
         env:
-          CI: 'true'
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT: ${{ github.event_name }}
+          SELECTIVE_ENABLED: ${{ vars.CI_SELECTIVE_ENABLED }}
+        run: |
+          args=()
+          # Full comparison remains mandatory until the documented rollout is approved.
+          if [[ "$EVENT" != pull_request || "$SELECTIVE_ENABLED" != true ]]; then args+=(--full); fi
+          python scripts/ci/select_e2e.py --base "$BASE_SHA" --head "${HEAD_SHA:-HEAD}" "${args[@]}"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path('e2e-plan.json')
+          plan = json.loads(path.read_text())
+          # Risk expansion runs separately as required full; avoid executing it twice.
+          if plan['full']:
+              plan['files'] = plan['smoke']
+          path.write_text(json.dumps(plan, indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: e2e-plan
+          path: e2e-plan.json
+          retention-days: 7
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: python -m pytest -q --junitxml=pytest-results.xml --durations=20
+      - name: Pytest summary
+        if: always()
+        run: python scripts/ci/junit_summary.py pytest-results.xml
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: browser-results-${{ matrix.project }}
-          path: frontend/test-results
-          retention-days: 7
+          name: pytest-results
+          path: pytest-results.xml
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm test -- --reporter=default --reporter=junit --outputFile.junit=vitest-results.xml
+        working-directory: frontend
+      - name: TypeScript and production build
+        run: npm run build
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          if-no-files-found: error
+          retention-days: 1
+      - name: Vitest summary
+        if: always()
+        run: python scripts/ci/junit_summary.py frontend/vitest-results.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vitest-results
+          path: frontend/vitest-results.xml
+  verify:
+    name: verify
+    needs: [backend, frontend, plan]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - env:
+          BACKEND: ${{ needs.backend.result }}
+          FRONTEND: ${{ needs.frontend.result }}
+          PLAN: ${{ needs.plan.result }}
+        run: test "$BACKEND" = success && test "$FRONTEND" = success && test "$PLAN" = success
+  selected:
+    needs: [plan, frontend]
+    uses: ./.github/workflows/e2e.yml
+    with:
+      artifact-prefix: smoke
+  full:
+    needs: [plan, frontend]
+    if: needs.plan.outputs.full == 'true'
+    uses: ./.github/workflows/e2e.yml
+    with:
+      full: true
+      artifact-prefix: full
+  e2e-smoke:
+    name: e2e-smoke
+    needs: [plan, selected, full]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require all intended jobs
+        env:
+          PLAN: ${{ needs.plan.result }}
+          SELECTED: ${{ needs.selected.result }}
+          FULL_REQUIRED: ${{ needs.plan.outputs.full }}
+          FULL_RESULT: ${{ needs.full.result }}
+        run: |
+          test "$PLAN" = success && test "$SELECTED" = success
+          if [[ "$FULL_REQUIRED" == true ]]; then test "$FULL_RESULT" = success; fi
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: smoke-*
+          path: reports/smoke
+      - run: python scripts/ci/check_e2e.py reports/smoke
+      - uses: actions/download-artifact@v4
+        if: needs.plan.outputs.full == 'true'
+        with:
+          pattern: full-*
+          path: reports/full
+      - if: needs.plan.outputs.full == 'true'
+        run: python scripts/ci/check_e2e.py reports/full
+  e2e-full:
+    name: e2e-full
+    needs: [plan, full]
+    if: always() && needs.plan.outputs.full == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - env:
+          RESULT: ${{ needs.full.result }}
+        run: test "$RESULT" = success
+  timing:
+    needs: [verify, e2e-smoke, e2e-full]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: read
+    steps:
+      - name: Job/step timing and runner consumption
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              owner: context.repo.owner, repo: context.repo.repo, run_id: context.runId
+            });
+            let seconds = 0;
+            const rows = [['Job / step', 'Result', 'Seconds']];
+            for (const j of jobs) {
+              if (!j.completed_at) continue;
+              const duration = (Date.parse(j.completed_at)-Date.parse(j.started_at))/1000;
+              seconds += duration;
+              rows.push([j.name, j.conclusion, String(duration)]);
+              for (const s of j.steps || []) {
+                if (s.started_at && s.completed_at) rows.push(['↳ '+s.name, s.conclusion || s.status,
+                  String((Date.parse(s.completed_at)-Date.parse(s.started_at))/1000)]);
+              }
+            }
+            await core.summary.addHeading('CI timing').addTable(rows)
+              .addRaw(`\nRunner time (excluding this report): ${(seconds/60).toFixed(2)} min. Billing may round each job.\n`)
+              .addRaw('\nCancelled is not passed. Compare run/commit timestamps and configured job timeout before attributing cancellation.\n')
+              .write();
+  nightly-alert:
+    needs: [verify, e2e-smoke, e2e-full]
+    if: always() && github.event_name == 'schedule' && (needs.verify.result != 'success' || needs.e2e-smoke.result != 'success' || needs.e2e-full.result != 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      issues: write
+    steps:
+      # Trusted scheduled run only. No checkout, artifacts, secrets or PR code.
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const title = 'CI: nightly regression on master';
+            const body = `Nightly regression failed or was incomplete. Master health is NOT confirmed.\n\nRun: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nInspect the failed jobs, disable CI_SELECTIVE_ENABLED while triaging, and rerun full before closing this issue.`;
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              ...context.repo, state: 'open', creator: 'github-actions[bot]', per_page: 100
+            });
+            const existing = issues.find(i => !i.pull_request && i.title === title);
+            if (existing) await github.rest.issues.createComment({ ...context.repo, issue_number: existing.number, body });
+            else await github.rest.issues.create({ ...context.repo, title, body });

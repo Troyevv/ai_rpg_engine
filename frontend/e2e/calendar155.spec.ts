@@ -5,7 +5,7 @@ import {
   type APIRequestContext,
 } from "@playwright/test";
 import { nav, actor } from "./navigation";
-test.use({ video: "off", trace: "off" });
+test.use({ video: "off" });
 async function seed(
   page: Page,
   request: APIRequestContext,
