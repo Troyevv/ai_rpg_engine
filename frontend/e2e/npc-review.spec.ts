@@ -249,6 +249,8 @@ test("NPC review resolves parallel edits without overwriting either version", as
   expect(updated.card.fields["Возраст"]).toBe("Серверные 35 лет");
   expect(updated.character.biological_sex).toBeNull();
   expect(updated.current.biological_sex).toBe("female");
+  // Wait for the parent to adopt the committed revision before using controls.
+  await expect(dialog.getByRole("button", {name:"Отложить", exact:true})).toBeEnabled();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
 });
