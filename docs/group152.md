@@ -227,3 +227,97 @@ Repair files: `backend/services/communication.py`, `tests/test_communication_cyc
 No changes to spontaneous/event pacing, `remote_initiative.stage()`, Knowledge,
 `basis_ids`, group multi-speaker support, source-bound Extraction or production UI.
 No full repository-wide E2E run; all provider responses were deterministic.
+
+## DeepSeek JSON-mode regression follow-up
+
+### Evidence and limits
+
+The GitHub API and fresh fetch still show #166 **open**, based on master
+`b775f055`; the user therefore selected updating #166 instead of creating a new
+PR containing the entire feature again. This fix starts from PR head `373b698`.
+
+A concrete request-contract defect is confirmed: `reaction_context()` sent
+`response_format={"type":"json_object"}` without the word JSON anywhere in the
+system/user messages for an ordinary group conversation. The same omission
+existed in autonomous `remote_group_semantics` and the pending-answer
+`remote_response_semantics` gate. Serializing a schema is not a JSON instruction.
+DeepSeek explicitly requires that word and an example:
+https://api-docs.deepseek.com/guides/json_mode/ .
+
+No live DeepSeek key or original failing-game diagnostics were supplied. Thus we
+have **not reproduced an actual DeepSeek server response or proven the specific
+user incident**. The reproduction uses the real OpenAI 2.54 SDK, HTTP serialization,
+FastAPI dispatch/retry, workers, SQLite, Runtime and Resolver with an
+`httpx.MockTransport` enforcing the documented JSON requirement. It does not mock
+`engine.chat_stream`. Before the fix direct messages passed, while groups failed
+with the reported Russian error for thinking off/low/high.
+
+Sanitized diagnostics persisted by the existing usage service in that reproduction:
+
+- stage: `remote_initiative` (group reaction author, not autonomous scheduling);
+- HTTP status: 400; reason: `json_instruction_required`; parameter: `messages`;
+- `request.has_json_instruction=false`, two system/user messages;
+- `response_format={"type":"json_object"}`, author `max_tokens=2400`;
+- model `deepseek-flash`; streaming with usage enabled;
+- thinking off: `thinking.type=disabled`, temperature 0.2, no reasoning_effort;
+- thinking low/high: `thinking.type=enabled`, matching reasoning_effort, temperature
+  omitted. SDK merges `extra_body` into the wire body; no nested extra_body field.
+
+The thinking mapping matches https://api-docs.deepseek.com/guides/thinking_mode/ .
+Full phone Extraction retains max_tokens=4096 (fixture config), temperature 0.1
+when thinking is off; the answer gate and autonomous request annotation remain
+bounded at 1200. All calls use ordinary system/user content, with no tool calls or
+assistant reasoning history. There is no evidence here for a model-name defect.
+The actual user's selected model and original provider_error remain unavailable.
+
+### Fix, compatibility and cost
+
+Three prompts explicitly request a valid JSON object and give an empty-result
+example. JSON mode, thinking, provider settings, validation and output budgets
+remain enabled. No changes to `llm.py` or usage were needed: the existing
+ProviderHTTPError classifier and SQLite diagnostics correctly preserve the safe
+reason/parameter. No new logging, raw HTTP bodies, credentials or private prompt
+artifacts are added.
+
+The response-gate replay comparison recognizes **only the exact previous prompt**
+without the newly added JSON guidance/example. All source data, schema and other
+instructions must still match; the saved response still passes Resolver. This
+avoids re-paying a completed gate after upgrading. The author already compares
+the unchanged source context, so its completed checkpoint remains reusable too.
+Other Extraction contracts retain exact comparison. There is no save migration.
+
+Changed files: `backend/runtime_v3/group_planning.py`,
+`backend/runtime_v3/remote_initiative.py`, `backend/runtime_v3/remote_semantics.py`,
+`backend/services/communication.py`, `tests/test_group_deepseek_http.py`, and this
+report. Pacing, multi-NPC reactions, source-bound consequences, Knowledge/basis_ids,
+agency and canonical RemoteEvents are preserved.
+
+Measured mock request counts: a successful two-NPC group reaction takes **2** HTTP
+requests (one author + one Extraction). A final-Extraction HTTP 400 followed by
+reload/Retry totals **3**, not four: the author is reused. A completed legacy
+answer gate and author followed by a failed final Extraction incur **one** request
+on Retry. Re-running a saved worker incurs **zero**. No extra stage is introduced;
+only a short instruction/example adds prompt tokens. Mock usage/cost remain
+unknown, and no paid requests were made; real billed cost was not measured.
+
+### Verification
+
+- `python -m pytest tests/test_group_deepseek_http.py tests/test_providers.py tests/test_group152.py tests/test_group166.py tests/test_phone133_followup.py tests/test_remote_decision_contract.py tests/test_phone122.py tests/test_phone163.py tests/test_communication_cycle.py tests/test_runtime.py -q`: **153 passed**.
+- `test_group_deepseek_http.py` contains 10 cases: direct/group × thinking
+  off/low/high; final-Extraction 400/reload/Retry; every group JSON stage through
+  HTTP; exact pre-fix group prompt rejection and recovery; a completed legacy
+  answer gate + author followed by final-Extraction failure/reload/Retry and a
+  canonical calendar agreement. Changed evidence/context is not replay-compatible.
+- Chromium `phone.spec.ts group152.spec.ts`: **12 passed**, desktop/mobile,
+  including group reaction, autonomous invitation, player answer, meeting and
+  reload. After the checkpoint compatibility change, `group152.spec.ts` was
+  rerun on the final code: **4 passed** (desktop/mobile, graphite/parchment).
+  E2E uses the existing deterministic provider, not the live DeepSeek API.
+- `npm run build --prefix frontend`: passed (existing large-bundle warning).
+- `git diff --check`: passed. No full repository-wide E2E run.
+
+Remaining limitation: live provider acceptance, real billed tokens and the
+specific reported game failure require its sanitized request/provider_error and
+model/config, or a live API test. Do not send API keys or private prompts for
+that comparison. The fix addresses a documented, reproduced contract violation;
+it does not claim every possible HTTP 400 has this cause.

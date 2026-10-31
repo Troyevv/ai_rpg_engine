@@ -99,7 +99,7 @@ def execute(storage, job, handle, chat_stream):
                 frame['validation_errors'] = json.loads(error.json(include_url=False))
         storage.save_communication_context(job['id'], captured, before)
     def extract(after, source_id, batch, stage='remote_semantics'):
-        from backend.runtime_v3.remote_semantics import messages as semantic_messages, resolve as semantic_resolve
+        from backend.runtime_v3.remote_semantics import messages as semantic_messages, resolve as semantic_resolve, same_extraction_context
         prompts = semantic_messages(after, source_id, response_only=stage=='remote_response_semantics')
         from backend.runtime_v3.remote_semantics import relationship_sources, evidence_slice
         from backend.runtime_v3.repository import relationship_reader
@@ -133,7 +133,7 @@ def execute(storage, job, handle, chat_stream):
         try:
             # A failed repair resumes from the accepted decision journal AND the
             # original semantic response, without another NPC or extraction call.
-            if semantic and semantic.get('response') and (semantic.get('accepted') or semantic.get('validation_errors')) and semantic.get('messages') == prompts and not job['replaces_id']:
+            if semantic and semantic.get('response') and (semantic.get('accepted') or semantic.get('validation_errors')) and same_extraction_context(semantic.get('messages'), prompts, response_only=stage=='remote_response_semantics') and not job['replaces_id']:
                 response = semantic['response']
             else:
                 response = generate_semantics(stage, prompts)

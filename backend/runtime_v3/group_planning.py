@@ -313,7 +313,8 @@ def reaction_context(snapshot, source_id):
     source = state['remote_events'][source_id]
     return [dict(role='system', content=(
         'Group communication reaction/1. Author an optional natural conversation in response to the supplied '
-        'player message, using the existing communication job. Return {"messages":[]} for silence. '
+        'player message, using the existing communication job. Return one valid JSON object matching the schema. '
+        'Return {"messages":[]} for silence. '
         'Several NPCs may answer the player AND each other, including returning speakers. '
         'Do not author the player, invent agreement or move anyone physically. Each selected speaker '
         'chooses to read the delivered source message before speaking; subsequent speakers must set '

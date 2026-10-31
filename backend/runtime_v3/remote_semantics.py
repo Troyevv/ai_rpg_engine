@@ -37,6 +37,26 @@ def evidence_slice(state, source_id):
     return rows
 
 
+RESPONSE_JSON_INSTRUCTION = 'Return one valid JSON object matching the supplied schema and example. '
+
+
+def same_extraction_context(recorded, current, *, response_only=False):
+    """Keep completed pre-fix response gates reusable; no evidence/schema changes.
+
+    Only the exact old prompt lacking JSON guidance is compatible. The existing
+    Resolver still validates the cached response against the staged source.
+    """
+    if recorded == current:
+        return True
+    if not response_only or not current:
+        return False
+    data = json.loads(current[1]['content'])
+    data.pop('example_json_output', None)
+    legacy = [dict(current[0], content=current[0]['content'].replace(RESPONSE_JSON_INSTRUCTION, '', 1)),
+              dict(current[1], content=json.dumps(data, ensure_ascii=False))]
+    return recorded == legacy
+
+
 def messages(snapshot, source_id, *, response_only=False):
     state = snapshot['world_state']
     rows = evidence_slice(state, source_id)
@@ -52,10 +72,12 @@ def messages(snapshot, source_id, *, response_only=False):
             present_character_ids=state['camera']['present_character_ids'], elapsed_minutes=0)
         return [dict(role='system', content=(
             'Remote semantic extraction/1. Interpret ONLY explicit answers or refusals to pending_group_requests. '
+            + RESPONSE_JSON_INSTRUCTION +
             'Return final_scene unchanged and group_response_changes with canonical request_event_id, '
             'response_event_id, assertion answered/refused and exact evidence. Reading, silence, mentions '
             'and unrelated messages are not answers. Do not extract other consequences in this phase.')),
             dict(role='user',content=json.dumps(dict(schema=schema,final_scene=scene,
+                example_json_output=dict(final_scene=scene,group_response_changes=[]),
                 controlled_actor_id=state['camera']['controlled_actor_id'],
                 pending_group_requests=[dict(event_id=e['id'], **e['response_request'])
                     for e in rows if e.get('response_request') and not e['response_request']['resolved_by']],

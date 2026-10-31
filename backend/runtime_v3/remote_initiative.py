@@ -460,6 +460,7 @@ def stage(snapshot, generate, operation_id, *, context_limit=32768, history_even
             from backend.runtime_v3.calendar import current_time
             semantic_messages = [dict(role='system', content=(
                 'Group response extraction/1. Interpret ONLY the supplied authored messages. '
+                'Return one valid JSON object matching the schema, for example {"requests":[]} when no answer is needed. '
                 'Return requests for explicit questions, invitations or voluntary decisions addressed to '
                 'controlled_actor_id. Mere mentions/greetings need no answer. Never invent a player reply. '
                 'Each request cites message_index, target_id, exact evidence and expires_at in canonical minutes '
