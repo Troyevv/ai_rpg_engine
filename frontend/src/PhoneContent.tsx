@@ -28,11 +28,11 @@ export function PhoneChatList({phone,saveId,openChat}:{phone:PhoneState;saveId:n
     <span className="phone-thread-meta">{event&&<time title={formatDateLabel(event.time_label)}>{clock(event.time_label)}</time>}{event?.outgoing&&<span role="img" aria-label={messageStatus(event)} title={messageStatus(event)}>{event.read_count||event.status==='delivered'?<CheckCheck size={15}/>:<Check size={15}/>}</span>}{!!unread&&<span className="phone-unread" aria-label={`Непрочитано: ${unread}`}>{unread}</span>}</span>
   </button>)}</div>;
 }
-export function PhoneMessages({events,group,locked,read}:{events:PhoneEvent[];group:boolean;locked:boolean;read:(id:string)=>void}) {
+export function PhoneMessages({events,group,locked,read,animated}:{events:PhoneEvent[];group:boolean;locked:boolean;read:(id:string)=>void;animated?:ReadonlySet<string>}) {
   if(!events.length)return <div className="phone-empty"><MessageCircle size={28}/><p>Сообщений пока нет.</p></div>;
   return <>{events.map((event,index)=><Fragment key={event.id}>
     {(!index||date(events[index-1].time_label)!==date(event.time_label))&&<div className="phone-day"><time>{date(event.time_label)}</time></div>}
-    <article className={`phone-message ${event.outgoing?'outgoing':'incoming'}`} data-event-id={event.id}>
+    <article className={`phone-message ${event.outgoing?'outgoing':'incoming'}${animated?.has(event.id)?' phone-message-arrival':''}`} data-event-id={event.id}>
       {group&&!event.outgoing&&<strong className="phone-message-sender">{event.sender?.name||'Неизвестный участник'}</strong>}
       <p>{event.content ?? 'Непрочитанное сообщение'}</p>
       <footer><time title={formatDateLabel(event.time_label)}>{clock(event.time_label)}</time><span>{messageStatus(event)}</span></footer>

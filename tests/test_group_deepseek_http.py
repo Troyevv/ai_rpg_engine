@@ -104,7 +104,8 @@ def test_sdk_phone_json_thinking_meeting(tmp_path, thinking, group):
     assert Repository(repo.path).get_snapshot(sid) == repo.get_snapshot(sid)
 
 
-def test_http400_extraction_reload_retry_reuses_author(tmp_path):
+@pytest.mark.parametrize('legacy_channel_context', [False, True])
+def test_http400_extraction_reload_retry_reuses_author(tmp_path, legacy_channel_context):
     repo, client, sid = setup(tmp_path)
     http = DeepSeekHTTP(); http.reject_semantic = True
     jid = send(repo, client, sid, config(), True)
@@ -117,6 +118,18 @@ def test_http400_extraction_reload_retry_reuses_author(tmp_path):
     assert failed['diagnostics']['provider_error']['http_status'] == 400
     before = repo.get_snapshot(sid)
     assert len(before['world_state']['remote_events']) == 1
+    if legacy_channel_context:
+        from backend.runtime_v3.group_planning import GROUP_TEXT_CONTEXT
+        job = repo.get_job(jid); frames = json.loads(job['context_json'])
+        author = next(f for f in frames if f['stage'] == 'communication')
+        author['messages'][0]['content'] = author['messages'][0]['content'].replace(GROUP_TEXT_CONTEXT, '')
+        data = json.loads(author['messages'][1]['content']); data['source_message'].pop('channel')
+        for group in data['groups']:
+            group.pop('channel'); group.pop('communication_profile')
+            for actor in group['actors']:
+                for field in ('personality','legacy_voice','personal_context'): actor.pop(field)
+        author['messages'][1]['content'] = json.dumps(data, ensure_ascii=False)
+        repo.save_communication_context(jid, frames, json.loads(job['memory_before_json'] or job['before_json']))
     repo = Repository(repo.path)
     assert repo.get_snapshot(sid) == before
     with patch('engine.launch'):

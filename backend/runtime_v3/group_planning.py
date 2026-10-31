@@ -160,9 +160,27 @@ def opportunities(state, history_events=()):
     return result
 
 
+GROUP_TEXT_CONTEXT = (
+    'For group_series and group reactions, the channel is TEXT_MESSAGE: each content is a written message '
+    'in a remote group conversation, not dialogue staged in a shared physical room. '
+    'Group membership and message delivery provide no visual or auditory perception, gestures, facial expressions, '
+    'physical actions or whereabouts of other members. Participants may be in different locations. '
+    'Each actor may use their own Knowledge, read messages and supplied personal context only; '
+    'another actor\'s personal context is not shared knowledge. Own location and canonical co-presence are '
+    'personal context, not new movement or permission to infer offscreen presence. They may discuss genuine '
+    'co-presence when supported by that context or known evidence; do not ban physical topics or figurative speech. '
+    'Preserve each speaker\'s personality and communication style, with natural humour, gossip, conflict, emotion, '
+    'profanity and short or long messages as appropriate. No mandatory messenger slang, format or reply. '
+    'Use the supplied CommunicationProfile delivery policy and technology, not assumptions about a modern app. '
+    'These group-text instructions do not apply to letters, couriers or other channels. '
+)
+
+
 def context(snapshot, options):
     """Per-speaker knowledge; no unrelated conversations or omniscient history."""
     state = snapshot['world_state']
+    from backend.runtime_v3.personality import context_profile
+    cards = {c['id']: c for c in snapshot.get('character_cards', [])}
     result = []
     for option in options:
         gid = option['conversation_id']
@@ -170,6 +188,12 @@ def context(snapshot, options):
         for actor in option['actor_ids']:
             c = state['characters'][actor]
             actors.append(dict(id=actor, name=c['display_name'],
+                personality=context_profile(c),
+                legacy_voice=({k:v for k,v in cards.get(actor, {}).get('fields', {}).items()
+                              if k in ('Характер', 'Стиль общения')} if c.get('personality') is None else {}),
+                personal_context=dict(own_location_id=c['location_id'],
+                    present_character_ids=(state['camera']['present_character_ids']
+                        if actor in state['camera']['present_character_ids'] else [])),
                 intentions=c['intentions'][:3], goals=c['goals'][:3],
                 relationships=[r for r in state['relationships'].values() if r['source_id'] == actor
                                and r['target_id'] in option['actor_ids']][:8],
@@ -179,6 +203,7 @@ def context(snapshot, options):
                          for e in state['remote_events'].values() if e['conversation_id'] == gid
                          and (e['sender_id'] == actor or actor in e['read_by'])][-6:]))
         result.append(dict(**option, title=state['conversations'][gid]['title'], actors=actors,
+            channel='TEXT_MESSAGE', communication_profile=deepcopy(state['meta']['communication']),
             gm_story_context=[dict(id=t['id'], description=t['description'], state=t['state'], character_ids=t['character_ids']) for t in state['threads'].values()
                      if t['id'] in {b for ids in option['basis'].values() for b in ids}]))
     return result
@@ -307,6 +332,24 @@ def reaction_option(state, source_id):
     return dict(conversation_id=group['id'], actor_ids=actors, basis={a:[source_id] for a in actors})
 
 
+def same_reaction_context(recorded, current):
+    if recorded[1:] == current[1:]:
+        return True
+    # Exact pre-channel-context checkpoint only: preserve already accepted work
+    # on Retry, while still requiring identical source, history and Knowledge.
+    data = json.loads(current[1]['content'])
+    data['source_message'].pop('channel')
+    for group in data['groups']:
+        group.pop('channel')
+        group.pop('communication_profile')
+        for actor in group['actors']:
+            for field in ('personality', 'legacy_voice', 'personal_context'):
+                actor.pop(field)
+    legacy = [dict(current[0], content=current[0]['content'].replace(GROUP_TEXT_CONTEXT, '', 1)),
+              dict(current[1], content=json.dumps(data, ensure_ascii=False))]
+    return recorded == legacy
+
+
 def reaction_context(snapshot, source_id):
     state = snapshot['world_state']
     option = reaction_option(state, source_id)
@@ -320,10 +363,11 @@ def reaction_context(snapshot, source_id):
         'chooses to read the delivered source message before speaking; subsequent speakers must set '
         'read_previous=true to read preceding accepted replies. Use the source ID as basis_ids. '
         'Preserve per-speaker Knowledge. Rumours are not canonical facts. End at an explicit request '
-        'for a voluntary player decision; do not invent its answer. No mandatory reply. Schema: '
+        'for a voluntary player decision; do not invent its answer. No mandatory reply. '
+        + GROUP_TEXT_CONTEXT + 'Schema: '
         + json.dumps(GroupReaction.model_json_schema(), ensure_ascii=False))),
         dict(role='user', content=json.dumps(dict(groups=context(snapshot, [option]),
-            source_message={k:source[k] for k in ('id','sender_id','content','world_time')},
+            source_message={k:source[k] for k in ('id','sender_id','channel','content','world_time')},
             controlled_actor_id=state['camera']['controlled_actor_id']), ensure_ascii=False))]
 
 

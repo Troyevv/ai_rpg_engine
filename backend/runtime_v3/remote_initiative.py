@@ -404,7 +404,7 @@ def stage(snapshot, generate, operation_id, *, context_limit=32768, history_even
     if "_remote_batch" in snapshot:
         return snapshot
     from backend.runtime_v3.group_planning import opportunities as group_options, context as group_context
-    from backend.runtime_v3.group_planning import GroupSemantics, accept_series, record_attempt
+    from backend.runtime_v3.group_planning import GroupSemantics, accept_series, record_attempt, GROUP_TEXT_CONTEXT
     from backend.runtime_v3.remote_decision import RemoteStageDecision, decode
 
     options = opportunities(snapshot['world_state'])
@@ -424,7 +424,8 @@ def stage(snapshot, generate, operation_id, *, context_limit=32768, history_even
             'must set read_previous=true to perceive preceding messages in this series; cite the initiating basis IDs. '
             'event_cues and gm_story_context are author-only context, NEVER character knowledge. A thread ID is a planning cue, '
             'not proof the speaker knows its secrets. Use it to motivate an inquiry, not to assert unknown information. '
-            'No filler or mandatory reply. No physical movement. Schema: '
+            'No filler or mandatory reply. No physical movement. '
+            + GROUP_TEXT_CONTEXT + 'Schema: '
             + json.dumps(RemoteStageDecision.model_json_schema(), ensure_ascii=False))
         data = json.loads(messages[1]['content'])
         data.update(groups=group_context(snapshot, groups), controlled_actor_id=snapshot['world_state']['camera']['controlled_actor_id'],

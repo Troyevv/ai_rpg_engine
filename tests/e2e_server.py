@@ -49,11 +49,15 @@ review_protocol_attempts={}
 fragment_attempts={}
 handoff_provider=None
 phone_mode="silent"
+group_semantic_fail_once=False
 letter130_provider=None
 
 def stream(**kwargs):
-    global phone_mode
+    global phone_mode, group_semantic_fail_once
     if phone_mode == 'group152':
+        if group_semantic_fail_once and kwargs['messages'][0]['content'].startswith('Remote semantic extraction/'):
+            group_semantic_fail_once=False
+            raise RuntimeError('Deterministic group Extraction outage')
         from group152_provider import response
         yield response(kwargs['messages'], bool(kwargs.get('response_format')))
         return
@@ -519,9 +523,10 @@ if __name__ == '__main__':
         return {'ready':True}
 
     @app.post('/test/group152-seed')
-    def group152_seed():
-        global phone_mode
+    def group152_seed(fail_semantic: bool = False):
+        global phone_mode, group_semantic_fail_once
         phone_mode='group152'
+        group_semantic_fail_once=fail_semantic
         from devtools.narrative_test_world import load_fixture
         seed=load_fixture(app.state.repository,'phone')
         return {'world':seed['world'],'save':seed['save']}

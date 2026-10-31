@@ -5,6 +5,9 @@ FIRST = 'Олег, фотографии карты готовы. Покажеш�
 QUESTION = 'Покажу завтра. Кирилл, ты придёшь?'
 ANSWER = 'Нет, завтра не приду.'
 HELLO = 'Привет всем! Как ваши дела?'
+ARRIVAL_REQUEST = 'Привет, как у вас дела?'
+LONG_REQUEST = 'Расскажи подробнее про фотографии.'
+LONG_REPLY = '\n\n'.join(f'Фотография {i}: мы обсуждали свет, цвета и старые воспоминания. ' * 4 for i in range(1, 13))
 ACCEPT = 'Да, Олег, завтра приду.'
 CONTINUED = 'Тогда обсудим фотографии вдвоём.'
 
@@ -16,8 +19,14 @@ def response(messages, structured=False):
         texts=([CONTINUED,'Хорошо, Тимур, обсудим альбом.','Отлично.'] if source['content']==ANSWER else
                ['Привет! Фотографии готовы.','Тимур, здорово! Покажешь потом?','Да, Олег, покажу.'] if source['content']==HELLO else
                ['Хорошо, Кирилл. Встреча завтра в силе.','Олег, я передам альбом.','Спасибо, Тимур.'])
+        speakers = ['qa_timur','qa_oleg','qa_timur']
+        if source['content'] == ARRIVAL_REQUEST:
+            texts = ['Привет! Сегодня разбираю фотографии.', 'Тимур, а альбом уже готов?', 'Олег, он ещё выбирает снимки.']
+            speakers = ['qa_timur','qa_oleg','qa_vera']
+        if source['content'] == LONG_REQUEST:
+            texts = [LONG_REPLY, 'Тимур, мне особенно понравилась третья фотография.', 'Да, Олег, у неё интересная история.']
         return json.dumps(dict(messages=[dict(actor_id=a,content=t,basis_ids=[source['id']],read_previous=i>0)
-            for i,(a,t) in enumerate(zip(['qa_timur','qa_oleg','qa_timur'],texts))]),ensure_ascii=False)
+            for i,(a,t) in enumerate(zip(speakers,texts))]),ensure_ascii=False)
     if system.startswith('Group response extraction/'):
 
         data=json.loads(messages[1]['content'])

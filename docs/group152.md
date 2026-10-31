@@ -321,3 +321,94 @@ specific reported game failure require its sanitized request/provider_error and
 model/config, or a live API test. Do not send API keys or private prompts for
 that comparison. The fix addresses a documented, reproduced contract violation;
 it does not claim every possible HTTP 400 has this cause.
+
+## Group channel context and sequential Phone presentation
+
+Confirmed causes: group authoring supplied members/history but did not explicitly
+identify a remote text channel or include individual voice profiles. The Phone
+rendered every newly committed event in the same render. Atomic commitment and
+identical world_time are correct and are retained.
+
+### Context and compatibility
+
+Both reaction_context and autonomous group authoring now share explicit
+TEXT_MESSAGE instructions. The context includes the canonical CommunicationProfile
+(including technology/delivery policy), the existing bounded personality projection
+or legacy character/voice fields, and each speaker's own location. Canonical
+present_character_ids are supplied only for a speaker who actually belongs to
+that physical scene; matching location IDs alone never establishes perception.
+Other speakers' personal context is explicitly not shared Knowledge. Existing
+per-speaker Knowledge and authored/read history remain unchanged.
+
+The instructions allow real known co-presence and figurative language, humour,
+gossip, conflict, profanity, and short or long messages. There are no creative
+text filters, output-length rules, mandatory messenger style, new classifier or
+LLM stage. Group instructions apply only to group TEXT_MESSAGE: letter/courier/
+other-channel prompts and general Narrative prompts are untouched. Profiles
+without text_message still offer no group initiative; custom delayed text policy
+is passed through rather than assumed instant.
+
+An exact pre-change reaction checkpoint remains reusable on Retry: only the
+specific added context fields/instruction are omitted when comparing its old
+source context. Other evidence/history/source changes still invalidate reuse;
+Runtime validates replayed output as before. No WorldState/save/schema migration,
+changes to basis_ids, remote.apply or acceptance logic were needed.
+
+### Presentation
+
+usePhoneArrivals retains ID/deadline metadata, not a second message/content store.
+PhoneMessages always renders a filtered view of the current authorized canonical
+projection, in its original order. Only newly arriving incoming IDs in the already
+open group are staggered: 180 ms initial delay, normally 420 ms between messages,
+with the entire planned delay capped at 2.6 seconds for large series, plus a
+180 ms opacity/5 px entrance. One finite timeout targets the next deadline; no
+scheduler, polling, typing state, API call or canonical timestamp is introduced.
+
+Initial history, reload, reopening, switching groups, member management,
+backgrounding and reduced motion show all available history immediately. These
+transitions clear pending presentation timers. Known IDs do not replay on refresh,
+Retry or rollback/reappearance. Outgoing messages flush older pending appearances.
+Only pinned readers follow new bubbles; an older reading position remains fixed.
+The animation uses the existing message layout and skin styles. Delivery/read
+commands and their timing are unchanged.
+
+### Verification and cost
+
+- Backend: `python -m pytest tests/test_group_channel_context.py tests/test_group_deepseek_http.py tests/test_group152.py tests/test_group166.py tests/test_remote_decision_contract.py tests/test_phone133_followup.py tests/test_communication_cycle.py -q` — **112 passed**.
+  After adding a canonical voice-profile assertion, channel/HTTP tests were
+  repeated: **14 passed**. Includes actual API/jobs/SQLite, SDK mock HTTP,
+  multi-NPC reaction, autonomous series, agency, Knowledge, waiting, calendar,
+  reload/Retry and exact legacy author-checkpoint reuse.
+- Frontend: `npm test --prefix frontend -- phoneArrivals.test.tsx phone158.test.tsx phone122.test.tsx` — **28 passed**. Covers deadlines, long text, closed/other
+  views, reduced-motion changes, backgrounding, cleanup, known IDs and large series.
+- Chromium: `phone-arrivals.spec.ts phone.spec.ts group152.spec.ts` — **20 passed**
+  desktop/mobile, with existing graphite/parchment coverage. Then the arrival
+  suite was extended to three distinct NPCs and a real failed-Extraction Retry:
+  `phone-arrivals.spec.ts` — **10 passed** desktop/mobile. DOM MutationObserver
+  records assert 1 → 2 → 3 canonical incoming IDs, separated by visible delays;
+  reduced motion records all three immediately. Tests verify exact long content,
+  unchanged world_time, stable old-history scroll, switching to another chat,
+  closing/reopening during a series, and immediate history after reload.
+- Actual E2E SQLite inspection: both desktop/mobile Retry jobs saved; each has
+  **one author and two Extraction attempts (one failed)**, three requests total.
+  No duplicate events. Screenshots inspected on both viewport sizes; artifacts
+  remain outside the repository. No full repository-wide E2E run.
+- Production build and `git diff --check` passed; existing bundle-size warning.
+- Additional LLM calls: **zero**. Repository input-token estimates in the two-NPC
+  fixture: reaction 1407 → 2327 (**+920**), autonomous author 2904 → 3810 (**+906**).
+  Actual context growth depends on speaker profiles; existing context budgets
+  remain enforced. These are estimates, not provider-billed tokens. No live
+  DeepSeek call or paid cost measurement was made.
+
+Files: runtime group_planning.py and remote_initiative.py; service communication.py;
+Phone.tsx, PhoneContent.tsx, lib/usePhoneArrivals.ts and styles/phone.css;
+frontend/tests/phoneArrivals.test.tsx and frontend/e2e/phone-arrivals.spec.ts;
+tests/test_group_channel_context.py, test_group_deepseek_http.py,
+group152_provider.py and e2e_server.py; this document.
+
+Remaining risks: prompt compliance and literary quality still require real
+DeepSeek playtesting; this fix does not claim a deterministic guarantee about
+creative wording. Existing saved dialogue is not rewritten. Browser timing can
+be delayed by a busy main thread; expired deadlines reveal immediately on the
+next callback, and background/closed views never accumulate a replay. Physical
+mobile devices were not tested. Knowledge/basis_ids P1 remains outside scope.

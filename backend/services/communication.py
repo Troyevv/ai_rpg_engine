@@ -50,7 +50,10 @@ def execute(storage, job, handle, chat_stream):
                 reusable = old.get('accepted') is not False
             except ValueError:
                 reusable = False
-        if old and not job["replaces_id"] and old.get("messages", [None,None])[1:] == messages[1:] and reusable:
+        from backend.runtime_v3.group_planning import same_reaction_context
+        same_context = (same_reaction_context(old.get('messages', []), messages) if group_reaction
+                        else old.get('messages', [None,None])[1:] == messages[1:]) if old else False
+        if old and not job["replaces_id"] and same_context and reusable:
             captured.append(old)
             return old["response"]  # Retry replays accepted work without another call.
         if index == 0 and old:
