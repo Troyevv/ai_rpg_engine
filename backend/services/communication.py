@@ -53,6 +53,11 @@ def execute(storage, job, handle, chat_stream):
         from backend.runtime_v3.group_planning import same_reaction_context
         same_context = (same_reaction_context(old.get('messages', []), messages) if group_reaction
                         else old.get('messages', [None,None])[1:] == messages[1:]) if old else False
+        if old and reusable and not same_context:
+            from backend.runtime_v3.remote_authoring import pre_style_context
+            previous = pre_style_context(messages, before, group=group_reaction)
+            same_context = (same_reaction_context(old.get('messages', []), previous) if group_reaction
+                            else old.get('messages', [None,None])[1:] == previous[1:])
         if old and not job["replaces_id"] and same_context and reusable:
             captured.append(old)
             return old["response"]  # Retry replays accepted work without another call.

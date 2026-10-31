@@ -412,3 +412,87 @@ creative wording. Existing saved dialogue is not rewritten. Browser timing can
 be delayed by a busy main thread; expired deadlines reveal immediately on the
 next callback, and background/closed views never accumulate a replay. Physical
 mobile devices were not tested. Knowledge/basis_ids P1 remains outside scope.
+
+## Shared digital writing style for direct and group chats
+
+The follow-up found concrete context gaps: the direct planner used a separate
+six-item personality excerpt and lacked legacy voice, directed relationships and
+emotion; group relationships excluded the controlled actor when only NPC authors
+were selected. These gaps are fixed without claiming to prove why a live model
+previously chose not to use emoji.
+
+`remote_authoring.speaker_context` now serves both planners. It uses the existing
+`personality.context_profile`, legacy Character/Communication Style card fields
+when no canonical profile exists, the speaker's outgoing relationships to actual
+interlocutors/group members (including the controlled actor), and the speaker's
+own emotion/situation. Private opinions/context are not broadcast Knowledge.
+Existing per-speaker Knowledge and read-history selection are unchanged.
+CommunicationProfile is now also supplied to direct planning.
+
+One `DIGITAL_TEXT_STYLE` block is used by direct `planning_context`, group
+`reaction_context`, and the autonomous planner (which already reuses
+planning_context). It appears once per request. It permits emoji, abbreviations,
+slang/profanity, informal punctuation, expressive text and varied message lengths,
+with individual and audience-dependent choices. No emoji is explicitly equally
+valid. There are no quotas, random probabilities, stereotype assignments, output
+filters, emoji insertion, new personality fields or style classifiers.
+
+The block is omitted for profiles without text_message; with mixed profiles it
+explicitly applies only to suitable TEXT_MESSAGE technology/settings, not letters,
+couriers, telegrams or spoken calls. Historical correspondence and general
+Narrative prompts are untouched. Existing personality remains the common source
+for a recognizable person across channels.
+
+Accepted pre-style author checkpoints can be reused on Retry through an exact
+prior-context projection. Direct legacy personality formatting comes from the
+original job snapshot. Source, options, Knowledge, history and unrelated fields
+must still match, and Runtime validates accepted operations. No additional LLM
+stage, new state/schema, Extraction change or message transformation was added.
+Pacing, waiting, agency and basis_ids are unchanged.
+
+Validation:
+
+- Targeted backend command: `python -m pytest tests/test_digital_style.py tests/test_group_channel_context.py tests/test_group_deepseek_http.py tests/test_remote_decision_contract.py tests/test_group166.py tests/test_communication_cycle.py tests/test_phone133_followup.py tests/test_communication_profile.py tests/test_historical_correspondence130.py -q` — **148 passed** before the final autonomous API test was added. Final `test_digital_style.py`: **7 passed**, including that additional test (149 distinct backend cases checked).
+- New integration cases use actual API/jobs/SQLite and the real SDK with deterministic
+  HTTP. They cover direct/group Unicode and plain replies, failed Extraction,
+  pre-style accepted journals, reload/Retry without another author, unread privacy,
+  explicit read, canonical events and agency. The autonomous API/job case preserves
+  Unicode NPC↔NPC content and uses one author plus existing group annotation.
+  Its long transcript needs a 64K test context for ordinary Extraction; the 32K
+  production budget guard correctly refused overflow and was not weakened.
+- Frontend: `npm test --prefix frontend -- phone158.test.tsx phoneArrivals.test.tsx phone122.test.tsx` — **30 passed**.
+- Chromium `phone-digital-style.spec.ts group152.spec.ts` — **8 passed** on
+  desktop/mobile. Direct/group Unicode cases verify exact mixed Russian/English,
+  combining accent, emoji modifier/ZWJ/variation-selector sequences, long text,
+  punctuation, unchanged IDs after reload, and Retry author counts via accounting.
+  A plain reply is deliberately present too; no test requires a live model to emit emoji.
+- Screenshot inspection first exposed missing emoji fonts in the container:
+  exact DOM/SQLite text was present but glyphs were boxes. Installing Noto Color
+  Emoji in the test environment (no application assets or CSS changes) corrected
+  rendering. Repeated Unicode E2E: **4 passed**; desktop/mobile screenshots were
+  inspected with visible composed colour emoji. No screenshots/fonts committed.
+- `git diff --check` passed. No full repository-wide E2E run.
+
+Additional author calls: **zero**. Measured input estimates in the small fixture:
+
+| Author request | Before | After | Added |
+|---|---:|---:|---:|
+| Direct planner | 1722 | 2489 | 767 |
+| Group reaction | 2327 | 2916 | 589 |
+| Autonomous planner | 3810 | 4581 | 771 |
+
+These are repository UTF-8 estimates, not billed provider usage; actual growth
+varies with profiles/relationships. Existing context/output budgets remain active.
+No live DeepSeek calls or paid cost measurements were made.
+
+Files: `backend/runtime_v3/remote_authoring.py`, `remote_initiative.py`,
+`group_planning.py`; `backend/services/communication.py`; `tests/test_digital_style.py`,
+`digital_style_provider.py`, `test_group_channel_context.py`, `e2e_server.py`;
+`frontend/tests/phone158.test.tsx`, `frontend/e2e/phone-digital-style.spec.ts`;
+this document.
+
+Remaining risks: literary quality and frequency of expressive choices require
+live playtesting; a restrained character may still legitimately use no emoji.
+Emoji appearance depends on the user's platform fonts. Long transcripts with
+small context windows can reach existing budget limits. Knowledge/basis_ids P1
+remains outside scope.

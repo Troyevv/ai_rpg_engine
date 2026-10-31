@@ -179,29 +179,28 @@ GROUP_TEXT_CONTEXT = (
 def context(snapshot, options):
     """Per-speaker knowledge; no unrelated conversations or omniscient history."""
     state = snapshot['world_state']
-    from backend.runtime_v3.personality import context_profile
-    cards = {c['id']: c for c in snapshot.get('character_cards', [])}
+    from backend.runtime_v3.remote_authoring import speaker_context
+    from backend.runtime_v3.remote import members
     result = []
     for option in options:
         gid = option['conversation_id']
         actors = []
         for actor in option['actor_ids']:
             c = state['characters'][actor]
+            voice = speaker_context(snapshot, actor, members(state['conversations'][gid]))
             actors.append(dict(id=actor, name=c['display_name'],
-                personality=context_profile(c),
-                legacy_voice=({k:v for k,v in cards.get(actor, {}).get('fields', {}).items()
-                              if k in ('Характер', 'Стиль общения')} if c.get('personality') is None else {}),
+                personality=voice['personality'], legacy_voice=voice['legacy_voice'],
                 personal_context=dict(own_location_id=c['location_id'],
                     present_character_ids=(state['camera']['present_character_ids']
                         if actor in state['camera']['present_character_ids'] else [])),
                 intentions=c['intentions'][:3], goals=c['goals'][:3],
-                relationships=[r for r in state['relationships'].values() if r['source_id'] == actor
-                               and r['target_id'] in option['actor_ids']][:8],
+                relationships=voice['relationships'],
                 knowledge=[dict(id=key, text=state['facts'][k['fact_id']]['text'], status=k['status'])
                            for key, k in state['knowledge'].items() if k['actor_id'] == actor and k['status'] == 'known'][-8:],
                 history=[{k:e[k] for k in ('id','sender_id','content','world_time')}
                          for e in state['remote_events'].values() if e['conversation_id'] == gid
-                         and (e['sender_id'] == actor or actor in e['read_by'])][-6:]))
+                         and (e['sender_id'] == actor or actor in e['read_by'])][-6:],
+                emotion=voice['emotion'], situation=voice['situation']))
         result.append(dict(**option, title=state['conversations'][gid]['title'], actors=actors,
             channel='TEXT_MESSAGE', communication_profile=deepcopy(state['meta']['communication']),
             gm_story_context=[dict(id=t['id'], description=t['description'], state=t['state'], character_ids=t['character_ids']) for t in state['threads'].values()
@@ -351,6 +350,7 @@ def same_reaction_context(recorded, current):
 
 
 def reaction_context(snapshot, source_id):
+    from backend.runtime_v3.remote_authoring import text_style_instructions
     state = snapshot['world_state']
     option = reaction_option(state, source_id)
     source = state['remote_events'][source_id]
@@ -364,7 +364,7 @@ def reaction_context(snapshot, source_id):
         'read_previous=true to read preceding accepted replies. Use the source ID as basis_ids. '
         'Preserve per-speaker Knowledge. Rumours are not canonical facts. End at an explicit request '
         'for a voluntary player decision; do not invent its answer. No mandatory reply. '
-        + GROUP_TEXT_CONTEXT + 'Schema: '
+        + GROUP_TEXT_CONTEXT + text_style_instructions(state['meta']['communication']) + 'Schema: '
         + json.dumps(GroupReaction.model_json_schema(), ensure_ascii=False))),
         dict(role='user', content=json.dumps(dict(groups=context(snapshot, [option]),
             source_message={k:source[k] for k in ('id','sender_id','channel','content','world_time')},

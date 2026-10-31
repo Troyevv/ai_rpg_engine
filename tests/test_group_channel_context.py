@@ -4,6 +4,7 @@ from copy import deepcopy
 from backend.runtime_v3.group_planning import context, opportunities, reaction_context, GROUP_TEXT_CONTEXT
 from backend.runtime_v3.remote_initiative import stage, planning_context
 from backend.services.communication_profile import catalog
+from backend.runtime_v3.remote_authoring import DIGITAL_TEXT_STYLE
 from backend.runtime_v3.models import PersonalityProfile, PersonalityItem
 from test_group152 import group, provider
 from test_remote_communication import command
@@ -69,7 +70,7 @@ def test_profile_controls_group_availability_and_does_not_rewrite_other_channels
     for preset in ('letters','1939','fantastic','none'):
         snapshot['world_state']['meta']['communication'] = catalog()[preset]
         assert not opportunities(snapshot['world_state'])
-        assert planning_context(snapshot, [])[0]['content'] == original
+        assert planning_context(snapshot, [])[0]['content'] == original.replace(DIGITAL_TEXT_STYLE, '')
     snapshot['world_state']['meta']['communication'] = dict(catalog()['custom'],text_message=True,
         delivery_policy={'text_message':'delayed'})
     ctx = context(snapshot, opportunities(snapshot['world_state']))[0]

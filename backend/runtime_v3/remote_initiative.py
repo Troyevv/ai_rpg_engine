@@ -173,6 +173,7 @@ def opportunities(state):
 
 
 def planning_context(snapshot, options):
+    from backend.runtime_v3.remote_authoring import speaker_context, option_audience, text_style_instructions
     state = snapshot["world_state"]
     actors = {r["actor_id"] for r in options if r["actor_id"] in state["characters"]}
     cards = {c["id"]: c for c in snapshot["character_cards"]}
@@ -189,20 +190,19 @@ def planning_context(snapshot, options):
             for k, v in state["knowledge"].items()
             if v["actor_id"] == cid and v["status"] in ("known", "suspected")
         ][:8]
+        voice = speaker_context(snapshot, cid, option_audience(state, cid, options))
         data.append(
             dict(
                 id=cid,
                 name=c["display_name"] or cards.get(cid, {}).get("name", cid),
-                situation=c["situation"][:400],
+                situation=voice["situation"],
                 intentions=[
                     r["text"][:300] for r in c["intentions"] if r["status"] == "active"
                 ][:3],
-                personality=[
-                    dict(field=i["field"], text=i["text"][:200])
-                    for i in list(
-                        (c.get("personality") or {}).get("items", {}).values()
-                    )[:6]
-                ],
+                personality=voice['personality'],
+                legacy_voice=voice['legacy_voice'],
+                relationships=voice['relationships'],
+                emotion=voice['emotion'],
                 knowledge=knowledge,
                 pending=[
                     dict(
@@ -229,7 +229,7 @@ def planning_context(snapshot, options):
             "An endpoint may remain unavailable (action:null). Only a meaningful reached individual "
             "may identify: speaker_name, existing_character_id only from the exact-address existing_ids list. "
             "Do not invent a biography or turn an organization into a person; identify an individual operator. "
-            "Schema: "
+            + text_style_instructions(state["meta"]["communication"]) + "Schema: "
             + json.dumps(RemoteDecision.model_json_schema(), ensure_ascii=False),
         ),
         dict(
@@ -240,6 +240,7 @@ def planning_context(snapshot, options):
                     actors=data,
                     world_time=state["meta"]["world_time"],
                     language=snapshot.get("campaign", {}).get("language", "ru"),
+                    communication_profile=state["meta"]["communication"],
                 ),
                 ensure_ascii=False,
             ),
