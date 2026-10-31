@@ -38,3 +38,15 @@ it('retains an uncertain send ID across unrelated successful commands and legacy
  expect(phoneOperation(key,command).payload.operation_id).not.toBe('legacy-pending-id');
  sessionStorage.removeItem(key);
 });
+
+it.each([false,true])('preserves literal Unicode and punctuation in direct/group text (%s), including rerender',async(group)=>{
+ const content='Да 🙂 / okay... 👩🏽‍💻 ❤️ — e\u0301\n\n'+'Русский + English; без шаблона!.. '.repeat(90);
+ const rows=[event('unicode',1,{content}),event('plain',2,{content:'Понял. Обсудим позже.'})];
+ const host=document.createElement('div');document.body.append(host);const root=createRoot(host);
+ try {
+  for(const events of [rows,JSON.parse(JSON.stringify(rows))]) {
+   await act(()=>root.render(<PhoneMessages events={events} group={group} locked={false} read={()=>{}}/>));
+   expect([...host.querySelectorAll('.phone-message p')].map(el=>el.textContent)).toEqual(rows.map(e=>e.content));
+  }
+ } finally {await act(()=>root.unmount());host.remove()}
+});

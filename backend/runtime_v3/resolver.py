@@ -470,6 +470,8 @@ class StateResolver:
         from backend.runtime_v3.remote import advance as advance_remote
         for section, values in remote_history.to_dict().items():
             getattr(self.history, section).extend(values)
+        from backend.runtime_v3.group_planning import resolve_responses
+        resolve_responses(self, raw)
         advance_remote(s, self.history)
         from backend.runtime_v3.call_continuity import apply_lifecycle, project_physical
         project_physical(self, raw)

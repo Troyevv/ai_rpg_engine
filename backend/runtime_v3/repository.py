@@ -179,7 +179,7 @@ def advance_receipt_reader(storage, head):
     return read
 
 
-def relationship_reader(storage, head):
+def relationship_reader(storage, head, *, candidates=()):
     """Exact evidence lookup on the recorded BEFORE lineage, including tombstones.
 
     Filter receipts in SQLite rather than loading unbounded relationship history.
@@ -199,7 +199,10 @@ def relationship_reader(storage, head):
                 ), changes AS (
                     SELECT c.value AS value FROM batches, json_each(payload,'$.relationship_changes') c
                     WHERE c.type='object' AND json_extract(c.value,'$.entity')=?
-                ) SELECT e.value FROM batches, json_each(payload,'$.events') e
+                ), evidence AS (
+                    SELECT e.value, e.type FROM batches, json_each(payload,'$.events') e
+                    UNION ALL SELECT value, type FROM json_each(?)
+                ) SELECT DISTINCT e.value FROM evidence e
                 WHERE e.type='object' AND json_type(e.value,'$.turn_id')='integer'
                 AND json_extract(e.value,'$.turn_id') >= 0
                 AND json_extract(e.value,'$.id') IN (SELECT value FROM json_each(?))
@@ -209,7 +212,7 @@ def relationship_reader(storage, head):
                      json_extract(c.value,'$.turn_id') >= json_extract(e.value,'$.turn_id')) OR
                     EXISTS (SELECT 1 FROM json_each(c.value,'$.source_event_ids') used
                             WHERE used.value=json_extract(e.value,'$.id'))
-                ) LIMIT 8''', (head, pair, json.dumps(event_ids))).fetchall()
+                ) LIMIT 8''', (head, pair, json.dumps(list(candidates)), json.dumps(event_ids))).fetchall()
             cache[key] = [json.loads(row[0]) for row in rows]
         return deepcopy(cache[key])
     return read

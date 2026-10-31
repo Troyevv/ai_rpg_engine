@@ -62,7 +62,7 @@
 .phone-empty p {margin:0;font-size:.85rem;line-height:1.5;}
 .phone-header-avatar {display:flex;align-items:center;flex:none;color:var(--accent);}
 .phone-header-avatar .character-avatar {border-radius:50%;}
-.phone-messages {flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:12px;display:flex;flex-direction:column;gap:7px;background:var(--surface-2);}
+.phone-messages {overflow-anchor:none;flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;padding:12px;display:flex;flex-direction:column;gap:7px;background:var(--surface-2);}
 .phone-day {text-align:center;font-size:.7rem;color:var(--text-muted);padding:8px 0;flex:none;}
 .phone-message {align-self:flex-start;max-width:88%;padding:10px 12px;border:1px solid var(--border);border-radius:17px 17px 17px 4px;background:var(--surface-1);font-size:.875rem;line-height:1.55;overflow-wrap:anywhere;flex:none;}
 .phone-message.outgoing {align-self:flex-end;background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 25%,var(--border));border-radius:17px 17px 4px 17px;}
@@ -114,3 +114,10 @@
 
 .phone-contact-actions>button {background:var(--accent-soft);color:var(--accent);border:1px solid var(--border);}
 .phone-contact-detail .phone-contact-name {cursor:default;}
+
+.phone-response-wait { margin: 0; padding: .4rem .8rem; color: var(--text-muted); font-size: .8rem; text-align: center; }
+
+/* Only newly received messages in the already open group use this entrance. */
+.phone-message-arrival {animation:phone-message-arrival 180ms ease-out;}
+@keyframes phone-message-arrival {from {opacity:0;transform:translateY(5px);} to {opacity:1;transform:none;}}
+@media(prefers-reduced-motion:reduce) {.phone-message-arrival {animation:none;}}

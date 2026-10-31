@@ -130,7 +130,17 @@ test("group membership and protagonist-owned contacts", async ({
   await expect(
     dialog.getByText("Только участникам группы.", { exact: true }),
   ).toBeVisible();
+  // The outgoing command is durable before its communication job completes.
+  // Require the job's canonical commit, not just the player's visible bubble.
+  const view=async()=>await(await request.get(`/api/saves/${selected.save}`)).json();
+  await expect.poll(async()=>(await view()).job?.status).toBe('saved');
+  const completed=await view();
+  expect(completed.job.kind).toBe('communication');
+  expect(completed.state.phone.events.filter((e:{content:string})=>e.content==='Только участникам группы.')).toHaveLength(1);
+  await expect(dialog.locator('.phone-heading')).toHaveAttribute('aria-busy','false');
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
   await dialog.getByRole("button",{name:"Управление участниками"}).click();
+  await expect(dialog.getByRole('button',{name:'Удалить: Вера работа',exact:true})).toBeEnabled();
   await dialog
     .getByRole("button", { name: "Удалить: Вера работа", exact: true })
     .click();

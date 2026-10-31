@@ -100,6 +100,10 @@ def validate_state(state):
                 and not m["joined_at"] <= m["left_at"] <= now
             ):
                 raise ValueError("Некорректный период участия.")
+    for c in state['conversations'].values():
+        pacing = c.get('initiative_pacing')
+        if pacing and (not c['group'] or pacing['world_time'] > now or pacing['turn_id'] > state['meta']['turn_id']):
+            raise ValueError('group_pacing_invalid')
     calls = set()
     for key, e in state["remote_events"].items():
         if (
@@ -120,6 +124,16 @@ def validate_state(state):
             for field in ("recipient_ids", "delivered_to", "read_by")
         ):
             raise ValueError("Повторные получатели события.")
+        request = e.get('response_request')
+        if request:
+            group = state['conversations'].get(e['conversation_id'])
+            response = state['remote_events'].get(request['resolved_by'])
+            if (not group or not group['group'] or e['channel'] != 'TEXT_MESSAGE'
+                    or request['target_id'] not in e['recipient_ids']
+                    or request['evidence'] not in e['content'] or request['expires_at'] <= e['world_time']
+                    or request['resolved_by'] and (not response or response['sender_id'] != request['target_id']
+                        or response['conversation_id'] != e['conversation_id'] or response['ordinal'] <= e['ordinal'])):
+                raise ValueError('group_response_invalid')
         if e["channel"] in HISTORICAL_CHANNELS:
             if (len(e["recipient_ids"]) != 1 or not e["content"].strip()
                     or e["delivery_due_at"] is None or e["delivery_due_at"] < e["world_time"]
@@ -198,7 +212,7 @@ def _read(state, event, actor, batch):
     acquire_communication(state, actor, fid, event, batch)
 
 
-def apply(snapshot, command, *, actor_id=None, autonomous=False):
+def apply(snapshot, command, *, actor_id=None, autonomous=False, response_request=None):
     """Pure action; the repository commits state + History in one transaction."""
     cmd = (
         RemoteCommand.model_validate(command) if isinstance(command, dict) else command
@@ -373,6 +387,9 @@ def apply(snapshot, command, *, actor_id=None, autonomous=False):
                 raise ValueError("Экстренный номер не настроен для региона.")
             recipients = []
         elif conversation:
+            from backend.runtime_v3.group_planning import pending
+            if autonomous and cmd.action == 'send' and pending(state, conversation['id']):
+                raise ValueError('group_awaiting_response')
             if cmd.action == "call" and conversation["group"]:
                 raise ValueError("Групповые звонки не поддерживаются.")
             recipients = sorted(members(conversation) - {actor})
@@ -453,6 +470,16 @@ def apply(snapshot, command, *, actor_id=None, autonomous=False):
             provenance=provenance,
             operation_id=cmd.operation_id,
         ).model_dump()
+        if response_request is not None:
+            if not autonomous or not conversation or not conversation['group'] or channel != 'TEXT_MESSAGE':
+                raise ValueError('group_request_channel')
+            from backend.runtime_v3.remote_models import ResponseRequest
+            request = ResponseRequest.model_validate(response_request).model_dump()
+            if (request['target_id'] != state['camera']['controlled_actor_id']
+                    or request['target_id'] not in recipients or request['expires_at'] <= now
+                    or request['evidence'] not in cmd.content or request['resolved_by'] is not None):
+                raise ValueError('group_request_source')
+            event['response_request'] = request
         state["remote_events"][eid] = event
         _event_history(batch, state, event)
         if channel in HISTORICAL_CHANNELS and event["delivery_due_at"] == now:
@@ -516,6 +543,8 @@ def apply(snapshot, command, *, actor_id=None, autonomous=False):
                 "call" if event["status"] == "answered" else "physical"
             )
         _event_history(batch, state, event, previous)
+    from backend.runtime_v3.group_planning import close_invalid_requests
+    close_invalid_requests(state, batch)
     result["world_state"] = assert_world_state_v3_invariants(state)
     return result, batch.to_dict()
 
@@ -681,6 +710,7 @@ def projection(snapshot):
                 "fire": "Пожарная служба",
             }[service]
             row["subject"]["name"] = row["label"]
+    from backend.runtime_v3.group_planning import pending
     conversations = []
     for c in state["conversations"].values():
         if not any(m["actor_id"] == actor for m in c["members"]):
@@ -711,6 +741,7 @@ def projection(snapshot):
                     "Переписка",
                 ),
                 group=c["group"],
+                awaiting_response=any(actor in e["read_by"] for e in pending(state, c["id"])),
                 contact_id=c["contact_id"]
                 if c["contact_id"] in {r["id"] for r in own}
                 else None,
@@ -830,6 +861,8 @@ def advance(state, batch):
     now = state["meta"]["world_time"]
     timeout = state["meta"]["communication"]["ring_timeout_minutes"]
     deliver_due(state, batch)
+    from backend.runtime_v3.group_planning import close_invalid_requests
+    close_invalid_requests(state, batch)
     for event in state["remote_events"].values():
         if (
             event["channel"] == "VOICE_CALL"

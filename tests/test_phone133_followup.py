@@ -26,7 +26,9 @@ def test_agency_repair_only_semantics_and_canonical_sources(tmp_path,field,conve
             else:row[field]=data['accepted_messages'][-1]['id']
         attempts.append(data)
         return value
-    assert execute(repo,jid,transform=malformed)==['decision','decision','semantic','semantic']
+    # Groups author the read/reply batch once; direct chats still decide each step.
+    expected=['decision']*(1 if conversation else 2)+['semantic','semantic']
+    assert execute(repo,jid,transform=malformed)==expected
     job=repo.get_job(jid)
     assert job['status']=='saved',job['error']
     warning=attempts[1]['repair']['diagnostics'][0]
@@ -204,3 +206,49 @@ def test_retry_regenerates_unusable_semantic_response_only(tmp_path,invalid):
     state=repo.get_snapshot(sid)['world_state']
     assert len(state['remote_events'])==2 and len(state['scheduled_events'])==1
     assert state['meta']['world_time']==before['world_state']['meta']['world_time']+1
+
+
+def test_group_meeting_reload_retry_reuses_npc_series_and_commits_once(tmp_path):
+    import engine
+    from phone_semantic_fixture import extract
+    repo,client,sid=setup(tmp_path)
+    r=client.post(f'/api/saves/{sid}/phone',json=dict(revision=repo.get_save(sid)['revision'],command=dict(
+        action='join',conversation_id='qa-group',operation_id='join-repair-integration',member_ids=['qa_timur'])))
+    assert r.status_code==200,r.text
+    jid=dispatch(repo,client,sid,conversation='qa-group')
+    before=repo.get_snapshot(sid);calls=[];fail=[True]
+    def provider(**kw):
+        messages=kw['messages'];data=json.loads(messages[1]['content'])
+        if messages[0]['content'].startswith('Group communication reaction/'):
+            calls.append('author')
+            assert calls.count('author')==1
+            source=data['source_message']['id']
+            yield json.dumps(dict(messages=[
+                dict(actor_id='qa_vera',content='Да, договорились.',basis_ids=[source]),
+                dict(actor_id='qa_timur',content='Вера, возьми альбом.',basis_ids=[source],read_previous=True)]),ensure_ascii=False)
+        else:
+            assert messages[0]['content'].startswith('Remote semantic extraction/')
+            calls.append('semantic')
+            if fail[0]:fail[0]=False;raise RuntimeError('controlled extraction outage')
+            yield json.dumps(extract(data),ensure_ascii=False)
+    def run():
+        with patch('engine.chat_stream',side_effect=provider):
+            engine.run_job(repo.path,jid,engine.Worker(epoch=repo.get_job(jid)['attempt_epoch']))
+    run()
+    assert repo.get_job(jid)['status']=='error' and repo.get_snapshot(sid)==before
+    repo=Repository(repo.path);repo.retry_job(jid,CONFIG);run()
+    assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
+    assert calls==['author','semantic','semantic']
+    state=repo.get_snapshot(sid)['world_state']
+    assert len(state['remote_events'])==3
+    assert [e['sender_id'] for e in state['remote_events'].values()]==['qa_kirill','qa_vera','qa_timur']
+    plan=state['scheduled_events']['phone-meeting']
+    assert set(plan['character_ids'])=={'qa_kirill','qa_vera'}
+    assert state['camera']==before['world_state']['camera']
+    read(repo,client,sid)
+    assert 'phone-meeting' in repo.get_save(sid)['state']['world']['scheduled_events']
+    saved=repo.get_snapshot(sid);repo=Repository(repo.path)
+    assert repo.get_snapshot(sid)==saved
+    run() # duplicate completed worker must not call the provider or write another event
+    with pytest.raises(ValueError):repo.retry_job(jid,CONFIG)
+    assert calls==['author','semantic','semantic'] and repo.get_snapshot(sid)==saved

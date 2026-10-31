@@ -1,4 +1,5 @@
 import {phoneText as t} from "./lib/phone";
+import {usePhoneArrivals} from "./lib/usePhoneArrivals";
 import {phoneOperation} from "./lib/phoneRequests";
 import { formatDateLabel } from "./gameDate";
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
@@ -18,6 +19,7 @@ import "./styles/phone.css";
 type Recipient = { id: string; search_name?: string; subject: PortraitSubject; can_send: boolean; can_call: boolean };
 type Contact = {
   can_send?: boolean;
+  awaiting_response?: boolean;
   can_call?: boolean;
   id: string;
   label: string;
@@ -33,6 +35,7 @@ export type Conversation = {
   contact_id: string | null;
   active: boolean;
   can_send?: boolean;
+  awaiting_response?: boolean;
   participants: PortraitSubject[];
 };
 export type PhoneEvent = {
@@ -150,6 +153,8 @@ export function Phone({
     [groupName, setGroupName] = useState("");
   const messageKey = `${save.id}:${phone?.actor_id}:${conversation || contact || recipient || ""}`;
   const currentMessage = useRef(messageKey); currentMessage.current = messageKey;
+  const arrivals = usePhoneArrivals(phone?.events, ownerKey,
+    open && tab==='messages' && !membersOpen && phone?.conversations.find(c=>c.id===conversation)?.group ? messageKey : '', conversation);
   useEffect(() => {
     setText(drafts.current[messageKey] || sessionStorage.getItem(`phone-draft:${messageKey}`) || "");
   }, [messageKey]);
@@ -248,7 +253,7 @@ export function Phone({
       .catch(e=>{if(currentOwner.current===owner)setError(t("failed"))})
       .finally(()=>{requestLock.current=false;setBusy(false)});
   }, [save.revision, open, tab, conversation, disabled, busy]);
-  useLayoutEffect(()=>{const el=messages.current;if(el){const position=reading.current[messageKey];el.scrollTop=position&&!position.pinned?position.top:el.scrollHeight}},[conversation,tab,open,membersOpen,phone?.events.length,save.revision]);
+  useLayoutEffect(()=>{const el=messages.current;if(el){const position=reading.current[messageKey];el.scrollTop=position&&!position.pinned?position.top:el.scrollHeight}},[conversation,tab,open,membersOpen,phone?.events.length,save.revision,arrivals.hidden]);
   useLayoutEffect(() => {
     if (input.current) { input.current.style.height='auto'; input.current.style.height=`${Math.min(input.current.scrollHeight, 120)}px`; }
   }, [text, open, conversation, recipient, contact]);
@@ -760,9 +765,10 @@ export function Phone({
                     )}
                     {!membersOpen && <>
                     <div ref={messages} className="phone-messages" aria-label="Сообщения" onScroll={e=>{const el=e.currentTarget;const pinned=el.scrollHeight-el.scrollTop-el.clientHeight<32;reading.current[messageKey]={top:el.scrollTop,pinned};setAway(!pinned)}}>
-                      <PhoneMessages events={phone.events.filter(e=>e.channel==='TEXT_MESSAGE'&&!!conversation&&e.conversation_id===conversation)} group={!!selected?.group} locked={locked} read={id=>void perform({action:'read',event_id:id})}/>
+                      <PhoneMessages events={phone.events.filter(e=>e.channel==='TEXT_MESSAGE'&&!!conversation&&e.conversation_id===conversation&&!arrivals.hidden.has(e.id))} animated={arrivals.animated} group={!!selected?.group} locked={locked} read={id=>void perform({action:'read',event_id:id})}/>
                     </div>
                     {away && <button className="phone-latest" onClick={()=>{const el=messages.current;if(el){el.scrollTop=el.scrollHeight;reading.current[messageKey]={top:el.scrollTop,pinned:true};setAway(false)}}}><ArrowDown size={16}/>К последнему сообщению</button>}
+                    {selected?.awaiting_response&&<p className="phone-response-wait" role="status">Ждут твоего ответа</p>}
                     {!canSend&&<p className="muted" role="status">{t("recipientUnavailable")}</p>}
                     {phone.capabilities.text_message &&
                       (!selected || selected.active) && (

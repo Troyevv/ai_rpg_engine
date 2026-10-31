@@ -561,10 +561,8 @@ def test_dozen_long_npc_letters_one_job_exact_lifecycle_reload_and_rollback(api)
     assert repo.get_snapshot(sid)['world_state'] == before['world_state']
 
 
-def test_modern_message_length_policy_is_unchanged():
-    from pydantic import ValidationError
+def test_152_modern_message_text_is_preserved_without_literary_cap():
     from backend.runtime_v3.remote_models import RemoteCommand, ExtractedRemoteEvent
-    with pytest.raises(ValidationError):
-        RemoteCommand(action='send', operation_id='modern-limit130', content='x'*4001)
-    with pytest.raises(ValidationError):
-        ExtractedRemoteEvent(channel='TEXT_MESSAGE', sender_id='b', recipient_ids=['a'], content='x'*4001)
+    text = 'x' * 10000
+    assert RemoteCommand(action='send', operation_id='modern-long152', content=text).content == text
+    assert ExtractedRemoteEvent(channel='TEXT_MESSAGE', sender_id='b', recipient_ids=['a'], content=text).content == text

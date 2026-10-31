@@ -49,10 +49,21 @@ review_protocol_attempts={}
 fragment_attempts={}
 handoff_provider=None
 phone_mode="silent"
+group_semantic_fail_once=False
 letter130_provider=None
 
 def stream(**kwargs):
-    global phone_mode
+    global phone_mode, group_semantic_fail_once
+    if phone_mode in ('group152', 'digital_style'):
+        if group_semantic_fail_once and kwargs['messages'][0]['content'].startswith('Remote semantic extraction/'):
+            group_semantic_fail_once=False
+            raise RuntimeError('Deterministic group Extraction outage')
+        if phone_mode == 'digital_style':
+            from digital_style_provider import response
+        else:
+            from group152_provider import response
+        yield response(kwargs['messages'], bool(kwargs.get('response_format')))
+        return
     if phone_mode == 'letter130':
         from unittest.mock import MagicMock, patch
         client = MagicMock()
@@ -111,6 +122,14 @@ def stream(**kwargs):
     if kwargs['messages'][0]['content'].startswith('Один необязательный пакет') and 'TEST_RELEASE_QUALITY' in full:
         yield '{"patches":[],"preserved_unknown":null}';return
     observer='Тип хода: background' in full or 'Режим observer:' in full or 'mode=observer' in full
+    if kwargs['messages'][0]['content'].startswith('Group communication reaction/'):
+        # Same deterministic phone modes, new group wire contract. Do not fall
+        # through to Narrative JSON: a silent reaction is a completed job.
+        if phone_mode in ('silent','read_only','narrative138'):
+            yield '{"messages":[]}';return
+        from test_communication_cycle import decision
+        yield decision(kwargs['messages'])
+        return
     if kwargs['messages'][0]['content'].startswith('Select at most ONE optional grounded autonomous remote action.'):
         options=json.loads(kwargs['messages'][1]['content'])['options']
         if phone_mode in ('silent','narrative138') or not options:
@@ -505,6 +524,15 @@ if __name__ == '__main__':
         phone_mode='silent'
         letter130_provider=None
         return {'ready':True}
+
+    @app.post('/test/group152-seed')
+    def group152_seed(fail_semantic: bool = False, digital_style: bool = False):
+        global phone_mode, group_semantic_fail_once
+        phone_mode='digital_style' if digital_style else 'group152'
+        group_semantic_fail_once=fail_semantic
+        from devtools.narrative_test_world import load_fixture
+        seed=load_fixture(app.state.repository,'phone')
+        return {'world':seed['world'],'save':seed['save']}
 
     @app.post('/test/narrative-phone138-seed')
     def narrative_phone138_seed():

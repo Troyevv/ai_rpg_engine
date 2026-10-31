@@ -1,7 +1,7 @@
 """One source-bound communication cycle, using #70 proposals and canonical commands.
 
-Four decisions TOTAL, including group recipients/endpoint identification. Silence
-ends the cycle. No polling, repair requests, ordinary turns or forced NPC speech.
+Direct/call cycles retain four decisions total. Group reactions use one author
+request for the whole exchange. Silence ends the cycle. No polling, repair requests, ordinary turns or forced NPC speech.
 """
 import json
 from backend.runtime_v3.remote_decision import parse as parse_decision
@@ -46,6 +46,7 @@ def options_for(snapshot, source_id, replied):
     # Endpoint identification is offered only for this actual attempt.
     if not e["recipient_ids"]:
         return [o for o in opportunities(dict(s, remote_events={source_id:e})) if o.get("event_id") == source_id][:1]
+    from backend.runtime_v3.group_planning import pending
     result = []
     for actor in e["recipient_ids"]:
         caps = capabilities(s, actor)
@@ -61,49 +62,87 @@ def options_for(snapshot, source_id, replied):
                 continue
             if actor in e["delivered_to"] and actor not in e["read_by"]:
                 result.append(dict(base, event_id=source_id, actions=["read"]))
-            elif actor in e["read_by"] and actor not in replied:
+            elif actor in e["read_by"] and actor not in replied and not pending(s, conv['id']):
                 result.insert(0, dict(base, paths=[dict(conversation_id=conv["id"])], actions=["send"]))
     return result[:4]
 
 
-def run(snapshot, request, generate, cancelled, checkpoint=None):
+def run(snapshot, request, generate, cancelled, checkpoint=None, resolve_source=None, legacy_group=False):
     r = validate(snapshot, request)
+    if cancelled.is_set():
+        return None
     after = deepcopy(snapshot)
     batch = WorldHistoryV3().to_dict()
     report = dict(source_event_id=r.source_event_id, owner_id=r.owner_id, decisions=0, accepted=[], rejected=[], max_decisions=MAX_DECISIONS)
-    if not options_for(after, r.source_event_id, set()):
-        report['unavailable'] = True
-    replied = set()
     start = after["world_state"]["meta"]["world_time"]
-    for index in range(MAX_DECISIONS):
-        if cancelled.is_set():
-            return None
-        options = options_for(after, r.source_event_id, replied)
-        if not options:
-            break
-        messages = planning_context(after, options)
-        raw = generate(index, messages)
-        report["decisions"] += 1
-        try:
-            proposal, diagnostic = parse_decision(raw)
-            report.setdefault("parser", []).append(diagnostic)
-            if proposal is None:
-                if checkpoint: checkpoint(index, True)
-                report["no_action"] = True
+    source = after['world_state']['remote_events'][r.source_event_id]
+    group = after['world_state']['conversations'].get(source['conversation_id'])
+    if source['channel'] == 'TEXT_MESSAGE' and group and group['group'] and not legacy_group:
+        from types import SimpleNamespace
+        from backend.runtime_v3.group_planning import (pending, reaction_option, reaction_context,
+            GroupReaction, GroupSemantics, accept_series, record_attempt)
+        report['max_decisions'] = 1
+        # Only Extraction can release an existing voluntary decision. Reuse the
+        # phone consequence adapter, once before authoring when it is needed.
+        if pending(after['world_state'], group['id']) and resolve_source:
+            after = resolve_source(after, r.source_event_id, batch)
+            if cancelled.is_set():
+                return None
+        option = reaction_option(after['world_state'], r.source_event_id)
+        if option['actor_ids'] and not pending(after['world_state'], group['id']):
+            raw = generate(0, reaction_context(after, r.source_event_id))
+            if cancelled.is_set():
+                return None
+            report['decisions'] = 1
+            try:
+                from backend.runtime_v3.remote_decision import decode
+                reaction = GroupReaction.model_validate(decode(raw))
+                after, delta = accept_series(after, SimpleNamespace(conversation_id=group['id'], messages=reaction.messages),
+                    GroupSemantics(requests=[]), [option], r.request_id, source_id=r.source_event_id)
+            except (ValueError, KeyError, TypeError) as exc:
+                if checkpoint: checkpoint(0, False, exc)
+                raise
+            if checkpoint: checkpoint(0, True)
+            for section, rows in delta.items(): batch[section].extend(rows)
+            report['accepted'].extend(['send'] * len(reaction.messages))
+            report['no_action'] = not reaction.messages
+        else:
+            report['unavailable'] = not option['actor_ids']
+        # This job owns the source: no autonomous second processing of it.
+        record_attempt(after, group['id'], r.request_id, batch)
+    else:
+        if not options_for(after, r.source_event_id, set()):
+            report['unavailable'] = True
+        replied = set()
+        for index in range(MAX_DECISIONS):
+            if cancelled.is_set():
+                return None
+            options = options_for(after, r.source_event_id, replied)
+            if not options:
                 break
-            updated, delta = accept(after, proposal, options, f"{r.request_id}:{index}")
-        except (ValueError, KeyError, TypeError) as exc:
-            if checkpoint: checkpoint(index, False, exc)
-            raise ValueError("Ответ модели не прошёл проверку связи. Подробности доступны в диагностике.") from exc
-        if checkpoint: checkpoint(index, True)
-        after = updated
-        for section, rows in delta.items():
-            batch[section].extend(rows)
-        report["accepted"].append(proposal["action"])
-        if proposal["action"] == "send":
-            replied.add(proposal["actor_id"])
-        if proposal["action"] in ("answer", "decline", "send"):
-            break
+            messages = planning_context(after, options)
+            raw = generate(index, messages)
+            report["decisions"] += 1
+            try:
+                proposal, diagnostic = parse_decision(raw)
+                report.setdefault("parser", []).append(diagnostic)
+                if proposal is None:
+                    if checkpoint: checkpoint(index, True)
+                    report["no_action"] = True
+                    break
+                updated, delta = accept(after, proposal, options, f"{r.request_id}:{index}")
+            except (ValueError, KeyError, TypeError) as exc:
+                if checkpoint: checkpoint(index, False, exc)
+                raise ValueError("Ответ модели не прошёл проверку связи. Подробности доступны в диагностике.") from exc
+            if checkpoint: checkpoint(index, True)
+            after = updated
+            for section, rows in delta.items():
+                batch[section].extend(rows)
+            report["accepted"].append(proposal["action"])
+            if proposal["action"] == "send":
+                replied.add(proposal["actor_id"])
+            if proposal["action"] in ("answer", "decline", "send"):
+                break
     event = after["world_state"]["remote_events"][r.source_event_id]
     # Successful/refused calls and text cycles cost one minute. An unanswered
     # call advances only to its configured canonical expiry, at most 60 minutes.

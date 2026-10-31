@@ -181,3 +181,42 @@ def test_legacy_flat_checkpoint_replays_without_provider(tmp_path):
 def test_invalid_proposal_fields_not_repaired(field,value):
     p=dict(actor_id='npc',action='answer',event_id='call',basis_ids=['call']);p[field]=value
     with pytest.raises(ValueError):parse(json.dumps({'action':p}))
+
+
+@pytest.mark.parametrize('flat', [False, True])
+def test_legacy_group_journal_replays_decisions_and_semantics_after_reload(tmp_path, flat):
+    from threading import Event
+    from test_phone122 import setup, dispatch as phone_dispatch
+    from test_communication_cycle import decision
+    from backend.repositories.preparation import Repository
+    from backend.runtime_v3.communication import run
+    from backend.runtime_v3.remote_semantics import messages as semantic_messages
+    from phone_semantic_fixture import extract
+    repo,client,sid=setup(tmp_path)
+    jid=phone_dispatch(repo,client,sid,conversation='qa-group')
+    before=repo.get_snapshot(sid)
+    request=json.loads(repo.get_job(jid)['config_json'])['communication']
+    frames=[]
+    def recorded(index,messages):
+        value=json.loads(decision(messages))
+        if value['action']['action']=='send':value['action']['content']='Да, договорились.'
+        response=json.dumps(value['action'] if flat else value,ensure_ascii=False)
+        frames.append(dict(messages=messages,response=response)) # old checkpoint: no stage/contract
+        return response
+    after,_,_=run(before,request,recorded,Event(),legacy_group=True)
+    prompts=semantic_messages(after,request['source_event_id'])
+    response=json.dumps(extract(json.loads(prompts[1]['content'])),ensure_ascii=False)
+    frames.append(dict(stage='remote_semantics',messages=prompts,response=response,accepted=True))
+    repo.save_communication_context(jid,frames,before)
+    repo=Repository(repo.path)
+    with patch('engine.chat_stream',side_effect=AssertionError('all source-bound frames must replay')):
+        engine.run_job(repo.path,jid,engine.Worker(epoch=repo.get_job(jid)['attempt_epoch']))
+    assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
+    state=repo.get_snapshot(sid)['world_state']
+    assert len(state['remote_events'])==2 and len(state['scheduled_events'])==1
+    assert state['camera']==before['world_state']['camera']
+    assert not repo.request_log(job_id=jid)
+    journal=json.loads(repo.get_job(jid)['context_json'])
+    assert [f['response'] for f in journal]==[f['response'] for f in frames]
+    assert all(f['accepted'] for f in journal)
+    assert all(f['parser']['normalized_flat']==flat for f in journal[:2])

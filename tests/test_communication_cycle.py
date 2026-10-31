@@ -12,6 +12,11 @@ from backend.runtime_v3.communication import run, options_for
 def decision(messages, outcome='answer'):
     if messages[0]['content'].startswith('Remote semantic extraction/'):
         return json.dumps({'final_scene':json.loads(messages[1]['content'])['final_scene']})
+    if messages[0]['content'].startswith('Group communication reaction/'):
+        data=json.loads(messages[1]['content'])
+        actors=data['groups'][0]['actor_ids']
+        actor='qa_vera' if 'qa_vera' in actors else actors[0]
+        return json.dumps(dict(messages=[dict(actor_id=actor,content='Да, увидимся завтра.',basis_ids=[data['source_message']['id']])]),ensure_ascii=False)
     options = json.loads(messages[1]['content'])['options']
     o = options[0]
     action = o['actions'][0]
@@ -120,8 +125,8 @@ def test_group_shares_budget_and_does_not_touch_other_source():
     s=command(s,'send',conversation_id=gid,content='Встретимся?')
     eid=list(s['world_state']['remote_events'])[-1]
     after,_,report=run(s,dict(source_event_id=eid,owner_id='a',request_id='group-cycle'),lambda i,m:decision(m),Event())
-    assert report['decisions']==2
-    assert report['accepted']==['read','send']
+    assert report['decisions']==1
+    assert report['accepted']==['send']
     assert report['elapsed_minutes']==1
     s=command(s,'edit_contact',contact_id='a-b',blocked=True)
     assert any(o['actor_id']=='b' for o in options_for(s,eid,set()))  # legacy annotation is not eligibility
