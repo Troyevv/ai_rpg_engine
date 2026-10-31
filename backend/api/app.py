@@ -60,6 +60,8 @@ def create_app(db_path=None, recover=True):
     register_portraits(app,repo)
     from backend.api.remote import install as install_remote
     install_remote(app,repo)
+    from backend.api.npc_review import install as install_npc_review
+    install_npc_review(app, repo, credentials)
     app.state.repository = repo
     app.state.preparation = preparation
 

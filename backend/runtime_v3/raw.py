@@ -65,6 +65,9 @@ class RawTurnResult:
                         if section in ('life_changes','condition_changes','movements') and not legacy_metadata and item[field] not in (None,'',[],{}):
                             fatal('Неизвестное поле существенного изменения.', 'raw_unknown_field', repairable=True, section=section, path=path)
                         warnings.append(dict(section=section,index=index,path=path,code='raw_unknown_field',action='ignore_field'))
+                    if section == 'promotions':
+                        from backend.services.npc_review import promotion_card
+                        promotion_card(item)
                     if not isinstance(item.get('evidence', ''), str):
                         warnings.append(dict(section=section, path=section+'.evidence', code='evidence_metadata_invalid', action='drop_field'))
                         item['evidence']=''
@@ -230,6 +233,9 @@ def extraction_schema():
         definitions[section]['required'].remove('assertion')
     from backend.services.world import CARD_FIELDS
     definitions['promotions']['properties']['fields']=obj({key:string for key in CARD_FIELDS},CARD_FIELDS)
+    from backend.runtime_v3.npc_identity import initial_schema
+    definitions['promotions']['properties']['character'] = initial_schema()
+    definitions['promotions']['required'].append('character')
     from backend.services.player_agency import PLAYER_SOURCE_DESCRIPTION
     for field in ('emotion','goals','intentions','obligations'):
         definitions['character_changes']['properties'][field]=dict(definitions['character_changes']['properties'][field],description=PLAYER_SOURCE_DESCRIPTION)
@@ -283,6 +289,13 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
             if isinstance(choices, list) and choices and all(isinstance(c, dict) and set(c) == {'type'} and isinstance(c['type'], str) for c in choices):
                 result.pop('anyOf')
                 result['type'] = list(dict.fromkeys(c['type'] for c in choices))
+            # Nullable enums have an equivalent enum union, without duplicating
+            # an anyOf wrapper and a null schema at every optional discriminator.
+            choices = result.get('anyOf')
+            if isinstance(choices,list) and choices and all(
+                    isinstance(c,dict) and (set(c)=={'enum'} or c=={'type':'null'}) for c in choices):
+                result.pop('anyOf')
+                result['enum']=[v for c in choices for v in (c['enum'] if 'enum' in c else [None])]
             if result.get('required') == []: result.pop('required')
             return result
         if isinstance(node, list): return [structural(v) for v in node]
@@ -332,27 +345,46 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
 
     def count(node):
         if isinstance(node, dict):
-            if set(node) & {'type', 'enum', 'const', 'anyOf'} and len(key(node)) > 23:
+            if set(node) & {'type', 'enum', 'const', 'anyOf'} and len(key(node)) > 13:
                 counts[key(node)] += 1
             for value in node.values(): count(value)
         elif isinstance(node, list):
             for value in node: count(value)
     count(schema)
-    shared = {value: str(index) for index, value in enumerate(sorted(k for k, n in counts.items() if n > 1 and n*(len(k)-23)>len(k)+10))}
+    shared = {value: ('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'[index] if index<52 else 's'+str(index)) for index, value in enumerate(sorted((k for k, n in counts.items() if n > 1 and n*(len(k)-13)>len(k)+25),key=lambda k:(-counts[k],k)))}
 
     def compact(node, root=False):
         if isinstance(node, dict):
-            if not root and key(node) in shared: return {'$ref':'#/$defs/'+shared[key(node)]}
+            if not root and key(node) in shared: return {'$ref':'#'+shared[key(node)]}
             return {name:compact(value) for name, value in node.items()}
         if isinstance(node, list): return [compact(value) for value in node]
         return node
     result = compact(schema)
-    result['$defs'] = {name:compact(json.loads(value), root=True) for value, name in shared.items()}
+    result['$defs'] = {name:dict(compact(json.loads(value), root=True), **{'$anchor':name}) for value, name in shared.items()}
     return result
 
 
 def repair_feedback(diagnostic, payload, before):
     """Retry-only context: never infer scene semantics from prose in Python."""
+    if isinstance(payload, str):
+        try: payload = json.loads(payload)
+        except ValueError: pass  # Preserve malformed output verbatim for repair.
     return json.dumps(dict(diagnostic=diagnostic, original_extraction=payload,
         previous_camera=before['camera'], known_locations=before['locations'],
-        contract='narrative-authority-v1: original_extraction — предварительный результат отклонённой попытки, не канон. Повторно интерпретируй то же полное повествование: исправь сообщённую ошибку и ошибочные классификации, сохрани все действительно произошедшие последствия и их зависимости. Не удаляй последствия только ради прохождения валидации. before/History — принятый канон; не переписывай его. final_scene present owns physical membership; observed is visible outside. Do not invent movements, consent or endpoints.'), ensure_ascii=False)
+        contract='narrative-authority-v1: original_extraction — предварительный, отклонённый результат, не канон. Reinterpret the same full narrative: fix structural errors and misclassifications; preserve actual outcomes and dependencies. Never delete outcomes merely to pass validation or rewrite accepted before/History. final_scene present owns physical membership; observed is outside. Do not invent movements, consent or endpoints.'), ensure_ascii=False, separators=(',', ':'))
+
+
+def prune_schema_definitions(schema):
+    """Drop unreachable definitions after optional wire sections were elided."""
+    used=set()
+    def visit(node):
+        if isinstance(node,dict):
+            ref=node.get('$ref','').removeprefix('#/$defs/').removeprefix('#')
+            if ref and ref not in used:
+                used.add(ref);visit(schema.get('$defs',{}).get(ref,{}))
+            for value in node.values():visit(value)
+        elif isinstance(node,list):
+            for value in node:visit(value)
+    visit(schema['properties'])
+    schema['$defs']={key:value for key,value in schema.get('$defs',{}).items() if key in used}
+    return schema

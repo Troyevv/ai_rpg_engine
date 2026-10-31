@@ -70,7 +70,8 @@ def simulate(before_snapshot, snapshot, history_batch, context_length, config, g
     resolved.history['knowledge_acquisitions']=[k for k in resolved.history['knowledge_acquisitions'] if k['actor_id'] not in visible_actors]
     resolved.history['state_changes'] = [c for c in resolved.history['state_changes']
         if c.get('kind') != 'knowledge_transition' or c.get('actor_id') not in visible_actors]
-    result['character_cards'].extend(resolved.cards)
+    from backend.services.npc_review import publish_cards
+    publish_cards(result, resolved)
     assert_world_state_v3_invariants(result['world_state'],state)
     for section,records in resolved.history.items():history_batch[section].extend(records)
     warnings.extend(dict(w,stage='background_simulation') for w in resolved.warnings)

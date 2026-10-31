@@ -1,3 +1,4 @@
+import {NpcReview} from './NpcReview';
 import {phoneText as t} from "./lib/phone";
 import {CurrentGame} from './CurrentGame';
 import {SceneClock} from './SceneClock';
@@ -238,6 +239,7 @@ export function Game({
       {save&&<>{save.state.protagonist_required&&<p role="alert">Главный герой умер. История продолжается: выбери или создай нового героя.</p>}<Protagonist save={save} open={protagonistOpen} onOpenChange={setProtagonistOpen} refresh={refreshControl} prefs={prefs} apiKey={apiKey}/></>}
       {save&&<><NarrativePolicy save={save} open={policyOpen} onOpenChange={setPolicyOpen} refresh={refreshControl}/></>}
       {save&&<WorldCamera save={save} open={cameraOpen} onOpenChange={setCameraOpen} busy={busy||pending} observe={observe} control={switchActor}/>}
+      {save&&<NpcReview key={save.id} save={save} locked={busy||pending} prefs={prefs} apiKey={apiKey} onCommit={refreshControl}/>}
       {save&&<Diagnostics saveId={save.id} jobId={diagnosticJob} open={diagnostics} onOpenChange={setDiagnostics} historyTools={<>{allEntries.filter(e=>e.committed&&e.turn.presentation?.surface!=='physical').map(e=>renderEntry(e,true))}{job&&['error','stopped'].includes(job.status)&&<><p role="alert">{job.error}</p>{retry}</>}</>}/>}
       {mobile&&save?<MobileScene save={save} meta={meta} busy={busy||pending} switchActor={switchActor} background={()=>void turn("background","")} openCharacter={openCharacter} openCamera={()=>setCameraOpen(true)}/>:<>{save&&<div className="pov-controls">
         <label>Управляемый персонаж<select aria-label="Управляемый персонаж" value={actorId||""} disabled={busy||pending} onChange={e=>switchActor(e.target.value)}>{!actorId&&<option value="">Камера наблюдателя</option>}{save.state.characters.map(c=><option key={c.id} value={c.id}>{c.name}{c.id===mainActor?" · основной герой":""}</option>)}</select></label>

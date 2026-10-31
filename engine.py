@@ -328,7 +328,8 @@ def run_job(path, job_id, handle):
                     if skip_result:
                         changes_skip=deepcopy(skip_result)
                         state['last_time_skip']=changes_skip
-                    state['character_cards'].extend(resolved.cards)
+                    from backend.services.npc_review import publish_cards
+                    publish_cards(state, resolved)
                     choices=resolved.choices if job['kind']!='background' else []
                     changes={'time_skip':skip_result, 'raw_turn_result':asdict(raw), 'state_patch':asdict(resolved.patch)}
                     audience=list(resolved.state['camera']['present_character_ids'])

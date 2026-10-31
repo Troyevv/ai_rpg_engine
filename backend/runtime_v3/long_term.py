@@ -678,7 +678,8 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 if c.id not in accepted_ids
             )
             result["world_state"] = resolved.state
-            result["character_cards"].extend(resolved.cards)
+            from backend.services.npc_review import publish_cards
+            publish_cards(result, resolved)
             for section, rows in resolved.history.items():
                 batch[section].extend(rows)
             report["accepted"].append(
