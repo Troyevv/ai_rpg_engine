@@ -393,6 +393,9 @@ def preparation_stream(**kwargs):
 preparation.chat_stream = preparation_stream
 engine.find_loaded_model = preparation.find_loaded_model = lambda model: {'config': {'context_length':131072 if model=='handoff-test' else 32768}}
 def authoring_stream(**kwargs):
+    if kwargs["messages"][0]["content"].startswith("Ты дополняешь предложенную карточку"):
+        yield json.dumps({"value":"Выросла у моря. Работала в мастерской, затем открыла своё дело."},ensure_ascii=False)
+        return
     if any('Ты редактор черновика Character' in m['content'] for m in kwargs['messages']):
         yield from stream(**kwargs)
     else:
@@ -695,6 +698,21 @@ if __name__ == '__main__':
         result = load_fixture(repo, 'calendar-evening')
         ordinary_job(repo,result['save'],'start')
         return {'world':result['world'],'save':result['save']}
+
+    @app.post('/test/npc-review-seed')
+    def npc_review_seed():
+        from test_runtime_v3_engine import run
+        from test_npc_review import promoted
+        from test_engine import CONFIG
+        repo=app.state.repository
+        wid=repo.save_world('Новые лица',summary());sid=repo.create_save(wid,'Проверка NPC')
+        raw=promoted(repo.get_snapshot(sid))
+        raw['promotions'][0]['character']=dict(biological_sex='female',life_status='alive',developmental_stage='adult',physical_state='Устала после дороги')
+        raw['promotions'].append(dict(id='second_npc',name='Александр Константинович Волконский',fields={},character=dict(biological_sex='male'),evidence='Пришёл.'))
+        raw['final_scene']['present_character_ids'].append('second_npc')
+        jid=repo.begin_job(sid,'Я доверяю Ладе.','start',CONFIG);run(repo,jid,raw)
+        if repo.get_job(jid)['status']!='saved':raise ValueError(repo.get_job(jid)['error'])
+        return dict(world=wid,save=sid)
 
     @app.post('/test/seed')
     def seed():

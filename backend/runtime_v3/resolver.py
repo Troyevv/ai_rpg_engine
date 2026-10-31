@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 import json
 import unicodedata
+import uuid
 from typing import Literal
 from pydantic import ValidationError
 from backend.runtime_v3.models import (Character, Location, Fact,
@@ -27,6 +28,7 @@ class ResolvedTurn:
     warnings: list
     choices: list
     cards: list
+    pending_reviews: dict
 
 
 class StateResolver:
@@ -63,6 +65,7 @@ class StateResolver:
         self.player_input, self.narrative, self.observed = player_input, narrative, observed
         self.turn_id = turn_id if turn_id is not None else before['meta']['turn_id'] + 1
         self.warnings, self.cards = [], []
+        self.pending_reviews = {}
         self.history = WorldHistoryV3()
 
     def warn(self, section, index, reason, field=None, entity=None, code='optional_record_invalid'):
@@ -139,16 +142,29 @@ class StateResolver:
             cid = item.get('id')
             if any(cid==ch['id'] for p in s['pregnancies'].values() for ch in p['children']):
                 self.warn('promotions',i,'Reserved birth identity is created only by Runtime.',code='birth_identity_reserved'); continue
-            fields = item.get('fields')
-            from backend.services.world import CARD_FIELDS
-            if not isinstance(cid,str) or not cid or not isinstance(item.get('name'),str) or not isinstance(fields,dict) or (cid not in self.minimal_promotion_ids and any(not isinstance(fields.get(k),str) or not fields[k].strip() for k in CARD_FIELDS)):
-                self.warn('promotions',i,'значимая роль требует полную карточку'); continue
+            from backend.services.npc_review import promotion_card, identity_card
+            card = promotion_card(item)
             if cid in s['characters']:
                 fatal('конфликт canonical character ID', 'canonical_id_conflict', repairable=True)
-            s['characters'][cid] = Character(id=cid).model_dump()
-            self.cards.append(dict(id=cid,name=item['name'],fields=deepcopy(fields),aliases=[],is_player=False))
-            from backend.runtime_v3.personality import initialize_profiles
-            initialize_profiles(dict(world_state=s, character_cards=[self.cards[-1]]))
+            from backend.runtime_v3.npc_identity import initial_character, validate_dates
+            try:
+                s['characters'][cid] = initial_character(cid, card['name'], item.get('character', {}))
+                validate_dates(s, cid)
+            except ValueError as exc:
+                fatal(str(exc), 'promotion_character_invalid', repairable=True, section='promotions')
+            self.history.state_changes.append(dict(kind='npc_identity_created', entity=cid, turn_id=self.turn_id,
+                source='extraction', evidence=item['evidence'], initial_character=deepcopy(s['characters'][cid])))
+            if cid in self.minimal_promotion_ids:
+                # LTA's bounded promotion policy remains authoritative.
+                card['fields'] = deepcopy(item['fields'])
+                self.cards.append(card)
+                from backend.runtime_v3.personality import initialize_profiles
+                initialize_profiles(dict(world_state=s, character_cards=[card]))
+            else:
+                self.cards.append(identity_card(card))
+                self.pending_reviews[cid] = dict(card=card, status='pending_review', revision=0,
+                    created_turn=self.turn_id, creation_id=uuid.uuid4().hex, audience_ids=list(self.protected_knowledge_actor_ids),
+                    proposals={}, extracted_fields=deepcopy(card['fields']), evidence=item['evidence'])
         scene = raw.final_scene
         lid, present = scene.get('location_id'), scene.get('present_character_ids')
         if lid is not None and (not isinstance(lid,str) or lid not in s['locations']):
@@ -509,4 +525,4 @@ class StateResolver:
             choices = [dict(c, interaction_channel=c.get('interaction_channel',self.before['meta']['interaction_focus'])) for c in choices]
             if self.before['meta']['interaction_focus']=='call' and not any(e.get('physical_text') for e in self.history.events):
                 choices = [c for c in choices if c['interaction_channel']!='physical']
-        return ResolvedTurn(state,patch,self.history.to_dict(),self.warnings,choices,self.cards)
+        return ResolvedTurn(state,patch,self.history.to_dict(),self.warnings,choices,self.cards,self.pending_reviews)

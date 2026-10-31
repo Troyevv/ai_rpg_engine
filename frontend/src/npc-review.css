@@ -1,0 +1,587 @@
+.npc-review-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  background: var(--surface-elevated);
+  color: var(--text);
+  width: 100%;
+  transition:
+    background 0.2s,
+    transform 0.2s;
+}
+.npc-review-entry:hover {
+  transform: translateY(-1px);
+  background: var(--surface-2);
+}
+.npc-review-entry > span:nth-child(2) {
+  flex: 1;
+}
+.npc-review-entry small {
+  display: block;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+.npc-review-entry-icon,
+.npc-review-monogram,
+.npc-review-avatar {
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-elevated));
+  color: var(--accent);
+  border-radius: 14px;
+  flex-shrink: 0;
+}
+.npc-review-entry-icon {
+  width: 38px;
+  height: 38px;
+}
+.dialog-content.npc-review-dialog {
+  width: min(1060px, calc(100vw - 48px));
+  max-width: 1060px;
+  height: min(860px, calc(100dvh - 48px));
+  max-height: calc(100dvh - 48px);
+  padding: 0;
+  gap: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 24px;
+}
+.npc-review-header {
+  padding: 28px 56px 20px 28px;
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+.npc-review-monogram {
+  width: 66px;
+  height: 74px;
+  font-size: 34px;
+  font-family: serif;
+}
+.npc-review-header .dialog-title {
+  font-size: 28px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.npc-review-header .dialog-description {
+  max-width: 640px;
+  margin-top: 8px;
+  line-height: 1.5;
+}
+.npc-review-progress {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 0 28px 20px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.npc-review-progress progress {
+  flex: 1;
+  height: 5px;
+  accent-color: var(--accent);
+}
+.npc-review-layout {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  border-top: 1px solid var(--border);
+}
+.npc-review-sidebar {
+  width: 220px;
+  padding: 22px 14px;
+  border-right: 1px solid var(--border);
+  overflow: auto;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--surface-2) 30%, var(--surface-elevated));
+}
+.npc-review-sidebar > .eyebrow {
+  padding: 0 10px;
+  margin-bottom: 14px;
+}
+.npc-review-sidebar nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.npc-review-sidebar button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 10px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  overflow-wrap: anywhere;
+}
+.npc-review-sidebar button[aria-current] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-elevated));
+}
+.npc-review-avatar {
+  width: 32px;
+  height: 36px;
+}
+.npc-review-sidebar small {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.npc-review-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.npc-review-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 16px 24px 0;
+  border-bottom: 1px solid var(--border);
+}
+.npc-review-tabs button {
+  flex: 1;
+  text-align: left;
+  padding: 8px 12px 14px;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+}
+.npc-review-tabs button[aria-selected="true"] {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.npc-review-tabs small {
+  display: block;
+  font-size: 11px;
+  margin-top: 4px;
+  color: var(--text-muted);
+}
+.npc-review-fields {
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 24px;
+  scrollbar-gutter: stable;
+}
+.npc-review-field {
+  margin-bottom: 28px;
+}
+.npc-review-field:last-child {
+  margin-bottom: 0;
+}
+.npc-review-field-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 9px;
+}
+.npc-review-field-heading label {
+  font-size: 16px;
+  font-weight: 600;
+}
+.npc-review-field-heading > span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.npc-review-field textarea {
+  min-height: 112px;
+  max-height: 50dvh;
+  resize: vertical;
+  line-height: 1.65;
+  padding: 14px 16px;
+}
+.npc-review-field-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+.npc-review-field-actions > span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.npc-review-proposal {
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: 14px;
+  padding: 18px;
+  margin-top: 12px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface-elevated));
+}
+.npc-review-proposal .eyebrow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.npc-review-proposal-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+  margin: 12px 0;
+  max-height: 320px;
+  overflow: auto;
+}
+.npc-review-proposal > div {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.npc-review-footer {
+  padding: 14px 24px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-elevated);
+}
+.npc-review-footer p {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+.npc-review-footer .npc-review-error {
+  color: var(--danger);
+}
+.npc-review-footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.npc-review-footer-actions > button:first-child {
+  margin-right: auto;
+}
+.npc-review-dialog button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.npc-review-spin {
+  animation: npc-spin 1s linear infinite;
+}
+@keyframes npc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (max-width: 700px) {
+  .dialog-content.npc-review-dialog {
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    top: 0;
+    left: 0;
+    transform: none;
+    padding-top: env(safe-area-inset-top);
+  }
+  .npc-review-header {
+    padding: 22px 44px 14px 18px;
+    gap: 12px;
+  }
+  .npc-review-header .dialog-title {
+    font-size: 23px;
+  }
+  .npc-review-header .dialog-description {
+    font-size: 12px;
+  }
+  .npc-review-monogram {
+    width: 42px;
+    height: 54px;
+    font-size: 25px;
+  }
+  .npc-review-progress {
+    padding: 0 18px 14px;
+    gap: 10px;
+  }
+  .npc-review-layout {
+    flex-direction: column;
+  }
+  .npc-review-sidebar {
+    width: 100%;
+    padding: 10px 14px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    overflow: visible;
+  }
+  .npc-review-sidebar > .eyebrow {
+    display: none;
+  }
+  .npc-review-sidebar nav {
+    flex-direction: row;
+    overflow: auto;
+    max-width: 100%;
+    gap: 8px;
+    padding: 2px;
+  }
+  .npc-review-sidebar button {
+    width: auto;
+    flex-shrink: 0;
+    max-width: 220px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+  .npc-review-sidebar small {
+    font-size: 10px;
+  }
+  .npc-review-avatar {
+    width: 26px;
+    height: 30px;
+  }
+  .npc-review-main {
+    min-height: 0;
+  }
+  .npc-review-tabs {
+    padding: 8px 12px 0;
+    gap: 0;
+  }
+  .npc-review-tabs button {
+    padding: 7px 10px 10px;
+    font-size: 13px;
+  }
+  .npc-review-tabs small {
+    font-size: 10px;
+  }
+  .npc-review-fields {
+    padding: 18px 16px;
+  }
+  .npc-review-field textarea {
+    font-size: 16px;
+  }
+  .npc-review-field-actions > span {
+    max-width: 110px;
+  }
+  .npc-review-field-actions button {
+    font-size: 12px;
+  }
+  .npc-review-footer {
+    padding: 10px 14px max(12px, env(safe-area-inset-bottom));
+  }
+  .npc-review-footer-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .npc-review-footer-actions > button:first-child {
+    margin: 0;
+  }
+  .npc-review-footer-actions > button:last-child {
+    grid-column: 1/-1;
+  }
+  .npc-review-footer p {
+    font-size: 11px;
+    margin-bottom: 8px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .npc-review-entry {
+    transition: none;
+  }
+  .npc-review-spin {
+    animation: none;
+  }
+}
+.npc-review-explainer {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+.npc-attribute-choices {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.npc-attribute-choices button {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+.npc-attribute-choices button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.npc-capabilities {
+  display: grid;
+  gap: 14px;
+}
+.npc-capabilities > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.npc-capabilities > div > span {
+  font-size: 14px;
+}
+.npc-attribute-list {
+  display: grid;
+  gap: 10px;
+}
+.npc-attribute-list > div {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.npc-attribute-list label {
+  flex: 1;
+}
+.npc-birth-date small {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 8px;
+}
+.npc-attribute-conflict {
+  padding: 14px;
+  background: var(--warning-soft);
+  border-radius: 12px;
+  margin-top: 12px;
+}
+.npc-attribute-conflict p {
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+.npc-connections h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 22px 0 12px;
+}
+.npc-connections article {
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.npc-connections article p {
+  white-space: pre-wrap;
+  line-height: 1.6;
+  font-size: 13px;
+  margin-top: 6px;
+}
+.npc-review-tabs {
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+.npc-review-tabs button {
+  min-width: 90px;
+  white-space: nowrap;
+}
+.npc-review-tabs small {
+  white-space: normal;
+}
+@media (max-width: 700px) {
+  .npc-review-tabs {
+    gap: 4px;
+  }
+  .npc-review-tabs button {
+    min-width: 100px;
+  }
+  .npc-review-tabs small {
+    display: none;
+  }
+  .npc-capabilities > div {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 7px;
+  }
+}
+.npc-review-progress progress {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 0;
+  border-radius: 99px;
+  overflow: hidden;
+  background: var(--surface-3);
+}
+.npc-review-progress progress::-webkit-progress-bar {
+  background: var(--surface-3);
+  border-radius: 99px;
+}
+.npc-review-progress progress::-webkit-progress-value {
+  background: var(--accent);
+  border-radius: 99px;
+}
+.npc-review-progress progress::-moz-progress-bar {
+  background: var(--accent);
+  border-radius: 99px;
+}
+.npc-review-sidebar button {
+  font-size: 14px;
+}
+.npc-review-sidebar button > span:last-child {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+.npc-review-field textarea[id="npc-Возраст"] {
+  min-height: 64px;
+  height: 64px;
+}
+.npc-review-field-heading > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.npc-review-fields {
+  animation: npc-review-reveal 0.18s ease-out;
+}
+@keyframes npc-review-reveal {
+  from {
+    opacity: 0.4;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .npc-review-fields {
+    animation: none;
+  }
+}
+.npc-review-conflict {
+  padding: 16px;
+  border: 1px solid var(--warning);
+  background: var(--warning-soft);
+  border-radius: 14px;
+  margin-bottom: 20px;
+}
+.npc-review-conflict h3 {
+  font-weight: 600;
+  font-size: 15px;
+  margin-bottom: 12px;
+}
+.npc-review-conflict > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.npc-review-conflict article {
+  min-width: 0;
+}
+.npc-review-conflict p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 180px;
+  overflow: auto;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 10px 0;
+}
+.npc-review-conflict strong {
+  font-size: 12px;
+}
+@media (max-width: 700px) {
+  .npc-review-conflict > div {
+    grid-template-columns: 1fr;
+  }
+}

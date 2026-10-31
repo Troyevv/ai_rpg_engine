@@ -11,6 +11,7 @@ observed_character_ids are visible/contactable OUTSIDE (e.g. doorway), disjoint 
 present: no boundary Location or movement required, no automatic Knowledge. Remote
 calls/messages, memories and mentions are not presence. Reuse places/aliases; create
 established new locations/significant NPCs with stable IDs and dependent records.
+Promotions: full 11 CARD_FIELDS and explicit character attributes; unknown=null/unknown/omitted. Never infer sex/dates or import provenance.
 Movements preserve meaningful routes/intermediate events; final endpoints must agree
 with scene. Never invent routes or unknown off-camera destinations. EXTERNAL voluntary
 movement needs player_assertion=explicit_choice + exact player_evidence; involuntary
