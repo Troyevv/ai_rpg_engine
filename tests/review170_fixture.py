@@ -14,16 +14,21 @@ def exported():
     if os.environ.get('RPG_REVIEW170_EXPORT'):
         return json.loads(Path(os.environ['RPG_REVIEW170_EXPORT']).read_text())
     from test_initial_draft_v4 import rich
-    from backend.services.draft_response import digest
-    state=rich();text=json.dumps(state,ensure_ascii=False)
+    from backend.services.draft_response import digest, join_fragments
+    from backend.services.draft_initial import inspect_candidate
+    from backend.services.draft_calendar import complete
+    state=inspect_candidate(complete(dict(rich(),creation_settings={}), 'TEST_REVIEW170', seed='synthetic170'))[0]
+    text=json.dumps(state,ensure_ascii=False)
     def part(value,finish='stop',usage=None):
         return dict(text=value,offset=0,sha256=digest(value),finish_reason=finish,
                     provider_finish_reason=finish,usage=usage)
     usage=dict(prompt_tokens=24032,completion_tokens=10984,
                completion_tokens_details=dict(reasoning_tokens=10984))
+    world=dict(parts=[part(text)],complete=True,document_state='complete',assembly={})
+    join_fragments(world['parts'],world['assembly'],terminal=True)
     return dict(candidate_snapshot=state,author_input=dict(source_text='TEST_REVIEW170. Соседи разговаривают на кухне.'),
                 current_diagnostics=[],requests=[dict(stage='draft_world_validation',finish_reason='length',output_tokens=10984,usage_json=json.dumps(usage)) for _ in range(5)],
-                responses={'world':dict(parts=[part(text)],complete=True),
+                responses={'world':world,
                     'completeness_legacy_review':dict(parts=[part('','length',usage) for _ in range(4)],complete=False),
                     'completeness_older_review':dict(parts=[part('','length',usage)],complete=False)},
                 pending=None,errors=[],review_failures=[],review_strategies={},accepted_reviews={},
