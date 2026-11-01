@@ -45,6 +45,7 @@ def runtime_v3_request(messages):
     return any('RawTurnResult v3' in message['content'] for message in messages)
 
 
+review170_control=None
 review_protocol_attempts={}
 fragment_attempts={}
 handoff_provider=None
@@ -78,6 +79,14 @@ def stream(**kwargs):
     if kwargs['messages'][0]['content'].startswith(MARKER):
         request=json.loads(kwargs['messages'][1]['content'])
         source=request.get('author_context','')
+        if review170_control and review170_control['source'] in source:
+            assert kwargs['thinking']=='off'
+            review170_control['calls']+=1
+            if not review170_control['gate'].wait(30):raise RuntimeError('Test review gate timed out')
+            kwargs['on_usage']({'prompt_tokens':24032,'completion_tokens':10,'completion_tokens_details':{'reasoning_tokens':10 if review170_control['fail'] else 0}})
+            kwargs['on_finish']('length' if review170_control['fail'] else 'stop')
+            yield '' if review170_control['fail'] else '{"issues":[]}'
+            return
         from draft_provider_fixture import protocol_review
         controlled=protocol_review(request)
         if controlled is not None:
@@ -420,6 +429,20 @@ if __name__ == '__main__':
     dice=BrowserDice()
     app.state.tabletop_runtime.dice=dice
     app.state.tabletop_runtime.combat.dice=dice
+    @app.post('/test/review170')
+    def seed_review170(body:dict):
+        global review170_control
+        from threading import Event
+        from review170_fixture import restore,exported
+        wid,jid=restore(app.state.repository)
+        review170_control=dict(source=exported()['author_input']['source_text'],gate=Event(),fail=body.get('fail',False),calls=0)
+        return dict(workspace=wid,job=jid)
+
+    @app.post('/test/review170/release')
+    def release_review170():
+        review170_control['gate'].set()
+        return dict(calls=review170_control['calls'])
+
     @app.post('/test/runtime-handoff-provider')
     def runtime_handoff_provider(enabled: bool=True, scenario: str="retry"):
         global handoff_provider

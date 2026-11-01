@@ -248,9 +248,15 @@ def resolve_subject(state, issue):
 def messages(state, author_context):
     candidate={k:deepcopy(state[k]) for k in ('campaign','characters','locations','world','world_clock','camera','controlled_actor_id','protagonist_id')}
     schema={k:runtime_schema(EXTENSIONS[k]) for k in ('objective_relations','roles','residences','organizations')}
-    example=ReviewReport(issues=[ReviewIssue(path='/world/roles/new_id',message='Конкретное противоречие',patch_paths=['/world/roles/new_id'])]).model_dump()
-    return [dict(role='system',content=MARKER+'\n'+RULES),dict(role='user',content=json.dumps(
-        dict(author_context=author_context,candidate=candidate,address_guide=address_guide(candidate),record_schemas=schema,report_schema=report_schema(),example=example,contract_version=CONTRACT_VERSION),ensure_ascii=False,separators=(',',':')))]
+    example=ReviewReport(issues=[ReviewIssue(path='/world/roles/new_id',message='Конкретное противоречие',patch_paths=['/world/roles/new_id'])]).model_dump(exclude_none=True,exclude_defaults=True)
+    def compact_schema(value):
+        # Titles are generated UI labels, not validation constraints. Keep every
+        # description, default and conditional rule, and the entire candidate.
+        if isinstance(value,dict):return {k:compact_schema(v) for k,v in value.items() if not (k=='title' and isinstance(v,str))}
+        if isinstance(value,list):return [compact_schema(v) for v in value]
+        return value
+    return [dict(role='system',content=MARKER+'\n'+RULES+'\nОтчёт должен быть кратким JSON: только конкретные замечания, без пересказа мира и повторов. Не выводи необязательные null/default поля. Если замечаний нет, верни {"issues":[]}. Сохрани все обнаруженные противоречия и необходимые основания.'),dict(role='user',content=json.dumps(
+        dict(author_context=author_context,candidate=candidate,address_guide=address_guide(candidate),record_schemas=compact_schema(schema),report_schema=compact_schema(report_schema()),example=example,contract_version=CONTRACT_VERSION),ensure_ascii=False,separators=(',',':')))]
 
 
 def correction_indices(reply, errors):

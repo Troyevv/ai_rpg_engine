@@ -127,6 +127,8 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
     const [name, setName] = useState('Новая история');
     const [useIdea, setUseIdea] = useState(false);
     const [busy, setBusy] = useState(false);
+    const [resuming, setResuming] = useState(false);
+    const resumeGuard = useRef(false);
     const [edit, setEdit] = useState<Target | null>(null);
     const [value, setValue] = useState<unknown>('');
     const [instruction, setInstruction] = useState('');
@@ -202,6 +204,17 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
     finally {
         setBusy(false);
     } };
+    const resume = async (options: Item = {}) => {
+        if (resumeGuard.current || active(job)) return;
+        resumeGuard.current = true; setResuming(true);
+        await run(async () => {
+            const next = await api<Job>(`/workspaces/${id}/draft/resume`, {api_key:apiKey, revision:draft?.revision,
+                max_tokens:prefs.summary.max_tokens, context_length:prefs.summary.context_length, ...options});
+            dispatchWorkspace({type:'update', id, update:current=>current ? {...current, job:next} : current});
+            await refresh();
+        });
+        resumeGuard.current = false; setResuming(false);
+    };
     const change = (body: Item) => run(async () => { await api(`/workspaces/${id}/draft`, { revision: draft?.revision, ...body }, 'PATCH'); refresh(); });
     const generate = (body: Item) => run(async () => { const j = await api<Job>(`/workspaces/${id}/draft/generate`, { revision: draft?.revision, config: prefs.summary, api_key: apiKey, ...body }); dispatchWorkspace({type:'update',id,update:d => d ? {...d,job:j} : d}); setEdit(null); });
     const openEdit = (target: Target) => { setEdit(target); setValue(target.value); setStructuredEdit(JSON.stringify(target.value ?? null,null,2)); setInstruction(''); setAck(false); };
@@ -286,13 +299,13 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
         </details>
       </details>
       {job?.status==='error' && (job as Job & {transport_incomplete?:boolean}).transport_incomplete && <section role="status"><h3>Восстановление ответа</h3><p>Полученный ответ сохранён. Продолжение проверит сборку, запросит недостающий конец при необходимости и завершит проверку мира. Полный проверенный мир ещё не готов.</p></section>}
-      {((job?.resumable && !(job as Job & {fragment_recovery?:boolean;transport_blocked?:boolean}).fragment_recovery && !(job as Job & {transport_blocked?:boolean}).transport_blocked) || (draft?.review?.status==='stale' && job?.status==='saved')) && <Button disabled={locked} onClick={()=>void run(async()=>{await api(`/workspaces/${id}/draft/resume`,{api_key:apiKey,revision:draft?.revision,max_tokens:prefs.summary.max_tokens,context_length:prefs.summary.context_length});await refresh();})}>{draft?.review && !(job as Job & {transport_incomplete?:boolean})?.transport_incomplete ? 'Повторить проверку' : 'Продолжить сохранённую генерацию'}</Button>}
-      {job?.resumable && <p className="workshop-hint">При продолжении сохраняются модель и режим thinking задания. Из текущих настроек применятся только контекст и лимит ответа; общий бюджет не сбрасывается.</p>}
+      {((job?.resumable && !(job as Job & {fragment_recovery?:boolean;transport_blocked?:boolean}).fragment_recovery && !(job as Job & {transport_blocked?:boolean}).transport_blocked) || (draft?.review?.status==='stale' && job?.status==='saved')) && <Button disabled={locked} onClick={()=>void resume({})}>{draft?.review && !(job as Job & {transport_incomplete?:boolean})?.transport_incomplete ? 'Повторить проверку' : 'Продолжить сохранённую генерацию'}</Button>}
+      {job?.resumable && <p className="workshop-hint">Модель и Thinking генерации закреплены за заданием. Смысловая проверка выполняется с Thinking Off; из текущих настроек применяются контекст и потолок ответа. Общий бюджет не сбрасывается.</p>}
       {(job as Job & {transport_blocked?:boolean})?.transport_blocked && <p role="alert">Сборка остановлена: повреждены исходные данные или нет безопасной границы для повтора. Скачайте диагностику; автоматическая замена сохранённых частей запрещена.</p>}
-      {(job as Job & {fragment_recovery?:boolean})?.fragment_recovery && <details><summary>Повторить проблемное продолжение</summary><p>Предыдущие части останутся неизменными. Отклонённая часть сохранится в диагностике; новый запрос может быть оплачен.</p><Button disabled={locked} onClick={()=>void run(async()=>{await api(`/workspaces/${id}/draft/resume`,{api_key:apiKey,revision:draft?.revision,max_tokens:prefs.summary.max_tokens,context_length:prefs.summary.context_length,retry_last_fragment:true});await refresh();})}>Запросить только последнее продолжение</Button></details>}
+      {(job as Job & {fragment_recovery?:boolean})?.fragment_recovery && <details><summary>Повторить проблемное продолжение</summary><p>Предыдущие части останутся неизменными. Отклонённая часть сохранится в диагностике; новый запрос может быть оплачен.</p><Button disabled={locked} onClick={()=>void resume({retry_last_fragment:true})}>Запросить только последнее продолжение</Button></details>}
       {(job?.status === 'error' || job?.status === 'stopped') && <div>{author && <Button variant="outline" onClick={()=>void run(async()=>{download(JSON.stringify(await api(`/workspaces/${id}/draft/raw`),null,2),'generation-response.json');})}>Скачать исходный ответ и диагностику</Button>}
-      {(job as Job & {unknown_outcome?:boolean}).unknown_outcome && <details><summary>Восстановить запрос с неизвестным исходом</summary><p>Провайдер мог списать оплату. Повтор может быть оплачен ещё раз; полученный текст останется в истории.</p><Button disabled={locked} onClick={()=>void run(async()=>{await api(`/workspaces/${id}/draft/resume`,{api_key:apiKey,revision:draft?.revision,max_tokens:prefs.summary.max_tokens,context_length:prefs.summary.context_length,acknowledge_unknown:true});await refresh();})}>Повторить с возможной повторной оплатой</Button></details>}</div>}
-      {draft?.review && ['failed','running','not_started','stale'].includes(draft.review.status) && <section className="workshop-review" role="status"><h3>Смысловая проверка не завершена</h3><p>Мир сохранён. Автоматическая проверка не завершилась. Это не установленная ошибка поля мира.</p><p>{draft.review.reason || 'При технической готовности можно начать с предупреждениями без повторной проверки.'}</p></section>}
+      {(job as Job & {unknown_outcome?:boolean}).unknown_outcome && <details><summary>Восстановить запрос с неизвестным исходом</summary><p>Провайдер мог списать оплату. Повтор может быть оплачен ещё раз; полученный текст останется в истории.</p><Button disabled={locked} onClick={()=>void resume({acknowledge_unknown:true})}>Повторить с возможной повторной оплатой</Button></details>}</div>}
+      {!resuming && !active(job) && draft?.review && ['failed','running','not_started','stale'].includes(draft.review.status) && <section className="workshop-review" role="status"><h3>Смысловая проверка не завершена</h3><p>Мир сохранён. Автоматическая проверка не завершилась. Это не установленная ошибка поля мира.</p><p>{draft.review.reason || 'При технической готовности можно начать с предупреждениями без повторной проверки.'}</p></section>}
       {author && draft?.review?.issues && draft.review.issues.length>0 && <details className="workshop-detail"><summary>Замечания смысловой проверки · {draft.review.issues.length}</summary>{draft.review.issues.map((issue,i)=><div key={i}><p>{issue.severity==='blocker'?'Противоречие':'Рекомендация'}: {issue.message}</p>{issue.protocol_warnings && <details><summary>Диагностика ссылок отчёта</summary><pre>{JSON.stringify(issue.protocol_warnings,null,2)}</pre></details>}</div>)}</details>}
       {draft?.start_warning && <p role="status">{draft.start_warning} Можно начать с предупреждениями.</p>}
       {draft?.start_block_reason && <p role="alert">Запуск заблокирован: {draft.start_block_reason}</p>}
@@ -348,12 +361,15 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
           {state && <Button variant="ghost" onClick={() => setEditingIdea(false)}>Вернуться к миру</Button>}
         </div>
       </section>}
-      {active(job) && <section className="workshop-generating" role="status">
-        <span className="workshop-pulse"/><div><strong>{reconnecting ? 'Восстанавливаем соединение…' : status[0]}</strong><p>{reconnecting ? 'Ожидаем связь с сервером. Генерация продолжает выполняться.' : status[1]}</p>{!reconnecting && !!job?.progress_chars && !['validating','saving'].includes(job.phase || '') && <small>Получено {job.progress_chars.toLocaleString('ru-RU')} символов ответа</small>}</div>
-        <Button variant="ghost" onClick={() => void run(async () => {await api(`/jobs/${job!.id}/stop`, {}); refresh();})}>Остановить</Button>
+      {(resuming || active(job)) && <section className="workshop-generating" role="status" aria-live="polite" aria-label="Ход проверки мира">
+        <span className="workshop-pulse"/><div><strong>{resuming ? 'Запускаем повторную проверку…' : reconnecting ? 'Восстанавливаем соединение…' : status[0]}</strong><p>{resuming ? 'Отправляем запрос на продолжение сохранённого задания.' : reconnecting ? 'Ожидаем связь с сервером. Генерация продолжает выполняться.' : status[1]}</p>{!reconnecting && !!job?.progress_chars && !['validating','saving'].includes(job.phase || '') && <small>Получено {job.progress_chars.toLocaleString('ru-RU')} символов ответа</small>}</div>
+        <Button variant="ghost" disabled={resuming || busy} onClick={() => void run(async () => {await api(`/jobs/${job!.id}/stop`, {}); refresh();})}>Остановить</Button>
       </section>}
       <Dialog open={!!deleteDraft} onOpenChange={open => { if (!open) setDeleteDraft(null); }}><DialogContent><DialogHeader><DialogTitle>Удалить «{deleteDraft?.name}»?</DialogTitle><DialogDescription>Черновик переместится в удалённые. Готовые игровые сохранения не затрагиваются.</DialogDescription></DialogHeader><div className="workshop-dialog-actions"><Button variant="ghost" onClick={() => setDeleteDraft(null)}>Отмена</Button><Button disabled={busy} onClick={() => void run(async () => { if (!deleteDraft) return; await api(`/workspaces/${deleteDraft.id}`,{revision:deleteDraft.revision},'DELETE'); setList(await api<WorkspacePick[]>('/workspaces')); setRemoved(await api<WorkspacePick[]>('/workspaces?deleted=true')); if (id === deleteDraft.id) { selectWorkspace(''); } setDeleteDraft(null); toast.success('Черновик перемещён в удалённые'); })}>Удалить</Button></div></DialogContent></Dialog>
-      {job?.error && <p className="workshop-error" role="alert">{job.error}</p>}
+      {!resuming && job?.error && <p className="workshop-error" role="alert">{job.error}</p>}
+      {job?.pinned_config && <p className="workshop-hint">Модель задания: {job.pinned_config.provider} / {job.pinned_config.model} · Thinking генерации: {job.pinned_config.thinking || 'off'} · Thinking проверки: off</p>}
+      {job?.effective_config && <p className="workshop-hint" aria-label="Фактические параметры запроса">Последний запрос: {job.effective_config.provider} / {job.effective_config.model} · Thinking: {job.effective_config.thinking} · Контекст: {job.effective_config.context_length} · Лимит ответа: {job.effective_config.max_tokens} · Попытка: {(job.attempt_epoch || 0)+1}</p>}
+      {job?.status==='saved' && draft?.review?.status==='completed' && <p role="status">Смысловая проверка завершена. Результат сохранён.</p>}
       {calendarNotices.map((notice,i)=><p key={i} role="status">{notice}</p>)}
       {state && <section className="workshop-result">
         {job?.status === 'saved' && ['partial','rejected'].includes(draft?.quality_status || '') && <p className="workshop-hint" role="status">Мир сохранён. {draft?.quality_status === 'partial' ? 'Некоторые творческие детали модель оставила неполными.' : 'Необязательное дополнение не было принято; проверенные данные сохранены.'} Проверить и дополнить детали можно в режиме «Автор мира».</p>}

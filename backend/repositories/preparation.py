@@ -83,7 +83,13 @@ class Repository(PresentationStorage, DraftStorage, Storage):
         if staged and job.get('status') != 'saved':
             job = {**job, 'narrative': ''}
         if job.get('kind','').startswith('draft_'):
-            job={**job,'narrative':'','progress_chars':len(job.get('narrative',''))}
+            config=json.loads(job.get('config_json') or '{}')
+            record=journal.get('responses',{}).get(journal.get('active_response'),{})
+            job={**job,'narrative':'','progress_chars':len(job.get('narrative','')),
+                 'attempt_epoch':journal.get('recovery_epoch',0),
+                 'effective_config':record.get('effective_config'),
+                 'response_diagnostic':record.get('failure'),
+                 'pinned_config':{k:config.get(k) for k in ('provider','model','thinking','context_length','max_tokens')}}
             if job.get('error','').startswith('Две попытки'):job['error']='Две попытки исправления исчерпаны. Мир сохранён; подробности доступны автору.'
         if 'repairs' in job:
             job['repairs']=[{k:v for k,v in row.items() if k in ('repair_error_code','repair_error_type','stage','attempt','attempt_epoch','revision')} for row in job['repairs']]
@@ -117,7 +123,8 @@ class Repository(PresentationStorage, DraftStorage, Storage):
             state=json.loads(journal['candidate_text'])
             source=journal['messages'][-1]['content']
             signature=review_signature(messages(state,source),config)
-            return journal.get('review_strategies',{}).get(signature,{}).get('exhausted',False)
+            if journal.get('review_strategies',{}).get(signature,{}).get('exhausted',False):return True
+            return any(record.get('failure') for slot,record in journal.get('responses',{}).items() if slot.startswith('completeness_'+signature+'_'))
         except (ValueError,KeyError,IndexError,TypeError):return False
 
     def resume_draft_response(self, jid, *, revision=None, config_changes=None, acknowledge_unknown=False, retry_last_fragment=False):
@@ -185,8 +192,9 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                 db.execute('UPDATE preparation_jobs SET revision=? WHERE id=?',(revision,jid))
             db.execute('UPDATE preparation_jobs SET config_json=? WHERE id=?',(json.dumps(config,ensure_ascii=False),jid))
             journal['recovery_epoch']=journal.get('recovery_epoch',0)+1
+            journal.pop('active_response',None)
             db.execute('UPDATE preparation_jobs SET response_journal=? WHERE id=?',(json.dumps(journal,ensure_ascii=False),jid))
-            db.execute("UPDATE preparation_jobs SET status='generating',error='' WHERE id=?",(jid,))
+            db.execute("UPDATE preparation_jobs SET status='generating',phase='',narrative='',error='' WHERE id=?",(jid,))
             return config
 
     def preparation_job(self, jid):

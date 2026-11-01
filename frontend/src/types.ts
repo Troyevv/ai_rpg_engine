@@ -153,6 +153,9 @@ export interface Turn {
   timing?: Record<string,number>|null;
 }
 export interface Job {
+  effective_config?: {provider:string;model:string;thinking:string;context_length:number;max_tokens:number} | null;
+  pinned_config?: {provider:string;model:string;thinking:string;context_length:number;max_tokens:number};
+  response_diagnostic?: {code:string;message:string} | null;
   presentation?: PresentationRoute;
   attempt_epoch?: number;
   resumable?: boolean;

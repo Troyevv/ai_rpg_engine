@@ -22,6 +22,29 @@ class TransportError(ValueError):
     pass
 
 
+REVIEW_POLICY = 1
+
+
+def review_config(config):
+    """Review needs a typed report, not a hidden chain sharing its output budget.
+
+    Job provider/model remain pinned. This versioned stage policy also applies
+    to old jobs; old response slots are retained, never overwritten.
+    """
+    return dict(config, thinking='off')
+
+
+def empty_diagnostic(part):
+    usage = part.get('usage') or {}
+    reasoning = (usage.get('completion_tokens_details') or {}).get('reasoning_tokens')
+    length = (part.get('provider_finish_reason') or part.get('finish_reason')) == 'length'
+    code = 'reasoning_budget_exhausted' if length and isinstance(reasoning, int) and reasoning > 0 else 'empty_output_limit' if length else 'provider_empty_response'
+    message = {'reasoning_budget_exhausted':'Лимит ответа исчерпан на reasoning; JSON-отчёт не получен.',
+               'empty_output_limit':'Достигнут лимит ответа без видимого текста; расход reasoning неизвестен.',
+               'provider_empty_response':'Провайдер завершил запрос без видимого текста.'}[code]
+    return dict(code=code, message=message+' Ответ и расход сохранены; повтор идентичного запроса запрещён.')
+
+
 class _Incomplete(Exception):
     pass
 
@@ -205,6 +228,7 @@ def stage_output_limit(slot, messages, config):
     # Output size follows candidate/scope size, bounded by the user's ceiling.
     size=estimate(messages)
     target=config['max_tokens'] if stage=='world' else max(1024,int(size*({'review':0.30,'repair':0.75,'quality':0.90}[stage])))
+    if stage=='review':target=min(8192,max(2048,int(size*0.30)))
     override=config.get('_draft_stage_output_limits',{}).get(stage)
     return min(config['max_tokens'],target if override is None else override)
 
@@ -239,6 +263,13 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
         repo.save_response_journal(jid,journal)
         return result
     text=assemble()
+    # Legacy journals may have several empty parts from repeated Resume clicks.
+    # Keep all bytes/accounting, but never spend another request on that slot.
+    if record.get('parts') and not record['parts'][-1]['text'].strip():
+        record.setdefault('failure',empty_diagnostic(record['parts'][-1]))
+    if record.get('failure'):
+        repo.save_response_journal(jid,journal)
+        raise TransportError(record['failure']['message'])
     if record['complete'] and record['document_state']!='incomplete':return text
     if record['complete']:
         record['complete']=False
@@ -261,6 +292,17 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
         input_bound = estimate(request)+512
         limit = min(output_limit,context-input_bound)
         if limit < 256: raise TransportError(f'Контекст {context} не вмещает полный запрос: требуется минимум {input_bound+256} токенов. Текст сохранён, запрос не отправлен.')
+        from llm import thinking_options
+        record['effective_config'] = dict(provider=config.get('provider'),model=config.get('model'),
+            thinking=thinking_options(config.get('provider','local'),config['model'],config.get('thinking','off'))[0],
+            context_length=context,max_tokens=limit)
+        journal['active_response']=slot
+        fingerprint=digest(json.dumps([request,{k:v for k,v in record['effective_config'].items() if k!='context_length'},config.get('temperature')],ensure_ascii=False,sort_keys=True))
+        prior=journal.get('empty_requests',{}).get(fingerprint)
+        if prior:
+            record['failure']=dict(prior['failure'])
+            repo.save_response_journal(jid,journal)
+            raise TransportError(record['failure']['message'])
         # A conservative reserved token envelope bounds even calls with missing
         # provider usage. Accounting remains actual usage in llm_requests.
         budget = config.get('_draft_token_budget',3*MAX_FRAGMENTS*(context+config['max_tokens']))
@@ -325,6 +367,7 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
         metadata=accounting()
         settle(metadata)
         part = dict(provider=config.get('provider'),model=re.sub(r'[^A-Za-z0-9_./:-]','',str(config.get('model','')))[:128],request_id=metadata.get('id'),usage=json.loads(metadata['usage_json']) if metadata.get('usage_json') else None,provider_finish_reason=metadata.get('finish_reason'),text=fragment,sha256=hashlib.sha256(fragment.encode()).hexdigest(),offset=sum(len(p['text']) for p in record['parts']),requested_output_limit=limit,finish_reason='stop' if ended else 'length')
+        part.update(effective_config=deepcopy(record['effective_config']),request_fingerprint=fingerprint)
         # Verify the prior manifest before extending it; retain every raw part.
         record.pop('assembly',None)
         record['parts'].append(part)
@@ -334,6 +377,11 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
         repo.preparation_progress(jid,text+fragment)
         text=assemble()
         repo.preparation_progress(jid,text)
+        if not fragment.strip():
+            record['failure']=empty_diagnostic(part)
+            journal.setdefault('empty_requests',{})[fingerprint]=dict(slot=slot,request_id=part['request_id'],failure=record['failure'])
+            repo.save_response_journal(jid,journal)
+            raise TransportError(record['failure']['message'])
         if record['document_state']!='incomplete' or (ended and not text):
             record['complete']=True
             repo.save_response_journal(jid,journal)
