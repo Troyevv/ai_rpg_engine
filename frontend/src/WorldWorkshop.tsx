@@ -51,6 +51,7 @@ type Draft = {
     candidate?: Record<string,unknown> | null;
     relation_merges?: {ids:string[];paths:string[];differences:string[];safe:boolean;records:Item[]}[];
     review?: {status:string;reason?:string;issues?:{message:string;severity:string;protocol_warnings?:unknown[]}[]} | null;
+    creative_status?: 'running' | 'applied' | 'rejected' | 'cancelled' | 'interrupted' | null;
     quality_status?: 'running' | 'accepted' | 'partial' | 'rejected' | 'cancelled' | null;
     start_block_reason?: string | null;
     start_warning?: string | null;
@@ -186,8 +187,9 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
     const locked = busy || loading || active(job);
     const phaseStatus: Record<string, [string,string]> = {
         continuing: ['Продолжаем ответ…', 'Полученная часть сохранена. Модель дописывает тот же мир.'],
-        world: ['Собираем игровой мир…', 'Модель развивает идею и сразу создаёт готовый World State.'],
+        world: ['Создание мира…', 'Модель создаёт исходный кандидат по вашей идее.'],
         retrying: ['Исправляем найденные ошибки…', 'Модель предлагает локальные изменения; остальные данные сохраняются.'],
+        developing: ['Творческое развитие мира…', 'Модель раскрывает неописанные стороны идеи и связывает новые детали с миром. Кандидат сохранён.'],
         improving: ['Дополняем карточки…', 'Заполняем разрешённые незаданные детали; сохраняем авторские ограничения.'],
         validating: ['Проверяем структуру мира…', 'Локальная проверка типов и ссылок.'],
         reviewing: ['Проверяем смысловую согласованность…', 'Модель проверяет сохранённый мир.'],
@@ -300,7 +302,8 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
         </details>
       </details>
       {job?.status==='error' && (job as Job & {transport_incomplete?:boolean}).transport_incomplete && <section role="status"><h3>Восстановление ответа</h3><p>Полученный ответ сохранён. Продолжение проверит сборку, запросит недостающий конец при необходимости и завершит проверку мира. Полный проверенный мир ещё не готов.</p></section>}
-      {((job?.resumable && !(job as Job & {fragment_recovery?:boolean;transport_blocked?:boolean}).fragment_recovery && !(job as Job & {transport_blocked?:boolean}).transport_blocked) || (draft?.review?.status==='stale' && job?.status==='saved')) && <Button disabled={locked} onClick={()=>void resume({})}>{draft?.review && !(job as Job & {transport_incomplete?:boolean})?.transport_incomplete ? 'Повторить проверку' : 'Продолжить сохранённую генерацию'}</Button>}
+      {((job?.resumable && !(job as Job & {fragment_recovery?:boolean;transport_blocked?:boolean}).fragment_recovery && !(job as Job & {transport_blocked?:boolean}).transport_blocked) || (draft?.review?.status==='stale' && job?.status==='saved')) && <Button disabled={locked} onClick={()=>void resume({})}>{draft?.creative_status && draft.creative_status !== 'applied' ? 'Продолжить творческое развитие' : draft?.review && !(job as Job & {transport_incomplete?:boolean})?.transport_incomplete ? 'Повторить проверку' : 'Продолжить сохранённую генерацию'}</Button>}
+      {draft?.creative_status && ['rejected','cancelled','interrupted'].includes(draft.creative_status) && !active(job) && <p role="status">Творческое развитие не завершено. Последний кандидат сохранён; его можно открыть в редакторе.</p>}
       {job?.empty_retry_token && <Button disabled={locked} onClick={()=>setEmptyRetry({token:job.empty_retry_token!,epoch:job.attempt_epoch || 0})}>Повторить после сбоя провайдера</Button>}
       <Dialog open={!!emptyRetry} onOpenChange={open=>{if(!open)setEmptyRetry(null)}}><DialogContent><DialogHeader><DialogTitle>Повторная проверка после сбоя</DialogTitle><DialogDescription>Провайдер завершил запрос без текста. Если временный сбой устранён, можно подтвердить одну новую проверку сохранённого мира. Это новый запрос, который может быть оплачен. Предыдущие ответы и расходы сохранятся, общий бюджет не сбрасывается. Каждому повтору нужно новое подтверждение; автоматических повторов не будет.</DialogDescription></DialogHeader><div className="workshop-dialog-actions"><Button variant="ghost" onClick={()=>setEmptyRetry(null)}>Отмена</Button><Button disabled={locked} onClick={()=>{if(!emptyRetry)return;const retry=emptyRetry;setEmptyRetry(null);void resume({retry_empty_response:retry.token,expected_epoch:retry.epoch})}}>Подтвердить одну повторную проверку</Button></div></DialogContent></Dialog>
       {job?.resumable && <p className="workshop-hint">Модель и Thinking генерации закреплены за заданием. Смысловая проверка выполняется с Thinking Off; из текущих настроек применяются контекст и потолок ответа. Общий бюджет не сбрасывается.</p>}

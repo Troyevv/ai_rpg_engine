@@ -3,6 +3,7 @@
 These are integration fixtures, not measurements of DeepSeek generation quality.
 No candidate_snapshot is imported into these new jobs.
 """
+from draft_provider_fixture import accept_creative_unchecked
 import json
 from pathlib import Path
 from copy import deepcopy
@@ -82,6 +83,7 @@ def test_fresh_generation_editor_start_turn_reload(api,scenario):
     client,app=api;repo=app.state.repository
     wid=client.post('/api/workspaces',json={'name':scenario['id']}).json()['id'];url=f'/api/workspaces/{wid}/draft'
     generated=controlled_world(scenario);calls=[];review_calls=0
+    @accept_creative_unchecked
     def stream(**kw):
         nonlocal review_calls
         calls.append(kw)

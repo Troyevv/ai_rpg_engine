@@ -1,5 +1,6 @@
 """Protocol failures are synthetic fixtures, not the user's unavailable raw report."""
 import json
+from draft_provider_fixture import accept_creative_unchecked
 from copy import deepcopy
 from threading import Event
 from unittest.mock import patch
@@ -102,6 +103,7 @@ def test_full_volkov_failed_review_resume_edit_play_reload(api):
     client,app=api
     wid=client.post('/api/workspaces',json={'name':'Protocol recovery'}).json()['id'];url=f'/api/workspaces/{wid}/draft'
     calls=[];bad={'issues':[{'path':'/world/world/roles/new_role','message':'Профессия должна быть канонической'}]}
+    @accept_creative_unchecked
     def broken(**kw):
         calls.append(kw)
         if len(calls)==1:yield json.dumps(real(),ensure_ascii=False);return
@@ -132,6 +134,7 @@ def test_full_volkov_failed_review_resume_edit_play_reload(api):
     d=changed.json();assert d['review']['status']=='stale'
     assert client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id']}).status_code==409
     reviews=[]
+    @accept_creative_unchecked
     def recovered(**kw):
         calls.append(kw)
         if kw['messages'][0]['content'].startswith(review.MARKER):
@@ -182,6 +185,7 @@ def test_legacy_failed_job_and_late_worker_cannot_overwrite_resume(tmp_path):
     with pytest.raises(ValueError,match='Устаревший'):repo.save_draft_candidate(jid,rich(),[],epoch=0)
     with pytest.raises(ValueError,match='Устаревший'):repo.finish_draft_job(jid,rich(),epoch=0)
     calls=[]
+    @accept_creative_unchecked
     def stream(**kw):
         calls.append(kw)
         assert kw['messages'][0]['content'].startswith(review.MARKER)
@@ -203,6 +207,7 @@ def test_report_repair_keeps_valid_sibling_and_malformed_patch_feedback(api):
     calls=[];state=rich()
     good={'path':'/campaign/title','message':'Название противоречит замыслу'}
     bad={'severity':'unknown','message':'Не терять сообщение'}
+    @accept_creative_unchecked
     def stream(**kw):
         calls.append(kw);n=len(calls)
         if n==1:yield json.dumps(state)

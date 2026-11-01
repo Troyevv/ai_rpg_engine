@@ -82,6 +82,8 @@ class DraftStorage:
             if quality_status not in ('running','accepted','partial','rejected','cancelled'):quality_status=None
             if author and quality_status in ('rejected','partial'):
                 report['warnings'].append('Необязательное дополнение не принято или качество не завершено полностью. Проверенные данные сохранены; некоторые поля могут требовать содержательного дополнения.')
+            creative_status=json.loads(latest['response_journal'] or '{}').get('creative',{}).get('status') if latest and record and record.get('origin_job')==latest['id'] else None
+            if creative_status=='running' and latest['status']!='generating':creative_status='interrupted'
             public_job=self.public_job(dict(latest)) if latest else None
             if public_job and record and review_metadata(record) and review_metadata(record).get('status')=='stale' and latest['status'] in ('error','stopped'):
                 journal=json.loads(latest['response_journal'] or '{}')
@@ -100,6 +102,7 @@ class DraftStorage:
                 'state':state if author or state is None else domain.player_view(state),
                 'validation':report if author or not (record and (record.get('origin_job') or review_metadata(record))) else {'errors':['Мир пока не готов к запуску. Откройте редактор автора.'] if report['errors'] else [],'warnings':[]},
                 'review':review_metadata(record) if record and author else ({'status':review_metadata(record).get('status')} if record and review_metadata(record) else None),
+                'creative_status':creative_status,
                 'quality_status':quality_status,  # Safe summary; raw reasons stay author-only.
                 'start_block_reason':None,
                 'start_warning':('Согласованность сюжета не подтверждена.' if block else None),
