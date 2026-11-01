@@ -211,9 +211,10 @@ def test_legacy_candidate_edit_lineage_is_retained(api):
     assert client.get(url+'?author=true').json()['state']['campaign']['title']=='Моя ручная правка'
 
 
-def test_terminal_duplicate_keys_and_empty_report_reach_strict_validation():
+def test_terminal_duplicate_keys_reach_validation_and_empty_is_transport_failure():
     assert run([('{"issues":[],"issues":[1]}','stop')])[0]=='{"issues":[],"issues":[1]}'
-    assert run([('','stop')])[0]==''
+    with pytest.raises(TransportError,match='без видимого текста'):
+        run([('','stop')])
     from backend.services.draft_response import strict_loads
     with pytest.raises(ValueError,match='Повтор'):strict_loads(run([('{"a":1,','length'),('"a":2}','stop')])[0])
 

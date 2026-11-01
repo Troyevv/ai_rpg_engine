@@ -87,7 +87,10 @@ class DraftStorage:
                 journal=json.loads(latest['response_journal'] or '{}')
                 if not journal.get('pending') and journal.get('candidate_text') and record['state']!=json.loads(journal['candidate_text']):public_job['resumable']=True
             if public_job and not author and public_job.get('error'):
-                public_job['error']='Проверка или генерация завершилась с замечанием. Подробности доступны автору.'
+                # Refresh must not replace a safe transport diagnostic from SSE
+                # with a generic error. Semantic/provider prose stays private.
+                diagnostic=public_job.get('response_diagnostic')
+                public_job['error']=diagnostic['message'] if diagnostic else 'Проверка или генерация завершилась с замечанием. Подробности доступны автору.'
             return {'id':wid,'name':w['name'],'revision':w['revision'],'version_id':head['id'] if head else None,
                 'candidate':raw if candidate and author else None,
                 'relation_merges':relation_plans(raw) if raw and author else [],

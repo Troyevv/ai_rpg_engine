@@ -81,12 +81,14 @@ def decode_result(text,state,config):
 
 def review_signature(messages, config):
     from backend.services.draft_completeness import CONTRACT_VERSION, RECOVERY_POLICY
-    return hashlib.sha256(json.dumps([messages,CONTRACT_VERSION,RECOVERY_POLICY,{k:config.get(k) for k in ('provider','model','max_tokens','context_length')}],ensure_ascii=False,sort_keys=True).encode()).hexdigest()
+    from backend.services.draft_response import REVIEW_POLICY, review_config
+    effective=review_config(config)
+    return hashlib.sha256(json.dumps([messages,CONTRACT_VERSION,RECOVERY_POLICY,REVIEW_POLICY,{k:effective.get(k) for k in ('provider','model','thinking','temperature','max_tokens','context_length','_draft_stage_output_limits','_model_capabilities')}],ensure_ascii=False,sort_keys=True).encode()).hexdigest()
 
 
 def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     from backend.repositories.drafts import candidate_hash
-    from backend.services.draft_response import response, strict_loads
+    from backend.services.draft_response import response, strict_loads, review_config
     from backend.services import draft_initial, draft_repair, draft_completeness
     repo=preparation.repo;job=repo.preparation_job(jid)
     original=repo.draft(job['workspace_id'],author=True)['state']
@@ -97,9 +99,10 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         handle.stream=stream
         if handle.cancel.is_set():stream.close()
     def generate(messages,limit):
-        structured=config['provider']=='deepseek' and not any(m['role']=='assistant' for m in messages)
-        return tracked_stream(repo,stream_fn,jid,stage,config,messages,model=config['model'],provider=config['provider'],api_key=api_key,
-            temperature=config['temperature'],max_tokens=limit,require_complete=True,cancel_event=handle.cancel,on_stream=opened,
+        effective=review_config(config) if stage=='draft_world_validation' else config
+        structured=effective['provider']=='deepseek' and not any(m['role']=='assistant' for m in messages)
+        return tracked_stream(repo,stream_fn,jid,stage,effective,messages,model=effective['model'],provider=effective['provider'],api_key=api_key,
+            temperature=effective['temperature'],max_tokens=limit,require_complete=True,cancel_event=handle.cancel,on_stream=opened,
             **({'response_format':{'type':'json_object'}} if structured else {}))
     if config['_draft_task']!='world':
         repo.draft_phase(jid,'editing',reset_progress=True)
@@ -176,14 +179,14 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         if not errors:
             review_meta=dict(status='running',contract_version=draft_completeness.CONTRACT_VERSION,issues=[])
             if not patch_failure:repo.save_draft_candidate(jid,state,[],review=review_meta,epoch=epoch)
-            repo.draft_phase(jid,'reviewing')
+            repo.draft_phase(jid,'reviewing',reset_progress=True)
             stage='draft_world_validation'
             review_messages=draft_completeness.messages(state,messages[-1]['content'])
             signature=review_signature(review_messages,config)
             review_meta['signature']=signature
             from backend.services.draft_review_recovery import obtain
             def review_call(slot, request_messages):
-                return response(repo,jid,journal,slot,request_messages,config,context,generate,handle.cancel)
+                return response(repo,jid,journal,slot,request_messages,review_config(config),context,generate,handle.cancel)
             try:
                 issues=obtain(state,review_messages,signature,journal,review_call,lambda:repo.save_response_journal(jid,journal))
             except (ValueError,TypeError,KeyError,IndexError) as exc:
@@ -257,7 +260,9 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         nonlocal stage
         stage=request_stage
         repo.draft_phase(jid,'improving' if request_stage=='draft_world_quality' else 'reviewing')
-        return response(repo,jid,journal,slot,request_messages,config,context,generate,handle.cancel)
+        effective=review_config(config) if request_stage=='draft_world_validation' else config
+        if request_stage=='draft_world_validation':slot+='_'+review_signature(request_messages,config)
+        return response(repo,jid,journal,slot,request_messages,effective,context,generate,handle.cancel)
     enhanced, quality_issues=draft_quality.complete(state,issues,messages[-1]['content'],journal,quality_call)
     if handle.cancel.is_set():
         repo.save_response_journal(jid,journal);return

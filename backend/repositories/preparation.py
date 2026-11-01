@@ -83,7 +83,15 @@ class Repository(PresentationStorage, DraftStorage, Storage):
         if staged and job.get('status') != 'saved':
             job = {**job, 'narrative': ''}
         if job.get('kind','').startswith('draft_'):
-            job={**job,'narrative':'','progress_chars':len(job.get('narrative',''))}
+            config=json.loads(job.get('config_json') or '{}')
+            record=journal.get('responses',{}).get(journal.get('active_response'),{})
+            from backend.services.draft_response import public_diagnostic
+            job={**job,'narrative':'','progress_chars':len(job.get('narrative','')),
+                 'attempt_epoch':journal.get('recovery_epoch',0),
+                 'effective_config':record.get('effective_config'),
+                 'response_diagnostic':public_diagnostic(record.get('failure')),
+                 'empty_retry_token':Repository.empty_retry_token(journal) if job.get('status')=='error' else None,
+                 'pinned_config':{k:config.get(k) for k in ('provider','model','thinking','context_length','max_tokens')}}
             if job.get('error','').startswith('Две попытки'):job['error']='Две попытки исправления исчерпаны. Мир сохранён; подробности доступны автору.'
         if 'repairs' in job:
             job['repairs']=[{k:v for k,v in row.items() if k in ('repair_error_code','repair_error_type','stage','attempt','attempt_epoch','revision')} for row in job['repairs']]
@@ -107,6 +115,23 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                 record.update(status='cancelled' if status=='stopped' else 'partial',warning='Дополнение прервано; предыдущий проверенный мир сохранён.')
 
     @staticmethod
+    def empty_retry_token(journal):
+        """Only a known terminal empty STOP may be retried unchanged by consent.
+
+        Exhausted reasoning/length needs a genuinely different request policy;
+        an unknown network outcome must use the separate acknowledgement path.
+        """
+        if journal.get('pending'):return None
+        slot=journal.get('active_response','')
+        record=journal.get('responses',{}).get(slot,{})
+        if not slot.startswith('completeness_') or record.get('failure',{}).get('code')!='provider_empty_response':return None
+        parts=record.get('parts',[])
+        if not parts:return None
+        token=parts[-1].get('request_fingerprint')
+        if not token or token not in journal.get('empty_requests',{}):return None
+        return token
+
+    @staticmethod
     def review_exhausted(journal, config):
         from backend.services.draft_generation import review_signature
         from backend.services.draft_completeness import messages, CONTRACT_VERSION, RECOVERY_POLICY
@@ -117,10 +142,11 @@ class Repository(PresentationStorage, DraftStorage, Storage):
             state=json.loads(journal['candidate_text'])
             source=journal['messages'][-1]['content']
             signature=review_signature(messages(state,source),config)
-            return journal.get('review_strategies',{}).get(signature,{}).get('exhausted',False)
+            if journal.get('review_strategies',{}).get(signature,{}).get('exhausted',False):return True
+            return any(record.get('failure') for slot,record in journal.get('responses',{}).items() if slot.startswith('completeness_'+signature+'_') and slot not in journal.get('response_retries',{}))
         except (ValueError,KeyError,IndexError,TypeError):return False
 
-    def resume_draft_response(self, jid, *, revision=None, config_changes=None, acknowledge_unknown=False, retry_last_fragment=False):
+    def resume_draft_response(self, jid, *, revision=None, config_changes=None, acknowledge_unknown=False, retry_last_fragment=False, retry_empty_response=None, expected_epoch=None):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             job = dict(db.execute('SELECT * FROM preparation_jobs WHERE id=?',(jid,)).fetchone())
@@ -130,6 +156,16 @@ class Repository(PresentationStorage, DraftStorage, Storage):
             if journal.get('pending') and not acknowledge_unknown:
                 raise ValueError('Исход прерванного запроса неизвестен. Автоматический повтор запрещён; полученный текст сохранён.')
             self._draft_workspace(db,job['workspace_id'],job['revision'] if revision is None else revision)
+            if retry_empty_response is not None:
+                if (revision is None or expected_epoch!=journal.get('recovery_epoch',0)
+                    or retry_empty_response!=self.empty_retry_token(journal) or acknowledge_unknown or retry_last_fragment):
+                    raise ValueError('Повтор пустого ответа недоступен или попытка устарела. Обнови черновик.')
+                old_slot=journal['active_response']
+                new_slot=old_slot+'_confirmed_'+str(expected_epoch+1)
+                journal.setdefault('response_retries',{})[old_slot]=new_slot
+                previous=journal.get('empty_retries',{}).get(retry_empty_response)
+                if previous:journal.setdefault('empty_retry_history',[]).append(dict(previous,fingerprint=retry_empty_response))
+                journal.setdefault('empty_retries',{})[retry_empty_response]=dict(slot=new_slot,epoch=expected_epoch+1,used=False,previous_slot=old_slot)
             config=json.loads(job['config_json'])
             proposed=dict(config,**(config_changes or {}))
             if revision is None or revision==job['revision']:
@@ -185,8 +221,9 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                 db.execute('UPDATE preparation_jobs SET revision=? WHERE id=?',(revision,jid))
             db.execute('UPDATE preparation_jobs SET config_json=? WHERE id=?',(json.dumps(config,ensure_ascii=False),jid))
             journal['recovery_epoch']=journal.get('recovery_epoch',0)+1
+            journal.pop('active_response',None)
             db.execute('UPDATE preparation_jobs SET response_journal=? WHERE id=?',(json.dumps(journal,ensure_ascii=False),jid))
-            db.execute("UPDATE preparation_jobs SET status='generating',error='' WHERE id=?",(jid,))
+            db.execute("UPDATE preparation_jobs SET status='generating',phase='',narrative='',error='' WHERE id=?",(jid,))
             return config
 
     def preparation_job(self, jid):
