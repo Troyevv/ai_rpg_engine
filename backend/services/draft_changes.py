@@ -59,6 +59,13 @@ def apply_proposal(state, reply):
                    or root == 'campaign' and len(parts) == 2 and parts[1] in schema['campaign']['properties'])
         if not allowed:
             raise ValueError('Путь вне разрешённого канона: '+path)
+        # Entity-field scope comes from the existing generation schema. Unknown
+        # fields must not become invisible side channels around canonical checks.
+        record_schema = (schema['world']['properties'][parts[1]].get('additionalProperties', {})
+                         if root == 'world' else schema[root].get('items', {}) if root in ('characters', 'locations') else {})
+        field_index = 3 if root == 'world' else 2
+        if root != 'campaign' and len(parts) > field_index and parts[field_index] not in record_schema.get('properties', {}):
+            raise ValueError('Неизвестное поле сущности: '+path)
         if root in ('characters', 'locations') and len(parts) == 2:
             if change.op != 'add' or parts[1] != '-' or not isinstance(change.value, dict):
                 raise ValueError('Карточки добавляются через /-; существующие меняются по полям.')

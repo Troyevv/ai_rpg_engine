@@ -4,6 +4,7 @@ from pathlib import Path
 from threading import Event
 from unittest.mock import patch
 import hashlib
+from draft_provider_fixture import accept_creative_unchecked
 import json
 import pytest
 from hypothesis import given, strategies as st
@@ -192,6 +193,7 @@ def test_legacy_candidate_edit_lineage_is_retained(api):
     client,app=api;repo=app.state.repository
     wid=client.post('/api/workspaces',json={'name':'legacy edited candidate'}).json()['id'];url=f'/api/workspaces/{wid}/draft'
     calls=[]
+    @accept_creative_unchecked
     def fail_review(**kw):
         calls.append(kw);yield json.dumps(rich()) if len(calls)==1 else '{"wrong":true}'
     with patch('backend.services.preparation.chat_stream',side_effect=fail_review):
@@ -204,7 +206,7 @@ def test_legacy_candidate_edit_lineage_is_retained(api):
             db.execute('UPDATE document_versions SET content=? WHERE id=?',(json.dumps(rec),row['id']))
     d=client.get(url+'?author=true').json()
     d=client.patch(url+'/candidate',json={'revision':d['revision'],'path':'/campaign/title','value':'Моя ручная правка'}).json()
-    with patch('backend.services.preparation.chat_stream',return_value=iter(['{"issues":[]}'])) as provider:
+    with patch('backend.services.preparation.chat_stream',side_effect=accept_creative_unchecked(lambda **kw:iter(['{"issues":[]}']))) as provider:
         assert client.post(url+'/resume',json={'revision':d['revision'],'api_key':'test'}).status_code==200
         assert wait_job(client,jid)['status']=='saved'
         assert provider.call_count==1
@@ -244,10 +246,10 @@ def test_identical_candidate_from_new_job_gets_new_lineage(api):
         last_version=d['version_id']
         with repo.connect() as db:assert json.loads(repo._draft_head(db,wid)['content'])['origin_job']==jid
     d=client.patch(url+'/candidate',json={'revision':d['revision'],'path':'/protagonist_id','value':cid}).json()
-    with patch('backend.services.preparation.chat_stream',return_value=iter(['{"issues":[]}'])) as provider:
+    with patch('backend.services.preparation.chat_stream',side_effect=accept_creative_unchecked(lambda **kw:iter(['{"issues":[]}']))) as provider:
         client.post(url+'/resume',json={'revision':d['revision'],'api_key':'test'})
         assert wait_job(client,jid)['status']=='saved'
-        assert provider.call_count==1
+        assert provider.call_count==2  # first creative batch, then review
 
 
 def test_terminal_syntax_failure_is_not_a_published_world():

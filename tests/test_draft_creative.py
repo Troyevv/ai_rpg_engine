@@ -66,6 +66,8 @@ def test_atomic_related_additions_provenance_and_idempotent_resume():
     lambda s:[change('/world/roles/bad',dict(id='bad',actor_id='absent',kind='occupation',title='x'))],
     lambda s:[change('/world/events/bad',dict(id='bad',text='Future',minute=9999999,participants=[],witnesses=[],fact_ids=[]))],
     lambda s:[change('/world_clock/minute',1,'replace')],
+    lambda s:[change('/world/characters/'+s['controlled_actor_id']+'/unknown_authority',True)],
+    lambda s:[change('/world/scheduled_events/new',dict(id='new',description='plan',participants=[],status='pending',due_minute=0,time_semantics='legacy'))],
     lambda s:[change('/world/characters/'+s['controlled_actor_id']+'/intentions',['Согласиться'],'replace')],
     lambda s:[change('/world/characters/'+s['controlled_actor_id']+'/birth_date_provenance',dict(source='manual'))],
     lambda s:[change('/world/knowledge/bad',dict(actor_id=s['controlled_actor_id'],fact_id='ownership',status='known',source_event_id='absent'))],
@@ -147,3 +149,65 @@ def test_complete_author_context_and_settings_are_not_clipped(brief):
     assert request['author_context']==brief
     assert request['candidate']['creation_settings']==state['creation_settings']
     assert request['candidate']['world']==state['world']
+
+
+@pytest.mark.parametrize('failure', ['empty', 'network', 'truncated'])
+def test_transport_resume_keeps_candidate_and_actual_usage(api,failure):
+    from llm import OutputLimitReached
+    client,app=api
+    wid=client.post('/api/workspaces',json={'name':'Creative recovery'}).json()['id']
+    url=f'/api/workspaces/{wid}/draft';creative_calls=[];world_calls=[];reply=''
+    def stream(**kw):
+        nonlocal reply
+        system=kw['messages'][0]['content']
+        kw['on_usage']({'prompt_tokens':100,'completion_tokens':20})
+        kw['on_finish']('stop')
+        if system.startswith(draft_creative.MARKER):
+            creative_calls.append(kw)
+            payload=json.loads(kw['messages'][1]['content'])
+            reply=json.dumps(dict(candidate_hash=payload['candidate_hash'],rationale='Сеть отношений мастерской.',changes=additions(payload['candidate'])),ensure_ascii=False)
+            if len(creative_calls)==1:
+                if failure=='empty':yield '';return
+                if failure=='network':raise OSError('controlled unknown outcome')
+                kw['on_finish']('length')
+                yield reply[:len(reply)//2]
+                raise OutputLimitReached()
+            if failure=='truncated':
+                assert kw['messages'][-2]['content']==reply[:len(reply)//2]
+                yield reply[len(reply)//2:];return
+            yield reply
+        elif system.startswith(draft_completeness.MARKER):yield '{"issues":[]}'
+        else:
+            world_calls.append(kw)
+            yield json.dumps(rich(),ensure_ascii=False)
+    with patch('backend.services.preparation.chat_stream',side_effect=stream):
+        created=client.post(url+'/generate',json={'revision':0,'text':'Мастерская после пожара.','config':dict(REMOTE,context_length=131072),'api_key':'offline'})
+        jid=created.json()['id'];job=wait_job(client,jid)
+        if failure!='truncated':
+            assert job['status']=='error',job
+            draft=client.get(url+'?author=true').json()
+            assert draft['candidate'] and draft['technical_valid']
+            assert 'workshop' not in draft['candidate']['world']['organizations']
+            journal=json.loads(app.state.repository.preparation_job(jid)['response_journal'])
+            assert journal['creative']['status']=='interrupted'
+            if failure=='network':
+                assert journal['pending'] and job['unknown_outcome']
+                assert client.post(url+'/resume',json={'revision':draft['revision'],'api_key':'offline'}).status_code==409
+                recovery={'acknowledge_unknown':True}
+            else:
+                assert job['empty_retry_token'] and not journal['pending']
+                recovery=dict(retry_empty_response=job['empty_retry_token'],expected_epoch=job['attempt_epoch'])
+            # Reload the repository before recovery, as after a process restart.
+            assert Repository(app.state.repository.path).draft(wid,True)['candidate']==draft['candidate']
+            resumed=client.post(url+'/resume',json=dict(revision=draft['revision'],api_key='offline',**recovery))
+            assert resumed.status_code==200,resumed.text
+            job=wait_job(client,jid)
+        assert job['status']=='saved',job
+    journal=json.loads(app.state.repository.preparation_job(jid)['response_journal'])
+    assert len(world_calls)==1 and len(creative_calls)==2
+    assert journal['creative']['status']=='applied'
+    assert len(app.state.repository.request_log(job_id=jid))==4
+    # Failed network billing is not inferred; the prior reservation stays intact.
+    if failure=='network':assert journal['unknown_attempts'] and journal['reserved_tokens']>0
+    else:assert journal['actual_tokens']==480 and journal['reserved_tokens']==0
+    assert client.get(url+'?author=true').json()['state']['world']['organizations']['workshop']

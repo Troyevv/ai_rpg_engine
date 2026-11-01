@@ -1,4 +1,5 @@
 from copy import deepcopy
+from draft_provider_fixture import accept_creative_unchecked
 import json
 from unittest.mock import patch
 import pytest
@@ -58,6 +59,7 @@ def test_saved_conflict_resume_repairs_without_generation(api):
     client,app=api;url='/api/workspaces/'+client.post('/api/workspaces',json={'name':'relations'}).json()['id']+'/draft'
     state=pair();state['world']['objective_relations']['b']['since']=10
     calls=[]
+    @accept_creative_unchecked
     def fail(**kw):
         calls.append(kw);yield json.dumps(state) if len(calls)==1 else '{"patches":[]}'
     with patch('backend.services.preparation.chat_stream',side_effect=fail):
@@ -67,6 +69,7 @@ def test_saved_conflict_resume_repairs_without_generation(api):
     assert d['relation_merges'][0]['safe'] is False
     assert client.post(url+'/merge-relations',json={'revision':d['revision'],'ids':['a','b']}).status_code==409
     resumed=[]
+    @accept_creative_unchecked
     def repair(**kw):
         resumed.append(kw)
         if len(resumed)==1:
@@ -116,6 +119,7 @@ def test_prose_contradiction_is_reviewed_then_locally_repaired(api):
     client,app=api;wid=client.post('/api/workspaces',json={'name':'text conflict'}).json()['id'];url=f'/api/workspaces/{wid}/draft'
     state=pair();state['world']['objective_relations']['b']['context']='Они не родственники, sibling ошибочен.'
     calls=[]
+    @accept_creative_unchecked
     def stream(**kw):
         calls.append(kw)
         if len(calls)==1:yield json.dumps(state)
