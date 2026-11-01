@@ -167,3 +167,101 @@ def test_actual_sdk_payload_uses_disabled_thinking_for_review(api):
     assert 'reasoning_effort' not in payload and payload['temperature']==.7
     assert sdk.chat.completions.create.call_count==1
     assert payload['max_tokens']<=8192
+
+
+def test_truncated_review_continues_report_with_review_phase():
+    repo=JournalRepo();journal={};calls=[]
+    def provider(messages,limit):
+        calls.append(messages)
+        if len(calls)==1:
+            yield '{"issues":'
+            raise OutputLimitReached()
+        yield '[]}'
+    assert response(repo,'j',journal,'completeness_truncated_review',MESSAGES,review_config(CONFIG),65536,provider,Event())=='{"issues":[]}'
+    assert len(calls)==2 and calls[1][-2]['content']=='{"issues":'
+    assert repo.phases==['reviewing']
+
+
+def test_safe_diagnostic_survives_player_projection_and_redacts_other_errors(api):
+    client,app=api;repo=app.state.repository;wid,jid=restore(repo)
+    url=f'/api/workspaces/{wid}/draft';draft=client.get(url).json()
+    def empty(**kw):
+        kw['on_finish']('length')
+        kw['on_usage']({'prompt_tokens':10,'completion_tokens':10,'completion_tokens_details':{'reasoning_tokens':10}})
+        yield ''
+    with patch('backend.services.preparation.chat_stream',side_effect=empty):
+        client.post(url+'/resume',json={'revision':draft['revision'],'api_key':'test'})
+        assert wait_job(client,jid)['status']=='error'
+    player=client.get(url).json();author=client.get(url+'?author=true').json();job=client.get(f'/api/jobs/{jid}').json()
+    assert player['job']['error']==author['job']['error']==job['response_diagnostic']['message']
+    assert 'Лимит ответа исчерпан на reasoning' in player['job']['error']
+    assert player['review']=={'status':'failed'} and player['candidate'] is None
+    assert author['review']['reason']==job['error']
+    journal=json.loads(repo.preparation_job(jid)['response_journal'])
+    slot=journal['active_response'];record=journal['responses'][slot]
+    # A provider/semantic error containing private story facts must stay hidden.
+    record['failure']={'code':'unknown_code','message':'private story fact'}
+    repo.save_response_journal(jid,journal)
+    with repo.connect() as db:db.execute('UPDATE preparation_jobs SET error=? WHERE id=?',('private story fact',jid))
+    player=client.get(url).json()
+    assert 'private story fact' not in json.dumps(player,ensure_ascii=False)
+    assert player['job']['response_diagnostic'] is None
+
+
+@pytest.mark.parametrize('succeeds',[False,True])
+def test_confirmed_empty_stop_retry_is_once_and_keeps_history(api,succeeds):
+    client,app=api;repo=app.state.repository;wid,jid=restore(repo);url=f'/api/workspaces/{wid}/draft'
+    before=client.get(url+'?author=true').json();calls=[];gate=Event()
+    def provider(**kw):
+        calls.append(kw)
+        if len(calls)>1:assert gate.wait(10)
+        kw['on_usage']({'prompt_tokens':24,'completion_tokens':5,'prompt_cache_hit_tokens':0})
+        kw['on_finish']('stop')
+        yield '{"issues":[]}' if succeeds and len(calls)>1 else ''
+    with patch('backend.services.preparation.chat_stream',side_effect=provider):
+        client.post(url+'/resume',json={'revision':before['revision'],'api_key':'test'})
+        failed=wait_job(client,jid);token=failed['empty_retry_token']
+        assert token and failed['response_diagnostic']['code']=='provider_empty_response'
+        saved=json.loads(repo.preparation_job(jid)['response_journal'])
+        d=client.get(url+'?author=true').json()
+        body=dict(revision=d['revision'],api_key='test',retry_empty_response=token,expected_epoch=failed['attempt_epoch'])
+        assert client.post(url+'/resume',json={'revision':d['revision'],'api_key':'test'}).status_code==409
+        assert client.post(url+'/resume',json=dict(body,expected_epoch=0)).status_code==409
+        assert client.post(url+'/resume',json=dict(body,acknowledge_unknown=True)).status_code==409
+        assert len(calls)==1
+        resumed=client.post(url+'/resume',json=body);assert resumed.status_code==200,resumed.text
+        assert client.post(url+'/resume',json=body).status_code==409
+        gate.set();final=wait_job(client,jid)
+        assert final['status']==('saved' if succeeds else 'error')
+        assert final['empty_retry_token']==(None if succeeds else token)
+        assert client.post(url+'/resume',json=body).status_code==409
+        assert len(calls)==2
+    after=json.loads(repo.preparation_job(jid)['response_journal'])
+    for slot,record in saved['responses'].items():assert after['responses'][slot]==record
+    assert after['actual_tokens']==saved['actual_tokens']+29
+    assert Decimal(after['actual_cost'])>Decimal(saved['actual_cost'])
+    assert after['empty_retries'][token]['used'] is True and after['pending'] is None
+    result=client.get(url+'?author=true').json()
+    assert (result['candidate'] or result['state'])==before['candidate'] and result['technical_valid']
+
+
+def test_provider_recovery_after_two_empty_stops_requires_fresh_consent(api):
+    client,app=api;repo=app.state.repository;wid,jid=restore(repo);url=f'/api/workspaces/{wid}/draft';calls=[]
+    def provider(**kw):
+        calls.append(kw);kw['on_finish']('stop')
+        yield '' if len(calls)<3 else '{"issues":[]}'
+    with patch('backend.services.preparation.chat_stream',side_effect=provider):
+        d=client.get(url).json()
+        client.post(url+'/resume',json={'revision':d['revision'],'api_key':'test'})
+        for attempt in (1,2):
+            job=wait_job(client,jid);assert job['status']=='error'
+            d=client.get(url).json()
+            body=dict(revision=d['revision'],api_key='test',retry_empty_response=job['empty_retry_token'],expected_epoch=job['attempt_epoch'])
+            assert client.post(url+'/resume',json=body).status_code==200
+            assert client.post(url+'/resume',json=body).status_code==409
+        assert wait_job(client,jid)['status']=='saved'
+    assert len(calls)==3
+    journal=json.loads(repo.preparation_job(jid)['response_journal'])
+    assert len(journal['empty_retry_history'])==1 and journal['empty_retry_history'][0]['used']
+    assert len(journal['response_retries'])==2
+    assert len([r for r in journal['responses'].values() if r.get('failure',{}).get('code')=='provider_empty_response'])==2

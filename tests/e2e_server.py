@@ -83,9 +83,11 @@ def stream(**kwargs):
             assert kwargs['thinking']=='off'
             review170_control['calls']+=1
             if not review170_control['gate'].wait(30):raise RuntimeError('Test review gate timed out')
-            kwargs['on_usage']({'prompt_tokens':24032,'completion_tokens':10,'completion_tokens_details':{'reasoning_tokens':10 if review170_control['fail'] else 0}})
-            kwargs['on_finish']('length' if review170_control['fail'] else 'stop')
-            yield '' if review170_control['fail'] else '{"issues":[]}'
+            failed=review170_control['fail'] and (not review170_control['transient'] or review170_control['calls']==1)
+            truncated=failed and not review170_control['transient']
+            kwargs['on_usage']({'prompt_tokens':24032,'completion_tokens':10,'completion_tokens_details':{'reasoning_tokens':10 if truncated else 0}})
+            kwargs['on_finish']('length' if truncated else 'stop')
+            yield '' if failed else '{"issues":[]}'
             return
         from draft_provider_fixture import protocol_review
         controlled=protocol_review(request)
@@ -431,11 +433,12 @@ if __name__ == '__main__':
     app.state.tabletop_runtime.combat.dice=dice
     @app.post('/test/review170')
     def seed_review170(body:dict):
-        global review170_control
+        global review170_control, phone_mode
+        phone_mode='silent'
         from threading import Event
         from review170_fixture import restore,exported
         wid,jid=restore(app.state.repository)
-        review170_control=dict(source=exported()['author_input']['source_text'],gate=Event(),fail=body.get('fail',False),calls=0)
+        review170_control=dict(source=exported()['author_input']['source_text'],gate=Event(),fail=body.get('fail',False),transient=body.get('transient',False),calls=0)
         return dict(workspace=wid,job=jid)
 
     @app.post('/test/review170/release')

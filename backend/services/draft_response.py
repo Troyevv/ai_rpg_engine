@@ -24,6 +24,19 @@ class TransportError(ValueError):
 
 REVIEW_POLICY = 1
 
+EMPTY_MESSAGES = {
+    'reasoning_budget_exhausted':'Лимит ответа исчерпан на reasoning; JSON-отчёт не получен.',
+    'empty_output_limit':'Достигнут лимит ответа без видимого текста; расход reasoning неизвестен.',
+    'provider_empty_response':'Провайдер завершил запрос без видимого текста.',
+}
+
+
+def public_diagnostic(failure):
+    """Only server-authored transport messages may cross the player projection."""
+    code=(failure or {}).get('code')
+    if code not in EMPTY_MESSAGES:return None
+    return dict(code=code,message=EMPTY_MESSAGES[code]+' Ответ и расход сохранены; автоматический повтор запрещён.')
+
 
 def review_config(config):
     """Review needs a typed report, not a hidden chain sharing its output budget.
@@ -39,10 +52,7 @@ def empty_diagnostic(part):
     reasoning = (usage.get('completion_tokens_details') or {}).get('reasoning_tokens')
     length = (part.get('provider_finish_reason') or part.get('finish_reason')) == 'length'
     code = 'reasoning_budget_exhausted' if length and isinstance(reasoning, int) and reasoning > 0 else 'empty_output_limit' if length else 'provider_empty_response'
-    message = {'reasoning_budget_exhausted':'Лимит ответа исчерпан на reasoning; JSON-отчёт не получен.',
-               'empty_output_limit':'Достигнут лимит ответа без видимого текста; расход reasoning неизвестен.',
-               'provider_empty_response':'Провайдер завершил запрос без видимого текста.'}[code]
-    return dict(code=code, message=message+' Ответ и расход сохранены; повтор идентичного запроса запрещён.')
+    return public_diagnostic(dict(code=code))
 
 
 class _Incomplete(Exception):
@@ -234,6 +244,11 @@ def stage_output_limit(slot, messages, config):
 
 
 def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
+    # A confirmed retry gets a new response slot. Historical parts are immutable.
+    redirects=journal.get('response_retries',{});seen=set()
+    while slot in redirects:
+        if slot in seen:raise TransportError('Повреждена история повторных проверок.')
+        seen.add(slot);slot=redirects[slot]
     # Provider capability is distinct from the app's intentionally smaller context.
     # Official model catalog, checked 2026-10-24: api-docs.deepseek.com/api/list-models/
     capabilities=config.get('_model_capabilities',{})
@@ -288,7 +303,7 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
         request = deepcopy(messages)
         if text:
             request += [{'role':'assistant','content':text},{'role':'user','content':CONTINUE}]
-            repo.draft_phase(jid,'continuing')
+            repo.draft_phase(jid,'reviewing' if slot.startswith(('completeness','quality_review')) else 'continuing')
         input_bound = estimate(request)+512
         limit = min(output_limit,context-input_bound)
         if limit < 256: raise TransportError(f'Контекст {context} не вмещает полный запрос: требуется минимум {input_bound+256} токенов. Текст сохранён, запрос не отправлен.')
@@ -299,7 +314,9 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
         journal['active_response']=slot
         fingerprint=digest(json.dumps([request,{k:v for k,v in record['effective_config'].items() if k!='context_length'},config.get('temperature')],ensure_ascii=False,sort_keys=True))
         prior=journal.get('empty_requests',{}).get(fingerprint)
-        if prior:
+        grant=journal.get('empty_retries',{}).get(fingerprint,{})
+        authorized=grant.get('slot')==slot and grant.get('epoch')==journal.get('recovery_epoch',0) and not grant.get('used')
+        if prior and not authorized:
             record['failure']=dict(prior['failure'])
             repo.save_response_journal(jid,journal)
             raise TransportError(record['failure']['message'])
@@ -320,6 +337,7 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
             if cost+Decimal(journal.get('actual_cost','0')) > Decimal(str(cap)): raise TransportError('Исчерпан бюджет расходов. Ответ сохранён.')
             journal['reserved_cost'] = str(cost)
         journal['reserved_tokens'] = reserved+input_bound+limit
+        if authorized:grant['used']=True
         journal['pending'] = {'slot':slot,'offset':sum(len(p['text']) for p in record['parts']),'text':''}
         repo.save_response_journal(jid,journal)  # commit BEFORE opening a paid request
         def settle(metadata, rejected=False):

@@ -53,6 +53,8 @@ class Resume(Credential):
     context_length: int | None = Field(default=None,ge=8192)
     acknowledge_unknown: bool = False
     retry_last_fragment: bool = False
+    retry_empty_response: str | None = Field(default=None,pattern=r'^[0-9a-f]{64}$')
+    expected_epoch: int | None = Field(default=None,ge=0)
 
 class CandidateChange(Revision):
     path: str
@@ -135,6 +137,7 @@ def install(app,repo,preparation,credentials,job):
         journal=json.loads(saved.get('response_journal') or '{}')
         # Explicit allowlist: never export config, credentials or authorization headers.
         keys=('responses','pending','errors','review_failures','repair_failures','http_failures','review_recoveries',
+              'active_response','empty_requests','empty_retries','empty_retry_history','response_retries',
               'quality','quality_attempts','review_strategies','review_resolutions','review_preparation_failures','internal_errors',
               'accepted_reviews','unknown_attempts','recovery_epoch','reserved_tokens','reserved_cost','actual_tokens','actual_cost','fragment_recoveries','binding')
         requests=[{k:r.get(k) for k in ('id','stage','status','finish_reason','usage_json','input_tokens','output_tokens','cost_usd')} for r in repo.request_log(job_id=current['id'])]
@@ -185,7 +188,8 @@ def install(app,repo,preparation,credentials,job):
         provider=json.loads(saved['config_json'])['provider']
         preparation.resume(current['id'],credentials.resolve(provider,body.key()),revision=body.revision,
             config_changes={k:getattr(body,k) for k in ('max_tokens','context_length') if getattr(body,k) is not None},
-            acknowledge_unknown=body.acknowledge_unknown,retry_last_fragment=body.retry_last_fragment)
+            acknowledge_unknown=body.acknowledge_unknown,retry_last_fragment=body.retry_last_fragment,
+            retry_empty_response=body.retry_empty_response,expected_epoch=body.expected_epoch)
         return job(current['id'])
 
     @app.post('/api/workspaces/{wid}/draft/confirm')

@@ -1,5 +1,6 @@
 import {test,expect} from '@playwright/test';
 import {nav} from './navigation';
+import {defaults} from '../src/types';
 
 for(const skin of ['graphite','parchment']) for(const fail of [false,true]) {
  test(`saved review pending, running, refresh and ${fail?'failure':'success'} in ${skin}`,async({page,request},info)=>{
@@ -8,7 +9,7 @@ for(const skin of ['graphite','parchment']) for(const fail of [false,true]) {
   const seed=await(await request.post('/test/review170',{data:{fail}})).json();
   const profile=`review170-${seed.workspace}`;
   await request.put('/api/credentials/deepseek',{data:{api_key:'offline-review170'}});
-  await request.put(`/api/settings/${profile}`,{data:{summary:{provider:'deepseek',model:'deepseek-flash',thinking:'off',temperature:.7,max_tokens:24000,context_length:65536}}});
+  expect((await request.put(`/api/settings/${profile}`,{data:{...defaults,summary:{...defaults.summary,provider:'deepseek',model:'deepseek-flash',thinking:'off',temperature:.7,max_tokens:24000,context_length:65536}}})).ok()).toBeTruthy();
   const url=`/api/workspaces/${seed.workspace}/draft`;
   await page.addInitScript(({wid,world,profile})=>{
    localStorage.setItem('profile',profile);localStorage.setItem('draftWorkspace',wid);localStorage.setItem('selection',JSON.stringify({world}));
@@ -44,6 +45,10 @@ for(const skin of ['graphite','parchment']) for(const fail of [false,true]) {
    await expect(page.getByRole('alert').filter({hasText:'Лимит ответа исчерпан на reasoning'})).toBeVisible();
    await expect(page.getByRole('button',{name:'Начать с предупреждениями',exact:true})).toBeEnabled();
    expect(final.review.status).toBe('failed');expect(final.job.resumable).toBe(false);
+   const player=await(await request.get(url)).json();
+   expect(player.job.error).toBe(final.job.response_diagnostic.message);
+   expect(final.review.reason).toBe(final.job.response_diagnostic.message);
+   await expect(page.getByRole('button',{name:'Повторить после сбоя провайдера'})).toHaveCount(0);
   }else{
    await expect(page.getByText('Смысловая проверка завершена. Результат сохранён.',{exact:true})).toBeVisible();
    expect(final.review.status).toBe('completed');
@@ -54,3 +59,37 @@ for(const skin of ['graphite','parchment']) for(const fail of [false,true]) {
   await expect(page.getByRole('button',{name:fail?'Начать с предупреждениями':'Подтвердить мир и начать игру',exact:true})).toBeEnabled();
  });
 }
+
+for(const skin of ['graphite','parchment']) test(`confirmed transient empty retry in ${skin}`,async({page,request},info)=>{
+ const theme=await(await request.post('/test/seed')).json();
+ await request.put(`/api/worlds/${theme.world}/presentation`,{data:{theme_id:skin}});
+ const seed=await(await request.post('/test/review170',{data:{fail:true,transient:true}})).json();
+ await request.put('/api/credentials/deepseek',{data:{api_key:'offline-review170'}});
+ await page.addInitScript(({wid,world})=>{localStorage.setItem('draftWorkspace',wid);localStorage.setItem('selection',JSON.stringify({world}));},{wid:seed.workspace,world:theme.world});
+ const url=`/api/workspaces/${seed.workspace}/draft`;
+ await page.goto('/');await nav(page,'Создать');
+ await page.getByRole('button',{name:'Повторить проверку',exact:true}).click();
+ await expect(page.getByRole('status',{name:'Ход проверки мира'})).toContainText('Проверяем смысловую согласованность');
+ await request.post('/test/review170/release');
+ await expect(page.getByRole('alert')).toContainText('Провайдер завершил запрос без видимого текста');
+ const before=await(await request.get(url+'/raw')).json();
+ const original=await(await request.get(url+'?author=true')).json();
+ await page.reload();await nav(page,'Создать');
+ await expect(page.getByRole('alert')).toContainText('Провайдер завершил запрос без видимого текста');
+ const retry=page.getByRole('button',{name:'Повторить после сбоя провайдера'});
+ await retry.click();await expect(page.getByRole('dialog')).toContainText('может быть оплачен');
+ await page.getByRole('button',{name:'Отмена',exact:true}).click();
+ expect((await(await request.post('/test/review170/release')).json()).calls).toBe(1);
+ await retry.click();
+ if(skin==='parchment')await page.getByRole('dialog').screenshot({path:info.outputPath('confirmed-retry.png')});
+ await page.getByRole('button',{name:'Подтвердить одну повторную проверку'}).click();
+ await expect(page.getByText('Смысловая проверка завершена. Результат сохранён.',{exact:true})).toBeVisible();
+ expect((await(await request.post('/test/review170/release')).json()).calls).toBe(2);
+ const after=await(await request.get(url+'/raw')).json();
+ for(const [slot,record] of Object.entries(before.responses))expect(after.responses[slot]).toEqual(record);
+ const completed=await(await request.get(url+'?author=true')).json();
+ expect(completed.state).toEqual(original.candidate);
+ await expect(retry).toHaveCount(0);await expect(page.getByRole('alert')).toHaveCount(0);
+ await page.reload();await nav(page,'Создать');
+ await expect(page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true})).toBeEnabled();
+});
