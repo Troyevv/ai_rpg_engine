@@ -58,7 +58,7 @@ for(const skin of ['graphite','parchment']) for(const mode of ['complete','empty
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme',skin);
   const canonical=async()=>{
-   const response=await request.get(`/test/creative172/saves/${selected.save}/canonical`);
+   const response=await request.post(`/test/creative172/saves/${selected.save}/canonical`);
    expect(response.ok()).toBeTruthy();return await response.json();
   };
   const initial=await canonical();

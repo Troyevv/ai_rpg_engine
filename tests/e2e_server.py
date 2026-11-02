@@ -477,9 +477,10 @@ if __name__ == '__main__':
         creative172_control=dict(gate=Event(),calls=0,fail=body.get('fail',False),invalid=body.get('invalid',False))
         return app.state.repository.create_workspace('Творческое развитие')
 
-    @app.get('/test/creative172/saves/{sid}/canonical')
+    @app.post('/test/creative172/saves/{sid}/canonical')
     def creative172_canonical(sid:int):
         # Test-only read from a reopened repository, never a production API.
+        # POST follows fixture routes; the production SPA owns GET fallbacks.
         from backend.repositories.preparation import Repository
         from backend.runtime_v3.repository import read_history
         repo=Repository(app.state.repository.path)
