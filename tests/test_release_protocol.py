@@ -1,3 +1,4 @@
+from draft_provider_fixture import accept_creative_unchecked
 """Untrusted provider replies: real handlers, never successful handler stubs."""
 from copy import deepcopy
 import json
@@ -204,6 +205,15 @@ def test_quality_rejected_rereview_or_cancel_rolls_back(broken_review):
     assert out==before and checked is None and journal['quality']['status']==('partial' if broken_review else 'cancelled')
     assert 'after_hash' not in journal['quality']
 
+def legacy_generation(preparation,jid,*args):
+    from backend.services.draft_generation import run
+    journal=json.loads(preparation.repo.preparation_job(jid).get('response_journal') or '{}')
+    journal.setdefault('generation_contract',{'version':5})
+    preparation.repo.save_response_journal(jid,journal)
+    return ORIGINAL_GENERATION_RUN(preparation,jid,*args)
+
+from backend.services.draft_generation import run as ORIGINAL_GENERATION_RUN
+
 @pytest.mark.parametrize('scenario',['nullable_review','advisory','quality_partial'])
 def test_api_protocol_recovery_to_game_without_manual_world_edit(api,scenario):
     client,app=api;state=rich();state['campaign']['title']='Неверное название'
@@ -211,6 +221,7 @@ def test_api_protocol_recovery_to_game_without_manual_world_edit(api,scenario):
     wid=client.post('/api/workspaces',json={'name':'Release'}).json()['id'];url=f'/api/workspaces/{wid}/draft';calls=[]
     blocker=dict(path='/campaign/title',message='Автор явно задал название Верное.',patch_paths=['/campaign/title'])
     advice=dict(section='characters',entity_id='missing',field='name',severity='recommendation',assertion='optional_detail',message='Совет')
+    @accept_creative_unchecked
     def provider(**kw):
         system=kw['messages'][0]['content'];calls.append(system)
         if system.startswith(review.MARKER):
@@ -223,7 +234,9 @@ def test_api_protocol_recovery_to_game_without_manual_world_edit(api,scenario):
         if 'patches' in system:yield '{"patches":[{"path":"/campaign/title","value":"Верное"}]}';return
         assert len(calls)==1
         yield json.dumps(state,ensure_ascii=False)
-    with patch('backend.services.preparation.chat_stream',side_effect=provider):
+    from contextlib import nullcontext
+    legacy=patch('backend.services.draft_generation.run',side_effect=legacy_generation) if scenario=='quality_partial' else nullcontext()
+    with legacy, patch('backend.services.preparation.chat_stream',side_effect=provider):
         reply=client.post(url+'/generate',json=dict(revision=0,text='Авторское название мира: Верное.',config=dict(REMOTE,context_length=262144),api_key='offline'))
         jid=reply.json()['id'];job=wait_job(client,jid);assert job['status']=='saved',job
         d=client.get(url+'?author=true').json();assert d['state']['campaign']['title']=='Верное'
@@ -312,10 +325,11 @@ def test_process_restart_finalizes_quality_and_preserves_unknown_provider_outcom
 def test_internal_quality_error_is_not_success_or_provider_protocol_error(api):
     client,app=api;wid=client.post('/api/workspaces',json={'name':'Internal failure'}).json()['id'];url=f'/api/workspaces/{wid}/draft'
     state=rich();state['characters'][1]['fields']['Внешность']='неизвестно'
+    @accept_creative_unchecked
     def provider(**kw):
         system=kw['messages'][0]['content']
         yield '{"issues":[]}' if system.startswith(review.MARKER) else '{"patches":[]}' if system.startswith('Один необязательный пакет') else json.dumps(state)
-    with patch('backend.services.preparation.chat_stream',side_effect=provider),patch.object(quality,'decode',side_effect=TypeError('Internal injected defect')):
+    with patch('backend.services.draft_generation.run',side_effect=legacy_generation),patch('backend.services.preparation.chat_stream',side_effect=provider),patch.object(quality,'decode',side_effect=TypeError('Internal injected defect')):
         r=client.post(url+'/generate',json=dict(revision=0,text='Мир',config=dict(REMOTE,context_length=262144),api_key='offline'))
         job=wait_job(client,r.json()['id']);assert job['status']=='error' and 'internal_error' in job['error']
     raw=client.get(url+'/raw').json();assert raw['internal_errors'][-1]['code']=='internal_error' and raw['quality']['status']=='partial'
@@ -345,6 +359,7 @@ def test_cast_bound_contract_budget_and_preservation(api,settings,count):
     while len(state['characters'])<count:
         cid='extra_'+str(len(state['characters']));card=deepcopy(template);card.update(id=cid,name='Житель '+cid,aliases=[])
         state['characters'].append(card);state['world']['characters'][cid]=dict(deepcopy(actor),id=cid)
+    @accept_creative_unchecked
     def stream(**kw):
         if kw['messages'][0]['content'].startswith(MARKER):yield '{"issues":[]}'
         else:yield json.dumps(state,ensure_ascii=False)

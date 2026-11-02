@@ -245,6 +245,7 @@ for (const marker of ['TEST_RELEASE_NESTED','TEST_RELEASE_QUALITY']) {
   await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('saved');
   const raw=await(await request.get(url+'/raw')).json();
   if(marker==='TEST_RELEASE_QUALITY'){
+   expect(raw.generation_contract.version).toBe(5);
    expect(raw.quality.status).toBe('partial');
    await expect(page.getByText(/Некоторые творческие детали модель оставила неполными/)).toBeVisible();
   }else expect(raw.review_failures.length).toBeGreaterThanOrEqual(2);

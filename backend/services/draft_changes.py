@@ -14,6 +14,14 @@ from backend.services.draft_completeness import pointer
 from backend.services.draft_initial import inspect_candidate, prompt_schema, DraftErrors
 
 
+class ProposalError(ValueError):
+    def __init__(self, message, *, proposal_paths=(), world_paths=(), drop_indices=()):
+        super().__init__(message)
+        self.proposal_paths=list(proposal_paths)
+        self.world_paths=list(world_paths)
+        self.drop_indices=list(drop_indices)
+
+
 class Change(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     op: Literal['add', 'replace']
@@ -48,7 +56,7 @@ def apply_proposal(state, reply):
     paths = [c.path for c in proposal.changes if c.path not in ('/characters/-', '/locations/-')]
     if len(set(paths)) != len(paths) or any(a.startswith(b+'/') for a in paths for b in paths if a != b):
         raise ValueError('Пересекающиеся пути предложения.')
-    for change in proposal.changes:
+    for index, change in enumerate(proposal.changes):
         path = change.path
         if not path.startswith('/') or re.search(r'~(?![01])', path):
             raise ValueError('Некорректный JSON Pointer.')
@@ -58,14 +66,14 @@ def apply_proposal(state, reply):
                    or root in ('characters', 'locations') and len(parts) >= 2
                    or root == 'campaign' and len(parts) == 2 and parts[1] in schema['campaign']['properties'])
         if not allowed:
-            raise ValueError('Путь вне разрешённого канона: '+path)
+            raise ProposalError('Путь вне разрешённого канона: '+path, proposal_paths=[f'/changes/{index}/path'], drop_indices=[index])
         # Entity-field scope comes from the existing generation schema. Unknown
         # fields must not become invisible side channels around canonical checks.
         record_schema = (schema['world']['properties'][parts[1]].get('additionalProperties', {})
                          if root == 'world' else schema[root].get('items', {}) if root in ('characters', 'locations') else {})
         field_index = 3 if root == 'world' else 2
         if root != 'campaign' and len(parts) > field_index and parts[field_index] not in record_schema.get('properties', {}):
-            raise ValueError('Неизвестное поле сущности: '+path)
+            raise ProposalError('Неизвестное поле сущности: '+path, proposal_paths=[f'/changes/{index}/path'], drop_indices=[index])
         if root in ('characters', 'locations') and len(parts) == 2:
             if change.op != 'add' or parts[1] != '-' or not isinstance(change.value, dict):
                 raise ValueError('Карточки добавляются через /-; существующие меняются по полям.')
@@ -81,7 +89,7 @@ def apply_proposal(state, reply):
             if change.op != 'add' or parts[2] in trial['world'][parts[1]]:
                 raise ValueError('Новый ID занят; существующую запись меняйте по полям.')
             if not isinstance(change.value, dict) or change.value.get('id', parts[2]) != parts[2]:
-                raise ValueError('ID не совпадает с адресом записи.')
+                raise ProposalError('ID не совпадает с адресом записи.', proposal_paths=[f'/changes/{index}/value/id'])
         elif parts[-1] in ('id', 'is_player'):
             raise ValueError('Идентичность неизменна.')
         parent_path = path.rsplit('/', 1)[0]
@@ -91,7 +99,7 @@ def apply_proposal(state, reply):
             if not isinstance(parent, dict):
                 raise ValueError('Меняйте список целиком, без сдвига адресов.')
             if (key in parent) != (change.op == 'replace'):
-                raise ValueError('Предусловие add/replace не выполнено.')
+                raise ProposalError('Предусловие add/replace не выполнено.', proposal_paths=[f'/changes/{index}/op'])
             parent[key] = deepcopy(change.value)
         except (KeyError, IndexError, TypeError) as exc:
             raise ValueError('Родительский путь не существует: '+path) from exc

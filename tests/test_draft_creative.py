@@ -211,3 +211,105 @@ def test_transport_resume_keeps_candidate_and_actual_usage(api,failure):
     if failure=='network':assert journal['unknown_attempts'] and journal['reserved_tokens']>0
     else:assert journal['actual_tokens']==480 and journal['reserved_tokens']==0
     assert client.get(url+'?author=true').json()['state']['world']['organizations']['workshop']
+
+@pytest.mark.parametrize('fault',['reference','shape','scope'])
+def test_addressed_correction_preserves_related_package(fault):
+    state=candidate();before=deepcopy(state);changes=additions(state)
+    if fault=='reference':changes[3]['value']['actor_id']='missing'
+    elif fault=='shape':changes[3]['value']['title']=12
+    else:changes.append(change('/world_clock/minute',100,'replace'))
+    original=proposal(state,changes);journal={};calls=[]
+    def call(slot, request):
+        calls.append(slot)
+        if not slot.startswith('creative_correction_'):return original
+        payload=json.loads(request[1]['content'])
+        patches=[] if fault=='scope' else [dict(path='/changes/3/value/'+('actor_id' if fault=='reference' else 'title'),value='craftswoman' if fault=='reference' else 'Реставратор')]
+        assert all(p['path'] in payload['allowed_paths'] for p in patches),payload
+        return json.dumps(dict(proposal_hash=payload['proposal_hash'],patches=patches,drop_indices=[9] if fault=='scope' else []))
+    enhanced=draft_creative.develop(state,'Авторский бриф',journal,call,lambda:None)
+    assert state==before and len(calls)==2
+    assert journal['creative']['original_reply']==original
+    assert len(journal['creative']['corrections'])==1
+    assert enhanced['world']['knowledge']['fire']['source_event_id']=='fire'
+    assert enhanced['world']['threads']['rebuild']['last_event_id']=='fire'
+    assert enhanced['world']['organizations']['workshop']['name']=='Мастерская Веры'
+    assert draft_creative.develop(state,'Авторский бриф',journal,lambda *_:pytest.fail('repeat'),lambda:None)==enhanced
+
+
+def test_correction_exhaustion_is_persistent_and_cannot_rewrite_good_changes():
+    state=candidate();before=deepcopy(state);changes=additions(state);changes[3]['value']['actor_id']='missing'
+    original=proposal(state,changes);journal={};calls=[]
+    def call(slot, request):
+        calls.append(slot)
+        if not slot.startswith('creative_correction_'):return original
+        payload=json.loads(request[1]['content'])
+        return json.dumps(dict(proposal_hash=payload['proposal_hash'],patches=[dict(path='/changes/0/value/name',value='Hacked')],drop_indices=[]))
+    for _ in range(3):
+        with pytest.raises(ValueError):draft_creative.develop(state,'brief',journal,call,lambda:None)
+        journal=json.loads(json.dumps(journal))
+    assert len(calls)==3 and len(journal['creative']['corrections'])==2
+    assert journal['creative']['current_reply']==original and state==before
+    assert 'candidate_text' not in journal
+    assert all('неразрешённый' in a['error'] for a in journal['creative']['corrections'])
+
+
+def test_correction_interruption_resumes_same_proposal_and_slot():
+    from backend.services.draft_response import TransportError
+    state=candidate();changes=additions(state);changes[3]['value']['actor_id']='missing'
+    original=proposal(state,changes);journal={};slots=[]
+    def interrupted(slot, request):
+        slots.append(slot)
+        if slot.startswith('creative_correction_'):raise TransportError('outage')
+        return original
+    with pytest.raises(TransportError):draft_creative.develop(state,'brief',journal,interrupted,lambda:None)
+    assert journal['creative']['status']=='interrupted' and not journal['creative']['corrections']
+    journal=json.loads(json.dumps(journal))
+    def recovered(slot, request):
+        assert slot==slots[-1]
+        payload=json.loads(request[1]['content'])
+        return json.dumps(dict(proposal_hash=payload['proposal_hash'],patches=[dict(path='/changes/3/value/actor_id',value='craftswoman')],drop_indices=[]))
+    assert draft_creative.develop(state,'brief',journal,recovered,lambda:None)['world']['organizations']['workshop']
+    assert journal['creative']['original_reply']==original and len(journal['creative']['corrections'])==1
+
+
+def test_changed_transport_policy_recovers_empty_length_without_losing_history():
+    from backend.services.draft_creative import response_slot
+    record={'slot':'creative_base','request_key':'old'}
+    old=dict(parts=[dict(text='')],failure={'code':'empty_output_limit'})
+    journal={'responses':{'creative_base':old}}
+    assert response_slot(journal,record,'new')=='creative_base_new'
+    assert journal['responses']['creative_base']==old
+    record={'slot':'creative_partial','request_key':'old'}
+    journal={'responses':{'creative_partial':dict(parts=[dict(text='{"changes":')])}}
+    assert response_slot(journal,record,'new')=='creative_partial'
+    record={'slot':'creative_base','request_key':'old'}
+    journal=dict(response_retries={'creative_base':'confirmed'},empty_retries={'fp':dict(slot='confirmed',epoch=1,used=False)},recovery_epoch=1)
+    assert response_slot(journal,record,'new')=='creative_base'
+
+
+def test_api_correction_accounting_and_saved_candidate(api):
+    client,app=api;repo=app.state.repository
+    wid=client.post('/api/workspaces',json={'name':'Addressed creative correction'}).json()['id'];url=f'/api/workspaces/{wid}/draft'
+    stages=[]
+    def stream(**kw):
+        system=kw['messages'][0]['content'];kw['on_usage']({'prompt_tokens':100,'completion_tokens':20,'prompt_cache_hit_tokens':0});kw['on_finish']('stop')
+        if system.startswith(draft_creative.MARKER):
+            stages.append('creative');payload=json.loads(kw['messages'][1]['content']);changes=additions(payload['candidate']);changes[3]['value']['actor_id']='missing'
+            yield json.dumps(dict(candidate_hash=payload['candidate_hash'],rationale='Связанный пакет мастерской',changes=changes))
+        elif system.startswith('Адресная коррекция'):
+            stages.append('correction');payload=json.loads(kw['messages'][1]['content'])
+            draft=repo.draft(wid,True);assert 'workshop' not in draft['candidate']['world']['organizations']
+            yield json.dumps(dict(proposal_hash=payload['proposal_hash'],patches=[dict(path='/changes/3/value/actor_id',value='craftswoman')],drop_indices=[]))
+        elif system.startswith(draft_completeness.MARKER):stages.append('review');yield '{"issues":[]}'
+        else:stages.append('world');yield json.dumps(rich())
+    with patch('backend.services.preparation.chat_stream',side_effect=stream):
+        created=client.post(url+'/generate',json=dict(revision=0,text='Город мастерских',config=dict(REMOTE,context_length=131072),api_key='offline'))
+        jid=created.json()['id'];job=wait_job(client,jid);assert job['status']=='saved',job
+    raw=client.get(url+'/raw').json()
+    assert stages==['world','creative','correction','review']
+    assert raw['actual_tokens']==480 and raw['reserved_tokens']==0
+    assert float(raw['actual_cost'])>0 and float(raw.get('reserved_cost',0))==0
+    assert [r['stage'] for r in raw['requests']].count('draft_world_creative_repair')==1
+    assert 'missing' in raw['creative']['original_reply'] and len(raw['creative']['corrections'])==1
+    saved=Repository(repo.path).draft(wid,True)
+    assert saved['state']['world']['knowledge']['fire']['source_event_id']=='fire'

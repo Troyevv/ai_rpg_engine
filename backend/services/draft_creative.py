@@ -73,7 +73,22 @@ def messages(state, author_context):
                 response_schema=Proposal.model_json_schema()), ensure_ascii=False, separators=(',', ':')))]
 
 
-def develop(state, author_context, journal, call, save):
+def response_slot(journal, record, request_key):
+    """A changed policy may recover failed transport, never discard paid text."""
+    slot=record['slot'];seen=set()
+    while slot in journal.get('response_retries',{}) and slot not in seen:
+        seen.add(slot);slot=journal['response_retries'][slot]
+    transport=journal.get('responses',{}).get(slot,{})
+    grant=any(r.get('slot')==slot and not r.get('used') and r.get('epoch')==journal.get('recovery_epoch',0)
+              for r in journal.get('empty_retries',{}).values())
+    if request_key is not None and record.get('request_key')!=request_key:
+        if not journal.get('pending') and not grant and (not transport.get('parts') or transport.get('failure')):
+            record['slot']=record.setdefault('base_slot',record['slot'])+'_'+request_key
+        record['request_key']=request_key
+    return record['slot']
+
+
+def develop(state, author_context, journal, call, save, *, request_key=None):
     record = journal.get('creative')
     if record and record.get('status') == 'applied':
         # Recover a crash between the journal checkpoint and version append.
@@ -92,17 +107,54 @@ def develop(state, author_context, journal, call, save):
             raise ValueError('Бюджет творческого развития исчерпан; кандидат сохранён для редактора.')
         record = dict(status='running', before_hash=before, slot='creative_'+before)
         journal['creative'] = record
-    if record.get('status') == 'rejected':
+    if record.get('status') == 'rejected' and record.get('correction_complete'):
         raise ValueError(record['reason'])
     record['status'] = 'running'
     save()
     try:
-        answer = call(record['slot'], messages(state, author_context))
+        from backend.services import draft_creative_repair as correction
+        answer = record.get('current_reply')
         if answer is None:
-            record['status'] = 'cancelled'
+            slot=response_slot(journal,record,request_key)
             save()
-            return None
-        enhanced, proposal = apply_proposal(state, answer)
+            answer = call(slot, messages(state, author_context))
+            if answer is None:
+                record['status'] = 'cancelled'
+                save()
+                return None
+            record['original_reply'] = answer
+            record['current_reply'] = answer
+            save()
+        attempts = record.setdefault('corrections', [])
+        while True:
+            try:
+                enhanced, proposal = apply_proposal(state, answer)
+                break
+            except ValueError as invalid:
+                allowed = correction.scope(state, answer, invalid)
+                if allowed is None or len(attempts) >= 2:
+                    record['correction_complete'] = True
+                    raise
+                # Slot identity survives transport interruptions and resume epochs.
+                slot = 'creative_correction_'+before+'_'+str(len(attempts))
+                pending=record.setdefault('correction_pending',dict(slot=slot,scope=allowed))
+                slot=response_slot(journal,pending,request_key)
+                save()
+                feedback = attempts[-1].get('error') if attempts else None
+                reply = call(slot, correction.messages(state, answer, author_context, allowed, feedback))
+                if reply is None:
+                    record['status'] = 'cancelled'
+                    save()
+                    return None
+                attempt = dict(slot=slot, scope=allowed, response=reply)
+                attempts.append(attempt)
+                record.pop('correction_pending', None)
+                try:
+                    answer = correction.apply(answer, reply, allowed)
+                    record['current_reply'] = answer
+                except ValueError as error:
+                    attempt['error'] = str(error)
+                save()
         record.update(status='applied', after_hash=candidate_hash(enhanced), proposal=proposal,
                       provenance=dict(source='creative_model', author_context_hash=candidate_hash(author_context)))
         # A single journal write binds the accepted batch and its resulting text.

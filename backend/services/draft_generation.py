@@ -181,9 +181,13 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
             stage='draft_world_creative'
             repo.draft_phase(jid,'developing',reset_progress=True)
             def creative_call(slot, request_messages):
+                nonlocal stage
+                stage='draft_world_creative_repair' if slot.startswith('creative_correction_') else 'draft_world_creative'
+                repo.draft_phase(jid,'retrying' if slot.startswith('creative_correction_') else 'developing')
                 return response(repo,jid,journal,slot,request_messages,config,context,generate,handle.cancel)
             state=draft_creative.develop(state,messages[-1]['content'],journal,creative_call,
-                                         lambda:repo.save_response_journal(jid,journal))
+                                         lambda:repo.save_response_journal(jid,journal),
+                                         request_key=candidate_hash([context,{k:config.get(k) for k in ('provider','model','thinking','temperature','max_tokens','_draft_stage_output_limits','_model_capabilities')}]))
             if state is None:return
             result=journal['candidate_text']
             repo.save_draft_candidate(jid,state,[],review=dict(status='not_started',issues=[]),epoch=epoch)

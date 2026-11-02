@@ -76,6 +76,12 @@ def stream(**kwargs):
             letter130_provider.artifacts=[]
             letter130_provider.rows=[]
         return
+    if kwargs['messages'][0]['content'].startswith('Адресная коррекция творческого предложения'):
+        payload=json.loads(kwargs['messages'][1]['content'])
+        kwargs['on_usage']({'prompt_tokens':100,'completion_tokens':20})
+        kwargs['on_finish']('stop')
+        yield json.dumps(dict(proposal_hash=payload['proposal_hash'],patches=[dict(path='/changes/3/value/actor_id',value='craftswoman')],drop_indices=[]))
+        return
     from draft_provider_fixture import CREATIVE_MARKER, creative_noop
     if kwargs["messages"][0]["content"].startswith(CREATIVE_MARKER):
         if creative172_control and 'CREATIVE172' in kwargs['messages'][1]['content']:
@@ -87,7 +93,9 @@ def stream(**kwargs):
                 yield '';return
             from test_draft_creative import additions
             payload=json.loads(kwargs['messages'][1]['content'])
-            yield json.dumps(dict(candidate_hash=payload['candidate_hash'],rationale='Восстановление мастерской связывает персонажей.',changes=additions(payload['candidate'])),ensure_ascii=False)
+            changes=additions(payload['candidate'])
+            if creative172_control.get('invalid'):changes[3]['value']['actor_id']='missing'
+            yield json.dumps(dict(candidate_hash=payload['candidate_hash'],rationale='Восстановление мастерской связывает персонажей.',changes=changes),ensure_ascii=False)
             return
         yield creative_noop(kwargs["messages"]);return
     if creative172_control and kwargs['messages'][0]['content'].startswith('Ты создаёшь полноценный живой RPG-мир') and 'CREATIVE172' in kwargs['messages'][1]['content']:
@@ -420,6 +428,18 @@ def preparation_stream(**kwargs):
             hold=False
 
 preparation.chat_stream = preparation_stream
+
+# This scenario exercises persisted pre-v6 quality semantics explicitly.
+from backend.services import draft_generation
+_generation_run = draft_generation.run
+def generation_fixture(prep, jid, config, *args):
+    if 'TEST_RELEASE_QUALITY' in str(config.get('_draft_source', config.get('_draft_input', ''))):
+        journal = json.loads(prep.repo.preparation_job(jid).get('response_journal') or '{}')
+        journal.setdefault('generation_contract', {'version': 5})
+        prep.repo.save_response_journal(jid, journal)
+    return _generation_run(prep, jid, config, *args)
+draft_generation.run = generation_fixture
+
 engine.find_loaded_model = preparation.find_loaded_model = lambda model: {'config': {'context_length':131072 if model=='handoff-test' else 32768}}
 def authoring_stream(**kwargs):
     if any('Ты редактор черновика Character' in m['content'] for m in kwargs['messages']):
@@ -454,7 +474,7 @@ if __name__ == '__main__':
         global creative172_control, phone_mode
         from threading import Event
         phone_mode=None
-        creative172_control=dict(gate=Event(),calls=0,fail=body.get('fail',False))
+        creative172_control=dict(gate=Event(),calls=0,fail=body.get('fail',False),invalid=body.get('invalid',False))
         return app.state.repository.create_workspace('Творческое развитие')
 
     @app.post('/test/creative172/release')

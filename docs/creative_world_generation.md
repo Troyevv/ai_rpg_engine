@@ -54,9 +54,20 @@ The proposal checkpoint and resulting candidate text share one journal write.
 A crash before the version append can reapply that exact cached proposal without
 another LLM request. Applied development is not repeated after review, repair or
 manual edits. A rejected structural proposal leaves the previous candidate and
-raw diagnostics intact. Editing that candidate permits a new proposal; at most
+raw diagnostics intact. At most two targeted corrections may change only validator-addressed
+proposal fields (or drop a specifically rejected scope operation). The full proposal
+is hash-bound and revalidated atomically; good sibling operations cannot be rewritten.
+Original/corrected replies, diagnostic scopes and every transport attempt remain in
+the journal and author diagnostic export. Interrupted corrections resume their exact
+slot without regenerating the creative batch; exhausted attempts stay exhausted
+across reloads. Unaddressable failures remain rejected.
+
+Editing that candidate permits a new proposal; at most
 three distinct candidate attempts are allowed, under the existing total budget.
-No automatic broad rewriting is used to repair a rejected proposal.
+No automatic broad rewriting is used to repair a rejected proposal. Corrections
+use the existing repair output budget and request accounting. Changing transport
+policy can recover an empty length-limited response without discarding paid partial
+text or bypassing identical-empty-request blocking.
 
 Empty terminal responses reuse #170's explicit one-request retry grant; identical
 empty requests are blocked without a fresh grant. Cancellation/network unknown
@@ -72,3 +83,36 @@ checkpoint replay, semantic review/repair, editor access, Start Game, turns and
 save/reload. They **do not measure live DeepSeek artistic quality**. Creative
 quality and literary preservation must still be assessed on representative live
 briefs with provider credentials; no API key is included in fixtures or logs.
+
+
+## Context measurements (offline, 2026-11-02)
+
+Reproduce with `python scripts/measure_creative_context.py`. Full requests include
+canon, author source/settings, rules and schemas; no truncation. Measurements use
+six existing controlled scenario worlds, one historical real DeepSeek candidate,
+and the existing 36/56-character cast-boundary fixtures. The latter are synthetic
+scale tests, not 56 independently authored character biographies.
+
+| World | UTF-8 bytes | Input reservation | Context for full output allowance |
+| --- | ---: | ---: | ---: |
+| Volkov controlled scenario | 72,278 | 36,972 | 60,972 |
+| Everyday / historical / fantasy / adoption / organizations | 48,900–49,700 | 25,283–25,683 | 47,576–48,336 |
+| Historical real provider candidate | 74,808 | 38,237 | 62,237 |
+| 36-character cast fixture | 98,430 | 50,048 | 74,048 |
+| 56-character cast fixture | 132,332 | 66,999 | 90,999 |
+
+Input reservations use the existing conservative UTF-8 estimator plus 512; they
+are not actual tokenizer counts. Output is bounded by the existing policy and a
+24,000-token configured ceiling for this measurement. 32K cannot fit the Volkov
+case; 64K cannot fit even the minimum 256 output tokens for the 56-character case.
+Preflight rejects those calls without spending; increasing context and resuming
+keeps canon and previous paid responses. No default limits were increased.
+Request construction measured 84–235 ms in this environment during concurrent
+tests; this does not measure provider latency.
+
+Using the repository's tariff snapshot `2026-09-15` at its peak uncached rate,
+one creative request reserves approximately $0.0343–$0.0489 at the output ceiling.
+This is a code-derived budget estimate, not verified current pricing or actual
+DeepSeek spending. Corrections/continuations and semantic review add separate
+reservations under the existing total cap. Missing usage remains unknown, and
+unknown-outcome requests retain their reservations until explicitly handled.
