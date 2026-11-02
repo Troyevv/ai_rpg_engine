@@ -328,3 +328,48 @@ def test_api_correction_accounting_and_saved_candidate(api):
     assert 'missing' in raw['creative']['original_reply'] and len(raw['creative']['corrections'])==1
     saved=Repository(repo.path).draft(wid,True)
     assert saved['state']['world']['knowledge']['fire']['source_event_id']=='fire'
+
+
+@pytest.mark.parametrize('checkpoint', ['response', 'correction', 'applied'])
+def test_completed_correction_checkpoint_replays_without_provider(checkpoint):
+    """A process loss after paid response persistence must not buy it again."""
+    import threading
+    from backend.services.draft_response import response
+    from test_draft_response_v4 import JournalRepo
+    state=candidate();before=deepcopy(state);changes=additions(state)
+    changes[3]['value']['actor_id']='missing'
+    original=proposal(state,changes);journal={};repo=JournalRepo();calls=[]
+    crashed=False
+    def save():
+        nonlocal crashed
+        repo.save_response_journal('j',journal)
+        record=journal['creative']
+        reached=(checkpoint=='correction' and record.get('corrections')
+                 or checkpoint=='applied' and record['status']=='applied')
+        if reached and not crashed:
+            crashed=True
+            raise RuntimeError('process lost after checkpoint')
+    def call(slot, messages):
+        nonlocal crashed
+        def generate(request, limit):
+            calls.append(slot)
+            if slot.startswith('creative_correction_'):
+                payload=json.loads(request[1]['content'])
+                yield json.dumps(dict(proposal_hash=payload['proposal_hash'],patches=[dict(path='/changes/3/value/actor_id',value='craftswoman')],drop_indices=[]))
+            else:yield original
+        result=response(repo,'j',journal,slot,messages,dict(provider='local',model='local',max_tokens=8192),131072,generate,threading.Event())
+        if checkpoint=='response' and slot.startswith('creative_correction_') and not crashed:
+            crashed=True
+            raise RuntimeError('process lost after paid response')
+        return result
+    with pytest.raises(RuntimeError,match='process lost'):
+        draft_creative.develop(state,'Авторский бриф',journal,call,save)
+    assert state==before and len(calls)==2
+    journal=json.loads(json.dumps(repo.journal))
+    enhanced=draft_creative.develop(state,'Авторский бриф',journal,call,save)
+    assert len(calls)==2 and len(journal['creative']['corrections'])==1
+    assert enhanced['world']['knowledge']['fire']['source_event_id']=='fire'
+    assert enhanced['world']['threads']['rebuild']['last_event_id']=='fire'
+    assert journal['creative']['original_reply']==original
+    assert journal['creative']['status']=='applied'
+    assert state==before

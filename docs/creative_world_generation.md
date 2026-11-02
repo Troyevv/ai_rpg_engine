@@ -116,3 +116,21 @@ This is a code-derived budget estimate, not verified current pricing or actual
 DeepSeek spending. Corrections/continuations and semantic review add separate
 reservations under the existing total cap. Missing usage remains unknown, and
 unknown-outcome requests retain their reservations until explicitly handled.
+
+## Reload regression diagnosis (#176)
+
+The failed `creative172` browser fixture installed an unconditional init script.
+Every reload reset `localStorage.selection` to the unrelated theme seed world,
+removing the save ID selected by draft confirmation. The failing CI trace shows
+`GET /api/saves/22` before reload but `GET /api/worlds/8` afterwards, with the DOM
+showing the seed world's title and “Создать прохождение”. `App` initializes React
+selection from that storage value and consequently loads no save. This was test
+setup corruption, not loss of persisted choices.
+
+Seed storage once instead. Keep the six-choice assertion and additionally verify
+that the selected world/save survives reload, the second turn is actually saved,
+and API turns, canonical state and draft request history remain identical. Run
+all three modes (success, explicit empty retry, addressed correction) in both
+skins and viewports. Recovery tests also interrupt correction transport and
+simulate process loss after response, correction and applied checkpoints; cached
+responses must be reused without additional provider calls.
