@@ -57,24 +57,49 @@ for(const skin of ['graphite','parchment']) for(const mode of ['complete','empty
   expect((await request.put(`/api/worlds/${selected.world}/presentation`,{data:{theme_id:skin}})).ok()).toBeTruthy();
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme',skin);
+  const canonical=async()=>{
+   const response=await request.get(`/test/creative172/saves/${selected.save}/canonical`);
+   expect(response.ok()).toBeTruthy();return await response.json();
+  };
+  const initial=await canonical();
+  expect(initial.world_state.organizations.workshop.name).toBe('Мастерская Веры');
+  expect(initial.world_state.roles.craft).toMatchObject({actor_id:'craftswoman',organization_id:'workshop'});
+  expect(initial.world_state.knowledge['craftswoman:fire']).toMatchObject({fact_id:'fire',source_event_id:'fire'});
+  expect(initial.events.find((e:{id:string})=>e.id==='fire')).toMatchObject({fact_ids:['fire']});
+  const records=[['organizations','workshop'],['roles','craft'],['objective_relations','friend'],['facts','fire'],['knowledge','craftswoman:fire'],['threads','rebuild']];
+  for(const [section,id] of records)expect(initial.world_state[section][id]).toBeTruthy();
   await page.getByRole('button',{name:'Начать игру',exact:true}).click();
   await expect(page.locator('.turn')).toHaveCount(1);
   await expect(page.locator('.choices button')).toHaveCount(6);
   const view=async()=>await(await request.get(`/api/saves/${selected.save}`)).json();
-  await page.locator('.choices button').first().click();
-  // Choices from the preceding turn can remain mounted while a job starts.
-  await expect(page.locator('.turn')).toHaveCount(2);
-  await expect.poll(async()=>(await view()).job.status).toBe('saved');
-  await expect(page.locator('.choices button')).toHaveCount(6);
-  const saved=await view();expect(saved.turns).toHaveLength(2);
-  expect(saved.state.world.organizations.workshop.name).toBe('Мастерская Веры');
+  for(const turnCount of [2,3]){
+   await page.locator('.choices button').first().click();
+   // Choices from the preceding turn can remain mounted while a job starts.
+   await expect(page.locator('.turn')).toHaveCount(turnCount);
+   await expect.poll(async()=>(await view()).job.status).toBe('saved');
+   await expect(page.locator('.choices button')).toHaveCount(6);
+   const current=await canonical();
+   for(const [section,id] of records)expect(current.world_state[section][id]).toEqual(initial.world_state[section][id]);
+   expect(current.events.find((e:{id:string})=>e.id==='fire')).toEqual(initial.events.find((e:{id:string})=>e.id==='fire'));
+  }
+  const saved=await view();expect(saved.turns).toHaveLength(3);
+  // GET /saves exposes ui_view, not the draft or canonical world schema.
+  // The role has no knowledge fact and must remain absent from the public view.
+  expect(saved.state.world).not.toHaveProperty('organizations');
+  expect(saved.state.residence_roles.roles).not.toEqual(expect.arrayContaining([expect.objectContaining({id:'craft'})]));
+  expect(saved.state.characters).toEqual(expect.arrayContaining([expect.objectContaining({id:'craftswoman',name:'Вера'})]));
+  expect(saved.state.world.facts.fire.text).toBe(initial.world_state.facts.fire.text);
+  expect(saved.state.world.knowledge['craftswoman:fire']).toEqual(initial.world_state.knowledge['craftswoman:fire']);
+  expect(saved.state.world.threads.rebuild).toEqual(initial.world_state.threads.rebuild);
+  const savedCanonical=await canonical();
   await page.reload();
-  await expect(page.locator('.turn')).toHaveCount(2);
+  await expect(page.locator('.turn')).toHaveCount(3);
   await expect(page.locator('.choices button')).toHaveCount(6);
   await expect(page.locator('html')).toHaveAttribute('data-theme',skin);
   expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('selection')!))).toEqual(selected);
   const reloaded=await view();
   expect(reloaded.turns).toEqual(saved.turns);expect(reloaded.state).toEqual(saved.state);
+  expect(await canonical()).toEqual(savedCanonical);
   expect((await(await request.get(url+'/raw')).json()).requests).toEqual(raw.requests);
  });
 }

@@ -134,3 +134,20 @@ all three modes (success, explicit empty retry, addressed correction) in both
 skins and viewports. Recovery tests also interrupt correction transport and
 simulate process loss after response, correction and applied checkpoints; cached
 responses must be reused without additional provider calls.
+
+A subsequent E2E assertion confused the draft and save contracts:
+`GET /api/saves/{id}` returns `ui_view`, whose `state.world` does not contain
+`organizations`. Canonical records remain under
+`Repository.get_snapshot(id)['world_state']['organizations']`. Social labels in
+the public response use `state.residence_roles`; this fixture's role has no
+knowledge fact, so it must not appear there. The actual API response after Start
+Game plus two ordinary turns has three turns, the new character, fire fact,
+Knowledge and thread, while the organization and role remain intact in SQLite.
+
+The browser test now checks public records through the existing API and reads
+canonical organization/role/relation/fact/Knowledge/thread records and the source
+event through a read-only route in the browser-only fixture server. It compares
+those records after each ordinary turn and after refresh, using a reopened
+Repository. Backend integration also reopens the whole application and compares
+public state/turns and the canonical snapshot. No production API or Knowledge
+visibility rule is changed to satisfy this test.

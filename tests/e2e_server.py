@@ -477,6 +477,17 @@ if __name__ == '__main__':
         creative172_control=dict(gate=Event(),calls=0,fail=body.get('fail',False),invalid=body.get('invalid',False))
         return app.state.repository.create_workspace('Творческое развитие')
 
+    @app.get('/test/creative172/saves/{sid}/canonical')
+    def creative172_canonical(sid:int):
+        # Test-only read from a reopened repository, never a production API.
+        from backend.repositories.preparation import Repository
+        from backend.runtime_v3.repository import read_history
+        repo=Repository(app.state.repository.path)
+        snapshot=repo.get_snapshot(sid)
+        with repo.connect() as db:
+            history,warnings=read_history(db,snapshot.get('history_head'))
+        return dict(world_state=snapshot['world_state'],events=history['events'],warnings=warnings)
+
     @app.post('/test/creative172/release')
     def release_creative172():
         creative172_control['gate'].set()

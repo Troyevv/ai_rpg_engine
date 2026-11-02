@@ -128,11 +128,40 @@ def test_generation_editor_start_turn_reload(api,repair):
     sid=started.json()['save'];repo=app.state.repository
     from test_runtime_v3_engine import run as play, raw_for
     from test_engine import CONFIG
-    for kind in ('start','turn'):
+    from backend.runtime_v3.repository import read_history
+    initial_snapshot=repo.get_snapshot(sid);initial=initial_snapshot['world_state']
+    with repo.connect() as db:initial_history,initial_warnings=read_history(db,initial_snapshot['history_head'])
+    records={'organizations':'workshop','roles':'craft','objective_relations':'friend',
+             'facts':'fire','knowledge':'craftswoman:fire','threads':'rebuild'}
+    assert initial['organizations']['workshop']['name']==expected
+    for section,key in records.items():assert initial[section][key]
+    assert initial['roles']['craft']['organization_id']=='workshop'
+    assert initial['knowledge']['craftswoman:fire']['source_event_id']=='fire'
+    for index,kind in enumerate(('start','turn','turn'),1):
         before=repo.get_snapshot(sid);jid=repo.begin_job(sid,'Осмотреться.' if kind=='turn' else '',kind,CONFIG)
         play(repo,jid,raw_for(before));assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
         repo=Repository(repo.path)
-        assert repo.get_snapshot(sid)['world_state']['organizations']['workshop']['name']==expected
+        snapshot=repo.get_snapshot(sid);canonical=snapshot['world_state']
+        for section,key in records.items():assert canonical[section][key]==initial[section][key]
+        with repo.connect() as db:history,warnings=read_history(db,snapshot['history_head'])
+        assert warnings==initial_warnings
+        assert next(e for e in history['events'] if e['id']=='fire')['fact_ids']==['fire']
+        response=client.get(f'/api/saves/{sid}');assert response.status_code==200
+        public=response.json();view=public['state']
+        assert len(public['turns'])==index
+        assert 'organizations' not in view['world']  # UI projection is not canonical.
+        assert not any(r['id']=='craft' for r in view['residence_roles']['roles'])
+        assert next(c for c in view['characters'] if c['id']=='craftswoman')['name']=='Вера'
+        assert view['world']['facts']['fire']['text']==canonical['facts']['fire']['text']
+        assert view['world']['knowledge']['craftswoman:fire']==canonical['knowledge']['craftswoman:fire']
+        assert view['world']['threads']['rebuild']==canonical['threads']['rebuild']
+    # A fresh application reads the same public projection and canonical records.
+    from fastapi.testclient import TestClient
+    from backend.api.app import create_app
+    with TestClient(create_app(repo.path)) as reloaded:
+        restored=reloaded.get(f'/api/saves/{sid}').json()
+        assert restored['state']==public['state'] and restored['turns']==public['turns']
+    assert Repository(repo.path).get_snapshot(sid)==snapshot
 
 
 def test_factored_schema_is_valid_and_has_all_canonical_roots():
