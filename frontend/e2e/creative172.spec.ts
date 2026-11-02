@@ -49,11 +49,17 @@ for(const skin of ['graphite','parchment']) for(const mode of ['complete','empty
   await page.reload();await nav(page,'Создать');
   await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
   await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Начать игру',exact:true})).toBeVisible();
+  const selected=await page.evaluate(()=>JSON.parse(localStorage.getItem('selection')!));
+  expect(selected.world).not.toBe(theme.world);expect(selected.save).toBeTruthy();
+  // Confirmation creates a new world with its own presentation. Exercise the
+  // requested skin in the game too, not only on the seed world's draft screen.
+  expect((await request.put(`/api/worlds/${selected.world}/presentation`,{data:{theme_id:skin}})).ok()).toBeTruthy();
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme',skin);
   await page.getByRole('button',{name:'Начать игру',exact:true}).click();
   await expect(page.locator('.turn')).toHaveCount(1);
   await expect(page.locator('.choices button')).toHaveCount(6);
-  const selected=await page.evaluate(()=>JSON.parse(localStorage.getItem('selection')!));
-  expect(selected.world).not.toBe(theme.world);expect(selected.save).toBeTruthy();
   const view=async()=>await(await request.get(`/api/saves/${selected.save}`)).json();
   await page.locator('.choices button').first().click();
   // Choices from the preceding turn can remain mounted while a job starts.
@@ -65,6 +71,7 @@ for(const skin of ['graphite','parchment']) for(const mode of ['complete','empty
   await page.reload();
   await expect(page.locator('.turn')).toHaveCount(2);
   await expect(page.locator('.choices button')).toHaveCount(6);
+  await expect(page.locator('html')).toHaveAttribute('data-theme',skin);
   expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('selection')!))).toEqual(selected);
   const reloaded=await view();
   expect(reloaded.turns).toEqual(saved.turns);expect(reloaded.state).toEqual(saved.state);
