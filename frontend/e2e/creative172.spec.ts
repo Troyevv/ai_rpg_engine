@@ -10,7 +10,10 @@ for(const skin of ['graphite','parchment']) for(const mode of ['complete','empty
   await request.put('/api/credentials/deepseek',{data:{api_key:'offline-creative172'}});
   const workspace=await(await request.post('/test/creative172',{data:{fail,invalid:mode==='correction'}})).json();
   const url=`/api/workspaces/${workspace.id}/draft`;
-  await page.addInitScript(({wid,world})=>{localStorage.setItem('draftWorkspace',wid);localStorage.setItem('selection',JSON.stringify({world}));},{wid:workspace.id,world:theme.world});
+  // Seed once: init scripts run again on every reload and would overwrite
+  // the world/save selected by confirmation with the unrelated theme world.
+  await page.goto('/');
+  await page.evaluate(({wid,world})=>{localStorage.setItem('draftWorkspace',wid);localStorage.setItem('selection',JSON.stringify({world}));},{wid:workspace.id,world:theme.world});
   await page.goto('/');await nav(page,'Создать');
   const generated=await request.post(url+'/generate',{data:{revision:0,text:'CREATIVE172: В приморском городе восстанавливают мастерскую после пожара. Происхождение героя неизвестно.',config:{...defaults.summary,provider:'deepseek',model:'deepseek-flash',thinking:'off',max_tokens:24000,context_length:131072},api_key:'offline'}});
   expect(generated.ok()).toBeTruthy();
@@ -47,9 +50,24 @@ for(const skin of ['graphite','parchment']) for(const mode of ['complete','empty
   await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
   await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
   await page.getByRole('button',{name:'Начать игру',exact:true}).click();
+  await expect(page.locator('.turn')).toHaveCount(1);
   await expect(page.locator('.choices button')).toHaveCount(6);
+  const selected=await page.evaluate(()=>JSON.parse(localStorage.getItem('selection')!));
+  expect(selected.world).not.toBe(theme.world);expect(selected.save).toBeTruthy();
+  const view=async()=>await(await request.get(`/api/saves/${selected.save}`)).json();
   await page.locator('.choices button').first().click();
+  // Choices from the preceding turn can remain mounted while a job starts.
+  await expect(page.locator('.turn')).toHaveCount(2);
+  await expect.poll(async()=>(await view()).job.status).toBe('saved');
   await expect(page.locator('.choices button')).toHaveCount(6);
-  await page.reload();await expect(page.locator('.choices button')).toHaveCount(6);
+  const saved=await view();expect(saved.turns).toHaveLength(2);
+  expect(saved.state.world.organizations.workshop.name).toBe('Мастерская Веры');
+  await page.reload();
+  await expect(page.locator('.turn')).toHaveCount(2);
+  await expect(page.locator('.choices button')).toHaveCount(6);
+  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('selection')!))).toEqual(selected);
+  const reloaded=await view();
+  expect(reloaded.turns).toEqual(saved.turns);expect(reloaded.state).toEqual(saved.state);
+  expect((await(await request.get(url+'/raw')).json()).requests).toEqual(raw.requests);
  });
 }

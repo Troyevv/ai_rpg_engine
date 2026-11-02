@@ -152,11 +152,12 @@ def test_complete_author_context_and_settings_are_not_clipped(brief):
 
 
 @pytest.mark.parametrize('failure', ['empty', 'network', 'truncated'])
-def test_transport_resume_keeps_candidate_and_actual_usage(api,failure):
+@pytest.mark.parametrize('stage', ['creative', 'correction'])
+def test_transport_resume_keeps_candidate_and_actual_usage(api,failure,stage):
     from llm import OutputLimitReached
     client,app=api
     wid=client.post('/api/workspaces',json={'name':'Creative recovery'}).json()['id']
-    url=f'/api/workspaces/{wid}/draft';creative_calls=[];world_calls=[];reply=''
+    url=f'/api/workspaces/{wid}/draft';creative_calls=[];world_calls=[];correction_calls=[];reply=''
     def stream(**kw):
         nonlocal reply
         system=kw['messages'][0]['content']
@@ -166,20 +167,27 @@ def test_transport_resume_keeps_candidate_and_actual_usage(api,failure):
             creative_calls.append(kw)
             payload=json.loads(kw['messages'][1]['content'])
             reply=json.dumps(dict(candidate_hash=payload['candidate_hash'],rationale='Сеть отношений мастерской.',changes=additions(payload['candidate'])),ensure_ascii=False)
-            if len(creative_calls)==1:
-                if failure=='empty':yield '';return
-                if failure=='network':raise OSError('controlled unknown outcome')
-                kw['on_finish']('length')
-                yield reply[:len(reply)//2]
-                raise OutputLimitReached()
-            if failure=='truncated':
-                assert kw['messages'][-2]['content']==reply[:len(reply)//2]
-                yield reply[len(reply)//2:];return
-            yield reply
-        elif system.startswith(draft_completeness.MARKER):yield '{"issues":[]}'
+            if stage=='correction':
+                value=json.loads(reply);value['changes'][3]['value']['actor_id']='missing'
+                yield json.dumps(value);return
+        elif system.startswith('Адресная коррекция'):
+            correction_calls.append(kw);payload=json.loads(kw['messages'][1]['content'])
+            reply=json.dumps(dict(proposal_hash=payload['proposal_hash'],patches=[dict(path='/changes/3/value/actor_id',value='craftswoman')],drop_indices=[]))
+        elif system.startswith(draft_completeness.MARKER):yield '{"issues":[]}';return
         else:
             world_calls.append(kw)
-            yield json.dumps(rich(),ensure_ascii=False)
+            yield json.dumps(rich(),ensure_ascii=False);return
+        active_calls=correction_calls if stage=='correction' else creative_calls
+        if len(active_calls)==1:
+            if failure=='empty':yield '';return
+            if failure=='network':raise OSError('controlled unknown outcome')
+            kw['on_finish']('length')
+            yield reply[:len(reply)//2]
+            raise OutputLimitReached()
+        if failure=='truncated':
+            assert kw['messages'][-2]['content']==reply[:len(reply)//2]
+            yield reply[len(reply)//2:];return
+        yield reply
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         created=client.post(url+'/generate',json={'revision':0,'text':'Мастерская после пожара.','config':dict(REMOTE,context_length=131072),'api_key':'offline'})
         jid=created.json()['id'];job=wait_job(client,jid)
@@ -204,12 +212,19 @@ def test_transport_resume_keeps_candidate_and_actual_usage(api,failure):
             job=wait_job(client,jid)
         assert job['status']=='saved',job
     journal=json.loads(app.state.repository.preparation_job(jid)['response_journal'])
-    assert len(world_calls)==1 and len(creative_calls)==2
+    assert len(world_calls)==1 and len(creative_calls)==(1 if stage=='correction' else 2)
+    assert len(correction_calls)==(2 if stage=='correction' else 0)
     assert journal['creative']['status']=='applied'
-    assert len(app.state.repository.request_log(job_id=jid))==4
+    assert len(app.state.repository.request_log(job_id=jid))==(5 if stage=='correction' else 4)
     # Failed network billing is not inferred; the prior reservation stays intact.
     if failure=='network':assert journal['unknown_attempts'] and journal['reserved_tokens']>0
-    else:assert journal['actual_tokens']==480 and journal['reserved_tokens']==0
+    else:assert journal['actual_tokens']==(600 if stage=='correction' else 480) and journal['reserved_tokens']==0
+    if stage=='correction':
+        assert len(journal['creative']['corrections'])==1
+        assert 'missing' in journal['creative']['original_reply']
+        saved=Repository(app.state.repository.path).draft(wid,True)['state']
+        assert saved['world']['knowledge']['fire']['source_event_id']=='fire'
+        assert saved['world']['threads']['rebuild']['last_event_id']=='fire'
     assert client.get(url+'?author=true').json()['state']['world']['organizations']['workshop']
 
 @pytest.mark.parametrize('fault',['reference','shape','scope'])
