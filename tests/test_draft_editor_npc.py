@@ -63,6 +63,12 @@ def test_exact_recorded_reply_and_server_normalization():
     fixed=correction.apply(f['reply'],json.dumps(dict(proposal_hash=allowed['proposal_hash'],patches=[],drop_indices=[15])),allowed)
     out,p=apply_proposal(s,fixed,editing=True)
     assert len(p['changes'])==15
+    expected=deepcopy(json.loads(f['reply'])['changes'][:-1])
+    for field in ('goals','intentions'):
+        for item in expected[3]['value'][field]:
+            for key in ('revision','review_required','reviewed_signature','source_sequence','source_event_id'):del item[key]
+    for op in expected[5:9]:del op['value']['revision']
+    assert p['changes']==expected  # every other key, prose, reason and operation survives
     assert_vera(s,out)
     assert s==original and validate_candidate(s,out,editing=True)==out
     # Model-free normalization is the only source of new server defaults.

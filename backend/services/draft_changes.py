@@ -111,6 +111,7 @@ def apply_proposal(state, reply, *, editing=False):
         raise ValueError('Пересекающиеся пути предложения.')
     removals = []
     problems = []
+    append_indices = {root:len(state[root]) for root in ('characters','locations')}
     for index, change in enumerate(proposal.changes):
         try:
             path = change.path
@@ -130,10 +131,14 @@ def apply_proposal(state, reply, *, editing=False):
             field_index = 3 if root == 'world' else 2
             if root != 'campaign' and len(parts) > field_index and parts[field_index] not in record_schema.get('properties', {}) and parts[field_index] not in SERVER_FIELDS:
                 raise ProposalError('Неизвестное поле сущности: '+path, proposal_paths=[f'/changes/{index}/path'], drop_indices=[index])
+            value_path = path
+            if path in ('/characters/-','/locations/-'):
+                value_path = f'/{root}/{append_indices[root]}'
+                append_indices[root] += 1
             if change.op != 'remove':
                 try: old = pointer(state, path)
                 except (KeyError, IndexError, TypeError, ValueError): old = None
-                change.value = author_value(old, change.value, path)
+                change.value = author_value(old, change.value, value_path)
         except ProposalError as exc:
             problems.append(exc)
     if problems:

@@ -45,12 +45,14 @@ def test_invalid_revision_has_exact_correction_scope_and_is_atomic(value):
     text=json.dumps(proposal)
     with pytest.raises(ValueError) as exc:apply_proposal(state,text)
     allowed=draft_creative_repair.scope(state,text,exc.value)
-    assert allowed['paths']==['/changes/3/value/revision']
+    assert allowed['paths']==[]
+    assert allowed['remove_paths']==['/changes/3/value/revision']
     assert state==before
-    correction=dict(proposal_hash=allowed['proposal_hash'],patches=[dict(path=allowed['paths'][0],value=0)],drop_indices=[])
+    correction=dict(proposal_hash=allowed['proposal_hash'],patches=[],remove_paths=allowed['remove_paths'],drop_indices=[])
     fixed=draft_creative_repair.apply(text,json.dumps(correction),allowed)
     assert len(apply_proposal(state,fixed)[1]['changes'])==7
-    correction['patches'][0]['path']='/changes/0/value/name'
+    assert 'revision' not in json.loads(fixed)['changes'][3]['value']
+    correction['remove_paths']=['/changes/0/value/name']
     with pytest.raises(ValueError):draft_creative_repair.apply(text,json.dumps(correction),allowed)
 
 
@@ -66,7 +68,14 @@ def test_server_metadata_cannot_be_minted_in_any_record(section,field,value):
         path=f'/world/{section}/new185',value={field:value},reason='test')])
     with pytest.raises(ProposalError) as exc:apply_proposal(state,json.dumps(proposal))
     allowed=draft_creative_repair.scope(state,json.dumps(proposal),exc.value)
-    assert allowed['paths']==[f'/changes/0/value/{field}']
+    assert allowed['paths']==[]
+    assert allowed['remove_paths']==[f'/changes/0/value/{field}']
+    fixed=draft_creative_repair.apply(json.dumps(proposal),json.dumps(dict(
+        proposal_hash=allowed['proposal_hash'],patches=[],remove_paths=allowed['remove_paths'],drop_indices=[])),allowed)
+    assert json.loads(fixed)['changes'][0]['value']=={}
+    # A null assignment must not masquerade as deleting model authority.
+    with pytest.raises(ValueError):draft_creative_repair.apply(json.dumps(proposal),json.dumps(dict(
+        proposal_hash=allowed['proposal_hash'],patches=[dict(path=allowed['remove_paths'][0],value=None)],drop_indices=[])),allowed)
 
 
 def test_existing_revision_and_nested_provenance_remain_protected():
@@ -133,7 +142,12 @@ def test_appended_card_nested_provenance_has_proposal_address(root):
     if root=='characters':card['is_player']=False
     p=dict(candidate_hash=candidate_hash(state),rationale='test',changes=[dict(op='add',path='/'+root+'/-',value=card,reason='test')])
     with pytest.raises(ProposalError) as exc:apply_proposal(state,json.dumps(p))
-    assert draft_creative_repair.scope(state,json.dumps(p),exc.value)['paths']==['/changes/0/value/birth_provenance']
+    scope=draft_creative_repair.scope(state,json.dumps(p),exc.value)
+    assert scope['paths']==[] and scope['remove_paths']==['/changes/0/value/birth_provenance']
+    fixed=draft_creative_repair.apply(json.dumps(p),json.dumps(dict(
+        proposal_hash=scope['proposal_hash'],patches=[],remove_paths=scope['remove_paths'],drop_indices=[])),scope)
+    expected=deepcopy(card);del expected['birth_provenance']
+    assert json.loads(fixed)['changes'][0]['value']==expected
 
 
 def test_upgrade_revalidation_does_not_reset_failed_correction_budget():
@@ -146,3 +160,16 @@ def test_upgrade_revalidation_does_not_reset_failed_correction_budget():
     assert state==before and len(record['corrections'])==2
     assert record['validation_version']==draft_creative.VALIDATION_VERSION
     assert record['diagnostics'][0]['path']=='/world/knowledge/know_sonya_repair/revision'
+
+
+def test_appended_card_diagnostic_does_not_grant_access_to_other_cards():
+    state=saved()['candidate'];changes=[]
+    for i in range(2):
+        card=deepcopy(state['locations'][0]);card['id']='new'+str(i)
+        if i==1:card['birth_provenance']={'source':'forged'}
+        changes.append(dict(op='add',path='/locations/-',value=card,reason='test'))
+    p=dict(candidate_hash=candidate_hash(state),rationale='test',changes=changes)
+    with pytest.raises(ProposalError) as exc:apply_proposal(state,json.dumps(p))
+    scope=draft_creative_repair.scope(state,json.dumps(p),exc.value)
+    assert scope['remove_paths']==['/changes/1/value/birth_provenance']
+    assert scope['paths']==[]
