@@ -133,7 +133,7 @@ def migrate_v2(original):
         if k.get('actor_id') not in actors or k.get('fact_id') not in state['facts']:
             report.append(dict(section='knowledge', entity=key, reason='отсутствует actor или fact', action='drop_record'))
             continue
-        current = Knowledge(**{field:k[field] for field in ('actor_id','fact_id','status','revision','source_event_id','evidence','source_turn','replaced_by') if field in k}).model_dump()
+        current = Knowledge(**{field:k[field] for field in ('actor_id','fact_id','status','revision','source_event_id','evidence','source_turn','replaced_by','confirmed_once') if field in k}).model_dump()
         state['knowledge'][current['actor_id'] + ':' + current['fact_id']] = current
         acquisition = dict(current, source_event_id=k.get('source_event_id'), migrated=True)
         source = world.get('events', {}).get(k.get('source_event_id'), {})
