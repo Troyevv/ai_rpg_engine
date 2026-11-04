@@ -771,3 +771,26 @@ def test_json_import_reuses_revision_conflict_checks(api):
     response=client.post(path+'/import',json={'revision':before['revision']-1,'format':'json','text':json.dumps(before['state'])})
     assert response.status_code==409 and 'Конфликт ревизий' in response.json()['detail']
     assert client.get(path+'?author=true').json()['history']==before['history']
+
+
+def test_draft_chronicle_dates_follow_visible_events_without_inventing_unknown_dates(api):
+    from pathlib import Path
+    from backend.services.draft_presentation import clock_view
+    client,_=api
+    state=json.loads((Path(__file__).parent/'fixtures/runtime_handoff/world.json').read_text())
+    wid=client.post('/api/workspaces',json={'name':'Chronicle'}).json()['id']
+    url=f'/api/workspaces/{wid}/draft'
+    response=client.post(url+'/import',json={'revision':0,'format':'json','text':json.dumps(state)})
+    assert response.status_code==200,response.text
+    author=client.get(url+'?author=true').json()
+    player=client.get(url).json()
+    for draft in (author,player):
+        events=draft['state']['world']['events']
+        labels=draft['presentation']['event_times']
+        assert labels.keys()==events.keys()
+        for eid,event in events.items():
+            expected=clock_view(dict(draft['state']['world_clock'],minute=event['minute']))['label'] if event['minute'] is not None else 'Дата неизвестна'
+            assert labels[eid]==expected
+    assert 'ev_roman_arkady' in author['presentation']['event_times']
+    assert 'ev_roman_arkady' not in player['presentation']['event_times']
+    assert author['presentation']['event_times']['ev_ilya_hired_zoya']=='Дата неизвестна'

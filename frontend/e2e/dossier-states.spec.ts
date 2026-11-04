@@ -40,5 +40,5 @@ test('large roster search and missing portrait asset stay usable',async({page,re
  const png=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=c.height=256;return c.toDataURL().split(',')[1]});
  await page.getByLabel('Файл портрета').setInputFiles({name:'qa.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});
  await page.route('**/portraits/assets/*',route=>route.fulfill({status:404}));await page.getByRole('button',{name:'Сохранить',exact:true}).click();
- await expect(d.locator('.portrait-control .portrait-initials')).toBeVisible();await expect(d.getByRole('button',{name:'Редактировать портрет'})).toBeEnabled();
+ await expect(d.locator('.portrait-control img.procedural-portrait')).toBeVisible();await expect(d.getByRole('button',{name:'Редактировать портрет'})).toBeEnabled();
 });

@@ -190,7 +190,7 @@ test("unread text and shared portrait projection", async ({
   const contact = dialog
     .locator("article.phone-row")
     .filter({ hasText: "Вера работа" });
-  await expect(contact.locator("svg[data-silhouette]")).toBeVisible();
+  await expect(contact.locator("img.procedural-portrait")).toBeVisible();
   await page.screenshot({
     path: test.info().outputPath("phone-unread.png"),
     animations: "disabled",

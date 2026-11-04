@@ -92,3 +92,23 @@ def test_saturated_world_repeated_reload_preserves_choice_and_scene_context(tmp_
         choice = expand(current, content('Choice context / controlled actor'))
         assert choice['scene']['present_actor_ids'] == sorted(current['camera']['present_character_ids'])
         assert len(choice['reproduction']['pregnancies'][0]['known_children']) == 3
+
+
+def test_visual_portrait_metadata_never_enters_narrative_or_extraction():
+    from test_runtime_v3_storage import snapshot_fixture
+    from backend.runtime_v3.context import build_context
+    from backend.services.draft_portraits import default_descriptor
+    snapshot = snapshot_fixture()
+    baseline = deepcopy(snapshot)
+    for cid, actor in snapshot['world_state']['characters'].items():
+        actor['procedural_portrait'] = default_descriptor(cid, 'adult')
+        actor['portrait_mode'] = 'procedural'
+    before = deepcopy(snapshot)
+    for extraction_text in (None, 'Продолжение истории.'):
+        def messages(value):
+            return build_context(value, [], 'Продолжить', 'turn', 32768, 2000,
+                                 extraction_text=extraction_text)
+        assert messages(snapshot) == messages(baseline)
+        wire = json.dumps(messages(snapshot))
+        assert 'procedural_portrait' not in wire and 'portrait_mode' not in wire
+    assert snapshot == before

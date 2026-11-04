@@ -2,7 +2,7 @@
 import hashlib
 import json
 from backend.services import draft_world as domain
-from backend.services.draft_presentation import clock_view,editor_contract,calendar_notices
+from backend.services.draft_presentation import clock_view,editor_contract,calendar_notices,event_times
 from backend.services.draft_relations import plans as relation_plans
 
 
@@ -96,13 +96,14 @@ class DraftStorage(DraftEditorStorage):
                 # with a generic error. Semantic/provider prose stays private.
                 diagnostic=public_job.get('response_diagnostic')
                 public_job['error']=diagnostic['message'] if diagnostic else 'Проверка или генерация завершилась с замечанием. Подробности доступны автору.'
+            visible=state if author else domain.player_view(state) if state else None
             return {'id':wid,'name':w['name'],'revision':w['revision'],'version_id':head['id'] if head else None,
                 'candidate':raw if candidate and author else None,
                 'relation_merges':relation_plans(raw) if raw and author else [],
                 'editor':editor_contract() if author else None,
-                'presentation':{'clock':clock_view(state['world_clock']), 'notices':calendar_notices(state) if author else []} if state else None,
+                'presentation':{'clock':clock_view(state['world_clock']), 'event_times':event_times(visible), 'notices':calendar_notices(state) if author else []} if state else None,
                 'creation_settings':(raw.get('creation_settings',{}) if raw else json.loads(latest['config_json']).get('_creation_settings',{}) if latest else {}) if author else {},
-                'state':state if author else domain.player_view(state) if state else None,
+                'state':visible,
                 'portraits':self._portrait_view(state,author),
                 'validation':report if author or not (record and (record.get('origin_job') or review_metadata(record))) else {'errors':['Мир пока не готов к запуску. Откройте редактор автора.'] if report['errors'] else [],'warnings':[]},
                 'review':review_metadata(record) if record and author else ({'status':review_metadata(record).get('status')} if record and review_metadata(record) else None),

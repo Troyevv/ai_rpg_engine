@@ -249,6 +249,11 @@ def test_exact_handoff_preserves_authored_graph_and_values(api, genres):
     for knowledge in old['world_state']['knowledge'].values():knowledge.setdefault('confirmed_once',False)
     # #168 preserves authored/legacy visibility with a neutral optional default.
     for thread in old['world_state']['threads'].values():thread.setdefault('discovered_by',None)
+    from backend.services.draft_portraits import default_descriptor
+    from backend.runtime_v3.portraits import life_period
+    for cid, actor in old['world_state']['characters'].items():
+        actor.update(portrait_mode='auto', procedural_portrait=default_descriptor(
+            cid, life_period(old['world_state'], cid)[1]))
     assert current['world_state']==old['world_state']
     assert current['character_cards']==old['character_cards']
     assert current['authoring']==old['authoring']==source()['authoring']

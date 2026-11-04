@@ -46,3 +46,11 @@ def calendar_notices(state):
         if record.get('notice'):
             notices.append(f"{names.get(cid,cid)} · дата рождения: {record['notice']} (/world/characters/{cid}/birth_date)")
     return notices
+
+
+def event_times(state):
+    """Format only events already admitted by the caller's author/player projection."""
+    clock=state.get('world_clock',{})
+    return {eid:clock_view(dict(clock,minute=event['minute']))['label']
+            if event.get('minute') is not None else 'Дата неизвестна'
+            for eid,event in state.get('world',{}).get('events',{}).items()}
