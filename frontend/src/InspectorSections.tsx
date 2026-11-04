@@ -1,3 +1,4 @@
+import {CharacterPeople as People} from "./CharacterPeople";
 import {StorySecretBrowser} from './StorySecretBrowser';
 import {genreLabels} from './GenreSettings';
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -250,39 +251,6 @@ function Bounded<T>({
         </button>
       )}
     </>
-  );
-}
-function People({
-  ids,
-  state,
-  save,
-  onCharacter,
-}: {
-  ids: string[];
-  state: State;
-  save?: Save | null;
-  onCharacter: (id: string) => void;
-}) {
-  return (
-    <div className="inspector-people">
-      {ids.map((id) => {
-        const c = state.characters.find((c) => c.id === id);
-        return c ? (
-          <button
-            className="inspector-person-chip"
-            key={id}
-            onClick={() => onCharacter(id)}
-          >
-            <CharacterAvatar subject={c} saveId={save?.id} size={26} />
-            <span>{c.name}</span>
-          </button>
-        ) : (
-          <span className="muted small" key={id}>
-            {it("unknown")}
-          </span>
-        );
-      })}
-    </div>
   );
 }
 function Facts({
@@ -824,7 +792,7 @@ export function RelationsSection(props: Props & { refresh: () => void }) {
 }
 
 export function SecretsSection(props: Props & {target?:string;active?:boolean}) {
-  return <StorySecretBrowser state={props.state} save={props.save} active={props.active} target={props.target}/>;
+  return <StorySecretBrowser state={props.state} save={props.save} active={props.active} target={props.target} onCharacter={props.onCharacter}/>;
 }
 
 export function ThreadsSection(props: Props & {target?:string}) {

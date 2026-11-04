@@ -81,7 +81,7 @@ export function CharacterView({state,card,save,refresh,tab='overview',setTab=()=
     <RelationsView key={`${save?.id}:${card.id}:${actor}`} state={state} actor={card.id} save={save} refresh={refresh} onCharacter={onCharacter}/>
    </DossierSection>}
    {tab==='family'&&<SocialStateView state={state} actor={card.id} saveId={save?.id} mode="family"/>}
-   {tab==='secrets'&&<StorySecretBrowser state={state} characterId={card.id} save={save} active={active} target={secretTarget}/>}
+   {tab==='secrets'&&<StorySecretBrowser state={state} characterId={card.id} save={save} active={active} target={secretTarget} onCharacter={onCharacter}/>}
    {tab==='history'&&<div className="dossier-grid">
     <DossierSection title="История персонажа" wide>{Object.values(state.world?.events||{}).filter(e=>e.player_observed&&e.participants.includes(card.id)).slice(-40).map(e=><p key={e.id}>{e.text}</p>)}
      {!!card.appearance_history?.length&&<details><summary>История внешности</summary>{card.appearance_history.map((r,i)=><p key={i}>{worldTime(r.minute,state.world_clock?.calendar)} · {r.before?r.before+' → ':''}{r.after||'Удалено'}</p>)}</details>}

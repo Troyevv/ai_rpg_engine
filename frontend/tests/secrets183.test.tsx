@@ -7,8 +7,8 @@ const requests=vi.hoisted(()=>({pending:[] as {resolve:(v:unknown)=>void;signal:
 vi.mock('../src/api',()=>({api:vi.fn((path:string,_body:unknown,_method:string,signal:AbortSignal)=>new Promise(resolve=>requests.pending.push({resolve,signal,path})))}));
 vi.mock('../src/lib/fogRenderer',()=>({paintFog:vi.fn(),animateFog:()=>()=>{}}));
 let host:HTMLDivElement,root:Root;
-const save=(revision=1,actor='a',id=183)=>({id,revision,state:{controlled_actor_id:actor,story_secrets:{personal:{b:[{id:'opaque',status:'hidden'}]},world:[],revealed:[]}}} as unknown as Save);
-async function render(s=save(),characterId:string|null='b',active=true){await act(()=>root.render(<StorySecretBrowser save={s} state={s.state} characterId={characterId??undefined} active={active}/>))}
+const save=(revision=1,actor='a',id=183)=>({id,revision,state:{characters:[{id:'a',name:'Илья'},{id:'b',name:'Марина'},{id:'c',name:'Тимур'}],controlled_actor_id:actor,story_secrets:{personal:{b:[{id:'opaque',status:'hidden'}]},world:[],revealed:[]}}} as unknown as Save);
+async function render(s=save(),characterId:string|null='b',active=true){await act(()=>root.render(<StorySecretBrowser save={s} state={s.state} onCharacter={()=>{}} characterId={characterId??undefined} active={active}/>))}
 const toggle=async()=>act(()=>host.querySelector<HTMLButtonElement>('[role=switch]')!.click());
 beforeEach(()=>{
  requests.pending=[];localStorage.clear();sessionStorage.clear();
@@ -18,7 +18,7 @@ beforeEach(()=>{
 });
 afterEach(async()=>{await act(()=>root.unmount());host.remove();vi.unstubAllGlobals()});
 it('keeps a confirmed card and its POV-limited audience until an explicit preview arrives',async()=>{
- const s=save(), row={id:'safe-slot',status:'known' as const,text:'Уже известный факт',audience:{known:['Илья'],suspected:[]}};
+ const s=save(), row={id:'safe-slot',status:'known' as const,text:'Уже известный факт',audience:{known:['a'],suspected:[]}};
  s.state.story_secrets!.personal.b=[row];
  await render(s);
  const original=host.querySelector('[data-secret-id="safe-slot"]');
@@ -26,7 +26,7 @@ it('keeps a confirmed card and its POV-limited audience until an explicit previe
  await toggle();
  expect(original?.isConnected).toBe(true);
  expect(original?.textContent).toContain('по сведениям ГГ');
- const full={...row,id:'preview-id',slot_id:row.id,audience:{known:['Илья','Марина'],suspected:['Тимур']}};
+ const full={...row,id:'preview-id',slot_id:row.id,audience:{known:['a','b'],suspected:['c']}};
  await act(()=>requests.pending[0].resolve({revision:1,character_id:'b',rows:[full]}));
  expect(original?.textContent).toContain('Марина');
  expect(original?.textContent).toContain('Тимур');
@@ -49,4 +49,19 @@ it.each(['actor','save','revision','card','surface','closed'])('discards rendere
  expect(host.innerHTML).not.toContain('PRIVATE183');expect(host.innerHTML).not.toContain('LATE183');
  expect(host.querySelector('[role=switch]')?.getAttribute('aria-checked')).toBe(change==='closed'?undefined:'false');
  expect(JSON.stringify([localStorage,sessionStorage])).not.toContain('183');
+});
+it('uses visible character IDs for portraits and navigation even with identical full names',async()=>{
+ const s=save();
+ s.state.characters=[{id:'b',name:'Александр Сергеевич Крылов'},{id:'c',name:'Александр Сергеевич Крылов'}] as Save['state']['characters'];
+ const navigate=vi.fn();
+ await act(()=>root.render(<StorySecretBrowser state={s.state} save={s} characterId="b" onCharacter={navigate}/>));
+ await toggle();
+ await act(()=>requests.pending[0].resolve({revision:1,character_id:'b',rows:[{id:'author',status:'spoiler',text:'Факт',audience:{known:['b','b','unavailable'],suspected:['c']}}]}));
+ const buttons=host.querySelectorAll<HTMLButtonElement>('.secret-audience button');
+ expect(buttons).toHaveLength(2);
+ expect(buttons[0].textContent).toContain('Александр Сергеевич Крылов');
+ expect(buttons[0].querySelector('[role=img]')?.getAttribute('aria-label')).toBe('Портрет: Александр Сергеевич Крылов');
+ expect(host.innerHTML).not.toContain('unavailable');
+ await act(()=>buttons[1].click());expect(navigate).toHaveBeenCalledWith('c');
+ await toggle();expect(host.querySelectorAll('.secret-audience button')).toHaveLength(0);
 });

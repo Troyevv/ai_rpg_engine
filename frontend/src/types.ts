@@ -1,4 +1,4 @@
-export type StorySecret={id:string;status:'hidden'|'known'|'spoiler';category?:'own'|'related'|'world';knowledge_status?:string;text?:string;fact_id?:string;source?:string;reveal_id?:string;slot_id?:string;audience?:{known:string[];suspected:string[]}};
+export type StorySecret={id:string;status:'hidden'|'known'|'spoiler';category?:'own'|'known'|'biography'|'related'|'world';knowledge_status?:string;text?:string;fact_id?:string;source?:string;reveal_id?:string;slot_id?:string;audience?:{known:string[];suspected:string[]}};
 export type StoryNotice={id:string;kind:'thread_new'|'secret_new'|'secret_revealed';text:string;turn_id:number;slot_id?:string;character_ids?:string[];thread_id?:string;available?:boolean};
 import type {RuntimeNotice} from './RuntimeNotifications';
 export type Provider = "local" | "deepseek" | "compatible";

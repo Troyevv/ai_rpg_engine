@@ -16,6 +16,7 @@ def legacy_secret_metadata(fact, actors):
     subjects = fact.get('secret_subject_ids', [owner] if classified and owner in actors else [])
     return dict(story_secret=classified, secret_subject_ids=subjects,
                 secret_keeper_ids=fact.get('secret_keeper_ids', []),
+                secret_biography_ids=fact.get('secret_biography_ids', []),
                 secret_existence=fact.get('secret_existence', 'hidden'))
 
 
@@ -105,7 +106,7 @@ def apply_disclosures(resolver, raw):
 
 
 def secret_characters(fact):
-    return list(dict.fromkeys([*fact['secret_subject_ids'], *fact.get('secret_keeper_ids', [])]))
+    return list(dict.fromkeys([*fact['secret_subject_ids'], *fact.get('secret_keeper_ids', []), *fact.get('secret_biography_ids', [])]))
 
 
 def _protected_existence(state, excluded=()):
@@ -130,13 +131,10 @@ def _ordinary_slot_id(state, actor, fact, subjects, known, protected):
     return identity('secret_slot',state['meta'].get('seed',''),actor,fact['id'])
 
 
-def projection(state, *, excluded=(), actor_name=None):
+def projection(state, *, excluded=()):
     """Only the controlled actor's own confirmed Knowledge enters ordinary rows."""
-    from backend.runtime_v3.kinship import visible_name
     actor=state['camera']['controlled_actor_id']
     if actor is None: return dict(personal={},world=[])
-    if not actor_name:
-        actor_name=visible_name(state,actor,actor,'Без имени')
     protected=_protected_existence(state,excluded)
     result=dict(personal={},world=[])
     for fid,fact in state['facts'].items():
@@ -148,16 +146,22 @@ def projection(state, *, excluded=(), actor_name=None):
         if slot_id is None: continue
         row=dict(id=slot_id,status='known' if known else 'hidden')
         if known:
-            row.update(fact_id=fid,text=fact['text'],audience=dict(known=[actor_name],suspected=[]))
+            row.update(fact_id=fid,text=fact['text'],audience=dict(known=[actor],suspected=[]))
             # Evidence is the observer's accepted acquisition, never GM history.
             if belief.get('evidence'): row['source']=belief['evidence']
         if subjects:
-            for cid in subjects:
+            # Knowing an unrelated secret belongs in the controlled actor's dossier
+            # too. Never enumerate another NPC's beliefs in an ordinary projection.
+            for cid in dict.fromkeys([*subjects, *([actor] if known else [])]):
                 personal=deepcopy(row)
-                if known and fact.get('secret_keeper_ids'):
-                    personal['category']='own' if cid in fact['secret_keeper_ids'] else 'related'
+                if known:
+                    personal['category'] = ('own' if cid in fact.get('secret_keeper_ids', []) else
+                                            'known' if cid == actor else 'related')
                 result['personal'].setdefault(cid,[]).append(personal)
-        else: result['world'].append(row)
+        else:
+            result['world'].append(row)
+            if known:
+                result['personal'].setdefault(actor, []).append(dict(deepcopy(row), category='known'))
     return result
 
 
@@ -223,8 +227,7 @@ def secure_game_view(result, state):
     result['facts']=[dict(f,known_by=[actor] if state['knowledge'].get(str(actor)+':'+f['id'],{}).get('status')=='known' else []) for f in result['facts'] if f['id'] in allowed]
     for f in [*world['facts'].values(),*result['facts']]:
         f.pop('origin_remote_event_id',None)
-    actor_name=next((card['name'] for card in result['characters'] if card['id']==actor),None)
-    result['story_secrets']=projection(state,actor_name=actor_name)
+    result['story_secrets']=projection(state)
     known_ids={row['fact_id'] for rows in [result['story_secrets']['world'], *result['story_secrets']['personal'].values()] for row in rows if row['status']=='known'}
     result['story_secrets']['revealed']=[dict(deepcopy(f),character_ids=secret_characters(f)) for fid,f in world['facts'].items() if fid in known_ids]
     # Unknown source events must not disclose a fact through searchable History.
@@ -266,11 +269,24 @@ def initialize_authored_secrets(world):
                 world['knowledge'][key] = Knowledge(actor_id=cid, fact_id=fid, confirmed_once=True).model_dump()
 
 
+def secret_category(state, fact, cid):
+    """Explicit-author classification relative to a dossier, not the viewing POV."""
+    if cid in fact.get('secret_keeper_ids', []):
+        return 'own'
+    if state['knowledge'].get(str(cid) + ':' + fact['id'], {}).get('status') == 'known':
+        return 'known'
+    if cid in fact.get('secret_biography_ids', []):
+        return 'biography'
+    return 'related'
+
+
 def spoiler_projection(snapshot, character_id=None):
-    """Explicit, read-only author view. Neither Knowledge records nor IDs are returned."""
+    """Explicit author read; audience references only navigable, POV-visible actors."""
+    from backend.runtime_v3.reproduction import known_birth
     state = snapshot['world_state']
     actor = state['camera']['controlled_actor_id']
-    if character_id is not None and character_id not in state['characters']:
+    visible = {c['id'] for c in snapshot['character_cards'] if known_birth(state, c['id'], actor)}
+    if character_id is not None and character_id not in visible:
         raise ValueError('Персонаж недоступен.')
     protected = _protected_existence(state)
     rows = {}
@@ -278,23 +294,20 @@ def spoiler_projection(snapshot, character_id=None):
         if not fact.get('story_secret'):
             continue
         subjects = secret_characters(fact)
-        if character_id is not None and character_id not in subjects:
+        scoped_known = state['knowledge'].get(str(character_id) + ':' + fid, {}).get('status') == 'known'
+        if character_id is not None and character_id not in subjects and not scoped_known:
             continue
         belief = state['knowledge'].get(str(actor) + ':' + fid, {}).get('status', 'unknown')
         row = dict(id=identity('spoiler', fid), text=fact['text'],
             status='known' if belief == 'known' else 'spoiler', knowledge_status=belief,
             audience=dict(known=[],suspected=[]),
-            category=('own' if character_id in fact['secret_keeper_ids'] else 'related') if character_id else
-                ('world' if not subjects else 'own' if actor in fact['secret_keeper_ids'] else 'related'))
+            category=secret_category(state, fact, character_id or actor) if character_id or subjects else 'world')
         slot_id = _ordinary_slot_id(state, actor, fact, subjects, belief == 'known', protected)
         if slot_id is not None:
             row['slot_id'] = slot_id
         rows[fid] = row
-    names = {c['id']:c['name'] for c in snapshot['character_cards']}
     for entry in state['knowledge'].values():
         row = rows.get(entry['fact_id'])
-        if row is not None and entry['status'] in ('known', 'suspected'):
-            cid = entry['actor_id']
-            name = state['characters'][cid].get('display_name') or names.get(cid) or 'Без имени'
-            row['audience'][entry['status']].append(name)
+        if row is not None and entry['status'] in ('known', 'suspected') and entry['actor_id'] in visible:
+            row['audience'][entry['status']].append(entry['actor_id'])
     return list(rows.values())

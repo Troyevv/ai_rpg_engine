@@ -4,14 +4,14 @@ import {api} from './api';
 import {StorySecrets} from './StorySecrets';
 import type {Save, State, StorySecret} from './types';
 
-type Props = {state:State; save?:Save|null; characterId?:string; active?:boolean; target?:string};
-type Group = 'own'|'related'|'hidden'|'world'|'additional';
+type Props = {state:State; save?:Save|null; characterId?:string; active?:boolean; target?:string; onCharacter?:(id:string)=>void};
+type Group = 'own'|'known'|'biography'|'related'|'hidden'|'world'|'additional';
 type Preview = {rows:StorySecret[]; pendingFog:Set<string>};
 
 function safeGroup(row:StorySecret):Group {
  if(row.category==='world')return 'world';
  if(row.status==='hidden')return 'hidden';
- return row.category==='own'?'own':'related';
+ return row.category||'related';
 }
 
 // A new identity destroys all transient author data BEFORE rendering another scope.
@@ -22,7 +22,7 @@ export function StorySecretBrowser(props:Props) {
  return <SecretBrowser key={scope} {...props} active={active}/>;
 }
 
-function SecretBrowser({state,save,characterId,active=true,target}:Props) {
+function SecretBrowser({state,save,characterId,active=true,target,onCharacter}:Props) {
  const [enabled,setEnabled]=useState(false),[preview,setPreview]=useState<Preview|null>(null);
  const [query,setQuery]=useState(''),[error,setError]=useState(false),[attempt,setAttempt]=useState(0);
  const request=useRef<AbortController|null>(null),switchButton=useRef<HTMLButtonElement>(null);
@@ -52,12 +52,12 @@ function SecretBrowser({state,save,characterId,active=true,target}:Props) {
   preview?.pendingFog.clear();setQuery(value);
  };
  const personal=state.story_secrets?.personal||{};
- const ownIds=new Set((personal[state.controlled_actor_id||'']||[]).filter(r=>r.category==='own').map(r=>r.id));
- const ordinary=characterId?(personal[characterId]||[]):[
-  ...new Map(Object.values(personal).flat().map(r=>[r.id,{...r,category:ownIds.has(r.id)?'own' as const:'related' as const}])).values(),
-  ...(state.story_secrets?.world||[]).map(r=>({...r,category:'world' as const})),
- ];
- const groups:Record<Group,StorySecret[]>={own:[],related:[],hidden:[],world:[],additional:[]};
+ const selfRows=new Map((personal[state.controlled_actor_id||'']||[]).map(r=>[r.id,r]));
+ const ordinary=characterId?(personal[characterId]||[]):[...new Map([
+  ...Object.values(personal).flat().map(r=>[r.id,selfRows.get(r.id)||r] as const),
+  ...(state.story_secrets?.world||[]).map(r=>[r.id,{...r,category:'world' as const}] as const),
+ ]).values()];
+ const groups:Record<Group,StorySecret[]>={own:[],known:[],biography:[],related:[],hidden:[],world:[],additional:[]};
  const bySlot=new Map(preview?.rows.filter(r=>r.slot_id).map(r=>[r.slot_id,r]));
  const normalizedQuery=query.trim().toLocaleLowerCase();
  const append=(group:Group,row:StorySecret)=>{
@@ -76,11 +76,13 @@ function SecretBrowser({state,save,characterId,active=true,target}:Props) {
  const isSelf=characterId===state.controlled_actor_id;
  const titles:Record<Group,string>={
   own:isSelf||!characterId?'Мои тайны':'Собственные тайны персонажа',
-  related:characterId?(preview?'Связанные тайны':'Известные связанные тайны'):'Тайны персонажей',
-  hidden:isSelf?'Неизвестное обо мне':characterId?'Неизвестное о персонаже':'Неизвестные тайны персонажей',
+  known:isSelf||!characterId?'Известные мне тайны':'Известные персонажу тайны',
+  biography:isSelf?'Неизвестное обо мне':'Неизвестное о персонаже',
+  related:'Связанные тайны',
+  hidden:'Скрытые тайны',
   world:'Тайны мира',additional:'Только в режиме спойлеров'
  };
- const categoryLabels={own:titles.own,related:characterId?'Связанная тайна персонажа':'Связанная с персонажем тайна',world:'Тайна мира'};
+ const categoryLabels={own:titles.own,known:titles.known,biography:titles.biography,related:'Связанная тайна',world:'Тайна мира'};
  const sections=(Object.keys(groups) as Group[]).filter(key=>groups[key].length);
  const count=sections.reduce((n,key)=>n+groups[key].length,0);
  const loading=enabled&&!preview&&!error;
@@ -98,7 +100,7 @@ function SecretBrowser({state,save,characterId,active=true,target}:Props) {
   </div>
   {!characterId&&<label className="secret-search"><Search size={18} aria-hidden/><span className="sr-only">Поиск тайн</span><input type="text" aria-label="Поиск тайн" placeholder="Найти тайну" value={query} onChange={e=>search(e.target.value)}/><span className="muted">{count}</span></label>}
   {sections.map(key=><StorySecrets key={key} title={titles[key]} rows={groups[key]} save={save} active={active} target={target} preview={enabled}
-   previewFog={preview?.pendingFog} categoryLabels={preview&&(key==='hidden'||key==='additional')?categoryLabels:undefined}/>)}
+   previewFog={preview?.pendingFog} categoryLabels={preview?categoryLabels:undefined} state={state} onCharacter={onCharacter}/>)}
   {!count&&<p className="dossier-empty">{query?'По этому запросу ничего не найдено.':preview?'В этой области нет сюжетных тайн.':'Нет доступных записей о тайнах.'}</p>}
  </div>;
 }

@@ -5,23 +5,27 @@ import {Markdown} from './Markdown';
 import {useTheme} from './ThemeProvider';
 import {animateFog,paintFog} from './lib/fogRenderer';
 import {presentationKey,wasPresented,markPresented} from './lib/storyPresentation';
-import type {Save,StorySecret} from './types';
+import {CharacterPeople} from './CharacterPeople';
+import type {Save,State,StorySecret} from './types';
 import './styles/story-secrets.css';
 
 type CategoryLabels=Record<NonNullable<StorySecret['category']>,string>;
-type RowProps={row:StorySecret;save?:Save|null;active:boolean;preview?:boolean;previewFog?:Set<string>;categoryLabels?:CategoryLabels};
+type RowProps={state?:State;onCharacter?:(id:string)=>void;row:StorySecret;save?:Save|null;active:boolean;preview?:boolean;previewFog?:Set<string>;categoryLabels?:CategoryLabels};
 
-function SecretAudience({audience,preview}:{audience:NonNullable<StorySecret['audience']>;preview:boolean}){
+function SecretAudience({audience,preview,state,save,onCharacter}:{audience:NonNullable<StorySecret['audience']>;preview:boolean}&Pick<RowProps,'state'|'save'|'onCharacter'>){
+ const visible=(ids:string[])=>ids.filter(id=>state?.characters?.some(c=>c.id===id));
+ const people=(ids:string[])=><CharacterPeople ids={visible(ids)} state={state!} save={save} onCharacter={onCharacter!} hideUnavailable/>;
+ if(!state||!onCharacter)return null;
  return <div className="secret-audience">
   <p>Кому известна тайна{!preview&&' · по сведениям ГГ'}</p>
   <dl>
-   <div><dt>Знают:</dt> <dd>{audience.known.join(', ')||'Нет подтверждённых сведений'}</dd></div>
-   {audience.suspected.length>0&&<div><dt>Подозревают:</dt> <dd>{audience.suspected.join(', ')}</dd></div>}
+   <div><dt>Знают:</dt> <dd>{visible(audience.known).length?people(audience.known):'Нет подтверждённых сведений'}</dd></div>
+   {visible(audience.suspected).length>0&&<div><dt>Подозревают:</dt> <dd>{people(audience.suspected)}</dd></div>}
   </dl>
  </div>;
 }
 
-function SecretRow({row,save,active,preview=false,previewFog,categoryLabels}:RowProps){
+function SecretRow({row,save,active,preview=false,previewFog,categoryLabels,state,onCharacter}:RowProps){
  const element=useRef<HTMLElement>(null),canvas=useRef<HTMLCanvasElement>(null);
  const [visible,setVisible]=useState(false),[,refresh]=useReducer((n:number)=>n+1,0);
  const reduced=useReducedMotion();const {presentation}=useTheme();
@@ -75,7 +79,7 @@ function SecretRow({row,save,active,preview=false,previewFog,categoryLabels}:Row
   {hidden?<div className="secret-placeholder"><LockKeyhole size={19} aria-hidden/><span>Скрытая тайна</span></div>:<div className="secret-disclosure">
    <div className="secret-kicker"><Eye size={15} aria-hidden/>{status}{category&&<span className="secret-category">{category}</span>}</div>
    <div className="secret-prose" tabIndex={0} role="region" aria-label={row.status==='spoiler'?'Содержание спойлера':'Содержание раскрытой тайны'}><Markdown text={row.text||''}/></div>
-   {row.audience&&<SecretAudience audience={row.audience} preview={preview&&!!previewFog}/>}
+   {row.audience&&<SecretAudience audience={row.audience} preview={preview&&!!previewFog} state={state} save={save} onCharacter={onCharacter}/>}
    {row.source&&<details className="secret-source"><summary>Как стало известно</summary><Markdown text={row.source}/></details>}
   </div>}
   {fog&&<canvas ref={canvas} className="secret-fog" aria-hidden="true"/>}
@@ -83,13 +87,13 @@ function SecretRow({row,save,active,preview=false,previewFog,categoryLabels}:Row
  </article>;
 }
 type GroupProps=Omit<RowProps,'row'|'active'>&{title?:string;rows:StorySecret[];active?:boolean;target?:string};
-export function StorySecrets({rows,save,active=true,target,title,preview=false,previewFog,categoryLabels}:GroupProps){
+export function StorySecrets({rows,save,active=true,target,title,preview=false,previewFog,categoryLabels,state,onCharacter}:GroupProps){
  const area=useRef<HTMLElement>(null);
  const targetVisible=rows.some(row=>(row.slot_id||row.id)===target);
  useEffect(()=>{if(!active||!target)return;const row=[...(area.current?.querySelectorAll<HTMLElement>('[data-secret-id]')||[])].find(e=>e.dataset.secretId===target);row?.scrollIntoView({block:'nearest'});row?.focus({preventScroll:true})},[target,active,targetVisible]);
  const hidden=rows.filter(r=>r.status==='hidden').length;
  return <section ref={area} className="story-secrets" aria-label="Сюжетные тайны">
   <header className="secrets-heading"><Sparkles size={21} aria-hidden/><div><h3>{title||'За пределами известного'}</h3><p>{hidden?`Скрытых тайн: ${hidden}`:title?`Записей: ${rows.length}`:'Нет доступных скрытых записей'}</p></div></header>
-  {rows.length?<div className="secret-list">{rows.map(row=><SecretRow key={`${save?.id}:${save?.state.controlled_actor_id}:${row.slot_id||row.id}`} row={row} save={save} active={active} preview={preview} previewFog={previewFog} categoryLabels={categoryLabels}/>)}</div>:<p className="dossier-empty">Здесь появятся доступные вашему персонажу тайны.</p>}
+  {rows.length?<div className="secret-list">{rows.map(row=><SecretRow key={`${save?.id}:${save?.state.controlled_actor_id}:${row.slot_id||row.id}`} row={row} save={save} active={active} preview={preview} previewFog={previewFog} categoryLabels={categoryLabels} state={state} onCharacter={onCharacter}/>)}</div>:<p className="dossier-empty">Здесь появятся доступные вашему персонажу тайны.</p>}
  </section>;
 }

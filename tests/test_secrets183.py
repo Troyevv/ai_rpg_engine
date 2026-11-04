@@ -16,7 +16,7 @@ def test_start_handoff_own_knowledge_pov_and_readonly_spoilers(api):
         assert text not in response.text
     own=view['state']['story_secrets']['personal']['ilya']
     own_row=next(r for r in own if r['status']=='known')
-    assert own_row['category']=='own' and own_row['audience']=={'known':['Илья'],'suspected':[]}
+    assert own_row['category']=='own' and own_row['audience']=={'known':['ilya'],'suspected':[]}
     assert all(set(r)=={'id','status'} for r in own if r['status']=='hidden')
     assert not view['state']['notification_history']
     state=before['world_state']
@@ -44,7 +44,7 @@ def test_start_handoff_own_knowledge_pov_and_readonly_spoilers(api):
             if r['text']==OWN:
                 assert r['slot_id']==own_row['id']
             if r['text']==MAXIM:
-                assert r['audience']=={'known':['Максим'],'suspected':['Илья']}
+                assert r['audience']=={'known':['maxim'],'suspected':['ilya']}
                 assert {'id':r['slot_id'],'status':'hidden'} in view['state']['story_secrets']['personal']['sonya']
             if r['text'].startswith(WORLD):
                 assert 'slot_id' not in r and r['audience']=={'known':[],'suspected':[]}
@@ -210,18 +210,90 @@ def test_audience_and_slot_follow_current_actor_and_beliefs():
     s['knowledge']['sonya:own181']['status']='known'
     s['characters']['sonya']['display_name']='Софья'
     ilya_slot=ordinary()['id']
-    assert ordinary()['audience']=={'known':['Илья'],'suspected':[]}
-    assert sorted(spoiler()['audience']['known'])==['Илья','Софья']
+    assert ordinary()['audience']=={'known':['ilya'],'suspected':[]}
+    assert sorted(spoiler()['audience']['known'])==['ilya','sonya']
     assert spoiler()['audience']['suspected']==[]
 
     s['camera']['controlled_actor_id']='sonya'
     assert ordinary()['id']==spoiler()['slot_id']!=ilya_slot
-    assert ordinary()['audience']=={'known':['Софья'],'suspected':[]}
+    assert ordinary()['audience']=={'known':['sonya'],'suspected':[]}
     for status in ('suspected','refuted','superseded','outdated','unknown'):
         s['knowledge']['ilya:own181']['status']=status
-        assert spoiler()['audience']=={'known':['Софья'],'suspected':['Илья'] if status=='suspected' else []}
-        assert ordinary()['audience']=={'known':['Софья'],'suspected':[]}
+        assert spoiler()['audience']=={'known':['sonya'],'suspected':['ilya'] if status=='suspected' else []}
+        assert ordinary()['audience']=={'known':['sonya'],'suspected':[]}
 
     s['camera']['controlled_actor_id']=None
     assert projection(s)==dict(personal={},world=[])
     assert 'slot_id' not in spoiler()
+
+
+def test_semantic_scope_and_stable_audience_ids():
+    from backend.runtime_v3.migration import migrate_v2
+    from backend.services.draft_initial import inspect_candidate
+    from secret183_fixture import candidate
+    raw=candidate()
+    snapshot=migrate_v2(inspect_candidate(raw)[0]).snapshot
+    rows=spoiler_projection(snapshot,'ilya')
+    love=next(r for r in rows if r['text']==SONYA)
+    assert love['category']=='related'
+    assert love['audience']['known']==['sonya']
+    s=snapshot['world_state']
+    s['knowledge']['ilya:fact_sonya_love']['status']='known'
+    assert next(r for r in spoiler_projection(snapshot,'ilya') if r['text']==SONYA)['category']=='known'
+
+
+def test_biography_authoring_api_scope_and_pov(api):
+    from secret183_fixture import BIO, KNOWN
+    from backend.services.draft_world import patch, dependencies
+    from backend.services.draft_initial import inspect_candidate
+    from secret183_fixture import candidate
+    client,app=api;repo=app.state.repository
+    sid=start(client,repo,semantic=True)['save'];path=f'/api/saves/{sid}'
+    snapshot=repo.get_snapshot(sid);s=snapshot['world_state']
+    assert s['facts']['circumstance183']['secret_biography_ids']==['ilya']
+    assert 'ilya:circumstance183' not in s['knowledge']
+    view=client.get(path);v=view.json();rev=v['revision']
+    assert BIO not in view.text and 'circumstance183' not in view.text
+    personal=v['state']['story_secrets']['personal']
+    assert next(r for r in personal['ilya'] if r.get('text')==KNOWN)['category']=='known'
+    assert all(set(r)=={'id','status'} for rows in personal.values() for r in rows if r['status']=='hidden')
+    rows=client.get(path+f'/story-secret-spoilers?revision={rev}&character_id=ilya').json()['rows']
+    categories={r['text']:r['category'] for r in rows}
+    assert {k:categories[k] for k in [OWN,KNOWN,SONYA,BIO]}=={OWN:'own',KNOWN:'known',SONYA:'related',BIO:'biography'}
+    assert next(r for r in rows if r['text']==KNOWN)['audience']['known']==['ilya','maxim']
+    assert repo.get_snapshot(sid)==snapshot
+    changed=client.post(path+'/protagonist',json=dict(revision=rev,operation='temporary',actor_id='sonya',operation_id='semantic183'))
+    assert changed.status_code==200,changed.text
+    v=client.get(path).json();rev=v['revision']
+    rows=client.get(path+f'/story-secret-spoilers?revision={rev}&character_id=ilya').json()['rows']
+    # Dossier classification is about Ilya; the spoiler status is about current POV Sonya.
+    known=next(r for r in rows if r['text']==KNOWN)
+    assert known['category']=='known' and known['status']=='spoiler'
+    assert KNOWN not in client.get(path).text and BIO not in client.get(path).text
+    raw,_=inspect_candidate(candidate(semantic=True))
+    assert any('circumstance183' in str(d) for d in dependencies(raw,'character','ilya'))
+    modified=patch(raw,'fact','circumstance183','secret_biography_ids',['sonya'])
+    assert modified['world']['facts']['circumstance183']['secret_biography_ids']==['sonya']
+    assert 'sonya:circumstance183' not in modified['world']['knowledge']
+    from backend.services.draft_world import validate
+    for invalid in [['missing'],['ilya','ilya']]:
+        # Draft edits may be incomplete; confirmation validation must reject them.
+        assert validate(patch(raw,'fact','circumstance183','secret_biography_ids',invalid))['errors']
+    with pytest.raises(ValueError):patch(raw,'fact','circumstance183','secret_biography_ids','ilya')
+
+
+def test_spoiler_audience_filters_unavailable_characters_and_preserves_ids():
+    from backend.runtime_v3.migration import migrate_v2
+    from backend.services.draft_initial import inspect_candidate
+    from secret183_fixture import candidate
+    from unittest.mock import patch
+    snapshot=migrate_v2(inspect_candidate(candidate())[0]).snapshot
+    s=snapshot['world_state']
+    s['characters']['sonya']['display_name']='Илья'  # Deliberate homonyms cannot redirect navigation.
+    s['knowledge']['sonya:own181']['status']='known'
+    row=next(r for r in spoiler_projection(snapshot,'ilya') if r['text']==OWN)
+    assert sorted(row['audience']['known'])==['ilya','sonya']
+    with patch('backend.runtime_v3.reproduction.known_birth',side_effect=lambda state,cid,actor:cid!='sonya'):
+        row=next(r for r in spoiler_projection(snapshot,'ilya') if r['text']==OWN)
+        assert row['audience']['known']==['ilya']
+        with pytest.raises(ValueError):spoiler_projection(snapshot,'sonya')

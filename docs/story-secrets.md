@@ -30,7 +30,7 @@ All acquisitions use the existing Knowledge transition machinery, claim-conflict
 
 `ui_view(...).story_secrets` is relative to **controlled_actor_id**, never camera/inspected NPC:
 
-- `personal[subject_id]`: rows for this subject only.
+- `personal[character_id]`: explicit subject/keeper/biography connections; for the controlled actor, also foreign secrets they know.
 - `world`: subjectless rows.
 - `revealed`: deduplicated known secret facts for the existing inspector. Its character links point to secret subjects.
 
@@ -84,24 +84,25 @@ refutation, supersession and other Knowledge transitions retain their authority.
 Extraction can carry this classification but still needs accepted acquisition
 provenance to change Knowledge. The Fact is not a second belief store.
 
-Safe `story_secrets.personal` known rows may have `category: own | related` when
-ownership is explicit. Unknown rows remain **exactly** `{id,status}`. The client
+Safe `story_secrets.personal` known rows have `category: own | known | related`; own
+requires explicit ownership. Unknown rows remain **exactly** `{id,status}`. The client
 must not infer their keeper/category. Hidden existence produces no slot/count.
-All character surfaces include explicit subjects and keepers; the global view
+All character surfaces include explicit subjects, keepers and biographical subjects; the global view
 deduplicates their shared opaque slots. Observing a character grants no access.
-The ordinary view can name the controlled actor on a confirmed row. This is a
+The ordinary view can reference the controlled actor on a confirmed row. This is a
 POV-limited audience, not a claim that nobody else knows. It never lists other
 characters' private beliefs; hidden rows have neither names nor audience counts.
 
 `GET /api/saves/{sid}/story-secret-spoilers?revision=N[&character_id=ID]` is an
 explicit author read in the same trusted single-user boundary as `author-state`.
 Omitting `character_id` explicitly requests all story secrets; specifying it
-restricts the result to the character's own/related secrets. Stale revisions are
+restricts the result to the character's own/related/biographical secrets and
+foreign secrets they know. Stale revisions are
 rejected. The response is `Cache-Control: no-store` and contains only
 `{revision, character_id, rows}`. Rows contain an opaque author-view ID, canonical
 text, known/spoiler status, the controlled actor's belief status and category.
 The author view lists who currently knows and who suspects each fact in
-`audience.known` and `audience.suspected` (display names). These lists come from
+`audience.known` and `audience.suspected` (POV-visible character IDs). These lists come from
 canonical Knowledge on the active version, not from subjects, keepers or initial
 witnesses. For a row already present in the ordinary projection, `slot_id`
 identifies its existing opaque slot for this observer. Facts absent from the
@@ -150,3 +151,48 @@ secrets, separately from subjects and additional Knowledge holders, preserve it
 on edits/remaps, and handle a conflicting initial belief as a validation error.
 Old drafts without the field remain accepted. It must not derive keeper IDs from
 legacy owner IDs or copy gameplay spoiler state into its own author mode.
+
+
+### Semantic categories and audience navigation (PR #187 follow-up)
+
+`Fact.secret_biography_ids: string[] = []` explicitly identifies whose hidden
+biographical circumstances/origin/life the fact describes. It is independent of
+`secret_subject_ids` (related people), `secret_keeper_ids` (conscious personal
+ownership), and Knowledge. Others' feelings/plans do not become biography just
+because their target is a subject. This field never grants knowledge. Old saves
+and drafts default to an empty list; no text/name heuristics or historical rewrites
+infer a missing classification. It participates in draft generation, patch/schema,
+dependencies, migration, immutable Fact extraction and reference validation.
+Workshop #175 should preserve it separately from subjects/keepers on edits/remaps.
+
+Author rows are classified relative to the **opened dossier**: explicit keeper →
+`own`; otherwise actual known Knowledge → `known`; otherwise explicit biography →
+`biography`; otherwise a direct subject/keeper/biography connection → `related`.
+An unrelated known secret is included in that character's dossier too. Global
+rows use the controlled actor as reference and retain the `world` category for
+facts without personal metadata. The known/spoiler badge always describes the
+**controlled actor**, even when the dossier is someone else. These are different
+questions, not interchangeable tests on subject IDs.
+
+Ordinary hidden rows still contain exactly `{id,status}` and are labelled neutrally
+«Скрытые тайны». Their membership, category, audience and text cannot be recovered
+from the DOM or search. Ordinary known foreign secrets appear in the controlled
+actor's «Известные мне тайны», including facts unrelated to their biography. No
+other NPC's Knowledge is enumerated in ordinary mode. The global view deduplicates
+personal/world copies by the same opaque slot ID.
+
+Preview overlays keep their original group and row keys. Exact semantic badges
+appear on each preview card without moving that card to another section during
+fog dispersion. Additional previously nonexistent slots are appended separately.
+This preserves the canvas, focus and card position from c9de9d5; closing removes
+all author text and audience immediately. Presentation receipts remain untouched.
+
+`audience.known` / `audience.suspected` now contain **stable character IDs**, not
+names. Ordinary known rows contain only the controlled actor's ID. Explicit
+preview enumerates canonical beliefs, filtered to characters whose cards can be
+navigated under the current POV (including birth visibility). Names and portraits
+come from those same safe game cards; hidden name changes are not exposed by this
+route. `CharacterPeople`, extracted from the inspector, supplies the shared round
+portrait/full-name buttons and ID-based dossier navigation. Missing/unavailable
+references are omitted without placeholders or counts. Preview mode does not
+make an otherwise unavailable character navigable.

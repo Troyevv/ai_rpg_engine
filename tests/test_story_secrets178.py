@@ -63,7 +63,9 @@ def test_semantics_before_read_is_pending_and_replay_does_not_duplicate():
     assert not h['knowledge_acquisitions']
     view=ui_view(snap,batch)
     assert view['story_secrets']['personal']['b'][0]['text']=='Соня скрывает авторство романа.'
-    assert view['story_secrets']['personal'].get('a') is None
+    known = view['story_secrets']['personal']['a'][0]
+    assert known['text']=='Соня скрывает авторство романа.' and known['category']=='known'
+    assert known['audience']=={'known':['a'],'suspected':[]}
 
 
 def test_rumor_is_not_confirmation_then_other_read_source_confirms():

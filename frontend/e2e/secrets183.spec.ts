@@ -5,9 +5,9 @@ const area=(p:Page)=>p.locator('.inspector-workspace');
 const control=(p:Page)=>area(p).getByRole('switch',{name:'Показать спойлеры'});
 async function dossier(p:Page,id:string){await nav(p,'Персонажи');await pickCharacter(p,id);await area(p).getByRole('tab',{name:'Тайны',exact:true}).click()}
 async function view(r:APIRequestContext,s:any){return (await r.get(`/api/saves/${s.save}`)).json()}
-async function setup(p:Page,r:APIRequestContext,theme='graphite'){
+async function setup(p:Page,r:APIRequestContext,theme='graphite',semantic=false){
  const w=await(await r.post('/api/workspaces',{data:{name:'Secrets183'}})).json();
- expect((await r.post(`/test/secret183-candidate/${w.id}`)).ok()).toBe(true);
+ expect((await r.post(`/test/secret183-candidate/${w.id}?semantic=${semantic}`)).ok()).toBe(true);
  const path=`/api/workspaces/${w.id}/draft`,d=await(await r.get(path+'?author=true')).json();
  const response=await r.post(path+'/confirm',{data:{revision:d.revision,version_id:d.version_id,accept_warnings:true}});
  expect(response.ok(),await response.text()).toBe(true);const s=await response.json();
@@ -34,7 +34,7 @@ for(const theme of ['graphite','parchment'])test(`explicit spoiler scopes, reset
  test.setTimeout(120000);const s=await setup(page,request,theme),before=await view(request,s);
  const canonical=await(await request.get(`/api/saves/${s.save}/author-state`)).json();
  let calls=0;page.on('request',r=>{if(r.url().includes('story-secret-spoilers'))calls++});
- await dossier(page,'ilya');await expect(area(page)).toContainText('Мои тайны');await expect(area(page)).toContainText(OWN);await expect(area(page)).toContainText('Неизвестное обо мне');
+ await dossier(page,'ilya');await expect(area(page)).toContainText('Мои тайны');await expect(area(page)).toContainText(OWN);await expect(area(page)).toContainText('Скрытые тайны');
  await expect(page.locator('.secret-browser:visible .secret-entry.is-revealing')).toHaveCount(0);await clean(page);expect(calls).toBe(0);
  await control(page).click();await expect(area(page)).toContainText(SONYA);await expect(area(page)).toContainText('Спойлер · ГГ не знает');
  await dossier(page,'sonya');await expect(control(page)).toHaveAttribute('aria-checked','false');await clean(page);
@@ -103,8 +103,8 @@ test('spoiler fog disperses over the same card without collapsing the list or co
   return alphaSamples.size;
  },{intervals:[50,80,100],timeout:4000}).toBeGreaterThan(1);
  const sale=browser.locator('.secret-entry').filter({hasText:MAXIM});
- await expect(sale).toContainText(/Знают[\s:]*Максим/);
- await expect(sale).toContainText(/Подозревают[\s:]*Илья/);
+ await expect(sale.locator('.secret-audience dl>div').filter({hasText:'Знают:'}).getByRole('button',{name:'Открыть досье: Максим',exact:true})).toBeVisible();
+ await expect(sale.locator('.secret-audience dl>div').filter({hasText:'Подозревают:'}).getByRole('button',{name:'Открыть досье: Илья',exact:true})).toBeVisible();
  await expect(card.locator('canvas')).toHaveCount(0);
  await expect(browser.locator('.is-revealing')).toHaveCount(0);
  expect(await page.evaluate(()=>Object.keys(localStorage).filter(k=>k.includes(':fog:')))).toEqual([]);
@@ -182,4 +182,47 @@ test('confirmed new protagonist with empty holders knows own secret before first
  await expect(control(page)).toHaveAttribute('aria-checked','false');await expect(page.locator('.secret-entry.is-revealing')).toHaveCount(0);
  expect((await view(request,s)).state.notification_history).toHaveLength(0);
  await page.reload();await dossier(page,draft.character.id);await expect(area(page)).toContainText(draft.secrets[0].text);
+});
+
+for(const theme of ['graphite','parchment'])test(`semantic categories and interactive knowledge audience: ${theme}`,async({page,request})=>{
+ const s=await setup(page,request,theme,true);
+ await dossier(page,'ilya');
+ await expect(area(page)).not.toContainText('Неизвестное обо мне');
+ await expect(area(page)).toContainText('Скрытые тайны');
+ await expect(area(page)).toContainText('Известные мне тайны');
+ await expect(area(page)).not.toContainText('В родильном доме Илью перепутали');
+ await expect(area(page).locator('.secret-audience button[data-character-id=maxim]')).toHaveCount(0);
+ await control(page).click();
+ const love=area(page).locator('.secret-entry').filter({hasText:SONYA});
+ await expect(love).toContainText('Связанная тайна');
+ await expect(love).not.toContainText('Неизвестное обо мне');
+ await expect(area(page).locator('.secret-entry').filter({hasText:'В родильном доме Илью перепутали'})).toContainText('Неизвестное обо мне');
+ await expect(area(page).locator('.secret-entry').filter({hasText:'Известный переводчик'})).toContainText('Известные мне тайны');
+ const sonya=love.getByRole('button',{name:'Открыть досье: Соня',exact:true});
+ await expect(sonya.getByRole('img',{name:'Портрет: Соня'})).toBeVisible();
+ await love.scrollIntoViewIfNeeded();await expect(love).not.toHaveClass(/is-preview-revealing/);
+ if(process.env.SECRET183_VISUAL)await love.screenshot({path:`/tmp/187-${theme}-${test.info().project.name}-audience.png`});
+ await sonya.focus();await page.keyboard.press('Enter');
+ await expect(area(page).locator('.dossier-name')).toContainText('Соня');
+ await area(page).getByRole('tab',{name:'Тайны',exact:true}).click();
+ await expect(control(page)).toHaveAttribute('aria-checked','false');await clean(page);
+ await control(page).click();
+ const sale=area(page).locator('.secret-entry').filter({hasText:MAXIM});
+ const suspected=sale.locator('.secret-audience dl>div').filter({hasText:'Подозревают:'});
+ await suspected.getByRole('button',{name:'Открыть досье: Илья',exact:true}).click();
+ await expect(area(page).locator('.dossier-name')).toContainText('Илья');
+ await nav(page,'Тайны');await control(page).click();
+ await area(page).locator('.secret-entry').filter({hasText:MAXIM}).getByRole('button',{name:'Открыть досье: Максим',exact:true}).click();
+ await expect(area(page).locator('.dossier-name')).toContainText('Максим');
+ const before=await view(request,s);
+ const changed=await request.post(`/api/saves/${s.save}/protagonist`,{data:{revision:before.revision,operation:'temporary',actor_id:'sonya',operation_id:'semantic-pov'}});
+ expect(changed.ok(),await changed.text()).toBe(true);await page.reload();await dossier(page,'ilya');
+ await expect(control(page)).toHaveAttribute('aria-checked','false');
+ await expect(area(page)).not.toContainText('Известный переводчик');
+ await expect(area(page)).not.toContainText('В родильном доме Илью перепутали');
+ await control(page).click();
+ const foreign=area(page).locator('.secret-entry').filter({hasText:'Известный переводчик'});
+ await expect(foreign).toContainText('Известные персонажу тайны');
+ await expect(foreign).toContainText('Спойлер · ГГ не знает');
+ expect((await view(request,s)).state.notification_history).toHaveLength(0);
 });
