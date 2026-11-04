@@ -26,7 +26,7 @@ for(const width of [360,390,412,430,1280,1440,1920]){
   await first.getByRole('button',{name:'Изменить fields.Внешность',exact:true}).click();
   await page.getByRole('dialog').getByLabel('Внешность',{exact:true}).fill('Рыжие волосы, зелёный шарф.');
   await page.getByRole('button',{name:'Сохранить поле',exact:true}).click();
-  await expect(page.getByRole('dialog')).toHaveCount(1);await page.getByRole('button',{name:'Готово',exact:true}).click();
+  await expect(page.locator('.ww-field-dialog')).toHaveCount(0);await page.getByRole('button',{name:'Готово',exact:true}).click();
   const draft=await (await request.get(`/api/workspaces/${workspace.id}/draft?author=true`)).json();
   expect(draft.state.characters[0].fields.Внешность).toContain('зелёный шарф');
   const exported=await request.get(`/api/workspaces/${workspace.id}/draft/export?version_id=${draft.version_id}&format=txt`);
@@ -225,7 +225,7 @@ for (const format of ['json','text']) {
   await person.getByRole('button',{name:'Изменить fields.Внешность',exact:true}).click();
   await page.getByRole('dialog').getByLabel('Внешность',{exact:true}).fill('Зелёный шарф — identity regression.');
   await page.getByRole('button',{name:'Сохранить поле',exact:true}).click();
-  await expect(page.getByRole('dialog')).toHaveCount(1);await invariant();
+  await expect(page.locator('.ww-field-dialog')).toHaveCount(0);await invariant();
   await expect(person).toContainText('identity regression');await page.getByRole('button',{name:'Готово',exact:true}).click();
   await workshopNav(page,'История и файлы');
   const downloadPromise=page.waitForEvent('download');

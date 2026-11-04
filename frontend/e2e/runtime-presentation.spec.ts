@@ -38,18 +38,30 @@ test('populated Runtime world has names, typed values, calendar, edit and reload
  await expect(page.getByRole('heading',{name:'Борис → Дом у реки',exact:true})).toBeVisible();
  await page.locator('.ww-record-card').filter({hasText:'Анна → Дом у реки'}).getByRole('button').click();
  const residence=page.locator('.ww-record-dialog');
+ const saveField=async()=>{
+  // A nested Radix dialog hides its parent from the accessibility tree, so
+  // getByRole('dialog').toHaveCount(1) is also true before the PATCH completes.
+  const committed=page.waitForResponse(r=>r.url().endsWith(url)&&r.request().method()==='PATCH');
+  await page.locator('.ww-field-dialog').getByRole('button',{name:'Сохранить поле',exact:true}).click();
+  const response=await committed;expect(response.ok(),await response.text()).toBe(true);
+  await expect(page.locator('.ww-field-dialog')).toHaveCount(0);await expect(residence).toBeVisible();
+ };
  await residence.getByRole('button',{name:'Изменить Контекст',exact:true}).first().click();
  await page.getByRole('dialog').last().getByLabel('Контекст',{exact:true}).fill('Дом остаётся прежним; уточнение автора.');
- await page.getByRole('button',{name:'Сохранить поле',exact:true}).click();
- await expect(page.getByRole('dialog')).toHaveCount(1);
+ await saveField();
  await residence.getByRole('button',{name:'Изменить С минуты',exact:true}).first().click();
  await expect(page.getByRole('dialog').last().getByLabel('С минуты',{exact:true})).toHaveAttribute('type','number');
  await page.getByRole('dialog').last().getByLabel('С минуты',{exact:true}).fill('0');
- await page.getByRole('button',{name:'Сохранить поле',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(1);
+ let release!:()=>void,received!:()=>void;const gate=new Promise<void>(r=>release=r),pending=new Promise<void>(r=>received=r);
+ await page.route(`**${url}`,async route=>{received();await gate;await route.continue()},{times:1});
+ const saving=saveField();await pending;
+ await expect(page.locator('.ww-field-dialog')).toContainText('Сохраняем');
+ expect((await(await request.get(url+'?author=true')).json()).state.world.residences.home_a.since).toBeNull();
+ release();await saving;
  expect((await(await request.get(url+'?author=true')).json()).state.world.residences.home_a.since).toBe(0);
  await residence.getByRole('button',{name:'Изменить С минуты',exact:true}).first().click();
  await page.getByRole('button',{name:'Оставить неизвестным',exact:true}).click();
- await page.getByRole('button',{name:'Сохранить поле',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(1);
+ await saveField();
  await expect.poll(async()=>(await(await request.get(url+'?author=true')).json()).state.world.residences.home_a.since).toBeNull();
  const after=await(await request.get(url+'?author=true')).json();expect(after.state.world.residences.home_a.context).toContain('уточнение автора');
  expect(after.state.world.residences.home_a.since).toBeNull();

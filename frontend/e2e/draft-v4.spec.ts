@@ -128,7 +128,7 @@ test('structured motivations render and edit without losing lifecycle metadata',
     records[0].text=`Редактирование ${field}`;
     await input.fill(records[0].text);
     await page.getByRole('button',{name:'Сохранить поле',exact:true}).click();
-    await expect(page.getByRole('dialog')).toHaveCount(1);
+    await expect(page.locator('.ww-field-dialog')).toHaveCount(0);
     await expect.poll(async()=> (await(await request.get(url+'?author=true')).json()).state.world.characters[cid][field]).toEqual(records);
   }
   await page.getByRole('button',{name:'Готово',exact:true}).click();await workshopNav(page,'Проверка мира');
