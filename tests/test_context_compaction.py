@@ -92,3 +92,15 @@ def test_saturated_world_repeated_reload_preserves_choice_and_scene_context(tmp_
         choice = expand(current, content('Choice context / controlled actor'))
         assert choice['scene']['present_actor_ids'] == sorted(current['camera']['present_character_ids'])
         assert len(choice['reproduction']['pregnancies'][0]['known_children']) == 3
+
+
+def test_compact_schema_preserves_secret_role_validation():
+    from jsonschema import Draft202012Validator
+    from backend.runtime_v3.raw import extraction_schema, prompt_schema
+    full, compact = extraction_schema(), prompt_schema()
+    a = Draft202012Validator({'$defs': compact['$defs'], 'properties': {'facts': compact['properties']['facts']}})
+    b = Draft202012Validator({'properties': {'facts': full['properties']['facts']}})
+    for field in ('secret_keeper_ids', 'secret_biography_ids', 'secret_subject_ids'):
+        for value, valid in [([], True), (['a', 'b'], True), ('a', False), ([1], False), (None, False)]:
+            payload = {'facts': [{'id': 'f', 'text': 'Скрытая история.', 'evidence': 'Источник.', field: value}]}
+            assert a.is_valid(payload) == b.is_valid(payload) == valid

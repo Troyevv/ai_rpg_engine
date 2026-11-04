@@ -363,6 +363,31 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
         return node
     result = compact(schema)
     result['$defs'] = {name:dict(compact(json.loads(value), root=True), **{'$anchor':name}) for value, name in shared.items()}
+    # Counting before factoring can leave definitions referenced only once:
+    # their original occurrences now live inside another shared definition.
+    # Inline those wrappers losslessly rather than paying for an anchor + ref.
+    while True:
+        refs = Counter()
+        def references(node):
+            if isinstance(node, dict):
+                if '$ref' in node: refs[node['$ref']] += 1
+                for child in node.values(): references(child)
+            elif isinstance(node, list):
+                for child in node: references(child)
+        references(result)
+        single = {name for name in result['$defs'] if refs['#'+name] == 1}
+        if not single: break
+        def inline(node):
+            if isinstance(node, dict):
+                name = node.get('$ref', '').removeprefix('#')
+                if set(node) == {'$ref'} and name in single:
+                    return inline({k:v for k,v in result['$defs'][name].items() if k != '$anchor'})
+                return {k:inline(v) for k,v in node.items()}
+            if isinstance(node, list): return [inline(v) for v in node]
+            return node
+        expanded = inline(result)
+        expanded['$defs'] = {k:v for k,v in expanded['$defs'].items() if k not in single}
+        result = expanded
     return result
 
 
