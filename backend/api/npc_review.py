@@ -9,6 +9,7 @@ class Edit(Revision):
     review_revision: int = Field(ge=0)
     operation_id: str = Field(min_length=8, max_length=100)
     fields: dict[str, StrictStr]
+    profile_acknowledgements: dict[str, StrictStr] = Field(default_factory=dict)
     character: dict = Field(default_factory=dict)
     proposals: dict[str, StrictStr] = Field(default_factory=dict)
     action: Literal['save', 'defer', 'confirm'] = 'save'

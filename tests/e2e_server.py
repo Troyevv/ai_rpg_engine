@@ -51,9 +51,18 @@ handoff_provider=None
 phone_mode="silent"
 group_semantic_fail_once=False
 letter130_provider=None
+npc_review_start_payload=None
 
 def stream(**kwargs):
-    global phone_mode, group_semantic_fail_once
+    global phone_mode, group_semantic_fail_once, npc_review_start_payload
+    if npc_review_start_payload is not None:
+        if kwargs.get('response_format') and runtime_v3_request(kwargs['messages']):
+            yield json.dumps(npc_review_start_payload,ensure_ascii=False)
+            npc_review_start_payload=None
+            return
+        if not kwargs.get('response_format'):
+            yield 'Лада пришла и рассказала об открытой мастерской. Она обещала показать её герою. Следом вошёл Александр Константинович Волконский.'
+            return
     if phone_mode in ('group152', 'digital_style'):
         if group_semantic_fail_once and kwargs['messages'][0]['content'].startswith('Remote semantic extraction/'):
             group_semantic_fail_once=False
@@ -700,7 +709,8 @@ if __name__ == '__main__':
         return {'world':result['world'],'save':result['save']}
 
     @app.post('/test/npc-review-seed')
-    def npc_review_seed():
+    def npc_review_seed(start_game:bool=True):
+        global npc_review_start_payload
         from test_runtime_v3_engine import run
         from test_npc_review import promoted
         from test_engine import CONFIG
@@ -710,9 +720,21 @@ if __name__ == '__main__':
         raw['promotions'][0]['character']=dict(biological_sex='female',life_status='alive',developmental_stage='adult',physical_state='Устала после дороги')
         raw['promotions'].append(dict(id='second_npc',name='Александр Константинович Волконский',fields={},character=dict(biological_sex='male'),evidence='Пришёл.'))
         raw['final_scene']['present_character_ids'].append('second_npc')
+        if not start_game:
+            # The actual UI start command has no authored player feelings.
+            raw['relationship_changes'][0] = {k:v for k,v in raw['relationship_changes'][0].items()
+                if k not in ('dimensions','player_assertion','player_evidence')}
+            npc_review_start_payload=raw
+            return dict(world=wid,save=sid)
         jid=repo.begin_job(sid,'Я доверяю Ладе.','start',CONFIG);run(repo,jid,raw)
         if repo.get_job(jid)['status']!='saved':raise ValueError(repo.get_job(jid)['error'])
         return dict(world=wid,save=sid)
+
+    @app.post('/test/npc-review-evolve/{sid}')
+    def npc_review_evolve(sid:int):
+        from test_npc_review_revision import evolve
+        evolve(app.state.repository,sid)
+        return app.state.repository.get_save(sid)
 
     @app.post('/test/seed')
     def seed():

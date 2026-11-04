@@ -31,6 +31,8 @@ import "./npc-review.css";
 export type NpcReviewRecord = {
   id: string;
   age: number | null;
+  profiles: Record<string, { text: string; revision: string }>;
+  profile_acknowledgements: Record<string, string>;
   extracted_fields: Record<string, string>;
   card: { id: string; name: string; fields: Record<string, string> };
   status: "pending_review" | "deferred" | "confirmed";
@@ -74,6 +76,7 @@ type Conflict = {
   canonical: boolean;
 };
 type Draft = {
+  profile_acknowledgements?: Record<string, string>;
   conflicts?: Record<string, Conflict>;
   fields: Record<string, string>;
   proposals: Record<string, string>;
@@ -119,6 +122,7 @@ export function NpcReview({
         fields: record.card.fields,
         proposals: record.proposals,
         character: record.character,
+        profile_acknowledgements: record.profile_acknowledgements,
       }
     : null;
   const completed = draft
@@ -158,6 +162,8 @@ export function NpcReview({
     const key = storageKey(record);
     setDrafts((d) => ({ ...d, [key]: next }));
     setNotice("Есть несохранённые правки");
+    setError("");
+    setCanCompare(false);
     try {
       localStorage.setItem(key, JSON.stringify(next));
     } catch {
@@ -177,6 +183,7 @@ export function NpcReview({
         fields: draft.fields,
         proposals: draft.proposals,
         character: draft.character,
+        profile_acknowledgements: draft.profile_acknowledgements || {},
         action,
       },
     ).catch((error) => {
@@ -371,10 +378,11 @@ export function NpcReview({
             </div>
             <div>
               <p className="eyebrow">Новое лицо · проверка карточки</p>
-              <DialogTitle>{record?.card.name}</DialogTitle>
-              <DialogDescription>
-                Персонаж уже участвует в истории. Проверь описание сейчас или
-                вернись к нему позже.
+              <DialogTitle className="dialog-title">
+                {record?.card.name}
+              </DialogTitle>
+              <DialogDescription className="dialog-description">
+                Персонаж уже в истории. Карточку можно проверить позже.
               </DialogDescription>
             </div>
           </header>
@@ -415,7 +423,12 @@ export function NpcReview({
                       {r.card.name.slice(0, 1)}
                     </span>
                     <span>
-                      {r.card.name}
+                      <span
+                        className="npc-review-queue-name"
+                        title={r.card.name}
+                      >
+                        {r.card.name}
+                      </span>
                       <small>
                         {r.status === "deferred"
                           ? "Отложена"
@@ -534,6 +547,48 @@ export function NpcReview({
                             )}
                           </span>
                         </div>
+                        {record?.profiles?.[field] &&
+                          record.profiles[field].text !== value && (
+                            <div
+                              className="npc-review-profile-conflict"
+                              role="group"
+                              aria-label={`${field}: канонический профиль`}
+                            >
+                              <strong>В игре уже установлено</strong>
+                              <p>
+                                {record.profiles[field].text ||
+                                  "Активного описания нет: прежний профиль завершён или недоступен текущему POV."}
+                              </p>
+                              <small>
+                                Текст карточки отличается. Подтверждение
+                                сохранит текущий профиль и его историю.
+                              </small>
+                              <Button
+                                variant="outline"
+                                disabled={
+                                  !!busy ||
+                                  locked ||
+                                  draft?.profile_acknowledgements?.[field] ===
+                                    record.profiles[field].revision
+                                }
+                                onClick={() =>
+                                  draft &&
+                                  change({
+                                    ...draft,
+                                    profile_acknowledgements: {
+                                      ...draft.profile_acknowledgements,
+                                      [field]: record.profiles[field].revision,
+                                    },
+                                  })
+                                }
+                              >
+                                {draft?.profile_acknowledgements?.[field] ===
+                                record.profiles[field].revision
+                                  ? "Актуальный профиль сохранится"
+                                  : "Сохранить актуальный профиль"}
+                              </Button>
+                            </div>
+                          )}
                         <Textarea
                           id={`npc-${field}`}
                           value={value}

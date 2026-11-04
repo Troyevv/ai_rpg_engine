@@ -388,15 +388,8 @@ class StateResolver:
                     date_parts(birth, profile_of(s))
                     if not self.supported(item):
                         raise ValueError('birth date must be explicitly stated in evidence')
-                    today = current_time(s)['date']
-                    if today and birth > today: raise ValueError('birth date is in the future')
-                    if actor.get('birth_date') not in (None,birth): raise ValueError('cannot overwrite an established birthday')
-                    if actor.get('birth_date') != birth:
-                        prior = deepcopy(actor)
-                        actor['birth_date'] = birth
-                        actor['birth_date_provenance'] = dict(source='extraction',evidence=item['evidence'],turn_id=self.turn_id)
-                        from backend.runtime_v3.life import _transition
-                        _transition(self,'birth_date_established',cid,prior,actor,item)
+                    from backend.runtime_v3.birth_identity import establish_birth_date
+                    establish_birth_date(self, cid, birth, item['evidence'])
                 except (ValueError,TypeError):
                     self.warn('character_changes',i,'дата рождения не подтверждена или некорректна','birth_date',cid)
             if actor['developmental_stage']=='infant':

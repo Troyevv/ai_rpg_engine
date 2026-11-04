@@ -247,7 +247,11 @@ def test_confirmation_preserves_extracted_profiles(db):
     before=repo.get_snapshot(sid)['world_state']['characters']['new_npc']
     fields=dict.fromkeys(CARD_FIELDS,'Полное описание')
     fields['Характер']='Новое описание не заменяет канонический профиль'
-    edit(repo,sid,'new_npc',**command(repo,sid,'confirm',fields))
+    from backend.services.npc_review_context import profile_state
+    with pytest.raises(ValueError,match='Канонический профиль отличается'):
+        edit(repo,sid,'new_npc',**command(repo,sid,'confirm',fields))
+    acknowledgements={k:v['revision'] for k,v in profile_state(repo.get_snapshot(sid),'new_npc').items()}
+    edit(repo,sid,'new_npc',**command(repo,sid,'confirm',fields,profile_acknowledgements=acknowledgements))
     after=repo.get_snapshot(sid)['world_state']['characters']['new_npc']
     assert after['appearance']==before['appearance']
     assert after['personality']['items']['temperament']==before['personality']['items']['temperament']

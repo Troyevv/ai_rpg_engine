@@ -82,3 +82,35 @@ horizontal queue/section navigation, independent content scrolling, safe-area
 footer and fixed actions. It uses existing skin tokens, focus trapping and reduced
 motion. Browser QA checks empty/long text, multiple NPCs, errors, proposal comparison,
 canonical controls, defer/play/reopen/reload and confirmation on both viewports.
+
+## Review hardening (#169)
+
+Field proposals use a bounded NPC-specific context, not protagonist creation's
+public directory. Narrative's `visible_views` and accepted surface reconciliation
+supply the introduction and up to four recent relevant scenes; at most sixteen
+witnessed events and twenty-four observer-known/suspected facts supplement them.
+Personality/appearance, roles, residences and objective links use their existing
+visibility projections. Another actor's Knowledge, unwitnessed source events,
+unread remote motivations and hidden profile items never enter this context.
+Directed feelings are restricted to the observer's own outgoing relationship.
+No GM-only Narrative block or complete WorldState is sent. Character attributes
+require observed source changes; old prose is explicitly subordinate to current
+canonical profiles. The provider's actual token budget remains a hard guard.
+Generation checks save revision both before the request and after its response.
+A late response from an outdated world is rejected without applying any text.
+
+DOB establishment now shares one domain procedure with Extraction and records
+DOB provenance plus a History transition. Established game birth data stays
+protected. Values already equal to current canon are no-ops: acknowledging a
+later life change cannot clear its fact reference or repeat its lifecycle cascade.
+Existing Life transitions and motivation lifecycle still own their side effects;
+manual scalar edits get a separate canonical audit transition.
+
+A pending card cannot silently disagree with an established appearance/personality
+profile. The editor shows the visible current text beside the description and
+requires an explicit “keep current profile” acknowledgement. Its opaque signature
+is bound to the actual profile revision and stored with the draft. Later changes
+invalidate that acknowledgement. Retirement stays retirement, and hidden traits
+are not exposed by the comparison. Descriptive baseline text may be retained,
+but all existing canonical projections continue to prefer the dynamic profile.
+These are optional snapshot fields; old pending records remain readable.

@@ -4,7 +4,6 @@ Only explicit authored values enter the canonical model. IDs, provenance and
 related entities remain owned by their existing Runtime domains.
 """
 from copy import deepcopy
-from pydantic import ValidationError
 from backend.runtime_v3.models import Character, assert_world_state_v3_invariants
 from backend.services.draft_initial import ACTOR_FIELDS, runtime_schema
 
@@ -96,14 +95,17 @@ def validate_patch(cid,patch):
         if key in patch and (not isinstance(patch[key],list) or any(not isinstance(v,str) or not v.strip() for v in patch[key])):
             raise ValueError(LABELS[key]+': удали пустые записи или заполни их.')
     initial_character(cid,cid,patch)
-    return deepcopy(patch)
+    patch=deepcopy(patch)
+    if patch.get('biological_sex')=='unknown':patch['biological_sex']=None
+    return patch
 
 
 def apply_review(state,cid,patch,baseline):
     """Field-level CAS, lifecycle-preserving changes and full world validation."""
     patch=validate_patch(cid,patch)
     actor=state['characters'][cid];current=editable_values(actor)
-    changed={k:v for k,v in patch.items() if v!=baseline[k]}
+    requested={k:v for k,v in patch.items() if v!=baseline[k]}
+    changed={k:v for k,v in requested.items() if v!=current[k]}
     if changed and state['camera']['controlled_actor_id']==cid:
         raise ValueError('Этот NPC сейчас управляется игроком. Верни исходного героя перед проверкой карточки.')
     conflicts=[LABELS[k] for k,v in changed.items() if current[k]!=baseline[k] and current[k]!=v]
@@ -116,19 +118,23 @@ def apply_review(state,cid,patch,baseline):
     from backend.runtime_v3.life import apply_life
     lifecycle_fields={'life_status','capabilities','developmental_stage','reproductive_capability','identity_components'}
     lifecycle={k:v for k,v in changed.items() if k in lifecycle_fields}
-    audit={}
+    resolver=StateResolver(state,'','',turn_id=state['meta']['turn_id'])
+    evidence='Явная правка в редакторе проверки NPC.'
+    if 'birth_date' in changed:
+        from backend.runtime_v3.birth_identity import establish_birth_date
+        establish_birth_date(resolver,cid,changed['birth_date'],evidence,source='npc_review',correct_initial=True)
     if lifecycle:
-        resolver=StateResolver(state,'','',turn_id=state['meta']['turn_id'])
         raw=RawTurnResult.parse(dict(final_scene={},life_changes=[dict(id=cid,**lifecycle,
             evidence='Явная правка в редакторе проверки NPC.',assertion='established')]))
         apply_life(resolver,raw)
-        state.clear();state.update(resolver.state)
-        actor=state['characters'][cid]
-        audit=resolver.history.to_dict()
+    state.clear();state.update(resolver.state)
+    actor=state['characters'][cid]
+    prior=deepcopy(actor)
     from backend.runtime_v3.lifecycle import replace_active
     for key,value in changed.items():
-        if key in lifecycle_fields:continue
+        if key in lifecycle_fields or key=='birth_date':continue
         if key in ('goals','intentions','obligations'):
+            if actor['developmental_stage']=='infant':raise ValueError('Младенцу нельзя назначать взрослые мотивации карточкой.')
             if actor['life_status']=='dead':raise ValueError('Мёртвому персонажу нельзя назначать мотивации.')
             actor[key]=replace_active(actor[key],value,cid,key,state['meta']['turn_id'])
         else:actor[key]=deepcopy(value)
@@ -141,4 +147,7 @@ def apply_review(state,cid,patch,baseline):
     call=active_call(state,cid)
     if call and call['status']=='answered' and not all(capabilities(state,cid)[k] for k in ('can_act','can_speak','can_perceive')):
         raise ValueError('Сначала заверши активный звонок: новые способности делают разговор невозможным.')
-    return audit
+    if actor != prior:
+        from backend.runtime_v3.life import _transition
+        _transition(resolver,'npc_review_attributes',cid,prior,actor,dict(evidence=evidence))
+    return resolver.history.to_dict()

@@ -61,7 +61,8 @@ def review_projection(snapshot):
         from backend.runtime_v3.npc_identity import editable_values
         from backend.runtime_v3.calendar import age_on, current_time, profile_of
         state=snapshot['world_state']
-        records.append(dict(id=cid, age=age_on(state['characters'][cid]['birth_date'], current_time(state)['date'], profile_of(state)), character=deepcopy(record.get('character_edits', {})),
+        from backend.services.npc_review_context import profile_state
+        records.append(dict(id=cid, profiles=profile_state(snapshot,cid), profile_acknowledgements=deepcopy(record.get('profile_acknowledgements',{})), age=age_on(state['characters'][cid]['birth_date'], current_time(state)['date'], profile_of(state)), character=deepcopy(record.get('character_edits', {})),
             baseline=deepcopy(record['character_baseline']), current=editable_values(snapshot['world_state']['characters'][cid]),
             **{key: deepcopy(record[key]) for key in
             ('card', 'status', 'revision', 'created_turn', 'creation_id', 'proposals', 'extracted_fields')}))
@@ -77,7 +78,7 @@ def review_record(snapshot, cid):
     return record
 
 
-def edit(repo, sid, cid, *, revision, review_revision, operation_id, fields, action='save', proposals=None, character=None):
+def edit(repo, sid, cid, *, revision, review_revision, operation_id, fields, action='save', proposals=None, character=None, profile_acknowledgements=None):
     """Save, defer, or confirm under one lock and existing save revision guard.
 
     Operation receipts live in the same snapshot; retries cannot cross branches.
@@ -91,7 +92,10 @@ def edit(repo, sid, cid, *, revision, review_revision, operation_id, fields, act
     character = validate_patch(cid, character or {})
     proposals = proposals or {}
     card_fields(proposals)
-    signature = dict(fields=fields, proposals=proposals, character=character, action=action, review_revision=review_revision)
+    profile_acknowledgements = profile_acknowledgements or {}
+    if not isinstance(profile_acknowledgements,dict) or any(k not in CARD_FIELDS or not isinstance(v,str) for k,v in profile_acknowledgements.items()):
+        raise ValueError('Некорректное подтверждение профиля.')
+    signature = dict(profile_acknowledgements=profile_acknowledgements, fields=fields, proposals=proposals, character=character, action=action, review_revision=review_revision)
     with repo.connect() as db:
         db.execute('BEGIN IMMEDIATE')
         repo._assert_idle(db, sid)
@@ -101,7 +105,8 @@ def edit(repo, sid, cid, *, revision, review_revision, operation_id, fields, act
         record = review_record(snapshot, cid)
         receipt = record.get('receipt')
         if receipt and receipt['id'] == operation_id:
-            if receipt['request'] != signature: raise ValueError('ID запроса уже использован для другого изменения.')
+            prior_request = dict(receipt['request'], profile_acknowledgements=receipt['request'].get('profile_acknowledgements', {}))
+            if prior_request != signature: raise ValueError('ID запроса уже использован для другого изменения.')
             return
         if row['revision'] != revision or record['revision'] != review_revision:
             raise ValueError('Карточка или мир изменились. Обнови данные; твой текст сохранён в редакторе.')
@@ -110,6 +115,7 @@ def edit(repo, sid, cid, *, revision, review_revision, operation_id, fields, act
         record['card']['fields'] = fields
         record['proposals'] = deepcopy(proposals)
         record['character_edits'] = deepcopy(character)
+        record['profile_acknowledgements'] = deepcopy(profile_acknowledgements)
         record['revision'] += 1
         record['status'] = {'save':'pending_review','defer':'deferred','confirm':'confirmed'}[action]
         record['receipt'] = dict(id=operation_id, request=signature)
@@ -124,6 +130,8 @@ def edit(repo, sid, cid, *, revision, review_revision, operation_id, fields, act
         canonical_before = deepcopy(snapshot['world_state']['characters'][cid])
         lifecycle_audit = {}
         if action == 'confirm':
+            from backend.services.npc_review_context import validate_profiles
+            validate_profiles(snapshot,cid,fields,profile_acknowledgements)
             lifecycle_audit = apply_review(snapshot['world_state'], cid, character, record['character_baseline'])
             cards = [c for c in snapshot['character_cards'] if c['id'] == cid]
             if len(cards) != 1: raise ValueError('Нарушена уникальность канонической карточки.')
@@ -167,7 +175,8 @@ def _generate(repo, sid, cid, *, field, revision, review_revision, config, api_k
     """A proposal can change only one field, never the world or accepted draft."""
     from backend.services.usage import tracked_stream
     from backend.services.coordinator import model_lease
-    from backend.services.protagonist_creation import creation_context
+    from backend.services.npc_review_context import context
+    from backend.runtime_v3.repository import read_history
     from context_builder import estimate
     import llm
     snapshot = repo.get_snapshot(sid)
@@ -175,14 +184,20 @@ def _generate(repo, sid, cid, *, field, revision, review_revision, config, api_k
     if field not in CARD_FIELDS or record['status'] == 'confirmed': raise ValueError('Поле недоступно.')
     if repo.get_save(sid)['revision'] != revision or record['revision'] != review_revision:
         raise ValueError('Контекст изменился. Сохрани карточку и повтори генерацию.')
-    from backend.runtime_v3.npc_identity import editable_values
+    with repo.connect() as db:
+        repo._assert_idle(db, sid)
+        history, _ = read_history(db, snapshot.get('history_head'))
+    npc_context = context(snapshot, cid, record, repo.list_turns(sid), history)
+    if repo.get_save(sid)['revision'] != revision:
+        raise ValueError('Контекст изменился. Повтори генерацию.')
     messages = [dict(role='system', content='Ты дополняешь предложенную карточку уже существующего NPC. '
         'Верни JSON {"value":"текст"} только для выбранного поля, на русском. '
         'Черновик не является каноном. Не меняй личность, не принимай решений за игрока, '
         'не приписывай знания скрытых тайн. Учитывай установленные события и текущие сведения. '
+        'current_card и текущие атрибуты приоритетнее старых реплик и черновика; не откатывай развитие персонажа. '
+        'Отсутствие сведений не означает отсутствия свойства; suspected остаётся предположением. '
         'Не генерируй другие поля.'), dict(role='user', content=json.dumps(dict(
-            field=field, draft=record['card'], character=editable_values(snapshot['world_state']['characters'][cid]), context=creation_context(snapshot),
-            situation=snapshot['world_state']['characters'][cid]['situation']), ensure_ascii=False))]
+            field=field, draft=record['card'], context=npc_context), ensure_ascii=False))]
     budget = config['max_tokens']
     if estimate(messages) + budget > config['context_length']: raise ValueError('Недостаточно контекста для генерации поля.')
     class Accounting:
@@ -198,6 +213,8 @@ def _generate(repo, sid, cid, *, field, revision, review_revision, config, api_k
         value = json.loads(text)
         if not isinstance(value, dict) or set(value) != {'value'} or not isinstance(value['value'], str) or not value['value'].strip(): raise ValueError()
     except (ValueError, TypeError): raise ValueError('Модель вернула некорректное предложение. Твой текст не изменён.')
+    if repo.get_save(sid)['revision'] != revision:
+        raise ValueError('Мир изменился во время генерации. Повтори запрос с актуальным контекстом.')
     # Generation is read-only. Late responses are revision-bound and never auto-applied.
     return dict(field=field, value=value['value'], review_revision=review_revision, revision=revision)
 

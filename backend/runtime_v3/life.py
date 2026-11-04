@@ -107,7 +107,7 @@ def _proof(resolver, item):
 def _transition(resolver, section, key, before, after, item):
     """Append structured provenance; bounded History reads never own current truth."""
     from backend.runtime_v3.milestones import stable_id, transition_provenance
-    actors = ([key] if section in ('life_changes','birth_date_established') else
+    actors = ([key] if section in ('life_changes','birth_date_established','npc_review_attributes') else
               [after[k] for k in ('actor_id','source_id','target_id') if after.get(k)])
     actors = list(dict.fromkeys([*actors, *after.get('character_ids', [])]))
     record = dict(kind=section, entity=key, before=deepcopy(before), after=deepcopy(after),

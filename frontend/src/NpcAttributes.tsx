@@ -285,6 +285,10 @@ export function NpcAttributes({
                     Мир уже изменил это поле. Твоя правка не заменит его
                     автоматически.
                   </p>
+                  <p>
+                    <strong>Сейчас в мире:</strong>{" "}
+                    {describeAttribute(record.current[key]) || "Не задано"}
+                  </p>
                   <Button
                     variant="outline"
                     disabled={disabled}
