@@ -96,17 +96,22 @@ class DraftStorage(DraftEditorStorage):
                 # with a generic error. Semantic/provider prose stays private.
                 diagnostic=public_job.get('response_diagnostic')
                 public_job['error']=diagnostic['message'] if diagnostic else 'Проверка или генерация завершилась с замечанием. Подробности доступны автору.'
+            if public_job and not author:
+                # Keep progress/transport state, never the script, summary, model
+                # config or authored input from a previous preparation screen.
+                public_job.pop('pinned_config',None);public_job.pop('effective_config',None)
+                public_job['narrative']=''
             games=[json.loads(r[0]) for r in db.execute("SELECT content FROM document_versions WHERE kind='draft_save' AND owner LIKE ? ORDER BY id DESC",(wid+':%',))]
             visible=state if author else domain.player_view(state) if state else None
             return {'games':[{k:g[k] for k in ('world','save','version_id')} for g in games],'id':wid,'name':w['name'],'revision':w['revision'],'version_id':head['id'] if head else None,
                 'candidate':raw if candidate and author else None,
                 'relation_merges':relation_plans(raw) if raw and author else [],
                 'editor':editor_contract() if author else None,
-                'presentation':{'clock':clock_view(state['world_clock']), 'event_times':event_times(visible), 'notices':calendar_notices(state) if author else []} if state else None,
+                'presentation':{'clock':clock_view(visible['world_clock']), 'event_times':event_times(visible), 'notices':calendar_notices(state) if author else []} if visible else None,
                 'creation_settings':(raw.get('creation_settings',{}) if raw else json.loads(latest['config_json']).get('_creation_settings',{}) if latest else {}) if author else {},
                 'state':visible,
-                'portraits':self._portrait_view(state,author),
-                'validation':report if author or not (record and (record.get('origin_job') or review_metadata(record))) else {'errors':['Мир пока не готов к запуску. Откройте редактор автора.'] if report['errors'] else [],'warnings':[]},
+                'portraits':self._portrait_view(state,visible,author),
+                'validation':report if author else {'errors':['Мир пока не готов к запуску. Откройте редактор автора.'] if report['errors'] else [],'warnings':['У автора есть замечания к черновику.'] if report['warnings'] and not (record and (record.get('origin_job') or review_metadata(record))) else []},
                 'review':review_metadata(record) if record and author else ({'status':review_metadata(record).get('status')} if record and review_metadata(record) else None),
                 'pending_editor':bool(latest and json.loads(latest['response_journal'] or '{}').get('editor',{}).get('status')=='preview'),
                 'creative_status':creative_status,
@@ -120,14 +125,10 @@ class DraftStorage(DraftEditorStorage):
                 'history':history,'job':public_job,'author':author}
 
     @staticmethod
-    def _portrait_view(state,author):
-        if state is None: return {}
-        from backend.services.draft_portraits import project
-        visible=state if author else domain.player_view(state)
-        displayed=project(state,author)
-        ids={c['id'] for c in visible['characters']}
-        return {c['id']:{k:c[k] for k in ('portrait','silhouette','procedural_portrait') if k in c}
-                for c in displayed['characters'] if c['id'] in ids}
+    def _portrait_view(state,visible,author):
+        if state is None:return {}
+        from backend.services.draft_portraits import presentation_map
+        return presentation_map(state,visible['characters'],author)
 
     def _write_draft(self,db,wid,state,reason,source='',warnings=None,source_id=None,outline='',generated=False,review=None,origin_job=None):
         state=domain.prepare(state)
@@ -239,12 +240,14 @@ class DraftStorage(DraftEditorStorage):
             import_assets(db,wid,state,assets)
             self._write_draft(db,wid,state,'import',text,warnings)
 
-    def edit_draft(self,wid,revision,operation,kind='',eid='',field='',value=None,source_id=None,ack=False):
+    def edit_draft(self,wid,revision,operation,kind='',eid='',field='',value=None,source_id=None,ack=False,*,field_visibility=None):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE');self._draft_workspace(db,wid,revision)
             head=self._draft_head(db,wid)
             if not head:raise ValueError('Сначала создай или импортируй мир.')
             record=json.loads(head['content'])
+            if field_visibility is not None and (operation!='patch' or kind!='character' or not field.startswith('fields.')):
+                raise ValueError('Политика видимости задаётся только литературному полю.')
             if operation=='restore':
                 old=db.execute("SELECT * FROM document_versions WHERE id=? AND kind='world_draft' AND owner=?",(source_id,wid)).fetchone()
                 if not old:raise ValueError('Версия не принадлежит черновику.')
@@ -252,7 +255,11 @@ class DraftStorage(DraftEditorStorage):
                 db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))
                 return eid
             state=domain.prepare(record['state']);before=domain.validate(state)
-            if operation=='patch':state=domain.patch(state,kind,eid,field,value)
+            if operation=='patch':
+                state=domain.patch(state,kind,eid,field,value)
+                if field_visibility is not None:
+                    from backend.services.draft_player_view import set_binding
+                    set_binding(state,eid,field[7:],field_visibility)
             elif operation=='add':state,eid=domain.add(state,kind)
             elif operation=='remove':state=domain.remove(state,kind,eid)
             else:raise ValueError('Неизвестная операция.')

@@ -2,6 +2,15 @@ import {describe,it,expect} from 'vitest';
 import {proceduralPortrait,type ProceduralPortrait} from '../src/workshop/proceduralPortrait';
 const base:ProceduralPortrait={version:1,seed:'a'.repeat(32),form:'human',stage:'adult',face:0,hair:0,skin:0,eyes:0,clothing:0,accessory:0,palette:0};
 describe('versioned workshop illustrations',()=>{
+ it('colors hair and clothing independently without changing the default rendering',()=>{
+  const before=proceduralPortrait({...base,hair:0,clothing:2});
+  const changed=proceduralPortrait({...base,hair:0,clothing:2,hair_color:2,clothing_color:0});
+  const svg=decodeURIComponent(changed!);
+  expect(changed).not.toBe(before);
+  expect(svg).toContain('#e5ca93');expect(svg).toContain('#393b40');
+  expect(svg).not.toContain('#93a18a'); // no original sage collar on the recolored shirt
+  expect(proceduralPortrait({...base,hair_color:99})).toBeNull();
+ });
  it('keeps an exact deterministic image across repeated calls and varied faces',()=>{
   const svg=proceduralPortrait(base);expect(svg).toBe(proceduralPortrait({...base}));
   expect(proceduralPortrait({...base,hair:7})).not.toBe(svg);

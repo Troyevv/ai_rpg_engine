@@ -731,8 +731,9 @@ def test_json_validation_errors_are_editable_but_block_start(api):
     response=client.post(path+'/import',json={'revision':w['revision'],'format':'json','text':json.dumps(state)})
     assert response.status_code==200,response.text
     imported=response.json()
-    assert imported['validation']==report
-    assert client.get(path+'?author=true').json()['state']==expected
+    assert imported['validation']['errors'] and report['errors'][0] not in json.dumps(imported['validation'],ensure_ascii=False)
+    author=client.get(path+'?author=true').json()
+    assert author['state']==expected and author['validation']==report
     confirm=client.post(path+'/confirm',json={'revision':imported['revision'],'version_id':imported['version_id']})
     assert 400<=confirm.status_code<500
     assert report['errors'][0] in confirm.json()['detail']
@@ -748,7 +749,9 @@ def test_json_warnings_do_not_block_import_or_start(api):
     response=client.post(path+'/import',json={'revision':w['revision'],'format':'json','text':json.dumps(state)})
     assert response.status_code==200,response.text
     imported=response.json()
-    assert imported['validation']==report
+    assert imported['validation']['warnings'] and not imported['validation']['errors']
+    assert report['warnings'][0] not in json.dumps(imported['validation'],ensure_ascii=False)
+    assert client.get(path+'?author=true').json()['validation']==report
     assert client.post(path+'/confirm',json={'revision':imported['revision'],'version_id':imported['version_id']}).status_code==200
 
 

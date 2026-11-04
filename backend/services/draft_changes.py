@@ -135,6 +135,12 @@ def apply_proposal(state, reply, *, editing=False):
     for parts, path in sorted(removals, key=lambda item: int(item[0][1]) if item[0][0] in ('characters', 'locations') else -1, reverse=True):
         parent = pointer(trial, path.rsplit('/', 1)[0])
         del parent[int(parts[-1]) if isinstance(parent, list) else parts[-1]]
+    # Removing a card also removes its draft-only field bindings. A surviving
+    # card keeps its bindings and may still block deletion of a referenced fact.
+    if removals and 'card_field_facts' in trial:
+        remaining={c['id'] for c in trial['characters']}
+        trial['card_field_facts']={k:v for k,v in trial['card_field_facts'].items() if k in remaining}
+        if not trial['card_field_facts']:trial.pop('card_field_facts')
     normalized = validate_transition(state, trial, editing=editing)
     return normalized, proposal.model_dump()
 

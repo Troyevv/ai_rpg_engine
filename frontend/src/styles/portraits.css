@@ -23,3 +23,6 @@ html[data-skin="paper"]{--avatar-male-bg:#dcebf8;--avatar-male-ink:#315c80;--ava
 .procedural-editor-grid>img{align-self:start}.procedural-editor-grid>div{min-width:0}
 @media(max-width:600px){.dialog-content.portrait-dialog{width:calc(100vw - 20px);padding:18px;max-height:calc(100dvh - 20px)}.portrait-dialog input:not([type=range]),.portrait-dialog select{font-size:16px}.procedural-editor-grid{grid-template-columns:1fr}.procedural-editor-grid>img{position:static;width:130px;justify-self:center}.portrait-dialog .portrait-actions>button{min-height:44px}}
 @media(max-width:760px){.dialog-content.portrait-dialog{top:0;bottom:auto;left:0;transform:none;width:100%;max-width:100%;height:var(--app-height,100dvh);max-height:var(--app-height,100dvh);border-radius:0;padding:22px 18px max(22px,env(safe-area-inset-bottom))}}
+
+.portrait-literary-reference{border-block:1px solid var(--border);padding:.65rem 0;margin:.75rem 0;color:var(--text);line-height:1.55;overflow-wrap:anywhere}
+.portrait-literary-reference summary{color:var(--accent);cursor:pointer}.portrait-literary-reference p{white-space:pre-wrap;margin:.5rem 0 0}

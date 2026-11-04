@@ -35,7 +35,9 @@ def editor_contract():
         for key,schema in schemas[kind].items():
             enum=schema.get('enum') or next((part['enum'] for part in schema.get('anyOf',[]) if 'enum' in part),None)
             if enum:enums[kind][key]=enum
-    return dict(fields={k:sorted(v) for k,v in FIELDS.items()},enums=enums,schemas=schemas,definitions=definitions)
+    from backend.services.draft_player_view import RESERVED_FIELDS
+    return dict(fields={k:sorted(v) for k,v in FIELDS.items()},enums=enums,schemas=schemas,definitions=definitions,
+                field_visibility_excluded=sorted(RESERVED_FIELDS))
 
 
 def calendar_notices(state):

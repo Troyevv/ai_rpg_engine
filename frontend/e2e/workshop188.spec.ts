@@ -10,8 +10,16 @@ test('new workspace retains the submitted idea without copying it into the next 
  await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
  await expect(page.locator('.ww-hero h1')).toBeVisible();
  const wid=await page.evaluate(()=>localStorage.getItem('draftWorkspace'));
- await workshopNav(page,'Идея и генерация');await expect(page.getByLabel('Описание мира или текст импорта')).toHaveValue(idea);
- await page.reload();await nav(page,'Создать');await workshopNav(page,'Идея и генерация');await expect(page.getByLabel('Описание мира или текст импорта')).toHaveValue(idea);
+ await workshopNav(page,'Идея и генерация');
+ await expect(page.getByLabel('Описание мира или текст импорта')).toHaveCount(0);
+ await page.getByRole('button',{name:'Открыть замысел автора'}).click();
+ await page.getByRole('button',{name:'Показать всё',exact:true}).click();
+ await expect(page.getByLabel('Описание мира или текст импорта')).toHaveValue(idea);
+ await page.reload();await nav(page,'Создать');await workshopNav(page,'Идея и генерация');
+ await expect(page.getByLabel('Описание мира или текст импорта')).toHaveCount(0);
+ await page.getByRole('button',{name:'Открыть замысел автора'}).click();
+ await page.getByRole('button',{name:'Показать всё',exact:true}).click();
+ await expect(page.getByLabel('Описание мира или текст импорта')).toHaveValue(idea);
  expect((await(await request.get(`/api/workspaces/${wid}/draft?author=true`)).json()).source_text).toContain(idea);
  await draftsMenu(page);await page.getByRole('button',{name:'+ Новая история',exact:true}).click();
  await expect(page.getByLabel('Описание мира или текст импорта')).toHaveValue('');

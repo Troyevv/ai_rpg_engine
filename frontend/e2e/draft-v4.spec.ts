@@ -186,6 +186,7 @@ test('previous world is labelled separately from an incomplete new response',asy
   await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),w.id);
   await page.goto('/');await nav(page,'Создать');
   await workshopNav(page,'Идея и генерация');
+  await page.getByRole('button',{name:'Открыть замысел автора'}).click();await page.getByRole('button',{name:'Показать всё',exact:true}).click();
   await page.getByLabel('Описание мира или текст импорта').fill(`TEST_FRAGMENT_RECOVERY previous ${info.project.name}. Новый мир.`);
   await page.getByRole('button',{name:'Создать новую версию мира',exact:true}).click();
   await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('error');

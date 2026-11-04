@@ -20,6 +20,7 @@ class Change(Revision):
     value: Any = None
     source_id: int | None = None
     warnings_ack: bool = False
+    field_visibility: Literal['default'] | list[str] | None = None
 
 from backend.services.world_creation_settings import CreationSettings, CalendarPresets
 
@@ -193,7 +194,9 @@ def install(app,repo,preparation,credentials,job):
 
     @app.patch('/api/workspaces/{wid}/draft')
     def change(wid:str,body:Change):
-        eid=repo.edit_draft(wid,body.revision,body.operation,body.kind,body.entity_id,body.field,body.value,body.source_id,body.warnings_ack)
+        if 'field_visibility' in body.model_fields_set and body.field_visibility is None:
+            raise ValueError('Политика поля: default или список ID фактов.')
+        eid=repo.edit_draft(wid,body.revision,body.operation,body.kind,body.entity_id,body.field,body.value,body.source_id,body.warnings_ack,field_visibility=body.field_visibility)
         return {**repo.draft(wid,True),'entity_id':eid}
 
     @app.get('/api/workspaces/{wid}/draft/dependencies')

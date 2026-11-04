@@ -34,8 +34,9 @@ def messages_for(repo,job,config):
         instructions+='\nРазработай пригодный для немедленной игры мир. Недостающие детали концепции дополни самостоятельно; исходная идея не является исчерпывающей спецификацией.'
         from backend.services.draft_initial import prompt_schema, compact_schema, SECRET_AUTHORING_RULES
         system=(config['_prompts']['draft_world_prompt.md']['content']+'\n'+SECRET_AUTHORING_RULES
+                +'\nВ portrait_traits карточки укажи только изображаемые, открыто видимые признаки из её Внешности, вариантами схемы. Если признак не задан или не поддерживается, пропусти; для нечеловеческого облика form=neutral. Не кодируй секреты, не дописывай Внешность ради портрета.'
                 +'\n\nКаноническая JSON Schema WorldState для ПЕРВОНАЧАЛЬНОЙ генерации (не заполняй саму схему; верни объект по ней):\n'
-                +json.dumps(compact_schema(prompt_schema()),ensure_ascii=False,separators=(',',':')))
+                +json.dumps(compact_schema(prompt_schema(initial_portraits=True)),ensure_ascii=False,separators=(',',':')))
         return [{'role':'system','content':system},
                 {'role':'user','content':instructions}]
     draft=repo.draft(wid,author=True);state=draft['state']
@@ -153,7 +154,9 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
                     raw.pop('authoring',None)  # Model cannot mint server provenance.
                     actors=raw.get('world',{}).get('characters',{}) if isinstance(raw.get('world'),dict) else {}
                     for actor in (actors.values() if isinstance(actors,dict) else []):
-                        if isinstance(actor,dict):actor.pop('birth_date_provenance',None)
+                        if isinstance(actor,dict):
+                            for reserved in ('birth_date_provenance','procedural_portrait','portraits','portrait_mode'):
+                                actor.pop(reserved,None)
                         if isinstance(actor,dict) and isinstance(actor.get('birth_provenance'),dict) and actor['birth_provenance'].get('source') in ('manual','authoring_automatic'):
                             actor['birth_provenance'].pop('source')
                     from backend.services.draft_intake import motivations

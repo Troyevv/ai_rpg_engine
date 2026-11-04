@@ -144,7 +144,7 @@ SERVER_FIELDS = frozenset(('birth_provenance', 'birth_date_provenance', 'authori
     'time_reference_minute', 'portraits', 'procedural_portrait', 'portrait_mode'))
 
 
-def prompt_schema():
+def prompt_schema(*, initial_portraits=False):
     # Keep the descriptive editor schema; omit duplicate prose from the provider
     # schema. Property names such as title/description are data, not annotations.
     from backend.services.draft_schema import world_state_schema
@@ -175,6 +175,9 @@ def prompt_schema():
                     node['required'] = [key for key in node['required'] if key not in SERVER_FIELDS]
             for child in node.values(): omit_server_fields(child)
     omit_server_fields(schema)
+    if initial_portraits:
+        from backend.services.portrait_traits import input_schema
+        schema['properties']['characters']['items']['properties']['portrait_traits'] = input_schema()
     return schema
 
 

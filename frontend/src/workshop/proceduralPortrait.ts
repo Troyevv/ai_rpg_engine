@@ -1,7 +1,7 @@
 // Trusted vector layers from the approved #175 artwork. Version 1 is immutable.
 // Never accept SVG, paths, colors or markup from the server/user.
 import parts from './portraitParts.json';
-export type ProceduralPortrait = {version:1;seed:string;form:'neutral'|'human';stage:string;face:number;hair:number;skin:number;eyes:number;clothing:number;accessory:number;palette:number};
+export type ProceduralPortrait = {version:1;seed:string;form:'neutral'|'human';stage:string;face:number;hair:number;skin:number;eyes:number;clothing:number;accessory:number;palette:number;hair_color?:number;clothing_color?:number};
 type Art = { [key:string]: any };
 function draw(p: Art): string {
     const skin = p.skin || ['#e6b99a', '#c68b70', '#aa705a'];
@@ -55,11 +55,33 @@ function draw(p: Art): string {
   };
 
 
+// New optional swatches do not change unconfigured v1 illustrations. Their
+// order is part of the persisted descriptor contract (portrait_traits.py).
+const hairColors=[
+ ['#3b3738','#201d20'],['#795737','#45362b'],['#e5ca93','#a68b60'],['#99876c','#685b4b'],
+ ['#ad6742','#653c32'],['#aaa6a0','#67686a'],['#f1ead8','#b7b2a9'],
+];
+const clothingColors=[
+ ['#393b40','#20242a'],['#e7e1d7','#b9b2a5'],['#637c97','#35475e'],['#788673','#435448'],
+ ['#876651','#533e33'],['#a4665c','#673d3c'],['#c4b395','#8d7c60'],
+];
+function garment(body:string,swatch:string[]|undefined):string {
+ if(!swatch)return body;
+ // Keep contrast in the trusted, illustrated collar/seams of the garment.
+ const rgb=(hex:string)=>[1,3,5].map(n=>parseInt(hex.slice(n,n+2),16));
+ const dark=rgb(swatch[1]),light=rgb(swatch[0]);
+ return body.replace(/(fill|stroke)="(#[0-9a-f]{6})"/gi,(_match,attr,hex)=>{
+  const [r,g,b]=rgb(hex),t=(r*.21+g*.72+b*.07)/255;
+  const tone=light.map((c,i)=>Math.round(dark[i]+(c-dark[i])*t)).map(c=>c.toString(16).padStart(2,'0')).join('');
+  return attr+'="#'+tone+'"';
+ });
+}
 const cache=new Map<string,string>();
 export function proceduralPortrait(p?:ProceduralPortrait|null):string|null {
  if(!p || p.version!==1 || !/^[a-f0-9]{32}$/.test(p.seed))return null;
  const keys=['face','hair','skin','eyes','clothing','accessory','palette'] as const;
  if(keys.some(k=>!Number.isInteger(p[k]) || p[k]<0 || p[k]>(['hair','clothing','accessory'].includes(k)?7:6)))return null;
+ if([p.hair_color,p.clothing_color].some(c=>c!=null&&(!Number.isInteger(c)||c<0||c>6)))return null;
  const key=JSON.stringify(p);const cached=cache.get(key);if(cached)return cached;
  const bg=parts[p.palette].bg;
  let svg:string;
@@ -67,11 +89,12 @@ export function proceduralPortrait(p?:ProceduralPortrait|null):string|null {
   svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500"><rect width="400" height="500" fill="${bg[1]}"/><circle cx="200" cy="190" r="68" fill="${bg[0]}"/><path d="M62 500V407a138 112 0 0 1 276 0v93Z" fill="${bg[0]}"/></svg>`;
  } else if(p.form==='human') {
   const face=parts[p.face] as Art, hair=parts[p.hair%7] as Art, skin=parts[p.skin] as Art;
+  const clothColor=p.clothing_color==null?undefined:clothingColors[p.clothing_color];
   svg=draw({...face,name:'',bg,skin:skin.skin||parts[1].skin,iris:parts[p.eyes].iris,
-   hair:hair.hair,frontHair:p.hair===7?'':hair.frontHair,backHair:p.hair===7?'':hair.backHair,
-   cloth:parts[p.palette].cloth,
+   hair:p.hair_color==null?hair.hair:hairColors[p.hair_color],frontHair:p.hair===7?'':hair.frontHair,backHair:p.hair===7?'':hair.backHair,
+   cloth:clothColor||parts[p.palette].cloth,
    // Plain unbranded tunic is the default in every historical setting.
-   body:p.clothing===0?'<path d="M173 316Q200 342 227 316L271 337Q311 349 328 402L345 500H56L73 402Q88 353 130 336Z" fill="url(#cloth)"/>':parts[(p.clothing-1)%7].body,
+   body:garment(p.clothing===0?'<path d="M173 316Q200 342 227 316L271 337Q311 349 328 402L345 500H56L73 402Q88 353 130 336Z" fill="url(#cloth)"/>':parts[(p.clothing-1)%7].body,clothColor),
    accessories:p.accessory===0?'':(parts[(p.accessory-1)%7] as Art).accessories||'',extraFace:'',brows:undefined});
  } else return null;
  // Each SVG is an image document: gradient IDs cannot collide between cards.

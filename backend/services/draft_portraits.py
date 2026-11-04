@@ -15,33 +15,69 @@ def portrait_state(state):
         meta={'world_time':state['world_clock']['minute'],'calendar':state['world_clock'].get('calendar')})
 
 
-def default_descriptor(cid,stage):
+def default_descriptor(cid,stage,actor=None,hints=None):
+    from backend.services.portrait_traits import graphic_choices
     seed=hashlib.sha256(('workshop-portrait-v1:'+cid).encode()).hexdigest()[:32]
     # Neutral graphic choices never become canonical appearance facts.
     values=[int(seed[i:i+2],16) for i in range(0,14,2)]
-    return ProceduralPortrait(seed=seed,stage=stage,form='human' if stage=='adult' else 'neutral',
-        face=values[0]%7,hair=values[1]%8,skin=values[2]%7,eyes=values[3]%7,
-        clothing=0,accessory=0,palette=values[6]%7).model_dump()
+    form = 'human' if stage=='adult' and not (isinstance(hints,dict) and hints.get('form')=='neutral') else 'neutral'
+    choices=dict(face=values[0]%7,hair=values[1]%8,skin=values[2]%7,eyes=values[3]%7,
+        clothing=0,accessory=0,palette=values[6]%7)
+    if form=='human': choices.update(graphic_choices(actor or {}, hints))
+    return ProceduralPortrait(seed=seed,stage=stage,form=form,**choices).model_dump()
+
+
+def consume_authored_traits(state):
+    """Materialize art direction once, after ID remap; never add it to a card."""
+    runtime=portrait_state(state)
+    for card in state['characters']:
+        hints=card.pop('portrait_traits',None)
+        cid=card['id'];actor=runtime['characters'].get(cid)
+        if isinstance(hints,dict) and hints and actor is not None and not actor.get('procedural_portrait'):
+            actor['procedural_portrait']=default_descriptor(cid,life_period(runtime,cid)[1],actor,hints)
 
 
 def initialize(state):
     runtime=portrait_state(state)
     for cid,actor in runtime['characters'].items():
         if not actor.get('procedural_portrait'):
-            actor['procedural_portrait']=default_descriptor(cid,life_period(runtime,cid)[1])
+            actor['procedural_portrait']=default_descriptor(cid,life_period(runtime,cid)[1],actor)
     return state
 
 
-def project(state,author=False):
-    state=initialize(deepcopy(state));runtime=portrait_state(state)
-    for card in state['characters']:
-        cid=card['id']
-        if cid not in runtime['characters']: continue
-        values=projection(runtime,cid)
-        if author:
-            values['procedural_portrait']=runtime['characters'][cid].get('procedural_portrait') or default_descriptor(cid,life_period(runtime,cid)[1])
-        card.update(values)
-    return state
+def appearance_disclosed(state, public_card):
+    """An explicitly spoiler-gated description also gates its visual representation.
+
+    public_card comes from the SAME player projection as the dossier (including
+    canonical Knowledge and fact visibility). No inference from absent/empty prose.
+    """
+    from backend.services.draft_player_view import BINDINGS
+    bindings=state.get(BINDINGS,{})
+    gates=bindings.get(public_card['id'],{}) if isinstance(bindings,dict) else None
+    return isinstance(gates,dict) and ('Внешность' not in gates or 'Внешность' in public_card['fields'])
+
+
+def reader_card(state,cid):
+    from backend.services.draft_world import player_view
+    card=next((c for c in player_view(state)['characters'] if c['id']==cid),None)
+    if card is None: raise ValueError('Портрет недоступен.')
+    return card
+
+
+def presentation_for(state,runtime,card,author):
+    cid=card['id']
+    if not author and not appearance_disclosed(state,card):
+        return dict(portrait=None,procedural_portrait=None,silhouette='neutral')
+    result=projection(runtime,cid)
+    if author:
+        result['procedural_portrait']=runtime['characters'][cid]['procedural_portrait']
+    return result
+
+
+def presentation_map(state,visible_cards,author):
+    runtime=portrait_state(initialize(deepcopy(state)))
+    return {c['id']:presentation_for(state,runtime,c,author)
+            for c in visible_cards if c['id'] in runtime['characters']}
 
 
 def load(repo,db,wid,cid,revision=None,editable=False):
@@ -58,14 +94,14 @@ def load(repo,db,wid,cid,revision=None,editable=False):
 def listing(repo,wid,cid,author=False):
     with repo.connect() as db:
         w,_,state=load(repo,db,wid,cid)
+        # Same computed fallback as /draft, without persisting a read.
+        initialize(state)
         if not author:
-            from backend.services.draft_world import player_view
-            public=player_view(state)
-            if cid not in {c['id'] for c in public['characters']}: raise ValueError('Портрет недоступен.')
-            return dict(revision=w['revision'],portraits=[],**projection(portrait_state(state),cid))
+            card=reader_card(state,cid)
+            return dict(revision=w['revision'],portraits=[],**presentation_for(state,portrait_state(state),card,False))
         runtime=portrait_state(state)
         return dict(revision=w['revision'],portraits=[p for p in runtime['characters'][cid].get('portraits',[]) if not p['deleted']],
-            **projection(runtime,cid),descriptor=runtime['characters'][cid].get('procedural_portrait') or default_descriptor(cid,life_period(runtime,cid)[1]),
+            **projection(runtime,cid),descriptor=runtime['characters'][cid]['procedural_portrait'],
             portrait_mode=runtime['characters'][cid].get('portrait_mode','auto'))
 
 
@@ -73,9 +109,8 @@ def asset(repo,wid,cid,aid,author=False):
     with repo.connect() as db:
         _,_,state=load(repo,db,wid,cid)
         if not author:
-            from backend.services.draft_world import player_view
-            if cid not in {c['id'] for c in player_view(state)['characters']}: raise ValueError('Портрет недоступен.')
-            selected=projection(portrait_state(state),cid)['portrait']
+            card=reader_card(state,cid)
+            selected=presentation_for(state,portrait_state(state),card,False)['portrait']
             if not selected or selected['asset_id']!=aid: raise ValueError('Портрет недоступен.')
         if not any(p['asset_id']==aid and not p['deleted'] for p in state['world']['characters'][cid].get('portraits',[])):
             raise ValueError('Портрет недоступен.')

@@ -112,3 +112,103 @@ def test_visual_preference_preserves_original_and_legacy_period_rules(api):
     # A descriptor tied to another life period is never reused as the current face.
     runtime['characters'][cid]['procedural_portrait']['stage']='infant' if descriptor['stage']!='infant' else 'adult'
     assert projection(runtime,cid)['procedural_portrait'] is None
+
+
+def test_primary_art_direction_becomes_one_portable_descriptor(api):
+    from backend.services.draft_initial import inspect_candidate, prompt_schema
+    from backend.services.draft_portraits import default_descriptor
+    from backend.runtime_v3.context import build_context
+    client,app=api
+    raw=fixture();card=raw['characters'][0];cid=card['id']
+    actor=raw['world']['characters'][cid];actor.update(birth_date=None,developmental_stage='adult')
+    description='Короткая тёмная стрижка, широкое лицо, серые глаза и тёмная рубашка.'
+    card['fields']['Внешность']=description
+    card['portrait_traits']=dict(face='broad',hair='short',hair_color='black',eyes='grey',clothing='shirt',clothing_color='dark')
+    contract=prompt_schema(initial_portraits=True)['properties']['characters']['items']
+    assert 'portrait_traits' not in contract['required'] and not contract['properties']['portrait_traits']['additionalProperties']
+    candidate,report=inspect_candidate(raw)
+    assert not report['errors'], report
+    assert 'portrait_traits' not in candidate['characters'][0] and candidate['characters'][0]['fields']['Внешность']==description
+    desc=candidate['world']['characters'][cid]['procedural_portrait']
+    assert desc==dict(default_descriptor(cid,'adult'),face=3,hair=0,hair_color=0,eyes=2,clothing=2,clothing_color=0)
+    url,d=create(client,candidate)
+    assert d['portraits'][cid]['procedural_portrait']==desc
+    # New hints or literary edits never replace a portrait that has already been saved.
+    again=deepcopy(candidate);again['characters'][0]['portrait_traits']={'hair_color':'blond'}
+    assert inspect_candidate(again)[0]['world']['characters'][cid]['procedural_portrait']==desc
+    started=client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id'],'accept_warnings':True}).json()
+    snapshot=app.state.repository.get_snapshot(started['save'])
+    assert projection(snapshot['world_state'],cid)['procedural_portrait']==desc
+    messages=build_context(snapshot, [], 'Оглядываюсь.', 'turn', 32768, 4096)
+    assert desc['seed'] not in json.dumps(messages)
+
+
+def test_portrait_uses_only_exact_public_initial_features():
+    from backend.services.draft_portraits import default_descriptor
+    base=default_descriptor('maxim','adult')
+    def from_feature(**changes):
+        item=dict(kind='eye_color',text='Серые',revision=1)
+        return default_descriptor('maxim','adult',{'appearance':{'items':{'iris':{**item,**changes}},
+            'legacy_text':'Он блондин в тёмной рубашке.'}})
+    assert from_feature()=={**base,'eyes':2}
+    assert from_feature(fact_id='hidden_fact')==base
+    assert from_feature(source_event_id='a_private_view')==base
+    assert from_feature(revision=2)==base
+    assert from_feature(text='Кажутся серыми только при плохом освещении.')==base
+    assert default_descriptor('maxim','child',hints={'form':'human','eyes':'grey'})['form']=='neutral'
+    assert default_descriptor('maxim','adult',hints={'form':'neutral','eyes':'grey'})['form']=='neutral'
+    assert default_descriptor('maxim','adult',hints={'hair_color':'<script>', 'clothing':['shirt']})==base
+    assert 'hair_color' not in base and 'clothing_color' not in base
+
+
+def test_single_primary_generation_accepts_visual_choices_not_model_owned_seeds_or_assets(api):
+    from draft_provider_fixture import accept_semantics_unchecked
+    from test_api import REMOTE,wait_job
+    from test_initial_draft_v4 import rich, SHORT
+    from unittest.mock import patch
+    client,_=api;raw=rich();card=raw['characters'][0];cid=card['id']
+    card['fields']['Возраст']='30 лет'
+    card['portrait_traits']=dict(hair='short',hair_color='black',eyes='grey',clothing='shirt',clothing_color='dark')
+    raw['world']['characters'][cid].update(birth_date=None,developmental_stage='adult',
+        procedural_portrait={'seed':'MODEL-CANNOT-ISSUE-AN-ID'},portraits=[{'asset_id':'forged'}],portrait_mode='procedural')
+    calls=[]
+    @accept_semantics_unchecked
+    def stream(**kwargs):
+        calls.append(kwargs['messages'][0]['content']);yield json.dumps(raw,ensure_ascii=False)
+    w=client.post('/api/workspaces',json={'name':'Портреты из первичного ответа'}).json()
+    path=f"/api/workspaces/{w['id']}/draft"
+    with patch('backend.services.preparation.chat_stream',side_effect=stream):
+        result=client.post(path+'/generate',json=dict(text=SHORT,revision=0,config=dict(REMOTE,context_length=131072),api_key='test'))
+        assert result.status_code==200,result.text
+        job=wait_job(client,result.json()['id']);assert job['status']=='saved',job.get('error')
+    assert len(calls)==1 and 'portrait_traits' in calls[0]
+    draft=client.get(path+'?author=true').json()
+    desc=draft['portraits'][cid]['procedural_portrait']
+    assert desc['form']=='human' and desc['eyes']==2 and desc['clothing']==2 and desc['hair_color']==desc['clothing_color']==0
+    assert 'MODEL-CANNOT-ISSUE-AN-ID' not in desc['seed']
+    assert not draft['state']['world']['characters'][cid].get('portraits')
+    assert draft['state']['world']['characters'][cid].get('portrait_mode','auto')=='auto'
+
+
+def test_spoiler_gated_appearance_blocks_the_image_and_direct_asset_until_known(api):
+    from secret183_fixture import candidate
+    client,_=api;state=candidate()
+    state['card_field_facts']={'sonya':{'Внешность':['fact_sonya_love']}}
+    url,d=create(client,state);path=url+'/characters/sonya/portraits'
+    uploaded=client.post(path,params={'revision':d['revision']},content=image(),headers={'content-type':'image/png'})
+    assert uploaded.status_code==200,uploaded.text
+    aid=uploaded.json()['portrait']['asset_id'];original=path+'/assets/'+aid
+    current=client.get(url+'?author=true').json()
+    assert current['portraits']['sonya']['portrait']['asset_id']==aid
+    assert client.get(original+'?author=true').status_code==200
+    hidden={'portrait':None,'procedural_portrait':None,'silhouette':'neutral'}
+    assert client.get(url).json()['portraits']['sonya']==hidden
+    assert all(client.get(path).json()[k]==v for k,v in hidden.items())
+    assert client.get(original).status_code==404
+    assert client.get(url).json()['portraits']['maxim']['procedural_portrait']
+    change=client.patch(url,json={'revision':current['revision'],'operation':'patch','kind':'knowledge',
+        'entity_id':'ilya:fact_sonya_love','field':'status','value':'known','warnings_ack':True})
+    assert change.status_code==200,change.text
+    assert client.get(url).json()['portraits']['sonya']['portrait']['asset_id']==aid
+    assert client.get(path).json()['portrait']['asset_id']==aid
+    assert client.get(original).status_code==200
