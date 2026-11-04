@@ -291,7 +291,7 @@ class StateResolver:
             s['characters'][controlled]['situation']=situation
         self.scene_character_situation=s['characters'].get(controlled,{}).get('situation')
         for i, item in self.records(raw,'facts'):
-            fields = {key:item[key] for key in ('id','text','visibility','character_ids','claim') if key in item}
+            fields = {key:item[key] for key in ('id','text','visibility','character_ids','claim','story_secret','secret_subject_ids','secret_existence') if key in item}
             if 'claim' in fields and fields['claim'] is not None:
                 from backend.runtime_v3.models import Claim
                 try: fields['claim'] = Claim.model_validate(fields['claim']).model_dump()
@@ -300,11 +300,16 @@ class StateResolver:
                     self.warn('facts', i, 'Некорректная идентичность утверждения.', field='claim', code='optional_schema_invalid')
             if 'claim' not in fields and isinstance(fields.get('id'), str) and fields['id'] in s['facts']:
                 fields['claim'] = s['facts'][fields['id']].get('claim')
+            if fields.get('id') in s['facts']:
+                for key in ('story_secret','secret_subject_ids','secret_existence','origin_remote_event_id'):
+                    fields.setdefault(key, s['facts'][fields['id']][key])
             entry = self.typed(Fact,fields,'facts',i)
             if entry:
-                for cid in entry['character_ids']: self.actor(cid,'facts',i)
+                for cid in entry['character_ids'] + entry['secret_subject_ids']: self.actor(cid,'facts',i)
                 if entry['id'] in s['facts'] and entry != s['facts'][entry['id']]:
                     fatal('конфликт canonical fact ID','canonical_id_conflict',repairable=True,entity=entry['id'])
+                if entry['id'] not in s['facts'] and getattr(self,'remote_origin_id',None):
+                    entry['origin_remote_event_id']=self.remote_origin_id
                 s['facts'][entry['id']] = entry
         events = {}
         for i, item in self.records(raw,'events'):
@@ -363,6 +368,8 @@ class StateResolver:
         remote_history = apply_extracted_remote(self, raw, events)
         from backend.runtime_v3.knowledge import apply_knowledge
         apply_knowledge(self, raw, events)
+        from backend.runtime_v3.secrets import apply_disclosures
+        apply_disclosures(self, raw)
         from backend.runtime_v3.remote import deliver_due
         # Life changes are committed at this turn's boundary. Earlier postal
         # deadlines must observe the earlier life state, not a later death.

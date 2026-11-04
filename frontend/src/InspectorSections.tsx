@@ -824,9 +824,8 @@ export function RelationsSection(props: Props & { refresh: () => void }) {
 
 export function SecretsSection(props: Props) {
   const [query, setQuery] = useState("");
-  const values = allFacts(props.state).filter(
+  const values = (props.state.story_secrets?.revealed || []).filter(
     (f) =>
-      f.secret &&
       matches(
         query,
         f.text,
@@ -837,7 +836,7 @@ export function SecretsSection(props: Props) {
     <>
       <p className="inspector-notice">
         <Shield size={20} />
-        {it("gmNotice")}
+        {gameLocale().startsWith("en") ? "Secrets confirmed by your character." : "Сюжетные тайны, подтверждённые управляемым персонажем."}
       </p>
       <div className="inspector-tools">
         <InspectorSearch
@@ -851,11 +850,7 @@ export function SecretsSection(props: Props) {
         <Facts {...props} values={values} secret />
       </div>
       {!values.length && <InspectorEmpty search={!!query} />}
-      <Reveal
-        title={it("originalSecrets")}
-        text={props.state.sections.knowledge}
-        preview={false}
-      />
+
       <p className="inspector-note">{it("publicFamily")}</p>
     </>
   );

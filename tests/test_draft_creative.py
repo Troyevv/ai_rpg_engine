@@ -153,7 +153,8 @@ def test_generation_editor_start_turn_reload(api,repair):
         assert not any(r['id']=='craft' for r in view['residence_roles']['roles'])
         assert next(c for c in view['characters'] if c['id']=='craftswoman')['name']=='Вера'
         assert view['world']['facts']['fire']['text']==canonical['facts']['fire']['text']
-        assert view['world']['knowledge']['craftswoman:fire']==canonical['knowledge']['craftswoman:fire']
+        assert 'craftswoman:fire' not in view['world']['knowledge']  # Other minds are author-only.
+        assert client.get(f'/api/saves/{sid}/author-state').json()['snapshot']['world_state']['knowledge']['craftswoman:fire']==canonical['knowledge']['craftswoman:fire']
         assert view['world']['threads']['rebuild']==canonical['threads']['rebuild']
     # A fresh application reads the same public projection and canonical records.
     from fastapi.testclient import TestClient

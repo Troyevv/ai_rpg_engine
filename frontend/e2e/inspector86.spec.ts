@@ -375,5 +375,5 @@ test('approved Graphite tonal roles stay scoped to Inspector', async ({page,requ
  expect(colors).toEqual({background:'rgb(28, 30, 33)',nav:'rgb(23, 25, 28)',hero:'rgb(37, 39, 43)',card:'rgb(32, 34, 38)',border:'rgb(58, 60, 64)',prose:'rgb(238, 237, 233)',secondary:'rgb(170, 173, 178)',selected:'rgb(59, 52, 41)'});
  expect(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--bg'))).toBe(rootBefore);
  await nav(page,'Тайны');
- await expect(page.getByRole('heading', {name: /Брак:.*Кирилл/})).toBeVisible();
+ await expect(page.getByRole('heading', {name: /Брак:.*Кирилл/})).toHaveCount(0); // Ordinary family facts are not plot secrets.
 });

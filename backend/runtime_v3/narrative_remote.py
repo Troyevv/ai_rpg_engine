@@ -19,6 +19,7 @@ def apply_extracted_remote(resolver, raw, events):
     if not records:
         return batch_history
     state = resolver.state
+    resolver.disclosure_source_ids = {}
     start = resolver.before['meta']['world_time']
     finish = state['meta']['world_time']
     previous_minute = start
@@ -185,6 +186,14 @@ def apply_extracted_remote(resolver, raw, events):
                 reject(index, str(exc))
             finally:
                 state['meta']['world_time'] = finish
+        # Bind explicit extraction source/artifact identities to the accepted
+        # remote event, so new letters need no guessed runtime-generated ID.
+        for source_id in (row.source_event_id, row.artifact_id, row.existing_event_id):
+            if source_id:
+                previous = resolver.disclosure_source_ids.get(source_id)
+                if previous and previous != event['id']:
+                    reject(index, 'Неоднозначный источник раскрытия.', 'source_event_id')
+                resolver.disclosure_source_ids[source_id] = event['id']
         # A literary delivery is not perception. Source-bound message facts
         # cannot grant the recipient Knowledge before Remote's explicit read.
         sources = [events[row.source_event_id]] if row.source_event_id else [e for e in events.values()

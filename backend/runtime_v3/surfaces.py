@@ -95,32 +95,9 @@ def physical_choice_source(turns, state, after_for=None):
 
 
 def visible_changes(changes, state, actor):
-    """Read-only diagnostics summary must not preload unread phone consequences."""
+    """Gameplay summaries only; omniscient Extraction/patches stay author-side."""
     from copy import deepcopy
-    from backend.runtime_v3.models import identity
-    from backend.runtime_v3.remote import commitment_visible, authored_record_visible
     result=deepcopy(changes)
-    raw=result.get('raw_turn_result', {})
-    records=raw.get('records', raw)
-    if 'scheduled_event_changes' in records:
-        records['scheduled_event_changes']=[r for r in records['scheduled_event_changes'] if commitment_visible(state,r,actor)]
-    for r in records.get('character_changes', []):
-        if 'intentions_updates' in r:
-            r['intentions_updates']=[v for v in r['intentions_updates'] if authored_record_visible(state,v,actor)]
-    upserts=result.get('state_patch',{}).get('upserts',{})
-    from backend.runtime_v3.remote_models import HISTORICAL_CHANNELS
-    for event in upserts.get('remote_events', {}).values():
-        if event.get('channel') in HISTORICAL_CHANNELS:
-            event.pop('content', None)
-    # Facts acquired from correspondence are available only through Knowledge;
-    # diagnostic patches must not expose another actor's private read.
-    private_facts = {identity('communicated_text', e['id']) for e in state.get('remote_events', {}).values()
-                     if e['channel'] in HISTORICAL_CHANNELS and actor != e['sender_id'] and actor not in e['read_by']}
-    if 'facts' in upserts:
-        upserts['facts'] = {k:v for k,v in upserts['facts'].items() if k not in private_facts}
-    if 'scheduled_events' in upserts:
-        upserts['scheduled_events']={k:v for k,v in upserts['scheduled_events'].items() if commitment_visible(state,v,actor)}
-    for c in upserts.get('characters',{}).values():
-        for key in ('goals','intentions','obligations'):
-            if key in c:c[key]=[v for v in c[key] if authored_record_visible(state,v,actor)]
+    result.pop('raw_turn_result', None)
+    result.pop('state_patch', None)
     return result

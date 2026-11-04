@@ -115,7 +115,9 @@ def test_backstage_is_canonical_and_regenerates_without_leaking_history(db):
     assert state['scene']=='Тайная встреча у подвала.' and state['world_clock']['last_event_time']=='День 1 · Пн · 18:25'
     assert json.loads(storage.get_job(original)['before_json'])['world_state']['camera']['situation']==scene
     assert controlled(state) is None
-    assert state['facts'][-1]['known_by']==['character_3','character_4']
+    assert all(f['known_by']==[] for f in state['facts'])
+    canonical=storage.get_snapshot(sid)['world_state']
+    assert {k['actor_id'] for k in canonical['knowledge'].values() if k['status']=='known' and canonical['facts'][k['fact_id']]['text']=='Тайный ключ передан.'}=={'character_3','character_4'}
     assert 'change' not in state['relationships'][-1]  # New dimensions have no numeric baseline.
     messages=build_context(storage.get_snapshot(sid),storage.list_turns(sid),'Продолжить','turn',32768,2000)
     assert SECRET not in [m['content'] for m in messages if m['role']=='assistant']

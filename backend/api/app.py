@@ -158,6 +158,12 @@ def create_app(db_path=None, recover=True):
                           'presentation': {'surface': route['surface'], 'actor_id': None, 'call_id': None}}
         return result
 
+    @app.get('/api/saves/{sid}/author-state')
+    def author_state(sid: int):
+        # Explicit author-only view; never embedded in ordinary game responses.
+        snapshot = repo.get_snapshot(sid)
+        return {'snapshot': snapshot}
+
     @app.get('/api/saves/{sid}')
     def save(sid: int):
         value = repo.get_save(sid)

@@ -16,7 +16,10 @@ test('POV, backstage and prompt versions',async({page,request})=>{
  let save=await (await request.get(`/api/saves/${selected.save}`)).json();
  expect(save.state.controlled_actor_id).toBeNull();
  expect(save.state.camera.mode).toBe('observer');
- expect(save.state.facts.at(-1).known_by).toEqual(['character_3','character_4']);
+ expect(save.state.facts.every((f:{known_by:string[]})=>f.known_by.length===0)).toBe(true);
+ expect(save.state.world.knowledge).toEqual({});
+ const authored=await (await request.get(`/api/saves/${selected.save}/author-state`)).json();
+ expect(Object.values(authored.snapshot.world_state.knowledge).filter((k:any)=>['character_3','character_4'].includes(k.actor_id)&&k.status==='known').length).toBeGreaterThanOrEqual(2);
  await page.locator('.background-exit').getByRole('button',{name:'Вернуться к Персонаж 0'}).click();
  await expect(page.locator('.turn')).toHaveCount(2);
  await expect.poll(async()=>(await(await request.get(`/api/saves/${selected.save}`)).json()).state.controlled_actor_id).toBe('character_1');

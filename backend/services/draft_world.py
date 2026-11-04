@@ -16,7 +16,7 @@ FIELDS={
  'actor':{'location','situation','goals','intentions','emotion','obligations'},
  'relationship':{'source_id','target_id','context','dimensions','visible_to_ids'},
  'location':{'name','text'},
- 'fact':{'text','secret','owner_id','character_ids','evidence'},
+ 'fact':{'text','secret','story_secret','secret_subject_ids','secret_existence','owner_id','character_ids','evidence'},
  'knowledge':{'actor_id','fact_id','status','source_event_id'},
  'thread':{'description','state','public_state','status','character_ids','relevance','visible_to_ids'},
  'scene':{'location','participants','text','start_minute','end_minute','status'},
@@ -188,6 +188,10 @@ def validate(state, *, canonical=True):
     for fid,f in world['facts'].items():
         require(isinstance(f.get('text'),str) and bool(f['text'].strip()),f'Факт {fid}: нужен текст.')
         refs(f.get('character_ids',[]),ids,f'fact {fid}')
+        refs(f.get('secret_subject_ids',[]),ids,f'secret subjects {fid}')
+        require(type(f.get('story_secret',False)) is bool, 'Неверный признак сюжетной тайны.')
+        require(f.get('secret_existence','hidden') in ('hidden','discoverable'), 'Неверная видимость существования тайны.')
+        require(not f.get('secret_subject_ids') or f.get('story_secret'), 'Субъекты допустимы только для сюжетной тайны.')
         if f.get('owner_id') is not None:require(isinstance(f['owner_id'],str) and f['owner_id'] in ids,f'Факт {fid}: неизвестный владелец тайны.')
     for kid,k in world['knowledge'].items():
         require(k.get('actor_id') in ids and k.get('fact_id') in world['facts'],f'Знание {kid}: ссылка не существует.')
@@ -307,10 +311,10 @@ def secret_holders(state):
     known={(k.get('actor_id'),k.get('fact_id')) for k in world['knowledge'].values() if k.get('status')=='known'}
     owners=set()
     for fid,fact in world['facts'].items():
-        if not fact.get('secret'):continue
-        linked=fact.get('character_ids',[])
-        owner=fact.get('owner_id') or (linked[0] if len(linked)==1 else None)
-        if owner and (owner,fid) in known:owners.add(owner)
+        from backend.runtime_v3.secrets import legacy_secret_metadata
+        meta=legacy_secret_metadata(fact, world['characters'])
+        for owner in meta['secret_subject_ids']:
+            if (owner,fid) in known: owners.add(owner)
     return owners
 
 
@@ -382,11 +386,11 @@ def patch(state,kind,eid,field,value):
             # Validate the actual Runtime field contract (including nullable periods
             # and string evidence), not legacy string-list assumptions.
             model.model_validate({k:v for k,v in dict(target,**{field:value}).items() if k in model.model_fields})
-        list_fields={'aliases','character_ids','participants','witnesses','fact_ids','evidence'}
+        list_fields={'secret_subject_ids','aliases','character_ids','participants','witnesses','fact_ids','evidence'}
         if not model and field in list_fields and (not isinstance(value,list) or any(not isinstance(x,str) for x in value)):
             raise ValueError('Нужен список строк.')
         if field in ('minute','start_minute','end_minute') and (type(value) is not int or value<0):raise ValueError('Нужно неотрицательное целое время.')
-        if field in ('secret','player_observed') and type(value) is not bool:raise ValueError('Нужно логическое значение.')
+        if field in ('secret','story_secret','player_observed') and type(value) is not bool:raise ValueError('Нужно логическое значение.')
         if field=='dimensions' and (not isinstance(value,dict) or any(type(x) not in (int,float) or not -100<=x<=100 for x in value.values())):raise ValueError('Показатели должны быть числами от -100 до 100.')
         old=target.get(field)
         if not model and old is not None and type(value) is not type(old):raise ValueError('Тип поля менять нельзя.')
@@ -453,7 +457,7 @@ def add(state,kind):
         templates={
           'relationship':{'source_id':actor,'target_id':next((c['id'] for c in state['characters'] if c['id']!=actor),actor),'context':'','dimensions':{}},
           'thread':{'id':eid,'description':'Новая линия','state':'','status':'active','character_ids':[],'relevance':0.5,'last_event_id':None},
-          'fact':{'id':eid,'text':'Новый факт','secret':False,'character_ids':[],'evidence':[]},
+          'fact':{'id':eid,'text':'Новый факт','secret':False,'story_secret':False,'secret_subject_ids':[],'secret_existence':'hidden','character_ids':[],'evidence':[]},
           'knowledge':{'actor_id':actor,'fact_id':next(iter(state['world']['facts']),''),'status':'unknown','source_event_id':None},
           'scene':{'id':eid,'participants':[],'location':'Не указано','text':'','start_minute':minute,'end_minute':minute,'status':'active','event_ids':[]},
           'event':{'id':eid,'text':'Новое событие','participants':[],'witnesses':[],'minute':minute,'fact_ids':[],'source_sequence':0,'player_observed':False,'scene_id':None}}

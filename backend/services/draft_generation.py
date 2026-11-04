@@ -32,10 +32,10 @@ def messages_for(repo,job,config):
         instructions+='\nНе генерируй телефонную книгу, contacts и номера персонажей: Runtime определяет адресатов из живых канонических NPC независимо от знакомства, контактов и устройств.'
         instructions+='\nНе выводи пустые технические defaults (dependencies, review_required, reviewed_signature) и производные поля, когда схема позволяет их опустить. Непустые метаданные Motivation, факты, биографии и тайны сохраняй полностью.'
         instructions+='\nРазработай пригодный для немедленной игры мир. Недостающие детали концепции дополни самостоятельно; исходная идея не является исчерпывающей спецификацией.'
-        from backend.services.draft_initial import prompt_schema
-        system=(config['_prompts']['draft_world_prompt.md']['content']
+        from backend.services.draft_initial import prompt_schema, compact_schema, SECRET_AUTHORING_RULES
+        system=(config['_prompts']['draft_world_prompt.md']['content']+'\n'+SECRET_AUTHORING_RULES
                 +'\n\nКаноническая JSON Schema WorldState для ПЕРВОНАЧАЛЬНОЙ генерации (не заполняй саму схему; верни объект по ней):\n'
-                +json.dumps(prompt_schema(),ensure_ascii=False,separators=(',',':')))
+                +json.dumps(compact_schema(prompt_schema()),ensure_ascii=False,separators=(',',':')))
         return [{'role':'system','content':system},
                 {'role':'user','content':instructions}]
     draft=repo.draft(wid,author=True);state=draft['state']

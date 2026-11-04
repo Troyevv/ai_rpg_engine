@@ -133,7 +133,8 @@ def apply_knowledge(resolver, raw, events):
     candidates.sort(key=lambda c: (c[2].get('order', 0), c[0]))
 
     def transition(entry, prior, event, item, trigger):
-        entry.update(revision=(prior or {}).get('revision', 0)+1,
+        entry.update(confirmed_once=entry['status']=='known' or (prior or {}).get('confirmed_once',False) or (prior or {}).get('status')=='known',
+                     revision=(prior or {}).get('revision', 0)+1,
                      source_event_id=event['id'], evidence=item['evidence'], source_turn=r.turn_id)
         key = entry['actor_id']+':'+entry['fact_id']
         s['knowledge'][key] = entry

@@ -36,37 +36,15 @@ reason объясняет художественную связь изменен
 
 
 def creative_schema():
-    """Factor repeated schema nodes without dropping constraints or canon."""
-    from collections import Counter
-    schema=prompt_schema();counts=Counter();definitions={};names={}
-    def key(node):return json.dumps(node,sort_keys=True,separators=(',', ':'))
-    def count(node):
-        if isinstance(node,dict):
-            if len(key(node))>160:counts[key(node)]+=1
-            for value in node.values():count(value)
-        elif isinstance(node,list):
-            for value in node:count(value)
-    count(schema)
-    def compact(node, properties=False):
-        if isinstance(node,list):return [compact(v) for v in node]
-        if not isinstance(node,dict):return node
-        signature=key(node)
-        # Property maps are not schemas; never replace them with a $ref.
-        if not properties and counts[signature]>1:
-            if signature not in names:
-                name='creative_'+str(len(names));names[signature]=name
-                definitions[name]={k:compact(v,k=='properties') for k,v in node.items()}
-            return {'$ref':'#/$defs/'+names[signature]}
-        return {k:compact(v,k=='properties') for k,v in node.items()}
-    result=compact(schema)
-    result['$defs']=definitions
-    return result
+    from backend.services.draft_initial import compact_schema
+    return compact_schema(prompt_schema())
 
 
 def messages(state, author_context):
     # Entire canonical content, no clipping, retrieval sampling, or second canon.
     # Transport preflight refuses contexts that cannot fit it before spending.
-    return [dict(role='system', content=MARKER+'\n'+RULES),
+    from backend.services.draft_initial import SECRET_AUTHORING_RULES
+    return [dict(role='system', content=MARKER+'\n'+RULES+'\n'+SECRET_AUTHORING_RULES),
             dict(role='user', content=json.dumps(dict(
                 author_context=author_context, candidate={k:state[k] for k in ('campaign','characters','locations','world','world_clock','camera','controlled_actor_id','protagonist_id','creation_settings','authoring','story_notes','sections') if k in state},
                 candidate_hash=candidate_hash(state), world_schema=creative_schema(),

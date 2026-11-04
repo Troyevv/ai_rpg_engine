@@ -691,6 +691,11 @@ if __name__ == '__main__':
         from devtools.narrative_test_world import build_fixture
         return build_fixture('ui-canonical-personal')
 
+    @app.post('/test/story-secrets178-seed')
+    def story_secrets178_seed():
+        from story_secrets_fixture import seed
+        return seed(app.state.repository)
+
     @app.post('/test/ui-completion-seed')
     def ui_completion_seed(checkpoint: str = 'ui-calendar'):
         from devtools.narrative_test_world import load_fixture

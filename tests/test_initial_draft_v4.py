@@ -81,7 +81,7 @@ def test_source_settings_continuation_editor_start_reload(api,source):
               'narrative_pacing':{'preset':'calm'},'narrative_risk':{'preset':'safe'}}
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         reply=client.post(path+'/generate',json={'revision':0,'text':source,'config':dict(REMOTE,context_length=65536 if source==FULL else 32768),'api_key':'test-secret','creation_settings':settings})
-        job=wait_job(client,reply.json()['id']);assert job['status']=='saved',job
+        job=wait_job(client,reply.json()['id']);assert job['status']=='saved',job.get('error',job)
     assert len(calls)==2 and source in calls[0]['messages'][1]['content']
     assert calls[1]['messages'][-2]['content']==raw[:cut]
     draft=client.get(path+'?author=true').json();assert draft['source_text']==source

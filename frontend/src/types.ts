@@ -73,6 +73,7 @@ export interface ResidenceRoleView {
   since:number|null;until:number|null;since_date:string|null;until_date:string|null;
 }
 export interface State {
+  story_secrets?: { revealed: WorldFact[]; personal: Record<string, {id:string;status:'hidden'|'known';text?:string;fact_id?:string;source?:string}[]>; world: {id:string;status:'hidden'|'known';text?:string;fact_id?:string;source?:string}[] };
   npc_reviews?: import('./NpcReview').NpcReviews;
   narrative_policy?: {genre?: import('./GenreSettings').GenreConfig|null};
   campaign?: {title?:string;setting?:string;era?:string;genre?:string;description?:string;public_description?:string};
@@ -224,7 +225,7 @@ export const defaults: Preferences = {
 export const active = (job: Job | null | undefined) =>
   !!job && ["generating", "extracting", "validating"].includes(job.status);
 
-export interface WorldFact {id:string;text:string;secret:boolean;character_ids:string[];evidence?:string[]}
+export interface WorldFact {story_secret?:boolean;secret_subject_ids?:string[];id:string;text:string;secret:boolean;character_ids:string[];evidence?:string[]}
 export interface Knowledge {actor_id:string;fact_id:string;status:string;source_event_id?:string|null;evidence?:string;revision?:number;replaced_by?:string|null}
 export interface Thread {id:string;description:string;state:string;status:string;character_ids:string[];relevance:number;last_event_id?:string|null;source_event_id?:string|null}
 export interface WorldEvent {id:string;text:string;participants:string[];witnesses:string[];minute:number|null;source_sequence:number;player_observed:boolean;fact_ids:string[]}

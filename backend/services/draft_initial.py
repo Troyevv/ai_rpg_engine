@@ -89,7 +89,7 @@ def extend_schema(schema):
     actor['properties'].update({k:canonical[k] for k in ('situation','goals','intentions','emotion','obligations')})
     actor['properties'].update({k:canonical[k] for k in ACTOR_FIELDS if k not in ('appearance','personality','values','identity_components')})
     world['facts']['additionalProperties']['properties']['claim'] = runtime_schema(m.Claim)
-    world['knowledge']['additionalProperties']['properties'].update({k:v for k,v in runtime_schema(m.Knowledge)['properties'].items() if k not in ('actor_id','fact_id')})
+    world['knowledge']['additionalProperties']['properties'].update({k:v for k,v in runtime_schema(m.Knowledge)['properties'].items() if k not in ('actor_id','fact_id','confirmed_once')})
     world['communication'] = runtime_schema(m.CommunicationCapabilities)
     place = schema['properties']['locations']['items']['properties']
     place.update({k:v for k,v in runtime_schema(m.Location)['properties'].items() if k in ('parent_id','kind','aliases')})
@@ -146,6 +146,8 @@ def prompt_schema():
         if not isinstance(v,dict):return v
         return {k:({name:compact(part) for name,part in x.items()} if k=='properties' else compact(x)) for k,x in v.items() if k not in ('description','title','$schema') and not (k=='additionalProperties' and x is True) and not (k=='required' and not x)}
     schema=compact(world_state_schema())
+    # New authors use explicit subjects; owner_id remains a legacy editor input.
+    schema['properties']['world']['properties']['facts']['additionalProperties']['properties'].pop('owner_id',None)
     # Contacts remain an accepted legacy/editor extension, not generation work.
     # Runtime derives recipients from canonical characters and enabled channels.
     schema['properties']['world']['properties'].pop('contacts', None)
@@ -515,3 +517,40 @@ def inspect_candidate(raw, *, for_start=False):
     except (ValueError,TypeError,KeyError,IndexError,AttributeError) as exc:
         diagnostics=exc.errors if isinstance(exc,DraftErrors) else [error('/',str(exc),'validation_incomplete')]
         return state,dict(errors=[e['path']+': '+e['message'] for e in diagnostics],warnings=[],diagnostics=diagnostics)
+
+
+def compact_schema(schema):
+    """Factor repeated schema nodes without dropping constraints or canon."""
+    from collections import Counter
+    import json
+    counts=Counter();definitions={};names={}
+    def key(node):return json.dumps(node,sort_keys=True,separators=(',', ':'))
+    def count(node):
+        if isinstance(node,dict):
+            if len(key(node))>160:counts[key(node)]+=1
+            for value in node.values():count(value)
+        elif isinstance(node,list):
+            for value in node:count(value)
+    count(schema)
+    def compact(node, properties=False):
+        if isinstance(node,list):return [compact(v) for v in node]
+        if not isinstance(node,dict):return node
+        signature=key(node)
+        # Property maps are not schemas; never replace them with a $ref.
+        if not properties and counts[signature]>1:
+            if signature not in names:
+                name='creative_'+str(len(names));names[signature]=name
+                definitions[name]={k:compact(v,k=='properties') for k,v in node.items()}
+            return {'$ref':'#/$defs/'+names[signature]}
+        return {k:compact(v,k=='properties') for k,v in node.items()}
+    result=compact(schema)
+    result['$defs']=definitions
+    return result
+
+
+
+SECRET_AUTHORING_RULES = ('secret означает приватность. story_secret=true только для содержательной сюжетной тайны, '
+    'не для бытовой реплики, технического факта или чувствительного состояния самого по себе. '
+    'secret_subject_ids — о ком тайна, не кто знает; [] для тайны мира. secret_existence=hidden по умолчанию; '
+    'discoverable разрешает безымянный слот. Knowledge и свидетели задаются отдельно. '
+    'Не помещай скрытые факты в публичные поля карточек/биографии/описания; держи их в facts.')
