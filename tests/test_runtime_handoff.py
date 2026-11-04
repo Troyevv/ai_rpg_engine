@@ -241,6 +241,12 @@ def test_exact_handoff_preserves_authored_graph_and_values(api, genres):
     old['world_state']['meta']['genre'] = dict(primary_genre='slice_of_life',
         secondary_genres=['family_saga','romance','drama'], custom_genre='') if genres else None
     old['world_state']['camera'].setdefault('observed_character_ids',[])
+    for fid,fact in old['world_state']['facts'].items():
+        original=source()['world']['facts'][fid]
+        owner=original.get('owner_id')
+        classified=bool(original.get('secret') and owner in old['world_state']['characters'])
+        fact.update(story_secret=classified,secret_subject_ids=[owner] if classified else [],secret_existence='hidden',origin_remote_event_id=None)
+    for knowledge in old['world_state']['knowledge'].values():knowledge.setdefault('confirmed_once',False)
     assert current['world_state']==old['world_state']
     assert current['character_cards']==old['character_cards']
     assert current['authoring']==old['authoring']==source()['authoring']

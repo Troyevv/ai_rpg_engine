@@ -433,7 +433,7 @@ export function Inspector({
             <span>/</span>
             <strong>{panelLabel(panel)}</strong>
           </div>
-          <span className="inspector-scope">{it("gm")}</span>
+          <span className="inspector-scope">{panel === "Тайны" ? "Знания персонажа" : it("gm")}</span>
           <Button
             variant="ghost"
             size="icon"

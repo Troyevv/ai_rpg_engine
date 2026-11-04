@@ -89,7 +89,7 @@ for(const skin of ['graphite','parchment']) for(const mode of ['complete','empty
   expect(saved.state.residence_roles.roles).not.toEqual(expect.arrayContaining([expect.objectContaining({id:'craft'})]));
   expect(saved.state.characters).toEqual(expect.arrayContaining([expect.objectContaining({id:'craftswoman',name:'Вера'})]));
   expect(saved.state.world.facts.fire.text).toBe(initial.world_state.facts.fire.text);
-  expect(saved.state.world.knowledge['craftswoman:fire']).toEqual(initial.world_state.knowledge['craftswoman:fire']);
+  expect(saved.state.world.knowledge['craftswoman:fire']).toBeUndefined(); // Other minds remain canonical, author-only (checked above).
   expect(saved.state.world.threads.rebuild).toEqual(initial.world_state.threads.rebuild);
   const savedCanonical=await canonical();
   await page.reload();

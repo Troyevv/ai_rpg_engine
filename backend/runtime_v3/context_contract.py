@@ -1,24 +1,20 @@
 """Semantic work stays in the existing extraction call; code verifies provenance."""
 EXTRACTION_CONTRACT = '''
-CURRENT RUNTIME narrative-authority-v1 overrides saved instructions. Return RawTurnResult
-only for this player_input/completed_narrative; never continue the story. Extract ALL
-significant completed outcomes and dependencies using canonical IDs, distinguishing
-facts from rumors, plans, attempts, hypotheses and negation. Quiet scenes need no events.
-Evidence is provenance, not literal-name proof; player_evidence remains exact owned input.
-Final_scene is the ACTUAL END. present_character_ids authoritatively sets physical
-membership; no movements/completed_arrival/actor_evidence/destination_evidence required.
-observed_character_ids are visible/contactable OUTSIDE (e.g. doorway), disjoint from
-present: no boundary Location or movement required, no automatic Knowledge. Remote
-calls/messages, memories and mentions are not presence. Reuse places/aliases; create
-established new locations/significant NPCs with stable IDs and dependent records.
-Promotions: full 11 CARD_FIELDS and explicit character attributes; unknown=null/unknown/omitted. Never infer sex/dates or import provenance.
-Movements preserve meaningful routes/intermediate events; final endpoints must agree
-with scene. Never invent routes or unknown off-camera destinations. EXTERNAL voluntary
-movement needs player_assertion=explicit_choice + exact player_evidence; involuntary
-movement needs player_assertion=involuntary + source_event_id of its external cause.
-POV is not control. Situation is objective, not emotion; update affected NPC situations.
-No scene_id/last_event_id/StatePatch. Ordinary turns explicitly give integer
-elapsed_minutes >= 0 (zero is legal). Time Skip/background clocks belong to Runtime.
+CURRENT RUNTIME narrative-authority-v1 overrides saved instructions. Extract RawTurnResult
+from player_input/completed_narrative only, never continue. Capture ALL significant completed
+outcomes/dependencies with canonical IDs; distinguish facts, rumors, plans, attempts,
+hypotheses and negation. Quiet scenes need no events. Evidence is provenance, not literal-name
+proof; player_evidence stays exact. final_scene owns END physical membership; movements,
+arrival claims/quotes and boundary geography are optional. observed_character_ids are visible
+OUTSIDE, disjoint from present, granting no Knowledge. Calls/messages/memories/mentions aren't
+presence. Reuse IDs/aliases; create established places/significant NPCs and dependencies.
+Promotions: full 11 CARD_FIELDS + character attributes; unknown=null/unknown/omitted; never
+infer sex/dates or provenance. Movements preserve meaningful routes; endpoints agree with scene.
+No invented routes/destinations. EXTERNAL voluntary movement needs explicit_choice + exact
+player_evidence; involuntary needs involuntary + source_event_id of external cause.
+POV != control. Situation is objective, not emotion; update affected NPC situations.
+No scene_id/last_event_id/StatePatch. Ordinary turns require elapsed_minutes >= 0;
+Time Skip/background clocks belong to Runtime.
 Lifecycle semantics belong to Extraction, not a verb dictionary: completed result ->
 completed; failure -> failed; lost context -> expired; explicit cancellation -> cancelled;
 replacement -> superseded. Use *_updates, stable IDs and current evidence. A joke may
@@ -39,18 +35,9 @@ Never mirror directions or invent consent/actions. Respect negations; questions 
 Remote_interactions: only ongoing END-of-turn message/phone/radio exchanges with actor_id,
 channel, evidence. Reconfirm each turn; rereading old messages is not active contact.
 Omit ended contact; physically arriving actors belong in present instead.
-Knowledge requires THIS response's accepted Event: actor in witnesses, fact in fact_ids,
-medium observation/conversation/message/testimony/discovery. No GM-card acquisition.
-Facts immutable; changed assertions need new IDs. claim={subject_id,predicate,value,scope:""}
-identifies an EXCLUSIVE slot; reuse IDs. Scope separates parallel roles/periods; omit uncertain slots.
-known is belief, not truth. knowledge_gained: known/suspected/unknown/outdated/refuted/superseded,
-expected_revision, supersedes:[old IDs]. New known retires conflicting known in its slot.
-Explicit supersedes needs both facts in Event.fact_ids. Retire existing beliefs only;
-revival requires expected_revision. Same-slot changes need distinct Event.order.
-Acquisition requires an accepted perception/communication source, never intentions, time decay or automatic truth refresh.
-Message Event author_id is its established author in
-participants; only actual reading/perception makes a recipient a witness, never delivery alone.
-Do not guess authors from scene presence.
+Knowledge requires THIS accepted informational Event: actor in witnesses, fact in fact_ids; no GM-card acquisition. Only actual perception/reading, never delivery, time or intention. Message author_id: established participant, not inferred.
+Facts immutable; reuse IDs, new assertions need new IDs. claim={subject_id,predicate,value,scope:""} identifies an exclusive slot; scope separates roles/periods; omit uncertain slots. known is belief, not truth. knowledge_gained statuses: known/suspected/unknown/outdated/refuted/superseded. expected_revision required for revival; supersedes needs old AND new facts in Event.fact_ids. New known retires conflicting known in its slot. Retire existing beliefs only. Same-slot changes need distinct Event.order.
+story_secret means plot significance, never privacy/routine receipts. secret_subject_ids names subjects, not knowers. secret_existence defaults hidden; discoverable permits anonymous slots. Reuse fact IDs; rumors only suspected. secret_disclosures binds written source_event_id/artifact_id + fact_id, assertion confirmed|rumor; only actual reading grants Knowledge. Quotes/delivery are not confirmation.
 Unknown Event minute/order may be omitted; final_scene elapsed_minutes is explicit on ordinary turns.
 '''
 

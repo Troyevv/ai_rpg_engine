@@ -105,6 +105,12 @@ class ChannelContent(RemoteModel):
     content: str = ""
 
 
+class SecretDisclosure(RemoteModel):
+    fact_id: str
+    assertion: Literal['confirmed', 'rumor']
+    evidence: str = Field(min_length=1)
+
+
 class RemoteEvent(ChannelContent):
     id: str
     ordinal: int = Field(default=0, ge=0)
@@ -128,6 +134,7 @@ class RemoteEvent(ChannelContent):
     provenance: str
     operation_id: str
     response_request: ResponseRequest | None = None
+    secret_disclosures: list[SecretDisclosure] = Field(default_factory=list)
 
 
 class RemoteCommand(ChannelContent):

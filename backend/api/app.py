@@ -158,6 +158,14 @@ def create_app(db_path=None, recover=True):
                           'presentation': {'surface': route['surface'], 'actor_id': None, 'call_id': None}}
         return result
 
+    @app.get('/api/saves/{sid}/author-state')
+    def author_state(sid: int):
+        # Author view, NOT an authorization boundary: like world/draft/document
+        # APIs this belongs to the trusted single-user server operator. Never
+        # embed it in gameplay responses. See docs/story-secrets.md.
+        snapshot = repo.get_snapshot(sid)
+        return {'snapshot': snapshot}
+
     @app.get('/api/saves/{sid}')
     def save(sid: int):
         value = repo.get_save(sid)

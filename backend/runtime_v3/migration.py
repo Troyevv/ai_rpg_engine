@@ -124,14 +124,16 @@ def migrate_v2(original):
     history.legacy.append(dict(schema_version=2, world=deepcopy(world)))
     history.events.extend(deepcopy(list(world.get('events', {}).values()) if isinstance(world.get('events',{}),dict) else [world.get('events')]))
     history.turns.extend(deepcopy(list(world.get('scene_records', {}).values()) if isinstance(world.get('scene_records',{}),dict) else [world.get('scene_records')]))
+    from backend.runtime_v3.secrets import legacy_secret_metadata
     for fid, f in world.get('facts', {}).items():
         state['facts'][fid] = Fact(id=fid, text=f['text'], visibility='secret' if f.get('secret') else 'public',
-            character_ids=[cid for cid in f.get('character_ids', []) if cid in actors], claim=deepcopy(f.get('claim'))).model_dump()
+            character_ids=[cid for cid in f.get('character_ids', []) if cid in actors], claim=deepcopy(f.get('claim')),
+            **legacy_secret_metadata(f, actors)).model_dump()
     for key, k in world.get('knowledge', {}).items():
         if k.get('actor_id') not in actors or k.get('fact_id') not in state['facts']:
             report.append(dict(section='knowledge', entity=key, reason='отсутствует actor или fact', action='drop_record'))
             continue
-        current = Knowledge(**{field:k[field] for field in ('actor_id','fact_id','status','revision','source_event_id','evidence','source_turn','replaced_by') if field in k}).model_dump()
+        current = Knowledge(**{field:k[field] for field in ('actor_id','fact_id','status','revision','source_event_id','evidence','source_turn','replaced_by','confirmed_once') if field in k}).model_dump()
         state['knowledge'][current['actor_id'] + ':' + current['fact_id']] = current
         acquisition = dict(current, source_event_id=k.get('source_event_id'), migrated=True)
         source = world.get('events', {}).get(k.get('source_event_id'), {})

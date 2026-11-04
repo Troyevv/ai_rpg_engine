@@ -210,6 +210,8 @@ def _read(state, event, actor, batch):
     from backend.runtime_v3.knowledge import acquire_communication
 
     acquire_communication(state, actor, fid, event, batch)
+    from backend.runtime_v3.secrets import acquire_disclosures
+    acquire_disclosures(state, event, actor, batch)
 
 
 def apply(snapshot, command, *, actor_id=None, autonomous=False, response_request=None):

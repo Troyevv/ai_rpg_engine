@@ -85,7 +85,7 @@ def messages(snapshot, source_id, *, response_only=False):
                     for e in rows if e['sender_id']==state['camera']['controlled_actor_id'] or e.get('response_request')]),ensure_ascii=False))]
     ids = set().union(*(participants(e) for e in rows))
     schema = extraction_schema()
-    allowed = ('final_scene', 'locations', 'scheduled_event_changes', 'character_changes', 'group_response_changes','group_request_changes','thread_changes','relationship_changes')
+    allowed = ('final_scene', 'locations', 'scheduled_event_changes', 'character_changes', 'group_response_changes','group_request_changes','thread_changes','relationship_changes','facts','secret_disclosures')
     schema['properties'] = {k:v for k,v in schema['properties'].items() if k in allowed}
     character=schema['properties']['character_changes']['items']
     character['properties']={k:v for k,v in character['properties'].items() if k in ('id','evidence','intentions_updates')}
@@ -99,7 +99,8 @@ def messages(snapshot, source_id, *, response_only=False):
             'assertion':{'enum':['agreed','rescheduled']}}},
         'then':{'required':['player_assertion','player_source_id','player_evidence'],
                 'properties':{'player_assertion':{'const':'explicit_choice'}}}}]
-    rules = ('Remote semantic extraction/1. Return one valid JSON object matching the supplied schema. '
+    rules = ('Remote semantic extraction/1. Privacy is not a plot secret. facts may establish explicitly meaningful story_secret with secret_subject_ids and secret_existence hidden/discoverable. Reuse existing fact IDs. secret_disclosures binds source_event_id to fact_id with assertion confirmed or rumor and evidence. Only substantive confirmed disclosure permits known; quoting or hearsay is rumor. Runtime waits for actual reading; do not emit knowledge_gained or events. '
+             'Return one valid JSON object matching the supplied schema. '
              'Extract ONLY accepted phone content into the existing RawTurnResult schema. '
              'This is GM truth, not a broadcast of Knowledge. No physical actions, emotion, goals or values. '
              'A proposal alone or hypothetical/past discussion is NOT an agreement. Require explicit assent from each '
@@ -139,6 +140,7 @@ def messages(snapshot, source_id, *, response_only=False):
         pending_group_requests=[dict(event_id=e['id'], **e['response_request']) for e in rows if e.get('response_request')],
         relationship_sources=[e for e in relationship_sources(snapshot) if e['id'] in {r['id'] for r in rows}],
         relationships=state['relationships'], threads=state['threads'],
+        existing_secret_facts=[f for f in state['facts'].values() if f.get('story_secret')],
         source_event_id=source_id, controlled_actor_id=state['camera']['controlled_actor_id'],
         current_time=current_time(state), calendar=state['meta']['calendar'],
         final_scene=dict(location_id=state['camera']['location_id'],
@@ -161,7 +163,7 @@ def resolve(snapshot, source_id, response, diagnostics=None, *, relationship_que
     expected = dict(location_id=state['camera']['location_id'],
                     present_character_ids=state['camera']['present_character_ids'], elapsed_minutes=0)
     if raw.final_scene != expected or raw.choices or any(v for k,v in raw.records.items()
-            if k not in ('locations','scheduled_event_changes','character_changes','group_response_changes','group_request_changes','thread_changes','relationship_changes')):
+            if k not in ('locations','scheduled_event_changes','character_changes','group_response_changes','group_request_changes','thread_changes','relationship_changes','facts','secret_disclosures')):
         raise ValueError('Телефонное извлечение пытается изменить физическую сцену или неподдерживаемый раздел.')
     by_id = {e['id']:e for e in rows}
     actor = state['camera']['controlled_actor_id']
@@ -224,6 +226,7 @@ def resolve(snapshot, source_id, response, diagnostics=None, *, relationship_que
     authored = '\n'.join(e['content'] for e in rows if e['sender_id'] == actor)
     resolver = StateResolver(state, narrative, authored, turn_id=state['meta']['turn_id'], observed=False)
     resolver.remote_semantic_sources = by_id
+    resolver.remote_origin_id = source_id
     resolver.relationship_query = relationship_query
     resolver.relationship_receipts = relationship_receipts or []
     from backend.services.world_delta_errors import StructuralDeltaError

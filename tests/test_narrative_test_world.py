@@ -148,7 +148,7 @@ def test_cli_is_opt_in_and_returns_normal_api_readable_save(tmp_path):
     result = json.loads(loaded.stdout)
     with TestClient(create_app(path)) as client:
         save = client.get(f"/api/saves/{result['save']}")
-        assert save.status_code == 200
+        assert save.status_code == 200, save.text
         assert save.json()['state']['scene_meta']['present_ids'] == list(PRESENT)
         assert client.get(f"/api/workspaces/{result['workspace']}/draft?author=true").json()['validation']['errors'] == []
         assert client.post('/api/dev/narrative-test-world/reset').status_code in (404, 405)

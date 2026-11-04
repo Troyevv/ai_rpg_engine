@@ -533,11 +533,16 @@ class Fact(StrictModel):
     id: str
     text: str
     visibility: Literal['public', 'secret'] = 'public'
+    story_secret: bool = False
+    secret_subject_ids: list[str] = Field(default_factory=list)
+    secret_existence: Literal['hidden', 'discoverable'] = 'hidden'
+    origin_remote_event_id: str | None = None
     character_ids: list[str] = Field(default_factory=list)
     claim: Claim | None = None
 
 
 class Knowledge(StrictModel):
+    confirmed_once: bool = False
     actor_id: str
     fact_id: str
     status: Literal['known', 'suspected', 'unknown', 'outdated', 'refuted', 'superseded'] = 'known'
@@ -739,6 +744,11 @@ def assert_world_state_v3_invariants(state, before=None):
         for key, item in value[section].items():
             if set(item['character_ids']) - actors.keys():
                 fatal('неизвестный связанный персонаж', section=section, entity=key)
+    for item in value['facts'].values():
+        if set(item['secret_subject_ids']) - actors.keys() or (not item['story_secret'] and item['secret_subject_ids']):
+            fatal('Некорректные субъекты сюжетной тайны', section='facts', entity=item['id'])
+    from backend.runtime_v3.secrets import validate_disclosures
+    validate_disclosures(value)
     for item in value['threads'].values():
         if set(item['stakes_for']) - actors.keys():
             fatal('неизвестный участник последствий линии', section='threads', entity=item['id'])
