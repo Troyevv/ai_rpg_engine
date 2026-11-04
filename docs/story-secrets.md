@@ -49,3 +49,17 @@ A legacy draft's explicit private `owner_id` can recover personal classification
 ## Verification boundaries
 
 Tests use real Runtime, APIs, SQLite, History and browser, with controlled provider responses. They do not establish live DeepSeek interpretation quality. No provider credentials or paid calls were used. A false semantic `confirmed` supplied by a model remains a model error; Runtime verifies source/reading/references rather than adjudicating prose. Legacy free-form text cannot be semantically reclassified without author input; arbitrary hidden information placed inside an otherwise public biography cannot be identified by structural validation.
+
+## Review #179: disclosure versus belief
+
+For a `story_secret`, only the current controlled actor's `known` permits the objective Fact payload in gameplay, even if an author marked its visibility public. `suspected`, `unknown`, `refuted`, `outdated` and `superseded` do not authorize Fact text, claim/evidence aliases or linked objective Events. A discoverable slot still contains only its opaque ID/status; hidden existence supplies no slot. These rules do not mutate Knowledge, evidence, revisions, replacement links or recorded narrative. Ordinary non-story beliefs keep the existing lifecycle UI. Unconfirmed plot beliefs remain canonical for interpretation and author inspection; their objective Fact is not a safe description of what the character suspects.
+
+Legacy turn `world_delta` diagnostics are author data, like raw Extraction/StatePatch. Fact/event summary aliases use the same visibility predicate as the main response. Original historical payloads remain stored and recorded POV prose/playback remain readable; filtering is not a deletion or a rewrite of past experiences.
+
+Memory compaction must explicitly take the canonical memory from the snapshot, never persist the player-filtered `ui_view.memory`. This preserves the objective summary, per-actor summaries, source cursor and memory identity on no-op, cancellation, failure and normal compaction. Narrative uses the canonical snapshot and its existing scoped history builder; gameplay reads do not modify its inputs. Unscoped legacy summaries remain stored for the author, without guessing which actor knew their contents.
+
+## Server trust boundary (not authentication)
+
+This application has no authenticated user/author roles or per-save read authorization. Anyone with direct server access has operator-level access. `GET /api/saves/{sid}/author-state` is an explicit author representation, **not** a protected endpoint. Existing `GET /api/worlds/{wid}` returns authored source/state; `GET /api/workspaces/{wid}/draft?author=true`, draft exports/raw diagnostics and document history likewise expose author material without a login. The new route does not grant a role or bypass an existing authorization check.
+
+The same-origin middleware rejects cross-origin mutations only. It is CSRF mitigation, not confidentiality or authentication; a direct HTTP client can read these endpoints. Browser same-origin rules are not server authorization. Deploy the server only within the operator's trust boundary (loopback/trusted network or an authenticated external access proxy). A shared server for mutually untrusted players would require consistent authentication/authorization across **all** author, history/export and mutation routes, not a token or query flag on this one endpoint. Gameplay projection prevents accidental spoiler delivery to ordinary UI; it cannot conceal canon from a deliberate server operator.

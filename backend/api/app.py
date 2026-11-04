@@ -160,7 +160,9 @@ def create_app(db_path=None, recover=True):
 
     @app.get('/api/saves/{sid}/author-state')
     def author_state(sid: int):
-        # Explicit author-only view; never embedded in ordinary game responses.
+        # Author view, NOT an authorization boundary: like world/draft/document
+        # APIs this belongs to the trusted single-user server operator. Never
+        # embed it in gameplay responses. See docs/story-secrets.md.
         snapshot = repo.get_snapshot(sid)
         return {'snapshot': snapshot}
 

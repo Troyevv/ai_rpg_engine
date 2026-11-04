@@ -165,6 +165,10 @@ def visible_fact_ids(state):
     for fid,f in state['facts'].items():
         if any(not known_birth(state,cid,actor) for cid in f['character_ids']+f['secret_subject_ids']): continue
         status=state['knowledge'].get(str(actor)+':'+fid,{}).get('status')
+        # A belief about a plot secret is not permission to serialize objective
+        # truth. Keep every belief/revision canonical, but disclose this payload
+        # only after confirmation, even if visibility was authored as public.
+        if f.get('story_secret') and status!='known': continue
         if fid in communications:
             e=communications[fid]
             if actor!=e['sender_id'] and actor not in e['read_by']: continue

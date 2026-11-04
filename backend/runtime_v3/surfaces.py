@@ -98,6 +98,16 @@ def visible_changes(changes, state, actor):
     """Gameplay summaries only; omniscient Extraction/patches stay author-side."""
     from copy import deepcopy
     result=deepcopy(changes)
-    result.pop('raw_turn_result', None)
-    result.pop('state_patch', None)
+    for key in ('raw_turn_result', 'state_patch', 'world_delta'):
+        result.pop(key, None)
+    # Legacy summaries may duplicate the full Fact/Event payload even after the
+    # main world projection has hidden it. Unlinked rows have no safe provenance;
+    # the original recorded prose and canonical source remain untouched.
+    from backend.runtime_v3.secrets import visible_fact_ids
+    allowed=visible_fact_ids(state)
+    if 'facts' in result:
+        result['facts']=[dict(f,known_by=[actor] if state['knowledge'].get(str(actor)+':'+f.get('id',''),{}).get('status')=='known' else [])
+                         for f in result['facts'] if f.get('id') in allowed]
+    if 'events' in result:
+        result['events']=[e for e in result['events'] if actor in e.get('witnesses',[]) and set(e.get('fact_ids',[]))<=allowed]
     return result
