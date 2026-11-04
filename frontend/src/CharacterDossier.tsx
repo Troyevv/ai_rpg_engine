@@ -1,8 +1,9 @@
+import {StorySecrets} from './StorySecrets';
 import {personalRelationships} from './lib/personalRelationships';
 import {personalRelationshipLabel} from './lib/dossier';
 import {phoneText} from './lib/phone';
 import {useId, type ReactNode} from 'react';
-import {UserRound,Brain,HeartHandshake,Users,BookOpen,MapPin} from 'lucide-react';
+import {UserRound,Brain,HeartHandshake,Users,BookOpen,MapPin,LockKeyhole} from 'lucide-react';
 import {CharacterAvatar,PortraitControl} from './Portrait';
 import {SectionTabs} from './components/ui/section-tabs';
 import {Reveal,KnowledgeRows,RelationsView,brief} from './InspectorViews';
@@ -24,7 +25,7 @@ export function DossierFact({label,children}:{label:string;children:ReactNode}){
 function Prose({text}:{text?:string}){
  return !text?<DossierEmpty/>:text.length>400?<Reveal title={brief(text,180)} text={text} preview={false}/>:<Markdown text={text}/>;
 }
-export function CharacterView({state,card,save,refresh,tab='overview',setTab=()=>{},onCharacter}:{state:State;card:Character;save?:Save|null;refresh?:()=>void;tab?:DossierTab;setTab?:(t:DossierTab)=>void;onCharacter:(id:string)=>void}){
+export function CharacterView({state,card,save,refresh,tab='overview',setTab=()=>{},onCharacter,active=true,secretTarget}:{active?:boolean;secretTarget?:string;state:State;card:Character;save?:Save|null;refresh?:()=>void;tab?:DossierTab;setTab?:(t:DossierTab)=>void;onCharacter:(id:string)=>void}){
  const panelId=useId();
  const c=state.world?.characters[card.id];
  const main=state.protagonist_id||state.characters.find(c=>c.is_player)?.id;
@@ -37,7 +38,7 @@ export function CharacterView({state,card,save,refresh,tab='overview',setTab=()=
  const age=c?.age??card.fields['Возраст'];
  const special=new Set(['Возраст','Пол','Статус','Место','Время','Сейчас','Чего хочет','Намерения','Обязательства','Физическое состояние']);
  const fields=Object.entries(card.fields).filter(([k])=>!special.has(k)&&!k.startsWith('Отношение к '));
- const items=([['overview',UserRound],['personality',Brain],['relationships',HeartHandshake],['family',Users],['history',BookOpen]] as const).map(([id,Icon])=>({id,label:t(id),icon:<Icon className={`dossier-icon-${id}`} size={16} aria-hidden="true"/>}));
+ const items=([['overview',UserRound],['personality',Brain],['relationships',HeartHandshake],['family',Users],['history',BookOpen],['secrets',LockKeyhole]] as const).map(([id,Icon])=>({id,label:t(id),icon:<Icon className={`dossier-icon-${id}`} size={16} aria-hidden="true"/>}));
  const conditions=card.dossier?.conditions||[];
  const activeConditions=conditions.filter(c=>['active','unknown_outcome'].includes(c.status));
  const conditionRows=(rows:typeof conditions)=>rows.map(r=><div className="dossier-condition" key={r.id}><strong>{r.description}</strong><span className="pill">{t(r.status as 'active')}</span>{r.duration==='persistent'&&<p>{t('persistent')}</p>}{r.since!=null&&<p className="muted small">{worldTime(r.since,state.world_clock?.calendar)}{r.until!=null?` → ${worldTime(r.until,state.world_clock?.calendar)}`:''}</p>}{r.restrictions.map(k=><p key={k}>{capabilityLabel(k)}</p>)}{r.evidence&&<Reveal title={t('evidence')} text={r.evidence} preview={false}/>}</div>);
@@ -80,6 +81,7 @@ export function CharacterView({state,card,save,refresh,tab='overview',setTab=()=
     <RelationsView key={`${save?.id}:${card.id}:${actor}`} state={state} actor={card.id} save={save} refresh={refresh} onCharacter={onCharacter}/>
    </DossierSection>}
    {tab==='family'&&<SocialStateView state={state} actor={card.id} saveId={save?.id} mode="family"/>}
+   {tab==='secrets'&&<StorySecrets rows={state.story_secrets?.personal[card.id]||[]} save={save} active={active} target={secretTarget}/>}
    {tab==='history'&&<div className="dossier-grid">
     <DossierSection title="История персонажа" wide>{Object.values(state.world?.events||{}).filter(e=>e.player_observed&&e.participants.includes(card.id)).slice(-40).map(e=><p key={e.id}>{e.text}</p>)}
      {!!card.appearance_history?.length&&<details><summary>История внешности</summary>{card.appearance_history.map((r,i)=><p key={i}>{worldTime(r.minute,state.world_clock?.calendar)} · {r.before?r.before+' → ':''}{r.after||'Удалено'}</p>)}</details>}

@@ -443,10 +443,22 @@ class StateResolver:
             if not isinstance(item.get('id'), str) or not item['id']:
                 self.warn('thread_changes', i, 'отсутствует ID'); continue
             fields = deepcopy(s['threads'].get(item.get('id'), {}))
-            fields.update({key:item[key] for key in Thread.model_fields if key in item and key != 'source_event_id'})
+            fields.update({key:item[key] for key in Thread.model_fields if key in item and key not in ('source_event_id', 'discovered_by')})
             entry = self.typed(Thread, fields, 'thread_changes', i)
             if entry:
                 for cid in entry['character_ids']: self.actor(cid, 'thread_changes', i)
+                source = events.get(item.get('source_event_id'), {})
+                if entry['id'] not in self.before['threads']:
+                    entry['source_event_id'] = source.get('id')
+                    entry['discovered_by'] = []
+                if entry['discovered_by'] is not None and source:
+                    from backend.runtime_v3.secrets import visible_fact_ids
+                    for witness in source.get('witnesses', []):
+                        if (not self.observed or self.mode == 'background') and witness in self.protected_knowledge_actor_ids:
+                            continue
+                        view = dict(s, camera=dict(s['camera'], controlled_actor_id=witness))
+                        if set(source.get('fact_ids', [])) <= visible_fact_ids(view):
+                            entry['discovered_by'] = sorted(set(entry['discovered_by']) | {witness})
                 s['threads'][entry['id']] = entry
         from backend.runtime_v3.reproduction import apply_reproduction
         apply_reproduction(self, raw, events)

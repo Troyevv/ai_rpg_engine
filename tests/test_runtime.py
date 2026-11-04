@@ -164,7 +164,13 @@ def test_extracted_thread_does_not_need_literal_quote(db):
     run(storage,job,bad)
     assert storage.get_job(job)['status']=='saved'
     state=storage.get_save(sid)['state']
-    assert state['plans'][0]['id']=='p1'
+    # Extraction still authors the line without a literal quote. #168 now
+    # requires witnessed source provenance before publishing a NEW line to UI.
+    thread=storage.get_snapshot(sid)['world_state']['threads']['p1']
+    assert thread['id']=='p1' and thread['description']=='Пойти в кино'
+    assert thread['discovered_by']==[]
+    assert not state['plans']
+    assert not state['notification_history']
     assert state['events'][-1]['text']==bad['events'][0]['text']
     assert all(w['code']=='raw_unknown_field' for w in json.loads(storage.get_job(job)['warnings_json']))
 

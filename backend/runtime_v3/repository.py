@@ -18,10 +18,14 @@ def initialize(db):
     initialize_milestones(db)
 
 
-def append_history(db, parent_id, batch):
+def append_history(db, parent_id, batch, *, before=None, after=None):
     # No FK to historical records: imported damaged history must not invalidate
     # otherwise valid current state. Audit reports missing ancestors separately.
     hid = uuid.uuid4().hex
+    if before is not None and after is not None:
+        from backend.runtime_v3.notifications import record_story_changes
+        batch = deepcopy(batch)
+        record_story_changes(before, after, batch, hid)
     db.execute('INSERT INTO world_history_v3(id,parent_id,payload_json) VALUES(?,?,?)',
         (hid,parent_id,json.dumps(batch,ensure_ascii=False)))
     from backend.runtime_v3.milestones import index_batch
@@ -109,7 +113,7 @@ def committed_snapshot(db, before_snapshot, resolved):
     snapshot['world_state']=state
     from backend.services.npc_review import publish_cards
     publish_cards(snapshot, resolved)
-    snapshot['history_head']=append_history(db,before_snapshot.get('history_head'),resolved.history)
+    snapshot['history_head']=append_history(db,before_snapshot.get('history_head'),resolved.history, before=before_snapshot['world_state'], after=state)
     return snapshot
 
 

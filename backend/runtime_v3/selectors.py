@@ -223,6 +223,19 @@ def ui_view(snapshot, history=None):
     result['notifications']=notifications(state, history)
     from backend.runtime_v3.secrets import secure_game_view
     secure_game_view(result, state)
+    from backend.runtime_v3.notifications import story_notifications
+    result['notification_history'] = story_notifications(state, history.get('_story_receipts', history.get('state_changes', [])))
+    for rows in [result['story_secrets']['world'], *result['story_secrets']['personal'].values()]:
+        for row in rows:
+            if row['status'] == 'known':
+                receipt = next((n for n in result['notification_history'] if n.get('slot_id') == row['id']), None)
+                if receipt: row['reveal_id'] = receipt['id']
+    visible_threads = {tid for tid,t in state['threads'].items()
+        if t.get('discovered_by') is None or observer in t['discovered_by']}
+    world['threads'] = {tid:t for tid,t in world['threads'].items() if tid in visible_threads}
+    result['plans'] = [t for t in result['plans'] if t['id'] in visible_threads]
+    for thread in [*world['threads'].values(), *result['plans']]:
+        thread.pop('discovered_by', None)
     from backend.services.npc_review import review_projection
     result['npc_reviews'] = review_projection(snapshot)
     return result

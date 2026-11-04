@@ -138,7 +138,7 @@ def extraction_schema():
     from backend.runtime_v3.continuity import ContinuityBeat, SceneTransition, Compression
     definitions['continuity_beats'] = ContinuityBeat.model_json_schema()
     definitions['scene_transitions'] = SceneTransition.model_json_schema()
-    definitions['thread_changes']['properties']['source_event_id'] = string
+    definitions['thread_changes']['properties']['source_event_id'] = dict(type='string', description='Event этого ответа, через который свидетели узнали о новой линии. Участие в character_ids/stakes_for не означает осведомлённость. Без источника новая линия остаётся скрытой.')
     definitions['scene_actions'] = SceneAction.model_json_schema()
     definitions['narrative_developments'] = NarrativeDevelopment.model_json_schema()
     definitions['consequences'] = ConsequenceClaim.model_json_schema()

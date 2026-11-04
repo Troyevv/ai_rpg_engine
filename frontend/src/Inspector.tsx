@@ -22,6 +22,7 @@ import { api, download } from "./api";
 import { type World, type Save, type State, type Scene, active } from "./types";
 import { localDate } from "./dates";
 import { ThemeSelector } from "./ThemeProvider";
+import type {StoryNotice} from './types';
 import { CharacterView } from "./CharacterDossier";
 import { CharacterAvatar } from "./Portrait";
 import { dossierText, type DossierTab } from "./lib/dossier";
@@ -240,6 +241,7 @@ export function CharacterPicker({
 }
 
 export function Inspector({
+  storyTarget,
   world,
   save,
   open,
@@ -254,6 +256,7 @@ export function Inspector({
   infoOpen,
   setInfoOpen,
 }: {
+  storyTarget?:StoryNotice|null;
   world: World | null;
   save: Save | null;
   open: boolean;
@@ -271,6 +274,7 @@ export function Inspector({
   const state = save?.state ?? world?.state;
   const meta = save?.scene_meta ?? world?.scene_meta;
   const [dossierTab, setDossierTab] = useState<DossierTab>("overview");
+  useEffect(()=>{if(open&&storyTarget?.character_ids?.length)setDossierTab('secrets')},[open,storyTarget]);
   const [expanded, setExpanded] = useState(
     () => sessionStorage.getItem("dossier-expanded") !== "no",
   );
@@ -399,7 +403,7 @@ export function Inspector({
       if (
         e.key === "Escape" &&
         !e.defaultPrevented &&
-        !document.querySelector('[role="dialog"]')
+        !document.querySelector('[role="dialog"]:not([data-state="closed"])')
       ) {
         e.preventDefault();
         backRef.current();
@@ -552,6 +556,8 @@ export function Inspector({
                       />
                       {selected ? (
                         <CharacterView
+                          active={open&&panel==='Персонажи'}
+                          secretTarget={storyTarget?.slot_id}
                           state={state}
                           card={selected}
                           save={save}
@@ -570,8 +576,8 @@ export function Inspector({
                   {id === "Отношения" && (
                     <RelationsSection {...props} refresh={refresh} />
                   )}
-                  {id === "Тайны" && <SecretsSection {...props} />}
-                  {id === "Сюжет" && <ThreadsSection {...props} />}
+                  {id === "Тайны" && <SecretsSection {...props} target={storyTarget?.slot_id} active={open&&panel==='Тайны'} />}
+                  {id === "Сюжет" && <ThreadsSection {...props} target={storyTarget?.thread_id} />}
                   {id === "Память" && <MemorySection {...props} />}
                 </div>
               ))}

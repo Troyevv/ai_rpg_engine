@@ -247,6 +247,8 @@ def test_exact_handoff_preserves_authored_graph_and_values(api, genres):
         classified=bool(original.get('secret') and owner in old['world_state']['characters'])
         fact.update(story_secret=classified,secret_subject_ids=[owner] if classified else [],secret_existence='hidden',origin_remote_event_id=None)
     for knowledge in old['world_state']['knowledge'].values():knowledge.setdefault('confirmed_once',False)
+    # #168 preserves authored/legacy visibility with a neutral optional default.
+    for thread in old['world_state']['threads'].values():thread.setdefault('discovered_by',None)
     assert current['world_state']==old['world_state']
     assert current['character_cards']==old['character_cards']
     assert current['authoring']==old['authoring']==source()['authoring']

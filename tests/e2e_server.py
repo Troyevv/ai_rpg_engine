@@ -54,9 +54,20 @@ phone_mode="silent"
 group_semantic_fail_once=False
 letter130_provider=None
 npc_review_start_payload=None
+story168_payload=None
+story168_gate=None
 
 def stream(**kwargs):
-    global phone_mode, group_semantic_fail_once, npc_review_start_payload
+    global phone_mode, group_semantic_fail_once, npc_review_start_payload, story168_payload
+    if story168_payload is not None:
+        from story_notifications_fixture import TEXT
+        if kwargs.get('response_format'):
+            if story168_gate is not None and not story168_gate.wait(30): raise RuntimeError('Story168 gate timed out')
+            yield json.dumps(story168_payload,ensure_ascii=False)
+            story168_payload=None
+        else:
+            yield TEXT
+        return
     if npc_review_start_payload is not None:
         if kwargs.get('response_format') and runtime_v3_request(kwargs['messages']):
             yield json.dumps(npc_review_start_payload,ensure_ascii=False)
@@ -690,6 +701,25 @@ if __name__ == '__main__':
     def dossier_authoring():
         from devtools.narrative_test_world import build_fixture
         return build_fixture('ui-canonical-personal')
+
+    @app.post('/test/story168-seed')
+    def story168_seed():
+        from story_notifications_fixture import seed
+        return seed(app.state.repository)
+
+    @app.post('/test/story168-prepare/{sid}')
+    def story168_prepare(sid: int, delayed: bool = False):
+        global story168_payload, story168_gate
+        from threading import Event
+        story168_gate = Event() if delayed else None
+        from story_notifications_fixture import payload
+        story168_payload=payload(app.state.repository.get_snapshot(sid))
+        return {'ready': True}
+
+    @app.post('/test/story168-release')
+    def story168_release():
+        if story168_gate is not None: story168_gate.set()
+        return {'released': True}
 
     @app.post('/test/story-secrets178-seed')
     def story_secrets178_seed():

@@ -17,6 +17,7 @@ import { defaults, type World, type Save, type Preferences } from "./types";
 import { Button } from "./components/ui/button";
 import { Settings } from "./Settings";
 import { Inspector, type Panel } from "./Inspector";
+import type {StoryNotice} from './types';
 import {inspectorSections,it,panelLabel} from "./lib/inspector";
 import { Library } from "./Library";
 import { WorldWorkshop } from "./WorldWorkshop";
@@ -71,6 +72,7 @@ export default function App() {
   const [library, setLibrary] = useState(false);
   const [settings, setSettings] = useState(false);
   const [inspector, setInspector] = useState(false);
+  const [storyTarget,setStoryTarget]=useState<StoryNotice|null>(null);
   const [worldInfo,setWorldInfo]=useState(false);
   const inspectorTrigger=useRef<HTMLElement|null>(null);
   const inspectorVisible=useRef(inspector);inspectorVisible.current=inspector;
@@ -78,19 +80,19 @@ export default function App() {
     if(mobileMenuVisible.current||historyTransition.current)return;
     if(!inspectorVisible.current){
       if(!workspaceVisible.current)return;
-      const dialog=document.querySelector<HTMLButtonElement>('[role="dialog"] .dialog-close');
+      const dialog=document.querySelector<HTMLButtonElement>('[role="dialog"]:not([data-state="closed"]) .dialog-close');
       if(dialog){history.pushState({...history.state,saveWorkspace:true},'');dialog.click()}
       else {workspaceVisible.current=null;setWorkspace(null);restoreWorkspaceFocus()}
       return;
     }
     // Keep one same-document entry while a nested dialog/source owns Back.
     history.pushState({...history.state,inspectorOpen:true},'');
-    const dialog=document.querySelector<HTMLButtonElement>('[role="dialog"] .dialog-close');
+    const dialog=document.querySelector<HTMLButtonElement>('[role="dialog"]:not([data-state="closed"]) .dialog-close');
     if(dialog)dialog.click();else window.dispatchEvent(new Event('inspector-back'));
   };window.addEventListener('popstate',back);return()=>window.removeEventListener('popstate',back)},[]);
   const closeInspector=(restoreFocus=true,done=()=>{})=>{
     const wasOpen=inspectorVisible.current;
-    inspectorVisible.current=false;setInspector(false);
+    inspectorVisible.current=false;setInspector(false);setStoryTarget(null);
     popLayer('inspectorOpen',()=>{
       if(wasOpen&&restoreFocus)requestAnimationFrame(()=>{
         const target=inspectorTrigger.current?.isConnected&&inspectorTrigger.current!==document.body?inspectorTrigger.current:document.querySelector<HTMLElement>("[data-mobile-menu-trigger],.nav-links button,.topbar button");
@@ -187,11 +189,18 @@ export default function App() {
     closeInspector(false,()=>closeWorkspace(false,()=>{setSelection({ world, save });setView("game")}));
   };
   const inspect = (p: Panel) => {
+    setStoryTarget(null);
     if(!inspector){inspectorTrigger.current=document.activeElement as HTMLElement;history.pushState({...history.state,inspectorOpen:true},'')}
     window.dispatchEvent(new Event("save-workspace-opened"));
     setView("game");
     setPanel(p);
     setInspector(true);
+  };
+  const openStory = (notice:StoryNotice) => {
+    const cid=notice.character_ids?.[0];
+    if(cid)setCharacter(cid);
+    inspect(cid?'Персонажи':notice.thread_id?'Сюжет':'Тайны');
+    setStoryTarget(notice);
   };
   const openCharacter = (id: string) => {
     setCharacter(id);
@@ -301,6 +310,7 @@ export default function App() {
           </div>
         ) : (view !== "prepare" || !!save) && (
           <div className="game-preserved" style={view==="prepare"?{display:"none"}:undefined} inert={view==="prepare"||!!workspace||inspector} aria-hidden={view==="prepare"||!!workspace||inspector}><Game
+            openStory={openStory}
             key={`${selection.world}-${selection.save}`}
             world={world}
             save={save}
@@ -332,6 +342,7 @@ export default function App() {
         prepare={() => setView("prepare")}
       />
       <Inspector
+        storyTarget={storyTarget}
         key={`${selection.world}:${selection.save}:${save?.state.controlled_actor_id}:${save?.state.camera?.pov_actor_id}:${save?.state.camera?.mode}`}
         infoOpen={worldInfo}
         setInfoOpen={setWorldInfo}

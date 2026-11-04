@@ -363,8 +363,8 @@ export function CurrentGame({
                 </article>
                 <label className="management-card management-toggle">
                   <span>
-                    <strong>Показывать изменения отношений</strong>
-                    <small>Уведомления об изменениях во время игры.</small>
+                    <strong>Показывать игровые уведомления</strong>
+                    <small>Сюжет, тайны и отношения. История открытий сохраняется даже без всплывающих сообщений.</small>
                   </span>
                   <input
                     type="checkbox"
