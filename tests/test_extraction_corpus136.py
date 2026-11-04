@@ -35,3 +35,9 @@ def test_semantic_fixture_before_resolver_and_real_job(api,case):
     assert world['camera']['present_character_ids']==case['expected']['present']
     if case['id']=='death_ellipsis':assert world['characters']['viktoria_solovyova']['life_status']=='dead'
     if case['id'] in ('rumor','hypothesis','negation'):assert world['characters']['viktoria_solovyova']['life_status']!='dead'
+
+    if case['id']=='new_npc':
+        assert world['characters']['arsen']['biological_sex']=='male'
+        snapshot=app.state.repository.get_snapshot(sid)
+        assert snapshot['pending_reviews']['arsen']['status']=='pending_review'
+        assert not any(next(c for c in snapshot['character_cards'] if c['id']=='arsen')['fields'].values())

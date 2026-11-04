@@ -221,4 +221,6 @@ def ui_view(snapshot, history=None):
     result['last_time_skip']=deepcopy(snapshot.get('last_time_skip'))
     from backend.runtime_v3.notifications import notifications
     result['notifications']=notifications(state, history)
+    from backend.services.npc_review import review_projection
+    result['npc_reviews'] = review_projection(snapshot)
     return result

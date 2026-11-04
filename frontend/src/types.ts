@@ -73,6 +73,7 @@ export interface ResidenceRoleView {
   since:number|null;until:number|null;since_date:string|null;until_date:string|null;
 }
 export interface State {
+  npc_reviews?: import('./NpcReview').NpcReviews;
   narrative_policy?: {genre?: import('./GenreSettings').GenreConfig|null};
   campaign?: {title?:string;setting?:string;era?:string;genre?:string;description?:string;public_description?:string};
   world_summary?:string;

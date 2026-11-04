@@ -123,7 +123,7 @@ def test_real_engine_repairs_once_with_original_and_full_context(db, repair_succ
     messages = calls[2]['messages']
     system = messages[0]['content']
     feedback = json.loads(system.split('Исправь структурную ошибку, верни полный JSON:\n', 1)[1])
-    assert json.loads(feedback['original_extraction']) == bad
+    assert feedback['original_extraction'] == bad
     assert feedback['previous_camera'] == camera
     assert feedback['known_locations'] == before['world_state']['locations']
     assert feedback['diagnostic']['repair_error_code'] == 'scene_movement_conflict'

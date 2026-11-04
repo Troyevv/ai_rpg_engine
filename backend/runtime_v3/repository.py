@@ -107,7 +107,8 @@ def committed_snapshot(db, before_snapshot, resolved):
     state=assert_world_state_v3_invariants(resolved.state,before_snapshot['world_state'])
     snapshot=deepcopy(before_snapshot)
     snapshot['world_state']=state
-    snapshot['character_cards'].extend(deepcopy(resolved.cards))
+    from backend.services.npc_review import publish_cards
+    publish_cards(snapshot, resolved)
     snapshot['history_head']=append_history(db,before_snapshot.get('history_head'),resolved.history)
     return snapshot
 

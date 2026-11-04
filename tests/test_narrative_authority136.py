@@ -265,7 +265,7 @@ def test_retry_uses_latest_provisional_response_without_union_of_claims(api):
     assert repo.get_snapshot(sid)['world_state']['characters']['viktoria_solovyova']['life_status']=='alive'
     assert len(repo.list_turns(sid))==1
     feedback=next(json.loads(m['content'].split('Исправь структурную ошибку, верни полный JSON:\n',1)[1]) for m in calls[0]['messages'] if 'original_extraction' in m['content'])
-    assert json.loads(feedback['original_extraction'])==attempts[-1]
+    assert feedback['original_extraction']==attempts[-1]
 
 
 def test_observed_stale_colocation_clears_only_unknown_position(api):

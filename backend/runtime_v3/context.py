@@ -759,18 +759,8 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                     schema['properties'].pop('value_deltas', None)
                 # Shared definitions belonging only to omitted evaluations do
                 # not need to remain in the wire schema.
-                used = set()
-                def references(node):
-                    if isinstance(node, dict):
-                        ref = node.get('$ref', '').removeprefix('#/$defs/')
-                        if ref and ref not in used:
-                            used.add(ref)
-                            references(schema.get('$defs', {}).get(ref, {}))
-                        for value in node.values(): references(value)
-                    elif isinstance(node, list):
-                        for value in node: references(value)
-                references(schema['properties'])
-                schema['$defs'] = {key:value for key,value in schema.get('$defs', {}).items() if key in used}
+                from backend.runtime_v3.raw import prune_schema_definitions
+                prune_schema_definitions(schema)
                 replace_block('JSON Schema', schema)
                 break
     # New phone outcomes are essential; optional Director attribution must not
@@ -783,7 +773,27 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                 for section in ('scene_actions', 'narrative_developments', 'consequences', 'continuity_beats', 'scene_transitions', 'physical_projections'):
                     if estimate(messages) <= hard_context_limit: break
                     schema['properties'].pop(section, None)
+                    from backend.runtime_v3.raw import prune_schema_definitions
+                    prune_schema_definitions(schema)
                     replace_block('JSON Schema', schema)
+                break
+    if builder.extraction and estimate(messages) > target:
+        # Optional structured profile enrichment duplicates the eleven descriptive
+        # card fields. Keep every identity/life/capability field and the full card;
+        # omit only this enrichment in tight wire schemas, never canonical data.
+        for message in messages:
+            if message['content'].startswith('JSON Schema\n'):
+                schema = json.loads(message['content'].split('\n', 1)[1])
+                def dereference(node):
+                    while '$ref' in node: node=schema['$defs'][node['$ref'].split('/')[-1].removeprefix('#')]
+                    return node
+                promotion=dereference(schema['properties']['promotions']['items'])
+                character=dereference(promotion['properties']['character'])
+                for field in ('appearance','personality','values'):
+                    character['properties'].pop(field,None)
+                from backend.runtime_v3.raw import prune_schema_definitions
+                prune_schema_definitions(schema)
+                replace_block('JSON Schema',schema)
                 break
     # Possession support is bounded by both its own cap and the request budget.
     # Keep explicitly named objects; omit lower-ranked incidental property first.

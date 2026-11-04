@@ -39,3 +39,26 @@ def compatible_state(state):
             actor['birth_date_provenance']=dob_metadata(actor)
             actor['birth_provenance']={'pregnancy_id':matches[0]['id'],'recovered_from':'pregnancy_child'}
     return result
+
+
+def establish_birth_date(resolver, cid, birth, evidence, *, source='extraction', correct_initial=False):
+    """One DOB/provenance boundary for extraction and explicit review edits."""
+    from backend.runtime_v3.calendar import date_parts, profile_of, current_time, ordinal
+    actor = resolver.state['characters'][cid]
+    if birth == actor.get('birth_date'): return
+    if is_game_birth(resolver.state, cid) or source != 'extraction' and actor.get('birth_date_provenance'):
+        raise ValueError('Дата рождения закреплена историей; используй откат исходного изменения.')
+    if actor.get('birth_date') is not None and not correct_initial:
+        raise ValueError('cannot overwrite an established birthday')
+    if birth is not None:
+        date_parts(birth, profile_of(resolver.state))
+        today = current_time(resolver.state)['date']
+        if today and ordinal(birth, profile_of(resolver.state)) > ordinal(today, profile_of(resolver.state)):
+            raise ValueError('birth date is in the future')
+    elif source == 'extraction':
+        raise ValueError('birth date must be explicitly established')
+    prior = deepcopy(actor)
+    actor['birth_date'] = birth
+    actor['birth_date_provenance'] = dict(source=source, evidence=evidence, turn_id=resolver.turn_id)
+    from backend.runtime_v3.life import _transition
+    _transition(resolver, 'birth_date_established', cid, prior, actor, dict(evidence=evidence))
