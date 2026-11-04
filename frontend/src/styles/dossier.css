@@ -1,6 +1,9 @@
 /* #83 dossier only. Shared Inspector navigation remains owned by #86. */
 :root{--sex-male:#8ac5fa;--sex-female:#f1a6c6;--dossier-overview:#83baff;--dossier-personality:#c6a5ff;--dossier-relationships:#fa9fb4;--dossier-family:#79d6b0;--dossier-history:#e8bf69}
 html[data-skin="paper"]{--sex-male:#195b91;--sex-female:#96385f;--dossier-overview:#2863a1;--dossier-personality:#7850a3;--dossier-relationships:#b13e61;--dossier-family:#26785c;--dossier-history:#93600b}
+:root{--dossier-secrets:#aab5d9}
+html[data-skin="paper"]{--dossier-secrets:#58658e}
+.dossier-tabs .dossier-icon-secrets{color:var(--dossier-secrets)}
 
 .character-profile{--dossier-portrait-size:120px}
 .dossier-expanded .character-profile{--dossier-portrait-size:144px}

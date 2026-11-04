@@ -4,7 +4,7 @@ import {writeFile} from 'node:fs/promises';
 const capture=process.env.UI_EVIDENCE==='1';
 test.use({video:capture?'on':'off'});
 const evidence=process.env.DOSSIER_EVIDENCE||'../docs/manual_qa/narrative_v4/issue83-evidence';
-const tabs=['Обзор','Личность','Отношения','Семья','История'];
+const tabs=['Обзор','Личность','Отношения','Семья','История','Тайны'];
 async function expectFitted(page:Page){
  await expect.poll(async()=>page.locator('.family-graph').evaluate(el=>{
   const area=el.getBoundingClientRect();
@@ -13,7 +13,7 @@ async function expectFitted(page:Page){
  await page.locator('.save-workspace').evaluate(el=>el.scrollTop=0);
 }
 async function open(page:Page){await nav(page,'Мир');await nav(page,'Персонажи')}
-for(const width of [360,393,768,1440])test(`five tabs, widths, two skins and preservation ${width}`,async({page,request},info)=>{
+for(const width of [360,393,768,1440])test(`six tabs, widths, two skins and preservation ${width}`,async({page,request},info)=>{
  test.skip(info.project.name!=='desktop');test.setTimeout(120000);
  await page.setViewportSize({width,height:900});
  const s=await(await request.post('/test/ui-completion-seed?checkpoint=ui-dossier')).json();
@@ -22,7 +22,7 @@ for(const width of [360,393,768,1440])test(`five tabs, widths, two skins and pre
  for(const skin of ['graphite','parchment']){
  await request.put(`/api/worlds/${s.world}/presentation`,{data:{theme_id:skin}});await page.goto('/');await open(page);
  const d=page.locator('.inspector-workspace');
- await expect(d.getByRole('tab')).toHaveCount(5);
+ await expect(d.getByRole('tab')).toHaveCount(tabs.length);
  await expect(d.getByRole('img',{name:'Мужской пол',exact:true})).toBeVisible();
  await expect(d.locator('.character-header')).toContainText('Кирилл Ларин');
  const header=await d.locator('.dossier-header').boundingBox();expect(header!.y+header!.height).toBeLessThan(900);

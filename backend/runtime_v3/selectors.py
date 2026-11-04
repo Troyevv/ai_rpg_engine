@@ -223,19 +223,18 @@ def ui_view(snapshot, history=None):
     result['notifications']=notifications(state, history)
     from backend.runtime_v3.secrets import secure_game_view
     secure_game_view(result, state)
-    from backend.runtime_v3.notifications import story_notifications
-    result['notification_history'] = story_notifications(state, history.get('_story_receipts', history.get('state_changes', [])))
+    from backend.runtime_v3.notifications import story_notifications, visible_threads
+    story_records = history.get('_story_receipts', history.get('state_changes', []))
+    world['threads'] = visible_threads(state, story_records)
+    result['notification_history'] = story_notifications(state, story_records,
+        secrets=result['story_secrets'], threads=world['threads'])
+    reveals = {n['slot_id']:n['id'] for n in result['notification_history'] if n.get('slot_id')}
     for rows in [result['story_secrets']['world'], *result['story_secrets']['personal'].values()]:
         for row in rows:
             if row['status'] == 'known':
-                receipt = next((n for n in result['notification_history'] if n.get('slot_id') == row['id']), None)
-                if receipt: row['reveal_id'] = receipt['id']
-    visible_threads = {tid for tid,t in state['threads'].items()
-        if t.get('discovered_by') is None or observer in t['discovered_by']}
-    world['threads'] = {tid:t for tid,t in world['threads'].items() if tid in visible_threads}
-    result['plans'] = [t for t in result['plans'] if t['id'] in visible_threads]
-    for thread in [*world['threads'].values(), *result['plans']]:
-        thread.pop('discovered_by', None)
+                if row['id'] in reveals: row['reveal_id'] = reveals[row['id']]
+    result['plans'] = [dict(t, text=t['state'] or t['description'],
+        status='done' if t['status']=='resolved' else 'open') for t in world['threads'].values()]
     from backend.services.npc_review import review_projection
     result['npc_reviews'] = review_projection(snapshot)
     return result

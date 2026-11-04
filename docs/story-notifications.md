@@ -5,7 +5,7 @@ Depends on merged #178 / #179. Privacy and story classification remain separate.
 ## Transaction and visibility
 
 `notifications.record_story_changes` consumes the accepted before/after state and
-History batch. `append_history` records its reference-only receipts in
+History batch. `append_history` records notification references in
 `state_changes` inside the same SQLite transaction as the snapshot/variant. A
 failed/cancelled/rejected operation publishes neither snapshot nor notification.
 Ordinary engine jobs (including communication) and direct phone read commands use
@@ -25,8 +25,13 @@ set this list directly. `None` preserves existing authored/legacy Thread
 visibility, without inventing an opening on load. The raw schema describes the
 existing `source_event_id` field; this adds no model call.
 
-`read_story_receipts` queries only notice receipts from the active immutable
+`read_story_receipts` queries notice receipts and witnessed Thread revisions from the active immutable
 History ancestry. It is independent of the bounded narrative context tail.
+Thread observations carry only the UI fields accepted from a witnessed source,
+with actor/source provenance, in the same existing History DAG. Gameplay uses the
+last witnessed revision for that actor; unseen updates remain canonical but cannot
+rewrite its card or the original creation notification. No parallel state store
+or unverified load-time diff is introduced.
 `story_notifications` resolves text from the current authorized projection and
 filters by controlled actor. Unknown fact text/evidence never enter a receipt or
 a response. Retired/refuted/replaced knowledge leaves a neutral historical marker

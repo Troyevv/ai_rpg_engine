@@ -459,6 +459,8 @@ class StateResolver:
                         view = dict(s, camera=dict(s['camera'], controlled_actor_id=witness))
                         if set(source.get('fact_ids', [])) <= visible_fact_ids(view):
                             entry['discovered_by'] = sorted(set(entry['discovered_by']) | {witness})
+                            self.history.state_changes.append(dict(kind='thread_witness', thread_id=entry['id'],
+                                actor_id=witness, source_event_id=source['id']))
                 s['threads'][entry['id']] = entry
         from backend.runtime_v3.reproduction import apply_reproduction
         apply_reproduction(self, raw, events)

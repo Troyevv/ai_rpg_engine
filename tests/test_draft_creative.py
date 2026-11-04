@@ -155,7 +155,9 @@ def test_generation_editor_start_turn_reload(api,repair):
         assert view['world']['facts']['fire']['text']==canonical['facts']['fire']['text']
         assert 'craftswoman:fire' not in view['world']['knowledge']  # Other minds are author-only.
         assert client.get(f'/api/saves/{sid}/author-state').json()['snapshot']['world_state']['knowledge']['craftswoman:fire']==canonical['knowledge']['craftswoman:fire']
-        assert view['world']['threads']['rebuild']==canonical['threads']['rebuild']
+        expected_thread=dict(canonical['threads']['rebuild'])
+        assert expected_thread.pop('discovered_by') is None  # Author/legacy visibility; metadata is server-only.
+        assert view['world']['threads']['rebuild']==expected_thread
     # A fresh application reads the same public projection and canonical records.
     from fastapi.testclient import TestClient
     from backend.api.app import create_app

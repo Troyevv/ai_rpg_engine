@@ -173,3 +173,34 @@ def test_background_thread_cannot_grant_controlled_actor_knowledge():
     assert 'a' not in r.state['threads']['t']['discovered_by']
     assert not story_notifications(r.state,r.history['state_changes'])
     assert 't' not in ui_view(dict(before,world_state=r.state),r.history)['world']['threads']
+
+
+def test_unseen_thread_revision_cannot_rewrite_observed_journal_or_api(tmp_path):
+    before=fixture();db=connection(tmp_path/'threads.db')
+    def update(snap,actor,description):
+        s=snap['world_state']
+        r=StateResolver(s,'Разговор','').resolve(raw(s,
+            events=[dict(id='e',text='Разговор',evidence='Разговор',participants=['a','b'],witnesses=[actor],fact_ids=[])],
+            thread_changes=[dict(id='t',description=description,state=description,character_ids=['a','b'],source_event_id='e',evidence='Разговор')]))
+        with db:return committed_snapshot(db,snap,r)
+    first=update(before,'a','Найти письмо')
+    second=update(first,'b','NEVER-EXPOSE-THREAD-REVISION')
+    history,_=read_history(db,second['history_head']);history['_story_receipts']=read_story_receipts(db,second['history_head'])
+    view=ui_view(second,history)
+    assert 'NEVER-EXPOSE-THREAD' not in json.dumps(view)
+    assert view['world']['threads']['t']['description']=='Найти письмо'
+    assert view['notification_history'][0]['text']=='Найти письмо'
+    assert len(view['notification_history'])==1
+    # A later witnessed update changes the visible revision, never its creation event.
+    third=update(second,'a','Письмо найдено')
+    history,_=read_history(db,third['history_head']);history['_story_receipts']=read_story_receipts(db,third['history_head'])
+    view=ui_view(third,history)
+    assert view['world']['threads']['t']['description']=='Письмо найдено'
+    assert view['notification_history'][0]['text']=='Найти письмо'
+    assert len(view['notification_history'])==1
+    # Switching actor resolves that actor's observed history, not another mind.
+    from backend.runtime_v3.protagonist import transition
+    third,_=transition(third,'temporary','b','thread-view-b')
+    view=ui_view(third,history)
+    assert view['world']['threads']['t']['description']=='NEVER-EXPOSE-THREAD-REVISION'
+    assert not view['notification_history']
