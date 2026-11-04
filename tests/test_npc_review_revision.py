@@ -181,11 +181,13 @@ def test_generation_context_stays_bounded_and_handles_changed_pov(db):
     assert 'Я справлюсь сама' not in json.dumps(result,ensure_ascii=False)
 
 
-def test_pre_upgrade_receipt_remains_idempotent(db):
-    repo,_,sid=db;start(repo,sid);cmd=command(repo,sid,'save')
+@pytest.mark.parametrize('character',[{}, {'biological_sex':'unknown'}])
+def test_pre_upgrade_receipt_remains_idempotent(db, character):
+    repo,_,sid=db;start(repo,sid);cmd=command(repo,sid,'save',character=character)
     edit(repo,sid,'new_npc',**cmd)
     before=repo.get_snapshot(sid)
     before['pending_reviews']['new_npc']['receipt']['request'].pop('profile_acknowledgements')
+    before['pending_reviews']['new_npc']['receipt']['request']['character']=character
     before['pending_reviews']['new_npc'].pop('profile_acknowledgements')
     with repo.connect() as conn:conn.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(before),sid))
     edit(repo,sid,'new_npc',**cmd)

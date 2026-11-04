@@ -106,6 +106,7 @@ def edit(repo, sid, cid, *, revision, review_revision, operation_id, fields, act
         receipt = record.get('receipt')
         if receipt and receipt['id'] == operation_id:
             prior_request = dict(receipt['request'], profile_acknowledgements=receipt['request'].get('profile_acknowledgements', {}))
+            prior_request['character'] = validate_patch(cid, prior_request.get('character') or {})
             if prior_request != signature: raise ValueError('ID запроса уже использован для другого изменения.')
             return
         if row['revision'] != revision or record['revision'] != review_revision:
