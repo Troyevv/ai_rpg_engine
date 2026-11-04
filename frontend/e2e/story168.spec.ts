@@ -104,7 +104,7 @@ test('phone reading queues a disclosure until the phone closes; first dossier vi
  await expect(page.locator('.story-toast')).toHaveCount(0);
  await phone.getByRole('button',{name:'Свернуть телефон',exact:true}).click();
  await expect(page.locator('.story-toast')).toContainText('Раскрыта тайна');
- if(process.env.STORY168_VISUAL)await page.screenshot({path:`/tmp/story168-${info.project.name}-toast.png`});
+ if(process.env.STORY168_VISUAL)await page.screenshot({animations:'disabled',path:`/tmp/story168-${info.project.name}-toast.png`});
  await page.locator('.story-toast-body button').click();
  await expect(page.locator('.secret-entry.is-revealing')).toHaveCount(1);
  await expect(page.locator('.secret-entry.is-revealing')).toHaveCount(0);

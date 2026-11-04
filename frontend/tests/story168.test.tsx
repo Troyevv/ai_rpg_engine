@@ -52,3 +52,10 @@ it('unknown rows contain no hidden payload; initial knowledge has no reveal and 
  await act(()=>root.render(<StorySecrets rows={[{...rows[2],reveal_id:'sibling'}]} save={save(3)}/>));
  expect(host.querySelector('[data-secret-id="new"]')?.className).toContain('is-revealing');
 });
+it('storage denial preserves presentation acknowledgements in the current session',()=>{
+ vi.spyOn(Storage.prototype,'getItem').mockImplementation(()=>{throw new Error('denied')});
+ vi.spyOn(Storage.prototype,'setItem').mockImplementation(()=>{throw new Error('quota')});
+ const key=presentationKey(38,'actor','storage-denial-event','fog');
+ expect(wasPresented(key)).toBe(false);markPresented(key);expect(wasPresented(key)).toBe(true);
+ vi.restoreAllMocks();
+});
