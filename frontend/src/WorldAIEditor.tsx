@@ -52,7 +52,7 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
  const previewResolve=current?.references ? resolver(current.references) : resolve;
  const destructive=!!current?.conflicts?.length||changed.some(d=>d.operation==='remove');
  const issues=current?.review?.issues||[];const blocked=!!current?.proposal?.conflicts?.length||issues.some(i=>(i.severity||'blocker')==='blocker');
- const disabled=busy||locked||data.started;
+ const disabled=busy||locked;
  const samePreview=current?.status==='preview'&&!current.stale&&current.instruction===instruction;
  useEffect(()=>{if(job && !active(job))requestId.current=null},[job?.status]);
  const decision=(choice:'accept'|'reject')=>execute(async()=>{
@@ -63,7 +63,8 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
   <div className="ai-editor-heading"><WandSparkles aria-hidden="true"/><div><p className="eyebrow">Изменения по вашему замыслу</p><h3 id="world-ai-title">AI-редактор мира</h3></div></div>
   <p>Опишите любые связанные изменения. Сначала вы увидите предложение и результаты проверки, затем решите, что сохранить.</p>
   <div className="ww-ai-columns"><div className="ww-ai-compose">
-  {data.started ? <p role="status">Игра уже запущена. Для нового замысла создайте отдельный черновик.</p> : <>
+  {data.started && <p role="status">Изменения войдут в новое прохождение. Начатая игра останется без изменений.</p>}
+  <>
    <label htmlFor="world-ai-instruction">Что изменить в мире?</label>
    <Textarea id="world-ai-instruction" value={instruction} disabled={busy||active(job)} onChange={e=>{setInstruction(e.target.value);requestId.current=null}}
      placeholder="Добавь герою сестру, придумай её прошлое и отношения с друзьями. Измени историю их группы…"/>
@@ -72,7 +73,7 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
     const next=await api<Job>(`/workspaces/${wid}/draft/edits`,{revision,text:instruction,request_id:requestId.current,config:prefs.summary,api_key:apiKey});
     if(alive.current){onJob(next);setSelected(next.id);await refresh();await load()}
    })}><WandSparkles size={16}/>{busy?'Подготавливаем…':'Предложить изменения'}</Button><span>Текущая версия остаётся целой до подтверждения.</span></div>
-  </>}
+  </>
   {error && <p className="ai-editor-error" role="alert">{error}</p>}
   </div><div className="ww-ai-result">
   {!current&&<div className="ww-ai-empty"><WandSparkles size={40}/><h4>Здесь появится предложение</h4><p>Сценарист сопоставит ваш замысел с текущим миром. Вы увидите каждую правку, её связи и результаты проверки до сохранения.</p></div>}

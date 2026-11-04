@@ -96,8 +96,9 @@ class DraftStorage(DraftEditorStorage):
                 # with a generic error. Semantic/provider prose stays private.
                 diagnostic=public_job.get('response_diagnostic')
                 public_job['error']=diagnostic['message'] if diagnostic else 'Проверка или генерация завершилась с замечанием. Подробности доступны автору.'
+            games=[json.loads(r[0]) for r in db.execute("SELECT content FROM document_versions WHERE kind='draft_save' AND owner LIKE ? ORDER BY id DESC",(wid+':%',))]
             visible=state if author else domain.player_view(state) if state else None
-            return {'id':wid,'name':w['name'],'revision':w['revision'],'version_id':head['id'] if head else None,
+            return {'games':[{k:g[k] for k in ('world','save','version_id')} for g in games],'id':wid,'name':w['name'],'revision':w['revision'],'version_id':head['id'] if head else None,
                 'candidate':raw if candidate and author else None,
                 'relation_merges':relation_plans(raw) if raw and author else [],
                 'editor':editor_contract() if author else None,

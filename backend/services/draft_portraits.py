@@ -46,8 +46,6 @@ def project(state,author=False):
 
 def load(repo,db,wid,cid,revision=None,editable=False):
     w=repo._draft_workspace(db,wid,revision,idle=editable)
-    if editable and db.execute("SELECT 1 FROM document_heads WHERE kind='draft_save' AND owner LIKE ?",(wid+':%',)).fetchone():
-        raise ValueError('Игра уже запущена. Создайте новый черновик.')
     head=repo._draft_head(db,wid)
     if not head: raise ValueError('Сначала создайте мир.')
     record=json.loads(head['content'])

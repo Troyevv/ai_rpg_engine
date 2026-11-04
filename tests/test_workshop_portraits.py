@@ -35,7 +35,11 @@ def test_projection_does_not_rewrite_canon_and_descriptor_survives_start(api):
     state=app.state.repository.get_snapshot(started.json()['save'])['world_state']
     assert state['characters'][cid]['procedural_portrait']==descriptor
     assert projection(state,cid)['procedural_portrait']==descriptor
-    assert client.put(path+'/procedural',json={'revision':d['revision'],'descriptor':descriptor}).status_code==409
+    old=deepcopy(app.state.repository.get_snapshot(started.json()['save']))
+    updated=dict(descriptor,hair=2)
+    assert client.put(path+'/procedural',json={'revision':d['revision'],'descriptor':updated}).status_code==200
+    assert app.state.repository.get_snapshot(started.json()['save'])==old
+    assert client.get(url+'?author=true').json()['state']['world']['characters'][cid]['procedural_portrait']==updated
 
 
 @pytest.mark.parametrize('format',['json','md','txt'])

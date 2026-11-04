@@ -60,8 +60,8 @@
 .world-workshop .ww-content .ww-hero .workshop-literary{font:400 14px/1.65 var(--ui-font);color:var(--text-muted);max-width:690px;margin:12px 0}
 .world-workshop .ww-content .ww-hero{padding:30px;min-height:255px}
 .world-workshop .ww-content .ww-panel h3 svg{flex:none}
-.ww-sidebar nav>div:nth-last-child(2){margin-top:22px}
-.ww-sidebar nav>div:nth-last-child(2)>button{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 25%,transparent);color:var(--accent);font-weight:600}
+.ww-sidebar nav>.ww-nav-ai,.ww-menu-dialog nav>.ww-nav-ai{margin-top:22px}
+.ww-nav-ai svg{color:var(--accent)}
 .ww-review-links{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
 .ww-review-links button{background:var(--surface-2);color:var(--accent);border:1px solid var(--border);border-radius:8px;padding:8px 12px;max-width:100%;overflow-wrap:anywhere;text-align:left}
 @media(max-width:760px){.world-workshop .ww-content .ww-hero{padding:24px 20px}}
@@ -138,3 +138,5 @@ html[data-theme="graphite"] :is(.world-workshop,.dialog-content.ww-dossier-dialo
 @media(max-width:760px){
  .dialog-content.ww-field-dialog,.dialog-content.ww-record-dialog{top:0;bottom:auto;left:0;transform:none;width:100%;max-width:100%;height:var(--app-height,100dvh);max-height:var(--app-height,100dvh);border-radius:0;padding:22px 18px max(22px,env(safe-area-inset-bottom))}
 }
+
+.ww-field-input{border:0;padding:0;margin:0;min-width:0;display:grid;gap:16px}

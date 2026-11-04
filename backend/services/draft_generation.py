@@ -50,9 +50,15 @@ def messages_for(repo,job,config):
                  +', '.join(CARD_FIELDS)+'. Стиль общения должен быть пригоден для написания узнаваемых реплик. '
                  'Сохрани дополнительные поля карточки, если они есть. ID и динамическое состояние мира неизменны.')
     else:system+=' Изменяется только поле '+target['field']+'.'
+    if task=='field':
+        system+=' Если инструкция касается отдельной детали, измени только её; дословно сохрани остальные сведения выбранного поля. Не сокращай описание и не придумывай несвязанные изменения.'
     deps=domain.dependencies(state,target['kind'],target['id'])
     related=[state['world'][d['kind']][d['id']] for d in deps if d['kind'] in state['world'] and d['id'] in state['world'][d['kind']]][:15]
     payload={'campaign':state['campaign'],'entity':item,'related':related,'instruction':config['_draft_input']}
+    if task=='field':
+        field=target['field']
+        payload['current_value']=item.get('fields',{}).get(field[7:]) if field.startswith('fields.') else item.get(field)
+        payload['card']=next((c for c in state['characters'] if c['id']==target['id']),None)
     if task=='field' and target['kind']=='actor' and target['field']=='birth_date':
         from backend.runtime_v3.models import Character
         system+=' Для birth_date null можно заменить творчески выбранной датой по схеме, если автор явно просит дополнить поле. Сохрани точный возраст; проверь его на текущую дату мира с учётом anchor и минут. При относительном календаре или приблизительном возрасте не выдумывай точность. Явные ограничения автора приоритетны.'
@@ -94,7 +100,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     original=repo.draft(job['workspace_id'],author=True)['state']
     context=config['context_length']
     if loaded: context=min(context,int(loaded.get('config',{}).get('context_length') or context))
-    stage='draft_world'
+    stage='draft_'+config['_draft_task']
     def opened(stream):
         handle.stream=stream
         if handle.cancel.is_set():stream.close()

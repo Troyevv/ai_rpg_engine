@@ -386,7 +386,8 @@ def patch(state,kind,eid,field,value):
     if kind not in FIELDS:raise ValueError('Неизвестная сущность.')
     if kind=='character' and field.startswith('fields.'):
         key=field[7:]
-        if not key or '.' in key or len(key)>100 or not isinstance(value,str):raise ValueError('Некорректное поле карточки.')
+        if not key or '.' in key or len(key)>100:raise ValueError('Некорректное поле карточки.')
+        if not isinstance(value,str):raise ValueError(f'Поле «{key}» должно быть текстом. Получено значение другого типа; прежнее значение сохранено.')
         target['fields'][key]=value
     elif field in FIELDS[kind]:
         if kind=='actor' and field in MOTIVATION_FIELDS:value=motivation_records(value,eid,field)

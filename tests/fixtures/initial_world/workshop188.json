@@ -1,0 +1,1224 @@
+{
+  "schema_version": 1,
+  "campaign": {
+    "title": "Сосновка, конец октября",
+    "setting": "Посёлок Сосновка в Тверской области, в двадцати пяти километрах от Твери. Старый семейный дом Ковалёвых с участком, яблонями, верандой и мокрым от дождя садом. Вечер пятницы, 23 октября 2026 года.",
+    "era": "Современная Россия, октябрь 2026 года.",
+    "genre": "slice of life, семейная драма, романтическая линия",
+    "tone": "Тихий, тёплый, бытовой — с медленно нарастающим напряжением; разговоры важнее событий, паузы важнее слов.",
+    "description": "Три дня в загородном доме. Илья Соколов, 27 лет, приехал из Москвы на выходные к подруге детства Соне Ковалёвой, 26 лет, и заодно застал её старшего брата Максима, 30 лет, который живёт в Твери и приехал наездом. За чаем, шарлоткой и разговорами о пробках на М-10 никто не говорит о главном: Соня много лет влюблена в Илью и не решается сказать; Максим готовит продажу семейного дома и до сих пор не поставил сестру в известность. Оба рассчитывают, что успеют «сначала всё уладить». Илья ничего об этом не знает и просто рад тишине.",
+    "public_description": "Небольшой ухоженный дом в посёлке под Тверью. В гостиной тепло, пахнет печёными яблоками, на столе чайник, по телевизору без звука идёт новостной канал. Хозяйка хлопочет, хозяин дома листает телефон в кресле у окна, гость с дороги устраивается на диване. Снаружи — ранняя темнота, дождь и один фонарь над мокрым садом.",
+    "rules": "Реалистичный быт без сверхъестественного: никакой магии, телепортации и всезнания. NPC действуют по своим мотивам и в отсутствие героя. Знание персонажа ограничено тем, что он видел, слышал или ему сказали; тайны не выдаются в описаниях и репликах без игрового повода. Смерть управляемого героя исключена настройками риска. Время идёт монотонно, расстояние и дорога занимают реальные минуты."
+  },
+  "locations": [
+    {
+      "id": "loc_sosnovka",
+      "name": "Посёлок Сосновка",
+      "text": "Посёлок в двадцати пяти километрах от Твери: две улицы, магазин, остановка автобуса, школа с закрытыми на зиму верандами и пруд за околицей. Осенью пустеет — половина домов стоит с заколоченными окнами, а в остальных горит свет по вечерам.",
+      "parent_id": null,
+      "kind": "посёлок",
+      "aliases": [
+        "Сосновка"
+      ]
+    },
+    {
+      "id": "loc_dom",
+      "name": "Дом Ковалёвых",
+      "text": "Бревенчатый дом с пристроенной верандой, выкрашенный в тёмно-зелёный цвет, с высоким крыльцом и резными наличниками. Внутри — низкие потолки, скрипучие половицы, печь и запах старого дерева. На стенах фотографии в рамках, в шкафу посуда, которую не переставляли с 2023 года.",
+      "parent_id": "loc_sosnovka",
+      "kind": "дом",
+      "aliases": [
+        "дом",
+        "семейный дом"
+      ]
+    },
+    {
+      "id": "loc_gostinaya",
+      "name": "Гостиная",
+      "text": "Самая большая комната дома: диван с выцветшей обивкой, кресло у окна, круглый стол под скатертью, буфет с чашками и большая печь. По вечерам здесь горит торшер и работает телевизор без звука. Пахнет яблоками, дровами и старой мебелью.",
+      "parent_id": "loc_dom",
+      "kind": "комната",
+      "aliases": [
+        "гостиная"
+      ]
+    },
+    {
+      "id": "loc_kuhnya",
+      "name": "Кухня",
+      "text": "Узкая комната с газовой плитой, духовкой, клеёнкой на столе и полках со специями; на подоконнике — банки с крупой, заварник и остывший чайник, у двери висит вышитое полотенце.",
+      "parent_id": "loc_dom",
+      "kind": "комната",
+      "aliases": [
+        "кухня"
+      ]
+    },
+    {
+      "id": "loc_dvor",
+      "name": "Двор и сад",
+      "text": "Мокрый от дождя двор с гравийной дорожкой, старая яблоня, качели под навесом и покосившийся сарай. За забором — тёмные сосны и один фонарь, который загорается с наступлением темноты.",
+      "parent_id": "loc_dom",
+      "kind": "участок",
+      "aliases": [
+        "двор",
+        "сад"
+      ]
+    },
+    {
+      "id": "loc_tver_flat",
+      "name": "Съёмная квартира Максима в Твери",
+      "text": "Однокомнатная квартира на четвёртом этаже панельного дома: диван, рабочий стол с ноутбуком, коробки в углу и вид на парковку. Максим появляется здесь по будням, но домом это место не считает.",
+      "parent_id": null,
+      "kind": "жильё",
+      "aliases": [
+        "квартира в Твери"
+      ]
+    },
+    {
+      "id": "loc_moscow_flat",
+      "name": "Квартира Ильи в Москве",
+      "text": "Небольшая съёмная студия рядом с метро, где Илья в основном ночует между работой и поездками. На подоконнике — чашка, зарядка и книга, которую он всё не дочитает.",
+      "parent_id": null,
+      "kind": "жильё",
+      "aliases": [
+        "квартира в Москве"
+      ]
+    },
+    {
+      "id": "loc_veranda",
+      "name": "Веранда",
+      "text": "Застеклённая пристройка вдоль южной стены дома: старый диван с пледом, плетёные кресла, ящики с антоновкой и банки с заготовками. Одно окно плохо закрывается, поэтому осенью здесь прохладно и слышно, как дождь стучит по крыше.",
+      "parent_id": "loc_dom",
+      "kind": "комната",
+      "aliases": [
+        "веранда"
+      ]
+    },
+    {
+      "id": "loc_sonya_room",
+      "name": "Комната Сони",
+      "text": "Маленькая комната в конце коридора: узкая кровать, письменный стол у окна, стеллаж с книгами и папками рисунков, на стене — детские фотографии и пробковая доска с набросками. Пахнет бумагой, карандашами и сушёными травами.",
+      "parent_id": "loc_dom",
+      "kind": "комната",
+      "aliases": [
+        "комната Сони"
+      ]
+    }
+  ],
+  "characters": [
+    {
+      "id": "ilya",
+      "name": "Илья Соколов",
+      "is_player": true,
+      "aliases": [
+        "Илья"
+      ],
+      "fields": {
+        "Возраст": "27 лет",
+        "Роль": "Разработчик интерфейсов в московской IT-компании; приехал в Сосновку на выходные.",
+        "Статус": "Гость в доме Ковалёвых.",
+        "Внешность": "Среднего роста, худощавый, чуть сутулится, когда устал; короткие тёмно-русые волосы лежат назад, серо-голубые глаза, лёгкая щетина. Одет в тёмные джинсы, серый свитер и расстёгнутую куртку, на ногах разношенные кроссовки.",
+        "Характер": "Спокойный, наблюдательный, не любит лезть в чужие дела, но плохо переносит ложь; в конфликте сначала отмалчивается, потом говорит прямо. Ответственный, привык решать проблемы сам, из-за этого иногда не слышит, что нужно другим.",
+        "Стиль общения": "Говорит негромко, короткими фразами, с сухим юмором; в незнакомой компании вежлив и сдержан, с близкими подшучивает. В споре не повышает голос, но задаёт неудобные вопросы.",
+        "Привычки": "Крутить в руках чашку, когда думает; проверять телефон на беззвучном; прежде чем ответить, делать паузу.",
+        "Сильные стороны": "Умеет слушать, держит слово, спокойно действует в бытовой неопределённости, хорошо читает настроение дома.",
+        "Слабости": "Избегает тяжёлых разговоров, склонен откладывать объяснения; из вежливости может согласиться на то, что ему неудобно.",
+        "Страхи и уязвимости": "Боится стать причиной ссоры между близкими; плохо переносит чувство вины за сказанное не вовремя.",
+        "Биография": "Вырос в Твери, в семье инженера и учительницы; с Соней познакомился в Сосновке в семь лет, когда родители снимали дом по соседству на лето. Учился на программиста, после университета уехал работать в Москву, но каждые несколько месяцев возвращается в Тверь к родителям. Дружбу с Соней считает одной из немногих постоянных вещей в своей жизни.",
+        "Чего хочет": "Провести выходные без работы и без спешки.",
+        "Сейчас": "Только что приехал в Сосновку на выходные; сидит в гостиной с чашкой чая, с дороги немного устал.",
+        "Намерения": "Осмотреться в доме и поддержать разговор с Соней и Максимом."
+      }
+    },
+    {
+      "id": "sonya",
+      "name": "Соня Ковалёва",
+      "is_player": false,
+      "aliases": [
+        "Соня"
+      ],
+      "fields": {
+        "Возраст": "26 лет",
+        "Роль": "Иллюстратор детских книг на удалёнке; подрабатывает в сосновской школе рисованием.",
+        "Статус": "Хозяйка дома, младшая сестра Максима.",
+        "Внешность": "Невысокая, худенькая, с прямой спиной; светло-каштановые волосы до плеч собраны в небрежный пучок, карие глаза, веснушки на носу. Дома носит тёплый кардиган поверх платья и шерстяные носки; на левом запястье — тонкий кожаный ремешок.",
+        "Характер": "Внимательная к мелочам, гостеприимная, сдержанная в чувствах; старается всех помирить и взять неловкость на себя. Внутри — упрямая, но предпочитает молчать, чем навязываться.",
+        "Стиль общения": "Говорит мягко, с паузами, часто задаёт встречные вопросы, чтобы не говорить о себе; с братом спорит коротко и язвительно, с Ильёй — теплее, чем позволяет себе. В конфликте замолкает и уходит на кухню.",
+        "Привычки": "Поправлять пучок, когда нервничает; накрывать на стол раньше, чем попросят; оставлять на полях блокнота маленькие рисунки.",
+        "Сильные стороны": "Хорошо готовит, умеет создать уют, замечает, когда человеку плохо, доводит начатое до конца.",
+        "Слабости": "Склонна к самоедству, откладывает важные разговоры, из-за вежливости терпит неудобства.",
+        "Страхи и уязвимости": "Боится, что её чувства станут обузой и разрушат дружбу; панически не любит публичные выяснения.",
+        "Биография": "Выросла в этом доме вместе с Максимом; отец ушёл из семьи, когда ей было двенадцать, мать умерла пять лет назад, и домом занималась бабушка. После бабушкиной смерти в 2025 году Соня переехала из Твери в Сосновку, чтобы сохранить дом и работать на удалёнке. С Ильёй дружит с детства и считает его человеком, рядом с которым можно быть собой.",
+        "Чего хочет": "Сделать вечер уютным и сохранить привычный тон.",
+        "Сейчас": "Принимает Илью в доме, хлопочет у стола и старается держаться ровно.",
+        "Намерения": "Накормить Илью и расспросить о дороге."
+      }
+    },
+    {
+      "id": "maxim",
+      "name": "Максим Ковалёв",
+      "is_player": false,
+      "aliases": [
+        "Максим"
+      ],
+      "fields": {
+        "Возраст": "30 лет",
+        "Роль": "Менеджер по закупкам в строительной компании в Твери; совладелец дома.",
+        "Статус": "Старший брат Сони, приехал на выходные.",
+        "Внешность": "Высокий, плотный, с короткой тёмной стрижкой и тяжёлой челюстью; серые глаза смотрят прямо, когда он уверен, и в сторону, когда врёт. Носит тёмную рубашку навыпуск, джинсы и часы с потёртым ремешком; на пальце — старое кольцо с печаткой.",
+        "Характер": "Рациональный, деловитый, привык брать ответственность на себя; под давлением становится резким и нетерпеливым. Заботится о сестре по-своему, но не умеет говорить о чувствах, поэтому решает за неё.",
+        "Стиль общения": "Говорит коротко, деловито, с редкой иронией; в разговоре с чужими держится ровно, с сестрой — командным тоном, который сам не замечает. В конфликте старается закончить разговор, а не выяснить.",
+        "Привычки": "Проверять телефон при любом удобном случае; поправлять кольцо; наливать себе чай, даже если не хочет.",
+        "Сильные стороны": "Умеет вести переговоры, быстро принимает решения, разбирается в документах и деньгах.",
+        "Слабости": "Не считается с чужим мнением, когда уверен в своей правоте; копит проблемы в себе и решает их в одиночку.",
+        "Страхи и уязвимости": "Боится потерять контроль и оказаться неудачником в глазах семьи; стыдится, что не может обеспечить сестру без продажи дома.",
+        "Биография": "Старший брат Сони, вырос в Сосновке. После смерти матери уехал учиться в Тверь, работал грузчиком, потом вырос до менеджера по закупкам. Дом остался на нём и Соне в равных долях; последние годы Максим тянул расходы на ремонт и налоги. В Твери снимает квартиру, приезжает в Сосновку наездами; любит сестру, но считает её мечтательность несерьёзной.",
+        "Чего хочет": "Закрыть накопившиеся дела до возвращения в Тверь.",
+        "Сейчас": "Отдыхает после дороги, листает телефон в кресле и не вмешивается в разговор.",
+        "Намерения": "Проверить телефон и дождаться ужина."
+      }
+    }
+  ],
+  "protagonist_id": "ilya",
+  "controlled_actor_id": "ilya",
+  "camera": {
+    "scene_id": "scene_gostinaya",
+    "mode": "actor"
+  },
+  "world_clock": {
+    "calendar": {
+      "start_minute": 1080,
+      "start_weekday": 4,
+      "start_date": "2026-10-23",
+      "profile": {
+        "id": "gregorian",
+        "system": "gregorian",
+        "month_lengths": [],
+        "month_names": [],
+        "weekday_names": [],
+        "observances": [],
+        "seasons": [],
+        "regional": {
+          "country": "RU",
+          "subdivision": null,
+          "version": "holidays-0.87-v1",
+          "language": "en_US",
+          "observed": false,
+          "overrides": []
+        }
+      }
+    },
+    "minute": 1080,
+    "last_event_time": "День 1 · 2026-10-23 · Пт · 18:00"
+  },
+  "world": {
+    "version": 2,
+    "characters": {
+      "ilya": {
+        "id": "ilya",
+        "birth_date": "1998-12-25",
+        "location": "loc_gostinaya",
+        "situation": "Только что приехал в Сосновку на выходные; сидит в гостиной с чашкой чая, с дороги немного устал.",
+        "goals": [
+          {
+            "id": "goal_ilya_rest",
+            "text": "Провести выходные без работы и без спешки.",
+            "status": "active",
+            "source_sequence": null,
+            "evidence": "",
+            "due_minute": null,
+            "revision": 0,
+            "source_event_id": null,
+            "dependencies": {},
+            "review_required": [],
+            "reviewed_signature": ""
+          }
+        ],
+        "intentions": [
+          {
+            "id": "int_ilya_osmotretsya",
+            "text": "Осмотреться в доме и поддержать разговор с Соней и Максимом.",
+            "status": "active",
+            "source_sequence": null,
+            "evidence": "",
+            "due_minute": null,
+            "revision": 0,
+            "source_event_id": null,
+            "dependencies": {},
+            "review_required": [],
+            "reviewed_signature": ""
+          }
+        ],
+        "emotion": "спокойное облегчение с ноткой усталости",
+        "minute": 1080,
+        "scene_id": "scene_gostinaya",
+        "last_event_id": "event_veche_start",
+        "life_status": "alive",
+        "biological_sex": "male",
+        "physical_state": "Здоров; после дороги слегка замёрз и устал.",
+        "capabilities": {
+          "conscious": true,
+          "can_perceive": true,
+          "can_act": true,
+          "can_speak": true,
+          "can_move": true
+        },
+        "developmental_stage": "adult",
+        "reproductive_capability": "can_impregnate",
+        "short_goal": "Провести выходные без работы и без спешки.",
+        "birth_date_provenance": {
+          "source": "authoring_automatic",
+          "input_signature": "d17d8fbef71b701c86febb66116ca10d4d5b55b7f1f6079541907ecfc9b0a95c"
+        }
+      },
+      "sonya": {
+        "id": "sonya",
+        "birth_date": "2000-02-27",
+        "location": "loc_gostinaya",
+        "situation": "Принимает Илью в доме, хлопочет у стола и старается держаться ровно.",
+        "goals": [
+          {
+            "id": "goal_sonya_comfort",
+            "text": "Сделать вечер уютным и сохранить привычный тон.",
+            "status": "active",
+            "source_sequence": null,
+            "evidence": "",
+            "due_minute": null,
+            "revision": 0,
+            "source_event_id": null,
+            "dependencies": {},
+            "review_required": [],
+            "reviewed_signature": ""
+          }
+        ],
+        "intentions": [
+          {
+            "id": "int_sonya_feed",
+            "text": "Накормить Илью и расспросить о дороге.",
+            "status": "active",
+            "source_sequence": null,
+            "evidence": "",
+            "due_minute": null,
+            "revision": 0,
+            "source_event_id": null,
+            "dependencies": {},
+            "review_required": [],
+            "reviewed_signature": ""
+          }
+        ],
+        "emotion": "тепло и внутреннее напряжение",
+        "minute": 1080,
+        "scene_id": "scene_gostinaya",
+        "last_event_id": "event_veche_start",
+        "life_status": "alive",
+        "biological_sex": "female",
+        "physical_state": "Здорова; держится бодро, но чуть сильнее обычного устала к вечеру.",
+        "capabilities": {
+          "conscious": true,
+          "can_perceive": true,
+          "can_act": true,
+          "can_speak": true,
+          "can_move": true
+        },
+        "developmental_stage": "adult",
+        "reproductive_capability": "can_become_pregnant",
+        "short_goal": "Сделать вечер уютным и сохранить привычный тон.",
+        "birth_date_provenance": {
+          "source": "authoring_automatic",
+          "input_signature": "6ed6af4514085bb756befe0b61f2c17387d7d8eb4ecfddb9a84dc49c954bedd4"
+        }
+      },
+      "maxim": {
+        "id": "maxim",
+        "birth_date": "1996-06-13",
+        "location": "loc_gostinaya",
+        "situation": "Отдыхает после дороги, листает телефон в кресле и не вмешивается в разговор.",
+        "goals": [
+          {
+            "id": "goal_maxim_deals",
+            "text": "Закрыть накопившиеся дела до возвращения в Тверь.",
+            "status": "active",
+            "source_sequence": null,
+            "evidence": "",
+            "due_minute": null,
+            "revision": 0,
+            "source_event_id": null,
+            "dependencies": {},
+            "review_required": [],
+            "reviewed_signature": ""
+          }
+        ],
+        "intentions": [
+          {
+            "id": "int_maxim_phone",
+            "text": "Проверить телефон и дождаться ужина.",
+            "status": "active",
+            "source_sequence": null,
+            "evidence": "",
+            "due_minute": null,
+            "revision": 0,
+            "source_event_id": null,
+            "dependencies": {},
+            "review_required": [],
+            "reviewed_signature": ""
+          }
+        ],
+        "emotion": "сдержанное напряжение",
+        "minute": 1080,
+        "scene_id": "scene_gostinaya",
+        "last_event_id": "event_veche_start",
+        "life_status": "alive",
+        "biological_sex": "male",
+        "physical_state": "Здоров; выглядит собранным, но трёт шею, будто не выспался.",
+        "capabilities": {
+          "conscious": true,
+          "can_perceive": true,
+          "can_act": true,
+          "can_speak": true,
+          "can_move": true
+        },
+        "developmental_stage": "adult",
+        "reproductive_capability": "can_impregnate",
+        "short_goal": "Закрыть накопившиеся дела до возвращения в Тверь.",
+        "birth_date_provenance": {
+          "source": "authoring_automatic",
+          "input_signature": "903bf7a7d46d539ca7dee4938da483ebd72fd8089035e423a6790b3bf2063e7b"
+        }
+      }
+    },
+    "relationships": {
+      "rel_ilya_sonya": {
+        "source_id": "ilya",
+        "target_id": "sonya",
+        "context": "Дружит с детства, приехал в гости и чувствует себя рядом с ней спокойно.",
+        "dimensions": {
+          "trust": 70,
+          "affection": 60,
+          "respect": 55
+        },
+        "visible_to_ids": [
+          "ilya",
+          "sonya"
+        ]
+      },
+      "rel_sonya_ilya": {
+        "source_id": "sonya",
+        "target_id": "ilya",
+        "context": "Дружит с детства; рядом с Ильёй теплее, чем она показывает.",
+        "dimensions": {
+          "trust": 80,
+          "affection": 85,
+          "attraction": 75,
+          "fear": 20,
+          "respect": 60
+        },
+        "visible_to_ids": [
+          "sonya"
+        ]
+      },
+      "rel_maxim_sonya": {
+        "source_id": "maxim",
+        "target_id": "sonya",
+        "context": "Старший брат, привык решать за сестру и считает её мягкой.",
+        "dimensions": {
+          "affection": 65,
+          "trust": 40,
+          "irritation": 30,
+          "respect": 55
+        },
+        "visible_to_ids": [
+          "maxim",
+          "sonya"
+        ]
+      },
+      "rel_sonya_maxim": {
+        "source_id": "sonya",
+        "target_id": "maxim",
+        "context": "Младшая сестра; любит брата, но устала от его командного тона.",
+        "dimensions": {
+          "trust": 55,
+          "affection": 60,
+          "irritation": 35,
+          "respect": 50
+        },
+        "visible_to_ids": [
+          "maxim",
+          "sonya"
+        ]
+      },
+      "rel_maxim_ilya": {
+        "source_id": "maxim",
+        "target_id": "ilya",
+        "context": "Помнит его по детству, относится настороженно, но без неприязни.",
+        "dimensions": {
+          "trust": 40,
+          "respect": 45,
+          "irritation": 15
+        },
+        "visible_to_ids": [
+          "maxim"
+        ]
+      },
+      "rel_ilya_maxim": {
+        "source_id": "ilya",
+        "target_id": "maxim",
+        "context": "Знает его как старшего брата Сони, держится вежливо и немного дистанцированно.",
+        "dimensions": {
+          "trust": 50,
+          "respect": 45
+        },
+        "visible_to_ids": [
+          "ilya"
+        ]
+      }
+    },
+    "facts": {
+      "fact_friendship": {
+        "id": "fact_friendship",
+        "text": "Илья и Соня дружат с детства: познакомились в Сосновке, когда Соне было семь лет, а Илье — восемь, и с тех пор поддерживают связь.",
+        "secret": false,
+        "character_ids": [
+          "ilya",
+          "sonya"
+        ],
+        "evidence": [
+          "Общие воспоминания о лете в Сосновке",
+          "Регулярная переписка"
+        ]
+      },
+      "fact_siblings": {
+        "id": "fact_siblings",
+        "text": "Максим — старший брат Сони; они единственные дети в семье и выросли в этом доме.",
+        "secret": false,
+        "character_ids": [
+          "maxim",
+          "sonya"
+        ],
+        "evidence": [
+          "Семейные фотографии в гостиной",
+          "Общие воспоминания"
+        ]
+      },
+      "fact_house_ownership": {
+        "id": "fact_house_ownership",
+        "text": "Дом в Сосновке после смерти бабушки в 2025 году перешёл Соне и Максиму в равных долях; Соня живёт в нём, Максим снимает квартиру в Твери.",
+        "secret": false,
+        "character_ids": [
+          "sonya",
+          "maxim"
+        ],
+        "evidence": [
+          "Документы на дом",
+          "Рассказ Сони"
+        ]
+      },
+      "fact_sonya_love": {
+        "id": "fact_sonya_love",
+        "text": "Соня уже несколько лет влюблена в Илью и скрывает это: она не решается сказать, боясь разрушить дружбу и услышать отказ.",
+        "secret": true,
+        "story_secret": true,
+        "secret_subject_ids": [
+          "sonya",
+          "ilya"
+        ],
+        "secret_existence": "discoverable",
+        "character_ids": [
+          "sonya",
+          "ilya"
+        ],
+        "evidence": [
+          "В блокноте Сони есть рисунки с Ильёй",
+          "Она избегает разговоров о своих отношениях при нём"
+        ]
+      },
+      "fact_maxim_sale": {
+        "id": "fact_maxim_sale",
+        "text": "Максим тайно готовит продажу семейного дома: он уже обсуждал цену с риелтором и рассчитывает подписать предварительный договор до конца ноября, не сообщая Соне.",
+        "secret": true,
+        "story_secret": true,
+        "secret_subject_ids": [
+          "maxim",
+          "sonya"
+        ],
+        "secret_existence": "discoverable",
+        "character_ids": [
+          "maxim",
+          "sonya"
+        ],
+        "evidence": [
+          "Переписка с риелтором в телефоне Максима",
+          "Папка с выпиской и предварительным договором в его сумке"
+        ]
+      },
+      "fact_house_repair": {
+        "id": "fact_house_repair",
+        "text": "Дом Ковалёвых старый и требует ремонта: над верандой протекает угол крыши, проводку давно не меняли, а часть рам рассохлась. Мелкий ремонт последние годы оплачивал Максим, Соня вызывала мастеров по мелочи.",
+        "secret": false,
+        "character_ids": [
+          "maxim",
+          "sonya"
+        ],
+        "evidence": [
+          "Следы воды на потолке веранды",
+          "Старые чеки за материалы в папке Максима",
+          "Разговоры Сони с соседями о мастерах"
+        ]
+      }
+    },
+    "knowledge": {
+      "know_ilya_friendship": {
+        "actor_id": "ilya",
+        "fact_id": "fact_friendship",
+        "status": "known",
+        "source_event_id": null,
+        "revision": 0,
+        "evidence": "Личный опыт дружбы."
+      },
+      "know_sonya_friendship": {
+        "actor_id": "sonya",
+        "fact_id": "fact_friendship",
+        "status": "known",
+        "source_event_id": null,
+        "revision": 0,
+        "evidence": "Личный опыт дружбы."
+      },
+      "know_maxim_friendship": {
+        "actor_id": "maxim",
+        "fact_id": "fact_friendship",
+        "status": "known",
+        "source_event_id": null,
+        "revision": 0,
+        "evidence": "Знает о дружбе сестры с Ильёй."
+      },
+      "know_ilya_siblings": {
+        "actor_id": "ilya",
+        "fact_id": "fact_siblings",
+        "status": "known",
+        "source_event_id": null,
+        "revision": 0,
+        "evidence": "Соня говорила о брате."
+      },
+      "know_sonya_siblings": {
+        "actor_id": "sonya",
+        "fact_id": "fact_siblings",
+        "status": "known",
+        "source_event_id": null,
+        "revision": 0,
+        "evidence": "Собственная семья."
+      },
+      "know_maxim_siblings": {
+        "actor_id": "maxim",
+        "fact_id": "fact_siblings",
+        "status": "known",
+        "source_event_id": null,
+        "revision": 0,
+        "evidence": "Собственная семья."
+      },
+      "know_sonya_ownership": {
+        "actor_id": "sonya",
+        "fact_id": "fact_house_ownership",
+        "status": "known",
+        "source_event_id": null,
+        "revision": 0,
+        "evidence": "Документы и жизнь в доме."
+      },
+      "know_maxim_ownership": {
+        "actor_id": "maxim",
+        "fact_id": "fact_house_ownership",
+        "status": "known",
+        "source_event_id": null,
+        "revision": 0,
+        "evidence": "Документы и расходы на дом."
+      },
+      "know_ilya_ownership": {
+        "actor_id": "ilya",
+        "fact_id": "fact_house_ownership",
+        "status": "unknown",
+        "source_event_id": null,
+        "revision": 0,
+        "evidence": "Не обсуждал с Соней документы на дом."
+      },
+      "know_sonya_love": {
+        "actor_id": "sonya",
+        "fact_id": "fact_sonya_love",
+        "status": "known",
+        "source_event_id": null,
+        "revision": 0,
+        "evidence": "Собственное чувство."
+      },
+      "know_ilya_love": {
+        "actor_id": "ilya",
+        "fact_id": "fact_sonya_love",
+        "status": "unknown",
+        "source_event_id": null,
+        "revision": 0,
+        "evidence": "Не замечает или не хочет замечать."
+      },
+      "know_maxim_love": {
+        "actor_id": "maxim",
+        "fact_id": "fact_sonya_love",
+        "status": "unknown",
+        "source_event_id": null,
+        "revision": 0,
+        "evidence": "Не обсуждал с сестрой её чувства."
+      },
+      "know_maxim_sale": {
+        "actor_id": "maxim",
+        "fact_id": "fact_maxim_sale",
+        "status": "known",
+        "source_event_id": null,
+        "revision": 0,
+        "evidence": "Собственные переговоры и документы."
+      },
+      "know_sonya_sale": {
+        "actor_id": "sonya",
+        "fact_id": "fact_maxim_sale",
+        "status": "unknown",
+        "source_event_id": null,
+        "revision": 0,
+        "evidence": "Брат не говорил ей о продаже."
+      },
+      "know_ilya_sale": {
+        "actor_id": "ilya",
+        "fact_id": "fact_maxim_sale",
+        "status": "unknown",
+        "source_event_id": null,
+        "revision": 0,
+        "evidence": "Не участвует в делах семьи Ковалёвых."
+      },
+      "know_sonya_repair": {
+        "actor_id": "sonya",
+        "fact_id": "fact_house_repair",
+        "status": "known",
+        "source_event_id": null,
+        "evidence": "Живёт в доме и сама сталкивалась с протечкой и мелким ремонтом."
+      },
+      "know_maxim_repair": {
+        "actor_id": "maxim",
+        "fact_id": "fact_house_repair",
+        "status": "known",
+        "source_event_id": null,
+        "evidence": "Оплачивал часть ремонта и обсуждал его с мастерами."
+      },
+      "know_ilya_repair": {
+        "actor_id": "ilya",
+        "fact_id": "fact_house_repair",
+        "status": "unknown",
+        "source_event_id": null,
+        "evidence": "Приехал на выходные и ещё не осматривал дом."
+      }
+    },
+    "threads": {
+      "thread_weekend": {
+        "id": "thread_weekend",
+        "description": "Илья гостит у Сони и Максима в загородном доме; ближайшие два дня должны пройти в бытовых разговорах, прогулках и старых обидах.",
+        "state": "Вечер пятницы, все трое в гостиной.",
+        "public_state": "В доме тепло, на столе чай и шарлотка, разговор идёт о дороге и планах на выходные.",
+        "status": "active",
+        "character_ids": [
+          "ilya",
+          "sonya",
+          "maxim"
+        ],
+        "visible_to_ids": [
+          "ilya",
+          "sonya",
+          "maxim"
+        ],
+        "relevance": 0.72,
+        "last_event_id": "event_veche_start"
+      },
+      "thread_sonya_feelings": {
+        "id": "thread_sonya_feelings",
+        "description": "Соня скрывает от Ильи многолетнюю влюблённость и боится, что признание разрушит дружбу.",
+        "state": "Соня держит чувства при себе; Илья ничего не знает.",
+        "status": "active",
+        "character_ids": [
+          "sonya",
+          "ilya"
+        ],
+        "visible_to_ids": [
+          "sonya"
+        ],
+        "relevance": 0.82,
+        "last_event_id": null
+      },
+      "thread_maxim_sale": {
+        "id": "thread_maxim_sale",
+        "description": "Максим тайно готовит продажу семейного дома и не сообщил об этом Соне.",
+        "state": "Переговоры с риелтором идут; Соня не в курсе.",
+        "status": "active",
+        "character_ids": [
+          "maxim",
+          "sonya"
+        ],
+        "visible_to_ids": [
+          "maxim"
+        ],
+        "relevance": 0.86,
+        "last_event_id": null
+      }
+    },
+    "events": {
+      "event_veche_start": {
+        "id": "event_veche_start",
+        "text": "Вечер пятницы. Илья приехал в Сосновку и сидит в гостиной с чашкой чая; Соня хлопочет у стола, Максим листает телефон в кресле у окна. Все трое находятся в доме.",
+        "participants": [
+          "ilya",
+          "sonya",
+          "maxim"
+        ],
+        "witnesses": [
+          "ilya",
+          "sonya",
+          "maxim"
+        ],
+        "minute": 0,
+        "scene_id": "scene_gostinaya",
+        "fact_ids": [
+          "fact_friendship",
+          "fact_siblings"
+        ],
+        "medium": "личное присутствие",
+        "evidence": "Чайник на столе, шарлотка, телевизор без звука; за окном дождь и ранняя темнота.",
+        "source_sequence": 0,
+        "player_observed": true
+      }
+    },
+    "scheduled_events": {},
+    "scenes": {
+      "scene_gostinaya": {
+        "id": "scene_gostinaya",
+        "location": "loc_gostinaya",
+        "participants": [
+          "ilya",
+          "sonya",
+          "maxim"
+        ],
+        "text": "В гостиной тепло, пахнет печёными яблоками. На столе чайник и шарлотка, по телевизору без звука идёт новостной канал. Илья устраивается на диване, Соня стоит у стола, Максим сидит в кресле у окна.",
+        "start_minute": 1080,
+        "end_minute": 1080,
+        "status": "active",
+        "event_ids": [
+          "event_veche_start"
+        ]
+      }
+    },
+    "objective_relations": {
+      "obj_rel_ilya_sonya_friend": {
+        "id": "obj_rel_ilya_sonya_friend",
+        "kind": "close_friend",
+        "source_id": "ilya",
+        "target_id": "sonya",
+        "status": "active",
+        "since": null,
+        "until": null,
+        "since_date": null,
+        "until_date": null,
+        "outcome": "",
+        "context": "Дружат с детства, познакомились в Сосновке в семь лет.\nДружат с детства; для Сони эта дружба давно стала чем-то большим.",
+        "evidence": "Общие воспоминания, регулярная переписка.\nОбщие воспоминания, её рисунки и переписка.",
+        "fact_id": "fact_friendship",
+        "closure_fact_id": null
+      },
+      "obj_rel_maxim_sonya_sibling": {
+        "id": "obj_rel_maxim_sonya_sibling",
+        "kind": "sibling",
+        "source_id": "maxim",
+        "target_id": "sonya",
+        "status": "active",
+        "since": null,
+        "until": null,
+        "since_date": null,
+        "until_date": null,
+        "outcome": "",
+        "context": "Старший брат, вырос вместе с Соней в этом доме.\nМладшая сестра, привыкла к командному тону брата.",
+        "evidence": "Семейные фотографии и общие воспоминания.",
+        "fact_id": "fact_siblings",
+        "closure_fact_id": null
+      }
+    },
+    "conditions": {},
+    "organizations": {},
+    "residences": {
+      "res_sonya_dom": {
+        "id": "res_sonya_dom",
+        "status": "active",
+        "since": null,
+        "until": null,
+        "since_date": null,
+        "until_date": null,
+        "context": "Живёт в семейном доме в Сосновке после переезда из Твери.",
+        "evidence": "Её вещи, работа и повседневные дела в доме.",
+        "fact_id": null,
+        "closure_fact_id": null,
+        "outcome": "",
+        "actor_id": "sonya",
+        "location_id": "loc_dom"
+      },
+      "res_maxim_tver": {
+        "id": "res_maxim_tver",
+        "status": "active",
+        "since": null,
+        "until": null,
+        "since_date": null,
+        "until_date": null,
+        "context": "Снимает однокомнатную квартиру в Твери, в Сосновку приезжает наездами.",
+        "evidence": "Ключи и документы на съём, разговоры о дороге.",
+        "fact_id": null,
+        "closure_fact_id": null,
+        "outcome": "",
+        "actor_id": "maxim",
+        "location_id": "loc_tver_flat"
+      },
+      "res_ilya_moscow": {
+        "id": "res_ilya_moscow",
+        "status": "active",
+        "since": null,
+        "until": null,
+        "since_date": null,
+        "until_date": null,
+        "context": "Снимает студию в Москве рядом с метро.",
+        "evidence": "Рассказывает о работе и дороге из Москвы.",
+        "fact_id": null,
+        "closure_fact_id": null,
+        "outcome": "",
+        "actor_id": "ilya",
+        "location_id": "loc_moscow_flat"
+      }
+    },
+    "roles": {
+      "role_ilya_dev": {
+        "id": "role_ilya_dev",
+        "status": "active",
+        "since": null,
+        "until": null,
+        "since_date": null,
+        "until_date": null,
+        "context": "Разработчик интерфейсов в московской IT-компании, часть времени работает удалённо.",
+        "evidence": "Говорит о работе и созвонах.",
+        "fact_id": null,
+        "closure_fact_id": null,
+        "outcome": "",
+        "actor_id": "ilya",
+        "kind": "работа",
+        "title": "разработчик интерфейсов",
+        "organization_id": null,
+        "field": "IT"
+      },
+      "role_sonya_illustrator": {
+        "id": "role_sonya_illustrator",
+        "status": "active",
+        "since": null,
+        "until": null,
+        "since_date": null,
+        "until_date": null,
+        "context": "Иллюстрирует детские книги на удалёнке из Сосновки.",
+        "evidence": "Рисунки и заказы в её блокноте.",
+        "fact_id": null,
+        "closure_fact_id": null,
+        "outcome": "",
+        "actor_id": "sonya",
+        "kind": "работа",
+        "title": "иллюстратор детских книг",
+        "organization_id": null,
+        "field": "иллюстрация"
+      },
+      "role_sonya_school": {
+        "id": "role_sonya_school",
+        "status": "active",
+        "since": null,
+        "until": null,
+        "since_date": null,
+        "until_date": null,
+        "context": "Подрабатывает в сосновской школе, ведёт занятия по рисованию.",
+        "evidence": "Расписание занятий на кухне.",
+        "fact_id": null,
+        "closure_fact_id": null,
+        "outcome": "",
+        "actor_id": "sonya",
+        "kind": "подработка",
+        "title": "ведущая занятий по рисованию",
+        "organization_id": null,
+        "field": "образование"
+      },
+      "role_maxim_manager": {
+        "id": "role_maxim_manager",
+        "status": "active",
+        "since": null,
+        "until": null,
+        "since_date": null,
+        "until_date": null,
+        "context": "Менеджер по закупкам в строительной компании в Твери.",
+        "evidence": "Рабочие звонки и документы в его сумке.",
+        "fact_id": null,
+        "closure_fact_id": null,
+        "outcome": "",
+        "actor_id": "maxim",
+        "kind": "работа",
+        "title": "менеджер по закупкам",
+        "organization_id": null,
+        "field": "строительство"
+      }
+    },
+    "possessions": {
+      "poss_maxim_phone": {
+        "id": "poss_maxim_phone",
+        "name": "Телефон Максима",
+        "kind": "телефон",
+        "owner_id": "maxim",
+        "holder_id": "maxim",
+        "location_id": null,
+        "status": "available",
+        "fact_id": "fact_maxim_sale",
+        "source_event_id": null
+      },
+      "poss_maxim_docs": {
+        "id": "poss_maxim_docs",
+        "name": "Папка с документами по дому",
+        "kind": "документы",
+        "owner_id": "maxim",
+        "holder_id": "maxim",
+        "location_id": null,
+        "status": "available",
+        "fact_id": "fact_maxim_sale",
+        "source_event_id": null
+      },
+      "poss_sonya_notebook": {
+        "id": "poss_sonya_notebook",
+        "name": "Блокнот Сони с рисунками",
+        "kind": "блокнот",
+        "owner_id": "sonya",
+        "holder_id": "sonya",
+        "location_id": null,
+        "status": "available",
+        "fact_id": "fact_sonya_love",
+        "source_event_id": null
+      },
+      "poss_sonya_tablet": {
+        "id": "poss_sonya_tablet",
+        "name": "Графический планшет Сони",
+        "kind": "рабочий инструмент",
+        "owner_id": "sonya",
+        "holder_id": "sonya",
+        "location_id": "loc_sonya_room",
+        "status": "available",
+        "fact_id": null,
+        "source_event_id": null
+      }
+    },
+    "pregnancies": {},
+    "reproductive_events": {},
+    "naming_decisions": {},
+    "communication": {
+      "profile_version": 1,
+      "preset": "modern",
+      "letter": false,
+      "courier": false,
+      "telegram": false,
+      "landline": false,
+      "magic": false,
+      "delivery_policy": {
+        "text_message": "instant",
+        "voice_call": "live"
+      },
+      "delivery_minutes": {},
+      "author_note": "",
+      "text_message": true,
+      "voice_call": true,
+      "presentation": "phone",
+      "region": "",
+      "ring_timeout_minutes": 2,
+      "emergency_numbers": {}
+    },
+    "scene_records": {},
+    "contacts": {}
+  },
+  "creation_settings": {
+    "primary_genre": "slice_of_life",
+    "secondary_genres": [
+      "family_saga",
+      "romance",
+      "drama"
+    ],
+    "custom_genre": "",
+    "communication": {
+      "profile_version": 1,
+      "preset": "modern",
+      "letter": false,
+      "courier": false,
+      "telegram": false,
+      "landline": false,
+      "magic": false,
+      "delivery_policy": {
+        "text_message": "instant",
+        "voice_call": "live"
+      },
+      "delivery_minutes": {},
+      "author_note": "",
+      "text_message": true,
+      "voice_call": true,
+      "presentation": "phone",
+      "region": "",
+      "ring_timeout_minutes": 2,
+      "emergency_numbers": {}
+    },
+    "calendar_start": {
+      "presets": {
+        "holidays": "country",
+        "country": "RU",
+        "subdivision": null,
+        "observed": false,
+        "seasons": "auto"
+      },
+      "mode": "gregorian",
+      "date": "2026-10-23",
+      "time": "18:00",
+      "weekday": null,
+      "profile": null
+    },
+    "narrative_pacing": {
+      "preset": "moderate",
+      "intensity": 0.45,
+      "quiet_minutes": 360,
+      "pressure_limit": 1.5,
+      "disruption": 0.3,
+      "escalation": 0.4,
+      "thread_cap": 4,
+      "candidate_budget": 2,
+      "relevance_floor": 0.6,
+      "extra_llm_calls": 0
+    },
+    "narrative_risk": {
+      "preset": "realistic",
+      "minor_illness": true,
+      "serious_illness": true,
+      "injury": true,
+      "permanent_injury": false,
+      "relationship_loss": true,
+      "career_loss": true,
+      "life_role_loss": true,
+      "major_accident": true,
+      "npc_death": true,
+      "protagonist_death": false
+    },
+    "npc_expressiveness": "realistic",
+    "cast_preset": "small",
+    "core_npcs": 6,
+    "secondary_npcs": 12,
+    "world_type": "real_world",
+    "geography": ""
+  },
+  "authoring": {
+    "calendar_completion": {
+      "seed": "prep_73ab482d8b6c484b81bc670352e9b319",
+      "version": 1,
+      "resolved": {
+        "minute": 1080,
+        "calendar": {
+          "start_minute": 1080,
+          "start_weekday": 4,
+          "start_date": "2026-10-23",
+          "profile": {
+            "id": "gregorian",
+            "system": "gregorian",
+            "month_lengths": [],
+            "month_names": [],
+            "weekday_names": [],
+            "observances": [],
+            "seasons": [],
+            "regional": {
+              "country": "RU",
+              "subdivision": null,
+              "version": "holidays-0.87-v1",
+              "language": "en_US",
+              "observed": false,
+              "overrides": []
+            }
+          }
+        },
+        "sources": {
+          "calendar": "settings",
+          "date": "settings",
+          "time": "settings",
+          "weekday": "generated"
+        }
+      },
+      "birth_dates": {
+        "ilya": {
+          "source": "automatic",
+          "value": "1998-12-25",
+          "input_signature": "d17d8fbef71b701c86febb66116ca10d4d5b55b7f1f6079541907ecfc9b0a95c"
+        },
+        "sonya": {
+          "source": "automatic",
+          "value": "2000-02-27",
+          "input_signature": "6ed6af4514085bb756befe0b61f2c17387d7d8eb4ecfddb9a84dc49c954bedd4"
+        },
+        "maxim": {
+          "source": "automatic",
+          "value": "1996-06-13",
+          "input_signature": "903bf7a7d46d539ca7dee4938da483ebd72fd8089035e423a6790b3bf2063e7b"
+        }
+      }
+    },
+    "calendar_presets": {
+      "selection": {
+        "holidays": "country",
+        "country": "RU",
+        "subdivision": null,
+        "observed": false,
+        "seasons": "auto"
+      },
+      "notices": [
+        "Календарный профиль сезонов не определён; собственные сезоны сохранены."
+      ]
+    }
+  },
+  "sections": {
+    "tone": "Тихий, тёплый, бытовой — с медленно нарастающим напряжением; разговоры важнее событий, паузы важнее слов."
+  },
+  "story_notes": "Реалистичный быт без сверхъестественного: никакой магии, телепортации и всезнания. NPC действуют по своим мотивам и в отсутствие героя. Знание персонажа ограничено тем, что он видел, слышал или ему сказали; тайны не выдаются в описаниях и репликах без игрового повода. Смерть управляемого героя исключена настройками риска. Время идёт монотонно, расстояние и дорога занимают реальные минуты.",
+  "relationships": [
+    {
+      "source_id": "ilya",
+      "target_id": "sonya",
+      "text": "Дружит с детства, приехал в гости и чувствует себя рядом с ней спокойно."
+    },
+    {
+      "source_id": "sonya",
+      "target_id": "ilya",
+      "text": "Дружит с детства; рядом с Ильёй теплее, чем она показывает."
+    },
+    {
+      "source_id": "maxim",
+      "target_id": "sonya",
+      "text": "Старший брат, привык решать за сестру и считает её мягкой."
+    },
+    {
+      "source_id": "sonya",
+      "target_id": "maxim",
+      "text": "Младшая сестра; любит брата, но устала от его командного тона."
+    },
+    {
+      "source_id": "maxim",
+      "target_id": "ilya",
+      "text": "Помнит его по детству, относится настороженно, но без неприязни."
+    },
+    {
+      "source_id": "ilya",
+      "target_id": "maxim",
+      "text": "Знает его как старшего брата Сони, держится вежливо и немного дистанцированно."
+    }
+  ],
+  "scene": "В гостиной тепло, пахнет печёными яблоками. На столе чайник и шарлотка, по телевизору без звука идёт новостной канал. Илья устраивается на диване, Соня стоит у стола, Максим сидит в кресле у окна.",
+  "scene_meta": {
+    "time": "День 1 · 2026-10-23 · Пт · 18:00",
+    "location": "loc_gostinaya",
+    "present_ids": [
+      "ilya",
+      "sonya",
+      "maxim"
+    ]
+  },
+  "draft_contract": 4
+}

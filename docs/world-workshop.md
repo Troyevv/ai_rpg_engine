@@ -13,7 +13,7 @@
 | Черновики, корзина, восстановление | Переключатель мира / История и файлы | workspaces; delete/restore | draft-world |
 | Streaming, попытка, диагностика, retry/resume/stop, кандидат | Идея и генерация / Проверка | useJob; draft/resume; jobs/stop; candidate | draft-recovery, draft-world |
 | Все текстовые поля карточки, имя, алиасы | Досье: Основное / Личность | draft PATCH character | workshop, draft-world |
-| birth_date, biological_sex, life_status, developmental_stage, appearance, physical_state, capabilities, personality, values, reproductive_capability, provenance/identity | Досье: Основное / Сейчас / Личность; типизированный редактор | editor.schemas; draft PATCH actor | workshop, draft-initial |
+| birth_date, biological_sex, life_status, developmental_stage, physical_state, capabilities, personality, values, reproductive_capability, provenance/identity | Досье: Основное / Сейчас / Личность; типизированный редактор | editor.schemas; draft PATCH actor | workshop, draft-initial |
 | Цели, намерения, обязательства; статус/происхождение записей | Досье: Цели | draft PATCH actor | structured editor, draft-world |
 | Направленные чувства, dimensions, контекст, доступность | Связи и семьи / Досье: Связи | draft PATCH relationship | draft-world |
 | objective_relations, периоды, история | Связи и семьи | существующие extension fields | draft-initial |
@@ -101,3 +101,9 @@ E2E работают с настоящими FastAPI, SQLite, API ревизий
 ## Повторный аудит PR #188
 
 [Воспроизведённые проблемы, исправления, интерактивные сценарии, результаты и ограничения](manual_qa/world-workshop-188.md). Скриншоты выше обновлены после аудита. В контекст LLM больше не попадают визуальные дескрипторы; канонические знания и литературная внешность сохранены.
+
+### Доработка исходного черновика после запуска
+
+Start Game фиксирует отдельное прохождение по `version_id`; тот же `version_id` подтверждается идемпотентно. Ручная правка, AI-пакет и портрет создают новые версии исходного черновика. Они не обновляют уже созданные saves, их Knowledge/POV, историю и изображения. В мастерской доступны отдельные действия продолжения игры и запуска текущей версии.
+
+Литературная внешность редактируется только через `character.fields.Внешность`. `actor.appearance` остаётся строгим `AppearanceProfile`, его заполненные признаки доступны в «Особых приметах» без ручного редактирования служебного `applied`. Текстовые правки сохраняют весь старый профиль.
