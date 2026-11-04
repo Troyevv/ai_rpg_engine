@@ -133,6 +133,14 @@ def stream(**kwargs):
         if creative172_control and 'CREATIVE172' in kwargs['messages'][1]['content']:
             creative172_control['calls']+=1
             if not creative172_control['gate'].wait(30):raise RuntimeError('Creative gate timed out')
+            if creative172_control.get('http_error') and creative172_control['calls']==1:
+                # Exercise real SDK error conversion before any stream/usage.
+                from test_draft_creative_http import CreativeHTTP
+                from unittest.mock import patch
+                http=CreativeHTTP(('opaque refusal','messages'))
+                with patch('llm.OpenAI',side_effect=http.client):
+                    yield from provider_chat_stream(**kwargs)
+                return
             kwargs['on_usage']({'prompt_tokens':100,'completion_tokens':20})
             kwargs['on_finish']('stop')
             if creative172_control['fail'] and creative172_control['calls']==1:
@@ -531,12 +539,18 @@ if __name__ == '__main__':
         editor173_control['gate'].set()
         return dict(calls=editor173_control['calls'])
 
+    @app.post('/test/creative185-rejected')
+    def seed_creative185_rejected():
+        from fastapi.testclient import TestClient
+        from creative185_fixture import seed_rejected
+        return seed_rejected(TestClient(app))
+
     @app.post('/test/creative172')
     def seed_creative172(body:dict):
         global creative172_control, phone_mode
         from threading import Event
         phone_mode=None
-        creative172_control=dict(gate=Event(),calls=0,fail=body.get('fail',False),invalid=body.get('invalid',False))
+        creative172_control=dict(gate=Event(),calls=0,fail=body.get('fail',False),invalid=body.get('invalid',False),http_error=body.get('http_error',False))
         return app.state.repository.create_workspace('Творческое развитие')
 
     @app.post('/test/creative172/saves/{sid}/canonical')

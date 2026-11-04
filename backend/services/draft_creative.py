@@ -4,6 +4,8 @@ from backend.repositories.drafts import candidate_hash
 from backend.services.draft_changes import Proposal, apply_proposal
 from backend.services.draft_initial import prompt_schema
 
+VALIDATION_VERSION = 2
+
 MARKER = 'Творческое развитие начального мира / v1.'
 RULES = '''Идея автора — творческий бриф, не исчерпывающая спецификация. Развей
 неописанные стороны мира свободно, связно и художественно: людей, их прошлое,
@@ -22,8 +24,11 @@ POV не передаёт управление; тайна мира не ста�
 с roles, организации с фактами, знания с источниками и свидетелями событий.
 Новые события — только предыстория; неизвестная минута null. Новые планы не
 гарантируют будущего выбора игрока. Не меняй время начала, камеру, управление,
-настройки, authoring и серверные provenance. Сохрани существующие IDs.
-Верни один атомарный пакет по response_schema, не полный мир. candidate_hash
+настройки, authoring и серверные provenance. Не копируй технические поля
+revision, source_turn, applied, field_facts, remote_source_ids, confirmed_once,
+birth_provenance, birth_date_provenance из кандидата в новые записи.
+Их значения назначает сервер. Сохрани существующие IDs.
+Верни один JSON-объект по response_schema, без Markdown и пояснений: атомарный пакет, не полный мир. candidate_hash
 скопируй точно. Для новых карточек/мест op=add path=/characters/- или
 /locations/-. Для новых записей op=add path=/world/<section>/<новый ID>.
 Зависимые записи добавляй в том же пакете: ссылки проверяются после всех
@@ -85,8 +90,13 @@ def develop(state, author_context, journal, call, save, *, request_key=None):
             raise ValueError('Бюджет творческого развития исчерпан; кандидат сохранён для редактора.')
         record = dict(status='running', before_hash=before, slot='creative_'+before)
         journal['creative'] = record
-    if record.get('status') == 'rejected' and record.get('correction_complete'):
+    exhausted = record.get('status') == 'rejected' and record.get('correction_complete')
+    revalidate = exhausted and record.get('validation_version', 1) < VALIDATION_VERSION and isinstance(record.get('current_reply'), str)
+    if exhausted and not revalidate:
         raise ValueError(record['reason'])
+    # A validator upgrade may recheck paid text once, without resetting correction
+    # budgets, replacing the candidate, or issuing another creative request.
+    record['validation_version'] = VALIDATION_VERSION
     record['status'] = 'running'
     save()
     try:
@@ -110,7 +120,7 @@ def develop(state, author_context, journal, call, save, *, request_key=None):
                 break
             except ValueError as invalid:
                 allowed = correction.scope(state, answer, invalid)
-                if allowed is None or len(attempts) >= 2:
+                if revalidate or allowed is None or len(attempts) >= 2:
                     record['correction_complete'] = True
                     raise
                 # Slot identity survives transport interruptions and resume epochs.
@@ -133,6 +143,7 @@ def develop(state, author_context, journal, call, save, *, request_key=None):
                 except ValueError as error:
                     attempt['error'] = str(error)
                 save()
+        record.pop('correction_complete', None)
         record.update(status='applied', after_hash=candidate_hash(enhanced), proposal=proposal,
                       provenance=dict(source='creative_model', author_context_hash=candidate_hash(author_context)))
         # A single journal write binds the accepted batch and its resulting text.
@@ -142,7 +153,9 @@ def develop(state, author_context, journal, call, save, *, request_key=None):
         return enhanced
     except ValueError as exc:
         from backend.services.draft_response import TransportError
-        diagnostics=getattr(exc, 'errors', None)
+        diagnostics=getattr(exc, 'diagnostic', None) or getattr(exc, 'errors', None)
+        if diagnostics is None and getattr(exc, 'world_paths', None):
+            diagnostics=[dict(path=p,category='server_metadata',message=str(exc)) for p in exc.world_paths]
         if callable(diagnostics):diagnostics=diagnostics(include_url=False,include_context=False,include_input=False)
         record.update(status='interrupted' if isinstance(exc, TransportError) else 'rejected', reason=str(exc),
                       diagnostics=diagnostics)

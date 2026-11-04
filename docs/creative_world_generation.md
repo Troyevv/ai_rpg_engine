@@ -151,3 +151,42 @@ those records after each ordinary turn and after refresh, using a reopened
 Repository. Backend integration also reopens the whole application and compares
 public state/turns and the canonical snapshot. No production API or Knowledge
 visibility rule is changed to satisfy this test.
+
+### HTTP 400 / #182
+
+The creative prompt now explicitly requests a JSON object. Previously the real
+SDK sent `response_format={"type":"json_object"}` with messages containing no
+`json` instruction for a Russian brief/candidate. `test_draft_creative_http.py`
+reproduces that wire contract through OpenAI + httpx.MockTransport: base succeeds,
+creative gets 400 before any chunk. With the prompt fixed, the same candidate
+passes proposal validation/application and semantic review. The pre-fix success
+regression was run and failed; the legacy-prompt regression retains this evidence.
+This establishes a reproducible defect, **not attribution of the original two
+Sosnovka failures**: their provider response body is unavailable. No live DeepSeek
+request was made.
+
+The official [JSON guide](https://api-docs.deepseek.com/guides/json_mode/) requires
+an explicit JSON instruction. The [chat API](https://api-docs.deepseek.com/api/create-chat-completion/)
+checked 2026-11-04 supports deepseek-flash, enabled Thinking with low/high effort,
+JSON output and max_tokens up to 393216. The reported 20000 is not intrinsically
+invalid; actual context still undergoes existing preflight. No model, Thinking,
+budget, JSON mode, stage or validation was disabled or enlarged to fix this issue.
+
+TransportError carries an optional safe diagnostic. Existing response journals
+store HTTP failure status, sanitized reason, request ID/fingerprint and provider
+body digest; public `response_diagnostic` reconstructs only allowlisted text and
+fields. Creative diagnostics and the existing raw export retain correlation.
+Unknown response text, credentials and headers are never copied to diagnostics.
+A known HTTP 400 is not resent with the same request fingerprint, even when a
+new recovery slot is created by changing context capacity alone. Corrected
+messages/parameters can resume; unknown rejections remain explicitly resumable.
+There is no automatic retry for 400; existing bounded 429/503 retries remain.
+
+An HTTP rejection has no accepted proposal. The valid candidate and prior versions
+remain intact, rejected requests have no invented usage, and confirmed pre-stream
+rejections release their reservations. Resume uses the current candidate/hash;
+accepted packages remain idempotent. New journal fields are additive, with no
+SQLite/WorldState migration or changes to #181. Old logs without a provider reason
+cannot be retroactively classified. The browser scenario uses a real SDK HTTP
+rejection, checks error/correlation, candidate/version preservation and refresh,
+then resumes and starts a game on desktop/mobile and both skins.

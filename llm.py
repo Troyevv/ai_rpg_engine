@@ -279,9 +279,11 @@ def provider_rejection(exc, messages, max_tokens, response_format):
         reason='output_limit'
     elif 'model' in message and ('exist' in message or 'invalid' in message):
         reason='model_unavailable'
+    elif any(p in message for p in ('thinking','reasoning_effort','response_format','temperature')):
+        reason='incompatible_parameters'
     return dict(http_status=getattr(exc,'status_code',None),reason=reason,
         error_type=error.get('type') if error.get('type') in ('invalid_request_error','authentication_error','rate_limit_error','server_error') else None,
-        parameter=error.get('param') if error.get('param') in ('messages','response_format','max_tokens','model') else None,
+        parameter=error.get('param') if error.get('param') in ('messages','response_format','max_tokens','model','thinking','reasoning_effort','temperature') else None,
         body_sha256=hashlib.sha256(json.dumps(body,ensure_ascii=False,default=str).encode()).hexdigest(),
         request=dict(message_count=len(messages),message_bytes=len(json.dumps(messages,ensure_ascii=False).encode()),
             has_json_instruction=any('json' in str(m.get('content','')).lower() for m in messages),
