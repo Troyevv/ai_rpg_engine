@@ -108,8 +108,11 @@ def projection(state, *, excluded=()):
     from backend.runtime_v3.reproduction import private_fact_ids, known_birth
     actor=state['camera']['controlled_actor_id']
     if actor is None: return dict(personal={},world=[])
-    from backend.runtime_v3.possessions import private_fact_ids as possession_facts
-    protected=private_fact_ids(state) | possession_facts(state) | set(excluded)
+    # Possession provenance protects the item and the fact's CONTENT, not an
+    # explicitly authored discoverable plot slot. A notebook/phone may cite the
+    # same plot fact without revoking that disclosure policy. Item projection
+    # and visible_fact_ids still require Knowledge independently.
+    protected=private_fact_ids(state) | set(excluded)
     protected |= {c['fact_id'] for c in state.get('conditions',{}).values() if c.get('fact_id')}
     protected |= {identity('communicated_text',e['id']) for e in state['remote_events'].values()}
     result=dict(personal={},world=[])
