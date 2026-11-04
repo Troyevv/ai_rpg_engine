@@ -17,6 +17,25 @@ beforeEach(()=>{
  host=document.createElement('div');document.body.append(host);root=createRoot(host);
 });
 afterEach(async()=>{await act(()=>root.unmount());host.remove();vi.unstubAllGlobals()});
+it('keeps a confirmed card and its POV-limited audience until an explicit preview arrives',async()=>{
+ const s=save(), row={id:'safe-slot',status:'known' as const,text:'Уже известный факт',audience:{known:['Илья'],suspected:[]}};
+ s.state.story_secrets!.personal.b=[row];
+ await render(s);
+ const original=host.querySelector('[data-secret-id="safe-slot"]');
+ expect(original?.textContent).toContain('по сведениям ГГ');
+ await toggle();
+ expect(original?.isConnected).toBe(true);
+ expect(original?.textContent).toContain('по сведениям ГГ');
+ const full={...row,id:'preview-id',slot_id:row.id,audience:{known:['Илья','Марина'],suspected:['Тимур']}};
+ await act(()=>requests.pending[0].resolve({revision:1,character_id:'b',rows:[full]}));
+ expect(original?.textContent).toContain('Марина');
+ expect(original?.textContent).toContain('Тимур');
+ expect(original?.textContent).not.toContain('по сведениям ГГ');
+ await toggle();
+ expect(original?.isConnected).toBe(true);
+ expect(host.innerHTML).not.toMatch(/Марина|Тимур/);
+ expect(original?.textContent).toContain('по сведениям ГГ');
+});
 it.each(['actor','save','revision','card','surface','closed'])('discards rendered and in-flight secrets before %s scope renders',async(change)=>{
  await render();expect(requests.pending).toHaveLength(0);await toggle();
  const first=requests.pending[0];

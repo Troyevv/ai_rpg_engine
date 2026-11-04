@@ -18,6 +18,18 @@ async function setup(p:Page,r:APIRequestContext,theme='graphite'){
 async function clean(p:Page){
  const html=await p.content();for(const value of [SONYA,MAXIM,WORLD,'fact_sonya_love','fact_maxim_sale','private183','world183','AUTHOR_EVIDENCE_181'])expect(html).not.toContain(value);
 }
+// Keep the real server projection; hold only delivery so loading/cancel cannot
+// accidentally be tested after a fast local response has already arrived.
+async function delaySpoilers(p:Page){
+ let release!:()=>void, started!:()=>void;
+ const received=new Promise<void>(resolve=>started=resolve), gate=new Promise<void>(resolve=>release=resolve);
+ await p.route('**/story-secret-spoilers?**',async route=>{
+  const response=await route.fetch();started();await gate;
+  // The user may cancel or navigate away while this response is held.
+  await route.fulfill({response}).catch(()=>{});
+ },{times:1});
+ return {received,release};
+}
 for(const theme of ['graphite','parchment'])test(`explicit spoiler scopes, reset, search and canonical knowledge: ${theme}`,async({page,request})=>{
  test.setTimeout(120000);const s=await setup(page,request,theme),before=await view(request,s);
  const canonical=await(await request.get(`/api/saves/${s.save}/author-state`)).json();
@@ -56,22 +68,66 @@ for(const theme of ['graphite','parchment'])test(`explicit spoiler scopes, reset
  }
  await page.emulateMedia({reducedMotion:'reduce'});await dossier(page,'sonya');await expect(page.locator('[data-fog-active=true]')).toHaveCount(0);
  await control(page).click();await expect(area(page)).toContainText(SONYA);
+ await expect(area(page).locator('.is-preview-revealing, [data-fog-active=true]')).toHaveCount(0);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test('spoiler fog disperses over the same card without collapsing the list or consuming a reveal',async({page,request})=>{
+ const s=await setup(page,request);await dossier(page,'sonya');
+ const browser=area(page).locator('.secret-browser:visible'), toggle=control(page);
+ const first=browser.locator('.secret-entry.is-hidden').first();
+ await expect(first).toBeVisible();await toggle.focus();
+ const slotId=await first.getAttribute('data-secret-id');
+ expect(slotId).toBeTruthy();
+ const card=browser.locator(`[data-secret-id="${slotId}"]`);
+ const top=()=>card.evaluate(e=>e.getBoundingClientRect().top);
+ const previousTop=await top(), previousHeight=await card.evaluate(e=>e.getBoundingClientRect().height);
+ const delayed=await delaySpoilers(page);
+ await toggle.press('Space');await delayed.received;
+ try {
+  // Before the network reply there is still a full, anonymous, fogged card.
+  await expect(card.locator('canvas')).toBeVisible();await expect(toggle).toBeFocused();await clean(page);
+  expect(Math.abs((await top())-previousTop)).toBeLessThanOrEqual(2);
+  expect(await card.evaluate(e=>e.getBoundingClientRect().height)).toBe(previousHeight);
+ } finally { delayed.release(); }
+ await expect(card).toHaveClass(/is-preview-revealing/);
+ expect(Math.abs((await top())-previousTop)).toBeLessThanOrEqual(4);
+ await expect(toggle).toBeFocused();
+ // Inspect the actual painted canvas during the dissolve: the opaque base veil
+ // must become translucent. An idle fog canvas or a CSS-only fade cannot pass.
+ const alphaSamples=new Set<number>();
+ await expect.poll(async()=>{
+  const alpha=await card.locator('canvas').evaluateAll(nodes=>
+   (nodes[0] as HTMLCanvasElement|undefined)?.getContext('2d')?.getImageData(0,0,1,1).data[3]);
+  if(alpha!==undefined && alpha>0 && alpha<235)alphaSamples.add(alpha);
+  return alphaSamples.size;
+ },{intervals:[50,80,100],timeout:4000}).toBeGreaterThan(1);
+ const sale=browser.locator('.secret-entry').filter({hasText:MAXIM});
+ await expect(sale).toContainText(/Знают[\s:]*Максим/);
+ await expect(sale).toContainText(/Подозревают[\s:]*Илья/);
+ await expect(card.locator('canvas')).toHaveCount(0);
+ await expect(browser.locator('.is-revealing')).toHaveCount(0);
+ expect(await page.evaluate(()=>Object.keys(localStorage).filter(k=>k.includes(':fog:')))).toEqual([]);
+ await toggle.press('Space');
+ await expect(card).toHaveClass(/is-hidden/);await clean(page);
+ await expect(browser.locator('.secret-entry').filter({hasText:/Максим|Соня|Илья|Подозревают|Знают/})).toHaveCount(0);
+ expect((await view(request,s)).state.notification_history).toHaveLength(0);
 });
 
 test('late responses, cancel, scope change, failure and retry cannot restore author data',async({page,request})=>{
  const s=await setup(page,request);await dossier(page,'sonya');
- let release!:()=>void;let arrived!:()=>void;
+ let release!:()=>void;
  async function hold(){
-  const seen=new Promise<void>(resolve=>arrived=resolve),gate=new Promise<void>(resolve=>release=resolve);
-  await page.route('**/story-secret-spoilers?**',async route=>{const response=await route.fetch();arrived();await gate;await route.fulfill({response}).catch(()=>{})},{times:1});
-  await control(page).click();await seen;
+  const delayed=await delaySpoilers(page);release=delayed.release;
+  await control(page).click();await delayed.received;
  }
  await hold();await control(page).click();release();await expect(control(page)).toHaveAttribute('aria-checked','false');await clean(page);
  await hold();await dossier(page,'ilya');release();await expect(control(page)).toHaveAttribute('aria-checked','false');await clean(page);
  await hold();await nav(page,'Тайны');release();await expect(control(page)).toHaveAttribute('aria-checked','false');await clean(page);
  await page.route('**/story-secret-spoilers?**',route=>route.fulfill({status:500,json:{detail:'PRIVATE_SERVER_ERROR_183'}}),{times:1});
- await control(page).click();await expect(area(page).getByRole('alert')).toBeVisible();expect(await page.content()).not.toContain('PRIVATE_SERVER_ERROR_183');
+ await control(page).click();await expect(area(page).getByRole('alert')).toBeVisible();
+ await expect(area(page).locator('.secret-entry.is-hidden').first()).toBeVisible();await clean(page);
+ expect(await page.content()).not.toContain('PRIVATE_SERVER_ERROR_183');
  await area(page).getByRole('button',{name:'Повторить',exact:true}).click();await expect(area(page)).toContainText(WORLD);
  await control(page).click();await clean(page);
  expect((await view(request,s)).state.notification_history).toHaveLength(0);
@@ -88,7 +144,10 @@ test('spoiler reading leaves real reveal, fog receipt, regeneration and rollback
   return view(request,s);
  };
  await commit('start',false);await page.reload();await dossier(page,'sonya');
- await control(page).click();await expect(area(page)).toContainText(SONYA);await control(page).click();await clean(page);
+ await control(page).click();const preview=area(page).locator('.secret-entry').filter({hasText:SONYA});
+ await expect(preview).toHaveClass(/is-preview-revealing/);await preview.scrollIntoViewIfNeeded();
+ await expect(preview).not.toHaveClass(/is-preview-revealing/);
+ await control(page).click();await clean(page);
  const stored=await page.evaluate(()=>Object.keys(localStorage).filter(k=>k.includes(':fog:')));expect(stored).toHaveLength(0);
  // Keep App mounted with the pre-commit baseline; poll through the real UI.
  await page.goBack();await nav(page,'Игра');

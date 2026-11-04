@@ -89,6 +89,9 @@ ownership is explicit. Unknown rows remain **exactly** `{id,status}`. The client
 must not infer their keeper/category. Hidden existence produces no slot/count.
 All character surfaces include explicit subjects and keepers; the global view
 deduplicates their shared opaque slots. Observing a character grants no access.
+The ordinary view can name the controlled actor on a confirmed row. This is a
+POV-limited audience, not a claim that nobody else knows. It never lists other
+characters' private beliefs; hidden rows have neither names nor audience counts.
 
 `GET /api/saves/{sid}/story-secret-spoilers?revision=N[&character_id=ID]` is an
 explicit author read in the same trusted single-user boundary as `author-state`.
@@ -97,6 +100,12 @@ restricts the result to the character's own/related secrets. Stale revisions are
 rejected. The response is `Cache-Control: no-store` and contains only
 `{revision, character_id, rows}`. Rows contain an opaque author-view ID, canonical
 text, known/spoiler status, the controlled actor's belief status and category.
+The author view lists who currently knows and who suspects each fact in
+`audience.known` and `audience.suspected` (display names). These lists come from
+canonical Knowledge on the active version, not from subjects, keepers or initial
+witnesses. For a row already present in the ordinary projection, `slot_id`
+identifies its existing opaque slot for this observer. Facts absent from the
+ordinary projection do not reserve space or expose a link before activation.
 There are no raw cards, arbitrary private facts, correspondence or full snapshots.
 `story_secret` remains the sole classification criterion. This endpoint is not a
 new authentication mechanism; the deployment trust requirements above still apply.
@@ -106,8 +115,12 @@ resets on section/card/surface/save/revision/controlled-actor changes, closing o
 reload. Abort and response guards discard late results, while component identity
 removes prior text before a changed scope renders. Search only indexes current
 rows and is cleared on mode changes. Neither text nor activation is persisted in
-browser storage. Spoiler rendering bypasses reveal animation/acknowledgements;
-normal subsequent disclosure still uses the existing notification/fog receipts.
+browser storage. While the request is pending, visible cards stay in place.
+On success, the same fog renderer used by a story discovery disperses the veil
+for a visual preview. This transition is transient: it neither records a discovery
+receipt nor sends a notification. Closing the preview removes its text and names
+immediately; reduced motion skips the transition. A later canonical discovery
+still has its own notification and one-time fog receipt.
 
 ### Compatibility and recovery
 

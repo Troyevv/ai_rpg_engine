@@ -3,7 +3,7 @@ from copy import deepcopy
 import pytest
 from test_api import api
 from secret183_fixture import start, SONYA, MAXIM, OWN, WORLD, PRIVATE
-from backend.runtime_v3.secrets import projection
+from backend.runtime_v3.secrets import projection, spoiler_projection
 
 
 def test_start_handoff_own_knowledge_pov_and_readonly_spoilers(api):
@@ -15,7 +15,8 @@ def test_start_handoff_own_knowledge_pov_and_readonly_spoilers(api):
     for text in (SONYA, MAXIM, WORLD, PRIVATE,'fact_sonya_love','fact_maxim_sale','world183','private183'):
         assert text not in response.text
     own=view['state']['story_secrets']['personal']['ilya']
-    assert next(r for r in own if r['status']=='known')['category']=='own'
+    own_row=next(r for r in own if r['status']=='known')
+    assert own_row['category']=='own' and own_row['audience']=={'known':['Илья'],'suspected':[]}
     assert all(set(r)=={'id','status'} for r in own if r['status']=='hidden')
     assert not view['state']['notification_history']
     state=before['world_state']
@@ -39,6 +40,14 @@ def test_start_handoff_own_knowledge_pov_and_readonly_spoilers(api):
         assert (SONYA in text)==(cid in (None,'ilya','sonya'))
         assert (MAXIM in text)==(cid in (None,'sonya','maxim'))
         assert len({r['id'] for r in rows})==len(rows)
+        for r in rows:
+            if r['text']==OWN:
+                assert r['slot_id']==own_row['id']
+            if r['text']==MAXIM:
+                assert r['audience']=={'known':['Максим'],'suspected':['Илья']}
+                assert {'id':r['slot_id'],'status':'hidden'} in view['state']['story_secrets']['personal']['sonya']
+            if r['text'].startswith(WORLD):
+                assert 'slot_id' not in r and r['audience']=={'known':[],'suspected':[]}
     assert repo.get_snapshot(sid)==before
     assert build_context(repo.get_snapshot(sid), [], 'Вспоминаю свою музыку.', 'turn', 32768, 4096)==context
     assert client.get(path).json()==view
@@ -172,10 +181,47 @@ def test_unknown_keeper_birth_cannot_leak_through_fact_metadata():
     from backend.services.draft_initial import inspect_candidate
     from secret183_fixture import candidate
     from unittest.mock import patch
-    s=migrate_v2(inspect_candidate(candidate())[0]).snapshot['world_state']
+    snapshot=migrate_v2(inspect_candidate(candidate())[0]).snapshot
+    s=snapshot['world_state']
     s['facts']['own181']['secret_keeper_ids'].append('sonya')
     # Reuse the canonical birth visibility predicate: the new reference must be
     # checked by BOTH slot and raw fact projections, not only the dossier.
     with patch('backend.runtime_v3.reproduction.known_birth',side_effect=lambda state,cid,actor:cid!='sonya'):
         assert 'own181' not in visible_fact_ids(s)
         assert not any(r.get('fact_id')=='own181' for rows in projection(s)['personal'].values() for r in rows)
+        assert 'slot_id' not in next(r for r in spoiler_projection(snapshot,'ilya') if r['text']==OWN)
+
+
+def test_audience_and_slot_follow_current_actor_and_beliefs():
+    from backend.runtime_v3.migration import migrate_v2
+    from backend.services.draft_initial import inspect_candidate
+    from secret183_fixture import candidate
+    snapshot=migrate_v2(inspect_candidate(candidate())[0]).snapshot
+    s=snapshot['world_state']
+
+    def spoiler():
+        return next(r for r in spoiler_projection(snapshot,'ilya') if r['text']==OWN)
+
+    def ordinary():
+        return next(r for r in projection(s)['personal']['ilya'] if r.get('text')==OWN)
+
+    # A subject is not a knower, and an actual knower need not be a keeper or subject.
+    s['facts']['own181']['secret_subject_ids'].append('maxim')
+    s['knowledge']['sonya:own181']['status']='known'
+    s['characters']['sonya']['display_name']='Софья'
+    ilya_slot=ordinary()['id']
+    assert ordinary()['audience']=={'known':['Илья'],'suspected':[]}
+    assert sorted(spoiler()['audience']['known'])==['Илья','Софья']
+    assert spoiler()['audience']['suspected']==[]
+
+    s['camera']['controlled_actor_id']='sonya'
+    assert ordinary()['id']==spoiler()['slot_id']!=ilya_slot
+    assert ordinary()['audience']=={'known':['Софья'],'suspected':[]}
+    for status in ('suspected','refuted','superseded','outdated','unknown'):
+        s['knowledge']['ilya:own181']['status']=status
+        assert spoiler()['audience']=={'known':['Софья'],'suspected':['Илья'] if status=='suspected' else []}
+        assert ordinary()['audience']=={'known':['Софья'],'suspected':[]}
+
+    s['camera']['controlled_actor_id']=None
+    assert projection(s)==dict(personal={},world=[])
+    assert 'slot_id' not in spoiler()

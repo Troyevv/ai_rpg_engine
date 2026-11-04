@@ -204,4 +204,4 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             if row['revision'] != revision: raise ValueError('Сохранение изменилось. Обновите раздел.')
             snapshot, _ = migrate_snapshot(db, json.loads(row['state_json']))
             return dict(revision=revision, character_id=character_id,
-                        rows=spoiler_projection(snapshot['world_state'], character_id))
+                        rows=spoiler_projection(snapshot, character_id))
