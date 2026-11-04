@@ -303,9 +303,12 @@ def test_separate_secret_events_never_cross_reveal_holders():
     s=snapshot();d=draft(s)
     d['secrets']=[dict(text='Первая тайна',holders=['a'],evidence='Первое свидетельство',approved=True),
                   dict(text='Вторая тайна',holders=['b'],evidence='Второе свидетельство',approved=True)]
-    _,_,history=prepare(s,d,'new-person')
+    result,cid,history=prepare(s,d,'new-person')
     assert len(history['events'])==2
-    assert history['events'][0]['witnesses']==['a'] and history['events'][1]['witnesses']==['b']
+    assert history['events'][0]['witnesses']==[cid,'a'] and history['events'][1]['witnesses']==[cid,'b']
+    first,second=[e['fact_ids'][0] for e in history['events']]
+    assert 'b:'+first not in result['world_state']['knowledge']
+    assert 'a:'+second not in result['world_state']['knowledge']
     assert set(history['events'][0]['fact_ids']).isdisjoint(history['events'][1]['fact_ids'])
 
 

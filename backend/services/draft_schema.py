@@ -68,7 +68,7 @@ def world_state_schema():
                     'dimensions': obj({key:{'type':'number','minimum':-100,'maximum':100} for key in RELATION_DIMENSIONS},description=RELATION_CONTRACT,additional=False),
                     'visible_to_ids': IDS},('source_id','target_id','context','dimensions'))
     fact = obj({'id':ID,'text':text('Объективный факт мира, включая собственные тайны значимых персонажей.'),
-                'secret':{'type':'boolean','description':'Приватность, НЕ сюжетная значимость.'},'story_secret':{'type':'boolean','description':'Явная сюжетная тайна. Бытовые просьбы и приватная переписка сами по себе не тайны.'},'secret_subject_ids':IDS,'secret_existence':{'enum':['hidden','discoverable']},'owner_id':OPTIONAL_ID,'character_ids':IDS,
+                'secret':{'type':'boolean','description':'Приватность, НЕ сюжетная значимость.'},'story_secret':{'type':'boolean','description':'Явная сюжетная тайна. Бытовые просьбы и приватная переписка сами по себе не тайны.'},'secret_subject_ids':IDS,'secret_keeper_ids':IDS,'secret_biography_ids':IDS,'secret_existence':{'enum':['hidden','discoverable']},'owner_id':OPTIONAL_ID,'character_ids':IDS,
                 'evidence':array(text('Основание для раскрытия'))},('id','text','secret','character_ids','evidence'))
     knowledge = obj({'actor_id':ID,'fact_id':ID,'status':{'type':'string','enum':['known','suspected','unknown']},
                      'source_event_id':OPTIONAL_ID},('actor_id','fact_id','status'),

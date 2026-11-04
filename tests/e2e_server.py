@@ -755,6 +755,12 @@ if __name__ == '__main__':
         from devtools.narrative_test_world import build_fixture
         return build_fixture('ui-canonical-personal')
 
+    @app.post('/test/secret183-candidate/{wid}')
+    def secret183_candidate(wid: str, semantic: bool = False):
+        from secret183_fixture import stage
+        stage(app.state.repository, wid, semantic)
+        return {'ok': True}
+
     @app.post('/test/secret181-candidate/{wid}')
     def secret181_candidate(wid: str):
         from secret_handoff181_fixture import stage

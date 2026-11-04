@@ -535,6 +535,9 @@ class Fact(StrictModel):
     visibility: Literal['public', 'secret'] = 'public'
     story_secret: bool = False
     secret_subject_ids: list[str] = Field(default_factory=list)
+    # Authored ownership, never a substitute for current Knowledge.
+    secret_keeper_ids: list[str] = Field(default_factory=list)
+    secret_biography_ids: list[str] = Field(default_factory=list)
     secret_existence: Literal['hidden', 'discoverable'] = 'hidden'
     origin_remote_event_id: str | None = None
     character_ids: list[str] = Field(default_factory=list)
@@ -749,6 +752,14 @@ def assert_world_state_v3_invariants(state, before=None):
     for item in value['facts'].values():
         if set(item['secret_subject_ids']) - actors.keys() or (not item['story_secret'] and item['secret_subject_ids']):
             fatal('Некорректные субъекты сюжетной тайны', section='facts', entity=item['id'])
+        if (set(item['secret_keeper_ids']) - actors.keys() or
+                (item['secret_keeper_ids'] and not item['story_secret']) or
+                len(set(item['secret_keeper_ids'])) != len(item['secret_keeper_ids'])):
+            fatal('Некорректные хранители собственной тайны', section='facts', entity=item['id'])
+        if (set(item['secret_biography_ids']) - actors.keys() or
+                (item['secret_biography_ids'] and not item['story_secret']) or
+                len(set(item['secret_biography_ids'])) != len(item['secret_biography_ids'])):
+            fatal('Некорректные субъекты биографической тайны', section='facts', entity=item['id'])
     from backend.runtime_v3.secrets import validate_disclosures
     validate_disclosures(value)
     for item in value['threads'].values():

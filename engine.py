@@ -137,6 +137,9 @@ def run_job(path, job_id, handle):
                 actual_context = model.get('config', {}).get('context_length') or config['context_length']
                 context = min(int(actual_context), config['context_length'])
             before = json.loads(job['memory_before_json'] or job['before_json'])
+            from backend.runtime_v3.repository import restore_biographical_secrets
+            with storage.connect() as db:
+                restore_biographical_secrets(db, before)
             from backend.runtime_v3.models import assert_world_state_v3_invariants
             before['world_state']=assert_world_state_v3_invariants(before['world_state'])
             if job['kind']=='turn' and config.get('interaction_channel'):

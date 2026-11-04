@@ -173,11 +173,12 @@ def prepare(snapshot, payload, operation_id, history=None):
         if not secret.approved: raise ValueError(f'secrets.{i}: подтверди собственную биографическую тайну.')
         if set(secret.holders)-s['characters'].keys(): raise ValueError(f'secrets.{i}: неизвестный носитель знания.')
         fid=stable_id('biography',[operation_id,i]);facts.append(fid)
-        s['facts'][fid]=Fact(id=fid,text=secret.text,visibility='secret',character_ids=[cid]).model_dump()
+        s['facts'][fid]=Fact(id=fid,text=secret.text,visibility='secret',character_ids=[cid],
+            story_secret=True,secret_subject_ids=[cid],secret_keeper_ids=[cid]).model_dump()
         secret_event=stable_id('onboarding-secret',[operation_id,i])
-        events.append(dict(id=secret_event,text=secret.evidence,participants=[cid],witnesses=list(dict.fromkeys(secret.holders)),fact_ids=[fid],medium='testimony',minute=s['meta']['world_time'],turn_id=s['meta']['turn_id'],player_observed=True))
-        for holder in dict.fromkeys(secret.holders):
-            record=Knowledge(actor_id=holder,fact_id=fid,source_event_id=secret_event,evidence=secret.evidence,source_turn=s['meta']['turn_id']).model_dump()
+        events.append(dict(id=secret_event,text=secret.evidence,participants=[cid],witnesses=list(dict.fromkeys([cid,*secret.holders])),fact_ids=[fid],medium='testimony',minute=s['meta']['world_time'],turn_id=s['meta']['turn_id'],player_observed=True))
+        for holder in dict.fromkeys([cid,*secret.holders]):
+            record=Knowledge(confirmed_once=True,actor_id=holder,fact_id=fid,source_event_id=secret_event,evidence=secret.evidence,source_turn=s['meta']['turn_id']).model_dump()
             s['knowledge'][holder+':'+fid]=record;acquisitions.append(record)
     from backend.runtime_v3.personality import initialize_profiles
     from backend.runtime_v3.appearance import initialize_profiles as initialize_appearance
