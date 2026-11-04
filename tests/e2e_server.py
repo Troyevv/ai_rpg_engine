@@ -741,6 +741,19 @@ if __name__ == '__main__':
         from devtools.narrative_test_world import build_fixture
         return build_fixture('ui-canonical-personal')
 
+    @app.post('/test/secret181-candidate/{wid}')
+    def secret181_candidate(wid: str):
+        from secret_handoff181_fixture import stage
+        stage(app.state.repository, wid, own=True)
+        return {'ready': True}
+
+    @app.post('/test/secret181-prepare/{sid}')
+    def secret181_prepare(sid: int, reveal: bool = True):
+        global story168_payload
+        from secret_handoff181_fixture import payload
+        story168_payload = payload(app.state.repository.get_snapshot(sid), reveal)
+        return {'ready': True}
+
     @app.post('/test/story168-seed')
     def story168_seed():
         from story_notifications_fixture import seed
