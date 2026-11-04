@@ -232,5 +232,12 @@ def install(app,repo,preparation,credentials,job):
     def export(wid:str,version_id:int,format:Literal['md','txt','json']='md'):
         value=repo.draft(wid,True)
         if value['version_id']!=version_id:raise ValueError('Версия изменилась. Обнови редактор.')
-        text=json.dumps(value.get('candidate') if value.get('candidate') is not None else value['state'],ensure_ascii=False,indent=2) if format=='json' else domain.export_markdown(value['state'])
+        from backend.services.draft_portraits import export_assets
+        import base64
+        state=value.get('candidate') if value.get('candidate') is not None else value['state']
+        assets=export_assets(repo,wid,state) if state and 'world' in state and 'characters' in state['world'] else {}
+        if format=='json': text=json.dumps({'state':state,'portrait_assets':assets} if assets else state,ensure_ascii=False,indent=2)
+        else:
+            text=domain.export_markdown(value['state'])
+            if assets: text+='\n<!-- AI_RPG_PORTRAITS_V1 '+base64.b64encode(json.dumps(assets).encode()).decode()+' -->\n'
         return PlainTextResponse(text,media_type='application/json' if format=='json' else 'text/plain',headers={'Content-Disposition':f'attachment; filename="world.{format}"'})

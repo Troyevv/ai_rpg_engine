@@ -253,7 +253,8 @@ def stream(**kwargs):
     if current_phone.get('communication'):
         camera=current_phone['camera']
         voice=current_phone['communication'].get('focus')=='call'
-        if phone_mode.startswith('office'):
+        # AI-editor fixtures reset the optional phone scenario between tests.
+        if (phone_mode or '').startswith('office'):
             from call_continuity_fixture import response,BEFORE,AFTER
             task=json.loads(next(m['content'].split('\n',1)[1] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')))
             if voice:
@@ -708,7 +709,7 @@ if __name__ == '__main__':
         return {'world':seed['world'],'save':seed['save']}
 
     @app.post('/test/phone-seed')
-    def phone_seed(unread: bool = False, incoming: bool = True, decision: str = "silent", polish: bool = False, hidden: bool = False, strangers: bool = False):
+    def phone_seed(unread: bool = False, incoming: bool = True, decision: str = "silent", polish: bool = False, hidden: bool = False, strangers: bool = False, legacy_portraits: bool = False):
         global phone_mode
         phone_mode=decision
         from devtools.narrative_test_world import load_fixture
@@ -723,6 +724,11 @@ if __name__ == '__main__':
         snap=repo.get_snapshot(sid)
         from backend.runtime_v3.models import WorldHistoryV3
         batch=WorldHistoryV3().to_dict()
+        if legacy_portraits:
+            # Explicit pre-175 save fixture: preserve coverage of the old fallback.
+            for actor in snap['world_state']['characters'].values():
+                actor.pop('procedural_portrait', None)
+                actor.pop('portrait_mode', None)
         if strangers:
             snap['world_state']['contacts'] = {}
         if polish:

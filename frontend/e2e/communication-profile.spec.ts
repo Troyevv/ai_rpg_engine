@@ -1,3 +1,4 @@
+import {workshopNav,draftsMenu} from './workshop-navigation';
 import { test, expect } from "@playwright/test";
 import { nav } from "./navigation";
 
@@ -42,16 +43,13 @@ for (const skin of ["graphite", "parchment"])
       .getByRole("button", { name: "Развить идею и создать мир", exact: true })
       .click();
     await expect(
-      page.getByRole("heading", { name: "Посмотри, что получилось" }),
+      page.locator('.ww-hero h1'),
     ).toBeVisible();
     await page.getByRole("button", { name: "Автор мира", exact: true }).click();
     await page
       .getByRole("button", { name: "Показать всё", exact: true })
       .click();
-    await page
-      .locator(".workshop-tabs")
-      .getByRole("button", { name: "Начало", exact: true })
-      .click();
+    await workshopNav(page,'Сцена и правила');
     const editor = page
       .locator(".workshop-content")
       .getByRole("region", { name: "Технологии связи" });
@@ -85,12 +83,12 @@ for (const skin of ["graphite", "parchment"])
       magic: true,
       preset: "custom",
     });
+    await workshopNav(page,'Проверка мира');
     await page
       .getByRole("button", { name: "Повторить проверку", exact: true })
       .click();
-    await expect(
-      page.getByRole("heading", { name: "Посмотри, что получилось" }),
-    ).toBeVisible();
+    await workshopNav(page,'Обзор мира');
+    await expect(page.locator('.ww-hero h1')).toBeVisible();
     await page
       .getByRole("button", {
         name: "Подтвердить мир и начать игру",

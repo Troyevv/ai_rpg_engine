@@ -213,7 +213,7 @@ export default function App() {
   };
   if(gameMode==='tabletop')return <ThemeProvider world={null}><ThemedToaster/><Tabletop onBack={()=>changeMode('narrative')} onSettings={()=>setSettings(true)} prefs={prefs} apiKey={apiKey}/><Settings open={settings} onOpenChange={setSettings} value={prefs} save={async p=>{await api(`/settings/${profile}`,p,'PUT');setPrefs(p);}} apiKey={apiKey} setApiKey={setApiKey}/></ThemeProvider>;
   return (
-    <ThemeProvider world={world}><div className={`app-shell narrative-shell ${inspector?"inspector-open":""} ${reading&&!inspector ? "reading" : ""}`}>
+    <ThemeProvider world={world} preview={view==='prepare'}><div className={`app-shell narrative-shell ${view==='prepare'?'workshop-open':''} ${inspector?"inspector-open":""} ${reading&&!inspector ? "reading" : ""}`}>
       <ThemedToaster />
       {!mobile&&<nav className="nav-rail" aria-label="Главная навигация">
         <button
@@ -297,6 +297,7 @@ export default function App() {
         </header>
         {view === "prepare" && (
           <WorldWorkshop
+            onBack={()=>navigate("game")} onSettings={()=>setSettings(true)}
               onGame={choose}
             prefs={prefs}
             apiKey={apiKey}

@@ -1,3 +1,4 @@
+import {workshopNav} from './workshop-navigation';
 import {test,expect} from '@playwright/test';
 import {nav} from './navigation';
 
@@ -18,7 +19,7 @@ test('calendar settings persist and resolve exact time',async({page,request},inf
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth));
  await page.getByLabel('Описание мира или текст импорта').fill('TEST_JSON_CONTINUATION. Сейчас 23.10.2026, 06:00, пятница. Соседи на кухне.');
  await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
- await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
+ await expect(page.locator('.ww-hero h1')).toBeVisible();
  const draft=await(await request.get(`/api/workspaces/${workspace.id}/draft?author=true`)).json();
  expect(draft.state.world_clock.minute%1440).toBe(720);
  expect(draft.state.world_clock.calendar.start_date).toBe('1370-10-23');
@@ -26,6 +27,7 @@ test('calendar settings persist and resolve exact time',async({page,request},inf
  expect(draft.validation.errors).toEqual([]);
  await page.getByRole('button',{name:'Автор мира',exact:true}).click();
  await page.getByRole('button',{name:'Показать всё',exact:true}).click();
+ await workshopNav(page,'Проверка мира');
  await expect(page.getByText(/применена настройка 1370-10-23/)).toBeVisible();
  await page.screenshot({path:`test-results/calendar-preview-${info.project.name}.png`,fullPage:true});
 });

@@ -27,7 +27,7 @@ export const enumLabels:Record<string,string>={
  eye_color:'Цвет глаз',natural_hair_color:'Природный цвет волос',skin:'Кожа',face:'Лицо',build:'Телосложение',height:'Рост',scar:'Шрам',tattoo:'Татуировка',piercing:'Пирсинг',hairstyle:'Причёска',facial_hair:'Растительность на лице',cosmetic:'Косметика',fulfilled:'Выполнено',missed:'Пропущено',dependency_cancelled:'Отменено вслед за зависимостью',profession:'Профессия',occupation:'Занятие',study:'Учёба',parent_organization:'Материнская организация',
 };
 const technical=new Set(['birth_provenance','birth_date_provenance','id','revision','source_turn','source_turn_id','reviewed_signature','provenance','field_facts','remote_source_ids','source_ids','seen_sources','applied','source_sequence','emotion_source_sequence']);
-const characterRefs=new Set(['source_id','target_id','actor_id','owner_id','holder_id','character_id','character_ids','visible_to_ids','participants','witnesses','sender_id','recipient_ids','mother_id','father_id','child_id','child_ids','protagonist_id','controlled_actor_id','parent_ids','decision_actor_ids','gestational_actor_id','impregnating_actor_id','delegated_to']);
+export const characterRefs=new Set(['source_id','target_id','actor_id','owner_id','holder_id','character_id','character_ids','visible_to_ids','participants','witnesses','sender_id','recipient_ids','mother_id','father_id','child_id','child_ids','protagonist_id','controlled_actor_id','parent_ids','decision_actor_ids','gestational_actor_id','impregnating_actor_id','delegated_to']);
 export function resolver(state:DisplayState) {
  const world=state.world;
  const entries=(key:string)=>Object.entries((world[key] || {}) as Record<string,RecordValue>).map(([id,item])=>({id,...item}));

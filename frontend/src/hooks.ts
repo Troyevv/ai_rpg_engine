@@ -7,6 +7,9 @@ function latestSnapshot(previous:Job|null,incoming:Job|null):Job|null {
   if(!previous||!incoming||previous.id!==incoming.id)return incoming;
   const oldEpoch=previous.attempt_epoch??0,newEpoch=incoming.attempt_epoch??0;
   if(oldEpoch!==newEpoch)return newEpoch>oldEpoch?incoming:previous;
+  // Resume's queued HTTP snapshot can arrive after SSE already announced review.
+  // The same attempt never returns to the unstarted phase; retain its observed state.
+  if(active(previous)&&active(incoming)&&previous.phase&&!incoming.phase)return previous;
   const rank:Record<string,number>={generating:0,extracting:1,validating:2,error:3,stopped:3,saved:4};
   if((rank[incoming.status]??0)<(rank[previous.status]??0))return previous;
   if(previous.narrative.length>incoming.narrative.length&&previous.narrative.startsWith(incoming.narrative))return {...incoming,narrative:previous.narrative};

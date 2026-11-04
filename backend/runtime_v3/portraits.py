@@ -16,6 +16,7 @@ def authorized(state, cid):
 
 
 def select_portrait(state, cid):
+    if state['characters'][cid].get('portrait_mode') == 'procedural': return None
     age,stage=life_period(state,cid)
     rows=[]
     for p in state['characters'][cid].get('portraits',[]):
@@ -39,5 +40,10 @@ def silhouette(state,cid):
 def projection(state,cid):
     if not authorized(state,cid): return dict(portrait=None,silhouette='neutral')
     p=select_portrait(state,cid)
-    return dict(portrait={k:p[k] for k in ('id','asset_id','width','height','crop','label')} if p else None,
+    descriptor=state['characters'][cid].get('procedural_portrait')
+    # A portrait for a different life period never becomes the current face.
+    if descriptor and descriptor.get('stage') != life_period(state,cid)[1]: descriptor=None
+    # Game births have private life/appearance semantics; do not disclose descriptors.
+    if is_game_birth(state,cid) and state['camera']['controlled_actor_id'] != cid: descriptor=None
+    return dict(procedural_portrait=descriptor, portrait={k:p[k] for k in ('id','asset_id','width','height','crop','label')} if p else None,
                 silhouette=silhouette(state,cid))

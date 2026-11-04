@@ -1,3 +1,4 @@
+import {workshopNav} from './workshop-navigation';
 import {test,expect} from '@playwright/test';
 import {nav} from './navigation';
 import {defaults} from '../src/types';
@@ -14,6 +15,7 @@ test('paid rejected creative resumes through review and save without regeneratio
  expect((await request.put(`/api/settings/${profile}`,{data:{...defaults,summary:{...defaults.summary,context_length:131072,max_tokens:20000}}})).ok()).toBe(true);
  await page.evaluate(wid=>localStorage.setItem('draftWorkspace',wid),workspace.id);
  await page.reload();await nav(page,'Создать');
+ await workshopNav(page,'Проверка мира');
  await expect(page.getByText('Творческое развитие не завершено.',{exact:false})).toBeVisible();
  await page.getByRole('button',{name:'Продолжить творческое развитие',exact:true}).click();
  await expect.poll(async()=> (await(await request.get(url+'?author=true')).json()).creative_status).toBe('applied');

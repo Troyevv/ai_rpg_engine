@@ -137,7 +137,7 @@ def ui_view(snapshot, history=None):
     from backend.runtime_v3.kinship import genealogy, visible_relations
     from backend.runtime_v3.life import capabilities
     for cid, actor in world['characters'].items():
-        for field in ('life_fact_id','name_history','parentage_complete_fact_id','personality','values','appearance','portraits'):
+        for field in ('life_fact_id','name_history','parentage_complete_fact_id','personality','values','appearance','portraits','procedural_portrait','portrait_mode'):
             actor.pop(field,None)
     from backend.runtime_v3.personality import visible_item
     # One bounded-per-actor projection pass, not NPC-count × History scans.

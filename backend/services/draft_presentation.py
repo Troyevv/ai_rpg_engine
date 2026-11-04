@@ -29,13 +29,13 @@ def editor_contract():
     from backend.services.draft_world import FIELDS
     from backend.services.draft_initial import EXTENSIONS
     from backend.runtime_v3.models import Character,ScheduledEvent
-    enums={};schemas={}
+    enums={};schemas={};definitions={}
     for kind,model in dict(EXTENSIONS,actor=Character,scheduled_events=ScheduledEvent).items():
-        enums[kind]={};schemas[kind]=model.model_json_schema()['properties']
+        enums[kind]={};schema=model.model_json_schema();schemas[kind]=schema['properties'];definitions.update(schema.get('$defs',{}))
         for key,schema in schemas[kind].items():
             enum=schema.get('enum') or next((part['enum'] for part in schema.get('anyOf',[]) if 'enum' in part),None)
             if enum:enums[kind][key]=enum
-    return dict(fields={k:sorted(v) for k,v in FIELDS.items()},enums=enums,schemas=schemas)
+    return dict(fields={k:sorted(v) for k,v in FIELDS.items()},enums=enums,schemas=schemas,definitions=definitions)
 
 
 def calendar_notices(state):

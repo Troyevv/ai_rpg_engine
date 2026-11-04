@@ -141,7 +141,7 @@ def normalize_calendar(clock):
 SERVER_FIELDS = frozenset(('birth_provenance', 'birth_date_provenance', 'authoring',
     'source_turn', 'source_sequence', 'emotion_source_sequence', 'field_facts', 'revision',
     'applied', 'remote_source_ids', 'confirmed_once', 'review_required', 'reviewed_signature',
-    'time_reference_minute'))
+    'time_reference_minute', 'portraits', 'procedural_portrait', 'portrait_mode'))
 
 
 def prompt_schema():

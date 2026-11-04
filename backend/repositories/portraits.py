@@ -16,6 +16,10 @@ def initialize(db):
       id TEXT PRIMARY KEY, world_id INTEGER NOT NULL, content BLOB NOT NULL,
       width INTEGER NOT NULL, height INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)''')
+    db.execute("""CREATE TABLE IF NOT EXISTS portrait_asset_access (
+      asset_id TEXT NOT NULL, scope TEXT NOT NULL, owner TEXT NOT NULL,
+      PRIMARY KEY(asset_id,scope,owner))""")
+    db.execute("INSERT OR IGNORE INTO schema_migrations(name) VALUES('portrait_asset_access_v2')")
     db.execute("INSERT OR IGNORE INTO schema_migrations(name) VALUES('portrait_assets_v1')")
 
 
@@ -44,7 +48,7 @@ def asset(repo,sid,cid,aid):
         row,snapshot=load(db,sid,cid)
         if not any(p['asset_id']==aid and not p['deleted'] for p in snapshot['world_state']['characters'][cid]['portraits']):
             raise ValueError('Портрет недоступен.')
-        value=db.execute('SELECT content FROM portrait_assets WHERE id=? AND world_id=?',(aid,row['world_id'])).fetchone()
+        value=db.execute("SELECT content FROM portrait_assets WHERE id=? AND (world_id=? OR EXISTS (SELECT 1 FROM portrait_asset_access a WHERE a.asset_id=portrait_assets.id AND a.scope='world' AND a.owner=?))",(aid,row['world_id'],str(row['world_id']))).fetchone()
         if value is None: raise ValueError('Портрет недоступен.')
         return value[0]
 
@@ -59,25 +63,11 @@ def edit(repo,sid,cid,revision,*,image=None,portrait_id=None,changes=None,remove
         row,snapshot=load(db,sid,cid)
         if row['revision']!=revision: raise ValueError('Сейв изменился. Обнови карточку.')
         actor=snapshot['world_state']['characters'][cid];before=deepcopy(actor['portraits'])
-        existing=next((p for p in actor['portraits'] if p['id']==portrait_id and not p['deleted']),None)
-        if portrait_id is not None and existing is None: raise ValueError('Портрет недоступен.')
+        aid=uuid.uuid4().hex if image is not None else None
+        mutate(actor,snapshot['world_state'],cid,image=image,asset_id=aid,portrait_id=portrait_id,changes=changes,remove=remove)
         if image is not None:
-            if len(actor['portraits'])>=128: raise ValueError('Достигнут лимит 128 портретов персонажа.')
-            content,w,h=image;aid=uuid.uuid4().hex
-            _,stage=life_period(snapshot['world_state'],cid)
-            p=PortraitReference(id=uuid.uuid4().hex,asset_id=aid,width=w,height=h,stage=stage,
-                                order=max((p['order'] for p in actor['portraits']),default=0)+1).model_dump()
-            # Replacement retains its predecessor in history; no shared mutable binary.
-            if existing: p.update({k:deepcopy(existing[k]) for k in ('stage','min_age','max_age','label')})
+            content,w,h=image
             db.execute('INSERT INTO portrait_assets(id,world_id,content,width,height) VALUES(?,?,?,?,?)',(aid,row['world_id'],content,w,h))
-            actor['portraits'].append(p)
-        elif existing: p=existing
-        else: raise ValueError('Выбери изображение.')
-        p.update({k:deepcopy(v) for k,v in changes.items() if k!='make_current'})
-        if changes.get('make_current'):
-            p['order']=max((x['order'] for x in actor['portraits']),default=0)+1
-        if remove: p['deleted']=True
-        validated=PortraitReference.model_validate(p).model_dump();p.clear();p.update(validated)
         batch=WorldHistoryV3()
         batch.state_changes.append(dict(kind='portrait_edit',entity=cid,source='user_attachment',
             minute=snapshot['world_state']['meta']['world_time'],before=before,after=deepcopy(actor['portraits'])))
@@ -85,3 +75,27 @@ def edit(repo,sid,cid,revision,*,image=None,portrait_id=None,changes=None,remove
         project(db,sid,snapshot)
         db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?',(json.dumps(snapshot,ensure_ascii=False),sid))
     return listing(repo,sid,cid)
+
+
+def mutate(actor,state,cid,*,image=None,asset_id=None,portrait_id=None,changes=None,remove=False):
+    """Shared save/draft metadata operation. The caller owns transaction and bytes."""
+    changes=changes or {}
+    actor.setdefault('portraits',[])
+    existing=next((p for p in actor['portraits'] if p['id']==portrait_id and not p['deleted']),None)
+    if portrait_id is not None and existing is None: raise ValueError('Портрет недоступен.')
+    if image is not None:
+        if len(actor['portraits'])>=128: raise ValueError('Достигнут лимит 128 портретов персонажа.')
+        _,w,h=image
+        _,stage=life_period(state,cid)
+        p=PortraitReference(id=uuid.uuid4().hex,asset_id=asset_id,width=w,height=h,stage=stage,
+            order=max((p['order'] for p in actor['portraits']),default=0)+1).model_dump()
+        if existing: p.update({k:deepcopy(existing[k]) for k in ('stage','min_age','max_age','label')})
+        actor['portraits'].append(p)
+    elif existing: p=existing
+    else: raise ValueError('Выбери изображение.')
+    p.update({k:deepcopy(v) for k,v in changes.items() if k!='make_current'})
+    if changes.get('make_current'):
+        p['order']=max((x['order'] for x in actor['portraits']),default=0)+1
+        actor['portrait_mode']='auto'
+    if remove: p['deleted']=True
+    validated=PortraitReference.model_validate(p).model_dump();p.clear();p.update(validated)

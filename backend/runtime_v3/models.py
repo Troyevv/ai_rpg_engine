@@ -414,6 +414,21 @@ class PortraitCrop(StrictModel):
     zoom: float = Field(default=1.0, ge=1, le=4)
 
 
+class ProceduralPortrait(StrictModel):
+    """Versioned presentation only; never evidence for Appearance or Knowledge."""
+    version: Literal[1] = 1
+    seed: str = Field(pattern=r'^[a-f0-9]{32}$')
+    form: Literal['neutral', 'human'] = 'neutral'
+    stage: Literal['unknown', 'infant', 'child', 'adolescent', 'adult'] = 'unknown'
+    face: int = Field(default=0, ge=0, le=6)
+    hair: int = Field(default=0, ge=0, le=7)
+    skin: int = Field(default=0, ge=0, le=6)
+    eyes: int = Field(default=0, ge=0, le=6)
+    clothing: int = Field(default=0, ge=0, le=7)
+    accessory: int = Field(default=0, ge=0, le=7)
+    palette: int = Field(default=0, ge=0, le=6)
+
+
 class PortraitReference(StrictModel):
     id: str = Field(pattern=r'^[a-f0-9]{32}$')
     asset_id: str = Field(pattern=r'^[a-f0-9]{32}$')
@@ -452,6 +467,8 @@ class Character(StrictModel):
     birth_provenance: dict[str, str | int | None] = Field(default_factory=dict)
     birth_date_provenance: dict[str, str | int | None] = Field(default_factory=dict)
     appearance: AppearanceProfile = Field(default_factory=AppearanceProfile)
+    procedural_portrait: ProceduralPortrait | None = None
+    portrait_mode: Literal['auto', 'procedural'] = 'auto'
     portraits: list[PortraitReference] = Field(default_factory=list, max_length=128)
     personality: PersonalityProfile | None = None
     values: dict[str, DurableValue] | None = None

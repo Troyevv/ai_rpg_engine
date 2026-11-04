@@ -37,6 +37,7 @@ export interface Character {
   appearance_history?:{before?:string|null;after?:string|null;minute:number}[];
   portrait?:import("./Portrait").PortraitRef|null;
   silhouette?:string;
+  procedural_portrait?:import("./workshop/proceduralPortrait").ProceduralPortrait|null;
   id: string;
   name: string;
   aliases?: string[];
@@ -64,7 +65,7 @@ export interface SocialRelation {
 /** Canonical dossier directory; not an actor Knowledge projection. */
 export type DossierPersonalRelation = Omit<SocialRelation, 'certainty'>;
 export interface Genealogy {
-  nodes:{id:string;name:string;life_status:string;birth_date?:string|null;portrait?:import("./Portrait").PortraitRef|null;silhouette?:string}[];
+  nodes:{id:string;name:string;life_status:string;birth_date?:string|null;portrait?:import("./Portrait").PortraitRef|null;silhouette?:string;procedural_portrait?:import("./workshop/proceduralPortrait").ProceduralPortrait|null}[];
   edges:SocialRelation[];
   kinship:{source_id:string;target_id:string;kind:string;lineage:string;generations?:number}[];
   truncated:boolean;
