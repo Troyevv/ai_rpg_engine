@@ -137,6 +137,13 @@ def normalize_calendar(clock):
         pass
 
 
+# Shared ownership boundary for generated proposals and their validator.
+SERVER_FIELDS = frozenset(('birth_provenance', 'birth_date_provenance', 'authoring',
+    'source_turn', 'source_sequence', 'emotion_source_sequence', 'field_facts', 'revision',
+    'applied', 'remote_source_ids', 'confirmed_once', 'review_required', 'reviewed_signature',
+    'time_reference_minute'))
+
+
 def prompt_schema():
     # Keep the descriptive editor schema; omit duplicate prose from the provider
     # schema. Property names such as title/description are data, not annotations.
@@ -158,6 +165,16 @@ def prompt_schema():
     profile=schema['properties']['world_clock']['properties']['calendar']['properties']['profile']
     for field in ('regional','regional_overrides','seasons_enabled'):
         profile['properties'].pop(field,None) # Server-owned presets never consume primary generation context.
+    def omit_server_fields(node):
+        if isinstance(node, list):
+            for child in node: omit_server_fields(child)
+        elif isinstance(node, dict):
+            if isinstance(node.get('properties'), dict):
+                for key in SERVER_FIELDS: node['properties'].pop(key, None)
+                if 'required' in node:
+                    node['required'] = [key for key in node['required'] if key not in SERVER_FIELDS]
+            for child in node.values(): omit_server_fields(child)
+    omit_server_fields(schema)
     return schema
 
 

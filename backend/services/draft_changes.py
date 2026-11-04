@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from backend.repositories.drafts import candidate_hash
 from backend.services.draft_response import strict_loads
 from backend.services.draft_completeness import pointer
-from backend.services.draft_initial import inspect_candidate, prompt_schema, DraftErrors
+from backend.services.draft_initial import inspect_candidate, prompt_schema, DraftErrors, SERVER_FIELDS
 
 
 class ProposalError(ValueError):
@@ -53,6 +53,19 @@ def apply_proposal(state, reply, *, editing=False):
         raise ValueError('Творческое предложение содержит нерешённые авторские конфликты.')
     if proposal.candidate_hash != candidate_hash(state):
         raise ValueError('Кандидат изменился; творческое предложение устарело.')
+    # Older prompts exposed Knowledge.revision. Accept only the exact redundant
+    # default on a NEW record, discard the echo, and let the existing Runtime
+    # Knowledge model assign its default during handoff. Never reset old data.
+    from backend.runtime_v3.models import Knowledge
+    for change in proposal.changes:
+        parts = change.path.split('/')
+        if (change.op == 'add' and len(parts) == 4 and parts[1:3] == ['world', 'knowledge']
+                and parts[3].replace('~1', '/').replace('~0', '~') not in state['world']['knowledge']
+                and isinstance(change.value, dict) and 'revision' in change.value):
+            value = change.value['revision']
+            default = Knowledge.model_fields['revision'].get_default()
+            if type(value) is type(default) and value == default:
+                del change.value['revision']
     trial = deepcopy(state)
     schema = prompt_schema()['properties']
     sections = set(schema['world']['properties']) - {'version', 'communication', 'scene_records'}
@@ -76,7 +89,7 @@ def apply_proposal(state, reply, *, editing=False):
         record_schema = (schema['world']['properties'][parts[1]].get('additionalProperties', {})
                          if root == 'world' else schema[root].get('items', {}) if root in ('characters', 'locations') else {})
         field_index = 3 if root == 'world' else 2
-        if root != 'campaign' and len(parts) > field_index and parts[field_index] not in record_schema.get('properties', {}):
+        if root != 'campaign' and len(parts) > field_index and parts[field_index] not in record_schema.get('properties', {}) and parts[field_index] not in SERVER_FIELDS:
             raise ProposalError('Неизвестное поле сущности: '+path, proposal_paths=[f'/changes/{index}/path'], drop_indices=[index])
         if change.op == 'remove':
             if not editing:
@@ -156,19 +169,23 @@ def validate_transition(state, trial, *, editing=False):
     for key in ('controlled_actor_id','protagonist_id','camera','world_clock','creation_settings','authoring'):
         if state.get(key)!=trial.get(key):raise ValueError('Предложение меняет защищённый контекст: '+key)
     # Reject authority minted inside nested objects, not only at patch paths.
-    def provenance(old, new):
+    def provenance(old, new, path=""):
+        escape = lambda key: str(key).replace("~", "~0").replace("/", "~1")
         if isinstance(new, dict):
-            for key, value in new.items():
+            for key in dict.fromkeys([*new, *([k for k in old if k in SERVER_FIELDS] if isinstance(old, dict) else [])]):
+                value = new.get(key)
                 previous = old.get(key) if isinstance(old, dict) else None
-                if key in ('birth_provenance', 'birth_date_provenance', 'authoring', 'source_turn', 'field_facts', 'revision') and previous != value:
-                    raise ValueError('Модель не может назначать серверное происхождение: '+key)
-                provenance(previous, value)
+                child = path+'/'+escape(key)
+                if key in SERVER_FIELDS and (previous != value or type(previous) is not type(value)):
+                    raise ProposalError('Модель не может назначать серверное происхождение: '+key,
+                                        world_paths=[child])
+                provenance(previous, value, child)
         elif isinstance(new, list):
             old_list = old if isinstance(old, list) else []
             by_id = {v['id']:v for v in old_list if isinstance(v,dict) and isinstance(v.get('id'),str)}
             for i, value in enumerate(new):
                 previous = by_id.get(value['id']) if isinstance(value,dict) and isinstance(value.get('id'),str) else old_list[i] if i < len(old_list) else None
-                provenance(previous, value)
+                provenance(previous, value, path+'/'+str(i))
     provenance(state, trial)
     actor = state['controlled_actor_id']
     if actor not in trial['world']['characters']:

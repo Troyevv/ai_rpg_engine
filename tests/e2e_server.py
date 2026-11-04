@@ -539,6 +539,12 @@ if __name__ == '__main__':
         editor173_control['gate'].set()
         return dict(calls=editor173_control['calls'])
 
+    @app.post('/test/creative185-rejected')
+    def seed_creative185_rejected():
+        from fastapi.testclient import TestClient
+        from creative185_fixture import seed_rejected
+        return seed_rejected(TestClient(app))
+
     @app.post('/test/creative172')
     def seed_creative172(body:dict):
         global creative172_control, phone_mode
