@@ -1,7 +1,7 @@
 """Bounded corrections to an unaccepted proposal, never patches to the world."""
 import json
 from typing import Any
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from backend.repositories.drafts import candidate_hash
 from backend.services.draft_completeness import pointer
 from backend.services.draft_response import strict_loads
@@ -20,6 +20,7 @@ class Correction(BaseModel):
     proposal_hash: str
     patches: list[Assignment]
     drop_indices: list[int]
+    remove_paths: list[str] = Field(default_factory=list)
 
 
 def scope(state, text, exc):
@@ -33,6 +34,7 @@ def scope(state, text, exc):
     if not isinstance(proposal,dict) or not isinstance(proposal.get('changes'),list):return None
     paths=list(getattr(exc,'proposal_paths',[]));world_paths=list(getattr(exc,'world_paths',[]))
     drops=list(getattr(exc,'drop_indices',[]))
+    remove_world=set(getattr(exc,'remove_paths',[]));removes=[]
     diagnostics=getattr(exc,'errors',[])
     if callable(diagnostics):
         diagnostics=diagnostics(include_url=False,include_context=False,include_input=False)
@@ -54,15 +56,17 @@ def scope(state, text, exc):
                 # Keep an entire meaningful record immutable when a diagnostic
                 # does not identify its bad field. Such failures need editing.
                 if tail or not isinstance(change.get('value'),(dict,list)):
-                    paths.append(f'/changes/{index}/value'+tail)
+                    destination=f'/changes/{index}/value'+tail
+                    if path in remove_world:removes.append(destination)
+                    else:paths.append(destination)
     allowed=[]
     for path in dict.fromkeys(paths):
         try:
             parent=pointer(proposal,path.rsplit('/',1)[0])
             if isinstance(parent,dict) or isinstance(parent,list) and path.rsplit('/',1)[1].isdigit() and int(path.rsplit('/',1)[1])<len(parent):allowed.append(path)
         except (KeyError,IndexError,ValueError,TypeError):pass
-    if not allowed and not drops:return None
-    return dict(proposal_hash=candidate_hash(proposal),paths=allowed,drop_indices=sorted(set(drops)),
+    if not allowed and not drops and not removes:return None
+    return dict(proposal_hash=candidate_hash(proposal),paths=allowed,remove_paths=removes,drop_indices=sorted(set(drops)),
                 world_paths=list(dict.fromkeys(world_paths)),diagnostics=diagnostics,reason=str(exc))
 
 
@@ -76,9 +80,9 @@ def messages(state, text, author_context, allowed, feedback=None):
     proposal=strict_loads(text)
     sections={c.get('path','').split('/')[2] for c in proposal['changes'] if isinstance(c,dict) and isinstance(c.get('path'),str) and c['path'].startswith('/world/') and len(c['path'].split('/'))>=3}
     schemas=prompt_schema()['properties']['world']['properties']
-    return [dict(role='system',content='Адресная коррекция творческого предложения, не новое творчество. Исправь только диагностированные поля через patches; path обязан входить в allowed_paths. Нельзя переписывать хорошие изменения, исходный мир, авторские факты и ограничения или принимать будущие решения игрока. При запрещённом scope можно убрать только указанную операцию через drop_indices. Остальные записи и их зависимости сохраняются. Верни JSON по response_schema. proposal_hash скопируй точно. Полный исправленный пакет снова будет проверен атомарно.'),
+    return [dict(role='system',content='Адресная коррекция творческого предложения, не новое творчество. Исправь только диагностированные поля через patches; path обязан входить в allowed_paths. Нельзя переписывать хорошие изменения, исходный мир, авторские факты и ограничения или принимать будущие решения игрока. Удаление свойства выполняй только через remove_paths из allowed_remove_paths; null НЕ удаляет ключ. patches заменяет значение, remove_paths удаляет ключ объекта, drop_indices удаляет целую операцию. При запрещённом scope можно убрать только указанную операцию через drop_indices. Остальные записи и их зависимости сохраняются. Верни JSON по response_schema. proposal_hash скопируй точно. Полный исправленный пакет снова будет проверен атомарно.'),
             dict(role='user',content=json.dumps(dict(author_context=author_context,proposal=proposal,
-                proposal_hash=allowed['proposal_hash'],allowed_paths=allowed['paths'],allowed_drop_indices=allowed['drop_indices'],
+                proposal_hash=allowed['proposal_hash'],allowed_paths=allowed['paths'],allowed_remove_paths=allowed.get('remove_paths',[]),allowed_drop_indices=allowed['drop_indices'],
                 diagnostics=allowed['diagnostics'],reason=allowed['reason'],previous_correction_error=feedback,
                 original_records=original,controlled_actor_id=state['controlled_actor_id'],
                 entities={'characters':[dict(id=c['id'],name=c['name']) for c in state['characters']],
@@ -95,10 +99,20 @@ def apply(text, reply, allowed):
         raise ValueError('Коррекция относится к другой версии предложения.')
     drops=correction.drop_indices
     if len(set(drops))!=len(drops) or not set(drops)<=set(allowed['drop_indices']):raise ValueError('Удаление не разрешено диагностикой.')
-    if any(p.path.startswith('/changes/'+str(i)+'/') for p in correction.patches for i in drops):raise ValueError('Нельзя исправлять и удалять одну операцию.')
-    if not correction.patches and not drops:raise ValueError('Коррекция не содержит изменений.')
+    if any(path.startswith('/changes/'+str(i)+'/') for path in [p.path for p in correction.patches]+correction.remove_paths for i in drops):raise ValueError('Нельзя исправлять и удалять одну операцию.')
+    removes=correction.remove_paths
+    if len(set(removes))!=len(removes) or not set(removes)<=set(allowed.get('remove_paths',[])):
+        raise ValueError('Удаление свойства не разрешено диагностикой.')
+    all_paths=[p.path for p in correction.patches]+removes
+    if len(set(all_paths))!=len(all_paths) or any(a.startswith(b+'/') for a in all_paths for b in all_paths if a!=b):
+        raise ValueError('Пересекающиеся адреса коррекции.')
+    if not correction.patches and not drops and not removes:raise ValueError('Коррекция не содержит изменений.')
     corrected=draft_repair.apply(text,json.dumps({'patches':[p.model_dump() for p in correction.patches]},ensure_ascii=False),allowed['paths']) if correction.patches else text
     value=strict_loads(corrected)
+    for path in removes:
+        parent=pointer(value,path.rsplit('/',1)[0]);key=path.rsplit('/',1)[1].replace('~1','/').replace('~0','~')
+        if not isinstance(parent,dict) or key not in parent:raise ValueError('Удалять можно только существующее свойство объекта.')
+        del parent[key]
     for i in sorted(drops,reverse=True):del value['changes'][i]
     if value==proposal:raise ValueError('Коррекция не изменила предложение.')
     return json.dumps(value,ensure_ascii=False)

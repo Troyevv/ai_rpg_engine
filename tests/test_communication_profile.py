@@ -53,7 +53,10 @@ def test_import_edit_start_turn_reload_next_turn_and_rollback(api,format,profile
     assert draft['state']['world']['communication']==profile
     assert draft['creation_settings']['communication']==profile
     public=client.get(url).json()
-    assert public['state']['world']['communication']==profile
+    # Player projection omits free-form author notes; author export and Runtime
+    # below must retain the complete profile unchanged.
+    assert public['state']['world']['communication']=={k:v for k,v in profile.items() if k!='author_note'}
+    assert 'author_note' not in public['state']['world']['communication']
     assert draft_world.exported_state(draft_world.export_markdown(draft['state']))['world']['communication']==profile
     confirmed=client.post(url+'/confirm',json={'revision':draft['revision'],'version_id':draft['version_id'],'accept_warnings':True})
     assert confirmed.status_code==200,confirmed.text

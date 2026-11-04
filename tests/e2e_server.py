@@ -101,7 +101,10 @@ def stream(**kwargs):
         payload=json.loads(kwargs['messages'][1]['content'])
         kwargs['on_usage']({'prompt_tokens':100,'completion_tokens':20})
         kwargs['on_finish']('stop')
-        yield json.dumps(dict(proposal_hash=payload['proposal_hash'],patches=[dict(path='/changes/3/value/actor_id',value='craftswoman')],drop_indices=[]))
+        if payload['proposal']['changes'][-1].get('path')=='/sections/relationships':
+            yield json.dumps(dict(proposal_hash=payload['proposal_hash'],patches=[],drop_indices=[15]))
+        else:
+            yield json.dumps(dict(proposal_hash=payload['proposal_hash'],patches=[dict(path='/changes/3/value/actor_id',value='craftswoman')],drop_indices=[]))
         return
     from backend.services.draft_editor import MARKER as EDITOR_MARKER
     if kwargs['messages'][0]['content'].startswith(EDITOR_MARKER):
@@ -114,6 +117,10 @@ def stream(**kwargs):
         from test_draft_creative import additions,change
         payload=json.loads(kwargs['messages'][1]['content'])
         state=payload['candidate'];instruction=json.loads(payload['author_context'])['current_instruction']
+        if instruction=='Создай сестру Ильи':
+            fixture=json.loads((Path(__file__).parent/'fixtures/draft_editor/ilya_sister.json').read_text())
+            proposal=json.loads(fixture['reply']);proposal['candidate_hash']=payload['candidate_hash']
+            yield json.dumps(proposal,ensure_ascii=False);return
         if instruction=='WORKSHOP188 пакет':
             changes=[change('/campaign/description','Новая редакция мира для следующего прохождения.','replace')]
         elif instruction=='DELETE184_LOCATION':

@@ -175,6 +175,19 @@ def prompt_schema(*, initial_portraits=False):
                     node['required'] = [key for key in node['required'] if key not in SERVER_FIELDS]
             for child in node.values(): omit_server_fields(child)
     omit_server_fields(schema)
+    # Motivation provenance belongs to Runtime; Knowledge's same-named field
+    # remains an authorable reference to a historical event.
+    actor=schema['properties']['world']['properties']['characters']['additionalProperties']
+    def omit_motivation_source(node):
+        if isinstance(node,list):
+            for child in node:omit_motivation_source(child)
+        elif isinstance(node,dict):
+            if 'properties' in node:
+                node['properties'].pop('source_event_id',None)
+                if 'required' in node:node['required']=[k for k in node['required'] if k!='source_event_id']
+            for child in node.values():omit_motivation_source(child)
+    for key in ('goals','intentions','obligations'):
+        omit_motivation_source(actor['properties'][key])
     if initial_portraits:
         from backend.services.portrait_traits import input_schema
         schema['properties']['characters']['items']['properties']['portrait_traits'] = input_schema()

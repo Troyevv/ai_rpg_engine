@@ -6,7 +6,7 @@ Only DraftStorage.decide_world_edit can publish the reviewed snapshot.
 import json
 from copy import deepcopy
 from backend.repositories.drafts import candidate_hash
-from backend.services.draft_changes import Proposal, apply_proposal, validate_transition
+from backend.services.draft_changes import Proposal, apply_proposal, validate_candidate, author_value
 from backend.services.draft_completeness import pointer
 
 MARKER = 'AI-редактор начального мира / v1.'
@@ -28,7 +28,17 @@ RULES = '''Ты автор-редактор ещё не запущенного �
 Удаляй/меняй все зависимые ссылки тем же пакетом. Индексы карточек относятся к
 исходному кандидату и не сдвигаются внутри пакета. Не меняй authoring, provenance,
 технические поля. reason объясняет каждое изменение, rationale — общий план,
-последствия и нерешённые противоречия. Не обрезай художественные тексты.'''
+последствия и нерешённые противоречия. Не обрезай художественные тексты.
+Контекст candidate — снимок для понимания мира, НЕ шаблон новых объектов.
+Разрешённые авторские поля заданы world_schema; серверные поля из candidate
+не копируй. Цели/намерения/обязательства создавай с id, text, status и
+содержательными зависимостями, без revision, source_sequence, source_event_id,
+review_required, reviewed_signature. Их назначает сервер. При изменении
+существующей цели сохраняй id; пропущенные служебные поля сервер сохранит.
+Knowledge.source_event_id — ссылка на реальное событие знания, не источник
+ревизии цели. Все знания и отношения из контекста учитывай полностью.
+Новый NPC находится в указанной им локации; не добавляй его в текущую сцену
+без причины. /sections/* — производные представления, не разрешённые пути.'''
 
 
 def author_context(base, instruction):
@@ -183,7 +193,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     # Reuse bounded address-scoped repairs, retaining every intermediate response.
     for attempt in range(3):
         if handle.cancel.is_set():return
-        trial=validate_transition(state,trial,editing=True)
+        trial=validate_candidate(state,trial,editing=True)
         stage='draft_world_validation';repo.draft_phase(jid,'reviewing',reset_progress=True)
         review_messages=draft_completeness.messages(trial,author_context(base,edit['instruction']))
         signature=review_signature(review_messages,config)
@@ -202,7 +212,8 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         stage='draft_editor_repair';repo.draft_phase(jid,'retrying')
         repaired=call('editor_repair_'+candidate_hash([trial,blockers]),request)
         if repaired is None:return
-        trial=json.loads(draft_repair.apply(json.dumps(repair_input,ensure_ascii=False),repaired,paths))
+        repaired_value=json.loads(draft_repair.apply(json.dumps(repair_input,ensure_ascii=False),repaired,paths))
+        trial=author_value(repair_input,repaired_value)
         if 'authoring' in state:trial['authoring']=deepcopy(state['authoring'])
         else:trial.pop('authoring',None)
     edit.update(status='preview',candidate=trial,diff=differences(state,trial),

@@ -25,6 +25,8 @@ test('populated Runtime world has names, typed values, calendar, edit and reload
  await page.locator('.ww-character-card').first().click();
  await expect(page.getByText('Взрослый',{exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Сейчас',exact:true}).click();
+ const capabilities=page.locator('.draft-field').filter({has:page.getByRole('button',{name:'Изменить Возможности',exact:true})});
+ await capabilities.locator('summary').click();
  await expect(page.getByText('Может передвигаться',{exact:true})).toBeVisible();
  await expect(page.getByText('Может воспринимать',{exact:true}).locator('..').getByText('Неизвестно',{exact:true})).toBeVisible();
  await expect(page.getByText('[object Object]',{exact:false})).toHaveCount(0);
@@ -73,7 +75,11 @@ test('populated Runtime world has names, typed values, calendar, edit and reload
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth));
  await page.reload();await nav(page,'Создать');
  const reloaded=await(await request.get(url+'?author=true')).json();expect(reloaded.state.world.residences).toEqual(after.state.world.residences);
- const player=await(await request.get(url)).json();expect(player.state.world.contacts || {}).toEqual({});
+ const player=await(await request.get(url)).json();expect(player.state.world.contacts).toEqual({contact_b:{id:'contact_b',owner_id:'character_1',kind:'person',label:'Друг',address:'local-b',available:true,blocked:false}});
+ // The player's own address is readable, while the unconfirmed identity and
+ // author provenance stay absent from the public projection.
+ expect(player.state.world.contacts.contact_b).not.toHaveProperty('character_id');
+ expect(player.state.world.contacts.contact_b).not.toHaveProperty('provenance');
  await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
  await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.choices button')).toHaveCount(6);
