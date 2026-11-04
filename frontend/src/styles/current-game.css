@@ -1,7 +1,6 @@
 .current-game-entry {
   display: flex;
-  padding: 6px 16px;
-  flex-shrink: 0;
+  min-width: 0;
 }
 .current-game-panel {
   width: min(900px, calc(100vw - 24px));
@@ -205,9 +204,6 @@
   }
   .scene-clock {
     font-size: 0.75rem;
-  }
-  .current-game-entry {
-    padding: 4px 12px;
   }
 }
 
