@@ -708,12 +708,16 @@ if __name__ == '__main__':
         return seed(app.state.repository)
 
     @app.post('/test/story168-prepare/{sid}')
-    def story168_prepare(sid: int, delayed: bool = False):
+    def story168_prepare(sid: int, delayed: bool = False, reveal: bool = True, target_turn_id: int | None = None):
         global story168_payload, story168_gate
         from threading import Event
         story168_gate = Event() if delayed else None
         from story_notifications_fixture import payload
-        story168_payload=payload(app.state.repository.get_snapshot(sid))
+        snap=app.state.repository.get_snapshot(sid)
+        if target_turn_id is not None:
+            with app.state.repository.connect() as db:
+                snap=json.loads(db.execute('SELECT before_json FROM turns WHERE id=? AND save_id=?',(target_turn_id,sid)).fetchone()[0])
+        story168_payload=payload(snap,reveal)
         return {'ready': True}
 
     @app.post('/test/story168-release')

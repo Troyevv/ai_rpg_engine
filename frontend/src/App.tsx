@@ -1,4 +1,5 @@
 import "./styles/current-game.css";
+import {observeStorySnapshot} from "./lib/storyPresentation";
 import {ThemeProvider, useTheme} from "./ThemeProvider";
 import { lazy, Suspense, useCallback, useMemo, useEffect, useState, useRef } from "react";
 import {
@@ -109,7 +110,11 @@ export default function App() {
   const [prefs, setPrefs] = useState<Preferences>(defaults);
   const [apiKey, setApiKey] = useState("");
   const [world, setWorld] = useState<World | null>(null);
-  const [save, setSave] = useState<Save | null>(null);
+  const [save, setLoadedSave] = useState<Save | null>(null);
+  const setSave=useCallback((next:Save|null)=>{
+    if(next)observeStorySnapshot(next);
+    setLoadedSave(next);
+  },[]);
   const workspaceViews=useMemo(()=>({calendar:new Map<string,unknown>(),family:new Map<string,unknown>()}),[save?.id,save?.state.controlled_actor_id]);
   useEffect(()=>{setFamilyRoot(undefined);setWorkspace(null)},[save?.id,save?.state.controlled_actor_id]);
   const [selection, setSelection] = useState<{ world?: number; save?: number }>(
@@ -310,6 +315,7 @@ export default function App() {
           </div>
         ) : (view !== "prepare" || !!save) && (
           <div className="game-preserved" style={view==="prepare"?{display:"none"}:undefined} inert={view==="prepare"||!!workspace||inspector} aria-hidden={view==="prepare"||!!workspace||inspector}><Game
+            presentationActive={view==="game"&&!workspace&&!inspector&&!mobileMenu&&!library&&!settings&&!worldInfo}
             openStory={openStory}
             key={`${selection.world}-${selection.save}`}
             world={world}
