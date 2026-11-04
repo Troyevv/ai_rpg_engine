@@ -178,6 +178,10 @@ def visible_fact_ids(state):
 def secure_game_view(result, state):
     """Close legacy aliases as well as the main fact/Knowledge dictionaries."""
     actor=state['camera']['controlled_actor_id']; world=result['world']
+    # Objective summaries and other actors' memories are author-only. Legacy
+    # unscoped summaries have no reliable POV provenance and stay canonical.
+    memory=result.get('memory',{}).get('per_actor',{}).get(actor,{}) if actor else {}
+    result['memory']={k:deepcopy(memory[k]) for k in ('summary','through_sequence') if k in memory}
     allowed=visible_fact_ids(state)
     world['facts']={k:v for k,v in world['facts'].items() if k in allowed}
     world['knowledge']={k:v for k,v in world['knowledge'].items() if v['actor_id']==actor and v['fact_id'] in allowed}

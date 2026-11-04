@@ -241,3 +241,23 @@ def test_repository_regeneration_rollback_and_read_receipts(tmp_path):
     repo.rollback_last(sid)
     assert 'qa_kirill:plot' not in repo.get_snapshot(sid)['world_state']['knowledge']
     assert not repo.get_save(sid)['state']['story_secrets']['revealed']
+
+
+def test_memory_projection_never_exposes_objective_or_other_pov():
+    snap=fixture()
+    snap['memory']={'summary':'OBJECTIVE_SECRET','per_actor':{
+        'a':{'summary':'A_VISIBLE','through_sequence':2},
+        'b':{'summary':'B_PRIVATE','through_sequence':3}},'source_node_ids':['PRIVATE_NODE']}
+    view=ui_view(snap)
+    assert view['memory']=={'summary':'A_VISIBLE','through_sequence':2}
+    assert 'OBJECTIVE_SECRET' not in json.dumps(view)
+    assert 'B_PRIVATE' not in json.dumps(view)
+    snap['world_state']['camera']['mode']='observer'
+    snap['world_state']['camera']['controlled_actor_id']='b'
+    assert ui_view(snap)['memory']['summary']=='B_PRIVATE'
+    snap['world_state']['camera']['controlled_actor_id']=None
+    assert ui_view(snap)['memory']=={}
+    snap['world_state']['camera']['controlled_actor_id']='a'
+    snap['memory'].pop('per_actor')
+    assert ui_view(snap)['memory']=={}
+    assert snap['memory']['summary']=='OBJECTIVE_SECRET'
