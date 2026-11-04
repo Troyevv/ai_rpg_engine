@@ -411,7 +411,7 @@ def patch(state,kind,eid,field,value):
             path=f'/{root}/{index}/'+('/'.join(escape(part) for part in field.split('.')))
         elif kind=='campaign':path='/campaign/'+escape(field)
         elif kind=='actor':path='/world/characters/'+escape(eid)+'/'+escape(field)
-        elif kind in state['world']:path='/world/'+kind+'/'+escape(eid)+'/'+escape(field)
+        elif GROUPS.get(kind,kind) in state['world']:path='/world/'+GROUPS.get(kind,kind)+'/'+escape(eid)+'/'+escape(field)
     state=manual_edit(state,path,old_minute)
     return sync(state)
 

@@ -32,7 +32,10 @@ def _invalid_json_constant(value):
     raise ValueError(f'Некорректное JSON-значение: {value}.')
 
 
-class DraftStorage:
+from backend.repositories.draft_editor import DraftEditorStorage
+
+
+class DraftStorage(DraftEditorStorage):
     def draft_phase(self,jid,phase,reset_progress=False):
         with self.connect() as db:
             db.execute("UPDATE preparation_jobs SET phase=?,narrative=CASE WHEN ? THEN '' ELSE narrative END WHERE id=? AND status='generating'",(phase,int(reset_progress),jid))
@@ -102,6 +105,7 @@ class DraftStorage:
                 'state':state if author or state is None else domain.player_view(state),
                 'validation':report if author or not (record and (record.get('origin_job') or review_metadata(record))) else {'errors':['Мир пока не готов к запуску. Откройте редактор автора.'] if report['errors'] else [],'warnings':[]},
                 'review':review_metadata(record) if record and author else ({'status':review_metadata(record).get('status')} if record and review_metadata(record) else None),
+                'pending_editor':bool(latest and json.loads(latest['response_journal'] or '{}').get('editor',{}).get('status')=='preview'),
                 'creative_status':creative_status,
                 'quality_status':quality_status,  # Safe summary; raw reasons stay author-only.
                 'start_block_reason':None,

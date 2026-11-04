@@ -246,6 +246,9 @@ def resolve_subject(state, issue):
 
 
 def messages(state, author_context):
+    instructions=state.get('authoring',{}).get('editor_instructions',[])
+    if instructions:
+        author_context=json.dumps(dict(original_context=author_context,confirmed_editor_instructions=instructions,priority='Подтверждённые инструкции редактора имеют приоритет над прежними деталями.'),ensure_ascii=False)
     candidate={k:deepcopy(state[k]) for k in ('campaign','characters','locations','world','world_clock','camera','controlled_actor_id','protagonist_id')}
     schema={k:runtime_schema(EXTENSIONS[k]) for k in ('objective_relations','roles','residences','organizations')}
     example=ReviewReport(issues=[ReviewIssue(path='/world/roles/new_id',message='Конкретное противоречие',patch_paths=['/world/roles/new_id'])]).model_dump(exclude_none=True,exclude_defaults=True)

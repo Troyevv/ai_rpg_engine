@@ -24,7 +24,7 @@ class ProposalError(ValueError):
 
 class Change(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
-    op: Literal['add', 'replace']
+    op: Literal['add', 'replace', 'remove']
     path: str
     value: Any
     reason: str = Field(min_length=1)
@@ -35,6 +35,7 @@ class Proposal(BaseModel):
     candidate_hash: str
     rationale: str = Field(min_length=1)
     changes: list[Change]
+    conflicts: list[str] = Field(default_factory=list)
 
 
 def preserve(before, after, path):
@@ -46,8 +47,10 @@ def preserve(before, after, path):
     raise ValueError('Предложение меняет защищённое значение: '+path)
 
 
-def apply_proposal(state, reply):
+def apply_proposal(state, reply, *, editing=False):
     proposal = Proposal.model_validate(strict_loads(reply))
+    if proposal.conflicts and not editing:
+        raise ValueError('Творческое предложение содержит нерешённые авторские конфликты.')
     if proposal.candidate_hash != candidate_hash(state):
         raise ValueError('Кандидат изменился; творческое предложение устарело.')
     trial = deepcopy(state)
@@ -56,6 +59,7 @@ def apply_proposal(state, reply):
     paths = [c.path for c in proposal.changes if c.path not in ('/characters/-', '/locations/-')]
     if len(set(paths)) != len(paths) or any(a.startswith(b+'/') for a in paths for b in paths if a != b):
         raise ValueError('Пересекающиеся пути предложения.')
+    removals = []
     for index, change in enumerate(proposal.changes):
         path = change.path
         if not path.startswith('/') or re.search(r'~(?![01])', path):
@@ -74,6 +78,17 @@ def apply_proposal(state, reply):
         field_index = 3 if root == 'world' else 2
         if root != 'campaign' and len(parts) > field_index and parts[field_index] not in record_schema.get('properties', {}):
             raise ProposalError('Неизвестное поле сущности: '+path, proposal_paths=[f'/changes/{index}/path'], drop_indices=[index])
+        if change.op == 'remove':
+            if not editing:
+                raise ValueError('Удаление разрешено только в предпросмотре AI-редактора.')
+            if not (root == 'world' and len(parts) == 3 or root in ('characters', 'locations') and len(parts) == 2):
+                raise ValueError('Удалять можно только целые сущности с зависимостями.')
+            if pointer(state, path) != change.value:
+                raise ValueError('Предусловие удаления не выполнено.')
+            if root == 'characters' and change.value.get('id') in (state.get('controlled_actor_id'), state.get('protagonist_id')):
+                raise ValueError('Нельзя удалить управляемого персонажа или протагониста.')
+            removals.append((parts, path))
+            continue
         if root in ('characters', 'locations') and len(parts) == 2:
             if change.op != 'add' or parts[1] != '-' or not isinstance(change.value, dict):
                 raise ValueError('Карточки добавляются через /-; существующие меняются по полям.')
@@ -103,6 +118,17 @@ def apply_proposal(state, reply):
             parent[key] = deepcopy(change.value)
         except (KeyError, IndexError, TypeError) as exc:
             raise ValueError('Родительский путь не существует: '+path) from exc
+    # Array indices always address the frozen base; remove only after assignments.
+    for parts, path in sorted(removals, key=lambda item: int(item[0][1]) if item[0][0] in ('characters', 'locations') else -1, reverse=True):
+        parent = pointer(trial, path.rsplit('/', 1)[0])
+        del parent[int(parts[-1]) if isinstance(parent, list) else parts[-1]]
+    normalized = validate_transition(state, trial, editing=editing)
+    return normalized, proposal.model_dump()
+
+
+def validate_transition(state, trial, *, editing=False):
+    for key in ('controlled_actor_id','protagonist_id','camera','world_clock','creation_settings','authoring'):
+        if state.get(key)!=trial.get(key):raise ValueError('Предложение меняет защищённый контекст: '+key)
     # Reject authority minted inside nested objects, not only at patch paths.
     def provenance(old, new):
         if isinstance(new, dict):
@@ -112,10 +138,15 @@ def apply_proposal(state, reply):
                     raise ValueError('Модель не может назначать серверное происхождение: '+key)
                 provenance(previous, value)
         elif isinstance(new, list):
+            old_list = old if isinstance(old, list) else []
+            by_id = {v['id']:v for v in old_list if isinstance(v,dict) and isinstance(v.get('id'),str)}
             for i, value in enumerate(new):
-                provenance(old[i] if isinstance(old, list) and i < len(old) else None, value)
+                previous = by_id.get(value['id']) if isinstance(value,dict) and isinstance(value.get('id'),str) else old_list[i] if i < len(old_list) else None
+                provenance(previous, value)
     provenance(state, trial)
     actor = state['controlled_actor_id']
+    if actor not in trial['world']['characters']:
+        raise ValueError('Нельзя удалить управляемого персонажа.')
     for field in ('goals', 'short_goal', 'intentions', 'obligations', 'emotion'):
         path = '/world/characters/'+actor.replace('~', '~0').replace('/', '~1')+'/'+field
         if field in state['world']['characters'][actor]:
@@ -133,11 +164,13 @@ def apply_proposal(state, reply):
             raise ValueError('Семантика времени существующего плана защищена.')
         if event.get('commitment') and actor in event.get('participants', []) and event != state['world']['scheduled_events'].get(key):
             raise ValueError('Новое обязательство игрока требует его решения.')
-    for path in state.get('authoring', {}).get('manual_paths', []):
-        preserve(state, trial, path)
+    if not editing:
+        for path in state.get('authoring', {}).get('manual_paths', []):
+            preserve(state, trial, path)
     normalized, report = inspect_candidate(trial)
     if report['errors']:
         raise DraftErrors(report['diagnostics'])
-    for path in state.get('authoring', {}).get('manual_paths', []):
-        preserve(state, normalized, path)
-    return normalized, proposal.model_dump()
+    if not editing:
+        for path in state.get('authoring', {}).get('manual_paths', []):
+            preserve(state, normalized, path)
+    return normalized
