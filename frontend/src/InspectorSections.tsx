@@ -1,5 +1,6 @@
+import {StorySecrets} from './StorySecrets';
 import {genreLabels} from './GenreSettings';
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ArrowRight,
   ArrowLeftRight,
@@ -822,8 +823,9 @@ export function RelationsSection(props: Props & { refresh: () => void }) {
   );
 }
 
-export function SecretsSection(props: Props) {
+export function SecretsSection(props: Props & {target?:string;active?:boolean}) {
   const [query, setQuery] = useState("");
+  useEffect(()=>{if(props.target)setQuery('')},[props.target]);
   const values = (props.state.story_secrets?.revealed || []).filter(
     (f) =>
       matches(
@@ -846,8 +848,9 @@ export function SecretsSection(props: Props) {
         />
         <small className="muted">{values.length}</small>
       </div>
+      {!!props.state.story_secrets?.world.some(r=>r.status==='known')&&<StorySecrets title="Тайны мира" rows={(props.state.story_secrets?.world||[]).filter(r=>r.status==='known'&&matches(query,r.text||''))} save={props.save} active={props.active} target={props.target}/>}
       <div className="inspector-secret-grid">
-        <Facts {...props} values={values} secret />
+        <Facts {...props} values={values.filter(f=>f.character_ids.length>0)} secret />
       </div>
       {!values.length && <InspectorEmpty search={!!query} />}
 
@@ -856,10 +859,12 @@ export function SecretsSection(props: Props) {
   );
 }
 
-export function ThreadsSection(props: Props) {
+export function ThreadsSection(props: Props & {target?:string}) {
   const { state } = props;
   const [status, setStatus] = useState("active");
   const [person, setPerson] = useState("");
+  const targetRef=useRef<HTMLElement|null>(null);
+  useEffect(()=>{if(!props.target)return;setStatus('all');setPerson('');const frame=requestAnimationFrame(()=>{targetRef.current?.scrollIntoView({block:'nearest'});targetRef.current?.focus({preventScroll:true})});return()=>cancelAnimationFrame(frame)},[props.target]);
   const rows: Thread[] = state.world?.threads
     ? Object.values(state.world.threads)
     : (state.plans || []).map((p, i) => ({
@@ -887,7 +892,7 @@ export function ThreadsSection(props: Props) {
               ? ["dormant", "paused"].includes(r.status)
               : ["resolved", "cancelled"].includes(r.status))),
     )
-    .sort((a, b) => b.relevance - a.relevance);
+    .sort((a, b) => a.id===props.target?-1:b.id===props.target?1:b.relevance-a.relevance);
   return (
     <>
       <div className="inspector-tools">
@@ -910,7 +915,10 @@ export function ThreadsSection(props: Props) {
             const event = eventId ? state.world?.events?.[eventId] : undefined;
             return (
               <article
+                tabIndex={-1}
+                ref={r.id===props.target?targetRef:undefined}
                 className={`inspector-card inspector-thread thread-${r.status}`}
+                data-thread-id={r.id}
                 key={r.id}
               >
                 <div className="inspector-row">

@@ -48,7 +48,7 @@ for(const width of [360,393,768,1440])test(`polish visual matrix ${width}`,async
   if(phase==='after'){
    await expect(d.locator('.portrait-control>.character-avatar')).toHaveCSS('width',width<768?'104px':'144px');
    const pencil=d.locator('.portrait-pencil');await expect(pencil).toHaveCSS('width','44px');await expect(pencil.locator('svg')).toHaveAttribute('width','16');
-   expect(await d.locator('.dossier-tabs svg').evaluateAll(els=>new Set(els.map(e=>getComputedStyle(e).color)).size)).toBe(5);
+   expect(await d.locator('.dossier-tabs svg').evaluateAll(els=>new Set(els.map(e=>getComputedStyle(e).color)).size)).toBe(6);
    expect(await d.evaluate(e=>e.scrollWidth<=e.clientWidth+1)).toBe(true);
    const columns=d.locator('.dossier-column');for(const col of await columns.all()){
     const boxes=await col.locator(':scope > section').evaluateAll(es=>es.map(e=>e.getBoundingClientRect().toJSON()));

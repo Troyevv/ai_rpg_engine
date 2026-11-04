@@ -90,7 +90,9 @@ for(const skin of ['graphite','parchment']) for(const mode of ['complete','empty
   expect(saved.state.characters).toEqual(expect.arrayContaining([expect.objectContaining({id:'craftswoman',name:'Вера'})]));
   expect(saved.state.world.facts.fire.text).toBe(initial.world_state.facts.fire.text);
   expect(saved.state.world.knowledge['craftswoman:fire']).toBeUndefined(); // Other minds remain canonical, author-only (checked above).
-  expect(saved.state.world.threads.rebuild).toEqual(initial.world_state.threads.rebuild);
+  const {discovered_by,...visibleThread}=initial.world_state.threads.rebuild;
+  expect(discovered_by).toBeNull(); // Author/legacy visibility; runtime metadata stays server-side.
+  expect(saved.state.world.threads.rebuild).toEqual(visibleThread);
   const savedCanonical=await canonical();
   await page.reload();
   await expect(page.locator('.turn')).toHaveCount(3);

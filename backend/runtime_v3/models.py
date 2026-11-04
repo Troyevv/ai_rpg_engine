@@ -561,6 +561,8 @@ class Relationship(StrictModel):
 
 
 class Thread(StrictModel):
+    # None preserves authored/legacy visibility; new extracted lines are source-bound.
+    discovered_by: list[str] | None = None
     source_event_id: str | None = None
     stakes_for: list[str] = Field(default_factory=list, max_length=8)
     favorable_path: FavorablePath | None = None
@@ -750,7 +752,7 @@ def assert_world_state_v3_invariants(state, before=None):
     from backend.runtime_v3.secrets import validate_disclosures
     validate_disclosures(value)
     for item in value['threads'].values():
-        if set(item['stakes_for']) - actors.keys():
+        if (set(item['stakes_for']) | set(item.get('discovered_by') or [])) - actors.keys():
             fatal('неизвестный участник последствий линии', section='threads', entity=item['id'])
     for item in value['scheduled_events'].values():
         if item['location_id'] is not None and item['location_id'] not in locations:

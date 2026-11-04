@@ -246,7 +246,7 @@ class EngineStorage:
             from backend.runtime_v3.repository import append_history
             assert_world_state_v3_invariants(state['world_state'],json.loads(job['before_json'])['world_state'])
             if history_batch is not None:
-                state=dict(state,history_head=append_history(db,state.get('history_head'),history_batch))
+                state=dict(state,history_head=append_history(db,state.get('history_head'),history_batch, before=json.loads(job['before_json'])['world_state'], after=state['world_state']))
             from backend.runtime_v3.surfaces import committed_route
             changes = dict(changes, presentation=committed_route(dict(job), history_batch))
             after = json.dumps(state, ensure_ascii=False)

@@ -1,3 +1,5 @@
+import {StoryNotifications} from './StoryNotifications';
+import type {StoryNotice} from './types';
 import {NpcReview} from './NpcReview';
 import {phoneText as t} from "./lib/phone";
 import {CurrentGame} from './CurrentGame';
@@ -47,20 +49,24 @@ import {Protagonist} from './Protagonist';
 import {WorldCamera} from "./WorldCamera";
 import {useMobile,MobileScene} from './mobile';
 export function Game({
+  presentationActive=true,
   world,
   save,
   refresh,
   choose,
   openLibrary,
+  openStory,
   openCharacter,
   prefs,
   apiKey,
 }: {
+  presentationActive?: boolean;
   world: World | null;
   save: Save | null;
   refresh: () => void;
   choose: (w: number, s?: number) => void;
   openLibrary: () => void;
+  openStory: (notice:StoryNotice) => void;
   openCharacter: (id: string) => void;
   prefs: Preferences;
   apiKey: string;
@@ -235,6 +241,7 @@ export function Game({
                     }}/>
                     <TimeSkip open={timeSkipOpen} onOpenChange={setTimeSkipOpen} save={save} disabled={busy||pending||!save.turns.length||!!save.state.protagonist_required} submit={(duration,reason)=>void turn('turn',actorId===null||save.state.actor_capabilities?.can_act===false?'':`Жду ${duration} минут.${reason?' '+reason:''}`,undefined,false,{duration,reason})}/>
 </>}
+      {save&&<StoryNotifications key={`${save.id}:${actorId}`} save={save} active={presentationActive} enabled={notices} onOpen={openStory}/>}
       <RuntimeNotifications save={save} job={submitted?job:null} enabled={notices}/>
       {save&&<>{save.state.protagonist_required&&<p role="alert">Главный герой умер. История продолжается: выбери или создай нового героя.</p>}<Protagonist save={save} open={protagonistOpen} onOpenChange={setProtagonistOpen} refresh={refreshControl} prefs={prefs} apiKey={apiKey}/></>}
       {save&&<><NarrativePolicy save={save} open={policyOpen} onOpenChange={setPolicyOpen} refresh={refreshControl}/></>}

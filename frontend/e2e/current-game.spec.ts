@@ -46,7 +46,7 @@ test("calendar, genealogy, policy and weather stay save-scoped and responsive", 
     await page.keyboard.press("Escape");
     await page.locator(".current-game-entry button").click();
     await tabs.getByRole("tab", { name: "Настройки", exact: true }).click();
-    await menu.getByRole("switch",{name:/Показывать изменения отношений/}).uncheck();
+    await menu.getByRole("switch",{name:/Показывать игровые уведомления/}).uncheck();
     expect(
       await page.evaluate(() => localStorage.getItem("relationship-notices")),
     ).toBe("off");

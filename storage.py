@@ -127,6 +127,8 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             from backend.runtime_v3.appearance import initialize_profiles as initialize_appearance
             initialize_appearance(snapshot)
             history,warnings=read_history(db,snapshot.get('history_head'))
+            from backend.runtime_v3.notifications import read_story_receipts
+            history['_story_receipts'] = read_story_receipts(db, snapshot.get('history_head'))
             result['state']=ui_view(snapshot,history)
             result['history_warnings']=warnings
             return result

@@ -397,7 +397,7 @@ class RuntimeStorage:
         if row['revision'] != revision: raise ValueError('Сейв изменился. Обнови телефон.')
         after, batch = apply(prior, command)
         batch['state_changes'].append(dict(kind='remote_receipt', operation_id=command['operation_id'],command_digest=digest))
-        after['history_head'] = append_history(db, prior.get('history_head'), batch)
+        after['history_head'] = append_history(db, prior.get('history_head'), batch, before=prior['world_state'], after=after['world_state'])
         parent = db.execute('SELECT active_variant_id FROM turns WHERE save_id=? ORDER BY sequence DESC LIMIT 1',(save_id,)).fetchone()
         db.execute('INSERT INTO actor_switches(save_id,revision,before_json,after_json,parent_variant_id) VALUES(?,?,?,?,?)',
             (save_id, revision, dump(prior), dump(after), parent[0] if parent else None))
