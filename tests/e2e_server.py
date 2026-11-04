@@ -113,8 +113,16 @@ def stream(**kwargs):
             yield '';return
         from test_draft_creative import additions,change
         payload=json.loads(kwargs['messages'][1]['content'])
-        changes=additions(payload['candidate'])
-        changes.append(change('/world/organizations/apex/name','Новая история организации','replace'))
+        state=payload['candidate'];instruction=json.loads(payload['author_context'])['current_instruction']
+        if instruction=='DELETE184_LOCATION':
+            changes=[change('/locations/1',state['locations'][1],'remove')]
+        elif instruction=='DELETE184_HISTORY':
+            index=next(i for i,c in enumerate(state['characters']) if c['id']=='archive184')
+            changes=[change('/characters/'+str(index),state['characters'][index],'remove'),
+                     change('/world/characters/archive184',state['world']['characters']['archive184'],'remove')]
+        else:
+            changes=additions(state)
+            changes.append(change('/world/organizations/apex/name','Новая история организации','replace'))
         yield json.dumps(dict(candidate_hash=payload['candidate_hash'],rationale='Вера возвращается в город. Её прошлое связано с мастерской и друзьями.',changes=changes),ensure_ascii=False)
         return
     if kwargs['messages'][0]['content'].startswith('Ты создаёшь полноценный живой RPG-мир') and 'EDITOR173' in kwargs['messages'][1]['content']:

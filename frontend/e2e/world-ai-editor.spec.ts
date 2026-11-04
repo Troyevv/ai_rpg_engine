@@ -46,9 +46,21 @@ for(const skin of ['graphite','parchment']) test(`AI editor preview, confirmatio
  await expect(page.getByRole('dialog')).toBeVisible();await page.keyboard.press('Escape');
  await expect(editor.getByRole('button',{name:'Применить пакет…'})).toBeFocused();
  expect((await(await request.get(url+'?author=true')).json()).state).toEqual(before.state);
+ // Drop the first acknowledgement after the server has committed it.
+ let dropped=false;
+ if(skin==='graphite')await page.route(/\/draft\/edits\/[^/?]+$/,async route=>{
+  if(dropped)return route.continue();
+  dropped=true;const response=await route.fetch();expect(response.ok()).toBeTruthy();await route.abort('failed');
+ });
  await editor.getByRole('button',{name:'Применить пакет…'}).click();await page.getByRole('button',{name:'Подтвердить изменения',exact:true}).click();
+ if(skin==='graphite'){
+  await expect(page.getByRole('dialog').getByRole('alert')).toBeVisible();
+  await page.getByRole('button',{name:'Подтвердить изменения',exact:true}).click();
+ }
  await expect(editor.getByText('Изменения сохранены.',{exact:false})).toBeVisible();
  const accepted=await(await request.get(url+'?author=true')).json();expect(accepted.state.world.roles.craft.organization_id).toBe('workshop');
+ expect(accepted.history.filter((v:{reason:string})=>v.reason==='ai_edit')).toHaveLength(1);
+ expect((await(await request.get(url+'/edits')).json()).edits).toEqual([]);
  // Existing history UI supplies rollback; restore creates a new immutable version.
  await page.locator('.workshop-tabs').getByRole('button',{name:'Ещё',exact:true}).click();
  await page.getByText(`История версий · ${accepted.history.length}`,{exact:true}).click();
@@ -91,4 +103,80 @@ test('AI editor empty response recovery, rejection and stale preview',async({pag
  await expect(editor.getByRole('button',{name:'Применить пакет…'})).toBeDisabled();
  await editor.getByRole('button',{name:'Отклонить пакет'}).click();await expect(editor.getByRole('heading',{name:'Отклонено',exact:true})).toBeVisible();
  expect((await(await request.get(url+'?author=true')).json()).state.campaign.title).toBe('Ручной мир');
+});
+
+test('AI editor workspace switch isolates input, errors, preview and late responses',async({page,request})=>{
+ const workspace=await(await request.post('/test/editor173',{data:{fail:false}})).json();
+ const url=`/api/workspaces/${workspace.id}/draft`;
+ await page.goto('/');await page.evaluate(wid=>localStorage.setItem('draftWorkspace',wid),workspace.id);
+ await page.reload();await nav(page,'Создать');
+ await page.getByLabel('Описание мира или текст импорта').fill('EDITOR173: Два разных мира.');
+ await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true})).toBeEnabled();
+ const first=await(await request.get(url+'?author=true')).json();
+ const second=await(await request.post('/api/workspaces',{data:{name:'Второй мир'}})).json();
+ expect((await request.post(`/api/workspaces/${second.id}/draft/import`,{data:{revision:0,text:JSON.stringify(first.state),format:'json'}})).ok()).toBeTruthy();
+ await page.evaluate(wid=>localStorage.setItem(`world-editor:${wid}`,'Несохранённая инструкция второго мира'),second.id);
+ await page.reload();await nav(page,'Создать');
+ await page.getByRole('button',{name:'Автор мира',exact:true}).click();await page.getByRole('button',{name:'Показать всё',exact:true}).click();
+ const editor=page.locator('.world-ai-editor');
+ await editor.getByLabel('Что изменить в мире?').fill('Первый мир: добавь Веру.');
+ await editor.getByRole('button',{name:'Предложить изменения',exact:true}).click();await request.post('/test/editor173/release');
+ await expect(editor.getByRole('button',{name:'Применить пакет…'})).toBeEnabled();
+ await editor.getByLabel('Что изменить в мире?').fill('Несохранённая инструкция первого мира');
+ await page.route(/\/draft\/edits$/,route=>route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({detail:'Ошибка только первого мира'})}));
+ await editor.getByRole('button',{name:'Предложить изменения',exact:true}).click();
+ await expect(editor.getByRole('alert')).toHaveText('Ошибка только первого мира');
+ await page.locator('.workshop-continue > summary').click();
+ await page.locator(`[data-workspace-id="${second.id}"]`).getByRole('button',{name:'Второй мир',exact:true}).click();
+ await page.getByRole('button',{name:'Автор мира',exact:true}).click();
+ await expect(editor.getByLabel('Что изменить в мире?')).toHaveValue('Несохранённая инструкция второго мира');
+ await expect(editor.locator('.ai-preview')).toHaveCount(0);await expect(editor.getByRole('alert')).toHaveCount(0);
+ // Return to A, hold its history response, then switch back to B.
+ let release!:()=>void;let captured!:()=>void;
+ const held=new Promise<void>(resolve=>{release=resolve});const arrived=new Promise<void>(resolve=>{captured=resolve});
+ await page.route(`**/workspaces/${workspace.id}/draft/edits?author=true`,async route=>{
+  const response=await route.fetch();captured();await held;await route.fulfill({response}).catch(()=>{});
+ });
+ await page.locator(`[data-workspace-id="${workspace.id}"]`).getByRole('button',{name:'AI-редактор',exact:true}).click();
+ await page.getByRole('button',{name:'Автор мира',exact:true}).click();await arrived;
+ await expect(editor.getByLabel('Что изменить в мире?')).toHaveValue('Несохранённая инструкция первого мира');
+ await page.locator(`[data-workspace-id="${second.id}"]`).getByRole('button',{name:'Второй мир',exact:true}).click();
+ await page.getByRole('button',{name:'Автор мира',exact:true}).click();release();
+ await expect(editor.getByLabel('Что изменить в мире?')).toHaveValue('Несохранённая инструкция второго мира');
+ await expect(editor.locator('.ai-preview')).toHaveCount(0);
+ expect(await page.evaluate(wid=>localStorage.getItem(`world-editor:${wid}`),workspace.id)).toBe('Несохранённая инструкция первого мира');
+ await page.reload();await nav(page,'Создать');
+ await page.getByRole('button',{name:'Автор мира',exact:true}).click();await page.getByRole('button',{name:'Показать всё',exact:true}).click();
+ await expect(editor.getByLabel('Что изменить в мире?')).toHaveValue('Несохранённая инструкция второго мира');
+});
+
+test('AI editor refuses dangling locations and archived NPC references without mutating canon',async({page,request})=>{
+ const workspace=await(await request.post('/test/editor173',{data:{fail:false}})).json();
+ const url=`/api/workspaces/${workspace.id}/draft`;
+ await page.goto('/');await page.evaluate(wid=>localStorage.setItem('draftWorkspace',wid),workspace.id);
+ await page.reload();await nav(page,'Создать');
+ await page.getByLabel('Описание мира или текст импорта').fill('EDITOR173: Проверка удаления.');
+ await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true})).toBeEnabled();
+ const draft=await(await request.get(url+'?author=true')).json();const state=draft.state;
+ state.characters.push({...structuredClone(state.characters.at(-1)),id:'archive184',name:'Архивный персонаж'});
+ state.world.characters.archive184={id:'archive184',situation:'Уехал.',location:null,goals:[],intentions:[],obligations:[]};
+ state.world.scene_records.archived={id:'archived',snapshot:{participants:['archive184']},text:'Запись прошлого остаётся.'};
+ const imported=await request.post(url+'/import',{data:{revision:draft.revision,text:JSON.stringify(state),format:'json'}});
+ expect(imported.ok(),await imported.text()).toBeTruthy();const before=await(await request.get(url+'?author=true')).json();
+ await page.reload();await nav(page,'Создать');
+ await page.getByRole('button',{name:'Автор мира',exact:true}).click();await page.getByRole('button',{name:'Показать всё',exact:true}).click();
+ const editor=page.locator('.world-ai-editor');await request.post('/test/editor173/release');
+ for(const instruction of ['DELETE184_LOCATION','DELETE184_HISTORY']){
+  await editor.getByLabel('Что изменить в мире?').fill(instruction);await editor.getByRole('button',{name:'Предложить изменения',exact:true}).click();
+  await expect(editor.getByRole('heading',{name:'Запрос прерван',exact:true})).toBeVisible();
+  await expect(editor.getByRole('alert')).toContainText('всё ещё связана');
+  await expect(editor.getByRole('button',{name:'Применить пакет…'})).toHaveCount(0);
+  const current=await(await request.get(url+'?author=true')).json();
+  expect(current.state).toEqual(before.state);expect(current.version_id).toBe(before.version_id);
+  expect((await(await request.get(url+'/edits')).json()).edits).toEqual([]);
+ }
+ await page.reload();await nav(page,'Создать');
+ expect((await(await request.get(url+'?author=true')).json()).state.world.scene_records.archived).toEqual(state.world.scene_records.archived);
 });

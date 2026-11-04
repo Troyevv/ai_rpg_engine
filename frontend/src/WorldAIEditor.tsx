@@ -22,10 +22,17 @@ const sectionNames:Record<string,string>={characters:'Карточки перс�
 const operations={add:'Добавление',replace:'Изменение',remove:'Удаление'};
 const statuses:Record<string,string>={preview:'Ожидает решения',accepted:'Применено',rejected:'Отклонено',running:'Подготовка',error:'Запрос прерван',stopped:'Остановлено'};
 
-export function WorldAIEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,resolve}: {
+type EditorProps = {
  wid:string;revision:number;job:Job|null;locked:boolean;prefs:Preferences;apiKey:string;
  onJob:(job:Job)=>void;refresh:()=>Promise<void>;resolve:ReturnType<typeof resolver>;
-}) {
+};
+
+// Own the workspace boundary here: callers need not remember a React key.
+export function WorldAIEditor(props:EditorProps) {
+ return <WorkspaceEditor key={props.wid} {...props}/>;
+}
+
+function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,resolve}:EditorProps) {
  const storageKey=`world-editor:${wid}`;
  const [instruction,setInstruction]=useState(()=>localStorage.getItem(storageKey)||'');
  const [data,setData]=useState<Edits>({edits:[],started:false});
@@ -36,8 +43,8 @@ export function WorldAIEditor({wid,revision,job,locked,prefs,apiKey,onJob,refres
  const guard=useRef(false);const requestId=useRef<string|null>(null);const alive=useRef(true);
  useEffect(()=>{alive.current=true;return()=>{alive.current=false}},[]);
  useEffect(()=>{localStorage.setItem(storageKey,instruction)},[storageKey,instruction]);
- const load=async()=>{const next=await api<Edits>(`/workspaces/${wid}/draft/edits`);if(alive.current)setData(next)};
- useEffect(()=>{const controller=new AbortController();void api<Edits>(`/workspaces/${wid}/draft/edits`,undefined,'GET',controller.signal)
+ const load=async()=>{const next=await api<Edits>(`/workspaces/${wid}/draft/edits?author=true`);if(alive.current)setData(next)};
+ useEffect(()=>{const controller=new AbortController();void api<Edits>(`/workspaces/${wid}/draft/edits?author=true`,undefined,'GET',controller.signal)
   .then(next=>{if(!controller.signal.aborted)setData(next)}).catch(e=>{if(!controller.signal.aborted)setError(e.message)});return()=>controller.abort()},[wid,revision,job?.status]);
  const execute=async(fn:()=>Promise<void>)=>{if(guard.current)return;guard.current=true;setBusy(true);setError('');try{await fn()}catch(e){if(alive.current)setError((e as Error).message)}finally{guard.current=false;if(alive.current)setBusy(false)}};
  const current=data.edits.find(e=>e.id===selected)||data.edits[0];

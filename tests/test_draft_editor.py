@@ -44,7 +44,7 @@ def run_edit(client,url,draft,changes=None,calls=None,key='edit1'):
     with patch('backend.services.preparation.chat_stream',side_effect=provider(changes,calls)):
         response=request(client,url,draft,key=key);assert response.status_code==200,response.text
         job=wait_job(client,response.json()['id']);assert job['status']=='saved',job.get('error')
-    return job,client.get(url+'/edits').json()['edits'][0]
+    return job,client.get(url+'/edits?author=true').json()['edits'][0]
 
 
 def decide(client,url,draft,edit,decision='accept',**extra):
@@ -80,7 +80,7 @@ def test_reject_and_stale_manual_edit(api):
     preview=client.get(url+'?author=true').json()
     updated=client.patch(url,json={'revision':preview['revision'],'operation':'patch','kind':'campaign','field':'title','value':'Ручное название'}).json()
     assert decide(client,url,updated,edit).status_code!=200
-    assert client.get(url+'/edits').json()['edits'][0]['stale']
+    assert client.get(url+'/edits?author=true').json()['edits'][0]['stale']
     assert decide(client,url,updated,edit,'reject').status_code==200
     assert client.get(url+'?author=true').json()['state']['campaign']['title']=='Ручное название'
 
@@ -213,7 +213,7 @@ def test_cancel_and_double_click_never_publish_late_proposal(api):
     assert len(calls)==1
     assert client.get(url+'?author=true').json()['state']==before['state']
     assert client.get('/api/jobs/'+jid).json()['status']=='stopped'
-    assert client.get(url+'/edits').json()['edits'][0]['status']!='accepted'
+    assert client.get(url+'/edits?author=true').json()['edits'][0]['status']!='accepted'
 
 
 def test_deletion_requires_consent_and_persists_rollback(api):
@@ -253,7 +253,7 @@ def test_preview_survives_repository_restart(api):
     client,app=api;wid,url,before=setup(client);_,edit=run_edit(client,url,before)
     repo=Repository(app.state.repository.path);draft=repo.draft(wid,True)
     repo.decide_world_edit(wid,edit['id'],draft['revision'],'accept')
-    assert repo.world_edits(wid)['edits'][0]['status']=='accepted'
+    assert repo.world_edits(wid,True)['edits'][0]['status']=='accepted'
     assert repo.draft(wid,True)['state']['world']['roles']['craft']
 
 
@@ -267,7 +267,7 @@ def test_explicit_model_conflict_is_reviewable_but_cannot_be_applied(api):
         else:yield '{"issues":[]}'
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         job=wait_job(client,request(client,url,before).json()['id']);assert job['status']=='saved',job.get('error')
-    edit=client.get(url+'/edits').json()['edits'][0];draft=client.get(url+'?author=true').json()
+    edit=client.get(url+'/edits?author=true').json()['edits'][0];draft=client.get(url+'?author=true').json()
     assert edit['proposal']['conflicts']
     assert decide(client,url,draft,edit,accept_conflicts=True).status_code!=200
     assert draft['state']==before['state']
@@ -296,7 +296,7 @@ def test_semantic_repair_is_previewed_before_commit(api):
         else:yield json.dumps({'patches':[dict(path='/world/organizations/workshop/name',value='Реставрационная мастерская')]},ensure_ascii=False)
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         job=wait_job(client,request(client,url,before).json()['id']);assert job['status']=='saved',job.get('error')
-    edit=client.get(url+'/edits').json()['edits'][0]
+    edit=client.get(url+'/edits?author=true').json()['edits'][0]
     assert next(d for d in edit['diff'] if d['section']=='world/organizations' and d['id']=='workshop')['fields'][0]['after']['name']=='Реставрационная мастерская'
     assert client.get(url+'?author=true').json()['state']==before['state']
     assert len(reviews)==2
@@ -366,3 +366,203 @@ def test_unknown_outcome_requires_consent_then_resumes_frozen_base(api):
     journal=json.loads(app.state.repository.preparation_job(job['id'])['response_journal'])
     assert len(journal['unknown_attempts'])==1 and journal['editor']['base']['state']==before['state']
     assert client.get(url+'?author=true').json()['state']==before['state']
+
+
+@pytest.mark.parametrize('decision',['accept','reject'])
+def test_editor_history_requires_explicit_author_projection(api,decision):
+    client,app=api;wid,url,before=setup(client)
+    npc=before['state']['characters'][-1]['id'];hidden='HIDDEN_EDITOR_CANON_184'
+    before=client.patch(url+'/candidate',json={'revision':before['revision'],'path':'/world/facts/hidden184','value':{
+        'id':'hidden184','text':hidden,'secret':True,'story_secret':True,'secret_subject_ids':[npc],
+        'secret_existence':'hidden','character_ids':[npc],'evidence':[hidden+' evidence']}}).json()
+    def stream(**kw):
+        if kw['messages'][0]['content'].startswith(draft_completeness.MARKER):
+            yield json.dumps({'issues':[{'path':'/world/facts/hidden184/text','severity':'recommendation','message':hidden+' review'}]})
+        else:yield from provider(lambda state:[change('/world/facts/hidden184/text',hidden+' changed','replace')])(**kw)
+    with patch('backend.services.preparation.chat_stream',side_effect=stream):
+        job=wait_job(client,request(client,url,before,text=hidden+' instruction').json()['id'])
+        assert job['status']=='saved',job
+    public=client.get(url+'/edits').json()
+    assert public=={'edits':[], 'started':False}
+    assert client.get(url+'/edits?author=false').json()==public
+    author=client.get(url+'/edits?author=true').json()['edits'][0]
+    for key in ('diff','references','review','instruction'):
+        assert hidden in json.dumps(author[key],ensure_ascii=False)
+    assert hidden not in client.get(url).text
+    assert decide(client,url,client.get(url+'?author=true').json(),author,decision,accept_warnings=True,accept_conflicts=True).status_code==200
+    assert client.get(url+'/edits').json()==public
+    assert client.get(url+'/edits?author=true').json()['edits'][0]['status']==('accepted' if decision=='accept' else 'rejected')
+    assert hidden not in client.get(url).text
+    if decision=='accept':
+        current=client.get(url+'?author=true').json()
+        started=client.post(url+'/confirm',json={'revision':current['revision'],'version_id':current['version_id'],'accept_warnings':True})
+        assert started.status_code==200,started.text
+        sid=started.json()['save']
+        assert hidden not in client.get(f'/api/saves/{sid}').text
+        assert hidden in client.get(f'/api/saves/{sid}/author-state').text
+        assert client.get(url+'/edits').json()=={'edits':[],'started':True}
+
+
+
+@pytest.mark.parametrize('field',['name','id','alias'])
+def test_deleted_location_cannot_survive_as_legacy_text_reference(field):
+    s=candidate();loc=s['locations'][1];loc['aliases']=['Старая кухня']
+    value={'name':loc['name'],'id':loc['id'],'alias':'  СТАРАЯ КУХНЯ  '}[field]
+    for actor in s['world']['characters'].values():
+        if actor.get('location')==loc['name']:actor['location']=value
+    for scene in s['world']['scenes'].values():scene['location']=value
+    before=deepcopy(s)
+    with pytest.raises(ValueError,match='связан'):
+        apply_proposal(s,proposal(s,[change('/locations/1',loc,'remove')]),editing=True)
+    assert s==before
+
+
+def test_history_references_block_deletion_without_erasing_history():
+    s=candidate();cid='archived_npc'
+    s['characters'].append(dict(deepcopy(s['characters'][-1]),id=cid,name=cid))
+    s['world']['characters'][cid]=dict(deepcopy(s['world']['characters'][s['characters'][-2]['id']]),id=cid)
+    s['world']['scene_records']['archived']={'id':'archived','snapshot':{'participants':[cid]},'text':'История остаётся.'}
+    changes=[change('/characters/'+str(len(s['characters'])-1),s['characters'][-1],'remove'),change('/world/characters/'+cid,s['world']['characters'][cid],'remove')]
+    before=deepcopy(s)
+    with pytest.raises(ValueError,match='связан'):
+        apply_proposal(s,proposal(s,changes),editing=True)
+    assert s==before
+
+
+@pytest.mark.parametrize('phase',['proposing','reviewing'])
+def test_process_crash_recovery_preserves_frozen_editor_and_requires_unknown_consent(tmp_path,phase):
+    """Kill a real backend process, including its worker, without lifespan cleanup."""
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+    from fastapi.testclient import TestClient
+    from backend.api.app import create_app
+    db=tmp_path/'restart.sqlite3';ready=tmp_path/'ready.json'
+    with TestClient(create_app(db)) as client:
+        wid,url,before=setup(client)
+    script=r'''
+import json,sys,threading
+from pathlib import Path
+from unittest.mock import patch
+from fastapi.testclient import TestClient
+from backend.api.app import create_app
+from test_draft_editor import request,provider
+from backend.services import draft_editor,draft_completeness
+entered=threading.Event()
+def stream(**kw):
+    target=draft_editor.MARKER if sys.argv[3]=='proposing' else draft_completeness.MARKER
+    if kw['messages'][0]['content'].startswith(target):
+        entered.set();threading.Event().wait()
+    yield from provider()(**kw)
+with TestClient(create_app(sys.argv[1])) as client, patch('backend.services.preparation.chat_stream',side_effect=stream):
+    url='/api/workspaces/'+sys.argv[2]+'/draft'
+    response=request(client,url,client.get(url+'?author=true').json())
+    assert response.status_code==200,response.text
+    assert entered.wait(10)
+    Path(sys.argv[4]).write_text(json.dumps(response.json()))
+    threading.Event().wait()
+'''
+    env=dict(os.environ,PYTHONPATH=os.pathsep.join([str(Path.cwd()),str(Path.cwd()/'tests')]))
+    with (tmp_path/'child.log').open('w') as log:
+        child=subprocess.Popen([sys.executable,'-c',script,str(db),wid,phase,str(ready)],env=env,stdout=log,stderr=log)
+        try:
+            deadline=time.monotonic()+15
+            while not ready.exists() and time.monotonic()<deadline and child.poll() is None:time.sleep(.02)
+            assert ready.exists(),(tmp_path/'child.log').read_text()
+            jid=json.loads(ready.read_text())['id']
+        finally:
+            child.kill();child.wait(timeout=5)
+    calls=[]
+    with TestClient(create_app(db)) as client:
+        job=client.get('/api/jobs/'+jid).json()
+        assert job['status']=='stopped' and job['unknown_outcome']
+        current=client.get(url+'?author=true').json()
+        assert current['state']==before['state'] and current['version_id']==before['version_id']
+        assert decide(client,url,current,{'id':jid}).status_code==409
+        with patch('backend.services.preparation.chat_stream',side_effect=provider(calls=calls)):
+            assert client.post(url+'/resume',json={'revision':current['revision'],'api_key':'offline'}).status_code==409
+            response=client.post(url+'/resume',json={'revision':current['revision'],'api_key':'offline','acknowledge_unknown':True})
+            assert response.status_code==200,response.text
+            assert wait_job(client,jid)['status']=='saved'
+        assert len(calls)==(2 if phase=='proposing' else 1)
+        assert client.get(url+'?author=true').json()['state']==before['state']
+        assert decide(client,url,current,{'id':jid}).status_code==200
+        accepted=client.get(url+'?author=true').json()
+        assert len([v for v in accepted['history'] if v['reason']=='ai_edit'])==1
+
+
+def test_lost_confirmation_response_and_concurrent_retries_publish_one_version(api):
+    from concurrent.futures import ThreadPoolExecutor
+    client,app=api;wid,url,before=setup(client);_,edit=run_edit(client,url,before)
+    preview=client.get(url+'?author=true').json()
+    # Commit succeeds, but the client never receives/uses the response.
+    assert decide(client,url,preview,edit).status_code==200
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results=list(pool.map(lambda _:decide(client,url,preview,edit),range(4)))
+    assert all(r.status_code==200 for r in results)
+    current=client.get(url+'?author=true').json()
+    assert len([v for v in current['history'] if v['reason']=='ai_edit'])==1
+    assert current['revision']==preview['revision']+1
+    assert decide(client,url,current,edit,'reject').status_code==409
+
+
+def test_atomic_multiple_npc_locations_dependencies_and_unrelated_history():
+    from backend.services.draft_initial import inspect_candidate
+    s=candidate();indices=[]
+    for index in (1,2):
+        cid=f'extra{index}';lid=f'place{index}';eid=f'past{index}';fid=f'fact{index}'
+        indices.append(len(s['characters']))
+        s['characters'].append(dict(deepcopy(s['characters'][-1]),id=cid,name=cid))
+        s['locations'].append(dict(id=lid,name=f'Место {index}',text='Бывшее место встречи.'))
+        s['world']['characters'][cid]=dict(id=cid,situation='В гостях.',location=lid,goals=[],intentions=[],obligations=[])
+        s['world']['scenes'][eid]=dict(id=eid,participants=[cid],location=lid,start_minute=1,end_minute=2,status='closed',text='Прошлая встреча.',event_ids=[eid])
+        s['world']['events'][eid]=dict(id=eid,participants=[cid],witnesses=[],minute=1,scene_id=eid,text='Пришёл.',fact_ids=[fid])
+        s['world']['facts'][fid]=dict(id=fid,text='Он был здесь.',character_ids=[cid],secret=False)
+        s['world']['knowledge'][fid]=dict(actor_id=cid,fact_id=fid,status='known',source_event_id=eid)
+        s['world']['residences'][cid]=dict(id=cid,actor_id=cid,location_id=lid)
+        s['world']['relationships'][cid]=dict(source_id=cid,target_id=s['controlled_actor_id'],context='Знакомы.',dimensions={})
+    s,report=inspect_candidate(s);assert not report['errors'],report
+    # Prose mentioning a removed character is history, not a structured reference.
+    s['world']['scene_records']['kept']=dict(id='kept',text='extra1 вспомнил place2 — это неизменяемый исторический текст.')
+    before=deepcopy(s);changes=[]
+    for index,pos in zip((1,2),indices):
+        cid=f'extra{index}';lid=f'place{index}';eid=f'past{index}';fid=f'fact{index}'
+        changes.append(change('/characters/'+str(pos),s['characters'][pos],'remove'))
+        loc_index=next(i for i,l in enumerate(s['locations']) if l['id']==lid)
+        changes.append(change('/locations/'+str(loc_index),s['locations'][loc_index],'remove'))
+        for section,key in [('characters',cid),('scenes',eid),('events',eid),('facts',fid),('knowledge',fid),('residences',cid),('relationships',cid)]:
+            changes.append(change('/world/'+section+'/'+key,s['world'][section][key],'remove'))
+    result,_=apply_proposal(s,proposal(s,changes),editing=True)
+    assert s==before and len(result['characters'])==len(s['characters'])-2
+    assert len(result['locations'])==len(s['locations'])-2
+    assert result['world']['scene_records']==s['world']['scene_records']
+    assert result['world']['events']=={k:v for k,v in s['world']['events'].items() if not k.startswith('past')}
+    for section in ('relationships','knowledge','scenes','events','residences'):
+        incomplete=[c for c in changes if c['path']!='/world/'+section+'/'+({'knowledge':'fact1','scenes':'past1','events':'past1'}.get(section,'extra1'))]
+        with pytest.raises(ValueError):apply_proposal(s,proposal(s,incomplete),editing=True)
+
+
+def test_deletion_dependency_namespaces_do_not_confuse_fact_and_event_ids():
+    s,_=apply_proposal(candidate(),proposal(candidate()))
+    # A retained fact may share an ID with a deleted event; unlink only the event.
+    changes=[change('/world/events/fire',s['world']['events']['fire'],'remove'),
+        change('/world/knowledge/fire/source_event_id',None,'replace'),
+        change('/world/threads/rebuild/last_event_id',None,'replace')]
+    result,_=apply_proposal(s,proposal(s,changes),editing=True)
+    assert result['world']['facts']['fire']==s['world']['facts']['fire']
+
+
+def test_resume_after_manual_edit_cannot_adopt_new_head(api):
+    client,app=api;wid,url,before=setup(client)
+    with patch('backend.services.preparation.chat_stream',side_effect=TimeoutError('interrupted')):
+        job=wait_job(client,request(client,url,before).json()['id'])
+    current=client.get(url+'?author=true').json()
+    updated=client.patch(url,json={'revision':current['revision'],'operation':'patch','kind':'campaign','field':'title','value':'Новый ручной замысел'}).json()
+    with patch('backend.services.preparation.chat_stream') as stream:
+        response=client.post(url+'/resume',json={'revision':updated['revision'],'api_key':'offline','acknowledge_unknown':True})
+        assert response.status_code==409
+        stream.assert_not_called()
+    assert decide(client,url,updated,{'id':job['id']}).status_code==409
+    actual=client.get(url+'?author=true').json()
+    assert actual['state']==updated['state'] and actual['version_id']==updated['version_id']

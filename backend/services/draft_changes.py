@@ -126,6 +126,32 @@ def apply_proposal(state, reply, *, editing=False):
     return normalized, proposal.model_dump()
 
 
+def validate_removals(before, after):
+    """Validate surviving dependencies on the final batch, never cascade history.
+
+    Typed validation covers canonical references. The shared editor dependency
+    walk also covers name/alias locations accepted by legacy migration and
+    structured references in immutable scene records.
+    """
+    from backend.services.draft_world import dependencies, GROUPS
+    from backend.services.draft_initial import error
+    deleted=[]
+    for root,kind in (('characters','character'),('locations','location')):
+        remaining={row['id'] for row in after[root]}
+        deleted.extend((kind,row['id']) for row in before[root] if row['id'] not in remaining)
+    kinds={section:kind for kind,section in GROUPS.items()}
+    for section,rows in before['world'].items():
+        if section=='characters' or not isinstance(rows,dict):continue
+        remaining=after['world'].get(section,{})
+        deleted.extend((kinds.get(section,section),key) for key in rows if key not in remaining)
+    problems=[]
+    for kind,eid in deleted:
+        for dependency in dependencies(after,kind,eid,original=before):
+            path='/world/'+dependency['kind']+'/'+dependency['id'].replace('~','~0').replace('/','~1')
+            problems.append(error(path,'Удаляемая сущность '+eid+' всё ещё связана с этой записью. Измените пакет или сохраните сущность.','reference'))
+    if problems:raise DraftErrors(problems)
+
+
 def validate_transition(state, trial, *, editing=False):
     for key in ('controlled_actor_id','protagonist_id','camera','world_clock','creation_settings','authoring'):
         if state.get(key)!=trial.get(key):raise ValueError('Предложение меняет защищённый контекст: '+key)
@@ -167,6 +193,7 @@ def validate_transition(state, trial, *, editing=False):
     if not editing:
         for path in state.get('authoring', {}).get('manual_paths', []):
             preserve(state, trial, path)
+    if editing:validate_removals(state,trial)
     normalized, report = inspect_candidate(trial)
     if report['errors']:
         raise DraftErrors(report['diagnostics'])

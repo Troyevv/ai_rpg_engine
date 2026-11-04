@@ -32,9 +32,13 @@ class DraftEditorStorage:
             self._editor_unstarted(db,job['workspace_id'])
             db.execute("UPDATE preparation_jobs SET status='saved',phase='preview' WHERE id=?",(jid,))
 
-    def world_edits(self,wid):
+    def world_edits(self,wid,author=False):
         with self.connect() as db:
             w=self._draft_workspace(db,wid,idle=False);head=self._draft_head(db,wid)
+            started=bool(db.execute("SELECT 1 FROM document_versions WHERE kind='draft_save' AND owner LIKE ?",(wid+':%',)).fetchone())
+            # Same explicit author projection as draft(); never expose even old
+            # rejected instructions, reviews or reference labels to player views.
+            if not author:return dict(edits=[],started=started)
             result=[]
             for row in db.execute("SELECT * FROM preparation_jobs WHERE workspace_id=? AND kind='draft_editor' ORDER BY rowid DESC",(wid,)):
                 edit=json.loads(row['response_journal']).get('editor',{})
@@ -47,7 +51,6 @@ class DraftEditorStorage:
                     item['references']=references(edit['base']['state'],edit['candidate'])
                 item['requests']=[dict(r) for r in db.execute('SELECT id,stage,status,input_tokens,output_tokens,cost_usd FROM llm_requests WHERE job_id=? ORDER BY rowid',(row['id'],))]
                 result.append(item)
-            started=bool(db.execute("SELECT 1 FROM document_versions WHERE kind='draft_save' AND owner LIKE ?",(wid+':%',)).fetchone())
             return dict(edits=result,started=started)
 
     def decide_world_edit(self,wid,jid,revision,decision,accept_conflicts=False,accept_warnings=False):

@@ -390,7 +390,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
           <div className="workshop-view"><span>Вид:</span><button className={!author ? 'selected' : ''} aria-pressed={!author} onClick={() => setAuthor(false)}>Игрок</button><button className={author ? 'selected' : ''} aria-pressed={author} onClick={() => authorAcknowledged ? setAuthor(true) : setAuthorAsk(true)}>Автор мира</button></div>
           <span className="workshop-hint">{author ? 'Полное состояние: секреты и намерения NPC доступны для редактирования.' : `То, что доступно персонажу ${person(actor)}.`}</span>
         </div>
-        {author && draft && <WorldAIEditor key={id} wid={id} revision={draft.revision} job={job} locked={locked} prefs={prefs} apiKey={apiKey} refresh={refresh} resolve={resolve} onJob={next=>dispatchWorkspace({type:'update',id,update:d=>d?{...d,job:next}:d})}/>}
+        {author && draft && <WorldAIEditor wid={id} revision={draft.revision} job={job} locked={locked} prefs={prefs} apiKey={apiKey} refresh={refresh} resolve={resolve} onJob={next=>dispatchWorkspace({type:'update',id,update:d=>d?{...d,job:next}:d})}/>}
         {(draft?.validation.errors.length || draft?.validation.warnings.length || draft?.import_warnings.length) ? <details className="workshop-review" open={!!draft?.validation.errors.length}>
           <summary>Проверка мира · {draft?.validation.errors.length || 0} ошибок · {(draft?.validation.warnings.length || 0) + (draft?.import_warnings.length || 0)} замечаний</summary>
           {[...(draft?.validation.errors || []), ...(draft?.validation.warnings || []), ...(draft?.import_warnings || [])].map((x,i)=><p key={i}>{x}</p>)}

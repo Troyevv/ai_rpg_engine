@@ -83,7 +83,7 @@ class EditDecision(Revision):
 
 def install(app,repo,preparation,credentials,job):
     @app.get('/api/workspaces/{wid}/draft/edits')
-    def edits(wid:str):return repo.world_edits(wid)
+    def edits(wid:str,author:bool=False):return repo.world_edits(wid,author)
 
     @app.post('/api/workspaces/{wid}/draft/edits')
     def propose(wid:str,body:WorldEdit):
