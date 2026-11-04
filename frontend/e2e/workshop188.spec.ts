@@ -94,3 +94,30 @@ test('reference relationship map uses existing directed edges and preserves doss
  await page.getByRole('combobox',{name:'Чьи отношения показать'}).selectOption('sergey_volkov');await expect(page.locator('.ww-record-dialog')).toHaveCount(0);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
+
+
+test('secret roles have named character selectors and survive Start Game independently',async({page,request})=>{
+ const state=JSON.parse(readFileSync(new URL('../../tests/fixtures/runtime_handoff/world.json',import.meta.url),'utf8'));
+ const fid='fact_ilya_orphan';state.world.facts[fid].story_secret=true;
+ const w=await(await request.post('/api/workspaces',{data:{name:'Роли тайны'}})).json();const url=`/api/workspaces/${w.id}/draft`;
+ expect((await request.post(url+'/import',{data:{revision:0,format:'json',text:JSON.stringify(state)}})).ok()).toBe(true);
+ await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),w.id);await page.goto('/');await nav(page,'Создать');await authorView(page);await workshopNav(page,'Факты и знания');
+ await page.locator('.ww-records-fact .ww-record-card').filter({hasText:state.world.facts[fid].text}).getByRole('button',{name:'Открыть запись →'}).click();
+ for(const [label,name] of [['Кто хранит тайну','Илья Александров'],['Чья скрытая биография','Виктория Соловьёва']]){
+  await page.getByRole('button',{name:`Изменить ${label}`,exact:true}).click();
+  const dialog=page.locator('.ww-field-dialog');await dialog.getByRole('searchbox',{name:`Поиск: ${label}`}).fill(name);await dialog.getByRole('checkbox',{name,exact:true}).check();
+  await dialog.getByRole('searchbox',{name:`Поиск: ${label}`}).fill('Нет такого имени');await expect(dialog).toContainText('Ничего не найдено');await expect(dialog).toContainText('Выбрано: 1');
+  await dialog.getByRole('searchbox',{name:`Поиск: ${label}`}).fill('');await expect(dialog.getByRole('checkbox',{name,exact:true})).toBeChecked();
+  await dialog.getByRole('button',{name:'Сохранить поле',exact:true}).click();await expect(dialog).toHaveCount(0);
+  await expect(page.locator('.ww-record-dialog')).toContainText(name);
+ }
+ await page.keyboard.press('Escape');await workshopNav(page,'Персонажи');await page.getByLabel('Поиск персонажей').fill('Виктория');await page.getByRole('button',{name:'Досье Виктория Соловьёва',exact:true}).click();await page.getByRole('button',{name:'Знания',exact:true}).click();await expect(page.locator('.ww-dossier-fields')).toContainText(state.world.facts[fid].text);
+ const draft=await(await request.get(url+'?author=true')).json();const fact=draft.state.world.facts[fid];
+ expect(fact.secret_keeper_ids).toEqual(['ilya']);expect(fact.secret_biography_ids).toEqual(['viktoria_solovyova']);
+ expect(fact.secret_subject_ids).toEqual(state.world.facts[fid].secret_subject_ids);
+ const response=await request.post(url+'/confirm',{data:{revision:draft.revision,version_id:draft.version_id,accept_warnings:true}});expect(response.ok(),await response.text()).toBe(true);
+ const save=await response.json(),author=await(await request.get(`/api/saves/${save.save}/author-state`)).json();
+ expect(author.snapshot.world_state.facts[fid]).toMatchObject({secret_keeper_ids:['ilya'],secret_biography_ids:['viktoria_solovyova']});
+ const game=await(await request.get(`/api/saves/${save.save}`)).json();
+ expect(game.state.world.facts[fid]).toMatchObject({secret_keeper_ids:['ilya'],secret_biography_ids:['viktoria_solovyova']});
+});

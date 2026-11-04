@@ -94,7 +94,9 @@ def migrate_snapshot(db, source):
     """Idempotent even when the same before snapshot occurs in many variants."""
     from hashlib import sha256
     if source.get('schema_version')==3:
-        return migrate_v2(source).snapshot,[]
+        snapshot = migrate_v2(source).snapshot
+        restore_biographical_secrets(db, snapshot)
+        return snapshot,[]
     digest=sha256(json.dumps(source,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
     row=db.execute('SELECT snapshot_json,report_json FROM world_migrations_v3 WHERE source_hash=?',(digest,)).fetchone()
     if row:return migrate_v2(json.loads(row[0])).snapshot,json.loads(row[1])
@@ -221,3 +223,59 @@ def relationship_reader(storage, head, *, candidates=()):
             cache[key] = [json.loads(row[0]) for row in rows]
         return deepcopy(cache[key])
     return read
+
+
+def restore_biographical_secrets(db, snapshot):
+    """Read-time compatibility, proven by the original onboarding History batch.
+
+    The 32-item limit is the original SecretDraft contract. Both independently
+    generated fact/event hashes, creation confirmation and operation receipt must
+    match. No text/subject/owner heuristics and no writes to historical snapshots.
+    Existing beliefs, including retired ones, always win.
+    """
+    from backend.runtime_v3.milestones import stable_id
+    from backend.runtime_v3.models import Knowledge
+    import json
+    state = snapshot['world_state']
+    candidates = {fid for fid, f in state['facts'].items()
+                  if fid.startswith('biography_') and not f.get('secret_keeper_ids')}
+    if not candidates or not snapshot.get('history_head'):
+        return
+    batches = db.execute('''WITH RECURSIVE lineage(id) AS (
+        SELECT ? UNION SELECT h.parent_id FROM world_history_v3 h JOIN lineage l ON h.id=l.id
+        WHERE h.parent_id IS NOT NULL)
+        SELECT payload_json FROM world_history_v3 WHERE id IN (SELECT id FROM lineage)
+        AND json_valid(payload_json) AND EXISTS (
+            SELECT 1 FROM json_each(payload_json,'$.state_changes') c
+            WHERE json_extract(CASE WHEN c.type='object' THEN c.value ELSE '{}' END,'$.kind')='character_creation')''',
+        (snapshot['history_head'],)).fetchall()
+    for row in batches:
+        batch = json.loads(row[0])
+        changes = batch.get('state_changes', [])
+        if not isinstance(changes, list):
+            continue
+        changes = [c for c in changes if isinstance(c, dict)]
+        creations = {c.get('entity'): c.get('id') for c in changes
+                     if c.get('kind') == 'character_creation' and c.get('source') == 'explicit_confirmation'}
+        events = {e.get('id'): e for e in batch.get('events', []) if isinstance(e, dict) and isinstance(e.get('id'), str)}
+        for receipt in changes:
+            cid = receipt.get('entity'); operation = receipt.get('operation_id')
+            if not isinstance(cid, str) or not isinstance(operation, str):
+                continue
+            if receipt.get('kind') != 'operation_receipt' or cid not in creations or cid not in state['characters'] or not operation:
+                continue
+            if creations[cid] != stable_id('onboarding', operation):
+                continue
+            for index in range(32):
+                fid = stable_id('biography', [operation, index])
+                eid = stable_id('onboarding-secret', [operation, index])
+                event = events.get(eid, {})
+                if fid not in candidates or event.get('participants') != [cid] or event.get('fact_ids') != [fid]:
+                    continue
+                fact = state['facts'][fid]
+                fact.update(story_secret=True, secret_subject_ids=list(dict.fromkeys([*fact.get('secret_subject_ids', []), cid])),
+                            secret_keeper_ids=[cid])
+                key = cid + ':' + fid
+                if key not in state['knowledge']:
+                    state['knowledge'][key] = Knowledge(actor_id=cid, fact_id=fid, confirmed_once=True,
+                        source_event_id=eid, evidence=event.get('text', ''), source_turn=event.get('turn_id', 0)).model_dump()

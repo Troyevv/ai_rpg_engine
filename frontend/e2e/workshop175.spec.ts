@@ -54,7 +54,12 @@ test('workshop portrait illustration and uploaded original survive Start Game',a
  await page.locator('.ww-character-card').first().click();await page.getByRole('button',{name:'Редактировать портрет',exact:true}).click();
  await page.getByText('Настроить иллюстрацию',{exact:true}).click();
  await page.getByLabel('Вид изображения',{exact:true}).selectOption('human');await page.getByLabel('Волосы',{exact:true}).selectOption('3');
- await page.getByLabel('Предпочтение',{exact:true}).selectOption('procedural');await page.getByRole('button',{name:'Сохранить иллюстрацию',exact:true}).click();
+ await page.getByLabel('Предпочтение',{exact:true}).selectOption('procedural');
+ let release!:()=>void,received!:()=>void;const gate=new Promise<void>(r=>release=r),refreshStarted=new Promise<void>(r=>received=r);
+ await page.route(`**/api/workspaces/${workspace.id}/draft?author=true`,async route=>{const response=await route.fetch();received();await gate;await route.fulfill({response})},{times:1});
+ await page.getByRole('button',{name:'Сохранить иллюстрацию',exact:true}).click();await refreshStarted;
+ await expect(page.getByRole('heading',{name:'Портрет персонажа',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Сохранить иллюстрацию',exact:true})).toBeDisabled();release();
  await expect(page.getByRole('heading',{name:'Портрет персонажа',exact:true})).toHaveCount(0);
  const svg=await page.locator('.ww-dossier-aside>.portrait-control .procedural-portrait').getAttribute('src');expect(svg).toMatch(/^data:image\/svg/);
  const second=state.characters[1].id;await page.getByLabel('Переключить досье').selectOption(second);await page.getByRole('button',{name:'Редактировать портрет',exact:true}).click();

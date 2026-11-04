@@ -28,6 +28,9 @@ for(const width of [360,390,412,430,1440])test(`inspector layout ${width}px`,asy
  await page.keyboard.press('Escape');await nav(page,'Мир');const dialog=page.locator('.inspector-workspace');
  for(const tab of ['Мир','Сцена','Персонажи','Отношения','Тайны','Сюжет','Память']){
   await nav(page,tab);
+  // nav's click can complete before React commits the new section. Collecting
+  // :visible summaries earlier retains locators from the now-hidden old panel.
+  await expect(dialog).toHaveAttribute('aria-label',tab);
   expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
   // No-overflow alone missed the previous bug: headings were squeezed beside previews.

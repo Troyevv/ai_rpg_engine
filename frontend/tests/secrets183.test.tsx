@@ -1,0 +1,67 @@
+import {afterEach,beforeEach,expect,it,vi} from 'vitest';
+import {act} from 'react';
+import {createRoot,type Root} from 'react-dom/client';
+import {StorySecretBrowser} from '../src/StorySecretBrowser';
+import type {Save} from '../src/types';
+const requests=vi.hoisted(()=>({pending:[] as {resolve:(v:unknown)=>void;signal:AbortSignal;path:string}[]}));
+vi.mock('../src/api',()=>({api:vi.fn((path:string,_body:unknown,_method:string,signal:AbortSignal)=>new Promise(resolve=>requests.pending.push({resolve,signal,path})))}));
+vi.mock('../src/lib/fogRenderer',()=>({paintFog:vi.fn(),animateFog:()=>()=>{}}));
+let host:HTMLDivElement,root:Root;
+const save=(revision=1,actor='a',id=183)=>({id,revision,state:{characters:[{id:'a',name:'Илья'},{id:'b',name:'Марина'},{id:'c',name:'Тимур'}],controlled_actor_id:actor,story_secrets:{personal:{b:[{id:'opaque',status:'hidden'}]},world:[],revealed:[]}}} as unknown as Save);
+async function render(s=save(),characterId:string|null='b',active=true){await act(()=>root.render(<StorySecretBrowser save={s} state={s.state} onCharacter={()=>{}} characterId={characterId??undefined} active={active}/>))}
+const toggle=async()=>act(()=>host.querySelector<HTMLButtonElement>('[role=switch]')!.click());
+beforeEach(()=>{
+ requests.pending=[];localStorage.clear();sessionStorage.clear();
+ vi.stubGlobal('ResizeObserver',class{observe(){}disconnect(){}});
+ vi.stubGlobal('IntersectionObserver',class{observe(){}disconnect(){}});
+ host=document.createElement('div');document.body.append(host);root=createRoot(host);
+});
+afterEach(async()=>{await act(()=>root.unmount());host.remove();vi.unstubAllGlobals()});
+it('keeps a confirmed card and its POV-limited audience until an explicit preview arrives',async()=>{
+ const s=save(), row={id:'safe-slot',status:'known' as const,text:'Уже известный факт',audience:{known:['a'],suspected:[]}};
+ s.state.story_secrets!.personal.b=[row];
+ await render(s);
+ const original=host.querySelector('[data-secret-id="safe-slot"]');
+ expect(original?.textContent).toContain('по сведениям ГГ');
+ await toggle();
+ expect(original?.isConnected).toBe(true);
+ expect(original?.textContent).toContain('по сведениям ГГ');
+ const full={...row,id:'preview-id',slot_id:row.id,audience:{known:['a','b'],suspected:['c']}};
+ await act(()=>requests.pending[0].resolve({revision:1,character_id:'b',rows:[full]}));
+ expect(original?.textContent).toContain('Марина');
+ expect(original?.textContent).toContain('Тимур');
+ expect(original?.textContent).not.toContain('по сведениям ГГ');
+ await toggle();
+ expect(original?.isConnected).toBe(true);
+ expect(host.innerHTML).not.toMatch(/Марина|Тимур/);
+ expect(original?.textContent).toContain('по сведениям ГГ');
+});
+it.each(['actor','save','revision','card','surface','closed'])('discards rendered and in-flight secrets before %s scope renders',async(change)=>{
+ await render();expect(requests.pending).toHaveLength(0);await toggle();
+ const first=requests.pending[0];
+ await act(()=>first.resolve({revision:1,character_id:'b',rows:[{id:'author-id',status:'spoiler',text:'PRIVATE183'}]}));
+ expect(host.textContent).toContain('PRIVATE183');await toggle();expect(host.innerHTML).not.toContain('PRIVATE183');
+ await toggle();const late=requests.pending[1];
+ const s=save(change==='revision'?2:1,change==='actor'?'c':'a',change==='save'?184:183);
+ await render(s,change==='card'?'c':change==='surface'?null:'b',change!=='closed');
+ expect(late.signal.aborted).toBe(true);
+ await act(()=>late.resolve({revision:1,character_id:'b',rows:[{id:'late-id',status:'spoiler',text:'LATE183'}]}));
+ expect(host.innerHTML).not.toContain('PRIVATE183');expect(host.innerHTML).not.toContain('LATE183');
+ expect(host.querySelector('[role=switch]')?.getAttribute('aria-checked')).toBe(change==='closed'?undefined:'false');
+ expect(JSON.stringify([localStorage,sessionStorage])).not.toContain('183');
+});
+it('uses visible character IDs for portraits and navigation even with identical full names',async()=>{
+ const s=save();
+ s.state.characters=[{id:'b',name:'Александр Сергеевич Крылов'},{id:'c',name:'Александр Сергеевич Крылов'}] as Save['state']['characters'];
+ const navigate=vi.fn();
+ await act(()=>root.render(<StorySecretBrowser state={s.state} save={s} characterId="b" onCharacter={navigate}/>));
+ await toggle();
+ await act(()=>requests.pending[0].resolve({revision:1,character_id:'b',rows:[{id:'author',status:'spoiler',text:'Факт',audience:{known:['b','b','unavailable'],suspected:['c']}}]}));
+ const buttons=host.querySelectorAll<HTMLButtonElement>('.secret-audience button');
+ expect(buttons).toHaveLength(2);
+ expect(buttons[0].textContent).toContain('Александр Сергеевич Крылов');
+ expect(buttons[0].querySelector('[role=img]')?.getAttribute('aria-label')).toBe('Портрет: Александр Сергеевич Крылов');
+ expect(host.innerHTML).not.toContain('unavailable');
+ await act(()=>buttons[1].click());expect(navigate).toHaveBeenCalledWith('c');
+ await toggle();expect(host.querySelectorAll('.secret-audience button')).toHaveLength(0);
+});

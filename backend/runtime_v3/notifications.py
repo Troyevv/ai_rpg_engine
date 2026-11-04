@@ -103,7 +103,7 @@ def visible_threads(state, records):
 
 def story_notifications(state, records, *, secrets=None, threads=None):
     """Resolve references against today's safe projection, never stored secret prose."""
-    from backend.runtime_v3.secrets import projection, visible_fact_ids
+    from backend.runtime_v3.secrets import projection, visible_fact_ids, secret_characters
     actor = state['camera']['controlled_actor_id']
     secrets = projection(state) if secrets is None else secrets
     known = {r['fact_id']: r for rows in [secrets['world'], *secrets['personal'].values()]
@@ -128,7 +128,10 @@ def story_notifications(state, records, *, secrets=None, threads=None):
                 item.update(text='Прежнее знание тайны '+label+'.', available=False)
                 result.append(item)
                 continue
-            subjects = [cid for cid, rows in secrets['personal'].items() if any(r['id'] == row['id'] for r in rows)]
+            # Dossiers now also list foreign secrets the actor knows. That does
+            # not turn the knower into a subject of the discovery notification.
+            subjects = [cid for cid in secret_characters(state['facts'][event['fact_id']])
+                        if any(r['id'] == row['id'] for r in secrets['personal'].get(cid, []))]
             item.update(text=row['text'], slot_id=row['id'], character_ids=subjects)
         else:
             observation = observations.get(event.get('observation_id'))

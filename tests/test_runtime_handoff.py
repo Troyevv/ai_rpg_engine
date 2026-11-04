@@ -241,11 +241,13 @@ def test_exact_handoff_preserves_authored_graph_and_values(api, genres):
     old['world_state']['meta']['genre'] = dict(primary_genre='slice_of_life',
         secondary_genres=['family_saga','romance','drama'], custom_genre='') if genres else None
     old['world_state']['camera'].setdefault('observed_character_ids',[])
+    # #183: absent authored roles remain empty; legacy owner/subject is not
+    # evidence of conscious keeping or a hidden biographical circumstance.
     for fid,fact in old['world_state']['facts'].items():
         original=source()['world']['facts'][fid]
         owner=original.get('owner_id')
         classified=bool(original.get('secret') and owner in old['world_state']['characters'])
-        fact.update(story_secret=classified,secret_subject_ids=[owner] if classified else [],secret_existence='hidden',origin_remote_event_id=None)
+        fact.update(story_secret=classified,secret_subject_ids=[owner] if classified else [],secret_keeper_ids=[],secret_biography_ids=[],secret_existence='hidden',origin_remote_event_id=None)
     for knowledge in old['world_state']['knowledge'].values():knowledge.setdefault('confirmed_once',False)
     # #168 preserves authored/legacy visibility with a neutral optional default.
     for thread in old['world_state']['threads'].values():thread.setdefault('discovered_by',None)
@@ -518,3 +520,18 @@ def test_archive_negative_narratives_repair_without_inventing_presence(api,case_
     assert set(after['world_state']['characters'])==set(before['world_state']['characters'])
     assert after['world_state']['meta']['world_time']==before['world_state']['meta']['world_time']+1
     assert len(repo.list_turns(sid))==1
+
+
+def test_explicit_secret_roles_survive_authoring_runtime_handoff(api):
+    client, app = api
+    value = source()
+    actors = [c['id'] for c in value['characters']]
+    fid, fact = next(iter(value['world']['facts'].items()))
+    fact.update(story_secret=True, secret_keeper_ids=actors[:2],
+                secret_biography_ids=actors[2:4], secret_subject_ids=actors[4:6])
+    before = deepcopy(value)
+    sid = imported(client, value)
+    canonical = app.state.repository.get_snapshot(sid)['world_state']['facts'][fid]
+    for field in ('secret_keeper_ids', 'secret_biography_ids', 'secret_subject_ids', 'text'):
+        assert canonical[field] == fact[field]
+    assert value == before

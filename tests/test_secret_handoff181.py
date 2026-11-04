@@ -95,7 +95,11 @@ def test_handoff_reveal_regeneration_rollback(api):
         result=client.get(f'/api/saves/{sid}').json()['state'];slots=result['story_secrets']['personal']
         assert (slots['sonya'][0]['status']=='known')==reveal
         assert slots['sonya'][0]['id']==initial['personal']['sonya'][0]['id']
-        assert slots['ilya'][0]==slots['sonya'][0]
+        assert {k:v for k,v in slots['ilya'][0].items() if k!='category'}=={k:v for k,v in slots['sonya'][0].items() if k!='category'}
+        if reveal:
+            assert slots['ilya'][0]['category']=='known' and slots['sonya'][0]['category']=='related'
+        else:
+            assert set(slots['ilya'][0])=={'id','status'}
         assert slots['maxim'][0]['status']=='hidden'
         assert len(result['notification_history'])==int(reveal)
     repo.rollback_last(sid)

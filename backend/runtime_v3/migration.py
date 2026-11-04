@@ -124,7 +124,8 @@ def migrate_v2(original):
     history.legacy.append(dict(schema_version=2, world=deepcopy(world)))
     history.events.extend(deepcopy(list(world.get('events', {}).values()) if isinstance(world.get('events',{}),dict) else [world.get('events')]))
     history.turns.extend(deepcopy(list(world.get('scene_records', {}).values()) if isinstance(world.get('scene_records',{}),dict) else [world.get('scene_records')]))
-    from backend.runtime_v3.secrets import legacy_secret_metadata
+    from backend.runtime_v3.secrets import legacy_secret_metadata, initialize_authored_secrets
+    initialize_authored_secrets(world)
     for fid, f in world.get('facts', {}).items():
         state['facts'][fid] = Fact(id=fid, text=f['text'], visibility='secret' if f.get('secret') else 'public',
             character_ids=[cid for cid in f.get('character_ids', []) if cid in actors], claim=deepcopy(f.get('claim')),

@@ -112,3 +112,15 @@ def test_visual_portrait_metadata_never_enters_narrative_or_extraction():
         wire = json.dumps(messages(snapshot))
         assert 'procedural_portrait' not in wire and 'portrait_mode' not in wire
     assert snapshot == before
+
+
+def test_compact_schema_preserves_secret_role_validation():
+    from jsonschema import Draft202012Validator
+    from backend.runtime_v3.raw import extraction_schema, prompt_schema
+    full, compact = extraction_schema(), prompt_schema()
+    a = Draft202012Validator({'$defs': compact['$defs'], 'properties': {'facts': compact['properties']['facts']}})
+    b = Draft202012Validator({'properties': {'facts': full['properties']['facts']}})
+    for field in ('secret_keeper_ids', 'secret_biography_ids', 'secret_subject_ids'):
+        for value, valid in [([], True), (['a', 'b'], True), ('a', False), ([1], False), (None, False)]:
+            payload = {'facts': [{'id': 'f', 'text': 'Скрытая история.', 'evidence': 'Источник.', field: value}]}
+            assert a.is_valid(payload) == b.is_valid(payload) == valid

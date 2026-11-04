@@ -16,7 +16,7 @@ FIELDS={
  'actor':{'location','situation','goals','intentions','emotion','obligations'},
  'relationship':{'source_id','target_id','context','dimensions','visible_to_ids'},
  'location':{'name','text'},
- 'fact':{'text','secret','story_secret','secret_subject_ids','secret_existence','owner_id','character_ids','evidence'},
+ 'fact':{'text','secret','story_secret','secret_keeper_ids','secret_biography_ids','secret_subject_ids','secret_existence','owner_id','character_ids','evidence'},
  'knowledge':{'actor_id','fact_id','status','source_event_id'},
  'thread':{'description','state','public_state','status','character_ids','relevance','visible_to_ids'},
  'scene':{'location','participants','text','start_minute','end_minute','status'},
@@ -91,6 +91,8 @@ def sync(state):
     """Update compatibility projections from canonical data; no parsing or LLM."""
     normalize_motivations(state)
     world=state['world'];campaign=state.get('campaign',{})
+    from backend.runtime_v3.secrets import initialize_authored_secrets
+    initialize_authored_secrets(world)
     state.setdefault('sections',{})['tone']=campaign.get('tone','')
     state['story_notes']=campaign.get('rules','')
     for c in state['characters']:
@@ -189,6 +191,13 @@ def validate(state, *, canonical=True):
         require(isinstance(f.get('text'),str) and bool(f['text'].strip()),f'Факт {fid}: нужен текст.')
         refs(f.get('character_ids',[]),ids,f'fact {fid}')
         refs(f.get('secret_subject_ids',[]),ids,f'secret subjects {fid}')
+        refs(f.get('secret_keeper_ids',[]),ids,f'secret keepers {fid}')
+        refs(f.get('secret_biography_ids',[]),ids,f'secret biography {fid}')
+        biography=f.get('secret_biography_ids',[])
+        if isinstance(biography,list) and all(isinstance(cid,str) for cid in biography):
+            require(len(set(biography)) == len(biography), 'Повторный субъект биографической тайны.')
+        require(not f.get('secret_biography_ids') or f.get('story_secret'), 'Биографическая классификация допустима только для сюжетной тайны.')
+        require(not f.get('secret_keeper_ids') or f.get('story_secret'), 'Хранители допустимы только для сюжетной тайны.')
         require(type(f.get('story_secret',False)) is bool, 'Неверный признак сюжетной тайны.')
         require(f.get('secret_existence','hidden') in ('hidden','discoverable'), 'Неверная видимость существования тайны.')
         require(not f.get('secret_subject_ids') or f.get('story_secret'), 'Субъекты допустимы только для сюжетной тайны.')
@@ -386,7 +395,7 @@ def patch(state,kind,eid,field,value):
             # Validate the actual Runtime field contract (including nullable periods
             # and string evidence), not legacy string-list assumptions.
             model.model_validate({k:v for k,v in dict(target,**{field:value}).items() if k in model.model_fields})
-        list_fields={'secret_subject_ids','aliases','character_ids','participants','witnesses','fact_ids','evidence'}
+        list_fields={'secret_keeper_ids','secret_biography_ids','secret_subject_ids','aliases','character_ids','participants','witnesses','fact_ids','evidence'}
         if not model and field in list_fields and (not isinstance(value,list) or any(not isinstance(x,str) for x in value)):
             raise ValueError('Нужен список строк.')
         if field in ('minute','start_minute','end_minute') and (type(value) is not int or value<0):raise ValueError('Нужно неотрицательное целое время.')
@@ -425,7 +434,7 @@ def dependencies(state,kind,eid, *, original=None):
     reference_fields={
         'character':{'source_id','target_id','actor_id','owner_id','holder_id','character_id',
             'controlled_actor_id','protagonist_id','participants','witnesses','character_ids',
-            'visible_to_ids','secret_subject_ids','present_ids','present_character_ids',
+            'visible_to_ids','secret_keeper_ids','secret_biography_ids','secret_subject_ids','present_ids','present_character_ids',
             'observed_character_ids','discovered_by','stakes_for'},
         'location':{'location_id','location_ids'},
         'fact':{'fact_id','fact_ids','life_fact_id','closure_fact_id','parentage_complete_fact_id','replaced_by'},

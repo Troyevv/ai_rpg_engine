@@ -80,7 +80,7 @@ test('actor, regenerated siblings and rollback use current membership and indepe
  };
  await control('temporary','qa_timur');await expect(toast(page)).toHaveCount(0);
  expect((await view(request,s)).state.notification_history).toEqual([]);
- await dossier(page);await expect(page.locator('.secret-entry.is-revealing')).toHaveCount(0);await expect(page.locator('.story-secrets')).not.toContainText('Вера тайно написала роман.');
+ await dossier(page);await expect(page.locator('.secret-entry.is-revealing')).toHaveCount(0);await expect(page.locator('.secret-browser:visible')).not.toContainText('Вера тайно написала роман.');
  await control('resume');
  for(const e of events)await dismiss(page,e.id);
  await request.post(`/test/story168-prepare/${s.save}?reveal=false&target_turn_id=${tid}`);
@@ -88,14 +88,14 @@ test('actor, regenerated siblings and rollback use current membership and indepe
  await expect(toast(page)).toContainText('Новая сюжетная линия');
  const sibling=await view(request,s),other=sibling.state.notification_history[0],siblingVariant=sibling.turns.at(-1).active_variant_id;
  expect(sibling.state.notification_history).toHaveLength(1);expect(events.map((e:any)=>e.id)).not.toContain(other.id);
- await dossier(page);await expect(page.locator('.secret-entry.is-revealing')).toHaveCount(0);await expect(page.locator('.story-secrets')).not.toContainText('Вера тайно написала роман.');
+ await dossier(page);await expect(page.locator('.secret-entry.is-revealing')).toHaveCount(0);await expect(page.locator('.secret-browser:visible')).not.toContainText('Вера тайно написала роман.');
  const choose=async(id:string)=>{const current=await view(request,s);const r=await request.post(`/api/saves/${s.save}/turns/${tid}/variant`,{data:{revision:current.revision,variant_id:id}});expect(r.ok(),await r.text()).toBe(true);await page.reload()};
  await choose(variant);await expect(page.getByRole('button',{name:'История уведомлений, 3',exact:true})).toBeVisible();await expect(toast(page)).toHaveCount(0);
  await dossier(page);await expect(page.locator('.secret-entry.is-revealing')).toHaveCount(1);await expect(page.locator('.secret-entry.is-revealing')).toHaveCount(0);
  await choose(siblingVariant);await expect(toast(page)).toHaveAttribute('data-notice-id',other.id);await dismiss(page,other.id);
  const current=await view(request,s);const rollback=await request.post(`/api/saves/${s.save}/rollback`,{data:{revision:current.revision}});expect(rollback.ok(),await rollback.text()).toBe(true);
  await page.reload();await expect(page.getByRole('button',{name:'История уведомлений, 0',exact:true})).toBeVisible();await expect(toast(page)).toHaveCount(0);
- await dossier(page);await expect(page.locator('.secret-entry.is-revealing')).toHaveCount(0);await expect(page.locator('.story-secrets')).not.toContainText('Вера тайно написала роман.');
+ await dossier(page);await expect(page.locator('.secret-entry.is-revealing')).toHaveCount(0);await expect(page.locator('.secret-browser:visible')).not.toContainText('Вера тайно написала роман.');
  await page.goBack();const fresh=await turn(page,request,s);expect(events.map((e:any)=>e.id)).not.toContain(fresh.state.notification_history[0].id);
  await toast(page).getByRole('button',{name:'Подробнее'}).click();await expect(page.locator('.secret-entry.is-revealing')).toHaveCount(1);await expect(page.locator('.secret-entry.is-revealing')).toHaveCount(0);
  expect(JSON.stringify(await view(request,s))).not.toContain('NEVER-EXPOSE');

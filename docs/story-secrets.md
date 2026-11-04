@@ -30,7 +30,7 @@ All acquisitions use the existing Knowledge transition machinery, claim-conflict
 
 `ui_view(...).story_secrets` is relative to **controlled_actor_id**, never camera/inspected NPC:
 
-- `personal[subject_id]`: rows for this subject only.
+- `personal[character_id]`: explicit subject/keeper/biography connections; for the controlled actor, also foreign secrets they know.
 - `world`: subjectless rows.
 - `revealed`: deduplicated known secret facts for the existing inspector. Its character links point to secret subjects.
 
@@ -63,3 +63,136 @@ Memory compaction must explicitly take the canonical memory from the snapshot, n
 This application has no authenticated user/author roles or per-save read authorization. Anyone with direct server access has operator-level access. `GET /api/saves/{sid}/author-state` is an explicit author representation, **not** a protected endpoint. Existing `GET /api/worlds/{wid}` returns authored source/state; `GET /api/workspaces/{wid}/draft?author=true`, draft exports/raw diagnostics and document history likewise expose author material without a login. The new route does not grant a role or bypass an existing authorization check.
 
 The same-origin middleware rejects cross-origin mutations only. It is CSRF mitigation, not confidentiality or authentication; a direct HTTP client can read these endpoints. Browser same-origin rules are not server authorization. Deploy the server only within the operator's trust boundary (loopback/trusted network or an authenticated external access proxy). A shared server for mutually untrusted players would require consistent authentication/authorization across **all** author, history/export and mutation routes, not a token or query flag on this one endpoint. Gameplay projection prevents accidental spoiler delivery to ordinary UI; it cannot conceal canon from a deliberate server operator.
+
+## Own secrets and explicit spoiler reading (#183)
+
+`Fact.secret_keeper_ids: string[] = []` is an authored statement of conscious
+personal ownership, separate from `secret_subject_ids` (who the fact concerns)
+and Knowledge (who currently knows it). Neither legacy `owner_id`, subjects,
+privacy, names in prose nor being the camera subject implies ownership or knowledge.
+A shared secret may have several keepers. Both lists reference existing characters.
+
+At the **initial authoring boundary**, a classified fact with explicit keepers
+creates missing canonical `Knowledge.status=known` for those keepers. Conflicting
+explicit non-known starting beliefs are rejected for author correction; other
+holders and facts stay untouched. A reviewed `CharacterDraft.secrets` entry is
+already explicit evidence of a new protagonist's own secret: creation classifies
+it, links the character as subject/keeper and adds that character to the deduplicated
+holders of its individual provenance event. No disclosure notification is emitted.
+Later Runtime reads/selection do **not** grant knowledge from keeper metadata:
+refutation, supersession and other Knowledge transitions retain their authority.
+Extraction can carry this classification but still needs accepted acquisition
+provenance to change Knowledge. The Fact is not a second belief store.
+
+Safe `story_secrets.personal` known rows have `category: own | known | related`; own
+requires explicit ownership. Unknown rows remain **exactly** `{id,status}`. The client
+must not infer their keeper/category. Hidden existence produces no slot/count.
+All character surfaces include explicit subjects, keepers and biographical subjects; the global view
+deduplicates their shared opaque slots. Observing a character grants no access.
+The ordinary view can reference the controlled actor on a confirmed row. This is a
+POV-limited audience, not a claim that nobody else knows. It never lists other
+characters' private beliefs; hidden rows have neither names nor audience counts.
+
+`GET /api/saves/{sid}/story-secret-spoilers?revision=N[&character_id=ID]` is an
+explicit author read in the same trusted single-user boundary as `author-state`.
+Omitting `character_id` explicitly requests all story secrets; specifying it
+restricts the result to the character's own/related/biographical secrets and
+foreign secrets they know. Stale revisions are
+rejected. The response is `Cache-Control: no-store` and contains only
+`{revision, character_id, rows}`. Rows contain an opaque author-view ID, canonical
+text, known/spoiler status, the controlled actor's belief status and category.
+The author view lists who currently knows and who suspects each fact in
+`audience.known` and `audience.suspected` (POV-visible character IDs). These lists come from
+canonical Knowledge on the active version, not from subjects, keepers or initial
+witnesses. For a row already present in the ordinary projection, `slot_id`
+identifies its existing opaque slot for this observer. Facts absent from the
+ordinary projection do not reserve space or expose a link before activation.
+There are no raw cards, arbitrary private facts, correspondence or full snapshots.
+`story_secret` remains the sole classification criterion. This endpoint is not a
+new authentication mechanism; the deployment trust requirements above still apply.
+
+Spoiler data is requested only on explicit activation. The shared game control
+resets on section/card/surface/save/revision/controlled-actor changes, closing or
+reload. Abort and response guards discard late results, while component identity
+removes prior text before a changed scope renders. Search only indexes current
+rows and is cleared on mode changes. Neither text nor activation is persisted in
+browser storage. While the request is pending, visible cards stay in place.
+On success, the same fog renderer used by a story discovery disperses the veil
+for a visual preview. This transition is transient: it neither records a discovery
+receipt nor sends a notification. Closing the preview removes its text and names
+immediately; reduced motion skips the transition. A later canonical discovery
+still has its own notification and one-time fog receipt.
+
+### Compatibility and recovery
+
+Existing metadata defaults to an empty keeper list. No broad migration infers
+ownership. Previously created `biography_*` facts can be recovered **only** when
+the active History ancestry contains the matching explicit character-creation
+confirmation, operation receipt and separate onboarding-secret event. Both
+fact/event IDs must match the original operation/index derivation (the original
+32-secret authoring limit). Missing owner Knowledge is supplied from that proven
+source; any existing belief, including refuted/superseded/unknown, wins. Unproven
+imports, legacy owner fields and unknown facts about one's ancestry are not guessed.
+
+This compatibility normalization is shared by game/author snapshot reads,
+Runtime repository operations and Engine job preparation/execution. It does not
+rewrite SQLite historical snapshots, variants or History; the next ordinary
+commit can persist the normalized current state. Recorded regeneration prompts
+remain recorded prompts, not rebuilt context. A spoiler request itself performs
+no WorldState, Knowledge, History or presentation-receipt write.
+
+### Contract for parallel Workshop #175
+
+No Workshop component/layout/style changes are included. Shared changes are:
+Fact/defaults and validation, draft schema/patch/dependency vocabulary,
+initial/creative authoring instructions, v2 → v3 handoff and safe secret rows.
+The new Workshop should expose `secret_keeper_ids` as explicitly known personal
+secrets, separately from subjects and additional Knowledge holders, preserve it
+on edits/remaps, and handle a conflicting initial belief as a validation error.
+Old drafts without the field remain accepted. It must not derive keeper IDs from
+legacy owner IDs or copy gameplay spoiler state into its own author mode.
+
+
+### Semantic categories and audience navigation (PR #187 follow-up)
+
+`Fact.secret_biography_ids: string[] = []` explicitly identifies whose hidden
+biographical circumstances/origin/life the fact describes. It is independent of
+`secret_subject_ids` (related people), `secret_keeper_ids` (conscious personal
+ownership), and Knowledge. Others' feelings/plans do not become biography just
+because their target is a subject. This field never grants knowledge. Old saves
+and drafts default to an empty list; no text/name heuristics or historical rewrites
+infer a missing classification. It participates in draft generation, patch/schema,
+dependencies, migration, immutable Fact extraction and reference validation.
+Workshop #175 should preserve it separately from subjects/keepers on edits/remaps.
+
+Author rows are classified relative to the **opened dossier**: explicit keeper →
+`own`; otherwise actual known Knowledge → `known`; otherwise explicit biography →
+`biography`; otherwise a direct subject/keeper/biography connection → `related`.
+An unrelated known secret is included in that character's dossier too. Global
+rows use the controlled actor as reference and retain the `world` category for
+facts without personal metadata. The known/spoiler badge always describes the
+**controlled actor**, even when the dossier is someone else. These are different
+questions, not interchangeable tests on subject IDs.
+
+Ordinary hidden rows still contain exactly `{id,status}` and are labelled neutrally
+«Скрытые тайны». Their membership, category, audience and text cannot be recovered
+from the DOM or search. Ordinary known foreign secrets appear in the controlled
+actor's «Известные мне тайны», including facts unrelated to their biography. No
+other NPC's Knowledge is enumerated in ordinary mode. The global view deduplicates
+personal/world copies by the same opaque slot ID.
+
+Preview overlays keep their original group and row keys. Exact semantic badges
+appear on each preview card without moving that card to another section during
+fog dispersion. Additional previously nonexistent slots are appended separately.
+This preserves the canvas, focus and card position from c9de9d5; closing removes
+all author text and audience immediately. Presentation receipts remain untouched.
+
+`audience.known` / `audience.suspected` now contain **stable character IDs**, not
+names. Ordinary known rows contain only the controlled actor's ID. Explicit
+preview enumerates canonical beliefs, filtered to characters whose cards can be
+navigated under the current POV (including birth visibility). Names and portraits
+come from those same safe game cards; hidden name changes are not exposed by this
+route. `CharacterPeople`, extracted from the inspector, supplies the shared round
+portrait/full-name buttons and ID-based dossier navigation. Missing/unavailable
+references are omitted without placeholders or counts. Preview mode does not
+make an otherwise unavailable character navigable.
