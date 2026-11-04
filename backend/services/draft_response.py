@@ -19,7 +19,20 @@ CONTINUE = ('Продолжи тот же JSON строго с места ост
 
 
 class TransportError(ValueError):
-    pass
+    def __init__(self, message, diagnostic=None):
+        super().__init__(message)
+        self.diagnostic = diagnostic
+
+
+HTTP_REASONS = {
+    'json_instruction_required': 'В запросе JSON-режима отсутствует явная инструкция вернуть JSON.',
+    'context_limit': 'Запрос превышает контекст модели.',
+    'output_limit': 'Провайдер отклонил лимит ответа.',
+    'model_unavailable': 'Указанная модель недоступна.',
+    'incompatible_parameters': 'Провайдер отклонил сочетание параметров запроса.',
+    'unclassified_rejection': 'Причина отказа не распознана; подробности сопоставляются по номеру запроса.',
+}
+
 
 
 REVIEW_POLICY = 1
@@ -34,6 +47,18 @@ EMPTY_MESSAGES = {
 def public_diagnostic(failure):
     """Only server-authored transport messages may cross the player projection."""
     code=(failure or {}).get('code')
+    if code == 'provider_http_rejection':
+        status=failure.get('http_status')
+        if type(status) is not int or not 400 <= status <= 599:return None
+        reason=failure.get('reason')
+        if reason not in HTTP_REASONS:reason='unclassified_rejection'
+        request_id=failure.get('request_id')
+        if not isinstance(request_id,str) or not re.fullmatch(r'[0-9a-f]{32}',request_id):request_id=None
+        received=failure.get('received_text') is True
+        message=f'Провайдер отклонил запрос: HTTP {status}. '+HTTP_REASONS[reason]
+        message+=' Полученный текст сохранён.' if received else ' Текст ответа не получен.'
+        if request_id is not None:message+=f' Запрос №{request_id}.'
+        return dict(code=code,http_status=status,reason=reason,request_id=request_id,received_text=received,message=message)
     if code not in EMPTY_MESSAGES:return None
     return dict(code=code,message=EMPTY_MESSAGES[code]+' Ответ и расход сохранены; автоматический повтор запрещён.')
 
@@ -313,6 +338,14 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
             context_length=context,max_tokens=limit)
         journal['active_response']=slot
         fingerprint=digest(json.dumps([request,{k:v for k,v in record['effective_config'].items() if k!='context_length'},config.get('temperature')],ensure_ascii=False,sort_keys=True))
+        rejection=next((failure.get('diagnostic') for failure in reversed(journal.get('http_failures',[]))
+            if failure.get('request_fingerprint')==fingerprint and failure.get('status')==400
+            and failure.get('diagnostic',{}).get('reason') in HTTP_REASONS
+            and failure['diagnostic']['reason']!='unclassified_rejection'),None)
+        if rejection:
+            record['http_failure']=rejection
+            repo.save_response_journal(jid,journal)
+            raise TransportError(rejection['message']+' Исправь параметры или сборку запроса перед продолжением.',rejection)
         prior=journal.get('empty_requests',{}).get(fingerprint)
         grant=journal.get('empty_retries',{}).get(fingerprint,{})
         authorized=grant.get('slot')==slot and grant.get('epoch')==journal.get('recovery_epoch',0) and not grant.get('used')
@@ -368,20 +401,25 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
             metadata=accounting()
             settle(metadata,rejected=not bool(fragment))
             journal['pending']=None
-            journal.setdefault('http_failures',[]).append(dict(slot=slot,status=exc.status_code,reservation_released=not bool(fragment)))
+            diagnostic=public_diagnostic(dict(code='provider_http_rejection',http_status=exc.status_code,
+                reason=exc.diagnostic.get('reason'),request_id=metadata.get('id'),received_text=bool(fragment)))
+            record['http_failure']=diagnostic
+            journal.setdefault('http_failures',[]).append(dict(slot=slot,status=exc.status_code,
+                reservation_released=not bool(fragment),request_fingerprint=fingerprint,diagnostic=diagnostic,provider_error=exc.diagnostic))
             retries=record.get('http_retries',0)
             record['http_retries']=retries+1
             repo.save_response_journal(jid,journal)
             if exc.status_code in (429,503) and not fragment and retries<2:
                 if cancel.wait(min(2**retries,4)):return None
                 continue
-            raise TransportError(f'Провайдер отклонил запрос: HTTP {exc.status_code}. Ответ сохранён.') from None
+            raise TransportError(diagnostic['message'],diagnostic) from None
         except MemoryError:
             raise
         except Exception:
             # Network errors and cancellation have unknown billing/output, even
             # if no visible characters arrived. Do not turn them into a retry.
             raise TransportError('Запрос прерван; его исход неизвестен. Полученный текст сохранён, слепой повтор запрещён.') from None
+        record.pop('http_failure',None)
         metadata=accounting()
         settle(metadata)
         part = dict(provider=config.get('provider'),model=re.sub(r'[^A-Za-z0-9_./:-]','',str(config.get('model','')))[:128],request_id=metadata.get('id'),usage=json.loads(metadata['usage_json']) if metadata.get('usage_json') else None,provider_finish_reason=metadata.get('finish_reason'),text=fragment,sha256=hashlib.sha256(fragment.encode()).hexdigest(),offset=sum(len(p['text']) for p in record['parts']),requested_output_limit=limit,finish_reason='stop' if ended else 'length')

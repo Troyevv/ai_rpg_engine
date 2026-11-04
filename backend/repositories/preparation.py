@@ -89,7 +89,7 @@ class Repository(PresentationStorage, DraftStorage, Storage):
             job={**job,'narrative':'','progress_chars':len(job.get('narrative','')),
                  'attempt_epoch':journal.get('recovery_epoch',0),
                  'effective_config':record.get('effective_config'),
-                 'response_diagnostic':public_diagnostic(record.get('failure')),
+                 'response_diagnostic':public_diagnostic(record.get('failure') or record.get('http_failure')),
                  'empty_retry_token':Repository.empty_retry_token(journal) if job.get('status')=='error' else None,
                  'pinned_config':{k:config.get(k) for k in ('provider','model','thinking','context_length','max_tokens')}}
             if job.get('error','').startswith('Две попытки'):job['error']='Две попытки исправления исчерпаны. Мир сохранён; подробности доступны автору.'

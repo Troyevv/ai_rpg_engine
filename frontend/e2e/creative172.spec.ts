@@ -2,13 +2,13 @@ import {test,expect} from '@playwright/test';
 import {nav} from './navigation';
 import {defaults} from '../src/types';
 
-for(const skin of ['graphite','parchment']) for(const mode of ['complete','empty','correction']) {
+for(const skin of ['graphite','parchment']) for(const mode of ['complete','empty','correction','http400']) {
  const fail=mode==='empty';
  test(`creative stage, refresh and ${mode} in ${skin}`,async({page,request})=>{
   const theme=await(await request.post('/test/seed')).json();
   await request.put(`/api/worlds/${theme.world}/presentation`,{data:{theme_id:skin}});
   await request.put('/api/credentials/deepseek',{data:{api_key:'offline-creative172'}});
-  const workspace=await(await request.post('/test/creative172',{data:{fail,invalid:mode==='correction'}})).json();
+  const workspace=await(await request.post('/test/creative172',{data:{fail,invalid:mode==='correction',http_error:mode==='http400'}})).json();
   const url=`/api/workspaces/${workspace.id}/draft`;
   // Seed once: init scripts run again on every reload and would overwrite
   // the world/save selected by confirmation with the unrelated theme world.
@@ -35,12 +35,26 @@ for(const skin of ['graphite','parchment']) for(const mode of ['complete','empty
    await page.getByRole('button',{name:'Повторить после сбоя провайдера'}).click();
    await page.getByRole('button',{name:'Подтвердить одну повторную проверку'}).click();
   }
+  if(mode==='http400'){
+   const alert=page.getByRole('alert');
+   await expect(alert).toContainText('HTTP 400');
+   await expect(alert).toContainText('Причина отказа не распознана');
+   await expect(alert).toContainText('Текст ответа не получен');
+   await expect(alert).toContainText('Запрос №');
+   const failed=await(await request.get(url+'?author=true')).json();
+   expect(failed.candidate).toEqual(before.candidate);
+   expect(failed.version_id).toBe(before.version_id);
+   await page.reload();await nav(page,'Создать');
+   await expect(alert).toContainText('HTTP 400');
+   await expect(page.getByText('Творческое развитие не завершено.',{exact:false})).toBeVisible();
+   await page.getByRole('button',{name:'Продолжить творческое развитие',exact:true}).click();
+  }
   await expect(page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true})).toBeEnabled();
   const completed=await(await request.get(url+'?author=true')).json();
   expect(completed.creative_status).toBe('applied');expect(completed.review.status).toBe('completed');
   expect(completed.state.world.organizations.workshop.name).toBe('Мастерская Веры');
   const raw=await(await request.get(url+'/raw')).json();
-  expect(raw.requests.filter((r:{stage:string})=>r.stage==='draft_world_creative').length).toBe(fail?2:1);
+  expect(raw.requests.filter((r:{stage:string})=>r.stage==='draft_world_creative').length).toBe(fail||mode==='http400'?2:1);
   expect(raw.requests.filter((r:{stage:string})=>r.stage==='draft_world_creative_repair')).toHaveLength(mode==='correction'?1:0);
   if(mode==='correction'){
    expect(raw.creative.original_reply).toContain('missing');

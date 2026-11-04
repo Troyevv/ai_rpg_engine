@@ -23,7 +23,7 @@ POV не передаёт управление; тайна мира не ста�
 Новые события — только предыстория; неизвестная минута null. Новые планы не
 гарантируют будущего выбора игрока. Не меняй время начала, камеру, управление,
 настройки, authoring и серверные provenance. Сохрани существующие IDs.
-Верни один атомарный пакет по response_schema, не полный мир. candidate_hash
+Верни один JSON-объект по response_schema, без Markdown и пояснений: атомарный пакет, не полный мир. candidate_hash
 скопируй точно. Для новых карточек/мест op=add path=/characters/- или
 /locations/-. Для новых записей op=add path=/world/<section>/<новый ID>.
 Зависимые записи добавляй в том же пакете: ссылки проверяются после всех
@@ -142,7 +142,7 @@ def develop(state, author_context, journal, call, save, *, request_key=None):
         return enhanced
     except ValueError as exc:
         from backend.services.draft_response import TransportError
-        diagnostics=getattr(exc, 'errors', None)
+        diagnostics=getattr(exc, 'diagnostic', None) or getattr(exc, 'errors', None)
         if callable(diagnostics):diagnostics=diagnostics(include_url=False,include_context=False,include_input=False)
         record.update(status='interrupted' if isinstance(exc, TransportError) else 'rejected', reason=str(exc),
                       diagnostics=diagnostics)
