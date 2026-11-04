@@ -227,7 +227,15 @@ def test_optional_batch_api_and_unchanged_resume(api,reject):
         elif 'patches' in system:
             yield json.dumps({'patches':[dict(path='/characters' if reject else path,value=[] if reject else 'Поправляет очки перед ответом.')]})
         else:yield json.dumps(original)
-    with patch('backend.services.preparation.chat_stream',side_effect=stream):
+    # Explicit historical job contract: old drafts retain optional completion.
+    from backend.services.draft_generation import run as generation_run
+    def legacy_run(preparation,jid,*args):
+        job=preparation.repo.preparation_job(jid)
+        journal=json.loads(job.get('response_journal') or '{}')
+        journal['generation_contract']={'version':5}
+        preparation.repo.save_response_journal(jid,journal)
+        return generation_run(preparation,jid,*args)
+    with patch('backend.services.draft_generation.run',side_effect=legacy_run), patch('backend.services.preparation.chat_stream',side_effect=stream):
         r=client.post(url+'/generate',json={'revision':0,'text':'Мир мастерских','config':dict(REMOTE,context_length=262144),'api_key':'offline'})
         jid=r.json()['id'];job=wait_job(client,jid);assert job['status']=='saved',job
         d=client.get(url+'?author=true').json()

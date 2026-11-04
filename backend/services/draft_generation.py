@@ -119,7 +119,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     if 'generation_contract' not in journal:
         from pathlib import Path
         bundled=(Path(__file__).resolve().parents[2]/'prompts/draft_world_prompt.md').read_text()
-        journal['generation_contract']={'version':'legacy' if journal.get('messages') or journal.get('responses') else 5,
+        journal['generation_contract']={'version':'legacy' if journal.get('messages') or journal.get('responses') else 6,
             'prompt_contract':'bundled' if config['_prompts']['draft_world_prompt.md']['content']==bundled else 'custom_unverified',
             'prompt_sha256':hashlib.sha256(config['_prompts']['draft_world_prompt.md']['content'].encode()).hexdigest()}
     messages=journal.setdefault('messages',messages_for(repo,job,config))
@@ -176,6 +176,21 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
                 journal['candidate_text']=json.dumps(raw,ensure_ascii=False)
                 repo.save_response_journal(jid,journal)
                 repo.save_draft_candidate(jid,raw,errors,review=dict(status='not_started',issues=[]),epoch=epoch)
+        if not errors and journal['generation_contract']['version'] == 6:
+            from backend.services import draft_creative
+            stage='draft_world_creative'
+            repo.draft_phase(jid,'developing',reset_progress=True)
+            def creative_call(slot, request_messages):
+                nonlocal stage
+                stage='draft_world_creative_repair' if slot.startswith('creative_correction_') else 'draft_world_creative'
+                repo.draft_phase(jid,'retrying' if slot.startswith('creative_correction_') else 'developing')
+                return response(repo,jid,journal,slot,request_messages,config,context,generate,handle.cancel)
+            state=draft_creative.develop(state,messages[-1]['content'],journal,creative_call,
+                                         lambda:repo.save_response_journal(jid,journal),
+                                         request_key=candidate_hash([context,{k:config.get(k) for k in ('provider','model','thinking','temperature','max_tokens','_draft_stage_output_limits','_model_capabilities')}]))
+            if state is None:return
+            result=journal['candidate_text']
+            repo.save_draft_candidate(jid,state,[],review=dict(status='not_started',issues=[]),epoch=epoch)
         if not errors:
             review_meta=dict(status='running',contract_version=draft_completeness.CONTRACT_VERSION,issues=[])
             if not patch_failure:repo.save_draft_candidate(jid,state,[],review=review_meta,epoch=epoch)
@@ -263,7 +278,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         effective=review_config(config) if request_stage=='draft_world_validation' else config
         if request_stage=='draft_world_validation':slot+='_'+review_signature(request_messages,config)
         return response(repo,jid,journal,slot,request_messages,effective,context,generate,handle.cancel)
-    enhanced, quality_issues=draft_quality.complete(state,issues,messages[-1]['content'],journal,quality_call)
+    enhanced, quality_issues=(state,None) if journal['generation_contract']['version']==6 else draft_quality.complete(state,issues,messages[-1]['content'],journal,quality_call)
     if handle.cancel.is_set():
         repo.save_response_journal(jid,journal);return
     if quality_issues is not None:

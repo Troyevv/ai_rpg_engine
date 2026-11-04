@@ -258,7 +258,7 @@ def test_generation_uses_one_world_request_plus_review_and_saves(api):
     assert set(CARD_FIELDS)==set(schema['properties']['characters']['items']['properties']['fields']['required'])
     with app.state.repository.connect() as db:
         stages=[row[0] for row in db.execute('SELECT stage FROM llm_requests')]
-    assert stages==['draft_world','draft_world_validation','draft_world_quality']
+    assert stages==['draft_world','draft_world_creative','draft_world_validation']
 
 
 def test_deepseek_json_mode_repairs_only_bad_format(api):
@@ -274,12 +274,12 @@ def test_deepseek_json_mode_repairs_only_bad_format(api):
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         job=client.post(path+'/generate',json={'revision':draft['revision'],'task':'world',
                                                 'text':'Сложный мир','config':REMOTE,'api_key':'fixture'})
-        assert wait_job(client,job.json()['id'])['status']=='saved'
+        finished=wait_job(client,job.json()['id']);assert finished['status']=='saved',finished.get('error')
     assert len(calls)==2
     assert all(c['response_format']=={'type':'json_object'} for c in calls)
     assert 'только синтаксическую' in calls[1]['messages'][0]['content']
     with app.state.repository.connect() as db:
-        assert sorted(r[0] for r in db.execute('SELECT stage FROM llm_requests'))==['draft_world','draft_world_quality','draft_world_repair','draft_world_validation']
+        assert sorted(r[0] for r in db.execute('SELECT stage FROM llm_requests'))==['draft_world','draft_world_creative','draft_world_repair','draft_world_validation']
 
 
 def test_failed_structural_repair_keeps_previous_version(api):
@@ -350,7 +350,7 @@ def test_scenario_route_stays_separate_from_quick_generation(api):
     assert current['idea'] in calls[1][-1]['content']
     with app.state.repository.connect() as db:
         stages=[row[0] for row in db.execute('SELECT stage FROM llm_requests ORDER BY created_at,id')]
-    assert sorted(stages)==['draft_world','draft_world_quality','draft_world_validation','idea']
+    assert sorted(stages)==['draft_world','draft_world_creative','draft_world_validation','idea']
 
 
 def test_semantic_warning_and_rename_preserves_directed_relationships(api):
@@ -563,9 +563,9 @@ def test_quick_generation_creative_completion_is_playable_with_review(api):
         calls.append(kwargs['messages'])
         yield json.dumps(state,ensure_ascii=False)
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
-        job=client.post(f"/api/workspaces/{w['id']}/draft/generate",json={'revision':w['revision'],'task':'world','text':idea,'config':REMOTE,'api_key':'fixture'})
+        job=client.post(f"/api/workspaces/{w['id']}/draft/generate",json={'revision':w['revision'],'task':'world','text':idea,'config':dict(REMOTE,context_length=65536),'api_key':'fixture'})
         assert job.status_code==200,job.text
-        assert wait_job(client,job.json()['id'])['status']=='saved'
+        finished=wait_job(client,job.json()['id']);assert finished['status']=='saved',finished.get('error')
     assert len(calls)==1 and idea in calls[0][-1]['content']
     assert 'Ты создаёшь полноценный живой RPG-мир' in calls[0][0]['content']
     draft=client.get(f"/api/workspaces/{w['id']}/draft?author=true").json()
@@ -581,7 +581,7 @@ def test_quick_generation_creative_completion_is_playable_with_review(api):
     assert confirmed.status_code==200,confirmed.text
     assert client.get(f"/api/saves/{confirmed.json()['save']}").json()['state']['world_clock']['minute']==5160
     with app.state.repository.connect() as db:
-        assert [row[0] for row in db.execute('SELECT stage FROM llm_requests')]==['draft_world','draft_world_validation']
+        assert [row[0] for row in db.execute('SELECT stage FROM llm_requests')]==['draft_world','draft_world_creative','draft_world_validation']
 
 
 def test_generation_review_is_advisory_and_import_is_unchanged(api):
@@ -609,7 +609,7 @@ def test_sparse_world_retains_valid_data_when_bounded_completion_is_rejected(api
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         job=client.post(path+'/generate',json={'revision':previous['revision'],'task':'world',
             'text':'Мир у маяка','config':REMOTE,'api_key':'fixture'})
-        assert wait_job(client,job.json()['id'])['status']=='saved'
+        finished=wait_job(client,job.json()['id']);assert finished['status']=='saved',finished.get('error')
     after=client.get(path+'?author=true').json()
     assert len(calls)==1 and after['validation']['warnings']
     assert after['state']['characters'][0]['fields']['Стиль общения']==''
@@ -617,7 +617,7 @@ def test_sparse_world_retains_valid_data_when_bounded_completion_is_rejected(api
     assert any('Внешность описана слишком общо' in note for note in after['validation']['warnings'])
     assert after['state']['world']['threads']=={} and after['state']['world']['relationships']=={}
     with app.state.repository.connect() as db:
-        assert [r[0] for r in db.execute('SELECT stage FROM llm_requests')]==['draft_world','draft_world_validation','draft_world_quality']
+        assert [r[0] for r in db.execute('SELECT stage FROM llm_requests')]==['draft_world','draft_world_creative','draft_world_validation']
 
 
 def test_shared_secret_does_not_count_as_every_characters_personal_secret():

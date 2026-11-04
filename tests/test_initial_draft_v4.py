@@ -194,7 +194,7 @@ def test_finish_reason_length_without_exception_and_budget_api(api):
         result=wait_job(client,r.json()['id']);assert result['status']=='saved',result
     assert len(calls)==2
     records=app.state.repository.request_log(job_id=r.json()['id'])
-    assert sorted(row['status'] for row in records)==['complete','complete','length']
+    assert sorted(row['status'] for row in records)==['complete','complete','complete','length']
     assert any(row['finish_reason']=='length' for row in records)
 
 

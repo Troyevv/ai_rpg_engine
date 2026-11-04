@@ -1,3 +1,4 @@
+from draft_provider_fixture import accept_creative_unchecked
 """Final-contract regressions. Historical bytes first; continuation is controlled, not live."""
 from copy import deepcopy
 from pathlib import Path
@@ -133,6 +134,7 @@ def test_e4_candidate366_resume_repair_quality_start_turn_reload_next(api,eviden
     actual=responses[-1]
     original=next((r for r in responses if any(i.get('assertion')=='missing_record' and i.get('path') is None for i in json.loads(r)['issues'])),responses[0])
     calls=[]
+    @accept_creative_unchecked
     def provider(**kw):
         system=kw['messages'][0]['content'];payload=json.loads(kw['messages'][1]['content']);calls.append(system)
         if system.startswith(review.MARKER):
@@ -266,6 +268,7 @@ def test_model_player_goal_recovery_preserves_source_agency(api,authored):
     s['world']['characters'][cid].update(short_goal='Поехать на юг',goals=[])
     source='Автор задаёт цель героя: поехать на юг.' if authored else 'Герой ещё не решил, поедет ли он на юг.'
     wid=client.post('/api/workspaces',json={'name':'Agency recovery'}).json()['id'];url=f'/api/workspaces/{wid}/draft';calls=[]
+    @accept_creative_unchecked
     def provider(**kw):
         system=kw['messages'][0]['content'];calls.append(system)
         if system.startswith(review.MARKER):yield '{"issues":[]}';return
@@ -283,6 +286,7 @@ def test_model_player_goal_recovery_preserves_source_agency(api,authored):
 
 def test_browser_provider_protocol_recovers_after_known_outage(api):
     from draft_provider_fixture import protocol_review
+    @accept_creative_unchecked
     def stream(**kw):
         if kw['messages'][0]['content'].startswith(review.MARKER):yield protocol_review(json.loads(kw['messages'][1]['content'])) or '{"issues":[]}'
         else:yield json.dumps(rich())
@@ -302,6 +306,7 @@ def test_browser_provider_protocol_recovers_after_known_outage(api):
 def test_value_cycle_is_persisted_across_resume_epoch(api):
     client,app=api;s=rich();s['campaign']['title']='A'
     wid=client.post('/api/workspaces',json={'name':'Cycle recovery'}).json()['id'];url=f'/api/workspaces/{wid}/draft';calls=[];repairs=[]
+    @accept_creative_unchecked
     def provider(**kw):
         system=kw['messages'][0]['content'];calls.append(system)
         if system.startswith(review.MARKER):yield json.dumps({'issues':[dict(path='/campaign/title',message='Controlled unresolved conflict')]})

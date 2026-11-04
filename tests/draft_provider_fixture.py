@@ -3,11 +3,29 @@
 These tests do not measure semantic recall. test_draft_completeness exercises the
 review/repair contract with the unabridged real DeepSeek response separately.
 """
+import json
 from functools import wraps
+from backend.services.draft_creative import MARKER as CREATIVE_MARKER
+
+
+def creative_noop(messages):
+    payload=json.loads(messages[1]["content"])
+    return json.dumps(dict(candidate_hash=payload["candidate_hash"], rationale="Transport fixture: retain supplied world; this is not a creative quality evaluation.", changes=[]))
+
+
+def accept_creative_unchecked(stream):
+    @wraps(stream)
+    def wrapped(**kwargs):
+        if kwargs["messages"][0]["content"].startswith(CREATIVE_MARKER):
+            yield creative_noop(kwargs["messages"]);return
+        yield from stream(**kwargs)
+    return wrapped
+
 from backend.services.draft_completeness import MARKER
 
 
 def accept_semantics_unchecked(stream):
+    @accept_creative_unchecked
     @wraps(stream)
     def wrapped(**kwargs):
         if kwargs['messages'][0]['content'].startswith(MARKER):

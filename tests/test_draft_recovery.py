@@ -1,4 +1,5 @@
 """Failure recovery uses the real author/version/confirm path and controlled replies."""
+from draft_provider_fixture import accept_creative_unchecked
 import json
 from copy import deepcopy
 from threading import Event
@@ -66,6 +67,7 @@ def test_failed_generation_manual_edit_start_turn_reload(api):
     client,app=api;w=client.post('/api/workspaces',json={'name':'recovery'}).json();url=f"/api/workspaces/{w['id']}/draft"
     raw=rich();original=raw['protagonist_id'];raw['protagonist_id']='missing';raw['controlled_actor_id']='missing'
     calls=[]
+    @accept_creative_unchecked
     def stream(**kw):
         calls.append(kw)
         yield json.dumps(raw) if len(calls)==1 else '{"patches":[]}'
@@ -86,7 +88,7 @@ def test_failed_generation_manual_edit_start_turn_reload(api):
         d=r.json()
     assert d['review']['status']=='stale'
     assert client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id']}).status_code==409
-    with patch('backend.services.preparation.chat_stream',return_value=iter(['{"issues":[]}'])):
+    with patch('backend.services.preparation.chat_stream',side_effect=accept_creative_unchecked(lambda **kw:iter(['{"issues":[]}']))):
         client.post(url+'/resume',json={'revision':d['revision'],'api_key':'test'})
         assert wait_job(client,jid)['status']=='saved'
     d=client.get(url+'?author=true').json()
@@ -107,6 +109,7 @@ def test_failed_generation_manual_edit_start_turn_reload(api):
 
 def test_malformed_review_resume_does_not_regenerate(api):
     client,app=api;w=client.post('/api/workspaces',json={'name':'review'}).json();url=f"/api/workspaces/{w['id']}/draft";calls=[]
+    @accept_creative_unchecked
     def stream(**kw):
         calls.append(kw)
         yield json.dumps(rich()) if len(calls)==1 else '{"bad":true}'
@@ -116,6 +119,7 @@ def test_malformed_review_resume_does_not_regenerate(api):
     d=client.get(url+'?author=true').json()
     assert d['candidate'] and d['technical_valid'] and d['start_warning']
     assert d['review']['status']=='failed' # v2: failure remains truthful, now advisory
+    @accept_creative_unchecked
     def correct(**kw):
         assert kw['messages'][0]['content'].startswith(review.MARKER)
         yield '{"issues":[]}'
@@ -145,6 +149,7 @@ def test_context_preflight_can_resume_with_larger_budget(api,context_length):
     assert source in before['messages'][-1]['content']
     assert not before.get('pending') and not before.get('reserved_tokens')
     calls=[]
+    @accept_creative_unchecked
     def stream(**kw):
         calls.append(kw)
         if kw['messages'][0]['content'].startswith(review.MARKER):
@@ -179,6 +184,7 @@ def test_review_context_resume_keeps_completed_world(api):
     before=json.loads(repo.preparation_job(jid)['response_journal'])['responses']['world']
     d=client.get(url+'?author=true').json()
     assert d['candidate']['characters'][0]['fields']['Биография']==raw['characters'][0]['fields']['Биография']
+    @accept_creative_unchecked
     def review_only(**kw):
         assert kw['messages'][0]['content'].startswith(review.MARKER)
         yield '{"issues":[]}'
@@ -186,7 +192,7 @@ def test_review_context_resume_keeps_completed_world(api):
         resumed=client.post(url+'/resume',json={'revision':d['revision'],'context_length':65536,'api_key':'test'})
         assert resumed.status_code==200,resumed.text
         assert wait_job(client,jid)['status']=='saved'
-        assert provider.call_count==1
+        assert provider.call_count==2  # creative development then review; world response is cached
     assert json.loads(repo.preparation_job(jid)['response_journal'])['responses']['world']==before
     assert client.get(url+'?author=true').json()['state']['characters'][0]['fields']['Биография']==raw['characters'][0]['fields']['Биография']
 
@@ -211,6 +217,7 @@ def test_confirmed_http_retry_keeps_category(status):
 def test_creative_new_facts_and_optional_recommendations_are_accepted(api):
     client,app=api;w=client.post('/api/workspaces',json={'name':'creative'}).json();url=f"/api/workspaces/{w['id']}/draft"
     raw=rich();calls=[]
+    @accept_creative_unchecked
     def stream(**kw):
         calls.append(kw)
         if kw['messages'][0]['content'].startswith(review.MARKER):

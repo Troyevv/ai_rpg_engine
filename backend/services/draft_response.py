@@ -234,10 +234,10 @@ def join_fragments(parts, manifest=None, *, schema=None, terminal=False):
 
 
 def stage_output_limit(slot, messages, config):
-    stage='world' if slot=='world' else 'review' if slot.startswith(('completeness','quality_review')) else 'quality' if slot.startswith('quality') else 'repair'
+    stage='repair' if slot.startswith('creative_correction_') else 'creative' if slot.startswith('creative_') else 'world' if slot=='world' else 'review' if slot.startswith(('completeness','quality_review')) else 'quality' if slot.startswith('quality') else 'repair'
     # Output size follows candidate/scope size, bounded by the user's ceiling.
     size=estimate(messages)
-    target=config['max_tokens'] if stage=='world' else max(1024,int(size*({'review':0.30,'repair':0.75,'quality':0.90}[stage])))
+    target=config['max_tokens'] if stage=='world' else max(1024,int(size*({'review':0.30,'repair':0.75,'quality':0.90,'creative':0.90}[stage])))
     if stage=='review':target=min(8192,max(2048,int(size*0.30)))
     override=config.get('_draft_stage_output_limits',{}).get(stage)
     return min(config['max_tokens'],target if override is None else override)
@@ -303,7 +303,7 @@ def response(repo,jid,journal,slot,messages,config,context,generate,cancel):
         request = deepcopy(messages)
         if text:
             request += [{'role':'assistant','content':text},{'role':'user','content':CONTINUE}]
-            repo.draft_phase(jid,'reviewing' if slot.startswith(('completeness','quality_review')) else 'continuing')
+            repo.draft_phase(jid,'reviewing' if slot.startswith(('completeness','quality_review')) else 'developing' if slot.startswith('creative_') else 'continuing')
         input_bound = estimate(request)+512
         limit = min(output_limit,context-input_bound)
         if limit < 256: raise TransportError(f'Контекст {context} не вмещает полный запрос: требуется минимум {input_bound+256} токенов. Текст сохранён, запрос не отправлен.')

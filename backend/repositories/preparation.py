@@ -124,7 +124,7 @@ class Repository(PresentationStorage, DraftStorage, Storage):
         if journal.get('pending'):return None
         slot=journal.get('active_response','')
         record=journal.get('responses',{}).get(slot,{})
-        if not slot.startswith('completeness_') or record.get('failure',{}).get('code')!='provider_empty_response':return None
+        if not slot.startswith(('completeness_', 'creative_')) or record.get('failure',{}).get('code')!='provider_empty_response':return None
         parts=record.get('parts',[])
         if not parts:return None
         token=parts[-1].get('request_fingerprint')
