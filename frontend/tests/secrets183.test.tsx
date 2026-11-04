@@ -1,0 +1,33 @@
+import {afterEach,beforeEach,expect,it,vi} from 'vitest';
+import {act} from 'react';
+import {createRoot,type Root} from 'react-dom/client';
+import {StorySecretBrowser} from '../src/StorySecretBrowser';
+import type {Save} from '../src/types';
+const requests=vi.hoisted(()=>({pending:[] as {resolve:(v:unknown)=>void;signal:AbortSignal;path:string}[]}));
+vi.mock('../src/api',()=>({api:vi.fn((path:string,_body:unknown,_method:string,signal:AbortSignal)=>new Promise(resolve=>requests.pending.push({resolve,signal,path})))}));
+vi.mock('../src/lib/fogRenderer',()=>({paintFog:vi.fn(),animateFog:()=>()=>{}}));
+let host:HTMLDivElement,root:Root;
+const save=(revision=1,actor='a',id=183)=>({id,revision,state:{controlled_actor_id:actor,story_secrets:{personal:{b:[{id:'opaque',status:'hidden'}]},world:[],revealed:[]}}} as unknown as Save);
+async function render(s=save(),characterId:string|null='b',active=true){await act(()=>root.render(<StorySecretBrowser save={s} state={s.state} characterId={characterId??undefined} active={active}/>))}
+const toggle=async()=>act(()=>host.querySelector<HTMLButtonElement>('[role=switch]')!.click());
+beforeEach(()=>{
+ requests.pending=[];localStorage.clear();sessionStorage.clear();
+ vi.stubGlobal('ResizeObserver',class{observe(){}disconnect(){}});
+ vi.stubGlobal('IntersectionObserver',class{observe(){}disconnect(){}});
+ host=document.createElement('div');document.body.append(host);root=createRoot(host);
+});
+afterEach(async()=>{await act(()=>root.unmount());host.remove();vi.unstubAllGlobals()});
+it.each(['actor','save','revision','card','surface','closed'])('discards rendered and in-flight secrets before %s scope renders',async(change)=>{
+ await render();expect(requests.pending).toHaveLength(0);await toggle();
+ const first=requests.pending[0];
+ await act(()=>first.resolve({revision:1,character_id:'b',rows:[{id:'author-id',status:'spoiler',text:'PRIVATE183'}]}));
+ expect(host.textContent).toContain('PRIVATE183');await toggle();expect(host.innerHTML).not.toContain('PRIVATE183');
+ await toggle();const late=requests.pending[1];
+ const s=save(change==='revision'?2:1,change==='actor'?'c':'a',change==='save'?184:183);
+ await render(s,change==='card'?'c':change==='surface'?null:'b',change!=='closed');
+ expect(late.signal.aborted).toBe(true);
+ await act(()=>late.resolve({revision:1,character_id:'b',rows:[{id:'late-id',status:'spoiler',text:'LATE183'}]}));
+ expect(host.innerHTML).not.toContain('PRIVATE183');expect(host.innerHTML).not.toContain('LATE183');
+ expect(host.querySelector('[role=switch]')?.getAttribute('aria-checked')).toBe(change==='closed'?undefined:'false');
+ expect(JSON.stringify([localStorage,sessionStorage])).not.toContain('183');
+});

@@ -39,7 +39,7 @@ def canonical_slice(state, scope, extraction=False, query=""):
         current_time=current_time(state), calendar_context=nearby_calendar(state, scope.relevant_actor_ids), camera=deepcopy(state['camera']),
         locations={lid: deepcopy(state['locations'][lid]) for lid in scope.location_ids},
         characters={cid: deepcopy(state['characters'][cid]) for cid in sorted(scope.relevant_actor_ids)},
-        facts={fid: {k:v for k,v in state['facts'][fid].items() if (state['facts'][fid].get('story_secret') or k not in ('story_secret','secret_subject_ids','secret_existence')) and (k!='origin_remote_event_id' or v is not None)} for fid in scope.fact_ids},
+        facts={fid: {k:v for k,v in state['facts'][fid].items() if (state['facts'][fid].get('story_secret') or k not in ('story_secret','secret_subject_ids','secret_keeper_ids','secret_existence')) and (k!='origin_remote_event_id' or v is not None)} for fid in scope.fact_ids},
         knowledge=context_rows(state, scope.knowledge_ids, extraction=extraction),
         relationships=[state['relationships'][key] for key in scope.relationship_pairs],
         threads=[state['threads'][tid] for tid in scope.thread_ids],

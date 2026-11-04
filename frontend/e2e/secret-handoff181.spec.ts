@@ -47,6 +47,9 @@ test('candidate → confirmed world → safe moving slots → canonical reveal',
  await page.reload();await dossier(page,'sonya');
  await expect(area(page)).toContainText('Соня несколько лет влюблена в Илью.');
  await expect(page.locator('.secret-entry.is-hidden')).toHaveCount(1);
+ // Known/unknown categories can place the remaining fog below the viewport;
+ // offscreen animation is intentionally paused. Test the visible surface.
+ await page.locator('.secret-entry.is-hidden').first().scrollIntoViewIfNeeded();
  const remaining=await bitmap(page);await expect.poll(()=>bitmap(page)).not.toBe(remaining);
  await dossier(page,'maxim');await expect(page.locator('.secret-entry.is-hidden')).toHaveCount(1);
  expect(await page.content()).not.toContain('Максим тайно готовит');

@@ -110,7 +110,7 @@ def extraction_schema():
     definitions = {
         'locations':record(dict(id=string,name=string,description=string,parent_id=string,kind=string,aliases=strings), ('id','name','evidence')),
         'promotions':record(dict(id=string,name=string,fields={'type':'object','additionalProperties':string}), ('id','name','fields','evidence')),
-        'facts':record(dict(id=string,text=string,claim=obj(dict(subject_id=string,predicate=string,value=string,scope=string),('subject_id','predicate','value')),visibility={'enum':['public','secret']},story_secret={'type':'boolean'},secret_subject_ids=strings,secret_existence={'enum':['hidden','discoverable']},character_ids=strings), ('id','text','evidence')),
+        'facts':record(dict(id=string,text=string,claim=obj(dict(subject_id=string,predicate=string,value=string,scope=string),('subject_id','predicate','value')),visibility={'enum':['public','secret']},story_secret={'type':'boolean'},secret_subject_ids=strings,secret_keeper_ids=strings,secret_existence={'enum':['hidden','discoverable']},character_ids=strings), ('id','text','evidence')),
         'events':record(dict(id=string,text=string,advance_candidate_ids=dict(type='array',items=string,maxItems=3,description='Only for Long-term Advance: selected cause IDs whose outcome this event establishes.'),participants=strings,witnesses=strings,fact_ids=strings,
             author_id=string, player_evidence=string, player_assertion={'enum':['completed_interaction']},
             medium={'enum':['observation','conversation','message','testimony','discovery','action']},

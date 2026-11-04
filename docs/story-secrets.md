@@ -63,3 +63,77 @@ Memory compaction must explicitly take the canonical memory from the snapshot, n
 This application has no authenticated user/author roles or per-save read authorization. Anyone with direct server access has operator-level access. `GET /api/saves/{sid}/author-state` is an explicit author representation, **not** a protected endpoint. Existing `GET /api/worlds/{wid}` returns authored source/state; `GET /api/workspaces/{wid}/draft?author=true`, draft exports/raw diagnostics and document history likewise expose author material without a login. The new route does not grant a role or bypass an existing authorization check.
 
 The same-origin middleware rejects cross-origin mutations only. It is CSRF mitigation, not confidentiality or authentication; a direct HTTP client can read these endpoints. Browser same-origin rules are not server authorization. Deploy the server only within the operator's trust boundary (loopback/trusted network or an authenticated external access proxy). A shared server for mutually untrusted players would require consistent authentication/authorization across **all** author, history/export and mutation routes, not a token or query flag on this one endpoint. Gameplay projection prevents accidental spoiler delivery to ordinary UI; it cannot conceal canon from a deliberate server operator.
+
+## Own secrets and explicit spoiler reading (#183)
+
+`Fact.secret_keeper_ids: string[] = []` is an authored statement of conscious
+personal ownership, separate from `secret_subject_ids` (who the fact concerns)
+and Knowledge (who currently knows it). Neither legacy `owner_id`, subjects,
+privacy, names in prose nor being the camera subject implies ownership or knowledge.
+A shared secret may have several keepers. Both lists reference existing characters.
+
+At the **initial authoring boundary**, a classified fact with explicit keepers
+creates missing canonical `Knowledge.status=known` for those keepers. Conflicting
+explicit non-known starting beliefs are rejected for author correction; other
+holders and facts stay untouched. A reviewed `CharacterDraft.secrets` entry is
+already explicit evidence of a new protagonist's own secret: creation classifies
+it, links the character as subject/keeper and adds that character to the deduplicated
+holders of its individual provenance event. No disclosure notification is emitted.
+Later Runtime reads/selection do **not** grant knowledge from keeper metadata:
+refutation, supersession and other Knowledge transitions retain their authority.
+Extraction can carry this classification but still needs accepted acquisition
+provenance to change Knowledge. The Fact is not a second belief store.
+
+Safe `story_secrets.personal` known rows may have `category: own | related` when
+ownership is explicit. Unknown rows remain **exactly** `{id,status}`. The client
+must not infer their keeper/category. Hidden existence produces no slot/count.
+All character surfaces include explicit subjects and keepers; the global view
+deduplicates their shared opaque slots. Observing a character grants no access.
+
+`GET /api/saves/{sid}/story-secret-spoilers?revision=N[&character_id=ID]` is an
+explicit author read in the same trusted single-user boundary as `author-state`.
+Omitting `character_id` explicitly requests all story secrets; specifying it
+restricts the result to the character's own/related secrets. Stale revisions are
+rejected. The response is `Cache-Control: no-store` and contains only
+`{revision, character_id, rows}`. Rows contain an opaque author-view ID, canonical
+text, known/spoiler status, the controlled actor's belief status and category.
+There are no raw cards, arbitrary private facts, correspondence or full snapshots.
+`story_secret` remains the sole classification criterion. This endpoint is not a
+new authentication mechanism; the deployment trust requirements above still apply.
+
+Spoiler data is requested only on explicit activation. The shared game control
+resets on section/card/surface/save/revision/controlled-actor changes, closing or
+reload. Abort and response guards discard late results, while component identity
+removes prior text before a changed scope renders. Search only indexes current
+rows and is cleared on mode changes. Neither text nor activation is persisted in
+browser storage. Spoiler rendering bypasses reveal animation/acknowledgements;
+normal subsequent disclosure still uses the existing notification/fog receipts.
+
+### Compatibility and recovery
+
+Existing metadata defaults to an empty keeper list. No broad migration infers
+ownership. Previously created `biography_*` facts can be recovered **only** when
+the active History ancestry contains the matching explicit character-creation
+confirmation, operation receipt and separate onboarding-secret event. Both
+fact/event IDs must match the original operation/index derivation (the original
+32-secret authoring limit). Missing owner Knowledge is supplied from that proven
+source; any existing belief, including refuted/superseded/unknown, wins. Unproven
+imports, legacy owner fields and unknown facts about one's ancestry are not guessed.
+
+This compatibility normalization is shared by game/author snapshot reads,
+Runtime repository operations and Engine job preparation/execution. It does not
+rewrite SQLite historical snapshots, variants or History; the next ordinary
+commit can persist the normalized current state. Recorded regeneration prompts
+remain recorded prompts, not rebuilt context. A spoiler request itself performs
+no WorldState, Knowledge, History or presentation-receipt write.
+
+### Contract for parallel Workshop #175
+
+No Workshop component/layout/style changes are included. Shared changes are:
+Fact/defaults and validation, draft schema/patch/dependency vocabulary,
+initial/creative authoring instructions, v2 → v3 handoff and safe secret rows.
+The new Workshop should expose `secret_keeper_ids` as explicitly known personal
+secrets, separately from subjects and additional Knowledge holders, preserve it
+on edits/remaps, and handle a conflicting initial belief as a validation error.
+Old drafts without the field remain accepted. It must not derive keeper IDs from
+legacy owner IDs or copy gameplay spoiler state into its own author mode.

@@ -158,6 +158,12 @@ def create_app(db_path=None, recover=True):
                           'presentation': {'surface': route['surface'], 'actor_id': None, 'call_id': None}}
         return result
 
+    @app.get('/api/saves/{sid}/story-secret-spoilers')
+    def story_secret_spoilers(sid: int, revision: int, character_id: str | None = None):
+        # Same explicit-author trust boundary as author-state, minimal scope.
+        return JSONResponse(repo.story_secret_spoilers(sid, revision, character_id),
+                            headers={'Cache-Control': 'no-store'})
+
     @app.get('/api/saves/{sid}/author-state')
     def author_state(sid: int):
         # Author view, NOT an authorization boundary: like world/draft/document

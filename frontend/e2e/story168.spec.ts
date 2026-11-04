@@ -18,6 +18,9 @@ for(const theme of ['graphite','parchment']){
   await expect(page.locator('.secret-entry.is-hidden')).toHaveCount(9);
   await expect(page.locator('.secret-entry.is-known canvas')).toHaveCount(0);
   expect(await page.content()).not.toContain('NEVER-EXPOSE');
+  // Category headers and known records precede the hidden group. Offscreen fog
+  // intentionally sleeps, so bring the measured surface into the viewport.
+  await page.locator('.secret-entry.is-hidden').first().scrollIntoViewIfNeeded();
   const before=await bitmap(page);await expect.poll(()=>bitmap(page)).not.toBe(before);
   const frameStats=await page.evaluate(()=>new Promise<{p95:number;max:number}>(resolve=>{
    const samples:number[]=[];let previous=performance.now();
@@ -37,6 +40,7 @@ for(const theme of ['graphite','parchment']){
   await expect(page.locator('.secret-entry.is-revealing')).toHaveCount(0);
   await request.post('/test/story168-release');
   await expect(page.locator('.secret-entry.is-revealing')).toHaveCount(1);
+  await page.locator('.secret-entry.is-revealing').scrollIntoViewIfNeeded();
   const revealing=page.locator('.secret-entry.is-revealing canvas');
   const start=await revealing.evaluate((c:HTMLCanvasElement)=>c.toDataURL());
   await expect.poll(()=>revealing.evaluate((c:HTMLCanvasElement)=>c.toDataURL())).not.toBe(start);

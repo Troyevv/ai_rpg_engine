@@ -1,4 +1,4 @@
-import {StorySecrets} from './StorySecrets';
+import {StorySecretBrowser} from './StorySecretBrowser';
 import {genreLabels} from './GenreSettings';
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
@@ -824,39 +824,7 @@ export function RelationsSection(props: Props & { refresh: () => void }) {
 }
 
 export function SecretsSection(props: Props & {target?:string;active?:boolean}) {
-  const [query, setQuery] = useState("");
-  useEffect(()=>{if(props.target)setQuery('')},[props.target]);
-  const values = (props.state.story_secrets?.revealed || []).filter(
-    (f) =>
-      matches(
-        query,
-        f.text,
-        ...f.character_ids.map((id) => nameOf(props.state, id)),
-      ),
-  );
-  return (
-    <>
-      <p className="inspector-notice">
-        <Shield size={20} />
-        {gameLocale().startsWith("en") ? "Secrets confirmed by your character." : "Сюжетные тайны, подтверждённые управляемым персонажем."}
-      </p>
-      <div className="inspector-tools">
-        <InspectorSearch
-          label={it("findSecrets")}
-          value={query}
-          onChange={setQuery}
-        />
-        <small className="muted">{values.length}</small>
-      </div>
-      {!!props.state.story_secrets?.world.some(r=>r.status==='known')&&<StorySecrets title="Тайны мира" rows={(props.state.story_secrets?.world||[]).filter(r=>r.status==='known'&&matches(query,r.text||''))} save={props.save} active={props.active} target={props.target}/>}
-      <div className="inspector-secret-grid">
-        <Facts {...props} values={values.filter(f=>f.character_ids.length>0)} secret />
-      </div>
-      {!values.length && <InspectorEmpty search={!!query} />}
-
-      <p className="inspector-note">{it("publicFamily")}</p>
-    </>
-  );
+  return <StorySecretBrowser state={props.state} save={props.save} active={props.active} target={props.target}/>;
 }
 
 export function ThreadsSection(props: Props & {target?:string}) {

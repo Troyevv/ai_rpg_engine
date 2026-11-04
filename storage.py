@@ -123,6 +123,8 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             from backend.runtime_v3.repository import read_history
             snapshot=json.loads(result.pop('state_json'))
             from backend.runtime_v3.models import assert_world_state_v3_invariants
+            from backend.runtime_v3.repository import restore_biographical_secrets
+            restore_biographical_secrets(db, snapshot)
             snapshot['world_state'] = assert_world_state_v3_invariants(snapshot['world_state'])
             from backend.runtime_v3.appearance import initialize_profiles as initialize_appearance
             initialize_appearance(snapshot)
@@ -184,9 +186,22 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             if not row:raise ValueError('Прохождение не найдено.')
             snapshot=json.loads(row[0])
             from backend.runtime_v3.models import assert_world_state_v3_invariants
+            from backend.runtime_v3.repository import restore_biographical_secrets
+            restore_biographical_secrets(db, snapshot)
             snapshot['world_state'] = assert_world_state_v3_invariants(snapshot['world_state'])
             from backend.runtime_v3.appearance import initialize_profiles as initialize_appearance
             initialize_appearance(snapshot)
             from backend.runtime_v3.protagonist import initialize
             initialize(snapshot)
             return snapshot
+
+    def story_secret_spoilers(self, save_id, revision, character_id=None):
+        from backend.runtime_v3.repository import migrate_snapshot
+        from backend.runtime_v3.secrets import spoiler_projection
+        with self.connect() as db:
+            row = db.execute('SELECT state_json,revision FROM saves WHERE id=?', (save_id,)).fetchone()
+            if row is None: raise ValueError('Прохождение не найдено.')
+            if row['revision'] != revision: raise ValueError('Сохранение изменилось. Обновите раздел.')
+            snapshot, _ = migrate_snapshot(db, json.loads(row['state_json']))
+            return dict(revision=revision, character_id=character_id,
+                        rows=spoiler_projection(snapshot['world_state'], character_id))
