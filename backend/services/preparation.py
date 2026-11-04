@@ -25,9 +25,10 @@ class Preparation:
     def submit(self, wid, kind, text, config, revision, api_key=None):
         if config['provider'] == 'deepseek':
             api_key = deepseek_key(api_key)
-        jid = self.repo.begin_preparation(wid, kind, text, config, revision)
-        handle = Handle()
         with self.lock:
+            jid = self.repo.begin_preparation(wid, kind, text, config, revision)
+            if jid in self.handles or self.repo.preparation_job(jid)['status']!='generating':return jid
+            handle = Handle()
             self.handles[jid] = handle
         threading.Thread(target=self.run, args=(jid, config, api_key, handle), daemon=True).start()
         return jid
@@ -83,7 +84,7 @@ class Preparation:
 
     def run(self, jid, config, api_key, handle):
         narrative = ''
-        worker_epoch=handle.epoch if config.get('_draft_task')=='world' else None
+        worker_epoch=handle.epoch if config.get('_draft_task') in ('world','editor') else None
         try:
             with model_lease(config['provider']):
                 if handle.cancel.is_set():
@@ -97,6 +98,9 @@ class Preparation:
                     if not loaded:raise ValueError('Сначала загрузи выбранную локальную модель.')
                 config = json.loads(job['config_json'])
                 if worker_epoch is not None and json.loads(job.get('response_journal') or '{}').get('recovery_epoch',0)!=worker_epoch:return
+                if job['kind']=='draft_editor':
+                    from backend.services.draft_editor import run
+                    return run(self,jid,config,api_key,handle,loaded,chat_stream)
                 if job['kind'].startswith('draft_'):
                     from backend.services.draft_generation import run
                     return run(self,jid,config,api_key,handle,loaded,chat_stream)

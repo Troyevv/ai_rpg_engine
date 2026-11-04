@@ -411,22 +411,46 @@ def patch(state,kind,eid,field,value):
             path=f'/{root}/{index}/'+('/'.join(escape(part) for part in field.split('.')))
         elif kind=='campaign':path='/campaign/'+escape(field)
         elif kind=='actor':path='/world/characters/'+escape(eid)+'/'+escape(field)
-        elif kind in state['world']:path='/world/'+kind+'/'+escape(eid)+'/'+escape(field)
+        elif GROUPS.get(kind,kind) in state['world']:path='/world/'+GROUPS.get(kind,kind)+'/'+escape(eid)+'/'+escape(field)
     state=manual_edit(state,path,old_minute)
     return sync(state)
 
 
-def dependencies(state,kind,eid):
+def dependencies(state,kind,eid, *, original=None):
     result=[]
+    location_names=set()
     if kind=='location':
-        name=entity(state,kind,eid)['name']
-        for group in ('characters','scenes'):
-            result += [{'kind':group,'id':key} for key,item in state['world'][group].items() if item.get('location')==name]
+        place=entity(original if original is not None else state,kind,eid)
+        location_names={n.strip().casefold() for n in [place['name'],*place.get('aliases',[])]}
+    reference_fields={
+        'character':{'source_id','target_id','actor_id','owner_id','holder_id','character_id',
+            'controlled_actor_id','protagonist_id','participants','witnesses','character_ids',
+            'visible_to_ids','secret_subject_ids','present_ids','present_character_ids',
+            'observed_character_ids','discovered_by','stakes_for'},
+        'location':{'location_id','location_ids'},
+        'fact':{'fact_id','fact_ids','life_fact_id','closure_fact_id','parentage_complete_fact_id','replaced_by'},
+        'event':{'source_event_id','last_event_id','resolved_event_id','event_ids'},
+        'scene':{'scene_id'}, 'scheduled_events':{'depends_on'},
+        'organizations':{'organization_id','parent_id'},
+    }.get(kind,set())
+    def references(item, *, nested=False):
+        if not isinstance(item,dict):return False
+        for field,value in item.items():
+            if kind=='location' and field=='location' and isinstance(value,str):
+                if value==eid or value.strip().casefold() in location_names:return True
+            is_reference=field in reference_fields
+            if is_reference and (value==eid or isinstance(value,list) and eid in value):return True
+            # Recorded history is immutable to AI editing. Inspect structured
+            # references inside its snapshots; never interpret or remove prose.
+            if nested and (isinstance(value,dict) and references(value,nested=True) or
+                           isinstance(value,list) and any(references(v,nested=True) for v in value)):
+                return True
+        return False
     for group,items in state['world'].items():
         if not isinstance(items,dict):continue
         for key,item in items.items():
             if group==GROUPS.get(kind) and key==eid:continue
-            if isinstance(item,dict) and any(v==eid or isinstance(v,list) and eid in v for k,v in item.items() if k.endswith('_id') or k.endswith('_ids') or k in ('participants','witnesses')):
+            if references(item,nested=group=='scene_records'):
                 result.append({'kind':group,'id':key})
     if kind=='character' and eid in (state.get('protagonist_id'),state.get('controlled_actor_id')):result.append({'kind':'start','id':eid})
     if kind=='scene' and eid==state.get('camera',{}).get('scene_id'):result.append({'kind':'camera','id':eid})

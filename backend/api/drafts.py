@@ -69,7 +69,36 @@ class Confirm(Revision):
     stop_review: bool = False
 
 
+class WorldEdit(Revision,Credential):
+    text: str = Field(min_length=1)
+    request_id: str = Field(min_length=1,max_length=100,pattern=r'^[a-zA-Z0-9_-]+$')
+    config: ModelConfig
+    budget: ResponseBudget = Field(default_factory=ResponseBudget)
+
+class EditDecision(Revision):
+    decision: Literal['accept','reject']
+    accept_conflicts: bool = False
+    accept_warnings: bool = False
+
+
 def install(app,repo,preparation,credentials,job):
+    @app.get('/api/workspaces/{wid}/draft/edits')
+    def edits(wid:str,author:bool=False):return repo.world_edits(wid,author)
+
+    @app.post('/api/workspaces/{wid}/draft/edits')
+    def propose(wid:str,body:WorldEdit):
+        if not body.text.strip():raise ValueError('Опишите желаемые изменения.')
+        config={**body.config.model_dump(),'_draft_task':'editor','_draft_input':body.text,'_editor_request_id':body.request_id}
+        if body.budget.max_total_tokens is not None:config['_draft_token_budget']=body.budget.max_total_tokens
+        if body.budget.max_cost_usd is not None:config['_draft_cost_budget_usd']=str(body.budget.max_cost_usd)
+        jid=preparation.submit(wid,'draft_editor',body.text,config,body.revision,credentials.resolve(body.config.provider,body.key()))
+        return job(jid)
+
+    @app.post('/api/workspaces/{wid}/draft/edits/{jid}')
+    def decide(wid:str,jid:str,body:EditDecision):
+        repo.decide_world_edit(wid,jid,body.revision,body.decision,body.accept_conflicts,body.accept_warnings)
+        return repo.draft(wid,True)
+
     @app.get('/api/communication/presets')
     def communication_presets():
         from backend.services.communication_profile import catalog
@@ -136,7 +165,7 @@ def install(app,repo,preparation,credentials,job):
         saved=repo.preparation_job(current['id'])
         journal=json.loads(saved.get('response_journal') or '{}')
         # Explicit allowlist: never export config, credentials or authorization headers.
-        keys=('generation_contract','creative','creative_history','responses','pending','errors','review_failures','repair_failures','http_failures','review_recoveries',
+        keys=('editor','generation_contract','creative','creative_history','responses','pending','errors','review_failures','repair_failures','http_failures','review_recoveries',
               'active_response','empty_requests','empty_retries','empty_retry_history','response_retries',
               'quality','quality_attempts','review_strategies','review_resolutions','review_preparation_failures','internal_errors',
               'accepted_reviews','unknown_attempts','recovery_epoch','reserved_tokens','reserved_cost','actual_tokens','actual_cost','fragment_recoveries','binding')

@@ -45,6 +45,7 @@ def runtime_v3_request(messages):
     return any('RawTurnResult v3' in message['content'] for message in messages)
 
 
+editor173_control=None
 creative172_control=None
 review170_control=None
 review_protocol_attempts={}
@@ -102,6 +103,31 @@ def stream(**kwargs):
         kwargs['on_finish']('stop')
         yield json.dumps(dict(proposal_hash=payload['proposal_hash'],patches=[dict(path='/changes/3/value/actor_id',value='craftswoman')],drop_indices=[]))
         return
+    from backend.services.draft_editor import MARKER as EDITOR_MARKER
+    if kwargs['messages'][0]['content'].startswith(EDITOR_MARKER):
+        editor173_control['calls']+=1
+        if not editor173_control['gate'].wait(45):raise RuntimeError('Editor gate timed out')
+        kwargs['on_usage']({'prompt_tokens':100,'completion_tokens':40})
+        kwargs['on_finish']('stop')
+        if editor173_control.get('fail') and editor173_control['calls']==1:
+            yield '';return
+        from test_draft_creative import additions,change
+        payload=json.loads(kwargs['messages'][1]['content'])
+        state=payload['candidate'];instruction=json.loads(payload['author_context'])['current_instruction']
+        if instruction=='DELETE184_LOCATION':
+            changes=[change('/locations/1',state['locations'][1],'remove')]
+        elif instruction=='DELETE184_HISTORY':
+            index=next(i for i,c in enumerate(state['characters']) if c['id']=='archive184')
+            changes=[change('/characters/'+str(index),state['characters'][index],'remove'),
+                     change('/world/characters/archive184',state['world']['characters']['archive184'],'remove')]
+        else:
+            changes=additions(state)
+            changes.append(change('/world/organizations/apex/name','Новая история организации','replace'))
+        yield json.dumps(dict(candidate_hash=payload['candidate_hash'],rationale='Вера возвращается в город. Её прошлое связано с мастерской и друзьями.',changes=changes),ensure_ascii=False)
+        return
+    if kwargs['messages'][0]['content'].startswith('Ты создаёшь полноценный живой RPG-мир') and 'EDITOR173' in kwargs['messages'][1]['content']:
+        from test_initial_draft_v4 import rich
+        yield json.dumps(rich(),ensure_ascii=False);return
     from draft_provider_fixture import CREATIVE_MARKER, creative_noop
     if kwargs["messages"][0]["content"].startswith(CREATIVE_MARKER):
         if creative172_control and 'CREATIVE172' in kwargs['messages'][1]['content']:
@@ -492,6 +518,19 @@ if __name__ == '__main__':
     dice=BrowserDice()
     app.state.tabletop_runtime.dice=dice
     app.state.tabletop_runtime.combat.dice=dice
+    @app.post('/test/editor173')
+    def seed_editor173(body:dict):
+        global editor173_control,phone_mode,creative172_control
+        from threading import Event
+        phone_mode=None;creative172_control=None
+        editor173_control=dict(gate=Event(),calls=0,fail=body.get('fail',False))
+        return app.state.repository.create_workspace('AI-редактор')
+
+    @app.post('/test/editor173/release')
+    def release_editor173():
+        editor173_control['gate'].set()
+        return dict(calls=editor173_control['calls'])
+
     @app.post('/test/creative172')
     def seed_creative172(body:dict):
         global creative172_control, phone_mode

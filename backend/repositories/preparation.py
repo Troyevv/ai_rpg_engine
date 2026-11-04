@@ -124,7 +124,7 @@ class Repository(PresentationStorage, DraftStorage, Storage):
         if journal.get('pending'):return None
         slot=journal.get('active_response','')
         record=journal.get('responses',{}).get(slot,{})
-        if not slot.startswith(('completeness_', 'creative_')) or record.get('failure',{}).get('code')!='provider_empty_response':return None
+        if not slot.startswith(('completeness_', 'creative_', 'editor_')) or record.get('failure',{}).get('code')!='provider_empty_response':return None
         parts=record.get('parts',[])
         if not parts:return None
         token=parts[-1].get('request_fingerprint')
@@ -151,8 +151,16 @@ class Repository(PresentationStorage, DraftStorage, Storage):
             db.execute('BEGIN IMMEDIATE')
             job = dict(db.execute('SELECT * FROM preparation_jobs WHERE id=?',(jid,)).fetchone())
             journal = json.loads(job['response_journal'])
-            if job['kind'] != 'draft_world' or job['status'] not in ('error','stopped','saved') or not journal:
+            if job['kind'] not in ('draft_world','draft_editor') or job['status'] not in ('error','stopped','saved') or not journal:
                 raise ValueError('Нет сохранённого ответа для продолжения.')
+            if job['kind']=='draft_editor':
+                self._editor_unstarted(db,job['workspace_id'])
+                head=self._draft_head(db,job['workspace_id'])
+                edit=journal['editor']
+                if edit['status'] in ('accepted','rejected') or not head or head['id']!=edit['base_version']:
+                    raise ValueError('Предложение устарело или уже закрыто.')
+                if revision is not None and revision!=edit['base_revision']:
+                    raise ValueError('Предпросмотр устарел: ревизия изменилась.')
             if journal.get('pending') and not acknowledge_unknown:
                 raise ValueError('Исход прерванного запроса неизвестен. Автоматический повтор запрещён; полученный текст сохранён.')
             self._draft_workspace(db,job['workspace_id'],job['revision'] if revision is None else revision)
@@ -191,7 +199,7 @@ class Repository(PresentationStorage, DraftStorage, Storage):
                     join_fragments(parts,dict(record['assembly']),schema=prompt_schema(),terminal=record.get('complete',False))
                 journal.setdefault('fragment_recoveries',[]).append(dict(part=parts.pop(),assembly=record.pop('assembly',None),reason=record.pop('assembly_error'),epoch=journal.get('recovery_epoch',0)))
                 record['complete']=False
-            if revision is not None:
+            if revision is not None and job['kind']!='draft_editor':
                 head=self._draft_head(db,job['workspace_id'])
                 if head:
                     record=json.loads(head['content'])
@@ -237,6 +245,12 @@ class Repository(PresentationStorage, DraftStorage, Storage):
         jid = 'prep_' + uuid.uuid4().hex
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
+            if kind=='draft_editor':
+                for previous in db.execute("SELECT id,config_json FROM preparation_jobs WHERE workspace_id=? AND kind='draft_editor'",(wid,)):
+                    saved=json.loads(previous['config_json'])
+                    if saved.get('_editor_request_id')==config.get('_editor_request_id'):
+                        if saved.get('_draft_input')!=config.get('_draft_input'):raise ValueError('Ключ запроса уже использован для другой инструкции.')
+                        return previous['id']
             w = db.execute('SELECT * FROM preparation_workspaces WHERE id=?', (wid,)).fetchone()
             if not w or w['deleted'] or w['revision'] != revision:
                 raise ValueError('Подготовка изменилась. Обнови её перед запросом.')
@@ -253,8 +267,13 @@ class Repository(PresentationStorage, DraftStorage, Storage):
             if config.get('_draft_task')=='world':
                 config['_draft_source']=config.get('_draft_input','')
                 if config.get('_use_idea'):config['_draft_source']+='\n\n'+w['idea']
+            journal={}
+            if kind=='draft_editor':
+                journal=self._begin_world_edit(db,wid,config,revision)
+                revision+=1
             db.execute("INSERT INTO preparation_jobs(id,workspace_id,kind,status,revision,config_json) VALUES(?,?,?,'generating',?,?)",
                        (jid, wid, kind, revision, json.dumps(config)))
+            if journal:db.execute('UPDATE preparation_jobs SET response_journal=? WHERE id=?',(json.dumps(journal,ensure_ascii=False),jid))
         return jid
 
     def preparation_progress(self, jid, narrative, status='generating', error=''):

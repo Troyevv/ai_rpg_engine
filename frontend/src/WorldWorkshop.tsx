@@ -1,3 +1,4 @@
+import {WorldAIEditor} from './WorldAIEditor';
 import {CommunicationEditor,CommunicationSettings,type CommunicationProfile} from './CommunicationSettings';
 import {CalendarProfileEditor} from './CalendarProfileEditor';
 import {RuntimeValue, resolver, recordTitle, runtimeLabels, enumLabels} from './runtimePresentation';
@@ -51,6 +52,7 @@ type Draft = {
     candidate?: Record<string,unknown> | null;
     relation_merges?: {ids:string[];paths:string[];differences:string[];safe:boolean;records:Item[]}[];
     review?: {status:string;reason?:string;issues?:{message:string;severity:string;protocol_warnings?:unknown[]}[]} | null;
+    pending_editor?: boolean;
     creative_status?: 'running' | 'applied' | 'rejected' | 'cancelled' | 'interrupted' | null;
     quality_status?: 'running' | 'accepted' | 'partial' | 'rejected' | 'cancelled' | null;
     start_block_reason?: string | null;
@@ -195,6 +197,8 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
         reviewing: ['Проверяем смысловую согласованность…', 'Модель проверяет сохранённый мир.'],
         review_format_repair: ['Исправляем отчёт проверки…', 'Мир сохранён. Исправляется формат ответа проверяющего.'],
         saving: ['Сохраняем версию…', 'Проверенный мир записывается в SQLite.'],
+        proposing: ['Готовим предложение изменений…', 'Текущий мир сохранён. После проверки будет доступен предпросмотр.'],
+        preview: ['Предложение готово', 'Откройте AI-редактор в виде автора.'],
         editing: ['Обновляем выбранное поле…', 'Модель подготавливает новую версию поля.'],
     };
     const status = phaseStatus[job?.phase || ''] || ['Ожидаем запуска генерации…', 'Задание создано и ожидает запуска модели.'];
@@ -303,7 +307,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
         </details>
       </details>
       {job?.status==='error' && (job as Job & {transport_incomplete?:boolean}).transport_incomplete && <section role="status"><h3>Восстановление ответа</h3><p>Полученный ответ сохранён. Продолжение проверит сборку, запросит недостающий конец при необходимости и завершит проверку мира. Полный проверенный мир ещё не готов.</p></section>}
-      {((job?.resumable && !(job as Job & {fragment_recovery?:boolean;transport_blocked?:boolean}).fragment_recovery && !(job as Job & {transport_blocked?:boolean}).transport_blocked) || (draft?.review?.status==='stale' && job?.status==='saved')) && <Button disabled={locked} onClick={()=>void resume({})}>{draft?.creative_status && draft.creative_status !== 'applied' ? 'Продолжить творческое развитие' : draft?.review && !(job as Job & {transport_incomplete?:boolean})?.transport_incomplete ? 'Повторить проверку' : 'Продолжить сохранённую генерацию'}</Button>}
+      {((job?.resumable && !(job as Job & {fragment_recovery?:boolean;transport_blocked?:boolean}).fragment_recovery && !(job as Job & {transport_blocked?:boolean}).transport_blocked) || (draft?.review?.status==='stale' && job?.status==='saved' && job.kind!=='draft_editor')) && <Button disabled={locked} onClick={()=>void resume({})}>{job?.kind==='draft_editor' ? 'Продолжить AI-редактирование' : draft?.creative_status && draft.creative_status !== 'applied' ? 'Продолжить творческое развитие' : draft?.review && !(job as Job & {transport_incomplete?:boolean})?.transport_incomplete ? 'Повторить проверку' : 'Продолжить сохранённую генерацию'}</Button>}
       {draft?.creative_status && ['rejected','cancelled','interrupted'].includes(draft.creative_status) && !active(job) && <p role="status">Творческое развитие не завершено. Последний кандидат сохранён; его можно открыть в редакторе.</p>}
       {job?.empty_retry_token && <Button disabled={locked} onClick={()=>setEmptyRetry({token:job.empty_retry_token!,epoch:job.attempt_epoch || 0})}>Повторить после сбоя провайдера</Button>}
       <Dialog open={!!emptyRetry} onOpenChange={open=>{if(!open)setEmptyRetry(null)}}><DialogContent><DialogHeader><DialogTitle>Повторная проверка после сбоя</DialogTitle><DialogDescription>Провайдер завершил запрос без текста. Если временный сбой устранён, можно подтвердить одну новую проверку сохранённого мира. Это новый запрос, который может быть оплачен. Предыдущие ответы и расходы сохранятся, общий бюджет не сбрасывается. Каждому повтору нужно новое подтверждение; автоматических повторов не будет.</DialogDescription></DialogHeader><div className="workshop-dialog-actions"><Button variant="ghost" onClick={()=>setEmptyRetry(null)}>Отмена</Button><Button disabled={locked} onClick={()=>{if(!emptyRetry)return;const retry=emptyRetry;setEmptyRetry(null);void resume({retry_empty_response:retry.token,expected_epoch:retry.epoch})}}>Подтвердить одну повторную проверку</Button></div></DialogContent></Dialog>
@@ -386,6 +390,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
           <div className="workshop-view"><span>Вид:</span><button className={!author ? 'selected' : ''} aria-pressed={!author} onClick={() => setAuthor(false)}>Игрок</button><button className={author ? 'selected' : ''} aria-pressed={author} onClick={() => authorAcknowledged ? setAuthor(true) : setAuthorAsk(true)}>Автор мира</button></div>
           <span className="workshop-hint">{author ? 'Полное состояние: секреты и намерения NPC доступны для редактирования.' : `То, что доступно персонажу ${person(actor)}.`}</span>
         </div>
+        {author && draft && <WorldAIEditor wid={id} revision={draft.revision} job={job} locked={locked} prefs={prefs} apiKey={apiKey} refresh={refresh} resolve={resolve} onJob={next=>dispatchWorkspace({type:'update',id,update:d=>d?{...d,job:next}:d})}/>}
         {(draft?.validation.errors.length || draft?.validation.warnings.length || draft?.import_warnings.length) ? <details className="workshop-review" open={!!draft?.validation.errors.length}>
           <summary>Проверка мира · {draft?.validation.errors.length || 0} ошибок · {(draft?.validation.warnings.length || 0) + (draft?.import_warnings.length || 0)} замечаний</summary>
           {[...(draft?.validation.errors || []), ...(draft?.validation.warnings || []), ...(draft?.import_warnings || [])].map((x,i)=><p key={i}>{x}</p>)}
@@ -455,7 +460,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
  {edit?.field === '__character' && <div><p>Связанные записи останутся неизменными; проверь их после изменения биографии:</p>{related.map(d => <p key={d.kind + d.id}>{d.kind} · {d.id}</p>)}</div>}<Textarea aria-label="Указание генератору" placeholder="Как изменить? Например: сделать характер мягче, сохранив биографию." value={instruction} onChange={e => setInstruction(e.target.value)}/><label><input type="checkbox" checked={ack} onChange={e => setAck(e.target.checked)}/> Изменить всё равно при семантических замечаниях</label><Button variant="outline" disabled={locked} onClick={() => edit && void generate({ task: edit.field === '__character' ? 'character' : 'field', kind: edit.kind, entity_id: edit.id, field: edit.field, text: instruction, warnings_ack: ack })}>Перегенерировать {edit?.field === '__character' ? 'персонажа' : 'поле'}</Button></DialogContent></Dialog>
  <Dialog open={!!removal} onOpenChange={o => { if (!o)
         setRemoval(null); }}><DialogContent><DialogHeader><DialogTitle>Удалить запись?</DialogTitle><DialogDescription>{removal?.deps.length ? 'Сначала измени связанные записи. Автоматически удалять их нельзя.' : 'Будет создана новая версия. Предыдущую можно восстановить из истории.'}</DialogDescription></DialogHeader>{removal?.deps.map(d => <p key={d.kind + d.id}>{d.kind} · {characters.find(c => c.id === d.id)?.name || d.id}</p>)}<Button disabled={locked || !!removal?.deps.length} onClick={() => void run(async () => { await api(`/workspaces/${id}/draft`, { revision: draft?.revision, operation: 'remove', kind: removal?.kind, entity_id: removal?.id }, 'PATCH'); setRemoval(null); refresh(); })}>Удалить</Button></DialogContent></Dialog>
- <Dialog open={confirmStart} onOpenChange={setConfirmStart}><DialogContent><DialogHeader><DialogTitle>Начать эту историю?</DialogTitle><DialogDescription>Будет сохранена текущая версия мира. Повторной генерации или разбора текста не будет.</DialogDescription></DialogHeader>{draft?.start_warning && <p>{draft.start_warning}</p>}{draft?.validation.warnings.map(x => <p key={x}>{x}</p>)}<Button disabled={busy || loading || !draft?.technical_valid} onClick={() => void run(async () => { const result = await api<{
+ <Dialog open={confirmStart} onOpenChange={setConfirmStart}><DialogContent><DialogHeader><DialogTitle>Начать эту историю?</DialogTitle><DialogDescription>Будет сохранена текущая версия мира. Повторной генерации или разбора текста не будет.</DialogDescription></DialogHeader>{draft?.pending_editor && <p>Предложение AI ещё не применено. Игра начнётся с текущей версии мира.</p>}{draft?.start_warning && <p>{draft.start_warning}</p>}{draft?.validation.warnings.map(x => <p key={x}>{x}</p>)}<Button disabled={busy || loading || !draft?.technical_valid} onClick={() => void run(async () => { const result = await api<{
         world: number;
         save: number;
     }>(`/workspaces/${id}/draft/confirm`, { revision: draft?.revision, version_id: draft?.version_id, accept_warnings:!!draft?.start_warning, stop_review:active(job) }); setConfirmStart(false); onGame(result.world, result.save); })}>Подтвердить и открыть игру</Button></DialogContent></Dialog>

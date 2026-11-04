@@ -1,0 +1,34 @@
+import {afterEach,beforeEach,expect,it,vi} from 'vitest';
+import {act} from 'react';
+import {createRoot,type Root} from 'react-dom/client';
+import {WorldAIEditor} from '../src/WorldAIEditor';
+import {defaults} from '../src/types';
+import {resolver} from '../src/runtimePresentation';
+const mocks=vi.hoisted(()=>({api:vi.fn()}));
+vi.mock('../src/api',()=>({api:mocks.api,download:vi.fn()}));
+let host:HTMLDivElement,root:Root;
+const onJob=vi.fn(),refresh=vi.fn(async()=>{});
+const render=async(wid:string)=>act(()=>root.render(<WorldAIEditor wid={wid} revision={1} job={null} locked={false} prefs={defaults} apiKey="" onJob={onJob} refresh={refresh} resolve={resolver({characters:[],locations:[],world:{}})}/>));
+beforeEach(()=>{localStorage.clear();vi.clearAllMocks();host=document.createElement('div');document.body.append(host);root=createRoot(host)});
+afterEach(async()=>{await act(()=>root.unmount());host.remove()});
+it('isolates local input, selected history and late responses when wid changes without a caller key',async()=>{
+ localStorage.setItem('world-editor:a','Инструкция A');localStorage.setItem('world-editor:b','Инструкция Б');
+ let finish!:(value:unknown)=>void;
+ mocks.api.mockImplementation((path:string)=>path.includes('/a/')?new Promise(resolve=>{finish=resolve}):Promise.resolve({edits:[],started:false}));
+ await render('a');expect(host.querySelector('textarea')?.value).toBe('Инструкция A');
+ await render('b');expect(host.querySelector('textarea')?.value).toBe('Инструкция Б');
+ await act(()=>finish({edits:[{id:'old',status:'preview',instruction:'Чужой секрет',base_version:1,diff:[]}],started:false}));
+ expect(host.textContent).not.toContain('Чужой секрет');expect(host.querySelector('.ai-preview')).toBeNull();
+ expect(localStorage.getItem('world-editor:a')).toBe('Инструкция A');expect(localStorage.getItem('world-editor:b')).toBe('Инструкция Б');
+ await render('a');expect(host.querySelector('textarea')?.value).toBe('Инструкция A');
+});
+it('drops errors and late submission callbacks from the old workspace',async()=>{
+ localStorage.setItem('world-editor:a','Инструкция A');
+ let reject!:(reason:Error)=>void;
+ mocks.api.mockImplementation((_path:string,body?:unknown)=>body?new Promise((_resolve,r)=>{reject=r}):Promise.resolve({edits:[],started:false}));
+ await render('a');
+ await act(()=>host.querySelector<HTMLButtonElement>('.ai-editor-actions button')!.click());
+ await render('b');await act(()=>reject(new Error('Ошибка старого мира')));
+ expect(host.querySelector('[role=alert]')).toBeNull();expect(host.querySelector('textarea')?.value).toBe('');
+ expect(onJob).not.toHaveBeenCalled();expect(refresh).not.toHaveBeenCalled();
+});
