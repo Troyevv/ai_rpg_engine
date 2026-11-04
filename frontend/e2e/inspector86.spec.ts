@@ -83,7 +83,7 @@ for (const width of [1440, 768, 393, 360])
         }
       }
       await nav(page, "Персонажи");
-      await expect(page.getByRole("tab")).toHaveCount(5);
+      await expect(page.getByRole("tab")).toHaveCount(6);
       await expect(
         page.locator(".character-profile .portrait-control"),
       ).toBeVisible();

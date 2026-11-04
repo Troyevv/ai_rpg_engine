@@ -64,7 +64,7 @@ test('responsive identity in graphite, parchment and terminal with long names',a
   await page.setViewportSize({width,height:900});await page.emulateMedia({reducedMotion:'reduce'});
   const response=await request.put(`/api/worlds/${s.world}/presentation`,{data:{theme_id:skin}});expect(response.ok()).toBe(true);
   await page.goto('/');await nav(page,'Персонажи');const d=dossier(page);
-  await expect(d.locator('.dossier-partner-link')).toHaveCount(3);await expect(d.getByRole('tab')).toHaveCount(5);
+  await expect(d.locator('.dossier-partner-link')).toHaveCount(3);await expect(d.getByRole('tab')).toHaveCount(6);
   for(const compact of width>=768?[false,true]:[false]){
    const toggle=d.getByRole('button',{name:compact?'Компактная панель':'Расширить панель',exact:true});
    if(await toggle.isVisible())await toggle.click();
