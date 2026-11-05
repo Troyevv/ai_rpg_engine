@@ -69,6 +69,8 @@ type Draft = {
     name: string;
     revision: number;
     version_id: number | null;
+    version_origin_job_id?: string | null;
+    version_is_candidate?: boolean;
     games?: {world:number;save:number;version_id:number}[];
     candidate?: Record<string,unknown> | null;
     relation_merges?: {ids:string[];paths:string[];differences:string[];safe:boolean;records:Item[]}[];
@@ -524,6 +526,10 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
     // Preserve the author's input locally, but never mount it in an existing world's reader view.
     const canOpenBrief=author||!id||!!draft&&!state&&!viewChanging&&!draft.version_id;
     const workspaceTitle=String(state?.campaign.title||draft?.name||'Новая история');
+    const generationActivity = (resuming || active(job)) && <section className="workshop-generating" role="status" aria-live="polite" aria-label="Ход проверки мира">
+        <span className="workshop-pulse"/><div><strong>{resuming ? 'Запускаем повторную проверку…' : reconnecting ? 'Восстанавливаем соединение…' : status[0]}</strong><p>{resuming ? 'Отправляем запрос на продолжение сохранённого задания.' : reconnecting ? 'Ожидаем связь с сервером. Генерация продолжает выполняться.' : status[1]}</p>{!reconnecting && !!job?.progress_chars && !['validating','saving'].includes(job.phase || '') && <small>Получено {job.progress_chars.toLocaleString('ru-RU')} символов ответа</small>}</div>
+        <Button variant="ghost" disabled={resuming || busy} onClick={() => void run(async () => {await api(`/jobs/${job!.id}/stop`, {}); refresh();})}>Остановить</Button>
+      </section>;
     return <main className="world-workshop" aria-busy={loading} data-workspace-id={id} data-draft-workspace-id={draft?.id || ''}>
     <WorkshopShell workspaceId={id} section={showIdea?'idea':section} onSection={navigate} title={workspaceTitle} revision={draft?.revision} loading={loading} busy={busy} author={author} onAuthor={()=>author?switchView(false):authorAcknowledged?switchView(true):setAuthorAsk(true)} onStart={()=>setConfirmStart(true)} startLabel={draft?.games?.length?'Начать игру из этой версии':active(job)?'Остановить проверку и начать':draft?.start_warning?'Начать с предупреждениями':previousWorld?'Начать игру в предыдущем мире':'Подтвердить мир и начать игру'} canStart={!!state&&!busy&&!loading&&!!draft?.technical_valid} counts={{characters:characters.length,world:state?.locations.length,relations:relations.length,story:threads.length,knowledge:facts.length,review:allIssues.length}} onDrafts={()=>setDraftsOpen(true)} onContinue={draft?.games?.length?()=>onGame(draft.games![0].world,draft.games![0].save):undefined} onBack={onBack} onSettings={onSettings} onSearch={()=>setSearchOpen(true)}>
     {previousWorld&&<section className="ww-panel" role="status"><h2>Ранее сохранённый мир</h2><p>Новая генерация не завершена. Сейчас показана предыдущая сохранённая версия; она не заменена неполным ответом.</p><button className="ww-text-button" onClick={()=>navigate('review')}>Продолжить генерацию →</button></section>}
@@ -551,8 +557,8 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
         </details>
       </details>
       </DialogContent></Dialog>
-      {showIdea&&job?.kind==='draft_world'&&draft&&!editingIdea&&<IdeaGeneration job={job} draft={draft} title={workspaceTitle} description={String(state?.campaign.public_description||'')} onEditor={()=>{setSection('overview');if(!author){if(authorAcknowledged)switchView(true);else setAuthorAsk(true)}}} onEdit={()=>setEditingIdea(true)}/>}
-      {(showIdea||section==='review'||section==='ai'&&job?.kind==='draft_editor')&&<>
+      {showIdea&&job?.kind==='draft_world'&&draft&&!editingIdea&&<IdeaGeneration job={job} draft={draft} activity={generationActivity} title={workspaceTitle} description={String(state?.campaign.public_description||'')} onEditor={()=>{setSection('overview');if(!author){if(authorAcknowledged)switchView(true);else setAuthorAsk(true)}}} onEdit={()=>setEditingIdea(true)}/>}
+      {(showIdea||section==='review'||section==='ai'&&job?.kind==='draft_editor')&&<div className={showIdea?"atelier-scope atelier-recovery":undefined}>
       {job?.status==='error' && (job as Job & {transport_incomplete?:boolean}).transport_incomplete && <section role="status"><h3>Восстановление ответа</h3><p>Полученный ответ сохранён. Продолжение проверит сборку, запросит недостающий конец при необходимости и завершит проверку мира. Полный проверенный мир ещё не готов.</p></section>}
       {((job?.resumable && !(job as Job & {fragment_recovery?:boolean;transport_blocked?:boolean}).fragment_recovery && !(job as Job & {transport_blocked?:boolean}).transport_blocked) || (draft?.review?.status==='stale' && job?.status==='saved' && job.kind!=='draft_editor')) && <Button disabled={locked} onClick={()=>void resume({})}>{job?.kind==='draft_editor' ? 'Продолжить AI-редактирование' : draft?.creative_status && draft.creative_status !== 'applied' ? 'Продолжить творческое развитие' : draft?.review && !(job as Job & {transport_incomplete?:boolean})?.transport_incomplete ? 'Повторить проверку' : 'Продолжить сохранённую генерацию'}</Button>}
       {draft?.creative_status && ['rejected','cancelled','interrupted'].includes(draft.creative_status) && !active(job) && <p role="status">Творческое развитие не завершено. Последний кандидат сохранён; его можно открыть в редакторе.</p>}
@@ -584,7 +590,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
         <Button variant="outline" onClick={()=>void refresh()}>Проверить структуру локально</Button>
         <details><summary>Полный кандидат (включая тайны)</summary><pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify(draft.candidate,null,2)}</pre></details>
       </section>}
-      </>}
+      </div>}
       {showIdea&&launchError&&<p role="alert" className="workshop-error">{launchError} {id?'Черновик сохранён; повтор использует тот же мир.':'Замысел остаётся в открытой форме.'}</p>}
       {showIdea&&canOpenBrief&&mode==='quick'&&(!job||job.kind!=='draft_world'||editingIdea)&&!active(job)&&!resuming&&<IdeaAtelier key={id} id={id} name={name||draft?.name||''} text={text} useIdea={useIdea} creation={creation} disabled={locked} saved={inputSaved} onName={setName} onText={setText} onScenario={setUseIdea} onCreation={setCreation} validate={validateIdea} launch={startIdea} onMethod={setMode} onBack={state?()=>{setEditingIdea(false);setSection('overview')}:undefined}/>}
       {showIdea && canOpenBrief && mode==='import' && <section className="workshop-inspiration">
@@ -624,12 +630,9 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
           {state && <Button variant="ghost" onClick={() => {setEditingIdea(false);setSection('overview')}}>Вернуться к миру</Button>}
         </div>
       </section>}
-      {(resuming || active(job)) && <section className="workshop-generating" role="status" aria-live="polite" aria-label="Ход проверки мира">
-        <span className="workshop-pulse"/><div><strong>{resuming ? 'Запускаем повторную проверку…' : reconnecting ? 'Восстанавливаем соединение…' : status[0]}</strong><p>{resuming ? 'Отправляем запрос на продолжение сохранённого задания.' : reconnecting ? 'Ожидаем связь с сервером. Генерация продолжает выполняться.' : status[1]}</p>{!reconnecting && !!job?.progress_chars && !['validating','saving'].includes(job.phase || '') && <small>Получено {job.progress_chars.toLocaleString('ru-RU')} символов ответа</small>}</div>
-        <Button variant="ghost" disabled={resuming || busy} onClick={() => void run(async () => {await api(`/jobs/${job!.id}/stop`, {}); refresh();})}>Остановить</Button>
-      </section>}
+      {!(showIdea&&job?.kind==='draft_world'&&!editingIdea)&&generationActivity}
       <Dialog open={!!deleteDraft} onOpenChange={open => { if (!open) setDeleteDraft(null); }}><DialogContent><DialogHeader><DialogTitle>Удалить «{deleteDraft?.name}»?</DialogTitle><DialogDescription>Черновик переместится в удалённые. Готовые игровые сохранения не затрагиваются.</DialogDescription></DialogHeader><div className="workshop-dialog-actions"><Button variant="ghost" onClick={() => setDeleteDraft(null)}>Отмена</Button><Button disabled={busy} onClick={() => void run(async () => { if (!deleteDraft) return; await api(`/workspaces/${deleteDraft.id}`,{revision:deleteDraft.revision},'DELETE'); setList(await api<WorkspacePick[]>('/workspaces')); setRemoved(await api<WorkspacePick[]>('/workspaces?deleted=true')); if (id === deleteDraft.id) { selectWorkspace(''); } setDeleteDraft(null); toast.success('Черновик перемещён в удалённые'); })}>Удалить</Button></div></DialogContent></Dialog>
-      {!resuming && !active(job) && (job?.response_diagnostic?.message || job?.error) && <p className="workshop-error" role="alert">{job?.response_diagnostic?.message || job?.error}</p>}
+      {!(showIdea&&job?.kind==='draft_world'&&!editingIdea) && !resuming && !active(job) && (job?.response_diagnostic?.message || job?.error) && <p className="workshop-error" role="alert">{job?.response_diagnostic?.message || job?.error}</p>}
       {(showIdea||section==='review'||section==='ai'&&job?.kind==='draft_editor')&&<>
       {(job?.pinned_config||job?.effective_config)&&<details className="workshop-detail ww-request-details"><summary>Параметры запроса</summary>
       {job?.pinned_config && <p className="workshop-hint">Модель задания: {job.pinned_config.provider} / {job.pinned_config.model} · Thinking генерации: {job.pinned_config.thinking || 'off'} · Thinking проверки: off</p>}

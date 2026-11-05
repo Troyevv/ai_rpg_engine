@@ -1,15 +1,21 @@
 import {draftsMenu} from './workshop-navigation';
-import {test,expect,type Page} from '@playwright/test';
+import {test,expect,type Page,type TestInfo} from '@playwright/test';
 import {nav} from './navigation';
 import {defaults} from '../src/types';
+async function capture(page:Page,info:TestInfo,name:string){
+ await page.evaluate(()=>document.fonts.ready);
+ const path=info.outputPath(`${name}-${info.project.name}.png`);
+ await page.screenshot({path,animations:'disabled'});await info.attach(name,{path,contentType:'image/png'});
+}
 const idea='В княжестве Валлор письма носят гонцы, но у каждой гильдии есть мобильный телефон. Башни связи принадлежат короне. Я играю за ученицу картографа. Накануне ярмарки на телефон мастера приходит звонок с башни, сгоревшей десять лет назад.';
 async function group(page:Page,name:string){await page.locator('.atelier-param').filter({hasText:name}).click()}
 async function done(page:Page){await page.getByRole('dialog').getByRole('button',{name:'Готово',exact:true}).click();await expect(page.locator('.atelier-dialog')).toHaveCount(0)}
 for(const skin of ['graphite','parchment'])test(`idea190: visual, panels, validation, persistence · ${skin}`,async({page,request},info)=>{
- await page.setViewportSize(info.project.name==='mobile'?{width:390,height:844}:{width:1363,height:936});
+ await page.setViewportSize(info.project.name==='mobile'?{width:390,height:844}:{width:1440,height:900});
  await page.addInitScript(skin=>{localStorage.setItem('workshop-theme',JSON.stringify({theme_id:skin,mode:'manual'}))},skin);
  await page.goto('/');await nav(page,'Создать');
  await page.evaluate(skin=>document.documentElement.dataset.theme=skin,skin);
+  if(skin==='graphite')await capture(page,info,'production-01-empty');
  await page.getByLabel('Название черновика').fill('Последняя вышка Валлора');
  await page.getByLabel('Описание мира или текст импорта').fill(idea);
  await page.getByLabel('Набор технологий связи',{exact:true}).selectOption('letters');
@@ -18,10 +24,24 @@ for(const skin of ['graphite','parchment'])test(`idea190: visual, panels, valida
  await expect(page.getByRole('checkbox',{name:'Гонцы',exact:true})).toBeChecked();
  await expect(page.getByLabel('Набор технологий связи',{exact:true})).toHaveValue('custom');
  await page.evaluate(()=>document.fonts.ready);
- await expect.poll(()=>page.locator('.atelier-hero img').evaluate(el=>(el as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+ await expect.poll(()=>page.locator('.hero-art').evaluate(async el=>{const url=getComputedStyle(el).backgroundImage.match(/url\("?([^")]+)/)?.[1];if(!url)return 0;const image=new Image();image.src=url;await image.decode();return image.naturalWidth})).toBeGreaterThan(0);
  await page.locator('.ww-scroll, .atelier-editor textarea').evaluateAll(elements=>elements.forEach(el=>{el.scrollTop=0}));
  const shot=info.outputPath(`idea190-${skin}-${info.project.name}.png`);await page.screenshot({path:shot});await info.attach('Эталонный экран '+skin,{path:shot,contentType:'image/png'});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width);
+  if(skin==='graphite'){
+   await capture(page,info,'production-02-filled');
+   await page.emulateMedia({reducedMotion:'reduce'});
+   expect(await page.locator('.channel').first().evaluate(el=>getComputedStyle(el).transitionDuration)).toBe('0s');
+   await page.emulateMedia({reducedMotion:'no-preference'});
+   for(const [key,title] of [['genre','Жанры истории'],['cast','Персонажи'],['world','Мир и география'],['calendar','Календарь и начало'],['narrative','Темп и последствия']]){
+    await group(page,title);await capture(page,info,'production-panel-'+key);await done(page);
+   }
+   await page.getByRole('button',{name:'Примеры',exact:true}).click();await capture(page,info,'production-examples');await page.keyboard.press('Escape');await expect(page.locator('.atelier-dialog')).toHaveCount(0);
+   await page.getByRole('button',{name:'Развернуть редактор идеи'}).click();await capture(page,info,'production-expanded');await done(page);
+   await page.getByRole('button',{name:'Правила и особенности',exact:true}).click();await page.locator('.comm-extra').scrollIntoViewIfNeeded();await capture(page,info,'production-communication');
+   await page.getByRole('button',{name:'Правила и особенности',exact:true}).click();await page.locator('.ww-scroll').evaluate(el=>el.scrollTop=0);
+   await page.getByRole('button',{name:'Проверить замысел',exact:true}).click();await expect(page.getByRole('region',{name:'Сводка замысла'})).toBeVisible();await capture(page,info,'production-review');await page.getByRole('button',{name:'К замыслу',exact:true}).click();
+  }
  await group(page,'Жанры истории');await page.getByLabel('Основной жанр',{exact:true}).selectOption('custom');await done(page);
  const before=await(await request.get('/api/workspaces')).json();
  await page.getByRole('button',{name:'Проверить замысел',exact:true}).click();
@@ -49,6 +69,7 @@ for(const skin of ['graphite','parchment'])test(`idea190: visual, panels, valida
 });
 
 test('idea190: real generation, reload, HTTP502 review recovery and author revision',async({page,request},info)=>{
+ await page.setViewportSize(info.project.name==='mobile'?{width:390,height:844}:{width:1440,height:900});
  await request.post('/test/idea190',{data:{fail_review:true,custom_calendar:true}});
  await page.goto('/');
  const profile=await page.evaluate(()=>localStorage.getItem('profile'));
@@ -57,7 +78,7 @@ test('idea190: real generation, reload, HTTP502 review recovery and author revis
  await page.reload();await nav(page,'Создать');
  await page.getByLabel('Описание мира или текст импорта').fill('ATELIER190. Компания друзей у моря.');
  await page.getByLabel('Набор технологий связи',{exact:true}).selectOption('letters');await page.getByRole('checkbox',{name:'Мобильные звонки',exact:true}).check();
- await group(page,'Персонажи');await page.getByLabel('Масштаб состава').selectOption('custom');await page.getByLabel('Важные NPC',{exact:true}).fill('4');await page.getByLabel('Второстепенные NPC',{exact:true}).fill('7');await done(page);
+ await group(page,'Персонажи');await page.getByRole('radio',{name:'Свой состав',exact:true}).check();await page.getByLabel('Важные NPC',{exact:true}).fill('4');await page.getByLabel('Второстепенные NPC',{exact:true}).fill('7');await done(page);
  await group(page,'Жанры истории');await page.getByLabel('Основной жанр',{exact:true}).selectOption('custom');await page.getByRole('dialog').locator('textarea').fill('Драма');await done(page);
  await group(page,'Календарь и начало');await page.getByLabel('Календарь начала игры').selectOption('custom');
  await page.getByLabel('Длины месяцев').fill('30, 40');await page.getByLabel('Названия месяцев').fill('Первый, Второй');
@@ -71,9 +92,11 @@ test('idea190: real generation, reload, HTTP502 review recovery and author revis
  const wid=await page.locator('.world-workshop').getAttribute('data-workspace-id');const url=`/api/workspaces/${wid}/draft`;
  await expect(page.getByRole('status',{name:'Ход проверки мира'})).toContainText('смысловую');
  const before=await(await request.get(url+'?author=true')).json();expect(before.version_id).toBeTruthy();
+ await page.locator('.ww-scroll').evaluate(el=>el.scrollTop=0);await capture(page,info,'production-running');
  await page.reload();await nav(page,'Создать');await expect(page.getByRole('region',{name:'Этапы создания мира'})).toBeVisible();
  await request.post('/test/idea190/release');await expect(page.getByRole('alert')).toContainText('HTTP 502');
  await expect(page.getByText(/известной причиной HTTP 400/)).toHaveCount(0);
+ await capture(page,info,'production-error');
  await page.reload();await nav(page,'Создать');
  await page.getByRole('button',{name:'Повторить проверку',exact:true}).click();
  await expect.poll(async()=> (await(await request.get(url)).json()).job.status).toBe('saved');
@@ -81,6 +104,7 @@ test('idea190: real generation, reload, HTTP502 review recovery and author revis
  expect(after.creation_settings.calendar_start).toMatchObject({mode:'custom',date:'2026-02-30',time:'18:30',profile:{month_lengths:[30,40]}});
  expect(after.creation_settings.communication).toMatchObject({preset:'custom',letter:true,courier:true,voice_call:true,presentation:'phone'});
  expect(after.creation_settings).toMatchObject({primary_genre:'custom',custom_genre:'Драма',cast_preset:'custom',core_npcs:4,secondary_npcs:7});
+ await expect(page.getByRole('heading',{name:'Мир готов к редактированию'})).toBeVisible();await capture(page,info,'production-result');
  const counts=await(await request.post('/test/idea190/release')).json();expect(counts.world_calls).toBe(1);expect(counts.review_calls).toBe(2);
  await page.getByRole('button',{name:'Открыть в редакторе',exact:true}).click();await page.getByRole('button',{name:'Показать всё',exact:true}).click();
  await expect(page.locator('.ww-hero h1')).toBeVisible();
@@ -131,4 +155,28 @@ test('idea190: saved scenario, isolated drafts and reuse after a rejected launch
  await page.getByRole('button',{name:'Проверить замысел',exact:true}).click();await page.getByRole('button',{name:'Создать мир',exact:true}).dblclick();
  await expect.poll(async()=> (await(await request.get(`/api/workspaces/${wid}/draft`)).json()).job?.status).toBe('saved');
  expect(used).toHaveLength(2);expect(used[0]).toBe(used[1]);expect((await(await request.get('/api/workspaces')).json()).length).toBe(before+1);
+});
+
+// Independent approved source, served exclusively by the test fixture server.
+test('idea190: approved reference at the same viewports and interaction states',async({page},info)=>{
+ test.setTimeout(120000);
+ await page.setViewportSize(info.project.name==='mobile'?{width:390,height:844}:{width:1440,height:900});
+ await page.goto('/test/idea190/reference/workspace.html');
+ await capture(page,info,'reference-01-empty');
+ await page.locator('#draft-name').fill('Последняя вышка Валлора');await page.locator('#idea').fill(idea);
+ await page.locator('#era').selectOption('letters');await page.getByRole('checkbox',{name:'Мобильные звонки',exact:true}).check();
+ await page.locator('.folio-scroll, #idea').evaluateAll(els=>els.forEach(el=>el.scrollTop=0));await capture(page,info,'reference-02-filled');
+ for(const [key,title] of [['genre','Жанры истории'],['cast','Персонажи'],['world','Мир и география'],['calendar','Календарь и начало'],['narrative','Темп и последствия']]){
+  await page.locator('.param').filter({hasText:title}).click();await capture(page,info,'reference-panel-'+key);await page.getByRole('button',{name:'Готово',exact:true}).click();
+ }
+ await page.getByRole('button',{name:'Примеры',exact:true}).click();await capture(page,info,'reference-examples');await page.getByRole('button',{name:'Закрыть окно',exact:true}).click();
+ await page.getByRole('button',{name:'Развернуть редактор',exact:true}).click();await capture(page,info,'reference-expanded');await page.getByRole('button',{name:'Готово',exact:true}).click();
+ await page.getByRole('button',{name:'Правила и особенности',exact:true}).click();await page.locator('.comm-extra').scrollIntoViewIfNeeded();await capture(page,info,'reference-communication');
+ await page.getByRole('button',{name:'Правила и особенности',exact:true}).click();await page.getByRole('button',{name:'Проверить замысел',exact:true}).click();
+ await capture(page,info,'reference-review');await page.locator('.fl-demo summary').click();await page.getByLabel('Исход запуска').selectOption('error');
+ await page.getByRole('button',{name:'Запустить демогенерацию'}).click();
+ await expect(page.locator('.fl-stages li.current strong')).toHaveText('Смысловая проверка');await capture(page,info,'reference-running');
+ await expect(page.getByRole('heading',{name:'Проверка не получила ответ'})).toBeVisible();await capture(page,info,'reference-error');
+ await page.getByRole('button',{name:'Повторить проверку',exact:true}).click();await page.getByRole('button',{name:'Подтвердить повтор',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Мир готов к редактированию'})).toBeVisible();await capture(page,info,'reference-result');
 });

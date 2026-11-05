@@ -1,0 +1,8 @@
+.atelier-disclosure{min-width:0}
+.atelier-disclosure-trigger{display:flex;gap:8px;align-items:center;text-align:left;width:100%;min-height:42px;padding:8px 0;border:0;background:none;color:inherit;font:inherit;cursor:pointer}
+.atelier-disclosure-trigger>svg:last-child{margin-left:auto;transition:transform 220ms ease}
+.atelier-disclosure[data-open=true]>.atelier-disclosure-trigger>svg:last-child{transform:rotate(180deg)}
+.atelier-disclosure-body{display:grid;grid-template-rows:0fr;opacity:0;transition:grid-template-rows 220ms ease,opacity 160ms}
+.atelier-disclosure-body>div{overflow:hidden;min-height:0}
+.atelier-disclosure[data-open=true]>.atelier-disclosure-body{grid-template-rows:1fr;opacity:1}
+@media(prefers-reduced-motion:reduce){.atelier-disclosure *{transition:none!important}}

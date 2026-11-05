@@ -1,3 +1,5 @@
+import {Check,Plus} from "lucide-react";
+import {AtelierDisclosure} from "./workshop/AtelierDisclosure";
 import './styles/genre-settings.css';
 import {gameLocale} from './gameDate';
 import {Textarea} from './components/ui/textarea';
@@ -26,15 +28,15 @@ export function GenreSettings({value,onChange,disabled=false,creation=false}:{va
  const en=gameLocale().startsWith('en'); const names=genreLabels(); const details=en?enDescriptions:descriptions;
  const change=(patch:Partial<GenreConfig>)=>onChange({...value,...patch});
  const custom=[value.primary_genre,...value.secondary_genres].includes('custom');
- return <fieldset disabled={disabled} className="genre-settings">
+ return <fieldset disabled={disabled} className="genre-settings sp">
   <legend>{en?'Story genres':'Жанры истории'}</legend>
   <p>{en?'The primary genre sets the main emphasis; secondary genres add accents. Unexpected off-genre events remain possible. Genres do not change risk or character decisions.':'Основной жанр задаёт главный акцент, дополнительные — оттенки. Неожиданные события вне жанра возможны. Жанры не меняют риск и решения персонажей.'}</p>
   <label>{en?'Primary genre':'Основной жанр'}<select aria-label={en?'Primary genre':'Основной жанр'} className="w-full" value={value.primary_genre||''} onChange={e=>change({primary_genre:e.target.value||null,secondary_genres:value.secondary_genres.filter(g=>g!==e.target.value)})}>
    <option value="">{creation?(en?'From world description':'Из описания мира'):(en?'No primary genre':'Без основного жанра')}</option>{Object.entries(names).map(([id,name])=><option key={id} value={id}>{name}</option>)}
   </select></label>
   {value.primary_genre&&<p aria-label={en?'Primary genre description':'Описание основного жанра'}>{details[value.primary_genre]}</p>}
-  <fieldset className="genre-secondary"><legend>{en?'Secondary genres · up to three':'Дополнительные жанры · до трёх'}</legend>{Object.entries(names).map(([id,name])=><label key={id} className="check"><input type="checkbox" checked={value.secondary_genres.includes(id)} disabled={disabled||id===value.primary_genre||value.secondary_genres.length>=3&&!value.secondary_genres.includes(id)} onChange={e=>change({secondary_genres:e.target.checked?[...value.secondary_genres,id]:value.secondary_genres.filter(g=>g!==id)})}/>{name}</label>)}</fieldset>
-  {value.secondary_genres.map(id=><p key={id} aria-label={(en?'Genre description ':'Описание жанра ')+names[id]}><strong>{names[id]}: </strong>{details[id]}</p>)}
+  <fieldset className="genre-secondary sp-block"><legend>{en?'Secondary genres · up to three':'Дополнительные жанры · до трёх'}</legend>{Object.entries(names).map(([id,name])=><label key={id} className={"check sp-chip"+(value.secondary_genres.includes(id)?" on":"")+(id===value.primary_genre||value.secondary_genres.length>=3&&!value.secondary_genres.includes(id)?" off":"")}><input type="checkbox" checked={value.secondary_genres.includes(id)} disabled={disabled||id===value.primary_genre||value.secondary_genres.length>=3&&!value.secondary_genres.includes(id)} onChange={e=>change({secondary_genres:e.target.checked?[...value.secondary_genres,id]:value.secondary_genres.filter(g=>g!==id)})}/>{value.secondary_genres.includes(id)?<Check size={13} className="selection-mark"/>:<Plus size={13}/>}<span>{name}</span></label>)}</fieldset>
+  {value.secondary_genres.length>0&&<AtelierDisclosure className="sp-notes" title={en?'How secondary genres influence the story':'Как дополнительные жанры повлияют на историю?'}>{value.secondary_genres.map(id=><p key={id} aria-label={(en?'Genre description ':'Описание жанра ')+names[id]}><strong>{names[id]}: </strong>{details[id]}</p>)}</AtelierDisclosure>}
   {custom&&<label>{en?'Custom genre description':'Описание своего жанра'}<Textarea required aria-invalid={!value.custom_genre.trim()} value={value.custom_genre} maxLength={2000} onChange={e=>change({custom_genre:e.target.value})}/>{!value.custom_genre.trim()&&<span role="alert">{en?'Add a custom genre description.':'Добавьте описание своего жанра.'}</span>}</label>}
  </fieldset>
 }

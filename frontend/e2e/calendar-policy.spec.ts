@@ -66,7 +66,7 @@ test('Quick and Scenario share independent presets and preview',async({page},inf
  await page.getByLabel('Праздники',{exact:true}).selectOption('country');
  await page.getByLabel('Страна праздников',{exact:true}).selectOption('BR');
  await page.getByLabel('Сезоны',{exact:true}).selectOption('south');
- await closeIdeaGroup(page);await page.locator('.atelier-method summary').click();
+ await closeIdeaGroup(page);await page.locator('.atelier-method').click();
  await creationMethod(page,'Со Сценаристом');
  await page.getByText('Настройки генератора',{exact:true}).click();
  await expect(page.getByLabel('Страна праздников',{exact:true})).toHaveValue('BR');

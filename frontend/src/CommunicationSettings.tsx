@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import {MessageSquare,Phone,Mail,Send,Radio,PhoneCall,Sparkles} from "lucide-react";
+import {MessageCircle,Phone,Mail,Footprints,RadioTower,Radio,PhoneCall,Sparkles,Check,Plus,ChevronDown,Info,NotebookPen,Smartphone} from "lucide-react";
+import {AtelierDisclosure} from "./workshop/AtelierDisclosure";
 import { api } from "./api";
 import { gameLocale } from "./gameDate";
 import { Button } from "./components/ui/button";
 import { Textarea } from "./components/ui/textarea";
 import "./styles/communication-settings.css";
-const channelIcons=[MessageSquare,Phone,Mail,Send,Radio,PhoneCall,Sparkles];
+const channelIcons=[MessageCircle,Phone,Mail,Footprints,RadioTower,Radio,PhoneCall,Sparkles,Check,Plus,ChevronDown,Info,NotebookPen,Smartphone];
 export const channels = [
   "text_message",
   "voice_call",
@@ -110,21 +111,22 @@ export function CommunicationSettings({
     change({[c]:checked,presentation:next.text_message||next.voice_call?'phone':'none',
       delivery_policy:{...v.delivery_policy,[c]:v.delivery_policy?.[c]||defaultPolicy(c)}});
   };
-  if(compact&&onChange)return <section className="atelier-communication" aria-label="Технологии связи">
-    <header><h2><Radio size={19} aria-hidden="true"/>Технологии связи</h2><small>{enabled.length} из 7</small></header>
-    <fieldset disabled={disabled} className="atelier-comm-body"><label>Набор технологий
-      <select aria-label="Набор технологий связи" value={v.preset||'none'} onChange={e=>selectPreset(e.target.value)}>
-        {Object.entries(presets).map(([id,label])=><option key={id} value={id} disabled={!catalog[id]}>{label[index]}</option>)}
-      </select><small>Выберите основу. Эпоху мира задаёт замысел.</small></label>
-      <fieldset className="atelier-channels"><legend>Доступные каналы</legend><div>{channels.map((c,i)=>{const Icon=channelIcons[i];return <label key={c} className={v[c]?'enabled':''} title={policies[v.delivery_policy?.[c]||defaultPolicy(c)][index]}>
-        <Icon size={13} aria-hidden="true"/>{names[i]}<input type="checkbox" checked={!!v[c]} onChange={e=>toggle(c,e.target.checked)}/>
+  if(compact&&onChange)return <section className="paper comm-card atelier-communication" aria-label="Технологии связи">
+    <header className="card-head comm-head"><div className="title-line"><Radio className="section-icon"/><h2>Технологии связи</h2></div><span className="count-badge" aria-live="polite">{enabled.length} из 7</span></header>
+    <fieldset disabled={disabled} className="comm-body"><div className="era"><label htmlFor="atelier-communication-preset">Набор технологий</label>
+      <div className="select-wrap"><select id="atelier-communication-preset" aria-label="Набор технологий связи" value={v.preset||'none'} onChange={e=>selectPreset(e.target.value)}>
+        {Object.entries(presets).map(([id,label])=><option key={id} value={id} disabled={!catalog[id]}>{id==='custom'&&!english?'Свой набор':label[index]}</option>)}
+      </select><ChevronDown size={15}/></div><p>Выберите основу. Эпоху мира задаёт замысел.</p></div>
+      <fieldset className="channel-set"><legend>Доступные каналы</legend><div className="chips">{channels.map((c,i)=>{const Icon=channelIcons[i];return <label key={c} className="channel" data-selected={!!v[c]} title={names[i]+' · '+policies[v.delivery_policy?.[c]||defaultPolicy(c)][index]}>
+        <input type="checkbox" checked={!!v[c]} onChange={e=>toggle(c,e.target.checked)}/><Icon size={14}/><span>{names[i]}</span>{v[c]?<Check className="on selection-mark" size={13}/>:<Plus className="off" size={12}/>}
       </label>})}</div></fieldset>
     </fieldset>
-    <footer><small>Личные разговоры доступны всегда</small><details><summary>Правила и особенности</summary>
-      <dl>{enabled.map(c=><div key={c}><dt>{names[channels.indexOf(c)]}</dt><dd>{policies[v.delivery_policy?.[c]||defaultPolicy(c)][index]}</dd></div>)}</dl>
-      <label>Особенности связи в мире<Textarea disabled={disabled} value={v.author_note||''} maxLength={2000} onChange={e=>change({author_note:e.target.value})}/></label>
-      <p>Описание не включает каналы и не меняет правила доставки. Адресат может не ответить.</p>
-    </details></footer>{error&&<p role="alert">{error}</p>}
+    <div className="comm-bottom"><span><Info size={14}/>Личные разговоры доступны всегда</span></div>
+    <AtelierDisclosure className="comm-disclosure" title={<><NotebookPen size={14}/>Правила и особенности</>}>
+     <div className="comm-extra"><div><strong>Доставка</strong>{enabled.length?<ul>{enabled.map(c=><li key={c}>{names[channels.indexOf(c)]}<span>{policies[v.delivery_policy?.[c]||defaultPolicy(c)][index]}</span></li>)}</ul>:<p>Удалённые каналы выключены.</p>}
+     {v.presentation==='phone'&&<p className="horiz"><Smartphone size={15}/>В игре доступен телефон.</p>}</div>
+     <label>Особенности связи в мире<Textarea disabled={disabled} value={v.author_note||''} maxLength={2000} placeholder="Например, мобильные телефоны есть только у городских гильдий…" onChange={e=>change({author_note:e.target.value})}/><small>Описание уточняет обычаи. Каналы включаются отдельно.</small></label></div>
+    </AtelierDisclosure>{error&&<p className="sp-error" role="alert">{error}</p>}
   </section>;
   return (
     <section

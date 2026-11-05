@@ -535,6 +535,16 @@ llm.unload_all_models = lambda: 1
 if __name__ == '__main__':
     path = os.getenv('E2E_DB_PATH') or str(Path(tempfile.mkdtemp())/'e2e.sqlite3')
     app = create_app(path)
+    # Approved prototype snapshot is test-only. No simulator is mounted in production.
+    import zipfile
+    from starlette.staticfiles import StaticFiles
+    from starlette.routing import Mount
+    reference_dir=Path(tempfile.mkdtemp(prefix='idea190-reference-'))
+    with zipfile.ZipFile(Path(__file__).parent/'fixtures/idea190-reference.zip') as archive:
+        archive.extractall(reference_dir)
+    import shutil
+    shutil.copyfile(Path(__file__).parents[1]/'frontend/src/assets/idea-folio.webp',reference_dir/'folio.webp')
+    app.router.routes.insert(0, Mount('/test/idea190/reference',app=StaticFiles(directory=reference_dir)))
     from backend.tabletop.dice import DiceEngine
     from tabletop_fixture import Fixed
     class BrowserDice(DiceEngine):

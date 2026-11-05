@@ -18,6 +18,6 @@ export async function generateIdea(page:Page){
 export async function creationMethod(page:Page,name:string){
  await expect(page.locator('.atelier-method, .workshop-paths')).toBeVisible();
  const menu=page.locator('.atelier-method');
- if(await menu.isVisible()&&await menu.getAttribute('open')===null)await menu.locator('summary').click();
+ if(await menu.isVisible())await menu.click();
  await page.getByRole('button',{name,exact:true}).click();
 }

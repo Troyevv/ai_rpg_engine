@@ -84,6 +84,7 @@ def test_real_generation_502_review_reuses_candidate_and_job(api):
                 if before['job']['phase']=='reviewing':break
                 time.sleep(.01)
             assert before['version_id'],before['job']
+            assert before['version_origin_job_id']==jid and before['version_is_candidate']
             duplicate=client.post(url+'/generate',json=dict(data,revision=before['revision'],api_key='offline-fixture'))
             assert duplicate.status_code==409
         finally:provider.gate.set()
@@ -100,6 +101,7 @@ def test_real_generation_502_review_reuses_candidate_and_job(api):
     after=client.get(url+'?author=true').json()
     assert provider.world_calls==1 and provider.review_calls==2
     assert after['review']['status']=='completed'
+    assert after['version_origin_job_id']==jid and not after['version_is_candidate']
     assert after['creation_settings']['communication']['voice_call']
     assert after['creation_settings']['communication']['letter'] and after['creation_settings']['communication']['courier']
     assert after['creation_settings']['communication']['presentation']=='phone'

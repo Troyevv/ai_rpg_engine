@@ -2,7 +2,7 @@ import {CalendarPresets,defaultPresets,type Presets} from './CalendarPresets';
 import {useEffect,useState} from 'react';
 export type CalendarStart={presets?:Presets;mode:string;date:string|null;time:string|null;weekday:number|null;profile:{id:string;system:string;month_lengths:number[];month_names:string[];weekday_names:string[]}|null};
 export const defaultCalendarStart:CalendarStart={presets:defaultPresets,mode:'auto',date:null,time:null,weekday:null,profile:null};
-export function CalendarStartSettings({value,onChange}:{value:CalendarStart;onChange:(v:CalendarStart)=>void}){
+export function CalendarStartSettings({value,onChange,atelier=false}:{value:CalendarStart;onChange:(v:CalendarStart)=>void;atelier?:boolean}){
  const change=(p:Partial<CalendarStart>)=>onChange({...value,...p});
  const profile=value.profile||{id:'custom',system:'custom',month_lengths:[30],month_names:['Первый'],weekday_names:['Первый','Второй','Третий']};
  const [dateParts,setDateParts]=useState((value.date||'').split('-'));
@@ -24,11 +24,11 @@ export function CalendarStartSettings({value,onChange}:{value:CalendarStart;onCh
  <label>Дни недели<input aria-label="Дни недели" value={weekdays} onChange={e=>{setWeekdays(e.target.value);change({profile:{...profile,weekday_names:e.target.value.split(',').map(v=>v.trim())}})}}/></label>
  <p>Месяцы: от 1 до 24, длина от 1 до 99 дней. Названия перечисляйте через запятую. Неделя: от 1 до 14 дней.</p>
  {(profile.month_lengths.some(n=>!Number.isInteger(n)||n<1||n>99)||profile.month_lengths.length!==profile.month_names.length)&&<p role="alert">Проверьте длины и названия месяцев: количество должно совпадать.</p>}
- <div>{['Год начала','Месяц начала','День начала'].map((label,i)=><label key={label}>{label}<input aria-label={label} inputMode="numeric" value={parts[i]||''} onChange={e=>setDatePart(i,e.target.value)} onBlur={saveDate}/></label>)}</div>
+ <div className={atelier?'sp-three':undefined}>{['Год начала','Месяц начала','День начала'].map((label,i)=><label key={label}>{label}<input aria-label={label} inputMode="numeric" value={parts[i]||''} onChange={e=>setDatePart(i,e.target.value)} onBlur={saveDate}/></label>)}</div>
  <label>Первый день недели<select aria-label="Первый день недели" value={value.weekday??''} onChange={e=>change({weekday:e.target.value===''?null:Number(e.target.value)})}><option value="">Из идеи мира</option>{profile.weekday_names.map((name,i)=><option key={i} value={i}>{name}</option>)}</select></label>
  </>:<label>Дата начала<input aria-label="Дата начала" type="date" min="0001-01-01" max="9999-12-31" value={value.date||''} onChange={e=>change({date:e.target.value||null})}/></label>}
  <label>Время начала<input aria-label="Время начала" type="time" value={value.time||''} onChange={e=>change({time:e.target.value||null})}/></label>
- <CalendarPresets value={value.presets||defaultPresets} onChange={presets=>change({presets})}/>
+ <CalendarPresets atelier={atelier} value={value.presets||defaultPresets} onChange={presets=>change({presets})}/>
  <p>Если не заполнено, используем дату и время из идеи мира</p>
  </fieldset>;
 }
