@@ -201,8 +201,14 @@ test('previous world is labelled separately from an incomplete new response',asy
   await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('error');
   await page.reload();await nav(page,'Создать');
   await expect(page.getByRole('heading',{name:'Ранее сохранённый мир',exact:true})).toBeVisible();
-  await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
+  const generation=page.getByRole('region',{name:'Этапы создания мира'});
+  await expect(generation).toContainText('Доступна предыдущая версия');
+  await expect(generation.locator('.fl-result')).toHaveCount(0);
+  await expect(generation.locator('[data-state=done]')).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Начать игру в предыдущем мире',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Открыть предыдущий мир',exact:true}).click();
+  await page.getByRole('button',{name:'Показать всё',exact:true}).click();
+  await expect(page.locator('.ww-hero h1')).toBeVisible();
   await workshopNav(page,'Проверка мира');
   await page.getByText('Повторить проблемное продолжение',{exact:true}).click();
   await page.getByRole('button',{name:'Запросить только последнее продолжение',exact:true}).click();
@@ -225,7 +231,7 @@ test('saved symmetric duplicates offer lossless merge after reconnect',async({pa
   const relation={id:'a',kind:'sibling',source_id:a,target_id:b,context:'Брат и сестра'};
   await request.patch(url+'/candidate',{data:{revision:d.revision,path:'/world/objective_relations',value:{a:relation,b:{...relation,id:'b',source_id:b,target_id:a,context:'Сестра и брат'}}}});
   await page.reload();await nav(page,'Создать');
-  await page.getByRole('button',{name:'Автор мира',exact:true}).click();
+  await page.getByRole('button',{name:'Открыть вид автора',exact:true}).click();
   await page.getByRole('button',{name:'Показать всё',exact:true}).click();
   await workshopNav(page,'Проверка мира');
   await expect(page.getByRole('heading',{name:'Две записи одной связи'})).toBeVisible();

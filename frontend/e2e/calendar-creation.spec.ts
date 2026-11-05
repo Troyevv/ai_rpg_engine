@@ -27,7 +27,7 @@ test('calendar settings persist and resolve exact time',async({page,request},inf
  expect(draft.state.world_clock.calendar.start_date).toBe('1370-10-23');
  expect(draft.presentation.notices.length).toBeGreaterThan(0);
  expect(draft.validation.errors).toEqual([]);
- await page.getByRole('button',{name:'Автор мира',exact:true}).click();
+ await page.getByRole('button',{name:'Открыть вид автора',exact:true}).click();
  await page.getByRole('button',{name:'Показать всё',exact:true}).click();
  await workshopNav(page,'Проверка мира');
  await expect(page.getByText(/применена настройка 1370-10-23/)).toBeVisible();

@@ -21,7 +21,7 @@ for(const skin of ['graphite','parchment']) test(`AI editor preview, confirmatio
  await expect(page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true})).toBeEnabled();
  const before=await(await request.get(url+'?author=true')).json();
  await expect(page.getByRole('heading',{name:'AI-редактор мира',exact:true})).toHaveCount(0);
- await page.getByRole('button',{name:'Автор мира',exact:true}).click();await page.getByRole('button',{name:'Показать всё',exact:true}).click();await workshopNav(page,'Изменить с ИИ');
+ await page.getByRole('button',{name:'Открыть вид автора',exact:true}).click();await page.getByRole('button',{name:'Показать всё',exact:true}).click();await workshopNav(page,'Изменить с ИИ');
  const editor=page.locator('.world-ai-editor');
  const instruction='Добавь Веру, её биографию, отношения, мастерскую, события и сюжетную линию. Измени историю организации. '+ 'Сохрани свободу будущего выбора героя. '.repeat(80);
  await editor.getByLabel('Что изменить в мире?').fill(instruction);
@@ -92,7 +92,7 @@ test('AI editor empty response recovery, rejection and stale preview',async({pag
  await page.goto('/');await page.evaluate(wid=>localStorage.setItem('draftWorkspace',wid),workspace.id);await page.reload();await nav(page,'Создать');
  await page.getByLabel('Описание мира или текст импорта').fill('EDITOR173: Друзья в городе.');await generateIdea(page);
  await expect(page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true})).toBeEnabled();
- await page.getByRole('button',{name:'Автор мира',exact:true}).click();await page.getByRole('button',{name:'Показать всё',exact:true}).click();await workshopNav(page,'Изменить с ИИ');
+ await page.getByRole('button',{name:'Открыть вид автора',exact:true}).click();await page.getByRole('button',{name:'Показать всё',exact:true}).click();await workshopNav(page,'Изменить с ИИ');
  const editor=page.locator('.world-ai-editor');await editor.getByLabel('Что изменить в мире?').fill('Добавь Веру.');await editor.getByRole('button',{name:'Предложить изменения',exact:true}).click();
  await request.post('/test/editor173/release');
  await expect(page.getByRole('button',{name:'Повторить после сбоя провайдера'})).toBeVisible();
@@ -121,7 +121,7 @@ test('AI editor workspace switch isolates input, errors, preview and late respon
  expect((await request.post(`/api/workspaces/${second.id}/draft/import`,{data:{revision:0,text:JSON.stringify(first.state),format:'json'}})).ok()).toBeTruthy();
  await page.evaluate(wid=>localStorage.setItem(`world-editor:${wid}`,'Несохранённая инструкция второго мира'),second.id);
  await page.reload();await nav(page,'Создать');
- await page.getByRole('button',{name:'Автор мира',exact:true}).click();await page.getByRole('button',{name:'Показать всё',exact:true}).click();await workshopNav(page,'Изменить с ИИ');
+ await page.getByRole('button',{name:'Открыть вид автора',exact:true}).click();await page.getByRole('button',{name:'Показать всё',exact:true}).click();await workshopNav(page,'Изменить с ИИ');
  const editor=page.locator('.world-ai-editor');
  await editor.getByLabel('Что изменить в мире?').fill('Первый мир: добавь Веру.');
  await editor.getByRole('button',{name:'Предложить изменения',exact:true}).click();await request.post('/test/editor173/release');
@@ -169,7 +169,7 @@ test('AI editor refuses dangling locations and archived NPC references without m
  const imported=await request.post(url+'/import',{data:{revision:draft.revision,text:JSON.stringify(state),format:'json'}});
  expect(imported.ok(),await imported.text()).toBeTruthy();const before=await(await request.get(url+'?author=true')).json();
  await page.reload();await nav(page,'Создать');
- await page.getByRole('button',{name:'Автор мира',exact:true}).click();await page.getByRole('button',{name:'Показать всё',exact:true}).click();await workshopNav(page,'Изменить с ИИ');
+ await page.getByRole('button',{name:'Открыть вид автора',exact:true}).click();await page.getByRole('button',{name:'Показать всё',exact:true}).click();await workshopNav(page,'Изменить с ИИ');
  const editor=page.locator('.world-ai-editor');await request.post('/test/editor173/release');
  for(const instruction of ['DELETE184_LOCATION','DELETE184_HISTORY']){
   await editor.getByLabel('Что изменить в мире?').fill(instruction);await editor.getByRole('button',{name:'Предложить изменения',exact:true}).click();

@@ -268,7 +268,11 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
     const savedCreation=JSON.stringify(draft?.creation_settings||{});
     useEffect(()=>{const saved=JSON.parse(savedCreation);if(!restoredCreation.current&&draft?.id===id&&(draft.author||!draft.version_id)){setCreation({...structuredClone(defaultCreation),...saved});setName(draft.name);restoredCreation.current=true;}},[id,savedCreation,draft?.id,draft?.author,draft?.version_id]);
     useEffect(()=>{if(!id||restoredCreation.current)setInputSaved(writeIdeaBuffer(id,{text,name,useIdea,creation}));},[id,text,name,useIdea,creation]);
-    const { job, reconnecting } = useJob(draft?.job, refresh);
+    const { job: streamedJob, reconnecting } = useJob(draft?.job, refresh);
+    // useJob synchronizes its source in an effect. A newly loaded workspace must
+    // render its own job immediately, rather than briefly mounting the editor
+    // toolbar with no job (or a different workspace's last streamed job).
+    const job = (streamedJob?.id === draft?.job?.id ? streamedJob : draft?.job) ?? null;
     // Phase snapshots arrive over SSE before the draft view is refreshed. Read
     // persisted lineage at stage boundaries, without replacing the live job
     // with a possibly older HTTP snapshot or re-opening its event stream.

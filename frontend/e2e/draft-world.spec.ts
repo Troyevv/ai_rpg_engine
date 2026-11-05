@@ -13,7 +13,7 @@ for(const width of [360,390,412,430,1280,1440,1920]){
   await generateIdea(page);
   await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
   await expect(page.locator('main')).not.toContainText('Тайная встреча у маяка');
-  await expect(page.locator('.workshop-view')).toContainText('Игрок');
+  await expect(page.getByRole('button',{name:'Открыть вид автора',exact:true})).toHaveAttribute('title','Взгляд героя');
   await workshopNav(page,'Сцена и правила');
   await expect(page.locator('.workshop-content')).toContainText('Кухня');
   await workshopNav(page,'Факты и знания');

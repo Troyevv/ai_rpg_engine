@@ -43,7 +43,7 @@ for (const skin of ["graphite", "parchment"])
     await expect(
       page.locator('.ww-hero h1, .fl-result h2'),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Автор мира", exact: true }).click();
+    await page.getByRole("button", { name: "Открыть вид автора", exact: true }).click();
     await page
       .getByRole("button", { name: "Показать всё", exact: true })
       .click();
