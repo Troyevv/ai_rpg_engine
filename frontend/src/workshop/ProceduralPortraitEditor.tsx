@@ -16,7 +16,7 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,mod
  <button type="button" aria-pressed={compare} onClick={()=>setCompare(!compare)}>Свериться с описанием внешности</button>
  {compare&&<p>Сравните варианты с текстом и выберите поддерживаемые признаки ниже. Автоматическое распознавание текста здесь не выполняется. Изменения сохраняются только по подтверждению.</p>}
  <div className="portrait-age-reference">
- <p>Реальный возраст персонажа: {ageReference?.age!=null?`${ageReference.age} лет`:'не указан'}{ageReference?.visual_age?` · ${ageLabels[ageReference.visual_age]}`:''}.</p>
+ <p>Реальный возраст персонажа: {ageReference?.age!=null?new Intl.NumberFormat('ru',{style:'unit',unit:'year',unitDisplay:'long'}).format(ageReference.age):'не указан'}{ageReference?.visual_age?` · ${ageLabels[ageReference.visual_age]}`:''}.</p>
  <label>Визуальный возраст<select aria-label="Визуальный возраст" disabled={disabled} value={ageSelection} onChange={e=>selectAge(e.target.value)}>
  <option value="auto" disabled={!ageReference?.visual_age}>Автоматически — по текущему возрасту персонажа</option>
  {ageSelection==='legacy'&&<option value="legacy" disabled>Сохранённый исходный стиль</option>}

@@ -61,7 +61,7 @@ test('manual visual age: Anna, persistence, full artwork and Runtime handoff',as
  await card.click();await page.getByRole('button',{name:'Редактировать портрет',exact:true}).click();
  await page.getByRole('button',{name:'Настроить иллюстрацию',exact:true}).click();
  const selector=page.getByLabel('Визуальный возраст',{exact:true});await expect(selector).toHaveValue('auto');
- await expect(page.locator('.portrait-age-reference')).toContainText('24 лет · Молодой взрослый');
+ await expect(page.locator('.portrait-age-reference')).toContainText('24 года · Молодой взрослый');
  const previews=new Map<string,string>();
  for(const age of ['infant','child','adolescent','young_adult','mature_adult','elderly']){
   await selector.selectOption(age);
