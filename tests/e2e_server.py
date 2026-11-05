@@ -117,8 +117,9 @@ def stream(**kwargs):
         from test_draft_creative import additions,change
         payload=json.loads(kwargs['messages'][1]['content'])
         state=payload['candidate'];instruction=json.loads(payload['author_context'])['current_instruction']
-        if instruction=='Создай сестру Ильи':
-            fixture=json.loads((Path(__file__).parent/'fixtures/draft_editor/ilya_sister.json').read_text())
+        if instruction in ('Создай сестру Ильи','Создай сестру Ильи — Олю'):
+            filename='ilya_sister_olya.json' if instruction.endswith('Олю') else 'ilya_sister.json'
+            fixture=json.loads((Path(__file__).parent/'fixtures/draft_editor'/filename).read_text())
             proposal=json.loads(fixture['reply']);proposal['candidate_hash']=payload['candidate_hash']
             yield json.dumps(proposal,ensure_ascii=False);return
         if instruction=='WORKSHOP188 пакет':

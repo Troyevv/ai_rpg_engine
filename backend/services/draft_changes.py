@@ -97,18 +97,79 @@ def author_value(old, new, path=""):
     return result
 
 
+def resolve_card_paths(state, proposal):
+    """Editor-only identity aliases; numeric addresses retain frozen-base semantics.
+
+    The shadow tracks prior additions/assignments and tombstones without shifting
+    indices. It never escapes preflight or changes the shared JSON Pointer reader.
+    """
+    shadow = deepcopy(state)
+    deleted = set()
+    errors = []
+    for index, change in enumerate(proposal.changes):
+        original = change.path
+        try:
+            if not original.startswith('/') or re.search(r'~(?![01])', original):
+                raise ValueError('Некорректный JSON Pointer')
+            parts = [p.replace('~1', '/').replace('~0', '~') for p in original[1:].split('/')]
+            if parts[0] not in ('characters', 'locations', 'world', 'campaign'):
+                continue  # Existing allowlist supplies the operation-drop scope.
+            if parts[0] in ('characters', 'locations') and len(parts) >= 2:
+                rows = shadow[parts[0]]
+                token = parts[1]
+                if token != '-' and not re.fullmatch(r'0|[1-9]\d*', token):
+                    matches = [i for i, row in enumerate(rows) if row.get('id') == token]
+                    if len(matches) != 1:
+                        raise ValueError('ID карточки не найден' if not matches else 'Неоднозначный ID карточки')
+                    parts[1] = str(matches[0])
+                elif token.isdigit() and any(row.get('id') == token for row in rows):
+                    raise ValueError('Неоднозначная адресация: числовой ID совпадает с индексом')
+            path = '/' + '/'.join(p.replace('~', '~0').replace('/', '~1') for p in parts)
+            if any(path == dead or path.startswith(dead + '/') for dead in deleted):
+                raise ValueError('Обращение к удалённой сущности')
+            parent = pointer(shadow, path.rsplit('/', 1)[0])
+            key = parts[-1]
+            if isinstance(parent, list):
+                if key == '-' and change.op == 'add' and len(parts) == 2:
+                    parent.append(deepcopy(change.value))
+                elif re.fullmatch(r'0|[1-9]\d*', key) and int(key) < len(parent):
+                    if change.op == 'remove': deleted.add(path)
+                else:
+                    raise ValueError('Некорректный индекс массива')
+            elif isinstance(parent, dict):
+                if key not in parent and change.op != 'add':
+                    raise ValueError('Поле отсутствует: используйте add или существующий адрес')
+                if change.op == 'remove': deleted.add(path)
+                else: parent[key] = deepcopy(change.value)
+            else:
+                raise ValueError('Родительский объект не является контейнером')
+            change.path = path
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            reason = str(exc) if isinstance(exc, ValueError) else 'Родительский объект не существует'
+            errors.append(f'Операция {index}, путь {original}: {reason}. Исправьте только path на существующий разрешённый адрес.')
+    if errors:
+        raise ProposalError('; '.join(errors), proposal_paths=[
+            f'/changes/{i}/path' for i, c in enumerate(proposal.changes)
+            if any(e.startswith(f'Операция {i},') for e in errors)])
+
+
 def apply_proposal(state, reply, *, editing=False):
     proposal = Proposal.model_validate(strict_loads(reply))
     if proposal.conflicts and not editing:
         raise ValueError('Творческое предложение содержит нерешённые авторские конфликты.')
     if proposal.candidate_hash != candidate_hash(state):
         raise ValueError('Кандидат изменился; творческое предложение устарело.')
+    if editing:
+        resolve_card_paths(state, proposal)
     trial = deepcopy(state)
     schema = prompt_schema()['properties']
     sections = set(schema['world']['properties']) - {'version', 'communication', 'scene_records'}
     paths = [c.path for c in proposal.changes if c.path not in ('/characters/-', '/locations/-')]
     if len(set(paths)) != len(paths) or any(a.startswith(b+'/') for a in paths for b in paths if a != b):
-        raise ValueError('Пересекающиеся пути предложения.')
+        raise ProposalError('Пересекающиеся пути предложения после разрешения адресов.',
+            proposal_paths=[f'/changes/{i}/path' for i,c in enumerate(proposal.changes)
+                if c.path in paths and any(i != j and (c.path == d.path or c.path.startswith(d.path+"/") or d.path.startswith(c.path+"/"))
+                    for j,d in enumerate(proposal.changes) if d.path in paths)])
     removals = []
     problems = []
     append_indices = {root:len(state[root]) for root in ('characters','locations')}
