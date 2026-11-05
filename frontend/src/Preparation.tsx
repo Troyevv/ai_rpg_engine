@@ -24,18 +24,22 @@ import {
   DialogTitle,
   DialogDescription,
 } from "./components/ui/dialog";
+type RemovedScenario={id:string;name:string;revision:number};
+type ScenarioTrashState={removed:RemovedScenario[];setRemoved:(items:RemovedScenario[])=>void;trashOpen:boolean;setTrashOpen:(open:boolean)=>void};
 type PreparationProps={prefs:Preferences;apiKey:string;onWorld:(id:number)=>void;onDraft?:(id:string)=>void;worldSettings?:ReactNode;initialWorkspaceId?:string;onWorkspaceChange?:(id:string)=>void};
 export function Preparation(props:PreparationProps){
+ const [removed,setRemoved]=useState<RemovedScenario[]>([]);
+ const [trashOpen,setTrashOpen]=useState(false);
  const [selected,setSelected]=useState(props.initialWorkspaceId??localStorage.getItem("workspace")??"");
  useEffect(()=>{if(props.initialWorkspaceId!==undefined)setSelected(props.initialWorkspaceId)},[props.initialWorkspaceId]);
- return <PreparationWorkspace key={selected} {...props} selected={selected} onSelect={id=>{setSelected(id);props.onWorkspaceChange?.(id)}}/>;
+ return <PreparationWorkspace key={selected} {...props} removed={removed} setRemoved={setRemoved} trashOpen={trashOpen} setTrashOpen={setTrashOpen} selected={selected} onSelect={id=>{setSelected(id);props.onWorkspaceChange?.(id)}}/>;
 }
 function PreparationWorkspace({
   prefs,
   apiKey,
   onWorld,
   onDraft,
-  worldSettings,selected,onSelect,
+  worldSettings,selected,onSelect,removed,setRemoved,trashOpen,setTrashOpen,
 }: {
   selected:string;onSelect:(id:string)=>void;
   prefs: Preferences;
@@ -43,7 +47,7 @@ function PreparationWorkspace({
   onWorld: (id: number) => void;
   onDraft?: (id: string) => void;
   worldSettings?: ReactNode;
-}) {
+}&ScenarioTrashState) {
   const [list, setList] = useState<{ id: string; name: string }[]>([]);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const id=selected,setId=onSelect;
@@ -56,7 +60,6 @@ function PreparationWorkspace({
   const [name, setName] = useState("Новая история");
   const [saveName, setSaveName] = useState("");
   const [versionKind,setVersionKind] = useState<"idea"|"summary"|null>(null);
-  const [removed,setRemoved] = useState<{id:string;name:string;revision:number}[]>([]);
   const [diagnostics,setDiagnostics] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -73,6 +76,7 @@ function PreparationWorkspace({
   }, []);
   useEffect(() => {
     setWorkspace(null);
+    if (!id) localStorage.removeItem("workspace");
     if (id) {
       localStorage.setItem("workspace", id);
       const c = new AbortController();
@@ -150,7 +154,7 @@ function PreparationWorkspace({
         </Button>
       </div>
       {workspace&&<Versions kind={versionKind||"summary"} owner={workspace.id} open={!!versionKind} close={()=>setVersionKind(null)} changed={refresh}/>}
-      <details><summary>Удалённые сценарии</summary><Button variant="ghost" onClick={()=>void api<typeof removed>("/workspaces?deleted=true").then(setRemoved).catch(e=>toast.error(e.message))}>Обновить корзину</Button>{removed.map(w=><div key={w.id}>{w.name}<Button size="sm" onClick={()=>void run(async()=>{await api(`/workspaces/${w.id}/restore`,{revision:w.revision});setList(await api("/workspaces"));setRemoved(await api("/workspaces?deleted=true"));setId(w.id)})}>Восстановить</Button></div>)}</details>
+      <details open={trashOpen} onToggle={e=>setTrashOpen(e.currentTarget.open)}><summary>Удалённые сценарии</summary><Button variant="ghost" onClick={()=>void api<typeof removed>("/workspaces?deleted=true").then(setRemoved).catch(e=>toast.error(e.message))}>Обновить корзину</Button>{removed.map(w=><div key={w.id}>{w.name}<Button size="sm" onClick={()=>void run(async()=>{await api(`/workspaces/${w.id}/restore`,{revision:w.revision});const items=await api<{id:string;name:string}[]>("/workspaces");setRemoved(await api("/workspaces?deleted=true"));if(alive.current){setList(items);setId(w.id)}})}>Восстановить</Button></div>)}</details>
       {worldSettings}
       {workspace && onDraft && <Button disabled={busy || active(job) || !workspace.idea} onClick={()=>onDraft(workspace.id)}>Продолжить в редакторе мира</Button>}
       {workspace ? (
@@ -291,7 +295,7 @@ function PreparationWorkspace({
               )}
             </section>
           </div>
-          <Button variant="ghost" disabled={busy||active(job)} onClick={()=>{if(window.confirm("Удалить сценарий вместе с рабочей выжимкой? Сохранённые миры и история версий останутся."))void run(async()=>{await api(`/workspaces/${id}`,{revision:workspace.revision},"DELETE");setId("");setWorkspace(null);setList(await api("/workspaces"))})}}>Удалить сценарий</Button>
+          <Button variant="ghost" disabled={busy||active(job)} onClick={()=>{if(window.confirm("Удалить сценарий вместе с рабочей выжимкой? Сохранённые миры и история версий останутся."))void run(async()=>{await api(`/workspaces/${id}`,{revision:workspace.revision},"DELETE");if(alive.current){setId("");setWorkspace(null)}})}}>Удалить сценарий</Button>
           <Button
             className="reset-button"
             variant="ghost"

@@ -123,3 +123,14 @@ Confirmed defects fixed in follow-up: list portraits were vertically centered af
 - Mobile Graphite dossier capture exposed overlapping age/location/search rows caused by several children sharing hard-coded grid rows. Replaced that layout with explicit identity and switcher groups; added browser geometry assertions in all three skins.
 
 - Mobile overview still hid cards below an oversized hero. Moved full setting/genre into an accessible disclosure, restored the corner edit action and four-column mobile statistics, and retained expandable untruncated source text.
+
+
+## Continuation — completed 3d8ac389 CI and deterministic race regressions
+
+Run [42080709704](https://github.com/Troyevv/ai_rpg_engine/actions/runs/42080709704) completed: backend **3213 passed, 1 skipped**, frontend **134 passed**, all four selected smoke jobs passed, and both full mobile shards passed. Full desktop shards had **164 passed / 1 failed** and **160 passed / 1 failed**. No complete CI success is inferred from the mobile result.
+
+The retained traces identify two timing defects. Search mounted its destination record while the outgoing Radix search layer still owned Escape/focus; navigation now waits for the search portal's close lifecycle. Deleting a scenario remounted its editor after a trash query had started, losing the open state and fetched rows; trash state now belongs to the persistent Preparation wrapper, and a late delete response cannot clear a newly selected workspace. The browser regression deliberately holds the DELETE response while opening/loading trash, then checks its state after the workspace changes. Tests remain strict, without extra timeouts or forced clicks.
+
+The start-settings summary now uses the same server-projected five roles as the launch dialog. Its browser test checks POV before opening the launch dialog as well as the real handoff.
+
+Reviewed the latest 360px overview and 390px places captures: the hero is bounded, four stats remain on one row, and the locations Add button is present. Source-content differences remain explicit. The evidence driver now uses the exact required viewport heights and adds 768×1024 / 1024×768 tablet boundaries; the previous seven-width, 900px-height series is historical evidence, not proof of those required dimensions. Fresh captures and full CI are required for these follow-ups.
