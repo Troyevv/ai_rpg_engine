@@ -53,6 +53,11 @@ test('workshop portrait illustration and uploaded original survive Start Game',a
  await page.goto('/');await page.evaluate(wid=>localStorage.setItem('draftWorkspace',wid),workspace.id);await page.reload();await nav(page,'Создать');await authorView(page);await workshopNav(page,'Персонажи');
  await page.locator('.ww-character-card').first().click();await page.getByRole('button',{name:'Редактировать портрет',exact:true}).click();
  await page.getByText('Настроить иллюстрацию',{exact:true}).click();
+ await page.getByLabel('Вид изображения',{exact:true}).selectOption('neutral');
+ const fallback=page.locator('.portrait-comparison .character-avatar');
+ await expect(fallback.locator('svg')).toHaveCount(1);
+ await expect(fallback.locator('.portrait-initials')).not.toHaveText('');
+ await expect(fallback.locator('img')).toHaveCount(0);
  await page.getByLabel('Вид изображения',{exact:true}).selectOption('human');await page.getByLabel('Волосы',{exact:true}).selectOption('3');
  await page.getByText('Свериться с описанием внешности',{exact:true}).click();
  await expect(page.locator('.portrait-literary-reference p')).toHaveText(state.characters[0].fields['Внешность']);

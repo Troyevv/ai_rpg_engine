@@ -4,7 +4,7 @@ STYLES = {
     'hair': ('short', 'long', 'bob', 'curly', 'medium', 'wavy', 'fringe', 'bald'),
     'hair_color': ('black', 'brown', 'blond', 'dark_blond', 'red', 'grey', 'white'),
     'skin': ('light', 'warm', 'beige', 'deep', 'olive', 'peach', 'sand'),
-    'eyes': ('hazel', 'green', 'grey', 'brown', 'grey_green', 'blue', 'light_green'),
+    'eyes': ('hazel', 'green', 'grey', 'brown', 'grey_green', 'blue', 'light_green', 'grey_blue'),
     'clothing': ('plain', 'tshirt', 'shirt', 'blazer', 'jacket', 'cardigan', 'jumper', 'sweater'),
     'clothing_color': ('dark', 'light', 'blue', 'green', 'brown', 'red', 'sand'),
 }
@@ -55,5 +55,9 @@ def graphic_choices(actor, hints=None):
     for field, tokens in matches.items():
         if len(tokens)==1:
             token=next(iter(tokens))
-            if token in STYLES[field]: approved[field]=STYLES[field].index(token)
+            if token in STYLES[field]:
+                choice=STYLES[field].index(token)
+                if field in approved and approved[field]!=choice:
+                    raise ValueError('portrait_traits противоречит структурированной внешности: '+field)
+                approved[field]=choice
     return approved

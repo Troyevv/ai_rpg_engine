@@ -423,7 +423,7 @@ class ProceduralPortrait(StrictModel):
     face: int = Field(default=0, ge=0, le=6)
     hair: int = Field(default=0, ge=0, le=7)
     skin: int = Field(default=0, ge=0, le=6)
-    eyes: int = Field(default=0, ge=0, le=6)
+    eyes: int = Field(default=0, ge=0, le=7)
     clothing: int = Field(default=0, ge=0, le=7)
     accessory: int = Field(default=0, ge=0, le=7)
     palette: int = Field(default=0, ge=0, le=6)

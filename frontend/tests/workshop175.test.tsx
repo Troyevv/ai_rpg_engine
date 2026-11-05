@@ -28,3 +28,14 @@ describe('versioned workshop illustrations',()=>{
   expect(JSON.stringify(base)).toBe(before);expect(proceduralPortrait(base)).toBe(proceduralPortrait({...base}));
  });
 });
+
+import {renderToStaticMarkup} from 'react-dom/server';
+import {CharacterAvatar} from '../src/Portrait';
+it('neutral descriptors use the identical game avatar and initials',()=>{
+ const subject={id:'ilya',name:'Илья Соколов',silhouette:'male'};
+ const plain=renderToStaticMarkup(<CharacterAvatar subject={subject}/>);
+ const neutral=renderToStaticMarkup(<CharacterAvatar subject={{...subject,procedural_portrait:{...base,form:'neutral'}}}/>);
+ expect(neutral).toBe(plain);expect(neutral).toContain('ИС');expect(neutral).toContain('data-silhouette="male"');
+ expect(proceduralPortrait({...base,form:'neutral'})).toBeNull();
+ expect(decodeURIComponent(proceduralPortrait({...base,eyes:7})!)).toContain('#6f8998');
+});

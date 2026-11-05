@@ -25,6 +25,11 @@ RULES = '''Ты автор-редактор ещё не запущенного �
 Карточки characters/locations — массивы: предпочитай точный стабильный ID, например
 /characters/ilya/fields/Биография. Сервер разрешит ID в индекс; имена не являются ID.
 /world/characters — словарь: /world/characters/ilya/biography.
+Для нового NPC добавь portrait_traits в карточку тем же ответом: только поддерживаемые
+открытые признаки из fields.Внешность по world_schema. Литературный текст первичен;
+не меняй его ради рисунка. Тёмно-русые → dark_blond, до подбородка → bob,
+серо-голубые → grey_blue. Учитывай отрицания и контекст, не выдумывай отсутствующие
+признаки. Неподдерживаемые детали пропускай. Существующие портреты не изменяй.
 Новые карточки добавляй /characters/- или /locations/-, новые записи —
 /world/<section>/<id>. Существующие записи меняй по полям; списки целиком.
 Удаление: op=remove, path целой сущности, value — её точное прежнее значение.
@@ -57,13 +62,13 @@ def author_context(base, instruction):
 
 
 def messages(base, instruction):
-    from backend.services.draft_creative import creative_schema
+    from backend.services.draft_initial import prompt_schema
     from backend.services.draft_initial import SECRET_AUTHORING_RULES
     state=base['state']
     return [dict(role='system',content=MARKER+'\n'+RULES+'\n'+SECRET_AUTHORING_RULES),
             dict(role='user',content=json.dumps(dict(author_context=author_context(base,instruction),
                 candidate=state,candidate_hash=candidate_hash(state),
-                world_schema=creative_schema(),response_schema=Proposal.model_json_schema()),ensure_ascii=False))]
+                world_schema=prompt_schema(initial_portraits=True),response_schema=Proposal.model_json_schema()),ensure_ascii=False))]
 
 
 def rebased_path(before, after, path):
@@ -199,6 +204,14 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         trial=validate_candidate(state,trial,editing=True)
         stage='draft_world_validation';repo.draft_phase(jid,'reviewing',reset_progress=True)
         review_messages=draft_completeness.messages(trial,author_context(base,edit['instruction']))
+        from backend.services.portrait_traits import STYLES
+        review_messages[0]['content'] += ('\nСравни procedural_portrait новых NPC с литературной Внешностью. '
+            'Описание первично; учитывай отрицания и контекст. Для индексов рисунка используй словарь: '
+            + json.dumps(STYLES,ensure_ascii=False) + '. Неописанные признаки могут быть условными. '
+            'При противоречии поддерживаемого признака дай recommendation с path карточки и понятным message: '
+            'автор должен явно проверить и настроить портрет. Не исправляй литературный текст ради рисунка '
+            'и не предлагай менять защищённый procedural_portrait. Родинки, часы, медицинская форма '
+            'и телосложение не поддерживаются; их отсутствие на рисунке не ошибка канона.')
         signature=review_signature(review_messages,config)
         issues=obtain(trial,review_messages,signature,journal,call,save)
         if issues is None:return

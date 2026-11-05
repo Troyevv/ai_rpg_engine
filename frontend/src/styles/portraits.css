@@ -26,3 +26,5 @@ html[data-skin="paper"]{--avatar-male-bg:#dcebf8;--avatar-male-ink:#315c80;--ava
 
 .portrait-literary-reference{border-block:1px solid var(--border);padding:.65rem 0;margin:.75rem 0;color:var(--text);line-height:1.55;overflow-wrap:anywhere}
 .portrait-literary-reference summary{color:var(--accent);cursor:pointer}.portrait-literary-reference p{white-space:pre-wrap;margin:.5rem 0 0}
+
+.portrait-comparison figure{margin:0 0 12px}.portrait-comparison figcaption{font-size:12px;margin-bottom:8px;color:var(--text-muted)}

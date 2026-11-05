@@ -80,17 +80,16 @@ const cache=new Map<string,string>();
 export function proceduralPortrait(p?:ProceduralPortrait|null):string|null {
  if(!p || p.version!==1 || !/^[a-f0-9]{32}$/.test(p.seed))return null;
  const keys=['face','hair','skin','eyes','clothing','accessory','palette'] as const;
- if(keys.some(k=>!Number.isInteger(p[k]) || p[k]<0 || p[k]>(['hair','clothing','accessory'].includes(k)?7:6)))return null;
+ if(keys.some(k=>!Number.isInteger(p[k]) || p[k]<0 || p[k]>(['hair','eyes','clothing','accessory'].includes(k)?7:6)))return null;
  if([p.hair_color,p.clothing_color].some(c=>c!=null&&(!Number.isInteger(c)||c<0||c>6)))return null;
  const key=JSON.stringify(p);const cached=cache.get(key);if(cached)return cached;
  const bg=parts[p.palette].bg;
  let svg:string;
- if(p.form==='neutral') {
-  svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500"><rect width="400" height="500" fill="${bg[1]}"/><circle cx="200" cy="190" r="68" fill="${bg[0]}"/><path d="M62 500V407a138 112 0 0 1 276 0v93Z" fill="${bg[0]}"/></svg>`;
- } else if(p.form==='human') {
+ if(p.form==='neutral') return null; // CharacterAvatar owns every fallback, including initials.
+ if(p.form==='human') {
   const face=parts[p.face] as Art, hair=parts[p.hair%7] as Art, skin=parts[p.skin] as Art;
   const clothColor=p.clothing_color==null?undefined:clothingColors[p.clothing_color];
-  svg=draw({...face,name:'',bg,skin:skin.skin||parts[1].skin,iris:parts[p.eyes].iris,
+  svg=draw({...face,name:'',bg,skin:skin.skin||parts[1].skin,iris:p.eyes===7?'#6f8998':parts[p.eyes].iris,
    hair:p.hair_color==null?hair.hair:hairColors[p.hair_color],frontHair:p.hair===7?'':hair.frontHair,backHair:p.hair===7?'':hair.backHair,
    cloth:clothColor||parts[p.palette].cloth,
    // Plain unbranded tunic is the default in every historical setting.
