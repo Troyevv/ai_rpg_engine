@@ -269,6 +269,18 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
     useEffect(()=>{const saved=JSON.parse(savedCreation);if(!restoredCreation.current&&draft?.id===id&&(draft.author||!draft.version_id)){setCreation({...structuredClone(defaultCreation),...saved});setName(draft.name);restoredCreation.current=true;}},[id,savedCreation,draft?.id,draft?.author,draft?.version_id]);
     useEffect(()=>{if(!id||restoredCreation.current)setInputSaved(writeIdeaBuffer(id,{text,name,useIdea,creation}));},[id,text,name,useIdea,creation]);
     const { job, reconnecting } = useJob(draft?.job, refresh);
+    // Phase snapshots arrive over SSE before the draft view is refreshed. Read
+    // persisted lineage at stage boundaries, without replacing the live job
+    // with a possibly older HTTP snapshot or re-opening its event stream.
+    useEffect(()=>{
+        if(!id||job?.kind!=='draft_world'||!active(job)||!job.phase)return;
+        const controller=new AbortController(), sequence=requestSequence.current, jobId=job.id;
+        void api<Draft>(`/workspaces/${id}/draft?author=${author}`,undefined,'GET',controller.signal).then(next=>{
+            if(!controller.signal.aborted&&requestSequence.current===sequence)
+                dispatchWorkspace({type:'update',id,update:current=>current?.job?.id===jobId?{...next,job:current.job}:current});
+        }).catch(()=>{/* SSE/reconnect owns connectivity; a later phase or completion refreshes again. */});
+        return()=>controller.abort();
+    },[id,author,job?.id,job?.kind,job?.phase,job?.status,job?.attempt_epoch]);
     const locked = busy || loading || active(job);
     const phaseStatus: Record<string, [string,string]> = {
         continuing: ['Продолжаем ответ…', 'Полученная часть сохранена. Модель дописывает тот же мир.'],
@@ -526,6 +538,9 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
     // Preserve the author's input locally, but never mount it in an existing world's reader view.
     const canOpenBrief=author||!id||!!draft&&!state&&!viewChanging&&!draft.version_id;
     const workspaceTitle=String(state?.campaign.title||draft?.name||'Новая история');
+    const ideaGenerationVisible=showIdea&&job?.kind==='draft_world'&&!!draft&&!editingIdea;
+    const resumeAction=((job?.resumable && !(job as Job & {fragment_recovery?:boolean;transport_blocked?:boolean}).fragment_recovery && !(job as Job & {transport_blocked?:boolean}).transport_blocked) || (draft?.review?.status==='stale' && job?.status==='saved' && job.kind!=='draft_editor')) && <Button className={ideaGenerationVisible?"fl-primary":undefined} disabled={locked} onClick={()=>void resume({})}>{job?.kind==='draft_editor' ? 'Продолжить AI-редактирование' : draft?.creative_status && draft.creative_status !== 'applied' ? 'Продолжить творческое развитие' : draft?.review && !(job as Job & {transport_incomplete?:boolean})?.transport_incomplete ? 'Повторить проверку' : 'Продолжить сохранённую генерацию'}</Button>;
+    const emptyRetryAction=job?.empty_retry_token && <Button className={ideaGenerationVisible?"fl-primary":undefined} disabled={locked} onClick={()=>setEmptyRetry({token:job.empty_retry_token!,epoch:job.attempt_epoch || 0})}>Повторить после сбоя провайдера</Button>;
     const generationActivity = (resuming || active(job)) && <section className="workshop-generating" role="status" aria-live="polite" aria-label="Ход проверки мира">
         <span className="workshop-pulse"/><div><strong>{resuming ? 'Запускаем повторную проверку…' : reconnecting ? 'Восстанавливаем соединение…' : status[0]}</strong><p>{resuming ? 'Отправляем запрос на продолжение сохранённого задания.' : reconnecting ? 'Ожидаем связь с сервером. Генерация продолжает выполняться.' : status[1]}</p>{!reconnecting && !!job?.progress_chars && !['validating','saving'].includes(job.phase || '') && <small>Получено {job.progress_chars.toLocaleString('ru-RU')} символов ответа</small>}</div>
         <Button variant="ghost" disabled={resuming || busy} onClick={() => void run(async () => {await api(`/jobs/${job!.id}/stop`, {}); refresh();})}>Остановить</Button>
@@ -557,13 +572,13 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
         </details>
       </details>
       </DialogContent></Dialog>
-      {showIdea&&job?.kind==='draft_world'&&draft&&!editingIdea&&<IdeaGeneration job={job} draft={draft} activity={generationActivity} title={workspaceTitle} description={String(state?.campaign.public_description||'')} onEditor={()=>{setSection('overview');if(!author){if(authorAcknowledged)switchView(true);else setAuthorAsk(true)}}} onEdit={()=>setEditingIdea(true)}/>}
+      {showIdea&&job?.kind==='draft_world'&&draft&&!editingIdea&&<IdeaGeneration job={job} draft={draft} activity={generationActivity} recoveryActions={<>{resumeAction}{emptyRetryAction}</>} title={workspaceTitle} description={String(state?.campaign.public_description||'')} onEditor={()=>{setSection('overview');if(!author){if(authorAcknowledged)switchView(true);else setAuthorAsk(true)}}} onEdit={()=>setEditingIdea(true)}/>}
       {(showIdea||section==='review'||section==='ai'&&job?.kind==='draft_editor')&&<div className={showIdea?"atelier-scope atelier-recovery":undefined}>
       {job?.status==='error' && (job as Job & {transport_incomplete?:boolean}).transport_incomplete && <section role="status"><h3>Восстановление ответа</h3><p>Полученный ответ сохранён. Продолжение проверит сборку, запросит недостающий конец при необходимости и завершит проверку мира. Полный проверенный мир ещё не готов.</p></section>}
-      {((job?.resumable && !(job as Job & {fragment_recovery?:boolean;transport_blocked?:boolean}).fragment_recovery && !(job as Job & {transport_blocked?:boolean}).transport_blocked) || (draft?.review?.status==='stale' && job?.status==='saved' && job.kind!=='draft_editor')) && <Button disabled={locked} onClick={()=>void resume({})}>{job?.kind==='draft_editor' ? 'Продолжить AI-редактирование' : draft?.creative_status && draft.creative_status !== 'applied' ? 'Продолжить творческое развитие' : draft?.review && !(job as Job & {transport_incomplete?:boolean})?.transport_incomplete ? 'Повторить проверку' : 'Продолжить сохранённую генерацию'}</Button>}
+      {!ideaGenerationVisible&&resumeAction}
       {draft?.creative_status && ['rejected','cancelled','interrupted'].includes(draft.creative_status) && !active(job) && <p role="status">Творческое развитие не завершено. Последний кандидат сохранён; его можно открыть в редакторе.</p>}
       {job?.response_diagnostic?.code === 'provider_http_rejection' && job.response_diagnostic.http_status === 400 && !active(job) && <p className="workshop-hint">HTTP-отказ не применён к миру. Перед продолжением проверь причину: для ошибки параметров нужно исправить настройки или сборку запроса. Неизменённый запрос с известной причиной HTTP 400 повторно не отправляется.</p>}
-      {job?.empty_retry_token && <Button disabled={locked} onClick={()=>setEmptyRetry({token:job.empty_retry_token!,epoch:job.attempt_epoch || 0})}>Повторить после сбоя провайдера</Button>}
+      {!ideaGenerationVisible&&emptyRetryAction}
       <Dialog open={!!emptyRetry} onOpenChange={open=>{if(!open)setEmptyRetry(null)}}><DialogContent><DialogHeader><DialogTitle>Повторная проверка после сбоя</DialogTitle><DialogDescription>Провайдер завершил запрос без текста. Если временный сбой устранён, можно подтвердить одну новую проверку сохранённого мира. Это новый запрос, который может быть оплачен. Предыдущие ответы и расходы сохранятся, общий бюджет не сбрасывается. Каждому повтору нужно новое подтверждение; автоматических повторов не будет.</DialogDescription></DialogHeader><div className="workshop-dialog-actions"><Button variant="ghost" onClick={()=>setEmptyRetry(null)}>Отмена</Button><Button disabled={locked} onClick={()=>{if(!emptyRetry)return;const retry=emptyRetry;setEmptyRetry(null);void resume({retry_empty_response:retry.token,expected_epoch:retry.epoch})}}>Подтвердить одну повторную проверку</Button></div></DialogContent></Dialog>
       {job?.resumable && <p className="workshop-hint">Модель и Thinking генерации закреплены за заданием. Смысловая проверка выполняется с Thinking Off; из текущих настроек применяются контекст и потолок ответа. Общий бюджет не сбрасывается.</p>}
       {(job as Job & {transport_blocked?:boolean})?.transport_blocked && <p role="alert">Сборка остановлена: повреждены исходные данные или нет безопасной границы для повтора. Скачайте диагностику; автоматическая замена сохранённых частей запрещена.</p>}
@@ -638,15 +653,15 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
       {job?.pinned_config && <p className="workshop-hint">Модель задания: {job.pinned_config.provider} / {job.pinned_config.model} · Thinking генерации: {job.pinned_config.thinking || 'off'} · Thinking проверки: off</p>}
       {job?.effective_config && <p className="workshop-hint" aria-label="Фактические параметры запроса">Последний запрос: {job.effective_config.provider} / {job.effective_config.model} · Thinking: {job.effective_config.thinking} · Контекст: {job.effective_config.context_length} · Лимит ответа: {job.effective_config.max_tokens} · Попытка: {(job.attempt_epoch || 0)+1}</p>}
       </details>}
-      {job?.status==='saved' && draft?.review?.status==='completed' && <p role="status">Смысловая проверка завершена. Результат сохранён.</p>}
+      {!ideaGenerationVisible && job?.status==='saved' && draft?.review?.status==='completed' && <p role="status">Смысловая проверка завершена. Результат сохранён.</p>}
       {calendarNotices.map((notice,i)=><p key={i} role="status">{notice}</p>)}
       </>}
       {state && <section className="workshop-result">
         {job?.status === 'saved' && ['partial','rejected'].includes(draft?.quality_status || '') && <p className="workshop-hint" role="status">Мир сохранён. {draft?.quality_status === 'partial' ? 'Некоторые творческие детали модель оставила неполными.' : 'Необязательное дополнение не было принято; проверенные данные сохранены.'} Проверить и дополнить детали можно в режиме «Автор мира».</p>}
-        <div className="workshop-result-toolbar">
+        {!ideaGenerationVisible&&<div className="workshop-result-toolbar">
           <div className="workshop-view"><span>Вид:</span><button className={!author ? 'selected' : ''} aria-pressed={!author} onClick={() => switchView(false)}>Игрок</button><button className={author ? 'selected' : ''} aria-pressed={author} onClick={() => authorAcknowledged ? switchView(true) : setAuthorAsk(true)}>Автор мира</button></div>
           <span className="workshop-hint">{author ? 'Полное состояние: секреты и намерения NPC доступны для редактирования.' : `Сведения о мире для чтения. Тайны, неизвестные персонажу ${person(actor)}, скрыты.`}</span>
-        </div>
+        </div>}
         {section==='ai'&&!author&&<div className="ww-empty"><h2>Изменения с ИИ</h2><p>Редактор работает с полным авторским миром, включая тайны и знания персонажей.</p><button onClick={()=>authorAcknowledged?switchView(true):setAuthorAsk(true)}>Открыть авторский редактор</button></div>}
         {section==='ai' && author && draft && <WorldAIEditor wid={id} revision={draft.revision} job={job} locked={locked} prefs={prefs} apiKey={apiKey} refresh={refresh} resolve={resolve} onJob={next=>dispatchWorkspace({type:'update',id,update:d=>d?{...d,job:next}:d})}/>}
         {section==='review' && (draft?.validation.errors.length || draft?.validation.warnings.length || draft?.import_warnings.length) ? <details className="workshop-review" open={!!draft?.validation.errors.length}>

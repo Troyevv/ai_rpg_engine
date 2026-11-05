@@ -17,12 +17,12 @@ export function generationSteps(job:Job,draft:GenerationSnapshot){
   {title:'Сохранение версии',done:job.status==='saved'&&candidate&&!draft.version_is_candidate,detail:candidate?`Кандидат текущего задания сохранён в версии ${draft.version_id}.`:'Результат останется в Мастерской.'}
  ].map((step,i)=>({...step,state:active(job)&&i===current?'current':step.done?'done':!active(job)&&i===current?(job.status==='stopped'?'paused':'error'):'pending'}));
 }
-export function IdeaGeneration({job,draft,title,description,onEditor,onEdit,activity}:{job:Job;activity?:ReactNode;draft:GenerationSnapshot;title:string;description:string;onEditor:()=>void;onEdit:()=>void}){
+export function IdeaGeneration({job,draft,title,description,onEditor,onEdit,activity,recoveryActions}:{job:Job;activity?:ReactNode;recoveryActions?:ReactNode;draft:GenerationSnapshot;title:string;description:string;onEditor:()=>void;onEdit:()=>void}){
  const running=active(job),belongs=!!draft.version_id&&draft.version_origin_job_id===job.id;
  const complete=job.status==='saved'&&belongs&&!draft.version_is_candidate;
  const steps=generationSteps(job,draft),current=steps.findIndex(s=>s.state==='current'||s.state==='error'||s.state==='paused');
  const heading=useRef<HTMLHeadingElement>(null);
- useEffect(()=>{heading.current?.focus({preventScroll:true})},[job.id,complete]);
+ useEffect(()=>{heading.current?.closest('.ww-scroll')?.scrollTo({top:0});heading.current?.focus({preventScroll:true})},[job.id,complete]);
  return <div className="atelier-scope atelier-generation"><section className="flow-root flow-wrap" aria-label="Этапы создания мира" data-result={complete}>
   <div className="fl-kicker"><i/>МАСТЕРСКАЯ МИРОВ <b>/</b>{complete?'04':'03'}<span>{complete?'Результат':running?'Генерация':'Восстановление'}</span></div>
   <h2 className="fl-title" ref={heading} tabIndex={-1}>{complete?'Мир готов к редактированию':running?'Создание мира':job.status==='stopped'?'Генерация остановлена':'Задание требует внимания'}</h2>
@@ -34,8 +34,8 @@ export function IdeaGeneration({job,draft,title,description,onEditor,onEdit,acti
    <div className="fl-seals"><span>{draft.technical_valid?<ShieldCheck size={16}/>:<AlertCircle size={16}/>}Структура {draft.technical_valid?'проверена':'требует исправления'}</span><span>{draft.review?.status==='completed'?<Check size={16}/>:<AlertCircle size={16}/>} {draft.review?.status==='completed'?'Смысловая проверка завершена':draft.review?.status==='stale'?'После правки нужна повторная проверка':'Смысловая проверка не завершена'}</span></div>
   </article>:<article className="fl-card" key="journal"><div className="fl-card-head"><BookOpen size={18}/><span>Журнал генерации</span>{current>=0&&<small>Этап {current+1} из {steps.length}</small>}</div>
    <div className="fl-progress" aria-hidden="true">{steps.map(s=><i key={s.title} className={s.state}/>)}</div>
-   <ol className="fl-stages" aria-live="polite">{steps.map((s,i)=><li key={s.title} className={s.state} data-state={s.state} aria-current={s.state==='current'?'step':undefined}><span className="fl-stage-no">{s.state==='done'?<Check size={15} className="selection-mark"/>:s.state==='error'?<AlertCircle size={15}/>:s.state==='paused'?<Pause size={15}/>:String(i+1).padStart(2,'0')}</span><div><strong>{s.title}</strong>{s.state!=='pending'&&<p>{s.detail}</p>}</div><small>{({done:'Готово',current:'В работе',error:'Ошибка',paused:'Остановлено',pending:'Ожидание'} as Record<string,string>)[s.state]}</small></li>)}</ol>{activity}
+   <ol className="fl-stages" aria-live="polite">{steps.map((s,i)=><li key={s.title} className={s.state} data-state={s.state} aria-current={s.state==='current'?'step':undefined}><span className="fl-stage-no">{s.state==='done'?<Check size={15} className="selection-mark"/>:s.state==='error'?<AlertCircle size={15}/>:s.state==='paused'?<Pause size={15}/>:String(i+1).padStart(2,'0')}</span><div><strong>{s.title}</strong>{['current','error','paused'].includes(s.state)&&<p>{s.detail}</p>}</div><small>{({done:'Готово',current:'В работе',error:'Ошибка',paused:'Остановлено',pending:'Ожидание'} as Record<string,string>)[s.state]}</small></li>)}</ol>{activity}
   </article>}
-  {!running&&<div className="fl-actions"><button className="fl-sub" onClick={onEdit}><ArrowLeft size={16}/>Изменить замысел</button>{draft.version_id&&<button className="fl-primary" onClick={onEditor}>{complete?'Открыть в редакторе':belongs?'Открыть сохранённый мир':'Открыть предыдущий мир'}<ArrowRight size={16}/></button>}</div>}
+  {!running&&<div className="fl-actions"><button className="fl-sub" onClick={onEdit}><ArrowLeft size={16}/>Изменить замысел</button>{draft.version_id&&<button className={complete?"fl-primary":"fl-sub"} onClick={onEditor}>{complete?'Открыть в редакторе':belongs?'Открыть сохранённый мир':'Открыть предыдущий мир'}<ArrowRight size={16}/></button>}{recoveryActions}</div>}
  </section></div>;
 }

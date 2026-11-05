@@ -113,6 +113,32 @@ def test_real_generation_502_review_reuses_candidate_and_job(api):
         else:assert after['creation_settings']['calendar_start'][key]==value
     journal=json.loads(repo.preparation_job(jid)['response_journal'])
     assert journal['recovery_epoch']==1
+    # A second real job initially sees the previous head; its successful review
+    # must not become completion evidence for the new generation.
+    from threading import Event
+    entered, release = Event(), Event()
+    def second_stream(**kwargs):
+        entered.set()
+        assert release.wait(5), 'second generation was not released'
+        yield from provider.stream(kwargs)
+    with patch('backend.services.preparation.chat_stream', side_effect=second_stream):
+        second=client.post(url+'/generate',json=dict(data,revision=after['revision'],api_key='offline-fixture'))
+        assert second.status_code==200,second.text
+        second_id=second.json()['id']
+        try:
+            assert entered.wait(5)
+            current=client.get(url).json()
+            assert current['job']['id']==second_id and second_id!=jid
+            assert current['version_id']==after['version_id']
+            assert current['version_origin_job_id']==jid
+            assert current['review']['status']=='completed'
+            assert current['creative_status'] is None
+        finally:
+            release.set()
+        assert wait_job(client,second_id)['status']=='saved'
+    regenerated=client.get(url).json()
+    assert regenerated['version_origin_job_id']==second_id
+    assert regenerated['version_id']!=after['version_id']
 
 
 def test_preflight_validation_never_echoes_credentials_or_input(api):

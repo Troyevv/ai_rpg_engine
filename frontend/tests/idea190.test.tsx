@@ -8,7 +8,7 @@ import {readIdeaBuffer,writeIdeaBuffer} from '../src/workshop/ideaBuffer';
 import {ApiError} from '../src/api';
 import type {Job} from '../src/types';
 // Motion timing is covered in Playwright; these tests exercise command guards.
-vi.mock('framer-motion',()=>({AnimatePresence:({children}:{children:ReactNode})=>children,useReducedMotion:()=>true,motion:{div:({children,initial,animate,exit,transition,...rest}:any)=><div {...rest}>{children}</div>,section:({children,initial,animate,exit,transition,...rest}:any)=><section {...rest}>{children}</section>}}));
+vi.mock('framer-motion',()=>({AnimatePresence:({children}:{children:ReactNode})=>children,useReducedMotion:()=>true,motion:{div:({children,initial,animate,exit,transition,onAnimationComplete,...rest}:any)=><div {...rest}>{children}</div>,section:({children,initial,animate,exit,transition,onAnimationComplete,...rest}:any)=><section {...rest}>{children}</section>}}));
 vi.mock('../src/api',async original=>({...await original<typeof import('../src/api')>(),api:vi.fn(async()=>({}))}));
 afterEach(()=>{sessionStorage.clear();document.body.innerHTML=''});
 it('isolates complete input by workspace without sharing mutable defaults',()=>{

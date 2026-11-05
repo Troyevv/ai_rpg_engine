@@ -3,6 +3,7 @@ import {test,expect,type Page,type TestInfo} from '@playwright/test';
 import {nav} from './navigation';
 import {defaults} from '../src/types';
 async function capture(page:Page,info:TestInfo,name:string){
+ await page.mouse.move(0,0);
  await page.evaluate(()=>document.fonts.ready);
  const review=page.getByRole('region',{name:'Сводка замысла'});
  if(await review.count())await expect(review).toHaveCSS('opacity','1');
@@ -40,7 +41,7 @@ for(const skin of ['graphite','parchment'])test(`idea190: visual, panels, valida
    }
    await page.getByRole('button',{name:'Примеры',exact:true}).click();await capture(page,info,'production-examples');await page.keyboard.press('Escape');await expect(page.locator('.atelier-dialog')).toHaveCount(0);
    await page.getByRole('button',{name:'Развернуть редактор идеи'}).click();await capture(page,info,'production-expanded');await done(page);
-   await page.getByRole('button',{name:'Правила и особенности',exact:true}).click();await page.locator('.comm-extra').scrollIntoViewIfNeeded();await capture(page,info,'production-communication');
+   await page.getByRole('button',{name:'Правила и особенности',exact:true}).click();await expect(page.locator('.comm-disclosure .atelier-disclosure-body')).toHaveCSS('opacity','1');await page.locator('.comm-extra').scrollIntoViewIfNeeded();await capture(page,info,'production-communication');
    await page.getByRole('button',{name:'Правила и особенности',exact:true}).click();await page.locator('.ww-scroll').evaluate(el=>el.scrollTop=0);
    await page.getByRole('button',{name:'Проверить замысел',exact:true}).click();await expect(page.getByRole('region',{name:'Сводка замысла'})).toBeVisible();await capture(page,info,'production-review');await page.getByRole('button',{name:'К замыслу',exact:true}).click();
   }
@@ -94,11 +95,11 @@ test('idea190: real generation, reload, HTTP502 review recovery and author revis
  const wid=await page.locator('.world-workshop').getAttribute('data-workspace-id');const url=`/api/workspaces/${wid}/draft`;
  await expect(page.getByRole('status',{name:'Ход проверки мира'})).toContainText('смысловую');
  const before=await(await request.get(url+'?author=true')).json();expect(before.version_id).toBeTruthy();
- await page.locator('.ww-scroll').evaluate(el=>el.scrollTop=0);await capture(page,info,'production-running');
+ await expect(page.locator('.fl-stages li[data-state=done]')).toHaveCount(3);await page.locator('.ww-scroll').evaluate(el=>el.scrollTop=0);await capture(page,info,'production-running');
  await page.reload();await nav(page,'Создать');await expect(page.getByRole('region',{name:'Этапы создания мира'})).toBeVisible();
  await request.post('/test/idea190/release');await expect(page.getByRole('alert')).toContainText('HTTP 502');
  await expect(page.getByText(/известной причиной HTTP 400/)).toHaveCount(0);
- await capture(page,info,'production-error');
+ await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);await capture(page,info,'production-error');
  await page.reload();await nav(page,'Создать');
  await page.getByRole('button',{name:'Повторить проверку',exact:true}).click();
  await expect.poll(async()=> (await(await request.get(url)).json()).job.status).toBe('saved');
