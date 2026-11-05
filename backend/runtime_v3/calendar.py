@@ -114,7 +114,7 @@ def _dates(state, relevant_ids=None):
         yield dict(id='birthday:'+cid, name=None, month=m, day=d, kind='birthday', character_ids=[cid], since_year=y)
 
 
-def calendar_range(state, start_date, end_date, relevant_ids=None):
+def calendar_range(state, start_date, end_date, relevant_ids=None, *, display_language=None):
     profile = profile_of(state)
     start, end = ordinal(start_date, profile), ordinal(end_date, profile)
     if not 0 <= end-start < MAX_RANGE_DAYS:
@@ -142,7 +142,7 @@ def calendar_range(state, start_date, end_date, relevant_ids=None):
     notices=[]
     if profile.get('regional') and profile.get('system','gregorian')=='gregorian':
         from backend.services.calendar_presets import occurrences, CoverageError
-        try:events.extend(occurrences(profile['regional'],start_date,end_date))
+        try:events.extend(occurrences(profile['regional'],start_date,end_date,display_language=display_language))
         except CoverageError as exc:notices.append(str(exc))
     events.sort(key=lambda e:(e['date'],e['id']))
     return dict(notices=notices,current=current, start_date=start_date, end_date=end_date, days=days, events=events,

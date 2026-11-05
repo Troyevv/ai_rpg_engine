@@ -390,7 +390,7 @@ def create_app(db_path=None, recover=True):
         return genealogy_roots(repo.get_snapshot(sid))
 
     @app.get('/api/saves/{sid}/calendar')
-    def calendar_projection(sid: int, start_date: str | None = None, end_date: str | None = None, minute: int | None = None):
+    def calendar_projection(sid: int, start_date: str | None = None, end_date: str | None = None, minute: int | None = None, display_language: str = 'ru_RU'):
         from backend.runtime_v3.calendar import calendar_range, current_time, calendar_label
         snapshot = repo.get_snapshot(sid)
         state = snapshot['world_state']
@@ -400,7 +400,7 @@ def create_app(db_path=None, recover=True):
             from backend.runtime_v3.player_calendar import player_calendar
             from backend.runtime_v3.repository import read_history
             with repo.connect() as db: history,_=read_history(db,snapshot.get('history_head'))
-            return player_calendar(state, start_date, end_date, {c['id']:c['name'] for c in snapshot.get('character_cards',[])},history)
+            return player_calendar(state, start_date, end_date, {c['id']:c['name'] for c in snapshot.get('character_cards',[])},history,display_language=display_language)
         now = state['meta']['world_time']
         if minute is not None and not max(0,now-10080) <= minute <= now+10080:
             raise ValueError('Предпросмотр времени ограничен семью сутками.')
@@ -412,7 +412,7 @@ def create_app(db_path=None, recover=True):
             from datetime import date,timedelta
             try:
                 end=min(date.max,date.fromisoformat(current['date'])+timedelta(days=min(30,(date.max-date.fromisoformat(current['date'])).days)))
-                regional=occurrences(profile['regional'],current['date'],end.isoformat())
+                regional=occurrences(profile['regional'],current['date'],end.isoformat(),display_language=display_language)
             except CoverageError as exc:notices.append(str(exc))
         return dict(current=current, label=calendar_label(state,minute),regional=regional,notices=notices)
 

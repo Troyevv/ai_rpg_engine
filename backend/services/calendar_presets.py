@@ -49,7 +49,7 @@ def catalog():
                 countries=[dict(code=c, name=v[0], group=v[1], subdivisions=list(source(c).subdivisions)) for c,v in COUNTRIES.items()])
 
 
-def occurrences(regional, start, end):
+def occurrences(regional, start, end, *, display_language=None):
     if regional['version'] != VERSION:
         raise CoverageError('Сохранённая версия правил праздников недоступна; автоматическая подмена запрещена.')
     lo, hi = date.fromisoformat(start), date.fromisoformat(end)
@@ -66,6 +66,8 @@ def occurrences(regional, start, end):
     base=source(regional['country'],regional.get('subdivision'),years,False)
     full=source(regional['country'],regional.get('subdivision'),years,True) if regional.get('observed') else base
     if not base:raise CoverageError('Источник не предоставил годовой набор; прежний календарь сохранён.')
+    from backend.services.holiday_names import localized_names
+    names = localized_names(regional, years, display_language) if display_language else {}
     overrides={v['id']:v for v in regional.get('overrides',[])}
     events=[]
     for day in sorted(full):
@@ -77,7 +79,7 @@ def occurrences(regional, start, end):
             if override.get('removed'):continue
             value=override.get('date') or day.isoformat()
             if start <= value <= end:
-                events.append(dict(id=identity,date=value,name=override.get('name') or name,kind='observance',
+                events.append(dict(id=identity,date=value,name=override.get('name') or names.get((day.isoformat(), name), name),kind='observance',
                                    observed=observed,source=VERSION,character_ids=[],original_date=day.isoformat()))
     return sorted(events,key=lambda e:(e['date'],e['id']))
 
@@ -154,7 +156,7 @@ def apply(state, choice, explicit=False):
     return result
 
 
-def preview(state):
+def preview(state, *, display_language='ru_RU'):
     from backend.runtime_v3.calendar import current_time, from_ordinal, ordinal
     clock=state['world_clock'];cal=clock['calendar'];profile=cal.get('profile') or {}
     now=current_time({'meta':{'world_time':clock['minute'],'calendar':cal}})
@@ -162,7 +164,7 @@ def preview(state):
     events=[]
     if not now['date']:notices.append('Игровой год неизвестен: годовые даты ещё не рассчитаны.')
     elif profile.get('regional'):
-        try:events=occurrences(profile['regional'],now['date'],from_ordinal(min(ordinal(now['date'],{})+90, date.max.toordinal()),{}))
+        try:events=occurrences(profile['regional'],now['date'],from_ordinal(min(ordinal(now['date'],{})+90, date.max.toordinal()),{}), display_language=display_language)
         except CoverageError as exc:notices.append(str(exc))
     regional=profile.get('regional')
     if regional:regional=dict(regional,display_name=COUNTRIES.get(regional['country'],(regional['country'],))[0])

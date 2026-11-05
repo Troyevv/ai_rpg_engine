@@ -48,7 +48,8 @@ evidence; warning-start is not successful model review or successful live genera
 ## Supported rules and limitations
 
 Pinned `holidays==0.87`, adapter version `holidays-0.87-v1`; PUBLIC category;
-explicit `en_US` names (documented fallback, independent of UI/machine locale).
+explicit `en_US` source names (stable identity); localized display projections
+are described below, independently of source and machine locale.
 Application coverage: **2025–2030**. Other dates remain playable with a coverage
 warning and custom dates. This is not a production/workday calendar; future one-off
 legislation is not promised. A saved rules-version mismatch produces a warning,
@@ -124,3 +125,56 @@ assign a job, vacation, commitment or player action. Player View must show only 
 safe warning and public calendar; raw review evidence stays in Author View.
 For custom calendars select none/custom and verify existing authored seasons survive
 while disabled. Never modify the user's E5 evidence for this checklist.
+
+## Display localization (#174)
+
+`source()` and default `occurrences()` retain English names and the exact
+`holidays-0.87-v1` ID formula. `regional.language` remains source metadata, even
+in old saves. No WorldState model, migration, import/export, calendar arithmetic,
+region, category or supported year changes are involved.
+
+The existing display projections now accept optional `display_language`:
+
+- `GET /api/saves/{sid}/calendar` (both range and current/nearby responses).
+- `GET/POST /api/workspaces/{wid}/draft/calendar-preview`.
+- `POST /api/calendar/preview`.
+
+The default is `ru_RU`, matching the current Russian UI. `en_US` explicitly
+requests original names. JSON shapes are unchanged: `events[].name` (or
+`regional[].name` in the save overview) is the display text. IDs, dates,
+`original_date`, `observed`, `source` and participant IDs are unchanged.
+`override.name` takes precedence verbatim; editing a date alone does not store the
+localized placeholder as an author rename. Plain `calendar_range()` and
+`nearby_calendar()` used for Narrative context keep their source-language behavior.
+
+The adapter reads the bundled gettext catalogs of the pinned library and matches
+by source message, never by the position in sorted translated names. It uses the
+library's own formatting metadata for observed/substituted names, and verifies
+each candidate against the same library's localized occurrence on the original
+date. Thus holidays coinciding on one day keep separate stable identities even
+when translated names sort in a different order. Read-only results are bounded
+by a 128-entry in-process cache; no translations enter persistent state.
+
+Locale tags accept `-` or `_`, case-insensitively. An exact supported locale is
+preferred, then an unambiguous supported locale of the same language. Otherwise
+English is used. Missing/ambiguous catalog entries or absent translation files
+also retain English, independently of host `LANG`/`LANGUAGE`. This adapter is
+version-specific (GNUTranslations catalogs in holidays 0.87); upgrading rules or
+translation dependencies requires rerunning identity and localization tests.
+
+Verified library coverage: RU supports `en_US`, `ru`, `th`. Russian labels are
+`Новогодние каникулы` (January 1, not a manually substituted “Новый год”),
+`Рождество Христово` (January 7) and `День Победы` (May 9). The other currently
+cataloged countries (DE, FR, GB, IT, ES, PL, US, CA, MX, BR, AR) do **not** provide
+Russian translations in 0.87. Their Russian-UI names stay English. Other available
+languages can be requested through the projection parameter; no LLM, manual
+holiday translation table or second set of holiday rules is introduced.
+
+Regression coverage: `tests/test_holiday_localization.py` checks all catalog
+countries in 2025–2030, exact Russian names, subdivisions/observed dates,
+coincident French Guiana holidays, overrides including cross-year moves, missing
+translations, host-locale independence, HTTP previews, old English source
+metadata, export/import, application reopen and unchanged database contents.
+`frontend/e2e/calendar-localization174.spec.ts` exercises the real editor and
+calendar with rename/move/delete and reload, on desktop/mobile in graphite and
+parchment. Test screenshots are optional (`CALENDAR_VISUAL=1`), outside git.
