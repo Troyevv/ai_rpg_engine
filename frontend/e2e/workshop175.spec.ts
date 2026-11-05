@@ -146,7 +146,7 @@ test('portrait layout: canonical ages, shared map artwork, full frames and scala
   const bounds=await card.locator('.ww-card-art').boundingBox();expect(bounds!.width/bounds!.height).toBeCloseTo(.8,2);
   await expect(card.locator('.procedural-portrait')).toHaveAttribute('src',src!);
  }
- await page.screenshot({path:info.outputPath(`workshop175-ages-${info.project.name}.png`)});
+ await page.screenshot({path:info.outputPath(`workshop175-ages-${info.project.name}.png`),fullPage:true,animations:'disabled'});
  await workshopNav(page,'Связи и семьи');
  await page.getByLabel('Чьи отношения показать').selectOption(state.characters[1].id);
  const node=page.getByRole('button',{name:'Отношения Анна Соколова',exact:true});
@@ -176,5 +176,8 @@ test('portrait layout: canonical ages, shared map artwork, full frames and scala
  await workshopNav(page,'Связи и семьи');
  expect(await page.locator('.ww-graph-node.is-center .character-avatar svg path').first().evaluate(el=>getComputedStyle(el).fill)).not.toBe('none');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
- await page.screenshot({path:info.outputPath(`workshop175-map-${info.project.name}.png`)});
+ // Radix retains the closing mobile menu until its exit animation finishes.
+ await expect(page.locator('.ww-menu-dialog')).toHaveCount(0);
+ await expect(page.locator('.dialog-overlay')).toHaveCount(0);
+ await page.screenshot({path:info.outputPath(`workshop175-map-${info.project.name}.png`),fullPage:true,animations:'disabled'});
 });
