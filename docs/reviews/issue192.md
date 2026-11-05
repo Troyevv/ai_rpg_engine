@@ -149,3 +149,9 @@ Local validation for this continuation: the tracking/completeness/recovery/initi
 Run [42106147109](https://github.com/Troyevv/ai_rpg_engine/actions/runs/42106147109) at `f0fbfa0` completed successfully: backend **3213 passed, 1 skipped**, frontend and all four smoke jobs passed, **all four Full E2E shards passed**. This verifies the two modal/trash timing regressions and the exact-viewport capture driver. The newer W11/W21/W45, motion and atomic-editor tests described above require their own fresh CI run; this success is not attributed to those later changes.
 
 The new atomic-editor browser test uses a real concurrent API write, expects HTTP 409 without partial mutation, reloads the stored buffer, explicitly discards it, then verifies that changing two fields creates exactly one revision/version.
+
+### Exact viewport evidence and tablet follow-up
+
+The `f0fbfa0` capture jobs produced 99 base-state pairs (11 sections × 9 sizes, including the extra 412×915 device width), plus six skin dossier pairs. Reviewed all 11 base sections at 390×844 and tablet overview/cards/start/AI at 768×1024 plus overview/review/history at 1024×768. Required 768px captures exposed overly narrow side-by-side start panels and a wrapping “Персонаж” button. Start panels now stack through 960px; primary heading actions do not shrink or split their label. Browser geometry assertions cover both defects. Thread headings now use the book face with a bounded three-line preview; the complete text remains below.
+
+The unknown feelings value also has explicit accessible value text: screen readers distinguish “Не задано” from an actual zero. Stored dimensions remain unchanged until an edit. These final visual/a11y adjustments require a new browser run after the in-flight `235b00a3` suite.

@@ -74,6 +74,8 @@ it('feelings preserve unknown dimensions instead of silently assigning zero',asy
  const update=vi.fn();await mount(<FeelingEditor value={{trust:0,custom:23}} onChange={update}/>);
  expect(update).not.toHaveBeenCalled();expect(document.body.textContent).toContain('custom');
  expect(document.querySelectorAll('input[type=range]').length).toBeGreaterThanOrEqual(7);
+ expect(document.querySelector('#feeling-trust')?.getAttribute('aria-valuetext')).toBe('0');
+ expect(document.querySelector('#feeling-affection')?.getAttribute('aria-valuetext')).toBe('Не задано');
 });
 
 it('review display keeps strongest priority and every path without duplicate serialized diagnostics',()=>{

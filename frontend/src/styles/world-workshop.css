@@ -255,6 +255,9 @@ body:has(.world-workshop):not(:has(.atelier-dialog)) .dialog-overlay{background:
 
 .ww-dossier-switcher input{width:100%;min-width:0;margin-top:8px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface-1);color:var(--text)}
 .ww-dossier-actions button{display:flex;align-items:center;gap:8px}.ww-dossier-actions svg{flex:none}
+.ww-page-head>.ww-primary{flex:none;white-space:nowrap}.ww-page-head>div{min-width:0}
+.ww-records-thread .ww-record-card h3{font:20px/1.35 var(--ww-book);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+@media(max-width:960px){.ww-start-layout{grid-template-columns:minmax(0,1fr);gap:0}}
 .ww-empty-motives{grid-column:1/-1}.ww-empty-motives summary{cursor:pointer;color:var(--text-muted);padding:10px 0}.ww-empty-motives>div{padding:12px 0;border-top:1px solid var(--border)}.ww-empty-motives small,.ww-empty-motives>p{color:var(--text-muted);font-size:12px}
 @media(max-width:760px){
  .ww-dossier-aside{grid-template-areas:"portrait identity" "note note" "people people" "switch switch";align-items:start;gap:10px 17px}
