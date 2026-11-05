@@ -32,3 +32,21 @@ it('drops errors and late submission callbacks from the old workspace',async()=>
  expect(host.querySelector('[role=alert]')).toBeNull();expect(host.querySelector('textarea')?.value).toBe('');
  expect(onJob).not.toHaveBeenCalled();expect(refresh).not.toHaveBeenCalled();
 });
+it('retries the same instruction idempotently but an explicitly accepted example starts a new request',async()=>{
+ localStorage.setItem('world-editor:a','Исходная инструкция');
+ mocks.api.mockImplementation((_path:string,body?:unknown)=>body?Promise.reject(new Error('Ответ сервера потерян')):Promise.resolve({edits:[],started:false}));
+ await render('a');
+ const submit=()=>host.querySelector<HTMLButtonElement>('.ai-editor-actions button')!;
+ const posts=()=>mocks.api.mock.calls.filter(([,body])=>body).map(([,body])=>body);
+ await act(()=>submit().click());await act(()=>submit().click());
+ expect(posts()).toHaveLength(2);expect(posts()[0].request_id).toBe(posts()[1].request_id);
+ const example=host.querySelector<HTMLButtonElement>('.ww-ai-examples button')!;
+ const dialogButton=(text:string)=>Array.from(document.querySelectorAll<HTMLButtonElement>('[role=dialog] button')).find(b=>b.textContent===text)!;
+ await act(()=>example.click());await act(()=>dialogButton('Оставить мой текст').click());
+ expect(host.querySelector('textarea')?.value).toBe('Исходная инструкция');expect(posts()).toHaveLength(2);
+ await act(()=>example.click());await act(()=>dialogButton('Вставить пример').click());
+ expect(host.querySelector('textarea')?.value).toBe(example.textContent);expect(posts()).toHaveLength(2);
+ await act(()=>submit().click());expect(posts()).toHaveLength(3);
+ expect(posts()[2].request_id).not.toBe(posts()[1].request_id);expect(posts()[2].text).toBe(example.textContent);
+ expect(onJob).not.toHaveBeenCalled();expect(refresh).not.toHaveBeenCalled();
+});

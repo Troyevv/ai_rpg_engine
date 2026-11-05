@@ -38,13 +38,14 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
  const [instruction,setInstruction]=useState(()=>localStorage.getItem(storageKey)||example||'');
  const textarea=useRef<HTMLTextAreaElement>(null);
  const [replacement,setReplacement]=useState<string|null>(null);
- const useExample=(text:string)=>{if(instruction.trim())setReplacement(text);else{setInstruction(text);textarea.current?.focus()}};
  const [data,setData]=useState<Edits>({edits:[],started:false});
  const [error,setError]=useState('');const [busy,setBusy]=useState(false);
  const [selected,setSelected]=useState<string|null>(null);
  const [confirm,setConfirm]=useState(false);const [conflicts,setConflicts]=useState(false);const [warnings,setWarnings]=useState(false);
  const acceptButton=useRef<HTMLButtonElement>(null);
  const guard=useRef(false);const requestId=useRef<string|null>(null);const alive=useRef(true);
+ const changeInstruction=(text:string)=>{setInstruction(text);requestId.current=null};
+ const useExample=(text:string)=>{if(instruction.trim())setReplacement(text);else{changeInstruction(text);textarea.current?.focus()}};
  useEffect(()=>{alive.current=true;return()=>{alive.current=false}},[]);
  useEffect(()=>{localStorage.setItem(storageKey,instruction)},[storageKey,instruction]);
  const load=async()=>{const next=await api<Edits>(`/workspaces/${wid}/draft/edits?author=true`);if(alive.current)setData(next)};
@@ -70,7 +71,7 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
   {data.started && <p role="status">Изменения войдут в новое прохождение. Начатая игра останется без изменений.</p>}
   <>
    <label htmlFor="world-ai-instruction">Что изменить в мире?</label>
-   <Textarea ref={textarea} id="world-ai-instruction" value={instruction} disabled={busy||active(job)} onChange={e=>{setInstruction(e.target.value);requestId.current=null}}
+   <Textarea ref={textarea} id="world-ai-instruction" value={instruction} disabled={busy||active(job)} onChange={e=>changeInstruction(e.target.value)}
      placeholder="Добавь герою сестру, придумай её прошлое и отношения с друзьями. Измени историю их группы…"/>
    <div className="ww-ai-examples" aria-label="Примеры инструкции">{['Раскрой мотивы второстепенных персонажей, сохранив известные факты.','Добавь возможность нового знакомства без решения за героя.','Уточни противоречия в предыстории и предложи связанные исправления.'].map(text=><button disabled={disabled} key={text} onClick={()=>useExample(text)}>{text}</button>)}</div>
    <div className="ai-editor-actions"><Button disabled={disabled||!instruction.trim()||samePreview} onClick={()=>void execute(async()=>{
@@ -111,7 +112,7 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
   </div>}
   {data.edits.length>1 && <details className="ai-editor-history"><summary><History size={16}/>История AI-редакций · {data.edits.length}</summary>{data.edits.map(e=><button key={e.id} onClick={()=>setSelected(e.id)} aria-pressed={current?.id===e.id}><strong>{statuses[e.status]||e.status}</strong><span>{e.instruction}</span></button>)}</details>}
   </div></div>
-  <Dialog open={replacement!==null} onOpenChange={o=>!o&&setReplacement(null)}><DialogContent><DialogTitle>Заменить текущую инструкцию примером?</DialogTitle><DialogDescription>Несохранённая инструкция будет заменена. Запрос к модели не отправляется.</DialogDescription><Button variant="ghost" onClick={()=>setReplacement(null)}>Оставить мой текст</Button><Button onClick={()=>{setInstruction(replacement||'');setReplacement(null);requestAnimationFrame(()=>textarea.current?.focus())}}>Вставить пример</Button></DialogContent></Dialog>
+  <Dialog open={replacement!==null} onOpenChange={o=>!o&&setReplacement(null)}><DialogContent><DialogTitle>Заменить текущую инструкцию примером?</DialogTitle><DialogDescription>Несохранённая инструкция будет заменена. Запрос к модели не отправляется.</DialogDescription><Button variant="ghost" onClick={()=>setReplacement(null)}>Оставить мой текст</Button><Button onClick={()=>{changeInstruction(replacement||'');setReplacement(null);requestAnimationFrame(()=>textarea.current?.focus())}}>Вставить пример</Button></DialogContent></Dialog>
   <Dialog open={confirm} onOpenChange={setConfirm}><DialogContent onCloseAutoFocus={event=>{event.preventDefault();acceptButton.current?.focus()}}><DialogHeader><DialogTitle>Применить изменения мира?</DialogTitle><DialogDescription>Будет сохранён весь показанный пакет: {changed.length} изменённых сущностей. Предыдущая версия останется доступна для отката.</DialogDescription></DialogHeader>
    {error && <p className="ai-editor-error" role="alert">{error}</p>}
    {destructive && <label className="ai-confirm-option"><input type="checkbox" checked={conflicts} onChange={e=>setConflicts(e.target.checked)}/>Подтверждаю удаления и замену указанных ручных решений</label>}
