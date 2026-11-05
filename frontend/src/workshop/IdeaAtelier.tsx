@@ -1,4 +1,4 @@
-import {useRef,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {Feather,NotebookPen,Sparkles,Maximize2,ArrowRight,SlidersHorizontal,Users,Globe2,CalendarDays,Activity,ChevronRight,Check,ArrowLeft} from 'lucide-react';
 import {CreationFields,castCounts,type Creation,type CreationGroup} from '../WorldCreationSettings';
 import {CommunicationSettings,channels,communicationNames} from '../CommunicationSettings';
@@ -47,6 +47,8 @@ type Props={id:string;name:string;text:string;useIdea:boolean;creation:Creation;
  validate:()=>Promise<void>;launch:()=>Promise<void>;onMethod:(v:string)=>void;onBack?:()=>void};
 export function IdeaAtelier(p:Props) {
  const [panel,setPanel]=useState<CreationGroup|'expand'|'examples'|null>(null),[review,setReview]=useState(false),[checking,setChecking]=useState(false),[error,setError]=useState<ReturnType<typeof creationError>|null>(null),[overwrite,setOverwrite]=useState(-1);
+ const mounted=useRef(true);
+ useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[]);
  const trigger=useRef<HTMLElement|null>(null),editor=useRef<HTMLTextAreaElement>(null),dialog=useRef<HTMLDivElement>(null),guard=useRef(false),heading=useRef<HTMLHeadingElement>(null);
  const open=(next:typeof panel)=>{trigger.current=document.activeElement as HTMLElement;setError(null);setPanel(next)};
  const close=()=>{setPanel(null);setOverwrite(-1)};
@@ -54,9 +56,9 @@ export function IdeaAtelier(p:Props) {
  async function check(start=false){
    if(guard.current||p.disabled)return;guard.current=true;setChecking(true);setError(null);
    let launching=false;
-   try {await p.validate();if(start){launching=true;await p.launch()}else {setReview(true);requestAnimationFrame(()=>heading.current?.focus())}}
-   catch(e){if(launching)return;const problem=creationError(e);setError(problem);if(problem.group){trigger.current=document.activeElement as HTMLElement;setPanel(problem.group)}else editor.current?.focus()}
-   finally{guard.current=false;setChecking(false)}
+   try {await p.validate();if(!mounted.current)return;if(start){launching=true;await p.launch()}else {setReview(true);requestAnimationFrame(()=>heading.current?.focus())}}
+   catch(e){if(!mounted.current||launching)return;const problem=creationError(e);setError(problem);if(problem.group){trigger.current=document.activeElement as HTMLElement;setPanel(problem.group)}else editor.current?.focus()}
+   finally{guard.current=false;if(mounted.current)setChecking(false)}
  }
  const comm=channels.filter(c=>p.creation.communication?.[c]).map(c=>communicationNames[channels.indexOf(c)]).join(', ')||'Личные разговоры';
  const saved=p.saved?'Сохранено в этой вкладке браузера':'Хранится в открытой форме';

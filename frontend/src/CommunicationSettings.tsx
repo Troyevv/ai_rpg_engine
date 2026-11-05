@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import {MessageSquare,Phone,Mail,Send,Radio,PhoneCall,Sparkles} from "lucide-react";
 import { api } from "./api";
 import { gameLocale } from "./gameDate";
 import { Button } from "./components/ui/button";
 import { Textarea } from "./components/ui/textarea";
 import "./styles/communication-settings.css";
+const channelIcons=[MessageSquare,Phone,Mail,Send,Radio,PhoneCall,Sparkles];
 export const channels = [
   "text_message",
   "voice_call",
@@ -109,14 +111,14 @@ export function CommunicationSettings({
       delivery_policy:{...v.delivery_policy,[c]:v.delivery_policy?.[c]||defaultPolicy(c)}});
   };
   if(compact&&onChange)return <section className="atelier-communication" aria-label="Технологии связи">
-    <header><h2>Технологии связи</h2><small>{enabled.length} из 7</small></header>
+    <header><h2><Radio size={19} aria-hidden="true"/>Технологии связи</h2><small>{enabled.length} из 7</small></header>
     <fieldset disabled={disabled} className="atelier-comm-body"><label>Набор технологий
       <select aria-label="Набор технологий связи" value={v.preset||'none'} onChange={e=>selectPreset(e.target.value)}>
         {Object.entries(presets).map(([id,label])=><option key={id} value={id} disabled={!catalog[id]}>{label[index]}</option>)}
       </select><small>Выберите основу. Эпоху мира задаёт замысел.</small></label>
-      <fieldset className="atelier-channels"><legend>Доступные каналы</legend><div>{channels.map((c,i)=><label key={c} className={v[c]?'enabled':''} title={policies[v.delivery_policy?.[c]||defaultPolicy(c)][index]}>
-        <input type="checkbox" checked={!!v[c]} onChange={e=>toggle(c,e.target.checked)}/>{names[i]}
-      </label>)}</div></fieldset>
+      <fieldset className="atelier-channels"><legend>Доступные каналы</legend><div>{channels.map((c,i)=>{const Icon=channelIcons[i];return <label key={c} className={v[c]?'enabled':''} title={policies[v.delivery_policy?.[c]||defaultPolicy(c)][index]}>
+        <Icon size={13} aria-hidden="true"/>{names[i]}<input type="checkbox" checked={!!v[c]} onChange={e=>toggle(c,e.target.checked)}/>
+      </label>})}</div></fieldset>
     </fieldset>
     <footer><small>Личные разговоры доступны всегда</small><details><summary>Правила и особенности</summary>
       <dl>{enabled.map(c=><div key={c}><dt>{names[channels.indexOf(c)]}</dt><dd>{policies[v.delivery_policy?.[c]||defaultPolicy(c)][index]}</dd></div>)}</dl>

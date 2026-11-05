@@ -1,6 +1,6 @@
 /* Scoped to the idea route: WorkshopShell navigation and other editors retain their tokens. */
 .ww-content:has(.idea-atelier){padding-top:0}
-.idea-atelier{--atelier-paper:color-mix(in srgb,var(--surface-1) 93%,var(--accent));color:var(--text);font-family:var(--ui-font)}
+.idea-atelier{--atelier-paper:color-mix(in srgb,var(--surface-1) 97%,var(--accent));color:var(--text);font-family:var(--ui-font)}
 .atelier-hero{position:relative;isolation:isolate;min-height:174px;margin:0 -36px;overflow:hidden;padding:26px 36px;border-bottom:1px solid var(--border);display:flex;align-items:center;background:var(--bg)}
 .atelier-hero>img{position:absolute;right:0;top:0;height:100%;width:70%;object-fit:cover;object-position:right center;z-index:-1;mask-image:linear-gradient(90deg,transparent,#000 45%);opacity:.8}
 .atelier-hero>div{max-width:68%}.ww-content .atelier-hero h1{font:400 clamp(42px,4.2vw,75px)/1.08 var(--ww-book);letter-spacing:-2px;margin:13px 0 7px}.atelier-hero h1 em{font-family:Georgia,serif;color:var(--accent);font-weight:400}
@@ -45,3 +45,9 @@
 .atelier-method>summary{padding:0;min-height:32px;font-size:11px;gap:6px}
 .atelier-paper>footer .atelier-primary{flex-shrink:0;white-space:nowrap}
 html[data-theme="graphite"] .atelier-dialog{--ui-font:"Workshop Sans","Segoe UI",sans-serif;--story-font:"Workshop Book",Georgia,serif}
+
+.atelier-communication h2>svg{color:var(--accent);flex-shrink:0}
+.atelier-icon.world{color:var(--success);background:color-mix(in srgb,var(--surface-1) 85%,var(--success))}
+.atelier-icon.cast{color:var(--warning);background:color-mix(in srgb,var(--surface-1) 87%,var(--warning))}
+.atelier-icon.narrative{color:var(--danger);background:color-mix(in srgb,var(--surface-1) 90%,var(--danger))}
+.world-workshop .atelier-communication details label{display:block;margin:8px 0}

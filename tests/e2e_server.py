@@ -570,7 +570,7 @@ if __name__ == '__main__':
     def configure_idea190(body:dict):
         global idea190_provider
         from idea190_provider import IdeaProvider
-        idea190_provider=IdeaProvider(body.get('fail_review',False),body.get('custom_calendar',False))
+        idea190_provider=IdeaProvider(body.get('fail_review',False),body.get('custom_calendar',False),transport_stream=provider_chat_stream)
         if body.get('release'):idea190_provider.gate.set()
         if body.get('scenario'):
             repo=app.state.repository

@@ -33,3 +33,13 @@ it('review has no generation side effects and pending validation ignores duplica
  await act(()=>resolve());expect(host.querySelector('[aria-label="Сводка замысла"]')).not.toBeNull();expect(launch).not.toHaveBeenCalled();
  await act(()=>root.unmount());
 });
+
+it('does not launch a different draft after leaving a pending preflight',async()=>{
+ const host=document.createElement('div');document.body.append(host);const root=createRoot(host);
+ let finish!:()=>void;const validate=vi.fn().mockResolvedValueOnce(undefined).mockImplementationOnce(()=>new Promise<void>(r=>finish=r));const launch=vi.fn(async()=>{});
+ await act(()=>root.render(<IdeaAtelier id="old" name="Мир" text="Идея" useIdea={false} creation={structuredClone(defaultCreation)} disabled={false} saved onName={()=>{}} onText={()=>{}} onScenario={()=>{}} onCreation={()=>{}} onMethod={()=>{}} validate={validate} launch={launch}/>));
+ await act(()=>Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('Проверить замысел'))!.click());
+ await act(()=>Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('Создать мир'))!.click());
+ expect(validate).toHaveBeenCalledTimes(2);
+ await act(()=>root.unmount());await act(()=>finish());expect(launch).not.toHaveBeenCalled();
+});

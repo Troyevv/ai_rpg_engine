@@ -7,7 +7,8 @@ from backend.services.draft_completeness import MARKER as REVIEW
 from draft_provider_fixture import creative_noop
 
 class IdeaProvider:
-    def __init__(self, fail_review=False, custom_calendar=False):
+    def __init__(self, fail_review=False, custom_calendar=False, transport_stream=None):
+        self.transport_stream=transport_stream
         self.fail_review=fail_review
         self.custom_calendar=custom_calendar
         self.gate=Event()
@@ -33,7 +34,7 @@ class IdeaProvider:
                 def client(**kw):
                     return OpenAI(**kw,http_client=httpx.Client(transport=httpx.MockTransport(
                         lambda request:httpx.Response(502,json={'error':{'message':'fixture upstream unavailable'}}))))
-                with patch('llm.OpenAI',side_effect=client):yield from llm.chat_stream(**kwargs)
+                with patch('llm.OpenAI',side_effect=client):yield from (self.transport_stream or llm.chat_stream)(**kwargs)
             else:yield '{"issues":[]}'
         else:
             self.world_calls+=1
