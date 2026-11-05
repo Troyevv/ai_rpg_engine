@@ -15,29 +15,29 @@
 
 | ID | Implementation / retained contract | Acceptance evidence or remaining work |
 |---|---|---|
-| W01 | Search indexes projected characters, locations, organizations, threads and facts, including text/aliases. | Unit indexing tests and desktop/mobile SQLite navigation passed at `f0fbfa0`; exact thread result opens and Escape returns. Full five-kind keyboard/privacy acceptance remains open. |
-| W02 | Empty search suggests objects; nonempty misses show a distinct state. | Unit test; render pending. |
+| W01 | Search indexes projected characters, locations, organizations, threads and facts, including text/aliases. | Unit indexing tests and desktop/mobile SQLite navigation passed. At `6d6fa2eb`, all five types open through Tab/Enter, Escape closes the record and player search/API exclude a hidden marker. |
+| W02 | Empty search suggests objects; nonempty misses show a distinct state. | Unit test and real desktop/mobile empty-query suggestions versus no-results status passed at `6d6fa2eb`. |
 | W03 | Overview diagnostics retain source paths and object links. | Review browser links including incomplete candidates. |
-| W04 | Overview opens atomic campaign editor and stays in overview. | Atomic write test; browser return pending. |
+| W04 | Overview opens atomic campaign editor and stays in overview. | Atomic write test and overview title edit/return passed on desktop/mobile at `6d6fa2eb`; separate record-editor conflict regression also passed. |
 | W05 | Public lead precedes expandable full author description. | Reader projection tests; visual pending. |
 | W06 | Last three actual version reasons and timestamps. | API source retained; timezone/visual check pending. |
 | W07 | Overview seeds AI example without overwriting stored instruction. Example replacement requires a decision. | Browser buffer/return pending. |
 | W08 | Stats, compact first four cards and start-scene panel retained. | Base overview compared at desktop/mobile/tablet; compact hero and four mobile stats inspected. Full interactive-state acceptance remains open. |
 | W09 | Mobile breadcrumb shows current section; generic prefix hidden. | Current section is visible in reviewed mobile captures at required widths; navigation regressions passed. |
 | W10 | AI sidebar action has separate visual surface. | Visual/theme acceptance pending. |
-| W11 | Navigation focuses content without scrolling; per-world/section scroll retained. The mobile menu defers focus until its portal closes; section changes from overview CTAs also transfer focus. | Real-frame E2E checks focus after desktop/mobile navigation; new check awaits CI. |
+| W11 | Navigation focuses content without scrolling; per-world/section scroll retained. The mobile menu defers focus until its portal closes; section changes from overview CTAs also transfer focus. | Real-frame E2E passed at `1a0e3766`: content focus after desktop/mobile navigation, Escape and normal/reduced movement. Complete nested-return/scroll comparisons remain open. |
 | W12 | Read/action/revision states separated; field dirty/saving state reflects actual state. | Review failed/pending requests and child-dialog status propagation. |
-| W13 | Existing theme typography retained. | OPEN: measure font families, weight, widths in all required themes. |
+| W13 | Existing theme typography retained. | At `1a0e3766`, all 55 desktop base pairs report Workshop Sans/Workshop Book with fonts ready. Portal computed fonts: Graphite Workshop Sans, Parchment Georgia, Cyberpunk Consolas. All six skin portal pairs inspected. Complete weight/width comparisons outside these states remain open. |
 | W14 | Overview panel surfaces differentiated using skin tokens. | Visual/theme acceptance pending. |
-| W15 | Existing modal backdrop retained. | Compared actual Graphite/Parchment/Cyberpunk portals: the global UI override removed blur. Restored the exact #175 scrim `#070a09ba` / `blur(9px)` only in the workshop; #190 atelier remains separate. Computed-style E2E assertion added; final capture pending. |
+| W15 | Existing modal backdrop retained. | Compared actual Graphite/Parchment/Cyberpunk portals: the global UI override removed blur. Restored the exact #175 scrim `#070a09ba` / `blur(9px)` only in the workshop; #190 atelier remains separate. Computed-style assertion passed in all three skins on both projects at `1a0e3766`; refreshed portal captures inspected. |
 | W16 | Local create form before mutation; nonempty name required, description editable; cancel does not write. | Backend + component tests; E2E added. |
 | W17 | Explicit ordered source/target; backend rejects self/missing/duplicate pair. | SQLite test verifies exact edge and no extra revision. |
 | W18 | Full cards show personality; overview stays compact; portrait contract retained. | Grid/list artwork geometry and full-SVG pixel comparison passed in `workshop188-age-choice`; fuller cards inspected in historical/current pairs. All long-copy combinations are not claimed. |
 | W19 | Family/organization filters use projected objective relations and roles. | Fixture/browser filter verification pending. |
 | W20 | Pagination controls omitted for one page; existing bounded 12-card pages retained. | `workshop175.spec.ts` passed on both projects at `f0fbfa0`: 240 characters, 12 visible, search for the last record and retained scoped search after return. |
-| W21 | Dossier hero/current-location context and character-name label. Empty motives collapse into one disclosure. Compatibility card projections do not duplicate canonical Runtime fields; every real editable contract remains available. | Added real SQLite/browser case for empty legacy/canonical intentions. Existing six skin portal pairs inspected; compact mobile actions need fresh captures. |
+| W21 | Dossier hero/current-location context and character-name label. Empty motives collapse into one disclosure. Compatibility card projections do not duplicate canonical Runtime fields; every real editable contract remains available. | Added real SQLite/browser case for empty legacy/canonical intentions. Six fresh skin portal pairs inspected at `235b00a3`; compact actions, identity rows and footer geometry passed at `1a0e3766`. |
 | W22 | Mobile horizontal portrait strip and searchable all-person select. | Browser touch/keyboard and 240+ people pending. |
-| W23 | Isolated per-world multi-field buffers; one patch_fields transaction; explicit discard. | Backend/component tests cover atomic fields, conflict and buffers. |
+| W23 | Isolated per-world multi-field buffers; one patch_fields transaction; explicit discard. | Backend/component tests and real SQLite/browser regression passed at `1a0e3766`: HTTP 409, buffer surviving reload, explicit discard and two fields committed in one version on both projects. |
 | W24 | Existing field/card generator can produce a scoped preview; apply/reject is separate. | SQLite controlled-provider test: one call, unchanged canon before decision, stale rejection. Controlled-provider browser case passed in `workshop188-editing.spec.ts` at `3d8ac38`; paid-provider calls are not an acceptance requirement. |
 | W25 | Existing procedural/photo/manual-age behavior retained; hover scaling is outside crop. | Portrait upload/crop, manual visual age, neutral fallback, descriptor persistence, Runtime handoff and reload suites passed at `f0fbfa0`; reviewed Anna historical/current frame pairs. |
 | W26 | Collection search includes description/text/context/aliases. | Browser localized search pending. |
@@ -45,9 +45,9 @@
 | W28 | Parent dropdown excludes self/descendants; backend rejects cycles and unknown parent. | SQLite parent-cycle test. |
 | W29 | Residence grouping and separate Runtime editors retained. | Existing regressions retained; browser pending. |
 | W30 | Directed relation row uses stretched native action; inner controls remain separate. | Browser hit-target/keyboard check pending. |
-| W31 | Seven named feeling sliders; unknown legacy keys stay visible/removable and unset stays absent. The existing Runtime whitelist is preserved. | Component unknown-value test. Browser keyboard/endpoints/two-field save/reverse-edge/restore regression added. Arbitrary custom keys are not accepted by the current canonical Runtime contract; see explicit scope conflict below. |
+| W31 | Seven named feeling sliders; unknown legacy keys stay visible/removable and unset stays absent. The existing Runtime whitelist is preserved. | Component unknown-value test. Browser keyboard/endpoints/two-field save/reverse-edge/restore regression passed on both projects at `6d6fa2eb`. Arbitrary custom keys are not accepted by the current canonical Runtime contract; see explicit scope conflict below. |
 | W32 | Family duplicate shortcut opens actual server merge plans; zero-count text is structural only. | Existing merge contract retained; browser duplicate fixture pending. |
-| W33 | Dossier tabs use tablist/tab/tabpanel and roving keyboard behavior. | Semantic tab selectors, retained dossier context and nested field-editor return passed in existing workshop suites. New long-name/tab-preservation case awaits its run. |
+| W33 | Dossier tabs use tablist/tab/tabpanel and roving keyboard behavior. | Semantic tab selectors, retained dossier context and nested field-editor return passed in existing workshop suites. New long-name/tab-preservation case passed on both projects at `1a0e3766`. |
 | W34 | Thread/fact/scene/event creation forms use single atomic add. | Six-type SQLite add tests; real browser cancel-without-write and thread creation with exactly one revision/version passed on desktop/mobile at `f0fbfa0`. |
 | W35 | Story-secret slice uses projected story_secret, distinct from private facts. | Player-view suite retained; browser slice/POV pending. |
 | W36 | Short thread heading + expandable original description; badge from server projection. | Server badge/projection test; long-copy visual pending. |
@@ -69,7 +69,7 @@
 | W52 | Author-only owned snapshot read, timestamp, preview, explicit restore; stale head blocked. | SQLite ownership/no-write/conflict tests and desktop/mobile historical preview, explicit restore, new immutable version and real Runtime continuation passed at `f0fbfa0`. |
 | W53 | Separate readable TXT omits headings/payload; legacy TXT/MD/JSON round trips retained. | Backend export test and existing portrait round-trip tests. |
 | W54 | Draft rows expose revision and current-world marker. | `draft-world.spec.ts` draft-trash and complete workspace identity lifecycle passed at `f0fbfa0`; current revision/correct world shown in reviewed history screen. |
-| W55 | Active draft uses current revision; opening list refreshes it; conflict refresh requires second confirmation. | Browser concurrent deletion check pending. |
+| W55 | Active draft uses current revision; opening list refreshes it; conflict refresh requires second confirmation. | Desktop/mobile same-name workspace regression passed at `6d6fa2eb`: fresh metadata via history entry, concurrent HTTP 409, cancellation without deletion, new explicit confirmation, restore and unchanged other workspace. |
 | W56 | Removed duplicate style editor; links point to specialized editors/recovery. | Browser return paths pending. |
 | W57 | Issue 190 generator retained. | Six #190 mobile reference/production pairs inspected: idea, genre, review, running, error, result. Existing Idea 190 suite passed; no replacement of the later approved design. |
 | W58 | Existing generator panels/presets and validation retained. | Existing Idea 190 tests retained. |
@@ -184,3 +184,15 @@ Additional browser cases exercise all five search result types with Tab/Enter, h
 
 
 The final code review also found that replacing an instruction with an example after a lost submission response retained the old idempotency key. Instruction changes now share one reset path; retrying unchanged text retains its key. A focused component regression passed: cancel/accept example emits no request, unchanged retry reuses the key, accepted replacement submits a different key and the new text. Nullable protagonist/controlled/POV types now match the observer API contract; this changes no runtime behavior.
+
+
+### Final tablet review
+
+Reviewed the `1a0e3766` reference/current pairs for places, relationships, stories, chronology, knowledge, review, AI and history at both 768×1024 and 1024×768. The history export row was clipped by the inner scroll surface at tablet width; document overflow alone did not detect it. Export buttons now wrap within their parent and retain readable labels. The comparison test checks the bounds and text overflow of all four controls at every required viewport. Production build passed; final browser verification is pending.
+
+
+### Completed `6d6fa2eb` run and final corrections
+
+Run [42117776408](https://github.com/Troyevv/ai_rpg_engine/actions/runs/42117776408): backend **3220 passed / 1 skipped**, frontend **138 passed**, production build and four smoke jobs passed. Full E2E: desktop **168 + 165 passed**, mobile **157 + 152 passed / 24 existing skips**; one failure per project, both in the new W43 test. The test used the old frontend fallback label rather than the actual Runtime label “Минута мира”; the captured accessibility tree and desktop trace identify the mismatch. Exact accessible-name selectors are corrected; no checks are removed. The remaining three new critical scenarios passed on both projects. A real FastAPI/SQLite probe separately verified invalid custom date rejection, month-boundary arithmetic and saving minute 1450 without changing the calendar contract.
+
+The final browser correction also records CSS timing functions, keyframe easing and animation delay alongside effect timing: effect-level `easing` alone can report linear while CSS keyframes use another curve. These new measurements, export button wrapping/bounds and corrected calendar selectors still require the next run.

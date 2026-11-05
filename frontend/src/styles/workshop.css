@@ -257,7 +257,8 @@
 
 .workshop-version { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; padding:8px 0; }
 
-.workshop-export { display:flex; gap:8px; margin:15px 0; }
+.workshop-export { display:flex; flex-wrap:wrap; gap:8px; margin:15px 0; }
+.workshop-export > button { max-width:100%; white-space:normal; overflow-wrap:anywhere; }
 
 .workshop-finish { position:sticky; bottom:0; z-index:4; background:var(--surface-2); border-top:1px solid var(--border); padding:14px 0 max(14px,env(safe-area-inset-bottom)); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; }
 

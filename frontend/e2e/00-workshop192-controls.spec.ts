@@ -114,8 +114,8 @@ test('W43 custom calendar rejects an invalid day and crosses the month boundary 
  state.world_clock.calendar={...state.world_clock.calendar,start_date:'2026-10-30',start_weekday:1,profile:{id:'custom',system:'custom',month_lengths:Array(12).fill(30),month_names:Array.from({length:12},(_,i)=>`Месяц ${i+1}`),weekday_names:['Один','Два','Три'],observances:[],seasons:[],regional:null}};
  const {id,url}=await create(request,state),before=await(await request.get(url+'?author=true')).json();
  await open(page,id);await workshopNav(page,'Сцена и правила');
- const editTime=page.getByRole('button',{name:'Изменить Игровое время · минуты недели',exact:true});await editTime.click();
- const editor=page.locator('.ww-field-dialog'),date=editor.getByLabel('Игровое время · минуты недели · дата',{exact:true}),time=editor.getByLabel('Игровое время · минуты недели · время',{exact:true}),save=editor.getByRole('button',{name:'Сохранить поле',exact:true});
+ const editTime=page.getByRole('button',{name:'Изменить Минута мира',exact:true});await editTime.click();
+ const editor=page.locator('.ww-field-dialog'),date=editor.getByLabel('Минута мира · дата',{exact:true}),time=editor.getByLabel('Минута мира · время',{exact:true}),save=editor.getByRole('button',{name:'Сохранить поле',exact:true});
  await expect(date).toHaveAttribute('type','text');await expect(date).toHaveValue('2026-10-30');
  await date.fill('2026-10-31');await date.press('Tab');await expect(editor.getByRole('alert')).toBeVisible();await expect(save).toBeDisabled();
  expect((await(await request.get(url+'?author=true')).json()).state).toEqual(before.state);

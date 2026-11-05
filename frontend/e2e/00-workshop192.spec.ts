@@ -72,6 +72,11 @@ test('W01–W69 reference/current browser evidence at required viewport widths',
     const add=await page.locator('.ww-page-head>.ww-primary').evaluate(el=>{const s=getComputedStyle(el);return {wrap:s.whiteSpace,overflow:el.scrollWidth>el.clientWidth}});
     expect(add).toEqual({wrap:'nowrap',overflow:false});
    }
+   if(route==='history'){
+    const exports=await page.locator('.workshop-export').evaluate(el=>{const parent=el.getBoundingClientRect();return {left:parent.left,right:parent.right,buttons:Array.from(el.querySelectorAll('button')).map(button=>{const r=button.getBoundingClientRect();return {left:r.left,right:r.right,overflow:button.scrollWidth>button.clientWidth+1}})}});
+    expect(exports.buttons).toHaveLength(4);
+    for(const button of exports.buttons){expect(button.left).toBeGreaterThanOrEqual(exports.left);expect(button.right).toBeLessThanOrEqual(exports.right+1);expect(button.overflow).toBe(false)}
+   }
    metadata.push({width,height,route,fixture:'workshop188.json',role:'author',fontsReady:await page.evaluate(()=>document.fonts.status),current:await page.evaluate(measure),reference:await ref.evaluate(measure),...metrics});
    await ref.screenshot({path:info.outputPath(`${width}-${route}-reference.png`),animations:'disabled'});
    await page.screenshot({path:info.outputPath(`${width}-${route}-current.png`),animations:'disabled'});

@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import {nav} from './navigation';
 import {authorView,workshopNav} from './workshop-navigation';
 
-type Sample={elapsed:number;opacity:string;transform:string;translate:string;x:number;y:number;animations:{name:string;duration:number|string;easing:string;state:string}[]};
+type Sample={elapsed:number;opacity:string;transform:string;translate:string;x:number;y:number;animationTimingFunction:string;transitionTimingFunction:string;animations:{name:string;duration:number|string;delay:number;easing:string;keyframes:{offset:number|null;easing:string}[];state:string}[]};
 /** Observe real frames before invoking the UI action, including its first frame. */
 async function sample(page:Page,selector:string,action:()=>Promise<unknown>){
  await page.evaluate(selector=>{
@@ -13,7 +13,7 @@ async function sample(page:Page,selector:string,action:()=>Promise<unknown>){
    const start=performance.now();
    function frame(){
     const el=document.querySelector(selector),elapsed=performance.now()-start;
-    if(el){const style=getComputedStyle(el),box=el.getBoundingClientRect();host.motion192!.frames.push({elapsed,opacity:style.opacity,transform:style.transform,translate:style.translate,x:box.x,y:box.y,animations:el.getAnimations().map(a=>({name:(a as CSSAnimation).animationName||'transition',duration:a.effect!.getTiming().duration,easing:a.effect!.getTiming().easing,state:a.playState}))})}
+    if(el){const style=getComputedStyle(el),box=el.getBoundingClientRect();host.motion192!.frames.push({elapsed,opacity:style.opacity,transform:style.transform,translate:style.translate,x:box.x,y:box.y,animationTimingFunction:style.animationTimingFunction,transitionTimingFunction:style.transitionTimingFunction,animations:el.getAnimations().map(a=>({name:(a as CSSAnimation).animationName||'transition',duration:a.effect!.getTiming().duration,delay:a.effect!.getTiming().delay,easing:a.effect!.getTiming().easing,keyframes:(a.effect as KeyframeEffect).getKeyframes().map(f=>({offset:f.offset,easing:f.easing})),state:a.playState}))})}
     if(elapsed<450)requestAnimationFrame(frame);else host.motion192!.done=true;
    }
    requestAnimationFrame(frame);
