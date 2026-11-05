@@ -52,7 +52,14 @@ for(const reduce of [false,true])test(`workshop192 actual section and modal fram
  const modal=await sample(page,'.ww-dossier-dialog',()=>page.locator('.ww-character-card').first().click());
  const original=await sample(reference,'.modal',()=>reference.locator('[data-action="navigate"][data-route="characters"]').first().evaluate((el:HTMLElement)=>{el.click();document.querySelector<HTMLButtonElement>('.cast-card')!.click()}));
  expect(modal.length).toBeGreaterThan(0);
- if(reduce)expect(modal.every(f=>!f.animations.length&&f.transform==='none')).toBe(true);
+ if(reduce){
+  // Desktop centering uses a static translate(-50%, -50%) transform. Reduced
+  // motion forbids movement, not that layout transform (mobile needs none).
+  expect(modal.every(f=>!f.animations.length&&f.translate==='none'&&f.opacity==='1')).toBe(true);
+  expect(new Set(modal.map(f=>f.transform)).size).toBe(1);
+  expect(Math.max(...modal.map(f=>f.x))-Math.min(...modal.map(f=>f.x))).toBeLessThan(.1);
+  expect(Math.max(...modal.map(f=>f.y))-Math.min(...modal.map(f=>f.y))).toBeLessThan(.1);
+ }
  else expect(modal.some(f=>f.animations.length>0)).toBe(true);
  await page.keyboard.press('Escape');await expect(page.locator('.ww-dossier-dialog,.dialog-overlay')).toHaveCount(0);
  await expect(page.locator('.ww-character-card').first()).toBeFocused();

@@ -18,10 +18,10 @@ test('W21 W22 empty motives use their canonical editor; searchable people retain
   await page.locator('.ww-character-card').first().click();
   const dossier=page.locator('.ww-dossier-dialog');await dossier.getByRole('tab',{name:'Цели',exact:true}).click();
   const empty=dossier.locator('.ww-empty-motives');
-  await expect(empty.locator('summary')).toBeVisible();
+  await expect(empty.locator(':scope > summary')).toBeVisible();
   await expect(dossier.getByRole('button',{name:'Изменить fields.Намерения',exact:true})).toHaveCount(0);
   await expect(empty.getByRole('button',{name:'Изменить Намерения',exact:true})).not.toBeVisible();
-  await empty.locator('summary').click();
+  await empty.locator(':scope > summary').click();
   await empty.getByRole('button',{name:'Изменить Намерения',exact:true}).click();
   await expect(page.locator('.ww-field-dialog').getByRole('button',{name:'Добавить запись',exact:true})).toBeVisible();
   await page.locator('.ww-field-dialog').getByRole('button',{name:'Закрыть',exact:true}).click();

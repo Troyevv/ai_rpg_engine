@@ -6,7 +6,7 @@
 - Read the issue and all six appendix comments. Original reference: Issue 175 attachment `world-workshop-reference.zip`.
 - Original `world-workshop.html`: **468501 bytes**, SHA-256 **4122bcf37cbfd4c979e264e655896cc8d8783d51899a2aa9d170bd9f5c3e82e1**. Verified before edits.
 - `tests/fixtures/workshop175-reference.zip` contains only that byte-identical HTML. The preview JPG and README are excluded. No demo state or JavaScript is imported into production. The E2E server independently verifies the hash before serving it.
-- **Pre-change browser baseline was blocked.** Local Chromium terminated with `socket() failed: Operation not permitted (1)` in `process_singleton_posix.cc`. The separate cloud browser could not reach the local server (`ERR_CONNECTION_REFUSED`). No baseline PNGs were obtained. Source inspection, unit tests and build are not substitutes for baseline measurements.
+- **Pre-change browser baseline was blocked.** Local Chromium terminated with `socket() failed: Operation not permitted (1)` in `process_singleton_posix.cc`. The separate cloud browser could not reach the local server (`ERR_CONNECTION_REFUSED`). No new baseline PNGs were obtained before editing. A limited historical baseline was recovered later (see provenance below); it does not replace the missing complete baseline series. Source inspection, unit tests and build are not substitutes for baseline measurements.
 - `00-workshop192.spec.ts` captures original/current pairs at 360×800, 390×844, 412×915, 430×932, 768×1024, 1024×768, 1280×800, 1440×1000 and 1920×1080 and records browser/font/overflow metadata. Those captures are post-change evidence, not the missing pre-change master baseline. The later Issue 190 prototype remains the reference for “По моей идее”.
 
 ## Status conventions
@@ -15,15 +15,15 @@
 
 | ID | Implementation / retained contract | Acceptance evidence or remaining work |
 |---|---|---|
-| W01 | Search indexes projected characters, locations, organizations, threads and facts, including text/aliases. | Unit test; SQLite/browser navigation test added, not yet accepted. |
+| W01 | Search indexes projected characters, locations, organizations, threads and facts, including text/aliases. | Unit indexing tests and desktop/mobile SQLite navigation passed at `f0fbfa0`; exact thread result opens and Escape returns. Full five-kind keyboard/privacy acceptance remains open. |
 | W02 | Empty search suggests objects; nonempty misses show a distinct state. | Unit test; render pending. |
 | W03 | Overview diagnostics retain source paths and object links. | Review browser links including incomplete candidates. |
 | W04 | Overview opens atomic campaign editor and stays in overview. | Atomic write test; browser return pending. |
 | W05 | Public lead precedes expandable full author description. | Reader projection tests; visual pending. |
 | W06 | Last three actual version reasons and timestamps. | API source retained; timezone/visual check pending. |
 | W07 | Overview seeds AI example without overwriting stored instruction. Example replacement requires a decision. | Browser buffer/return pending. |
-| W08 | Stats, compact first four cards and start-scene panel retained. | Reference comparison pending. |
-| W09 | Mobile breadcrumb shows current section; generic prefix hidden. | Browser widths pending. |
+| W08 | Stats, compact first four cards and start-scene panel retained. | Base overview compared at desktop/mobile/tablet; compact hero and four mobile stats inspected. Full interactive-state acceptance remains open. |
+| W09 | Mobile breadcrumb shows current section; generic prefix hidden. | Current section is visible in reviewed mobile captures at required widths; navigation regressions passed. |
 | W10 | AI sidebar action has separate visual surface. | Visual/theme acceptance pending. |
 | W11 | Navigation focuses content without scrolling; per-world/section scroll retained. The mobile menu defers focus until its portal closes; section changes from overview CTAs also transfer focus. | Real-frame E2E checks focus after desktop/mobile navigation; new check awaits CI. |
 | W12 | Read/action/revision states separated; field dirty/saving state reflects actual state. | Review failed/pending requests and child-dialog status propagation. |
@@ -32,14 +32,14 @@
 | W15 | Existing modal backdrop retained. | Compared actual Graphite/Parchment/Cyberpunk portals: the global UI override removed blur. Restored the exact #175 scrim `#070a09ba` / `blur(9px)` only in the workshop; #190 atelier remains separate. Computed-style E2E assertion added; final capture pending. |
 | W16 | Local create form before mutation; nonempty name required, description editable; cancel does not write. | Backend + component tests; E2E added. |
 | W17 | Explicit ordered source/target; backend rejects self/missing/duplicate pair. | SQLite test verifies exact edge and no extra revision. |
-| W18 | Full cards show personality; overview stays compact; portrait contract retained. | Crop and card density need browser review. |
+| W18 | Full cards show personality; overview stays compact; portrait contract retained. | Grid/list artwork geometry and full-SVG pixel comparison passed in `workshop188-age-choice`; fuller cards inspected in historical/current pairs. All long-copy combinations are not claimed. |
 | W19 | Family/organization filters use projected objective relations and roles. | Fixture/browser filter verification pending. |
-| W20 | Pagination controls omitted for one page; existing bounded 12-card pages retained. | Existing 240-character E2E retained; rerun required. |
+| W20 | Pagination controls omitted for one page; existing bounded 12-card pages retained. | `workshop175.spec.ts` passed on both projects at `f0fbfa0`: 240 characters, 12 visible, search for the last record and retained scoped search after return. |
 | W21 | Dossier hero/current-location context and character-name label. Empty motives collapse into one disclosure. Compatibility card projections do not duplicate canonical Runtime fields; every real editable contract remains available. | Added real SQLite/browser case for empty legacy/canonical intentions. Existing six skin portal pairs inspected; compact mobile actions need fresh captures. |
 | W22 | Mobile horizontal portrait strip and searchable all-person select. | Browser touch/keyboard and 240+ people pending. |
 | W23 | Isolated per-world multi-field buffers; one patch_fields transaction; explicit discard. | Backend/component tests cover atomic fields, conflict and buffers. |
 | W24 | Existing field/card generator can produce a scoped preview; apply/reject is separate. | SQLite controlled-provider test: one call, unchanged canon before decision, stale rejection. Controlled-provider browser case passed in `workshop188-editing.spec.ts` at `3d8ac38`; paid-provider calls are not an acceptance requirement. |
-| W25 | Existing procedural/photo/manual-age behavior retained; hover scaling is outside crop. | Existing portrait suites retained; browser recheck pending. |
+| W25 | Existing procedural/photo/manual-age behavior retained; hover scaling is outside crop. | Portrait upload/crop, manual visual age, neutral fallback, descriptor persistence, Runtime handoff and reload suites passed at `f0fbfa0`; reviewed Anna historical/current frame pairs. |
 | W26 | Collection search includes description/text/context/aliases. | Browser localized search pending. |
 | W27 | Place/org metadata, starting-place badge, projected participants and organization locations. | Browser hierarchy and long-content check pending. |
 | W28 | Parent dropdown excludes self/descendants; backend rejects cycles and unknown parent. | SQLite parent-cycle test. |
@@ -47,8 +47,8 @@
 | W30 | Directed relation row uses stretched native action; inner controls remain separate. | Browser hit-target/keyboard check pending. |
 | W31 | Seven feeling sliders plus custom dimensions; unset stays absent. | Component unknown-value test; browser endpoints pending. |
 | W32 | Family duplicate shortcut opens actual server merge plans; zero-count text is structural only. | Existing merge contract retained; browser duplicate fixture pending. |
-| W33 | Dossier tabs use tablist/tab/tabpanel and roving keyboard behavior. | Existing E2E selectors updated to semantic roles; execution pending. |
-| W34 | Thread/fact/scene/event creation forms use single atomic add. | Six-type SQLite tests; browser cancel/create added. |
+| W33 | Dossier tabs use tablist/tab/tabpanel and roving keyboard behavior. | Semantic tab selectors, retained dossier context and nested field-editor return passed in existing workshop suites. New long-name/tab-preservation case awaits its run. |
+| W34 | Thread/fact/scene/event creation forms use single atomic add. | Six-type SQLite add tests; real browser cancel-without-write and thread creation with exactly one revision/version passed on desktop/mobile at `f0fbfa0`. |
 | W35 | Story-secret slice uses projected story_secret, distinct from private facts. | Player-view suite retained; browser slice/POV pending. |
 | W36 | Short thread heading + expandable original description; badge from server projection. | Server badge/projection test; long-copy visual pending. |
 | W37 | Separate desktop date column, timeline axis, card surface, ending and server-projected today/past/future labels. | Runtime day classification unit test; rendered spacing still needs acceptance. |
@@ -62,30 +62,30 @@
 | W45 | Distinguishes absent/stale/completed review; merges severity and paths; category counts/filter; pins checked revision. | Priority/duplicate unit test and revision/no-op/stale SQLite test. The author-only decision history now reuses accepted re-audit issue IDs, reasons and basis, distinguishes disproved/replaced, and marks changed-candidate history. SQLite and render tests verify privacy, no-write behavior and stale-address suppression. Structural fixes now require a previously observed typed defect and a completed report for the exact new candidate. Stable entity IDs survive array reordering and changed wording; semantic disappearance, deleted subjects, failed/stale reviews and initially false-positive findings never become fixes. Seven focused tracking tests and render tests passed. Full recovery browser acceptance remains open. |
 | W46 | Scene diagnostics route to exact scene in chronology. | Browser diagnostic fixture pending. |
 | W47 | No fabricated repair action: real recovery or existing field navigation. | Existing server recovery unchanged; browser pending. |
-| W48 | AI examples, world/version context, three steps and empty proposal area. | Component/build checks; visual pending. |
-| W49 | Skeleton shown only for actual active editor job, old diff hidden during generation. | Controlled-provider E2E retained; browser pending. |
-| W50 | First changed diff expanded and before/after surfaces distinct. | Existing diff tests updated for expanded default; browser pending. |
+| W48 | AI examples, world/version context, three steps and empty proposal area. | Desktop/mobile base AI composition compared; three-step context/example panel inspected. Full example-overwrite interaction acceptance remains open. |
+| W49 | Skeleton shown only for actual active editor job, old diff hidden during generation. | `world-ai-editor.spec.ts` passed controlled-provider running/reload/completion/error/retry/reject cases on desktop/mobile. Full paired loading-state motion comparison remains open. |
+| W50 | First changed diff expanded and before/after surfaces distinct. | `world-ai-editor.spec.ts` passed first-diff-open, before/after, cancel/no-write, apply/reconnect idempotency and subsequent Narrative reload checks in Graphite/Parchment. |
 | W51 | Applied proposal links to available object and immutable base version. | Browser object/base-version navigation pending. |
-| W52 | Author-only owned snapshot read, timestamp, preview, explicit restore; stale head blocked. | SQLite ownership/no-write/restore/conflict tests; E2E added. |
+| W52 | Author-only owned snapshot read, timestamp, preview, explicit restore; stale head blocked. | SQLite ownership/no-write/conflict tests and desktop/mobile historical preview, explicit restore, new immutable version and real Runtime continuation passed at `f0fbfa0`. |
 | W53 | Separate readable TXT omits headings/payload; legacy TXT/MD/JSON round trips retained. | Backend export test and existing portrait round-trip tests. |
-| W54 | Draft rows expose revision and current-world marker. | Browser identical-name/delete/restore pending. |
+| W54 | Draft rows expose revision and current-world marker. | `draft-world.spec.ts` draft-trash and complete workspace identity lifecycle passed at `f0fbfa0`; current revision/correct world shown in reviewed history screen. |
 | W55 | Active draft uses current revision; opening list refreshes it; conflict refresh requires second confirmation. | Browser concurrent deletion check pending. |
 | W56 | Removed duplicate style editor; links point to specialized editors/recovery. | Browser return paths pending. |
-| W57 | Issue 190 generator retained. | Existing unit/build checks; all later-reference screenshots pending. |
+| W57 | Issue 190 generator retained. | Six #190 mobile reference/production pairs inspected: idea, genre, review, running, error, result. Existing Idea 190 suite passed; no replacement of the later approved design. |
 | W58 | Existing generator panels/presets and validation retained. | Existing Idea 190 tests retained. |
-| W59 | Existing progress and recovery remain server-driven. | Existing backend recovery tests in full suite; E2E pending. |
-| W60 | Existing import/generation transitions retained. | Full related E2E pending; no visual acceptance inferred. |
-| W61 | Scenario editor receives explicit wid, isolated keyed instance, common workshop shell. | Two-world browser identity/buffer test added; late-response acceptance pending. |
-| W62 | Scenario input buffer per wid; Radix summary-deletion confirmation. | Browser cancel/reload/isolation pending. |
+| W59 | Existing progress and recovery remain server-driven. | Controlled-provider draft recovery, reload, malformed/empty response and generation suites passed in full CI at `f0fbfa0`. |
+| W60 | Existing import/generation transitions retained. | Import, generation and workspace lifecycle E2E passed at `f0fbfa0`; six later-reference generator states inspected. |
+| W61 | Scenario editor receives explicit wid, isolated keyed instance, common workshop shell. | Desktop/mobile two-world identity and isolated input-buffer E2E passed at `f0fbfa0`; reload recovery and deliberately held late DELETE regression passed. |
+| W62 | Scenario input buffer per wid; Radix summary-deletion confirmation. | Separate per-world input retention and scenario trash late-response regression passed at `f0fbfa0`; physical keyboard not tested. |
 | W63 | Imported JSON remains editable in text buffer. | Build; browser invalid-file correction pending. |
-| W64 | Pasted valid JSON array rejected; bracket-prefixed Markdown retained as text. | Unit test. |
-| W65 | No scenario checkbox in import; empty input cannot submit. | Existing import API remains deterministic; browser pending. |
-| W66 | Import continues to use existing path without LLM request. | Existing import tests retained. |
-| W67 | Launch pins wid/revision/version; warnings/stale/stop require separate choices; changed conditions invalidate. | Component test; existing real launch E2E updated for explicit choices. |
+| W64 | Pasted valid JSON array rejected; bracket-prefixed Markdown retained as text. | Unit array-vs-Markdown distinction and real pasted-state/wrapper/Markdown/broken-input E2E passed. |
+| W65 | No scenario checkbox in import; empty input cannot submit. | File/paste import and empty-input paths passed in `draft-world.spec.ts`; no paid provider used. |
+| W66 | Import continues to use existing path without LLM request. | Existing controlled-provider import/lifecycle tests passed; deterministic import path retained. |
+| W67 | Launch pins wid/revision/version; warnings/stale/stop require separate choices; changed conditions invalidate. | Component invalidation tests and updated real launch E2E passed at `f0fbfa0`; all interactive confirmation combinations are not visually accepted. |
 | W68 | Summary separates protagonist, control, camera, scene/place/time; scene edit preserves camera fields. | Found and fixed migration dropping explicit POV/subject. Server launch projection keeps subject separate from POV and hides inaccessible names. SQLite handoff covers different protagonist/control/POV and observer without protagonist; E2E added. 158 related backend tests passed. |
-| W69 | Full launch summary and real API handoff; existing-save continuation retained. | Existing post-start save/portrait/AI tests retained; browser acceptance open. |
+| W69 | Full launch summary and real API handoff; existing-save continuation retained. | Real launch, Narrative turn, save/reload, portraits and AI-version isolation E2E passed at `f0fbfa0`; full paired launch-dialog interaction acceptance remains open. |
 
-## Validation
+## Initial validation (historical; superseded by completed runs below)
 
 - Production TypeScript/Vite build succeeded (existing large-chunk warning remains).
 - Final frontend suite: **134 passed** (20 files).
@@ -155,3 +155,21 @@ The new atomic-editor browser test uses a real concurrent API write, expects HTT
 The `f0fbfa0` capture jobs produced 99 base-state pairs (11 sections × 9 sizes, including the extra 412×915 device width), plus six skin dossier pairs. Reviewed all 11 base sections at 390×844 and tablet overview/cards/start/AI at 768×1024 plus overview/review/history at 1024×768. Required 768px captures exposed overly narrow side-by-side start panels and a wrapping “Персонаж” button. Start panels now stack through 960px; primary heading actions do not shrink or split their label. Browser geometry assertions cover both defects. Thread headings now use the book face with a bounded three-line preview; the complete text remains below.
 
 The unknown feelings value also has explicit accessible value text: screen readers distinguish “Не задано” from an actual zero. Stored dimensions remain unchanged until an edit. These final visual/a11y adjustments require a new browser run after the in-flight `235b00a3` suite.
+
+### Recovered historical baseline (limited)
+
+Recovered and inspected the retained browser artifacts from successful run [42051309940](https://github.com/Troyevv/ai_rpg_engine/actions/runs/42051309940), created **2026-11-05 15:04:56 UTC**, before Issue 192 implementation. Both its PR head `66674050b81047fdd7c9d11dd94d202f014ed923` and the actual Actions checkout `4b99436faa893ea8c65a10e9b0ea1c9caac8cbf7` have tree `6ea82456e75463227622346bf00cafa6d7ca30cf`, identical to the original `master@eaf75a1` tree. This is original-master evidence, not a reconstruction from changed code.
+
+- Sources: desktop shard 2 artifact [13426729578](https://github.com/Troyevv/ai_rpg_engine/actions/runs/42051309940/artifacts/13426729578), mobile shard 2 artifact [13428018461](https://github.com/Troyevv/ai_rpg_engine/actions/runs/42051309940/artifacts/13428018461).
+- Compared matching `anna-cards`, `field-error-graphite` and `ai-empty-graphite` captures against `f0fbfa0`. The two source fixtures are unchanged; the Anna test setup and capture are unchanged before/after. Changes preceding the field-error capture are navigation semantics and the requested persistent AI action surface, not fixture data.
+- The desktop AI comparison confirms the restored composed panel and hierarchy; cards show the fuller personality/details and compact mobile toolbar; the field-error state retains its source text/diagnostics and gains explicit discard.
+- **Excluded mobile AI captures from settled-layout acceptance:** both historical/current captures caught the menu closing. They are transient evidence, not a valid finished-page comparison. The new motion test samples actual frames separately.
+- This recovery covers only existing historical scenarios at their original Desktop Chrome / Pixel 7 settings. It does not supply all 11 sections, required viewports, every interactive state or the missing pre-edit measurement manifest. It was recovered after implementation and is not presented as a newly captured pre-edit baseline.
+
+### Completed `235b00a3` run
+
+Run [42109622727](https://github.com/Troyevv/ai_rpg_engine/actions/runs/42109622727) completed: backend **3220 passed, 1 skipped**, frontend **137 passed**, four smoke jobs passed. Full desktop shard 1: **165 passed**; shard 2: **163 passed / 2 failed**. Full mobile shard 1: **154 passed / 11 skipped**; shard 2: **151 passed / 1 failed / 13 skipped**.
+
+All three failures were in the newly added assertions, diagnosed from logs and retained traces. The empty-motives locator also matched a nested “Сведения” summary; it now selects the direct disclosure heading. The desktop reduced-motion assertion incorrectly required `transform:none`, rejecting the fixed centering matrix `matrix(1, 0, 0, 1, -520, -425)`. Captured frames show a constant position, opacity 1 and no animations. The corrected assertion requires no animations/animated translate, constant transform, constant X/Y and full opacity; desktop centering is preserved. No production behavior or assertion is disabled to obtain a pass.
+
+The real 409 / retained buffer / explicit discard / two-fields-one-version case passed in both projects. Normal section/dossier motion and mobile normal/reduced menu motion passed. Reviewed the fresh mobile Graphite/Parchment/Cyberpunk dossier captures: compact actions, separate identity/search rows and reachable footer are visible; all geometry assertions passed. The selector and stationary-layout corrections, plus tablet layout changes, require the next CI run.
