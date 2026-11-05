@@ -31,8 +31,8 @@ def visible_calendar_state(state, history=None):
     return view
 
 
-def player_calendar(state, start_date, end_date, names=None, history=None):
-    result = calendar_range(visible_calendar_state(state,history), start_date, end_date)
+def player_calendar(state, start_date, end_date, names=None, history=None, *, display_language='ru_RU'):
+    result = calendar_range(visible_calendar_state(state,history), start_date, end_date, display_language=display_language)
     from backend.runtime_v3.calendar import ordinal, profile_of
     from backend.runtime_v3.weather import weather_at
     cal = state['meta'].get('calendar') or {}

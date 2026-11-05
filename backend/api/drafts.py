@@ -111,22 +111,22 @@ def install(app,repo,preparation,credentials,job):
         return repo.draft(wid,True)
 
     @app.post('/api/calendar/preview')
-    def creation_calendar_preview(body:CreationSettings):
+    def creation_calendar_preview(body:CreationSettings, display_language:str='ru_RU'):
         from backend.services.calendar_presets import apply, preview
         from backend.runtime_v3.models import Calendar
         settings=body.model_dump();start=body.calendar_start
         cal=Calendar(start_minute=0,start_weekday=start.weekday or 0,start_date=start.date,
                      profile=start.profile or {}).model_dump()
         state={'creation_settings':settings,'world_clock':{'minute':0,'calendar':cal}}
-        return preview(apply(state,(start.presets or CalendarPresets()).model_dump()))
+        return preview(apply(state,(start.presets or CalendarPresets()).model_dump()),display_language=display_language)
 
     @app.post('/api/workspaces/{wid}/draft/calendar-preview')
-    def proposed_calendar_preview(wid:str,body:CalendarPresets):
+    def proposed_calendar_preview(wid:str,body:CalendarPresets, display_language:str='ru_RU'):
         from backend.services.calendar_presets import apply,preview
         value=repo.draft(wid,True)
         state=value.get('candidate') or value.get('state')
         if not state:raise ValueError('Сначала создайте мир.')
-        return preview(apply(state,body.model_dump(),explicit=True))
+        return preview(apply(state,body.model_dump(),explicit=True),display_language=display_language)
 
     @app.get('/api/calendar/presets')
     def preset_catalog():
@@ -139,12 +139,12 @@ def install(app,repo,preparation,credentials,job):
         return repo.draft(wid,True)
 
     @app.get('/api/workspaces/{wid}/draft/calendar-preview')
-    def calendar_preview(wid:str):
+    def calendar_preview(wid:str, display_language:str='ru_RU'):
         from backend.services.calendar_presets import preview
         value=repo.draft(wid,True)
         state=value.get('candidate') or value.get('state')
         if not state:raise ValueError('Сначала создайте мир.')
-        return preview(state)
+        return preview(state,display_language=display_language)
 
     @app.get('/api/workspaces/{wid}/draft')
     def draft(wid:str,author:bool=False):return repo.draft(wid,author)
