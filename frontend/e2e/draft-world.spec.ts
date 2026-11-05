@@ -221,7 +221,14 @@ for (const format of ['json','text']) {
   const person=page.locator('.ww-dossier-dialog');
   await person.getByRole('button',{name:'Вариант всей карточки',exact:true}).click();
   await expect.poll(()=>calls.some(c=>c.id===created.id&&c.path==='/dependencies')).toBe(true);
-  await page.keyboard.press('Escape');
+  // A request event precedes mounting the nested dialog. Escape sent then can
+  // dismiss the dossier beneath it, leaving regeneration open without a parent.
+  const regeneration=page.locator('.ww-field-dialog');
+  const instruction=regeneration.getByLabel('Указание генератору',{exact:true});
+  await instruction.click();
+  await instruction.press('Escape');
+  await expect(regeneration).toHaveCount(0);
+  await expect(person).toBeVisible();
   await person.getByRole('button',{name:'Изменить fields.Внешность',exact:true}).click();
   await page.getByRole('dialog').getByLabel('Внешность',{exact:true}).fill('Зелёный шарф — identity regression.');
   await page.getByRole('button',{name:'Сохранить поле',exact:true}).click();
