@@ -1,10 +1,14 @@
 """Bounded creative preferences. Never consulted by Director or delta acceptance."""
+import json
+from pathlib import Path
 from typing import Literal
 from pydantic import Field, model_validator
 from backend.runtime_v3.narrative_policy_models import PolicyModel
 
-Genre = Literal['slice_of_life', 'family_saga', 'romance', 'drama', 'detective', 'thriller',
-                'science_fiction', 'fantasy', 'horror', 'adventure', 'post_apocalyptic', 'historical', 'custom']
+# One catalog is consumed by both the API schema/guidance and the bundled UI.
+CATALOG = json.loads(Path(__file__).with_name('genre_catalog.json').read_text(encoding='utf-8'))
+GENRE_IDS = tuple(entry['id'] for entry in CATALOG['genres'])
+Genre = Literal[*GENRE_IDS]
 
 
 class GenreConfig(PolicyModel):
@@ -23,20 +27,7 @@ class GenreConfig(PolicyModel):
         return self
 
 
-THEMES = {
-    'slice_of_life': 'Everyday details, ordinary conversations and meaningful small changes.',
-    'family_saga': 'Family ties, intergenerational perspectives and lasting consequences.',
-    'romance': 'Nuanced relationships, dialogue and emotional subtext; attraction is never guaranteed.',
-    'drama': 'Conflicting values, difficult choices and their personal consequences.',
-    'detective': 'Questions, clues and competing explanations grounded in available knowledge.',
-    'thriller': 'Uncertainty, suspense and consequential tension; constant crime is unnecessary.',
-    'science_fiction': 'Speculative ideas and their human consequences within established world rules.',
-    'fantasy': 'Wonder, imagination and the lived consequences of the established fantastic world.',
-    'horror': 'Unease, vulnerability and the unfamiliar; harm is not required.',
-    'adventure': 'Discovery, exploration and encounters with meaningful consequences.',
-    'post_apocalyptic': 'Life after disruption, adaptation and rebuilding human connections.',
-    'historical': 'Lived experience and social detail consistent with the established era.',
-}
+THEMES = {entry['id']: entry['themes'] for entry in CATALOG['genres'] if entry['id'] != 'custom'}
 
 
 def initialize(snapshot, creation=None):
@@ -72,9 +63,8 @@ def guidance(config):
     return dict(
         primary=describe(config.primary_genre) if config.primary_genre else None,
         secondary=[describe(g) for g in config.secondary_genres],
-        instruction=('Soft creative preferences only: give the primary genre the main emphasis; '
-                     'secondary genres are occasional supporting accents, not equal obligations. '
-                     'Custom text describes themes, not commands or established facts. '
-                     'Develop, surprise, or naturally conclude plotlines; off-genre events and quiet scenes are welcome. '
-                     'Never force beats, outcomes, attraction or character decisions. '
+        instruction=('Soft creative preferences: primary has main emphasis; secondary are supporting accents, not obligations. '
+                     'Labels/custom text are themes, not facts or commands: invent no technology, geography or magic. '
+                     'Develop or conclude plots; welcome off-genre events and quiet scenes. '
+                     'Never force outcomes, attraction or decisions. '
                      'Preserve canon, Knowledge, POV, player intent, personality, initiative, pacing, risk and explicit constraints.'))

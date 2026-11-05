@@ -1,3 +1,4 @@
+import {chooseGenre} from './genre-navigation';
 import {draftsMenu} from './workshop-navigation';
 import {test,expect,type Page,type TestInfo} from '@playwright/test';
 import {nav} from './navigation';
@@ -57,7 +58,7 @@ for(const skin of ['graphite','parchment'])test(`idea190: visual, panels, valida
    await page.getByRole('button',{name:'Правила и особенности',exact:true}).click();await page.locator('.ww-scroll').evaluate(el=>el.scrollTop=0);
    await page.getByRole('button',{name:'Проверить замысел',exact:true}).click();await expect(page.getByRole('region',{name:'Сводка замысла'})).toBeVisible();await capture(page,info,'production-review');await page.getByRole('button',{name:'К замыслу',exact:true}).click();
   }
- await group(page,'Жанры истории');await page.getByLabel('Основной жанр',{exact:true}).selectOption('custom');await done(page);
+ await group(page,'Жанры истории');await chooseGenre(page,'Свой жанр');await done(page);
  const before=await(await request.get('/api/workspaces')).json();
  await page.getByRole('button',{name:'Проверить замысел',exact:true}).click();
  await expect(page.getByRole('dialog')).toBeVisible();await expect(page.getByRole('dialog').getByRole('alert').first()).toContainText(/жанр/i);
@@ -94,7 +95,7 @@ test('idea190: real generation, reload, HTTP502 review recovery and author revis
  await page.getByLabel('Описание мира или текст импорта').fill('ATELIER190. Компания друзей у моря.');
  await page.getByLabel('Набор технологий связи',{exact:true}).selectOption('letters');await page.getByRole('checkbox',{name:'Мобильные звонки',exact:true}).check();
  await group(page,'Персонажи');await page.getByRole('radio',{name:'Свой состав',exact:true}).check();await page.getByLabel('Важные NPC',{exact:true}).fill('4');await page.getByLabel('Второстепенные NPC',{exact:true}).fill('7');await done(page);
- await group(page,'Жанры истории');await page.getByLabel('Основной жанр',{exact:true}).selectOption('custom');await page.getByRole('dialog').locator('textarea').fill('Драма');await done(page);
+ await group(page,'Жанры истории');await chooseGenre(page,'Свой жанр');await page.getByRole('dialog').locator('textarea').fill('Драма');await done(page);
  await group(page,'Календарь и начало');await page.getByLabel('Календарь начала игры').selectOption('custom');
  await page.getByLabel('Длины месяцев').fill('30, 40');await page.getByLabel('Названия месяцев').fill('Первый, Второй');
  await page.getByLabel('Год начала',{exact:true}).fill('2026');await page.getByLabel('Месяц начала',{exact:true}).fill('02');await page.getByLabel('День начала',{exact:true}).fill('30');

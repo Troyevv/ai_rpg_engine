@@ -134,3 +134,9 @@ start/turn/rollback snapshots. Full comparisons remain intact.
 Focused reproduction/regression: 30 passed. Frontend build and 10 relevant
 Playwright desktop/mobile checks passed. Full-suite and GitHub Actions results
 for this correction are recorded in the PR description after completion.
+
+## Expanded shared catalog (#193)
+
+See [catalog, stable IDs and interaction contract](genre-catalog.md). The issue
+contains 25 named additions, all preserved. Existing GenreConfig, persistence,
+regeneration and authoring-only boundaries above remain unchanged.

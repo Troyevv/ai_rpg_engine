@@ -1,3 +1,4 @@
+import {chooseGenre} from './genre-navigation';
 import {confirmWorkshopStart} from './workshop-navigation';
 import {generateIdea,ideaGroup,closeIdeaGroup} from './idea-navigation';
 import {workshopNav,draftsMenu} from './workshop-navigation';
@@ -9,7 +10,7 @@ test('creation settings and JSON continuation survive editor start and reload',a
   await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),workspace.id);
   await page.goto('/');await nav(page,'Создать');
   await ideaGroup(page,'Жанры истории');
-  await page.getByLabel('Основной жанр',{exact:true}).selectOption('family_saga');
+  await chooseGenre(page,'Семейная сага');
   await ideaGroup(page,'Персонажи');
   await page.getByLabel('Выразительность NPC',{exact:true}).selectOption('hyperbolized');
   await ideaGroup(page,'Темп и последствия');
