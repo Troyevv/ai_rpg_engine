@@ -720,7 +720,7 @@ export function SceneSection(props: Props & { editor: ReactNode }) {
   );
 }
 
-export function RelationsSection(props: Props & { refresh: () => void }) {
+export function RelationsSection(props: Props & { refresh: () => void; active?: boolean }) {
   const { state, save, refresh } = props;
   const controlled = actorOf(state);
   const [person, setPerson] = useState(controlled || "");
@@ -770,7 +770,7 @@ export function RelationsSection(props: Props & { refresh: () => void }) {
         <Bounded
           rows={filtered}
           render={(r, i) => (
-            <RelationshipCard key={`${r.source}:${r.target}:${i}`} state={state} relation={r} saveId={save?.id} onCharacter={props.onCharacter} change={r.change}/>
+            <RelationshipCard key={`${r.source}:${r.target}:${i}`} state={state} relation={r} saveId={save?.id} onCharacter={props.onCharacter} change={r.change} active={props.active} motionKey={JSON.stringify([person,direction])}/>
           )}
         />
       </div>
@@ -781,6 +781,7 @@ export function RelationsSection(props: Props & { refresh: () => void }) {
           </summary>
           <RelationshipEditor
             key={`${save.id}:${card.id}`}
+            active={props.active}
             save={save}
             card={card}
             refresh={refresh}

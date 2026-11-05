@@ -109,6 +109,9 @@ class DraftStorage(DraftEditorStorage):
                 from backend.services.draft_review_history import decisions
                 origin=db.execute('SELECT response_journal FROM preparation_jobs WHERE id=? AND workspace_id=?',(record['origin_job'],wid)).fetchone()
                 if origin:review_decisions=decisions(json.loads(origin['response_journal'] or '{}'),candidate_hash(raw))
+            if author and record:
+                from backend.services.draft_review_tracking import fixed_decisions
+                review_decisions+=fixed_decisions(record.get('review_tracking'),candidate_hash(raw))
             return {'games':[{k:g[k] for k in ('world','save','version_id')} for g in games],'id':wid,'name':w['name'],'revision':w['revision'],'version_id':head['id'] if head else None,
                 # Safe lineage metadata: identifies the saved version, never its private content.
                 'version_origin_job_id':record.get('origin_job') if record else None,
@@ -203,6 +206,10 @@ class DraftStorage(DraftEditorStorage):
     def _write_draft(self,db,wid,state,reason,source='',warnings=None,source_id=None,outline='',generated=False,review=None,origin_job=None):
         state=domain.prepare(state)
         record={'state':state,'source':source,'warnings':warnings or [],'outline':outline,'generated':generated}
+        head=self._draft_head(db,wid)
+        previous=json.loads(head['content']) if head else {}
+        if origin_job and previous.get('origin_job')==origin_job and previous.get('review_tracking'):
+            record['review_tracking']=previous['review_tracking']
         if origin_job:record['origin_job']=origin_job
         if review is not None:
             record['review']=dict(review)
@@ -230,6 +237,9 @@ class DraftStorage(DraftEditorStorage):
                 review=dict(review,checked_revision=old_review.get('checked_revision',job['revision']+1) if same_review else job['revision']+1)
             if previous.get('origin_job')==jid and previous.get('candidate') and previous.get('state')==value and previous.get('diagnostics')==diagnostics and previous.get('review')==review:return
             record=dict(state=value,origin_job=jid,candidate=True,source=config.get('_draft_source',config.get('_draft_input','')),warnings=[],diagnostics=diagnostics,review=review)
+            from backend.services.draft_review_tracking import observe
+            tracking=observe(previous.get('review_tracking') if previous.get('origin_job')==jid else None,value,review)
+            if tracking.get('pending') or tracking.get('fixed'):record['review_tracking']=tracking
             self._record_document(db,'world_draft',job['workspace_id'],dump(record),True,'generation_candidate',None)
             db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(job['workspace_id'],))
             db.execute('UPDATE preparation_jobs SET revision=revision+1 WHERE id=?',(jid,))

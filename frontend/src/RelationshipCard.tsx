@@ -4,6 +4,7 @@ import { CharacterAvatar } from "./Portrait";
 import { Markdown } from "./Markdown";
 import type { State, WorldRelation } from "./types";
 import { relationshipLabel } from "./lib/relationships";
+import { RelationshipMeter } from "./RelationshipMeter";
 import "./styles/relationships.css";
 
 export function RelationshipPair({
@@ -52,6 +53,8 @@ export function RelationshipCard({
   onCharacter,
   actions,
   change,
+  active = true,
+  motionKey = "",
 }: {
   state: State;
   relation: WorldRelation;
@@ -59,7 +62,10 @@ export function RelationshipCard({
   onCharacter?: (id: string) => void;
   actions?: ReactNode;
   change?: { direction: string; reason: string };
+  active?: boolean;
+  motionKey?: string;
 }) {
+  let meterIndex = 0;
   return (
     <article
       className="inspector-card inspector-relation relationship-card"
@@ -83,7 +89,7 @@ export function RelationshipCard({
           <Markdown text={relation.context} />
         </div>
       </div>
-      <div className="inspector-metrics">
+      <div className="inspector-metrics" key={JSON.stringify([saveId, relation.source_id, relation.target_id, motionKey])}>
         {Object.entries(relation.dimensions).map(([key, value]) => (
           <div key={key} data-dimension={key} className="inspector-metric">
             <div>
@@ -91,11 +97,11 @@ export function RelationshipCard({
               <strong>{typeof value === "number" ? value : "Изменение"}</strong>
             </div>
             {typeof value === "number" ? (
-              <meter
-                min={-100}
-                max={100}
+              <RelationshipMeter
                 value={value}
-                aria-label={`${relationshipLabel(key)}: ${value}; от −100 до 100`}
+                label={relationshipLabel(key)}
+                index={meterIndex++}
+                active={active}
               />
             ) : (
               <p>

@@ -254,18 +254,23 @@ html[data-theme="graphite"] .dialog-content[class*="ww-"]{--ui-font:"Workshop Sa
 body:has(.world-workshop):not(:has(.atelier-dialog)) .dialog-overlay{background:#070a09ba;backdrop-filter:blur(9px)}
 
 .ww-dossier-switcher input{width:100%;min-width:0;margin-top:8px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface-1);color:var(--text)}
+.ww-dossier-actions button{display:flex;align-items:center;gap:8px}.ww-dossier-actions svg{flex:none}
+.ww-empty-motives{grid-column:1/-1}.ww-empty-motives summary{cursor:pointer;color:var(--text-muted);padding:10px 0}.ww-empty-motives>div{padding:12px 0;border-top:1px solid var(--border)}.ww-empty-motives small,.ww-empty-motives>p{color:var(--text-muted);font-size:12px}
 @media(max-width:760px){
- .ww-dossier-aside{grid-template-areas:"portrait identity" "note note" "people people" "switch switch" "actions actions";align-items:start;gap:10px 17px}
+ .ww-dossier-aside{grid-template-areas:"portrait identity" "note note" "people people" "switch switch";align-items:start;gap:10px 17px}
  .ww-dossier-aside>.portrait-control,.ww-dossier-aside>.character-avatar{grid-area:portrait}
  .ww-dossier-identity{grid-area:identity;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
  .ww-dossier-identity h2{margin:0;font-size:24px}.ww-dossier-identity p{line-height:1.45}
  .ww-dossier-identity p:last-child{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
  .ww-dossier-identity .ww-record-badge{font-size:10px;padding:3px 7px}
  .ww-dossier-aside>.ww-dossier-illustration-note{grid-area:note;font-size:10px;margin:0}
- .ww-dossier-aside>.ww-dossier-nav{grid-area:people;margin:0;padding:2px 0}
+ .ww-dossier-aside>.ww-dossier-nav{grid-area:people;margin:0;padding:2px 0;min-width:0;align-self:center}
+ .ww-dossier-aside:has(.ww-dossier-actions)>.ww-dossier-nav{margin-right:142px}
  .ww-dossier-switcher{grid-area:switch;display:grid;grid-template-columns:1fr 1fr;gap:10px;min-width:0}
  .ww-dossier-switcher label{grid-column:auto;margin:0;min-width:0;font-size:10px}.ww-dossier-switcher input,.ww-dossier-switcher select{margin-top:4px;min-height:42px;font-size:16px;padding:8px;width:100%}
- .ww-dossier-aside>.ww-dossier-actions{grid-area:actions;margin:0;gap:4px 12px}
+ .ww-dossier-aside>.ww-dossier-actions{grid-area:people;justify-self:end;margin:0;gap:2px;flex-wrap:nowrap}
+ .ww-dossier-actions button{width:44px;height:44px;padding:0;justify-content:center;border:1px solid var(--border);border-radius:8px;background:var(--surface-1)}
+ .ww-dossier-actions button>span{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 }
 
 .ww-hero{position:relative}.ww-hero>.ww-eyebrow{padding-right:42px}

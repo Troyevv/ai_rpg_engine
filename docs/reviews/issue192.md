@@ -7,7 +7,7 @@
 - Original `world-workshop.html`: **468501 bytes**, SHA-256 **4122bcf37cbfd4c979e264e655896cc8d8783d51899a2aa9d170bd9f5c3e82e1**. Verified before edits.
 - `tests/fixtures/workshop175-reference.zip` contains only that byte-identical HTML. The preview JPG and README are excluded. No demo state or JavaScript is imported into production. The E2E server independently verifies the hash before serving it.
 - **Pre-change browser baseline was blocked.** Local Chromium terminated with `socket() failed: Operation not permitted (1)` in `process_singleton_posix.cc`. The separate cloud browser could not reach the local server (`ERR_CONNECTION_REFUSED`). No baseline PNGs were obtained. Source inspection, unit tests and build are not substitutes for baseline measurements.
-- `00-workshop192.spec.ts` captures original/current pairs at 360/390/412/430/1280/1440/1920 px and records browser/font/overflow metadata. Those captures are post-change evidence, not the missing pre-change master baseline. The later Issue 190 prototype remains the reference for “По моей идее”.
+- `00-workshop192.spec.ts` captures original/current pairs at 360×800, 390×844, 412×915, 430×932, 768×1024, 1024×768, 1280×800, 1440×1000 and 1920×1080 and records browser/font/overflow metadata. Those captures are post-change evidence, not the missing pre-change master baseline. The later Issue 190 prototype remains the reference for “По моей идее”.
 
 ## Status conventions
 
@@ -25,7 +25,7 @@
 | W08 | Stats, compact first four cards and start-scene panel retained. | Reference comparison pending. |
 | W09 | Mobile breadcrumb shows current section; generic prefix hidden. | Browser widths pending. |
 | W10 | AI sidebar action has separate visual surface. | Visual/theme acceptance pending. |
-| W11 | Navigation focuses content without scrolling; per-world/section scroll retained. | Keyboard browser verification pending. |
+| W11 | Navigation focuses content without scrolling; per-world/section scroll retained. The mobile menu defers focus until its portal closes; section changes from overview CTAs also transfer focus. | Real-frame E2E checks focus after desktop/mobile navigation; new check awaits CI. |
 | W12 | Read/action/revision states separated; field dirty/saving state reflects actual state. | Review failed/pending requests and child-dialog status propagation. |
 | W13 | Existing theme typography retained. | OPEN: measure font families, weight, widths in all required themes. |
 | W14 | Overview panel surfaces differentiated using skin tokens. | Visual/theme acceptance pending. |
@@ -35,7 +35,7 @@
 | W18 | Full cards show personality; overview stays compact; portrait contract retained. | Crop and card density need browser review. |
 | W19 | Family/organization filters use projected objective relations and roles. | Fixture/browser filter verification pending. |
 | W20 | Pagination controls omitted for one page; existing bounded 12-card pages retained. | Existing 240-character E2E retained; rerun required. |
-| W21 | Dossier hero/current-location context and character-name label. | Motive layout and browser comparison pending. |
+| W21 | Dossier hero/current-location context and character-name label. Empty motives collapse into one disclosure while retaining separate card and Runtime editors. | Added real SQLite/browser case for empty legacy/canonical intentions. Existing six skin portal pairs inspected; compact mobile actions need fresh captures. |
 | W22 | Mobile horizontal portrait strip and searchable all-person select. | Browser touch/keyboard and 240+ people pending. |
 | W23 | Isolated per-world multi-field buffers; one patch_fields transaction; explicit discard. | Backend/component tests cover atomic fields, conflict and buffers. |
 | W24 | Existing field/card generator can produce a scoped preview; apply/reject is separate. | SQLite controlled-provider test: one call, unchanged canon before decision, stale rejection. Real-provider browser acceptance pending. |
@@ -59,7 +59,7 @@
 | W42 | Start scene is first tab; world/narrative and calendar/communication are separate. | Communication E2E navigation updated; browser pending. |
 | W43 | Date/time editor previews via Runtime calendar arithmetic, including custom profiles. | Calendar unit tests added; browser invalid-date/save timing pending. |
 | W44 | Communication screen links to existing contact section. | Browser navigation pending. |
-| W45 | Distinguishes absent/stale/completed review; merges severity and paths; category counts/filter; pins checked revision. | Priority/duplicate unit test and revision/no-op/stale SQLite test. The author-only decision history now reuses accepted re-audit issue IDs, reasons and basis, distinguishes disproved/replaced, and marks changed-candidate history. SQLite and render tests verify privacy, no-write behavior and stale-address suppression. OPEN: generic fixed-issue matching across independent reports and full recovery browser acceptance. |
+| W45 | Distinguishes absent/stale/completed review; merges severity and paths; category counts/filter; pins checked revision. | Priority/duplicate unit test and revision/no-op/stale SQLite test. The author-only decision history now reuses accepted re-audit issue IDs, reasons and basis, distinguishes disproved/replaced, and marks changed-candidate history. SQLite and render tests verify privacy, no-write behavior and stale-address suppression. Structural fixes now require a previously observed typed defect and a completed report for the exact new candidate. Stable entity IDs survive array reordering and changed wording; semantic disappearance, deleted subjects, failed/stale reviews and initially false-positive findings never become fixes. Seven focused tracking tests and render tests passed. Full recovery browser acceptance remains open. |
 | W46 | Scene diagnostics route to exact scene in chronology. | Browser diagnostic fixture pending. |
 | W47 | No fabricated repair action: real recovery or existing field navigation. | Existing server recovery unchanged; browser pending. |
 | W48 | AI examples, world/version context, three steps and empty proposal area. | Component/build checks; visual pending. |
@@ -134,3 +134,14 @@ The retained traces identify two timing defects. Search mounted its destination 
 The start-settings summary now uses the same server-projected five roles as the launch dialog. Its browser test checks POV before opening the launch dialog as well as the real handoff.
 
 Reviewed the latest 360px overview and 390px places captures: the hero is bounded, four stats remain on one row, and the locations Add button is present. Source-content differences remain explicit. The evidence driver now uses the exact required viewport heights and adds 768×1024 / 1024×768 tablet boundaries; the previous seven-width, 900px-height series is historical evidence, not proof of those required dimensions. Fresh captures and full CI are required for these follow-ups.
+
+## Latest continuation — verified fixes and remaining browser checks
+
+The branch includes `master@cc326ce9f0377a1f305f9baa1dc37d82f62e4de7` (relationship-meter animations). This synchronizes the working branch; PR 195 is not merged.
+
+- W45 stores observed structural fix history in author-only draft metadata, outside world canon. The original typed review predicates remain the single verifier. Same-job manual versions retain history; a new generation resets it. Repeated identical completed reports do not create versions or duplicate fixes. No migration or extra LLM call is introduced.
+- Section entry animation now also wraps review and AI screens. A new browser test records actual opacity/translation/animation frames for original/current section and dossier transitions, reduced motion and mobile menu movement. It also verifies Escape, portal removal and restored focus. The test is added, not yet claimed passed.
+- Inspected Graphite/Parchment/Cyberpunk dossier pairs on desktop and mobile from `3d8ac38`. The repaired mobile identity rows no longer overlap. Search and the three text actions still made the mobile header unnecessarily tall; mobile actions now share the avatar row as 44px icon buttons with accessible names. The original full text remains on desktop. A geometry assertion checks that the strip and actions do not overlap and the header leaves room for content. Fresh screenshots are required.
+- Added W21/W22 browser coverage at 360×800 / 390×844 / 430×932 for empty motives, both independent editors, a long-name search, preserving the active tab while changing characters, avatar navigation and focus return.
+
+Local validation for this continuation: the tracking/completeness/recovery/initial-draft/workshop backend selection passed **78 tests**; frontend passed **137 tests**; production build succeeded. Local browser execution remains blocked before any page assertion by Chromium's Unix-socket sandbox error. GitHub Actions is the browser execution environment; no physical Android/IME or real-provider acceptance is inferred from it.

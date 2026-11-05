@@ -36,12 +36,14 @@ export function RelationsView({
   save,
   refresh,
   onCharacter,
+  active = true,
 }: {
   state: State;
   actor?: string;
   save?: Save | null;
   refresh?: () => void;
   onCharacter?: (id: string) => void;
+  active?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [person, setPerson] = useState("");
@@ -144,6 +146,8 @@ export function RelationsView({
             saveId={save?.id}
             onCharacter={onCharacter}
             change={r.change}
+            active={active}
+            motionKey={JSON.stringify([person, direction])}
             actions={actions?.(r)}
           />
         ))}

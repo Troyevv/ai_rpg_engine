@@ -71,7 +71,7 @@ test('W01–W69 reference/current browser evidence at required viewport widths',
  await info.attach('comparison-metadata',{body:JSON.stringify({browser:browser.version(),referenceSHA256:'4122bcf37cbfd4c979e264e655896cc8d8783d51899a2aa9d170bd9f5c3e82e1',note:'Current branch and original reference; not pre-change master baseline or automatic visual acceptance.',metadata},null,2),contentType:'application/json'});
  // Theme portals inherit root tokens; switching must not mutate the world.
  const before=await(await request.get(`/api/workspaces/${w.id}/draft?author=true`)).json();
- await page.setViewportSize({width:info.project.name==='desktop'?1440:390,height:900});await ref.setViewportSize({width:info.project.name==='desktop'?1440:390,height:900});
+ const portalViewport=info.project.name==='desktop'?{width:1440,height:1000}:{width:390,height:844};await page.setViewportSize(portalViewport);await ref.setViewportSize(portalViewport);
  for(const theme of ['graphite','parchment','cyberpunk']){
   await ref.locator('[data-action="navigate"][data-route="characters"]').first().evaluate((el:HTMLElement)=>el.click());
   await ref.locator('[data-action="skins"]').first().evaluate((el:HTMLElement)=>el.click());
@@ -87,7 +87,11 @@ test('W01–W69 reference/current browser evidence at required viewport widths',
   await page.keyboard.press('Escape');await expect(page.getByRole('dialog',{name:'Оформление мастерской',exact:true})).toHaveCount(0);if(info.project.name==='mobile'){await page.keyboard.press('Escape');await expect(page.locator('.ww-menu-dialog')).toHaveCount(0);}
   await workshopNav(page,'Персонажи');await page.locator('.ww-character-card').first().click();
   await expect(page.locator('.ww-dossier-dialog')).toBeVisible();await page.evaluate(()=>document.fonts.ready);
-  if(info.project.name==='mobile'){const boxes=await page.locator('.ww-dossier-identity').evaluate(el=>Array.from(el.children).map(c=>{const b=c.getBoundingClientRect();return {top:b.top,bottom:b.bottom}}));for(let i=1;i<boxes.length;i++)expect(boxes[i].top,'identity rows must not overlap').toBeGreaterThanOrEqual(boxes[i-1].bottom);const input=page.getByLabel('Найти персонажа в досье');await expect(input).toBeVisible();await expect(page.getByLabel('Переключить досье')).toBeVisible();}
+  if(info.project.name==='mobile'){const boxes=await page.locator('.ww-dossier-identity').evaluate(el=>Array.from(el.children).map(c=>{const b=c.getBoundingClientRect();return {top:b.top,bottom:b.bottom}}));for(let i=1;i<boxes.length;i++)expect(boxes[i].top,'identity rows must not overlap').toBeGreaterThanOrEqual(boxes[i-1].bottom);const input=page.getByLabel('Найти персонажа в досье');await expect(input).toBeVisible();await expect(page.getByLabel('Переключить досье')).toBeVisible();
+   const layout=await page.locator('.ww-dossier-aside').evaluate(el=>{const nav=el.querySelector('.ww-dossier-nav')!.getBoundingClientRect(),actions=el.querySelector('.ww-dossier-actions')!.getBoundingClientRect();return {navRight:nav.right,actionsLeft:actions.left,bottom:el.getBoundingClientRect().bottom,viewport:innerHeight,buttons:Array.from(el.querySelectorAll('.ww-dossier-actions button')).map(b=>({width:b.getBoundingClientRect().width,height:b.getBoundingClientRect().height}))}});
+   expect(layout.navRight).toBeLessThanOrEqual(layout.actionsLeft);expect(layout.bottom).toBeLessThan(layout.viewport*.6);
+   for(const b of layout.buttons){expect(b.width).toBeGreaterThanOrEqual(44);expect(b.height).toBeGreaterThanOrEqual(44)}
+  }
   await page.screenshot({path:info.outputPath(`skin-${theme}-dossier.png`),animations:'disabled'});
   const portal=await page.locator('.ww-dossier-dialog').evaluate(el=>{const style=getComputedStyle(el);const overlay=document.querySelector('.dialog-overlay');return {font:style.fontFamily,background:style.backgroundColor,color:style.color,overlay:overlay?{background:getComputedStyle(overlay).backgroundColor,blur:getComputedStyle(overlay).backdropFilter}:null}});
   expect(portal.overlay?.blur).toBe('blur(9px)');

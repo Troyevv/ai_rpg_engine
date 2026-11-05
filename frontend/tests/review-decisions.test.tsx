@@ -9,3 +9,8 @@ it('distinguishes explicit outcomes and never links old indexed addresses into a
  expect(html).toContain('/campaign/title');
  expect(html).not.toContain('Исправлено');
 });
+it('labels only an explicitly verified structural outcome as fixed',()=>{
+ const html=renderToStaticMarkup(<ReviewDecisions items={[{issue_id:'fixed',signature:'s',message:'Отсутствовало значение',resolution:'fixed',reason:'Поле теперь заполнено.',paths:['/campaign/title'],applies_to_current:true}]} links={paths=><a href="#">{paths.join(',')}</a>}/>);
+ expect(html).toContain('Исправлено и проверено');expect(html).toContain('Поле теперь заполнено.');expect(html).toContain('/campaign/title');
+ expect(html).toContain('Исчезновение замечания из отчёта само по себе не считается исправлением');
+});

@@ -574,7 +574,7 @@ export function Inspector({
                     </>
                   )}
                   {id === "Отношения" && (
-                    <RelationsSection {...props} refresh={refresh} />
+                    <RelationsSection {...props} refresh={refresh} active={open&&panel==='Отношения'} />
                   )}
                   {id === "Тайны" && <SecretsSection {...props} target={storyTarget?.slot_id} active={open&&panel==='Тайны'} />}
                   {id === "Сюжет" && <ThreadsSection {...props} target={storyTarget?.thread_id} />}

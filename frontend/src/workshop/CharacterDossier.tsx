@@ -1,4 +1,5 @@
 import {Children,useId,useState,type ReactNode} from 'react';
+import {Pencil,Sparkles,Trash2} from 'lucide-react';
 import {Dialog,DialogContent,DialogTitle,DialogDescription} from '../components/ui/dialog';
 import {CharacterAvatar,PortraitControl} from '../Portrait';
 import {SectionTabs} from '../components/ui/section-tabs';
@@ -27,7 +28,7 @@ export function CharacterDossier({open,onClose,card,characters,wid,author,locked
  const appearance=actor.appearance as {items?:Item;legacy_text?:string}|undefined;
  const personality=actor.personality as {items?:Item;evidence?:Item}|undefined;
  const hasValues=filled(actor.values);
- const entries:ReactNode[]=[];
+ const entries:ReactNode[]=[],emptyMotives:ReactNode[]=[];
  if(card){
   if(tab==='connections')entries.push(...connections);
   else if(tab==='knowledge')entries.push(...knowledge);
@@ -37,8 +38,11 @@ export function CharacterDossier({open,onClose,card,characters,wid,author,locked
     if(author||card.aliases?.length)entries.push(row('character',card.id,'aliases',card.aliases||[]));
    }
    for(const [key,value] of Object.entries(card.fields)){
-    if(cardSection(key)===tab && (author||filled(value)) && !(dynamic[key]&&filled(actor[dynamic[key]])))
-     entries.push(row('character',card.id,'fields.'+key,value));
+    if(cardSection(key)===tab && (author||filled(value)) && !(dynamic[key]&&filled(actor[dynamic[key]]))){
+     const field=row('character',card.id,'fields.'+key,value);
+     if(tab==='goals'&&!filled(value))emptyMotives.push(<div key={'card:'+key}><small>Описание в карточке</small>{field}</div>);
+     else entries.push(field);
+    }
    }
    const mechanics:ReactNode[]=[];
    for(const key of actorFields){
@@ -47,13 +51,16 @@ export function CharacterDossier({open,onClose,card,characters,wid,author,locked
     if(key==='personality'&&!filled(personality?.items)&&!filled(personality?.evidence))continue;
     if(key==='values'&&!hasValues)continue;
     const dest=tab==='life'&&!['situation','location','emotion','physical_state'].includes(key)?mechanics:entries;
-    dest.push(row('actor',card.id,key,actor[key]??null));
+    const field=row('actor',card.id,key,actor[key]??null);
+    if(tab==='goals'&&!filled(actor[key]))emptyMotives.push(<div key={'actor:'+key}><small>Записи игрового мира</small>{field}</div>);
+    else dest.push(field);
    }
    if(tab==='profile'&&appearance&&(filled(appearance.items)||appearance.legacy_text))
     entries.push(row('actor',card.id,'appearance',{items:appearance.items||{},legacy_text:appearance.legacy_text||''},false));
    if(tab==='personality'&&author&&!hasValues)
     entries.push(<button key="add-values" className="ww-soft" disabled={locked} onClick={onAddValues}>Добавить ценности</button>);
    if(tab==='life')entries.push(...life,...mechanics);
+   if(emptyMotives.length)entries.push(<details className="ww-empty-motives" key="empty-motives"><summary>Незаполненные мотивы · {emptyMotives.length}</summary><p>Описание в карточке и записи игрового мира редактируются отдельно.</p>{emptyMotives}</details>);
   }
  }
  const rows=Children.toArray(entries),index=characters.findIndex(c=>c.id===card?.id);
@@ -70,8 +77,8 @@ export function CharacterDossier({open,onClose,card,characters,wid,author,locked
     <div className="ww-dossier-nav">{characters.slice(Math.max(0,index-3),Math.max(0,index-3)+7).map(c=>
      <button key={c.id} onClick={()=>onSelect(c.id)} aria-label={`Досье ${c.name}`} aria-pressed={c.id===card.id}>
       <CharacterAvatar subject={c} workspaceId={wid} author={author} size={32}/></button>)}</div>
-    {author&&<div className="ww-dossier-actions"><button disabled={locked} onClick={onEdit}>Редактировать карточку</button><button disabled={locked} onClick={onRegenerate}>Вариант всей карточки</button>
-     <button disabled={locked} onClick={onDelete}>Удалить персонажа</button></div>}
+    {author&&<div className="ww-dossier-actions"><button disabled={locked} onClick={onEdit} title="Редактировать карточку"><Pencil aria-hidden="true" size={18}/><span>Редактировать карточку</span></button><button disabled={locked} onClick={onRegenerate} title="Вариант всей карточки"><Sparkles aria-hidden="true" size={18}/><span>Вариант всей карточки</span></button>
+     <button disabled={locked} onClick={onDelete} title="Удалить персонажа"><Trash2 aria-hidden="true" size={18}/><span>Удалить персонажа</span></button></div>}
    </aside><section className="ww-dossier-body">
     <SectionTabs tablist panelId={panel} label="Разделы досье" value={tab} onChange={setTab} items={tabs.map(([id,label])=>({id,label}))}/>
     <div role="tabpanel" id={panel} aria-labelledby={`${panel}-tab-${tab}`} className="ww-dossier-fields" key={card.id+tab}>{rows.length?rows:<p className="ww-dossier-note">{unavailable[tab]}</p>}</div>
