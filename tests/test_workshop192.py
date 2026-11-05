@@ -150,3 +150,29 @@ def test_date_selection_uses_runtime_calendar_without_writing(custom):
     assert result['date']=='2024-02-29' and result['time']=='09:00'
     assert clock==before
     with pytest.raises(ValueError):time_selection(clock,clock['minute'],'2024-02-31')
+
+
+def test_whole_card_preview_preserves_identity_and_requires_decision(api):
+    client,_=api;wid,url,before=imported(client)
+    card=before['state']['characters'][0];cid=card['id']
+    proposed={key:deepcopy(card.get(key,[] if key=='aliases' else '')) for key in ('name','aliases','fields')}
+    proposed['fields']['Характер']+=' Любит ранние прогулки.'
+    calls=[]
+    def provider(**kwargs):
+        calls.append(kwargs);kwargs['on_finish']('stop')
+        yield json.dumps({'value':proposed},ensure_ascii=False)
+    with patch('backend.services.preparation.chat_stream',side_effect=provider):
+        response=client.post(url+'/generate',json={'revision':before['revision'],'preview':True,'task':'character','kind':'character','entity_id':cid,'config':dict(REMOTE,context_length=131072,max_tokens=4000),'api_key':'fixture-key'})
+        assert response.status_code==200,response.text
+        job=wait_job(client,response.json()['id'])
+    assert job['status']=='saved' and job['phase']=='preview',job
+    staged=client.get(url+'?author=true').json();assert staged['state']==before['state'];assert staged['pending_editor']
+    endpoint=url+'/field-proposals/'+job['id']
+    preview=client.get(endpoint+'?author=true').json();assert preview['value']==proposed
+    response=client.post(endpoint,json={'revision':before['revision'],'decision':'accept','accept_warnings':True})
+    assert response.status_code==200,response.text
+    final=response.json();assert final['revision']==before['revision']+1
+    assert final['state']['world']==before['state']['world']
+    result=next(c for c in final['state']['characters'] if c['id']==cid)
+    assert result==dict(card,**proposed);assert len(calls)==1;assert not final['pending_editor']
+    assert client.post(endpoint,json={'revision':final['revision'],'decision':'accept','accept_warnings':True}).status_code==409

@@ -21,9 +21,9 @@ test('player reads ordinary NPC and world records without receiving the hidden p
  await page.getByLabel('Поиск персонажей').fill('Максим');
  await page.getByRole('button',{name:'Досье Максим Ковалёв',exact:true}).click();
  const dossier=page.getByRole('dialog',{name:'Досье персонажа'});
- await dossier.getByRole('button',{name:'Личность'}).click();
+ await dossier.getByRole('tab',{name:'Личность'}).click();
  await expect(dossier).toContainText('Старший брат Сони, вырос в Сосновке.');
- await dossier.getByRole('button',{name:'Цели'}).click();
+ await dossier.getByRole('tab',{name:'Цели'}).click();
  await expect(dossier).toContainText('Закрыть накопившиеся дела до возвращения в Тверь.');
  await dossier.getByRole('tab',{name:'Сейчас',exact:true}).click();
  await expect(dossier).toContainText('менеджер по закупкам',{ignoreCase:true});

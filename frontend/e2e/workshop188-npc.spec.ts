@@ -24,7 +24,7 @@ test(`recorded sister ${cid}: unchanged draft, preview, confirmation and Runtime
  await expect(editor.getByRole('button',{name:'Применить пакет…',exact:true})).toBeEnabled();
  const preview=await(await request.get(url+'/edits?author=true')).json();expect(preview.edits[0].proposal.changes).toHaveLength(cid==='vera'?15:13);
  expect((await(await request.get(url+'?author=true')).json()).state).toEqual(before.state);
- const vera=editor.locator('.ai-diff-entity').filter({hasText:name}).first();await vera.locator(':scope > summary').click();await expect(vera).toContainText(name);
+ const vera=editor.locator('.ai-diff-entity').filter({hasText:name}).first();if(await vera.getAttribute('open')===null)await vera.locator(':scope > summary').click();await expect(vera).toHaveAttribute('open','');await expect(vera).toContainText(name);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:test.info().outputPath(`sister-preview-${info.project.name}.png`),scale:'css'});
  await editor.getByRole('button',{name:'Применить пакет…',exact:true}).click();await page.keyboard.press('Escape');

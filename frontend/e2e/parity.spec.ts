@@ -102,7 +102,7 @@ test("streaming survives disconnect; stop keeps a draft and cannot save it as a 
   const w = await (
     await request.post("/api/workspaces", { data: { name: "Остановка" } })
   ).json();
-  await page.addInitScript((id) => localStorage.setItem("workspace", id), w.id);
+  await page.addInitScript((id) => {localStorage.setItem("workspace", id);localStorage.setItem("draftWorkspace",id)}, w.id);
   await page.goto("/");
   await nav(page,'Создать');
   await creationMethod(page,'Со Сценаристом');

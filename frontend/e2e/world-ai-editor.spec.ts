@@ -37,7 +37,7 @@ for(const skin of ['graphite','parchment']) test(`AI editor preview, confirmatio
  await expect(editor.getByLabel('Что изменить в мире?')).toHaveValue(instruction);
  await expect(editor.getByRole('heading',{name:'Ожидает решения',exact:true})).toBeVisible();
  await expect(editor.getByLabel('Состав изменений')).toContainText('Добавление: 9');
- await editor.locator('.ai-diff-entity').first().locator(':scope > summary').click();
+ await expect(editor.locator('.ai-diff-entity').first()).toHaveAttribute('open','');
  await expect(editor.locator('.ai-diff-values').first()).toContainText('До');
  await expect(editor.locator('.ai-diff-values').first()).toContainText('Вера');
  await expect(page.locator('html')).toHaveAttribute('data-theme',skin);

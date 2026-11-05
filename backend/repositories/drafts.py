@@ -138,7 +138,7 @@ class DraftStorage(DraftEditorStorage):
             config=json.loads(job['config_json']);head=self._draft_head(db,job['workspace_id'])
             if not config.get('_preview_only') or config['_draft_task'] not in ('field','character'):raise ValueError('Нет адресного предложения.')
             target=config['_draft_target'];state=json.loads(head['content'])['state'];item=domain.entity(state,target['kind'],target['id'])
-            before={key:item[key] for key in ('name','aliases','fields')} if config['_draft_task']=='character' else item.get('fields',{}).get(target['field'][7:]) if target['field'].startswith('fields.') else item.get(target['field'])
+            before={key:item.get(key,[] if key=='aliases' else '') for key in ('name','aliases','fields')} if config['_draft_task']=='character' else item.get('fields',{}).get(target['field'][7:]) if target['field'].startswith('fields.') else item.get(target['field'])
             journal=json.loads(job['response_journal'] or '{}')
             journal['field_proposal']={'status':'preview','base_version':head['id'],'target':target,'before':before,'value':value,'warnings':warnings}
             db.execute("UPDATE preparation_jobs SET response_journal=?,status='saved',phase='preview' WHERE id=?",(dump(journal),jid))

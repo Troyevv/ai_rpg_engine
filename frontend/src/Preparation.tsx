@@ -24,11 +24,11 @@ import {
   DialogTitle,
   DialogDescription,
 } from "./components/ui/dialog";
-type PreparationProps={prefs:Preferences;apiKey:string;onWorld:(id:number)=>void;onDraft?:(id:string)=>void;worldSettings?:ReactNode;initialWorkspaceId?:string};
+type PreparationProps={prefs:Preferences;apiKey:string;onWorld:(id:number)=>void;onDraft?:(id:string)=>void;worldSettings?:ReactNode;initialWorkspaceId?:string;onWorkspaceChange?:(id:string)=>void};
 export function Preparation(props:PreparationProps){
  const [selected,setSelected]=useState(props.initialWorkspaceId??localStorage.getItem("workspace")??"");
  useEffect(()=>{if(props.initialWorkspaceId!==undefined)setSelected(props.initialWorkspaceId)},[props.initialWorkspaceId]);
- return <PreparationWorkspace key={selected} {...props} selected={selected} onSelect={setSelected}/>;
+ return <PreparationWorkspace key={selected} {...props} selected={selected} onSelect={id=>{setSelected(id);props.onWorkspaceChange?.(id)}}/>;
 }
 function PreparationWorkspace({
   prefs,
@@ -104,7 +104,7 @@ function PreparationWorkspace({
         api_key: apiKey,
       });
       if(alive.current)setWorkspace((w) => (w ? { ...w, job: j } : w));
-      if (kind === "idea") {sessionStorage.removeItem(inputKey);if(alive.current)setText("")}
+      if (kind === "idea"&&sessionStorage.getItem(inputKey)===text) {sessionStorage.removeItem(inputKey);if(alive.current)setText("")}
     });
   return (
     <main className="preparation">
@@ -141,8 +141,7 @@ function PreparationWorkspace({
           onClick={() =>
             run(async () => {
               const w = await api<Workspace>("/workspaces", { name });
-              setList((items) => [{ id: w.id, name: w.name }, ...items]);
-              setId(w.id);
+              if(alive.current){setList((items) => [{ id: w.id, name: w.name }, ...items]);setId(w.id)}
             })
           }
         >

@@ -7,7 +7,7 @@
 - Original `world-workshop.html`: **468501 bytes**, SHA-256 **4122bcf37cbfd4c979e264e655896cc8d8783d51899a2aa9d170bd9f5c3e82e1**. Verified before edits.
 - `tests/fixtures/workshop175-reference.zip` contains only that byte-identical HTML. The preview JPG and README are excluded. No demo state or JavaScript is imported into production. The E2E server independently verifies the hash before serving it.
 - **Pre-change browser baseline was blocked.** Local Chromium terminated with `socket() failed: Operation not permitted (1)` in `process_singleton_posix.cc`. The separate cloud browser could not reach the local server (`ERR_CONNECTION_REFUSED`). No baseline PNGs were obtained. Source inspection, unit tests and build are not substitutes for baseline measurements.
-- `workshop192.spec.ts` captures original/current pairs at 360/390/412/430/1280/1440/1920 px and records browser/font/overflow metadata. Those captures are post-change evidence, not the missing pre-change master baseline. The later Issue 190 prototype remains the reference for “По моей идее”.
+- `00-workshop192.spec.ts` captures original/current pairs at 360/390/412/430/1280/1440/1920 px and records browser/font/overflow metadata. Those captures are post-change evidence, not the missing pre-change master baseline. The later Issue 190 prototype remains the reference for “По моей идее”.
 
 ## Status conventions
 
@@ -75,7 +75,7 @@
 | W58 | Existing generator panels/presets and validation retained. | Existing Idea 190 tests retained. |
 | W59 | Existing progress and recovery remain server-driven. | Existing backend recovery tests in full suite; E2E pending. |
 | W60 | Existing import/generation transitions retained. | Full related E2E pending; no visual acceptance inferred. |
-| W61 | Scenario editor receives explicit wid, isolated keyed instance, common workshop shell. | Late-response/browser navigation test still needed. |
+| W61 | Scenario editor receives explicit wid, isolated keyed instance, common workshop shell. | Two-world browser identity/buffer test added; late-response acceptance pending. |
 | W62 | Scenario input buffer per wid; Radix summary-deletion confirmation. | Browser cancel/reload/isolation pending. |
 | W63 | Imported JSON remains editable in text buffer. | Build; browser invalid-file correction pending. |
 | W64 | Pasted valid JSON array rejected; bracket-prefixed Markdown retained as text. | Unit test. |
@@ -88,10 +88,10 @@
 ## Validation
 
 - Production TypeScript/Vite build succeeded (existing large-chunk warning remains).
-- Existing frontend suite: 124 passed; new component suite: 7 passed.
+- Final frontend suite: **131 passed** (19 files).
 - Focused backend suites: 64 passed after fixing the new-card removal/manual-path regression.
-- Full backend run and final focused calendar checks: pending at this checkpoint.
-- Playwright test discovery and execution: pending at this checkpoint. No E2E success, visual acceptance, physical phone testing or real DeepSeek result is claimed.
+- Full backend run: **3203 passed, 1 skipped** in 917.64 s. Final targeted calendar/projection/Runtime handoff suite: **60 passed**.
+- Playwright discovery: **642 tests / 92 files**. Remote CI execution is in progress. No E2E success, visual acceptance, physical phone testing or real DeepSeek result is claimed.
 
 ## Remaining acceptance gate
 

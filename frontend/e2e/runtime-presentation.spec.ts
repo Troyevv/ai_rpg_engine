@@ -14,13 +14,14 @@ test('populated Runtime world has names, typed values, calendar, edit and reload
 
  await workshopNav(page,'Сцена и правила');
  await expect(page.getByText('Пятница, 23 октября 2026, 08:00',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Календарь и связь',exact:true}).click();
  const effective=page.getByRole('region',{name:'Действующий календарь'});
  await expect(effective).toContainText('Понедельник');
  await expect(effective).toContainText('февраля: 28');
  await expect(effective).toContainText('октября: 31');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth));
  await expect(page.getByText('[object Object]',{exact:false})).toHaveCount(0);
- await page.locator('.workshop-start').scrollIntoViewIfNeeded();
+ await effective.scrollIntoViewIfNeeded();
  await page.screenshot({path:`test-results/runtime-calendar-${info.project.name}.png`,fullPage:true});
  await workshopNav(page,'Персонажи');
  await page.locator('.ww-character-card').first().click();
