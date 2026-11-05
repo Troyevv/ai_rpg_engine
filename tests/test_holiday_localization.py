@@ -1,6 +1,5 @@
 """Pinned-library names, stable v1 identities and read-only HTTP projections (#174)."""
 from copy import deepcopy
-from datetime import date
 from hashlib import sha256
 import json
 from unittest.mock import patch
@@ -71,7 +70,7 @@ def test_subdivision_observed_and_localized_rules(country,subdivision,locale):
 
 
 def test_multi_holiday_date_keeps_name_identity_pairing():
-    # Two real holidays on the same date; sorting changes in French.
+    # Two real holidays on the same date retain separate identities.
     r=regional('FR',subdivision='973')
     day='2030-06-10'
     en={e['name']:e for e in rows(r,year=2030) if e['date']==day}
@@ -79,6 +78,23 @@ def test_multi_holiday_date_keeps_name_identity_pairing():
     assert len(fr)==len(en)==2
     assert fr[en['Abolition of Slavery']['id']]['name']=="Abolition de l'esclavage"
     assert fr[en['Whit Monday']['id']]['name']=='Lundi de Pentecôte'
+
+
+def test_multi_holiday_sort_order_changes_and_ambiguous_catalog_alias():
+    r=regional('IT',subdivision='CB')
+    en={e['name']:e for e in rows(r) if e['date']=='2026-11-01'}
+    localized={e['id']:e for e in rows(r,'it-IT')}
+    assert localized[en["All Saints' Day"]['id']]['name']=='Ognissanti'
+    assert localized[en['National Unity Day']['id']]['name']=="Giorno dell'unità nazionale"
+    r['overrides']=[dict(id=en["All Saints' Day"]['id'],removed=True),
+                    dict(id=en['National Unity Day']['id'],name='Author label',date='2026-11-02')]
+    changed={e['id']:e for e in rows(r,'it-IT')}
+    assert en["All Saints' Day"]['id'] not in changed
+    assert changed[en['National Unity Day']['id']]['name']=='Author label'
+    assert changed[en['National Unity Day']['id']]['date']=='2026-11-02'
+    # The English catalog maps multiple native msgids to Saint George's Day.
+    # Only the candidate occurring in this subdivision/date may be selected.
+    assert next(e for e in localized.values() if e['date']=='2026-04-23')['name']=='San Giorgio'
 
 
 def test_overrides_before_localization_and_cross_year_move():

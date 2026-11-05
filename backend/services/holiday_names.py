@@ -41,15 +41,16 @@ def _translator(source, target):
         if localized == key and target.language != target.default_language and key != english:
             continue
         pairs.setdefault(english, set()).add(localized)
-    direct = {key: next(iter(values)) for key, values in pairs.items() if len(values) == 1}
     templates = [(key, re.compile(re.escape(key).replace('%s', '(.+)')), value)
-                 for key, value in direct.items() if key.count('%s') == value.count('%s') == 1]
+                 for key, values in pairs.items() for value in sorted(values)
+                 if key.count('%s') == value.count('%s') == 1]
 
-    def translate(name, depth=0):
-        if name in direct:
-            return direct[name]
+    def candidates(name, depth=0):
+        if name in pairs:
+            return pairs[name]
         if depth > 2:
-            return name
+            return {name}
+        results = set()
         for source_template, pattern, template in templates:
             match = pattern.fullmatch(name)
             if not match:
@@ -60,13 +61,19 @@ def _translator(source, target):
             date_format = getattr(source, 'substituted_date_format', None)
             if date_format and source_template == source.tr(getattr(source, 'substituted_label', '')):
                 try:
-                    inner = datetime.strptime(inner, source.tr(date_format)).strftime(target.tr(date_format))
+                    value = datetime.strptime(inner, source.tr(date_format)).strftime(target.tr(date_format))
                 except ValueError:
-                    return name
+                    continue
+                results.add(template % value)
             else:
-                inner = translate(inner, depth + 1)
-            return template % inner
-        return name
+                results.update(template % value for value in candidates(inner, depth + 1))
+        return results or {name}
+
+    def translate(name, allowed=None):
+        values = candidates(name)
+        if allowed is not None:
+            values = values & allowed
+        return next(iter(values)) if len(values) == 1 else name
     return translate
 
 
@@ -81,7 +88,7 @@ def _names(country, subdivision, years, observed, locale):
     for day in english:
         translated = set(target.get_list(day))
         for name in english.get_list(day):
-            candidate = translate(name)
+            candidate = translate(name, translated)
             # Only names actually produced by the same pinned rule set can be
             # displayed. Ambiguous/missing entries deterministically stay English.
             result[day.isoformat(), name] = candidate if candidate in translated else name
