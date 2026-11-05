@@ -372,7 +372,7 @@ html[data-theme=graphite] .atelier-scope{--panel:#20221e;--sub:#191c18;--ink:#f1
 .atelier-scope .field-name{padding:0;margin:0}
 .atelier-scope .editor-tools label{display:flex;align-items:center;gap:6px;font-size:11px;padding:0;margin:0}
 .atelier-scope .editor-shell textarea{margin:0;box-shadow:none;min-height:95px}
-.atelier-scope .name-input{height:36px;min-height:36px}
+
 .atelier-scope .param small{white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}
 .atelier-scope .param:focus-visible small{display:block;-webkit-line-clamp:unset}
 .atelier-scope .comm-body{margin:0;border:0;min-width:0}
@@ -398,11 +398,11 @@ html[data-theme=graphite] .atelier-scope{--panel:#20221e;--sub:#191c18;--ink:#f1
 .dialog-content.atelier-scope.drawer[data-state=closed]{animation:atelier-slide-out var(--atelier-fast) ease-in}
 body:has(.atelier-dialog) .dialog-overlay{backdrop-filter:blur(3px)}
 .atelier-scope .sp{gap:20px}
-.atelier-scope .atelier-fields,.atelier-scope .genre-settings,.atelier-scope .atelier-fields>fieldset{border:0;padding:0;margin:0;min-width:0;display:flex;flex-direction:column;gap:18px}
+.atelier-scope .atelier-fields,.atelier-scope .genre-settings,.atelier-scope .atelier-fields>fieldset{border:0;padding:0;margin:0;min-width:0;display:flex;flex-direction:column;gap:22px}
 .atelier-scope .genre-settings>legend,.atelier-scope .atelier-fields>fieldset>legend{display:none}
 .atelier-scope .sp :is(label,fieldset){min-width:0}
 .atelier-scope .sp label:not(.sp-chip):not(.sp-choice){display:flex;align-items:stretch;flex-direction:column;gap:7px;padding:0;margin:0;font:600 14px/1.5 var(--ui-font);color:var(--ink)}
-.atelier-scope .sp :is(input:not([type=checkbox]):not([type=radio]),select,textarea){display:block;width:100%;min-width:0;min-height:44px;color:var(--ink);background:var(--sub);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:0;font:400 14px/1.5 var(--ui-font);box-shadow:none}
+.atelier-scope .sp input:not([type=checkbox]):not([type=radio]),.atelier-scope .sp select,.atelier-scope .sp textarea{display:block;width:100%;min-width:0;min-height:44px;color:var(--ink);background-color:var(--sub);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:0;font:400 14px/1.5 var(--ui-font);box-shadow:none}
 .atelier-scope .sp select{appearance:none;padding-right:38px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23c7b497' stroke-width='1.6'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-position:right 12px center;background-repeat:no-repeat}
 .atelier-scope .sp textarea{min-height:110px;resize:vertical}
 .atelier-scope .sp :is(p,small){font-size:13px;color:var(--muted);font-weight:400;line-height:1.6;margin:0}
@@ -474,3 +474,29 @@ body:has(.atelier-dialog) .dialog-overlay{backdrop-filter:blur(3px)}
 .ww-content:has(.atelier-generation)>.workshop-result{padding:0 clamp(18px,3vw,48px) 20px}
 .ww-content:has(.atelier-generation)>.ww-request-details{margin-inline:clamp(18px,3vw,48px)}
 @keyframes atelier-reveal{from{opacity:.4;translate:0 5px}to{opacity:1;translate:0 0}}
+.atelier-scope .atelier-fields fieldset:not(.genre-secondary):not(.sp-block){border:0;padding:0;margin:0;min-width:0;display:flex;flex-direction:column;gap:22px}
+.atelier-scope .sp .sp-chip>span{font-weight:400}
+
+/* Explicit scope beats shared form and utility selectors, without changing the shell. */
+.atelier-scope .overline{text-decoration:none}
+.dialog-content.atelier-scope.folio-modal{max-width:none}
+.dialog-content.atelier-scope.folio-modal.wide{width:min(910px,calc(100vw - 36px))}
+.atelier-scope .sp fieldset.genre-secondary.sp-block{display:flex;flex-wrap:wrap;gap:7px}
+.atelier-scope .sp label:not(.sp-chip):not(.sp-choice):has(>input[type=checkbox]){flex-direction:row;align-items:center;font-weight:400;font-size:13px;color:var(--muted)}
+.atelier-scope .sp input[type=checkbox]{width:17px;height:17px;flex:none;min-height:0;margin:0}
+.atelier-scope .sp .sp-chip input{position:absolute;width:1px;height:1px;opacity:0}
+.atelier-scope .sp fieldset>legend{font:600 14px/1.5 var(--ui-font);color:var(--ink);margin-bottom:10px;padding:0}
+.atelier-scope .comm-disclosure>.atelier-disclosure-trigger{font-weight:400}
+.atelier-scope .sp .calendar-date-time{display:grid;grid-template-columns:1fr 1fr;gap:10px;min-width:0}
+.atelier-scope .sp .sp-sample{margin:15px 0;padding:12px 16px;border-left:2px solid var(--gold)}
+@media(max-width:760px){
+ .dialog-content.atelier-scope.folio-modal.drawer{width:calc(100vw - 34px)}
+ .atelier-scope .hero-copy{padding-top:0}
+ .atelier-scope .editor-shell textarea{min-height:90px}
+}
+
+.atelier-scope .sp textarea{min-height:110px}
+.atelier-scope .sp textarea[aria-label="География"]{min-height:148px}
+.atelier-scope .dialog-title:focus{outline:none}
+.dialog-content.atelier-scope .dialog-close{min-width:36px;min-height:36px}
+@media(max-width:760px){.dialog-content.atelier-scope .dialog-close{min-width:44px;min-height:44px}}

@@ -4,12 +4,14 @@ import {nav} from './navigation';
 import {defaults} from '../src/types';
 async function capture(page:Page,info:TestInfo,name:string){
  await page.evaluate(()=>document.fonts.ready);
+ const review=page.getByRole('region',{name:'Сводка замысла'});
+ if(await review.count())await expect(review).toHaveCSS('opacity','1');
  const path=info.outputPath(`${name}-${info.project.name}.png`);
  await page.screenshot({path,animations:'disabled'});await info.attach(name,{path,contentType:'image/png'});
 }
 const idea='В княжестве Валлор письма носят гонцы, но у каждой гильдии есть мобильный телефон. Башни связи принадлежат короне. Я играю за ученицу картографа. Накануне ярмарки на телефон мастера приходит звонок с башни, сгоревшей десять лет назад.';
 async function group(page:Page,name:string){await page.locator('.atelier-param').filter({hasText:name}).click()}
-async function done(page:Page){await page.getByRole('dialog').getByRole('button',{name:'Готово',exact:true}).click();await expect(page.locator('.atelier-dialog')).toHaveCount(0)}
+async function done(page:Page){await page.getByRole('dialog').getByRole('button',{name:/^(Готово|К параметрам)$/,exact:true}).click();await expect(page.locator('.atelier-dialog')).toHaveCount(0)}
 for(const skin of ['graphite','parchment'])test(`idea190: visual, panels, validation, persistence · ${skin}`,async({page,request},info)=>{
  await page.setViewportSize(info.project.name==='mobile'?{width:390,height:844}:{width:1440,height:900});
  await page.addInitScript(skin=>{localStorage.setItem('workshop-theme',JSON.stringify({theme_id:skin,mode:'manual'}))},skin);
@@ -170,7 +172,7 @@ test('idea190: approved reference at the same viewports and interaction states',
   await page.locator('.param').filter({hasText:title}).click();await capture(page,info,'reference-panel-'+key);await page.getByRole('button',{name:'Готово',exact:true}).click();
  }
  await page.getByRole('button',{name:'Примеры',exact:true}).click();await capture(page,info,'reference-examples');await page.getByRole('button',{name:'Закрыть окно',exact:true}).click();
- await page.getByRole('button',{name:'Развернуть редактор',exact:true}).click();await capture(page,info,'reference-expanded');await page.getByRole('button',{name:'Готово',exact:true}).click();
+ await page.getByRole('button',{name:'Развернуть редактор',exact:true}).click();await capture(page,info,'reference-expanded');await page.getByRole('button',{name:'К параметрам',exact:true}).click();
  await page.getByRole('button',{name:'Правила и особенности',exact:true}).click();await page.locator('.comm-extra').scrollIntoViewIfNeeded();await capture(page,info,'reference-communication');
  await page.getByRole('button',{name:'Правила и особенности',exact:true}).click();await page.getByRole('button',{name:'Проверить замысел',exact:true}).click();
  await capture(page,info,'reference-review');await page.locator('.fl-demo summary').click();await page.getByLabel('Исход запуска').selectOption('error');

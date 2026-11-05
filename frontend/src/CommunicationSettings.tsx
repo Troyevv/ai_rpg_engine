@@ -6,7 +6,7 @@ import { gameLocale } from "./gameDate";
 import { Button } from "./components/ui/button";
 import { Textarea } from "./components/ui/textarea";
 import "./styles/communication-settings.css";
-const channelIcons=[MessageCircle,Phone,Mail,Footprints,RadioTower,Radio,PhoneCall,Sparkles,Check,Plus,ChevronDown,Info,NotebookPen,Smartphone];
+const channelIcons=[MessageCircle,Phone,Mail,Footprints,RadioTower,PhoneCall,Sparkles];
 export const channels = [
   "text_message",
   "voice_call",
