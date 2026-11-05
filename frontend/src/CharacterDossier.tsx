@@ -78,7 +78,7 @@ export function CharacterView({state,card,save,refresh,tab='overview',setTab=()=
     </DossierSection>
    </div>}
    {tab==='relationships'&&<DossierSection title={t('relationships')}>
-    <RelationsView key={`${save?.id}:${card.id}:${actor}`} state={state} actor={card.id} save={save} refresh={refresh} onCharacter={onCharacter}/>
+    <RelationsView key={`${save?.id}:${card.id}:${actor}`} state={state} actor={card.id} save={save} refresh={refresh} onCharacter={onCharacter} active={active}/>
    </DossierSection>}
    {tab==='family'&&<SocialStateView state={state} actor={card.id} saveId={save?.id} mode="family"/>}
    {tab==='secrets'&&<StorySecretBrowser state={state} characterId={card.id} save={save} active={active} target={secretTarget} onCharacter={onCharacter}/>}

@@ -46,8 +46,75 @@
 .relationship-card .inspector-metric > div {
   font-size: 0.85rem;
 }
-.relationship-card .inspector-metric meter {
+.relationship-card .relationship-meter-semantic {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.relationship-meter {
+  position: relative;
+  display: block;
   height: 9px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--surface-3);
+}
+.relationship-meter-reveal,
+.relationship-meter-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: left center;
+  border-radius: inherit;
+}
+.relationship-meter-reveal {
+  transform: scaleX(0);
+}
+.relationship-meter-fill {
+  border-radius: inherit;
+  background: var(--metric-color, var(--accent));
+}
+.relationship-meter[data-entered="true"] .relationship-meter-reveal {
+  transform: scaleX(1);
+  animation: relationship-meter-enter 1050ms cubic-bezier(.22, 1, .36, 1)
+    var(--relationship-meter-delay) backwards;
+  animation-play-state: paused;
+}
+.relationship-meter[data-visible="true"] .relationship-meter-reveal {
+  animation-play-state: running;
+}
+.relationship-meter[data-visible="true"] .relationship-meter-fill {
+  transition: transform 360ms cubic-bezier(.22, 1, .36, 1);
+}
+.relationship-meter-zero {
+  position: absolute;
+  inset: 0 auto 0 50%;
+  width: 1px;
+  background: var(--text);
+  opacity: .55;
+}
+@keyframes relationship-meter-enter {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .relationship-meter[data-entered] .relationship-meter-reveal {
+    animation: none;
+    transform: none;
+  }
+  .relationship-meter[data-visible] .relationship-meter-fill {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .relationship-meter { background: Canvas; outline: 1px solid CanvasText; }
+  .relationship-meter-fill { background: Highlight; }
+  .relationship-meter-zero { background: CanvasText; opacity: 1; }
 }
 .relationship-card .inspector-card-footer {
   display: flex;

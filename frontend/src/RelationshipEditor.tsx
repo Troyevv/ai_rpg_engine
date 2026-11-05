@@ -28,12 +28,14 @@ export function RelationshipEditor({
   refresh,
   children,
   onCharacter,
+  active = true,
 }: {
   save: Save;
   card: Character;
   refresh: () => void;
   children?: (controls: Controls) => ReactNode;
   onCharacter?: (id: string) => void;
+  active?: boolean;
 }) {
   const relations = Object.values(save.state.world?.relationships || {}).filter(
     (r) => r.source_id === card.id,
@@ -214,6 +216,7 @@ export function RelationshipEditor({
               key={r.target_id}
               state={save.state}
               relation={r}
+              active={active}
               saveId={save.id}
               onCharacter={onCharacter}
               actions={actions(r)}

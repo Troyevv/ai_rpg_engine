@@ -1,9 +1,21 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { it, expect, vi } from "vitest";
+import { it, expect, vi, beforeEach, afterEach } from "vitest";
 import { RelationshipCard } from "../src/RelationshipCard";
 import { relationshipRows } from "../src/lib/relationshipRows";
 import type { State, WorldRelation } from "../src/types";
+const observers: { notify: (visible: boolean) => void; disconnect: ReturnType<typeof vi.fn> }[] = [];
+beforeEach(() => {
+  observers.length = 0;
+  vi.stubGlobal("IntersectionObserver", class {
+    disconnect = vi.fn();
+    constructor(private callback: (entries: { isIntersecting: boolean }[]) => void) {
+      observers.push({ notify: (visible) => callback([{ isIntersecting: visible }]), disconnect: this.disconnect });
+    }
+    observe() { this.callback([{ isIntersecting: true }]); }
+  });
+});
+afterEach(() => vi.unstubAllGlobals());
 const a: WorldRelation = {
   source_id: "a",
   target_id: "b",
@@ -133,4 +145,66 @@ it("clears an open editor when controlled actor or save changes, without writes"
     host.remove();
     fetcher.mockRestore();
   }
+});
+
+it("keeps signed native semantics and exact labels, and never invents unknown metrics", async () => {
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  const dimensions = { fear: -100, trust: -31, respect: 0, affection: 62, attraction: 100,
+    jealousy: { direction: "up", reason: "Известно только изменение" } };
+  try {
+    await act(() => root.render(<RelationshipCard state={state} relation={{ ...a, dimensions }} />));
+    const meters = [...host.querySelectorAll("meter")];
+    expect(meters.map(m => [m.min, m.value, m.max])).toEqual(
+      [-100, -31, 0, 62, 100].map(value => [-100, value, 100]),
+    );
+    expect([...host.querySelectorAll<HTMLElement>(".relationship-meter-fill")].map(m => m.style.transform))
+      .toEqual(["scaleX(0)", "scaleX(0.345)", "scaleX(0.5)", "scaleX(0.81)", "scaleX(1)"]);
+    expect(meters[1].getAttribute("aria-label")).toBe("Доверие: -31; от −100 до 100");
+    expect(host.querySelector('[data-dimension="jealousy"] meter')).toBeNull();
+    expect(host.querySelector('[data-dimension="irritation"]')).toBeNull();
+    expect(host.textContent).toContain("Известно только изменение");
+  } finally { await act(() => root.unmount()); }
+});
+
+it("replays only on opening or selection, preserves entry across data refresh, and cleans observers", async () => {
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  let relation = a, active = true, motionKey = "all";
+  const render = () => act(() => root.render(<RelationshipCard state={state} relation={relation} active={active} motionKey={motionKey} />));
+  const track = () => host.querySelector(".relationship-meter")!;
+  try {
+    await render();
+    const first = track();
+    expect(first.getAttribute("data-entered")).toBe("true");
+    relation = { ...a, dimensions: { ...a.dimensions } };
+    await render();
+    expect(track()).toBe(first);
+    expect(observers).toHaveLength(3);
+    relation = { ...a, dimensions: { trust: -20 } };
+    await render();
+    expect(track()).toBe(first);
+    expect(track().getAttribute("data-entered")).toBe("true");
+    expect(host.querySelector<HTMLElement>(".relationship-meter-fill")!.style.transform).toBe("scaleX(0.4)");
+    expect(observers[1].disconnect).toHaveBeenCalledOnce();
+    await act(() => observers[0].notify(false));
+    expect(track().getAttribute("data-visible")).toBe("false");
+    expect(track().getAttribute("data-entered")).toBe("true");
+    active = false;
+    await render();
+    expect(track().getAttribute("data-entered")).toBe("false");
+    await act(() => observers[0].notify(true)); // stale callback after disconnect
+    expect(track().getAttribute("data-entered")).toBe("false");
+    active = true;
+    await render();
+    expect(track().getAttribute("data-entered")).toBe("true");
+    relation = b;
+    await render();
+    expect(track()).not.toBe(first);
+    const second = track();
+    motionKey = "incoming";
+    await render();
+    expect(track()).not.toBe(second);
+  } finally { await act(() => root.unmount()); }
+  expect(observers.every(o => o.disconnect.mock.calls.length === 1)).toBe(true);
 });
