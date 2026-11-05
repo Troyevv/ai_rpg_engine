@@ -1,3 +1,4 @@
+import {confirmWorkshopStart} from './workshop-navigation';
 import {test,expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {defaults} from '../src/types';
@@ -18,7 +19,7 @@ test('V1 turn survives manual edit, AI package, portrait replacement and V2 laun
   await page.getByLabel('Файл портрета').setInputFiles({name:'portrait.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});await page.getByRole('button',{name:'Сохранить',exact:true}).click();await expect(page.getByRole('heading',{name:'Портрет персонажа',exact:true})).toHaveCount(0);
  };
  await openMaxim();await portrait('#41665a');await page.getByRole('button',{name:'Готово',exact:true}).click();
- await page.locator('.ww-topbar .ww-primary').click();await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+ await page.locator('.ww-topbar .ww-primary').click();await confirmWorkshopStart(page);
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.choices button')).toHaveCount(1);await page.locator('.choices button').first().click();await expect(page.locator('.turn')).toHaveCount(2);await expect(page.locator('.choices button')).toHaveCount(1);
  const v1=(await(await request.get(url+'?author=true')).json()).games[0];
  const canonical=async(sid:number)=>({...((await(await request.get(`/api/saves/${sid}/author-state`)).json()).snapshot),history:(await(await request.post(`/test/creative172/saves/${sid}/canonical`)).json()).events});
@@ -30,11 +31,11 @@ test('V1 turn survives manual edit, AI package, portrait replacement and V2 laun
  if(info.project.name==='mobile')await page.setViewportSize({width:360,height:740});
  await page.getByLabel('Что изменить в мире?').fill('WORKSHOP188 пакет');await page.getByRole('button',{name:'Предложить изменения',exact:true}).click();await expect(page.getByRole('heading',{name:'Ожидает решения',exact:true})).toBeVisible();
  await expect(page.locator('.ww-ai-compose')).toContainText('Изменения войдут в новое прохождение');
- await page.locator('.ai-diff-entity > summary').click();expect(await page.locator('.ai-diff-label').first().evaluate(e=>getComputedStyle(e).display)).toBe('block');expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:test.info().outputPath(`post-start-preview-${info.project.name}.png`),scale:'css'});
+ await expect(page.locator('.ai-diff-entity').first()).toHaveAttribute('open','');expect(await page.locator('.ai-diff-label').first().evaluate(e=>getComputedStyle(e).display)).toBe('block');expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:test.info().outputPath(`post-start-preview-${info.project.name}.png`),scale:'css'});
  await page.getByRole('button',{name:'Применить пакет…',exact:true}).click();await page.getByRole('button',{name:'Подтвердить изменения',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.locator('.ai-preview')).toContainText('Изменения сохранены');
  expect(await canonical(v1.save)).toEqual(old);
  const draft=await(await request.get(url+'?author=true')).json();expect(draft.state.campaign.description).toBe('Новая редакция мира для следующего прохождения.');
- await page.getByRole('button',{name:'Начать игру из этой версии',exact:true}).click();await expect(page.getByRole('button',{name:'Продолжить существующую игру',exact:true})).toBeVisible();await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();await expect(page.locator('.world-workshop')).toHaveCount(0);
+ await page.getByRole('button',{name:'Начать игру из этой версии',exact:true}).click();await expect(page.getByRole('button',{name:'Продолжить существующую игру',exact:true})).toBeVisible();await confirmWorkshopStart(page);await expect(page.locator('.world-workshop')).toHaveCount(0);
  const v2=(await(await request.get(url+'?author=true')).json()).games[0];expect(v2.save).not.toBe(v1.save);
  const next=await canonical(v2.save);expect(next.character_cards.find((c:any)=>c.id==='maxim').fields.Внешность).toContain('светлыми волосами');expect(next.world_state.characters.maxim.portraits.at(-1).asset_id).not.toBe(oldPortrait.asset_id);
  expect(await canonical(v1.save)).toEqual(old);expect(await(await request.get(`/api/saves/${v1.save}/characters/maxim/portraits/assets/${oldPortrait.asset_id}`)).body()).toEqual(oldImage);

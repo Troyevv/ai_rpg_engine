@@ -1,4 +1,11 @@
 import {expect,type Page} from '@playwright/test';
+export async function confirmWorkshopStart(page:Page){
+ const dialog=page.locator('.ww-start-dialog');
+ await expect(dialog).toBeVisible();
+ // Each checkbox represents an independent, visible user decision.
+ for(const checkbox of await dialog.getByRole('checkbox').all())await checkbox.check();
+ await dialog.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+}
 export async function workshopNav(page:Page,name:string){
  const direct=page.locator('.ww-sidebar').getByRole('button').filter({hasText:name});
  if((page.viewportSize()?.width||1440)>760)await direct.click();

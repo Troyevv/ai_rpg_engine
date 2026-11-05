@@ -545,6 +545,13 @@ if __name__ == '__main__':
     import shutil
     shutil.copyfile(Path(__file__).parents[1]/'frontend/src/assets/idea-folio.webp',reference_dir/'folio.webp')
     app.router.routes.insert(0, Mount('/test/idea190/reference',app=StaticFiles(directory=reference_dir)))
+    workshop_reference_dir=Path(tempfile.mkdtemp(prefix='workshop175-reference-'))
+    with zipfile.ZipFile(Path(__file__).parent/'fixtures/workshop175-reference.zip') as archive:
+        import hashlib
+        reference=archive.read('world-workshop.html')
+        assert hashlib.sha256(reference).hexdigest()=='4122bcf37cbfd4c979e264e655896cc8d8783d51899a2aa9d170bd9f5c3e82e1'
+        (workshop_reference_dir/'world-workshop.html').write_bytes(reference)
+    app.router.routes.insert(0, Mount('/test/workshop175/reference',app=StaticFiles(directory=workshop_reference_dir)))
     from backend.tabletop.dice import DiceEngine
     from tabletop_fixture import Fixed
     class BrowserDice(DiceEngine):

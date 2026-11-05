@@ -126,7 +126,7 @@ test('idea190: real generation, reload, HTTP502 review recovery and author revis
  // Edit through the existing author editor, preserving revision protection.
  if(info.project.name==='mobile'){await page.getByRole('button',{name:'Разделы мастерской',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Сцена и правила',exact:true}).click()}
  else await page.locator('.ww-sidebar').getByRole('button',{name:'Сцена и правила',exact:true}).click();
- await page.locator('summary').filter({hasText:'Описание и правила мира'}).click();
+ await page.getByRole('button',{name:'Мир и повествование',exact:true}).click();await expect(page.getByRole('heading',{name:'Описание и правила мира',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Изменить Название',exact:true}).click();
  await page.getByRole('dialog').locator('input,textarea').first().fill('Отредактированный мир');
  await page.getByRole('dialog').getByRole('button',{name:'Сохранить поле',exact:true}).click();

@@ -24,6 +24,7 @@ const statuses:Record<string,string>={preview:'Ожидает решения',ac
 
 type EditorProps = {
  wid:string;revision:number;job:Job|null;locked:boolean;prefs:Preferences;apiKey:string;
+ title?:string;version?:number|null;example?:string;onHistory?:(version:number)=>void;onObject?:(section:string,id:string)=>void;
  onJob:(job:Job)=>void;refresh:()=>Promise<void>;resolve:ReturnType<typeof resolver>;
 };
 
@@ -32,15 +33,19 @@ export function WorldAIEditor(props:EditorProps) {
  return <WorkspaceEditor key={props.wid} {...props}/>;
 }
 
-function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,resolve}:EditorProps) {
+function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,resolve,title,version,example,onHistory,onObject}:EditorProps) {
  const storageKey=`world-editor:${wid}`;
- const [instruction,setInstruction]=useState(()=>localStorage.getItem(storageKey)||'');
+ const [instruction,setInstruction]=useState(()=>localStorage.getItem(storageKey)||example||'');
+ const textarea=useRef<HTMLTextAreaElement>(null);
+ const [replacement,setReplacement]=useState<string|null>(null);
  const [data,setData]=useState<Edits>({edits:[],started:false});
  const [error,setError]=useState('');const [busy,setBusy]=useState(false);
  const [selected,setSelected]=useState<string|null>(null);
  const [confirm,setConfirm]=useState(false);const [conflicts,setConflicts]=useState(false);const [warnings,setWarnings]=useState(false);
  const acceptButton=useRef<HTMLButtonElement>(null);
  const guard=useRef(false);const requestId=useRef<string|null>(null);const alive=useRef(true);
+ const changeInstruction=(text:string)=>{setInstruction(text);requestId.current=null};
+ const useExample=(text:string)=>{if(instruction.trim())setReplacement(text);else{changeInstruction(text);textarea.current?.focus()}};
  useEffect(()=>{alive.current=true;return()=>{alive.current=false}},[]);
  useEffect(()=>{localStorage.setItem(storageKey,instruction)},[storageKey,instruction]);
  const load=async()=>{const next=await api<Edits>(`/workspaces/${wid}/draft/edits?author=true`);if(alive.current)setData(next)};
@@ -62,12 +67,13 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
  return <section className="world-ai-editor" aria-labelledby="world-ai-title">
   <div className="ai-editor-heading"><WandSparkles aria-hidden="true"/><div><p className="eyebrow">Изменения по вашему замыслу</p><h3 id="world-ai-title">AI-редактор мира</h3></div></div>
   <p>Опишите любые связанные изменения. Сначала вы увидите предложение и результаты проверки, затем решите, что сохранить.</p>
-  <div className="ww-ai-columns"><div className="ww-ai-compose">
+  <div className="ww-ai-columns"><div className="ww-ai-compose"><p className="ww-eyebrow">{title} · версия #{version}</p><ol className="ww-ai-steps"><li>Замысел</li><li>Предложение</li><li>Ваше решение</li></ol>
   {data.started && <p role="status">Изменения войдут в новое прохождение. Начатая игра останется без изменений.</p>}
   <>
    <label htmlFor="world-ai-instruction">Что изменить в мире?</label>
-   <Textarea id="world-ai-instruction" value={instruction} disabled={busy||active(job)} onChange={e=>{setInstruction(e.target.value);requestId.current=null}}
+   <Textarea ref={textarea} id="world-ai-instruction" value={instruction} disabled={busy||active(job)} onChange={e=>changeInstruction(e.target.value)}
      placeholder="Добавь герою сестру, придумай её прошлое и отношения с друзьями. Измени историю их группы…"/>
+   <div className="ww-ai-examples" aria-label="Примеры инструкции">{['Раскрой мотивы второстепенных персонажей, сохранив известные факты.','Добавь возможность нового знакомства без решения за героя.','Уточни противоречия в предыстории и предложи связанные исправления.'].map(text=><button disabled={disabled} key={text} onClick={()=>useExample(text)}>{text}</button>)}</div>
    <div className="ai-editor-actions"><Button disabled={disabled||!instruction.trim()||samePreview} onClick={()=>void execute(async()=>{
     requestId.current ||= crypto.randomUUID();
     const next=await api<Job>(`/workspaces/${wid}/draft/edits`,{revision,text:instruction,request_id:requestId.current,config:prefs.summary,api_key:apiKey});
@@ -76,8 +82,9 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
   </>
   {error && <p className="ai-editor-error" role="alert">{error}</p>}
   </div><div className="ww-ai-result">
-  {!current&&<div className="ww-ai-empty"><WandSparkles size={40}/><h4>Здесь появится предложение</h4><p>Сценарист сопоставит ваш замысел с текущим миром. Вы увидите каждую правку, её связи и результаты проверки до сохранения.</p></div>}
-  {current && <div className="ai-preview" aria-label="Предпросмотр AI-изменений">
+  {active(job)&&job?.kind==='draft_editor'&&<div className="ww-ai-loading" role="status" aria-live="polite"><WandSparkles/><h4>Готовим предложение</h4><p>Сопоставляем инструкцию с текущим миром. Канон ещё не изменён.</p><div className="ww-ai-stream"/>{[94,68,82,55].map(width=><span key={width} className="ww-ai-skeleton" style={{width:width+'%'}}/>)}</div>}
+  {!current&&!active(job)&&<div className="ww-ai-empty"><WandSparkles size={40}/><h4>Здесь появится предложение</h4><p>Сценарист сопоставит ваш замысел с текущим миром. Вы увидите каждую правку, её связи и результаты проверки до сохранения.</p></div>}
+  {current && !(active(job)&&job?.kind==='draft_editor') && <div className="ai-preview" aria-label="Предпросмотр AI-изменений">
    <div className="ai-preview-title"><h4>{statuses[current.status]||'Сохранённый запрос'}</h4><span>На основе версии #{current.base_version}</span></div>
    <details><summary>Инструкция автора</summary><p className="ai-prose">{current.instruction}</p></details>
    {current.proposal && <><p className="ai-prose">{current.proposal.rationale}</p><details><summary>План и зависимости изменений</summary><ol>{current.proposal.changes.map((c,i)=><li key={i}>{c.reason}<small>{c.path}</small></li>)}</ol></details></>}
@@ -86,7 +93,7 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
    {current.diff && <>
     <div className="ai-diff-counts" aria-label="Состав изменений">{(['add','replace','remove'] as const).map(op=><span key={op}>{op==='add'?<Plus size={14}/>:op==='remove'?<Minus size={14}/>:<Pencil size={14}/>} {operations[op]}: {changed.filter(d=>d.operation===op).length}</span>)}</div>
     {!changed.length && <p>Модель не предложила изменений. Уточните инструкцию или отклоните пакет.</p>}
-    {[...new Set(changed.map(d=>d.section))].map(section=><section className="ai-diff-group" key={section}><h5>{sectionNames[section]||runtimeLabels[section.split('/').pop()!]||section}</h5>{changed.filter(d=>d.section===section).map(d=><details className={`ai-diff-entity ai-diff-${d.operation}`} key={d.id}>
+    {[...new Set(changed.map(d=>d.section))].map(section=><section className="ai-diff-group" key={section}><h5>{sectionNames[section]||runtimeLabels[section.split('/').pop()!]||section}</h5>{changed.filter(d=>d.section===section).map(d=><details open={d===changed[0]||undefined} className={`ai-diff-entity ai-diff-${d.operation}`} key={d.id}>
       <summary><span>{d.name}</span><span>{operations[d.operation]} · {d.fields.length}</span></summary>
       {d.fields.map((f,i)=><div className="ai-diff-field" key={i}><h6>{f.field==='/'?'Вся сущность':runtimeLabels[f.field.split('/').pop()!]||f.field}</h6><div className="ai-diff-values">
         <div><span className="ai-diff-label">До</span>{f.before==null?<p>Отсутствует</p>:<RuntimeValue field={f.field.split('/').pop()!} value={f.before} resolve={previewResolve} author/>}</div><ArrowRight className="ai-diff-arrow" aria-hidden="true" size={16}/>
@@ -99,12 +106,13 @@ function WorkspaceEditor({wid,revision,job,locked,prefs,apiKey,onJob,refresh,res
    {current.proposal?.conflicts?.map((text,i)=><p role="alert" className="ai-editor-warning" key={i}>{text}</p>)}
    {blocked && <p>Уточните инструкцию с учётом противоречий. Применение заблокировано.</p>}
    {current.status==='preview' && <div className="ai-editor-actions"><Button ref={acceptButton} disabled={disabled||current.stale||blocked||!changed.length} onClick={()=>{setError('');setConflicts(false);setWarnings(false);setConfirm(true)}}><Check size={16}/>Применить пакет…</Button><Button variant="outline" disabled={disabled} onClick={()=>void decision('reject')}>Отклонить пакет</Button></div>}
-   {current.status==='accepted' && <p role="status">Изменения сохранены. Предыдущий мир доступен в разделе «История и файлы».</p>}
+   {current.status==='accepted' && <section><p role="status">Изменения сохранены в версии #{current.applied_version}.</p>{onHistory&&<Button variant="outline" onClick={()=>onHistory(current.base_version)}>Посмотреть исходную версию</Button>}{onObject&&changed.filter(d=>d.operation!=='remove').map(d=><Button key={d.section+d.id} variant="ghost" onClick={()=>onObject(d.section,d.id)}>Открыть: {d.name}</Button>)}</section>}
    {!!current.requests?.length && <details><summary>Запросы и расходы · {current.requests.length}</summary>{current.requests.map((r,i)=><p key={r.id}>Запрос {i+1}: {r.input_tokens ?? 'неизвестно'} входных / {r.output_tokens ?? 'неизвестно'} выходных токенов · {r.cost_usd===null?'стоимость неизвестна':`оценка $${Number(r.cost_usd).toFixed(6)}`}</p>)}</details>}
    <Button variant="ghost" disabled={busy} onClick={()=>void execute(async()=>{download(JSON.stringify(current,null,2),'world-edit.json')})}>Скачать предложение</Button>
   </div>}
   {data.edits.length>1 && <details className="ai-editor-history"><summary><History size={16}/>История AI-редакций · {data.edits.length}</summary>{data.edits.map(e=><button key={e.id} onClick={()=>setSelected(e.id)} aria-pressed={current?.id===e.id}><strong>{statuses[e.status]||e.status}</strong><span>{e.instruction}</span></button>)}</details>}
   </div></div>
+  <Dialog open={replacement!==null} onOpenChange={o=>!o&&setReplacement(null)}><DialogContent><DialogTitle>Заменить текущую инструкцию примером?</DialogTitle><DialogDescription>Несохранённая инструкция будет заменена. Запрос к модели не отправляется.</DialogDescription><Button variant="ghost" onClick={()=>setReplacement(null)}>Оставить мой текст</Button><Button onClick={()=>{changeInstruction(replacement||'');setReplacement(null);requestAnimationFrame(()=>textarea.current?.focus())}}>Вставить пример</Button></DialogContent></Dialog>
   <Dialog open={confirm} onOpenChange={setConfirm}><DialogContent onCloseAutoFocus={event=>{event.preventDefault();acceptButton.current?.focus()}}><DialogHeader><DialogTitle>Применить изменения мира?</DialogTitle><DialogDescription>Будет сохранён весь показанный пакет: {changed.length} изменённых сущностей. Предыдущая версия останется доступна для отката.</DialogDescription></DialogHeader>
    {error && <p className="ai-editor-error" role="alert">{error}</p>}
    {destructive && <label className="ai-confirm-option"><input type="checkbox" checked={conflicts} onChange={e=>setConflicts(e.target.checked)}/>Подтверждаю удаления и замену указанных ручных решений</label>}

@@ -13,7 +13,7 @@ test('dossier rows fit the available panel and retain editable details without n
  const open=async()=>{
   await page.getByLabel('Поиск персонажей').fill('Илья Александров');
   await page.getByRole('button',{name:'Досье Илья Александров',exact:true}).click();
-  await page.getByRole('button',{name:'Сейчас',exact:true}).click();
+  await page.getByRole('tab',{name:'Сейчас',exact:true}).click();
  };
  await open();
  const dossier=page.getByRole('dialog',{name:'Досье персонажа',exact:true});
@@ -55,7 +55,7 @@ test('author can publish a safe field or bind it to a secret in the same revisio
  await page.goto('/');await nav(page,'Создать');await authorView(page);await workshopNav(page,'Персонажи');
  await page.getByRole('button',{name:'Досье Максим Ковалёв',exact:true}).click();
  const dossier=page.getByRole('dialog',{name:'Досье персонажа',exact:true}), label='Страхи и уязвимости';
- await dossier.getByRole('button',{name:'Личность',exact:true}).click();
+ await dossier.getByRole('tab',{name:'Личность',exact:true}).click();
  const open=()=>dossier.getByRole('button',{name:'Изменить fields.'+label,exact:true}).click();
  await open();
  const field=page.locator('.ww-field-dialog'),rule=field.getByLabel('Правило показа'),

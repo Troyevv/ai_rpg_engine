@@ -1,3 +1,4 @@
+import {confirmWorkshopStart} from './workshop-navigation';
 import {generateIdea,ideaGroup,closeIdeaGroup} from './idea-navigation';
 import {workshopNav,draftsMenu} from './workshop-navigation';
 import {test,expect} from '@playwright/test';
@@ -32,7 +33,7 @@ test('creation settings and JSON continuation survive editor start and reload',a
   expect(draft.job).not.toHaveProperty('response_journal');
   await page.reload();await nav(page,'Создать');
   await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
-  await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+  await confirmWorkshopStart(page);
   await page.getByRole('button',{name:'Начать игру',exact:true}).click();
   await expect(page.locator('.choices button')).toHaveCount(6);
   await page.reload();
@@ -65,7 +66,7 @@ test('failed world remains editable and starts without regeneration',async({page
   const after=await(await request.get(url+'?author=true')).json();
   expect(after.state.world.facts).toEqual(before.candidate.world.facts);
   await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
-  await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+  await confirmWorkshopStart(page);
   await page.getByRole('button',{name:'Начать игру',exact:true}).click();
   await expect(page.locator('.choices button')).toHaveCount(6);
 });
@@ -100,7 +101,7 @@ test('review protocol failure survives reload and resumes only review',async({pa
   expect(requests.filter((r:{stage:string})=>r.stage==='draft_world_validation')).toHaveLength(4);
   await expect(page.getByRole('button',{name:'Начать с предупреждениями',exact:true})).toBeEnabled();
   await page.getByRole('button',{name:'Начать с предупреждениями',exact:true}).click();
-  await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+  await confirmWorkshopStart(page);
   await page.getByRole('button',{name:'Начать игру',exact:true}).click();
   await expect(page.locator('.choices button')).toHaveCount(6);
   await page.reload();await expect(page.locator('.choices button')).toHaveCount(6);
@@ -116,7 +117,7 @@ test('structured motivations render and edit without losing lifecycle metadata',
   await generateIdea(page);
   await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('saved');
   await workshopNav(page,'Персонажи');
-  await page.locator('.ww-character-card').first().click();await page.getByRole('button',{name:'Цели',exact:true}).click();
+  await page.locator('.ww-character-card').first().click();await page.getByRole('tab',{name:'Цели',exact:true}).click();
   await page.locator('.ww-dossier-fields summary').first().click();
   await expect(page.locator('.ww-dossier-fields')).toContainText('Текущая goals');
   await page.getByRole('button',{name:'Готово',exact:true}).click();
@@ -124,7 +125,7 @@ test('structured motivations render and edit without losing lifecycle metadata',
   await page.getByRole('button',{name:'Автор мира',exact:true}).click();
   await page.getByRole('button',{name:'Показать всё',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await page.locator('.ww-character-card').first().click();await page.getByRole('button',{name:'Цели',exact:true}).click();
+  await page.locator('.ww-character-card').first().click();await page.getByRole('tab',{name:'Цели',exact:true}).click();
   const before=await(await request.get(url+'?author=true')).json();
   const cid=before.state.protagonist_id;
   for (const [field,label] of [['goals','Цели'],['intentions','Намерения'],['obligations','Обязательства']]) {
@@ -144,7 +145,7 @@ test('structured motivations render and edit without losing lifecycle metadata',
   await page.screenshot({path:`test-results/motivations-${page.viewportSize()?.width}.png`,fullPage:true});
   await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
   const confirm=page.waitForResponse(r=>r.url().endsWith('/draft/confirm'));
-  await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+  await confirmWorkshopStart(page);
   const {save}=await(await confirm).json();
   await page.getByRole('button',{name:'Начать игру',exact:true}).click();
   await expect(page.locator('.choices button')).toHaveCount(6);
@@ -179,7 +180,7 @@ test('fragment recovery survives reload and repeats only rejected continuation',
   expect(after.fragment_recoveries[0].part).toEqual(before.responses.world.parts[1]);
   expect(after.responses.world.parts).toHaveLength(2);
   await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
-  await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+  await confirmWorkshopStart(page);
   await page.getByRole('button',{name:'Начать игру',exact:true}).click();
   await expect(page.locator('.choices button')).toHaveCount(6);
   await page.reload();await expect(page.locator('.choices button')).toHaveCount(6);
@@ -259,7 +260,7 @@ test('malformed review automatically reaches a playable draft through alternate 
   await generateIdea(page);
   await expect.poll(async()=> (await(await request.get(`/api/workspaces/${w.id}/draft`)).json()).job?.status).toBe('saved');
   await page.getByRole('button',{name:'Начать с предупреждениями',exact:true}).click();
-  await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+  await confirmWorkshopStart(page);
   await page.getByRole('button',{name:'Начать игру',exact:true}).click();
   await expect(page.locator('.choices button')).toHaveCount(6);
 });
@@ -286,7 +287,7 @@ for (const marker of ['TEST_RELEASE_NESTED','TEST_RELEASE_QUALITY']) {
   await page.reload();await nav(page,'Создать');
   if(marker==='TEST_RELEASE_QUALITY')await expect(page.getByText(/Некоторые творческие детали модель оставила неполными/)).toBeVisible();
   await page.getByRole('button',{name:marker==='TEST_RELEASE_NESTED'?'Начать с предупреждениями':'Подтвердить мир и начать игру',exact:true}).click();
-  await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+  await confirmWorkshopStart(page);
   await page.getByRole('button',{name:'Начать игру',exact:true}).click();
   await expect(page.locator('.choices button')).toHaveCount(6);
   await page.reload();await expect(page.locator('.choices button')).toHaveCount(6);

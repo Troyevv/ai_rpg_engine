@@ -1,3 +1,4 @@
+import {confirmWorkshopStart} from './workshop-navigation';
 import {workshopNav,draftsMenu} from './workshop-navigation';
 import {test,expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
@@ -13,18 +14,19 @@ test('populated Runtime world has names, typed values, calendar, edit and reload
 
  await workshopNav(page,'Сцена и правила');
  await expect(page.getByText('Пятница, 23 октября 2026, 08:00',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Календарь и связь',exact:true}).click();
  const effective=page.getByRole('region',{name:'Действующий календарь'});
  await expect(effective).toContainText('Понедельник');
  await expect(effective).toContainText('февраля: 28');
  await expect(effective).toContainText('октября: 31');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth));
  await expect(page.getByText('[object Object]',{exact:false})).toHaveCount(0);
- await page.locator('.workshop-start').scrollIntoViewIfNeeded();
+ await effective.scrollIntoViewIfNeeded();
  await page.screenshot({path:`test-results/runtime-calendar-${info.project.name}.png`,fullPage:true});
  await workshopNav(page,'Персонажи');
  await page.locator('.ww-character-card').first().click();
  await expect(page.getByText('Взрослый',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Сейчас',exact:true}).click();
+ await page.getByRole('tab',{name:'Сейчас',exact:true}).click();
  const capabilities=page.locator('.draft-field').filter({has:page.getByRole('button',{name:'Изменить Возможности',exact:true})});
  await capabilities.locator('summary').click();
  await expect(page.getByText('Может передвигаться',{exact:true})).toBeVisible();
@@ -81,7 +83,7 @@ test('populated Runtime world has names, typed values, calendar, edit and reload
  expect(player.state.world.contacts.contact_b).not.toHaveProperty('character_id');
  expect(player.state.world.contacts.contact_b).not.toHaveProperty('provenance');
  await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
- await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+ await confirmWorkshopStart(page);
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.choices button')).toHaveCount(6);
  await page.reload();await expect(page.locator('.choices button')).toHaveCount(6);
 });

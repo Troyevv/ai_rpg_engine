@@ -1,3 +1,4 @@
+import {confirmWorkshopStart} from './workshop-navigation';
 import {creationMethod} from './idea-navigation';
 import {generateIdea} from './idea-navigation';
 import {workshopNav,draftsMenu} from './workshop-navigation';
@@ -46,7 +47,7 @@ for(const width of [360,390,412,430,1280,1440,1920]){
   await page.getByRole('button',{name:'Повторить проверку',exact:true}).click();
   await expect(page.getByRole('status',{name:'Ход проверки мира'})).toHaveCount(0);await workshopNav(page,'Обзор мира');await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
   await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
-  await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+  await confirmWorkshopStart(page);
   await expect(page.getByRole('button',{name:'Начать игру',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Начать игру',exact:true}).click();
   await expect(page.locator('.choices button')).toHaveCount(6);
@@ -113,7 +114,7 @@ for (const extension of ['md', 'txt', 'json']) {
   await page.getByLabel('Файл мира').setInputFiles({name:filename,mimeType:extension==='json'?'application/json':'text/plain',buffer:Buffer.from(content,'utf8')});
   if (extension==='json') {
    await expect(page.getByRole('status')).toContainText(filename);
-   await expect(page.getByLabel('Описание мира или текст импорта')).toHaveCount(0);
+   await expect(page.getByLabel('Описание мира или текст импорта')).toHaveValue(content);await expect(page.getByLabel('Описание мира или текст импорта')).toBeEditable();
   } else await expect(page.getByLabel('Описание мира или текст импорта')).toHaveValue(content);
   await page.getByRole('button',{name:'Открыть в редакторе',exact:true}).click();
   await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
@@ -242,7 +243,7 @@ for (const format of ['json','text']) {
   await page.getByRole('button',{name:'Экспорт JSON',exact:true}).click();
   expect((await downloadPromise).suggestedFilename()).toBe('world.json');await invariant();
   await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
-  await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+  await confirmWorkshopStart(page);
   await expect(page.getByRole('button',{name:'Начать игру',exact:true})).toBeVisible();
   const imported=calls.find(c=>c.path==='/import')!;
   const author=calls.find(c=>c.method==='GET'&&c.path===''&&c.author==='true')!;

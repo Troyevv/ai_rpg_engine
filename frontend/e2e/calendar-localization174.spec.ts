@@ -1,3 +1,4 @@
+import {confirmWorkshopStart} from './workshop-navigation';
 import {test,expect} from '@playwright/test';
 import {nav} from './navigation';
 import {workshopNav} from './workshop-navigation';
@@ -22,7 +23,7 @@ for(const skin of ['graphite','parchment']) {
   await page.reload();await nav(page,'Создать');
   await page.getByRole('button',{name:'Автор мира',exact:true}).click();
   await page.getByRole('button',{name:'Показать всё',exact:true}).click();
-  await workshopNav(page,'Сцена и правила');
+  await workshopNav(page,'Сцена и правила');await page.getByRole('button',{name:'Календарь и связь',exact:true}).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme',skin);
   await page.getByText('Праздники и сезоны мира',{exact:true}).click();
   const preview=page.getByLabel('Предпросмотр календаря');
@@ -50,7 +51,7 @@ for(const skin of ['graphite','parchment']) {
   expect(edited.regional.overrides.some((o:{id:string})=>o.id===original('2026-01-07').id)).toBe(false);
   await page.reload();await nav(page,'Создать');
   await page.getByRole('button',{name:'Начать с предупреждениями',exact:true}).click();
-  await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+  await confirmWorkshopStart(page);
   await expect(page.getByRole('button',{name:'Начать игру',exact:true})).toBeVisible();
   const selection=await page.evaluate(()=>JSON.parse(localStorage.getItem('selection')||'{}'));
   expect(selection.save).toBeTruthy();

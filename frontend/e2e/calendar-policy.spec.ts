@@ -1,3 +1,4 @@
+import {confirmWorkshopStart} from './workshop-navigation';
 import {creationMethod} from './idea-navigation';
 import {ideaGroup,closeIdeaGroup} from './idea-navigation';
 import {test,expect} from '@playwright/test';
@@ -14,7 +15,7 @@ test('E5 starts with warnings in Player View without new review',async({page,req
  await page.screenshot({path:`test-results/e5-warning-${info.project.name}.png`,fullPage:true});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth));
  await page.getByRole('button',{name:'Начать с предупреждениями',exact:true}).click();
- await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+ await confirmWorkshopStart(page);
  await expect(page.getByRole('button',{name:'Начать с предупреждениями',exact:true})).toHaveCount(0);
  expect(await(await request.get(`/api/workspaces/${w.id}/requests`)).json()).toEqual(before);
  const d=await(await request.get(`/api/workspaces/${w.id}/draft?author=true`)).json();
@@ -36,7 +37,7 @@ test('regional presets preview apply and custom edit preserve E5 authorship',asy
  await page.goto('/');await nav(page,'Создать');
  await page.getByRole('button',{name:'Автор мира',exact:true}).click();
  await page.getByRole('button',{name:'Показать всё',exact:true}).click();
- await workshopNav(page,'Сцена и правила');
+ await workshopNav(page,'Сцена и правила');await page.getByRole('button',{name:'Календарь и связь',exact:true}).click();
  await page.getByText('Праздники и сезоны мира',{exact:true}).click();
  await page.getByRole('button',{name:'Предпросмотр набора',exact:true}).click();
  await expect(page.getByLabel('Предпросмотр календаря')).toContainText('Россия');

@@ -121,8 +121,11 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         if handle.cancel.is_set():return
         state=decode_result(result,original,config);report=domain.validate(state)
         if report['errors']:raise ValueError('; '.join(report['errors']))
-        if report['warnings'] and not config.get('_warnings_ack'):raise ValueError('; '.join(report['warnings']))
-        repo.finish_draft_job(jid,state);return
+        if report['warnings'] and not config.get('_warnings_ack') and not config.get('_preview_only'):raise ValueError('; '.join(report['warnings']))
+        if config.get('_preview_only'):
+            repo.finish_field_preview(jid,strict_loads(result)['value'],report['warnings'])
+        else:repo.finish_draft_job(jid,state)
+        return
     journal=json.loads(job.get('response_journal') or '{}')
     repo.draft_phase(jid,'world')
     if 'generation_contract' not in journal:

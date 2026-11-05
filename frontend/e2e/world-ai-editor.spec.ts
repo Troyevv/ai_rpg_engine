@@ -1,3 +1,4 @@
+import {confirmWorkshopStart} from './workshop-navigation';
 import {generateIdea} from './idea-navigation';
 import {workshopNav,draftsMenu} from './workshop-navigation';
 import {test,expect} from '@playwright/test';
@@ -36,7 +37,7 @@ for(const skin of ['graphite','parchment']) test(`AI editor preview, confirmatio
  await expect(editor.getByLabel('Что изменить в мире?')).toHaveValue(instruction);
  await expect(editor.getByRole('heading',{name:'Ожидает решения',exact:true})).toBeVisible();
  await expect(editor.getByLabel('Состав изменений')).toContainText('Добавление: 9');
- await editor.locator('.ai-diff-entity').first().locator(':scope > summary').click();
+ await expect(editor.locator('.ai-diff-entity').first()).toHaveAttribute('open','');
  await expect(editor.locator('.ai-diff-values').first()).toContainText('До');
  await expect(editor.locator('.ai-diff-values').first()).toContainText('Вера');
  await expect(page.locator('html')).toHaveAttribute('data-theme',skin);
@@ -60,7 +61,7 @@ for(const skin of ['graphite','parchment']) test(`AI editor preview, confirmatio
   await expect(page.getByRole('dialog').getByRole('alert')).toBeVisible();
   await page.getByRole('button',{name:'Подтвердить изменения',exact:true}).click();
  }
- await expect(editor.getByText('Изменения сохранены.',{exact:false})).toBeVisible();
+ await expect(editor.getByRole('status').filter({hasText:/Изменения сохранены в версии #\d+\./})).toBeVisible();
  const accepted=await(await request.get(url+'?author=true')).json();expect(accepted.state.world.roles.craft.organization_id).toBe('workshop');
  expect(accepted.history.filter((v:{reason:string})=>v.reason==='ai_edit')).toHaveLength(1);
  expect((await(await request.get(url+'/edits')).json()).edits).toEqual([]);
@@ -68,13 +69,13 @@ for(const skin of ['graphite','parchment']) test(`AI editor preview, confirmatio
  await workshopNav(page,'История и файлы');
  await page.getByText(`История версий · ${accepted.history.length}`,{exact:true}).click();
  const previous=page.locator('.workshop-version').filter({hasText:`Версия ${before.history.length} ·`});
- await previous.getByRole('button',{name:'Восстановить',exact:true}).click();
+ await previous.getByRole('button',{name:'Посмотреть версию',exact:true}).click();const versionPreview=page.locator('.ww-version-preview');await expect(versionPreview.getByRole('heading',{name:before.state.campaign.title,exact:true})).toBeVisible();expect((await(await request.get(url+'?author=true')).json()).revision).toBe(accepted.revision);await versionPreview.getByRole('checkbox').check();await versionPreview.getByRole('button',{name:'Восстановить выбранную версию',exact:true}).click();
  await expect.poll(async()=>(await(await request.get(url+'?author=true')).json()).state).toEqual(before.state);
  const restored=await(await request.get(url+'?author=true')).json();
  // Restore the accepted version through the same public history API, then play it.
  expect((await request.patch(url,{data:{revision:restored.revision,operation:'restore',source_id:accepted.version_id}})).ok()).toBeTruthy();
  await page.reload();await nav(page,'Создать');
- await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+ await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();await confirmWorkshopStart(page);
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.choices button')).toHaveCount(6);
  await page.locator('.choices button').first().click();await expect(page.locator('.turn')).toHaveCount(2);
  await expect(page.locator('.choices button')).toHaveCount(6);

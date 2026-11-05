@@ -1,3 +1,4 @@
+import {confirmWorkshopStart} from './workshop-navigation';
 import {workshopNav} from './workshop-navigation';
 import {test,expect} from '@playwright/test';
 import {nav} from './navigation';
@@ -66,7 +67,7 @@ for(const skin of ['graphite','parchment']) for(const mode of ['complete','empty
   }
   await page.reload();await nav(page,'Создать');
   await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
-  await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+  await confirmWorkshopStart(page);
   await expect(page.getByRole('button',{name:'Начать игру',exact:true})).toBeVisible();
   const selected=await page.evaluate(()=>JSON.parse(localStorage.getItem('selection')!));
   expect(selected.world).not.toBe(theme.world);expect(selected.save).toBeTruthy();

@@ -230,6 +230,25 @@ def record_predicate(state, issue):
     return disproved
 
 
+
+def predicate_disproved(state, issue):
+    """Verify only typed structural claims; never infer meaning from prose."""
+    if issue.assertion not in ('missing_value','missing_reference','missing_record'):
+        raise ValueError('Утверждение требует смысловой проверки.')
+    actual=None if issue.assertion=='missing_record' else pointer(state,issue.path)
+    if issue.assertion=='missing_value': return actual is not None and actual != '' and actual != [] and actual != {} and (not isinstance(actual,str) or bool(actual.strip()))
+    elif issue.assertion=='missing_record':
+        return record_predicate(state,issue)
+    else:
+        if not isinstance(actual,str) or not actual.strip():
+            raise ValueError('missing_reference требует одиночный непустой строковый ID в path. Для отсутствующей записи используй missing_record, section и record_match; технический ID определит сервер, коллекцию заменять нельзя.')
+        if not issue.target_path:raise ValueError('Для missing_reference нужен target_path.')
+        if issue.target_path not in {'/world/'+name for name in SECTIONS}:raise ValueError('target_path должен указывать каноническую коллекцию по ID.')
+        try:target=pointer(state,issue.target_path)
+        except KeyError as exc:raise ValueError('Коллекция target_path отсутствует.') from exc
+        if not isinstance(target,dict):raise ValueError('target_path должен указывать словарь записей по ID.')
+        return actual in target
+
 def resolve_subject(state, issue):
     if issue.assertion=='missing_record':return
     if issue.section and issue.entity_id:
@@ -380,19 +399,7 @@ def _parse(reply, state):
                 issue.severity='recommendation'
             else:
                 try:
-                    actual=None if issue.assertion=='missing_record' else pointer(state,issue.path)
-                    if issue.assertion=='missing_value': disproved=actual is not None and actual != '' and actual != [] and actual != {} and (not isinstance(actual,str) or bool(actual.strip()))
-                    elif issue.assertion=='missing_record':
-                        disproved=record_predicate(state,issue)
-                    else:
-                        if not isinstance(actual,str) or not actual.strip():
-                            raise ValueError('missing_reference требует одиночный непустой строковый ID в path. Для отсутствующей записи используй missing_record, section и record_match; технический ID определит сервер, коллекцию заменять нельзя.')
-                        if not issue.target_path:raise ValueError('Для missing_reference нужен target_path.')
-                        if issue.target_path not in {'/world/'+name for name in SECTIONS}:raise ValueError('target_path должен указывать каноническую коллекцию по ID.')
-                        try:target=pointer(state,issue.target_path)
-                        except KeyError as exc:raise ValueError('Коллекция target_path отсутствует.') from exc
-                        if not isinstance(target,dict):raise ValueError('target_path должен указывать словарь записей по ID.')
-                        disproved=actual in target
+                    disproved=predicate_disproved(state,issue)
                 except KeyError:disproved=False
                 except (TypeError,ValueError,IndexError) as exc:
                     errors.append(dict(report_path=base+'/assertion',world_path=issue.path,message=str(exc)));continue

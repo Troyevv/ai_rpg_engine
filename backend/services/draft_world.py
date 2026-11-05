@@ -175,8 +175,12 @@ def validate(state, *, canonical=True):
     require(all(re.fullmatch(r'[\w-]{1,100}',cid) for cid in ids),'Некорректный Character ID.')
     require(len({c['name'].strip().casefold() for c in cards})==len(cards),'Повтор имени: проверь identities персонажей.')
     require(bool(cards) and all(c['name'].strip() for c in cards),'Нужны персонажи с именами.')
-    require(state.get('protagonist_id') in ids,'Не выбран protagonist.')
-    require(state.get('controlled_actor_id') in ids,'Не выбран controlled actor для старта.')
+    require('protagonist_id' in state and (state['protagonist_id'] is None or state['protagonist_id'] in ids),'Неизвестный protagonist.')
+    camera=state.get('camera',{})
+    require(camera.get('mode','actor') in ('actor','observer'),'Неизвестный режим камеры.')
+    require(state.get('controlled_actor_id') in ids or ('controlled_actor_id' in state and state['controlled_actor_id'] is None and camera.get('mode')=='observer'),'Не выбран controlled actor для старта.')
+    for field in ('pov_actor_id','subject_id'):
+        require(camera.get(field) is None or isinstance(camera[field],str) and camera[field] in ids,'Неизвестный персонаж камеры: '+field)
     require(set(world['characters'])==ids,'Character cards и character state не совпадают.')
     minute=state.get('world_clock',{}).get('minute')
     require(type(minute) is int and minute>=0,'Нужно игровое время (минута от начала недели).')
@@ -269,7 +273,7 @@ def validate(state, *, canonical=True):
         require(c.get('minute') is None or type(c['minute']) is int and c['minute']>=0,f'Персонаж {cid}: некорректное время.')
         require(not c.get('last_event_id') or c['last_event_id'] in world['events'],f'Персонаж {cid}: неизвестное последнее событие.')
     start=world['scenes'].get(state.get('camera',{}).get('scene_id'),{})
-    require(state.get('controlled_actor_id') in start.get('participants',[]),'Управляемый персонаж должен присутствовать в стартовой сцене.')
+    require(state.get('controlled_actor_id') is None or state['controlled_actor_id'] in start.get('participants',[]),'Управляемый персонаж должен присутствовать в стартовой сцене.')
     require(type(start.get('end_minute')) is int and type(minute) is int and start['end_minute']<=minute,'Стартовая сцена находится позже часов мира.')
     if not isinstance(start.get('text'),str) or not start['text'].strip():warnings.append('Стартовая ситуация пока не описана.')
     for c in cards:
@@ -387,7 +391,7 @@ def entity(state,kind,eid):
     return value
 
 
-def patch(state,kind,eid,field,value):
+def patch(state,kind,eid,field,value,*,synchronize=True):
     state=deepcopy(state);old_minute=state.get('world_clock',{}).get('minute');target=entity(state,kind,eid)
     if kind not in FIELDS:raise ValueError('Неизвестная сущность.')
     if kind=='character' and field.startswith('fields.'):
@@ -413,9 +417,16 @@ def patch(state,kind,eid,field,value):
         # Creative text is not clipped or arbitrarily length-limited here.
         target[field]=value
     else:raise ValueError('Поле недоступно для изменения.')
+    if kind=='location' and field=='parent_id':
+        parents={loc['id']:loc.get('parent_id') for loc in state['locations']}
+        seen={eid};current=value
+        while current:
+            if current in seen:raise ValueError('Локация не может быть собственным предком.')
+            if current not in parents:raise ValueError('Родительская локация не найдена.')
+            seen.add(current);current=parents[current]
     if kind=='start':
         state.update(protagonist_id=target['protagonist_id'],controlled_actor_id=target['controlled_actor_id'])
-        state['camera']={'scene_id':target['scene_id'],'mode':'actor'}
+        state['camera']={**state.get('camera',{}),'scene_id':target['scene_id']}
         state['world_clock']={**state.get('world_clock',{}),'minute':target['minute'],'last_event_time':label(target['minute'])}
     from backend.services.draft_calendar import manual_edit
     path='/world_clock' if kind in ('start','clock') else '/world/characters/'+eid+'/birth_date' if kind=='actor' and field=='birth_date' else ''
@@ -429,7 +440,7 @@ def patch(state,kind,eid,field,value):
         elif kind=='actor':path='/world/characters/'+escape(eid)+'/'+escape(field)
         elif GROUPS.get(kind,kind) in state['world']:path='/world/'+GROUPS.get(kind,kind)+'/'+escape(eid)+'/'+escape(field)
     state=manual_edit(state,path,old_minute)
-    return sync(state)
+    return sync(state) if synchronize else state
 
 
 def dependencies(state,kind,eid, *, original=None):
@@ -483,7 +494,23 @@ def remove(state,kind,eid):
     if deps:raise ValueError('Сначала измени связанные записи: '+', '.join(f"{d['kind']}/{d['id']}" for d in deps))
     state=deepcopy(state)
     if kind in ('character','location'):
-        key='characters' if kind=='character' else 'locations';state[key]=[x for x in state[key] if x['id']!=eid]
+        key='characters' if kind=='character' else 'locations'
+        removed_index=next(i for i,x in enumerate(state[key]) if x['id']==eid)
+        paths=state.get('authoring',{}).get('manual_paths',[])
+        remapped=[]
+        for path in paths:
+            parts=path.split('/')
+            if len(parts)>2 and parts[1]==key and parts[2].isdigit():
+                index=int(parts[2])
+                if index==removed_index:continue
+                if index>removed_index:parts[2]=str(index-1)
+            elif kind=='character' and path.startswith('/world/characters/'+eid+'/'):continue
+            remapped.append('/'.join(parts))
+        if paths:
+            state['authoring']['manual_paths']=remapped
+            if not remapped:state['authoring'].pop('manual_paths')
+            if not state['authoring']:state.pop('authoring')
+        state[key]=[x for x in state[key] if x['id']!=eid]
         if kind=='character':
             state['world']['characters'].pop(eid,None)
             state.get(BINDINGS,{}).pop(eid,None)
@@ -492,7 +519,18 @@ def remove(state,kind,eid):
     return sync(state)
 
 
-def add(state,kind):
+def add(state,kind,values=None):
+    if values is not None and not isinstance(values,dict):raise ValueError('Нужны поля создаваемой записи.')
+    values=values or {}
+    required={'character':'name','location':'name','fact':'text','event':'text','thread':'description','scene':'text'}
+    if kind in required and (not isinstance(values.get(required[kind]),str) or not values[required[kind]].strip()):
+        raise ValueError('Заполните имя или описание записи перед созданием.')
+    if kind=='relationship':
+        ids={c['id'] for c in state['characters']}
+        source,target=values.get('source_id'),values.get('target_id')
+        if source not in ids or target not in ids or source==target:raise ValueError('Выберите двух разных персонажей.')
+        if any(r['source_id']==source and r['target_id']==target for r in state['world']['relationships'].values()):
+            raise ValueError('Это направленное отношение уже существует. Откройте его для изменения.')
     state=deepcopy(state);eid=kind+'_'+uuid.uuid4().hex[:16]
     actor=state.get('controlled_actor_id');minute=state['world_clock']['minute']
     if kind=='character':
@@ -501,7 +539,7 @@ def add(state,kind):
     elif kind=='location':state['locations'].append({'id':eid,'name':'Новое место','text':''})
     else:
         templates={
-          'relationship':{'source_id':actor,'target_id':next((c['id'] for c in state['characters'] if c['id']!=actor),actor),'context':'','dimensions':{}},
+          'relationship':{'source_id':values.get('source_id'),'target_id':values.get('target_id'),'context':'','dimensions':{}},
           'thread':{'id':eid,'description':'Новая линия','state':'','status':'active','character_ids':[],'relevance':0.5,'last_event_id':None},
           'fact':{'id':eid,'text':'Новый факт','secret':False,'story_secret':False,'secret_subject_ids':[],'secret_existence':'hidden','character_ids':[],'evidence':[]},
           'knowledge':{'actor_id':actor,'fact_id':next(iter(state['world']['facts']),''),'status':'unknown','source_event_id':None},
@@ -509,10 +547,19 @@ def add(state,kind):
           'event':{'id':eid,'text':'Новое событие','participants':[],'witnesses':[],'minute':minute,'fact_ids':[],'source_sequence':0,'player_observed':False,'scene_id':None}}
         if kind not in templates:raise ValueError('Тип не поддерживается.')
         state['world'][GROUPS[kind]][eid]=templates[kind]
-    return sync(state),eid
+    if kind=='relationship':
+        state=sync(state)
+        eid=next(key for key,r in state['world']['relationships'].items() if r['source_id']==values['source_id'] and r['target_id']==values['target_id'])
+    for field,value in values.items():
+        state=patch(state,kind,eid,field,value)
+    state=sync(state)
+    # Synchronization canonicalizes directed pairs to their Runtime identifier.
+    if kind=='relationship':
+        eid=next(key for key,r in state['world']['relationships'].items() if r['source_id']==values['source_id'] and r['target_id']==values['target_id'])
+    return state,eid
 
 
-def export_markdown(state):
+def export_markdown(state, *, readable_text=False):
     """Readable projection plus a versioned, integrity-checked round-trip payload."""
     names={c['id']:c['name'] for c in state['characters']}
     def person(cid):return names.get(cid,cid or 'Неизвестно')
@@ -551,6 +598,10 @@ def export_markdown(state):
                 if type(item.get(field)) is int:lines += [label(item[field])]
     for loc in state['locations']:lines+=['## '+loc['name'],loc['text']]
     body='\n\n'.join(lines)+'\n'
+    if readable_text:
+        # This intentionally omits the reversible author payload. Keep the legacy
+        # MD/TXT importer format untouched for users moving worlds and portraits.
+        return re.sub(r'^#{1,3} ', '', body, flags=re.MULTILINE)
     payload=base64.b64encode(json.dumps(state,ensure_ascii=False).encode()).decode()
     return body+f'\n<!-- AI_RPG_STATE_V2 {hashlib.sha256(body.encode()).hexdigest()} {payload} -->\n'
 

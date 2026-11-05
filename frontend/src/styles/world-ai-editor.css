@@ -6,3 +6,14 @@
 .ai-diff-entity>summary{overflow-wrap:anywhere}
 
 .ww-ai-columns{display:grid;grid-template-columns:minmax(260px,.8fr) minmax(0,1.2fr);gap:28px;align-items:start}.ww-ai-compose{position:sticky;top:0}.ww-ai-compose>label{display:block;font-weight:600;margin:16px 0}.ww-ai-compose textarea{min-height:260px}.ww-ai-result{min-width:0}.ww-ai-result .ai-preview{margin:0;padding:20px;border:1px solid var(--border);border-radius:16px}.ww-ai-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:320px;padding:28px;gap:12px;background:var(--muted);border-radius:16px}.ww-ai-empty svg{color:var(--primary)}.ww-ai-empty h4{font:26px Georgia,serif;margin:0}.ww-ai-empty p{margin:0;color:var(--muted-foreground);line-height:1.7;max-width:38ch}@media(max-width:1000px){.ww-ai-columns{grid-template-columns:minmax(0,1fr)}.ww-ai-compose{position:static}}
+.ww-ai-steps{display:flex;gap:24px;flex-wrap:wrap;color:var(--text-muted);font-size:12px;padding-left:18px}
+.ww-ai-examples{display:grid;gap:8px;margin:16px 0}.ww-ai-examples button{text-align:left;border:1px solid var(--border);border-radius:10px;padding:12px;background:var(--surface-1);color:var(--text-muted)}
+.ww-ai-examples button:hover{border-color:var(--accent)}
+.ww-ai-empty{min-height:440px;border:1px dashed var(--border)}
+.ww-ai-loading{min-height:440px;padding:30px;display:flex;flex-direction:column;align-items:flex-start;gap:18px}
+.ww-ai-skeleton{display:block;height:16px;border-radius:8px;background:var(--surface-2);animation:ww-ai-shimmer 1.5s ease-in-out infinite alternate}
+.ww-ai-stream{width:100%;height:2px;overflow:hidden;background:var(--surface-2)}.ww-ai-stream::after{content:'';display:block;width:35%;height:100%;background:var(--accent);animation:ww-ai-flow 1.7s ease-in-out infinite}
+.ai-diff-values>div:first-child{padding:14px;background:color-mix(in srgb,#b75050 10%,var(--surface-1));border-radius:8px}
+.ai-diff-values>div:last-child{padding:14px;background:color-mix(in srgb,#66966f 12%,var(--surface-1));border-radius:8px}
+@keyframes ww-ai-shimmer{to{opacity:.4}}@keyframes ww-ai-flow{from{translate:-100% 0}to{translate:300% 0}}
+@media(prefers-reduced-motion:reduce){.ww-ai-skeleton,.ww-ai-stream::after{animation:none!important}}

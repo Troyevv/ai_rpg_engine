@@ -1,3 +1,4 @@
+import {confirmWorkshopStart} from './workshop-navigation';
 import {test,expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {defaults} from '../src/types';
@@ -23,7 +24,7 @@ test(`recorded sister ${cid}: unchanged draft, preview, confirmation and Runtime
  await expect(editor.getByRole('button',{name:'Применить пакет…',exact:true})).toBeEnabled();
  const preview=await(await request.get(url+'/edits?author=true')).json();expect(preview.edits[0].proposal.changes).toHaveLength(cid==='vera'?15:13);
  expect((await(await request.get(url+'?author=true')).json()).state).toEqual(before.state);
- const vera=editor.locator('.ai-diff-entity').filter({hasText:name}).first();await vera.locator(':scope > summary').click();await expect(vera).toContainText(name);
+ const vera=editor.locator('.ai-diff-entity').filter({hasText:name}).first();if(await vera.getAttribute('open')===null)await vera.locator(':scope > summary').click();await expect(vera).toHaveAttribute('open','');await expect(vera).toContainText(name);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:test.info().outputPath(`sister-preview-${info.project.name}.png`),scale:'css'});
  await editor.getByRole('button',{name:'Применить пакет…',exact:true}).click();await page.keyboard.press('Escape');
@@ -35,7 +36,7 @@ test(`recorded sister ${cid}: unchanged draft, preview, confirmation and Runtime
  for(const [id,fact] of Object.entries(before.state.world.facts))expect(accepted.state.world.facts[id]).toEqual(fact);
  await workshopNav(page,'Персонажи');await page.getByRole('button',{name:`Досье ${name}`,exact:true}).click();
  await expect(page.getByRole('dialog')).toContainText(name);await page.getByRole('button',{name:'Готово',exact:true}).click();
- await page.locator('.ww-topbar .ww-primary').click();await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();await expect(page.locator('.world-workshop')).toHaveCount(0);
+ await page.locator('.ww-topbar .ww-primary').click();await confirmWorkshopStart(page);await expect(page.locator('.world-workshop')).toHaveCount(0);
  const selected=await page.evaluate(()=>JSON.parse(localStorage.getItem('selection')!));
  const snapshot=(await(await request.get(`/api/saves/${selected.save}/author-state`)).json()).snapshot;
  expect(snapshot.world_state.characters[cid].location_id).toBe(cid==='vera'?'loc_sokolovy_tver':'loc_sokolov_tver');expect(snapshot.world_state.camera.present_character_ids).not.toContain(cid);

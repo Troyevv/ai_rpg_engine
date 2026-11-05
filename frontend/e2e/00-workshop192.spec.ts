@@ -1,0 +1,141 @@
+import {test,expect} from '@playwright/test';
+import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {nav} from './navigation';
+import {authorView,workshopNav,confirmWorkshopStart} from './workshop-navigation';
+import {creationMethod} from './idea-navigation';
+
+const source=JSON.parse(readFileSync(new URL('../../tests/fixtures/initial_world/workshop188.json',import.meta.url),'utf8'));
+test('W61 W62 scenario follows explicit world and preserves separate input buffers',async({page,request})=>{
+ const a=await(await request.post('/api/workspaces',{data:{name:'Сценарий A'}})).json();
+ const b=await(await request.post('/api/workspaces',{data:{name:'Сценарий B'}})).json();
+ for(const w of [a,b]){const h=await(await request.get(`/api/documents/idea/${w.id}`)).json();expect((await request.post(`/api/documents/idea/${w.id}`,{data:{content:w.name,expected_head:h.active_id}})).ok()).toBe(true)}
+ await page.addInitScript(({a,b})=>{localStorage.setItem('workspace',a);localStorage.setItem('draftWorkspace',b)}, {a:a.id,b:b.id});
+ await page.goto('/');await nav(page,'Создать');await creationMethod(page,'Со Сценаристом');
+ await expect(page.getByLabel('Подготовка',{exact:true})).toHaveValue(b.id);await expect(page.locator('.preparation')).toContainText('Сценарий B');
+ const input=page.getByLabel('Идея или правки сценария');await input.fill('Несохранённое уточнение B');
+ await page.getByLabel('Подготовка',{exact:true}).selectOption(a.id);await expect(input).toHaveValue('');await input.fill('Отдельный ввод A');
+ await page.getByLabel('Подготовка',{exact:true}).selectOption(b.id);await expect(input).toHaveValue('Несохранённое уточнение B');
+ await page.getByRole('button',{name:'← Генератор мира',exact:true}).click();await creationMethod(page,'Со Сценаристом');await expect(input).toHaveValue('Несохранённое уточнение B');
+ for(const w of [a,b]){const data=await(await request.get(`/api/workspaces/${w.id}`)).json();expect(data.idea).toBe(w.name)}
+ await expect(page.locator('.ww-shell .preparation')).toBeVisible();
+});
+test('W01 W16 W34 W52 real SQLite creation, cancellation, search and version preview',async({page,request})=>{
+ const workspace=await(await request.post('/api/workspaces',{data:{name:'Проверка 192'}})).json();const url=`/api/workspaces/${workspace.id}/draft`;
+ expect((await request.post(url+'/import',{data:{revision:0,format:'json',text:JSON.stringify(source)}})).ok()).toBe(true);
+ const before=await(await request.get(url+'?author=true')).json();
+ await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),workspace.id);await page.goto('/');await nav(page,'Создать');await authorView(page);
+ await workshopNav(page,'Персонажи');await page.getByRole('button',{name:'Персонаж',exact:true}).click();
+ const form=page.locator('.ww-create-dialog');await expect(form.getByRole('button',{name:'Создать запись',exact:true})).toBeDisabled();
+ await form.getByLabel('Имя',{exact:true}).fill('Не сохранять');await form.getByRole('button',{name:'Отмена',exact:true}).click();
+ expect((await(await request.get(url+'?author=true')).json()).revision).toBe(before.revision);
+ await workshopNav(page,'Сюжеты');await page.locator('.ww-records-thread').getByRole('button',{name:'Добавить',exact:true}).click();
+ await form.getByLabel('Название или краткое описание').fill('Найти старый телескоп');await form.getByLabel('Описание',{exact:true}).fill('Уникальная обсерватория на крыше.');
+ await form.getByRole('button',{name:'Создать запись',exact:true}).click();await expect(page.locator('.ww-record-dialog')).toContainText('Уникальная обсерватория');
+ const after=await(await request.get(url+'?author=true')).json();expect(after.revision).toBe(before.revision+1);expect(after.history).toHaveLength(before.history.length+1);
+ await page.keyboard.press('Escape');if((page.viewportSize()?.width||1440)>760)await page.locator('.ww-topbar').getByRole('button',{name:'Поиск по миру',exact:true}).click();else{await page.getByRole('button',{name:'Разделы мастерской',exact:true}).click();await page.locator('.ww-menu-dialog').getByRole('button',{name:'Поиск по миру',exact:true}).click();}
+ await page.getByRole('dialog').getByRole('textbox',{name:'Поиск по миру',exact:true}).fill('обсерватория');await page.locator('.ww-search-results button').click();await expect(page.locator('.ww-record-dialog')).toContainText('Найти старый телескоп');
+ await page.keyboard.press('Escape');await expect(page.locator('.ww-record-dialog')).toHaveCount(0);await workshopNav(page,'История и файлы');await page.getByText(`История версий · ${after.history.length}`,{exact:true}).click();
+ await page.locator('.workshop-version').last().getByRole('button',{name:'Посмотреть версию',exact:true}).click();await expect(page.locator('.ww-version-preview').getByRole('heading',{name:source.campaign.title,exact:true})).toHaveText(source.campaign.title);
+ expect((await(await request.get(url+'?author=true')).json()).revision).toBe(after.revision);
+ await page.getByRole('button',{name:'Закрыть просмотр',exact:true}).click();expect((await(await request.get(url+'?author=true')).json()).state).toEqual(after.state);
+ await workshopNav(page,'Проверка мира');await page.getByRole('button',{name:'Решения проверки · 0',exact:true}).click();await expect(page.getByText('Подтверждённых решений пока нет.',{exact:true})).toBeVisible();
+ expect((await(await request.get(url+'?author=true')).json()).revision).toBe(after.revision);
+});
+
+test('W01–W69 reference/current browser evidence at required viewport widths',async({page,request,browser},info)=>{
+ test.setTimeout(240000);
+ const referenceURL='/test/workshop175/reference/world-workshop.html';
+ const bytes=await(await request.get(referenceURL)).body();expect(bytes.length).toBe(468501);
+ expect(createHash('sha256').update(bytes).digest('hex')).toBe('4122bcf37cbfd4c979e264e655896cc8d8783d51899a2aa9d170bd9f5c3e82e1');
+ const w=await(await request.post('/api/workspaces',{data:{name:'Сравнение 192'}})).json();
+ expect((await request.post(`/api/workspaces/${w.id}/draft/import`,{data:{revision:0,format:'json',text:JSON.stringify(source)}})).ok()).toBe(true);
+ await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),w.id);await page.goto('/');await nav(page,'Создать');await authorView(page);
+ const ref=await page.context().newPage();await ref.goto(referenceURL);await ref.evaluate(()=>document.fonts.ready);
+ const viewports=info.project.name==='desktop'?[[768,1024],[1024,768],[1280,800],[1440,1000],[1920,1080]]:[[360,800],[390,844],[412,915],[430,932]];
+ const screens=[['overview','Обзор мира'],['characters','Персонажи'],['places','Места и сообщества'],['relations','Связи и семьи'],['story','Сюжеты'],['timeline','Хронология'],['knowledge','Факты и знания'],['settings','Сцена и правила'],['review','Проверка мира'],['ai','Изменить с ИИ'],['history','История и файлы']];
+ const metadata:Record<string,unknown>[]=[];
+ const measure=()=>{const box=(selector:string)=>{const node=document.querySelector(selector);if(!node)return null;const r=node.getBoundingClientRect(),style=getComputedStyle(node);return {x:r.x,y:r.y,width:r.width,height:r.height,font:style.font,fontFamily:style.fontFamily,color:style.color,background:style.backgroundColor}};return {viewport:{width:innerWidth,height:innerHeight,dpr:devicePixelRatio},theme:document.documentElement.dataset.theme||'reference graphite',focus:document.activeElement?.getAttribute('aria-label')||document.activeElement?.tagName,scrollTop:document.querySelector('.ww-scroll,.content')?.scrollTop||0,heading:box('.ww-content h1,#main h1'),panel:box('.ww-panel,.panel'),card:box('.ww-character-card,.cast-card'),scrollWidth:document.documentElement.scrollWidth}};
+ for(const [width,height] of viewports){
+  await page.setViewportSize({width,height});await ref.setViewportSize({width,height});
+  for(const [route,label] of screens){
+   await ref.locator(`[data-action="navigate"][data-route="${route}"]`).first().evaluate((el:HTMLElement)=>el.click());
+   await workshopNav(page,label);await page.evaluate(()=>document.fonts.ready);await expect(page.locator('.ww-content')).toBeVisible();
+   const metrics=await page.evaluate(()=>({fonts:[getComputedStyle(document.querySelector('.ww-content')!).fontFamily,getComputedStyle((document.querySelector('.ww-content h1,.ww-content h2,.ww-content h3')||document.querySelector('.ww-content'))!).fontFamily],scrollWidth:document.documentElement.scrollWidth,viewport:innerWidth}));
+   expect(metrics.scrollWidth,`${width} ${route} horizontal overflow`).toBeLessThanOrEqual(width);
+   if(route==='settings'&&width<=960){
+    const controls=await page.locator('.ww-start-controls').boundingBox(),preview=await page.locator('.ww-start-preview').boundingBox();
+    expect(controls!.width).toBeGreaterThan(width<=430?260:430);
+    expect(preview!.y).toBeGreaterThanOrEqual(controls!.y+controls!.height);
+   }
+   if(route==='characters'){
+    const add=await page.locator('.ww-page-head>.ww-primary').evaluate(el=>{const s=getComputedStyle(el);return {wrap:s.whiteSpace,overflow:el.scrollWidth>el.clientWidth}});
+    expect(add).toEqual({wrap:'nowrap',overflow:false});
+   }
+   if(route==='history'){
+    const exports=await page.locator('.workshop-export').evaluate(el=>{const parent=el.getBoundingClientRect();return {left:parent.left,right:parent.right,buttons:Array.from(el.querySelectorAll('button')).map(button=>{const r=button.getBoundingClientRect();return {left:r.left,right:r.right,overflow:button.scrollWidth>button.clientWidth+1}})}});
+    expect(exports.buttons).toHaveLength(4);
+    for(const button of exports.buttons){expect(button.left).toBeGreaterThanOrEqual(exports.left);expect(button.right).toBeLessThanOrEqual(exports.right+1);expect(button.overflow).toBe(false)}
+   }
+   metadata.push({width,height,route,fixture:'workshop188.json',role:'author',fontsReady:await page.evaluate(()=>document.fonts.status),current:await page.evaluate(measure),reference:await ref.evaluate(measure),...metrics});
+   await ref.screenshot({path:info.outputPath(`${width}-${route}-reference.png`),animations:'disabled'});
+   await page.screenshot({path:info.outputPath(`${width}-${route}-current.png`),animations:'disabled'});
+  }
+ }
+ await info.attach('comparison-metadata',{body:JSON.stringify({browser:browser.version(),referenceSHA256:'4122bcf37cbfd4c979e264e655896cc8d8783d51899a2aa9d170bd9f5c3e82e1',note:'Current branch and original reference; not pre-change master baseline or automatic visual acceptance.',metadata},null,2),contentType:'application/json'});
+ // Theme portals inherit root tokens; switching must not mutate the world.
+ const before=await(await request.get(`/api/workspaces/${w.id}/draft?author=true`)).json();
+ const portalViewport=info.project.name==='desktop'?{width:1440,height:1000}:{width:390,height:844};await page.setViewportSize(portalViewport);await ref.setViewportSize(portalViewport);
+ for(const theme of ['graphite','parchment','cyberpunk']){
+  await ref.locator('[data-action="navigate"][data-route="characters"]').first().evaluate((el:HTMLElement)=>el.click());
+  await ref.locator('[data-action="skins"]').first().evaluate((el:HTMLElement)=>el.click());
+  await ref.locator(`[data-action="set-skin"][data-skin="${theme}"]`).click();await expect(ref.locator('html')).toHaveAttribute('data-theme',theme);
+  await ref.locator('[data-action="close-modal"]').first().click();await expect(ref.getByRole('dialog')).toHaveCount(0);
+  await ref.locator('.cast-card').first().click();await expect(ref.getByRole('dialog')).toBeVisible();await ref.evaluate(()=>document.fonts.ready);
+  await ref.screenshot({path:info.outputPath(`skin-${theme}-dossier-reference.png`),animations:'disabled'});
+  await ref.locator('[data-action="close-modal"]').first().click();
+
+  if(info.project.name==='mobile')await page.getByRole('button',{name:'Разделы мастерской',exact:true}).click();
+  await page.locator(info.project.name==='desktop'?'.ww-sidebar':'.ww-menu-dialog').getByRole('button',{name:'Оформление',exact:true}).click();
+  await page.getByRole('combobox',{name:'Тема мира',exact:true}).selectOption(theme);await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
+  await page.keyboard.press('Escape');await expect(page.getByRole('dialog',{name:'Оформление мастерской',exact:true})).toHaveCount(0);if(info.project.name==='mobile'){await page.keyboard.press('Escape');await expect(page.locator('.ww-menu-dialog')).toHaveCount(0);}
+  await workshopNav(page,'Персонажи');await page.locator('.ww-character-card').first().click();
+  await expect(page.locator('.ww-dossier-dialog')).toBeVisible();await page.evaluate(()=>document.fonts.ready);
+  if(info.project.name==='mobile'){const boxes=await page.locator('.ww-dossier-identity').evaluate(el=>Array.from(el.children).map(c=>{const b=c.getBoundingClientRect();return {top:b.top,bottom:b.bottom}}));for(let i=1;i<boxes.length;i++)expect(boxes[i].top,'identity rows must not overlap').toBeGreaterThanOrEqual(boxes[i-1].bottom);const input=page.getByLabel('Найти персонажа в досье');await expect(input).toBeVisible();await expect(page.getByLabel('Переключить досье')).toBeVisible();
+   const layout=await page.locator('.ww-dossier-aside').evaluate(el=>{const nav=el.querySelector('.ww-dossier-nav')!.getBoundingClientRect(),actions=el.querySelector('.ww-dossier-actions')!.getBoundingClientRect();return {navRight:nav.right,actionsLeft:actions.left,bottom:el.getBoundingClientRect().bottom,viewport:innerHeight,buttons:Array.from(el.querySelectorAll('.ww-dossier-actions button')).map(b=>({width:b.getBoundingClientRect().width,height:b.getBoundingClientRect().height}))}});
+   expect(layout.navRight).toBeLessThanOrEqual(layout.actionsLeft);expect(layout.bottom).toBeLessThan(layout.viewport*.6);
+   for(const b of layout.buttons){expect(b.width).toBeGreaterThanOrEqual(44);expect(b.height).toBeGreaterThanOrEqual(44)}
+  }
+  await page.screenshot({path:info.outputPath(`skin-${theme}-dossier.png`),animations:'disabled'});
+  const portal=await page.locator('.ww-dossier-dialog').evaluate(el=>{const style=getComputedStyle(el);const overlay=document.querySelector('.dialog-overlay');return {font:style.fontFamily,background:style.backgroundColor,color:style.color,overlay:overlay?{background:getComputedStyle(overlay).backgroundColor,blur:getComputedStyle(overlay).backdropFilter}:null}});
+  expect(portal.overlay?.blur).toBe('blur(9px)');
+  await info.attach(`skin-${theme}-portal`,{body:JSON.stringify(portal),contentType:'application/json'});
+  await page.keyboard.press('Escape');await expect(page.locator('.ww-character-card').first()).toBeFocused();
+ }
+ const after=await(await request.get(`/api/workspaces/${w.id}/draft?author=true`)).json();expect(after.state).toEqual(before.state);expect(after.revision).toBe(before.revision);
+ await ref.close();
+});
+
+for(const observer of [false,true])test(`W68 server launch summary and real handoff: observer=${observer}`,async({page,request})=>{
+ const world=structuredClone(source),ids=world.characters.map((c:{id:string})=>c.id);
+ world.protagonist_id=observer?null:ids[0];world.controlled_actor_id=observer?null:ids[1];
+ world.camera={...world.camera,mode:observer?'observer':'actor',pov_actor_id:ids[2],subject_id:ids[0]};
+ for(const c of world.characters)c.is_player=c.id===world.protagonist_id;
+ world.world.scenes[world.camera.scene_id].participants=ids;
+ const opening=world.world.scenes[world.camera.scene_id];opening.text='Выбранная сцена у окна.';world.world.scenes.other_opening={...opening,id:'other_opening',text:'Другая сцена в том же месте.'};
+ const w=await(await request.post('/api/workspaces',{data:{name:'Роли запуска'}})).json(),url=`/api/workspaces/${w.id}/draft`;
+ expect((await request.post(url+'/import',{data:{revision:0,format:'json',text:JSON.stringify(world)}})).ok()).toBe(true);
+ await page.addInitScript(wid=>localStorage.setItem('draftWorkspace',wid),w.id);await page.goto('/');await nav(page,'Создать');await authorView(page);
+ const before=await(await request.get(url+'?author=true')).json();
+ await workshopNav(page,'Сцена и правила');
+ await expect(page.locator('.ww-start-controls .ww-launch-summary div').filter({has:page.locator('dt',{hasText:'Чья точка зрения'})}).locator('dd')).toHaveText(world.characters[2].name);
+ await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
+ const summary=page.locator('.ww-start-dialog .ww-launch-summary');
+ for(const [label,value] of [['Главный герой',observer?'Мир без протагониста':world.characters[0].name],['Управляемый персонаж',observer?'Нет управляемого персонажа':world.characters[1].name],['Носитель POV',world.characters[2].name],['Фокус камеры',world.characters[0].name],['Стартовая сцена',opening.text]])await expect(summary.locator('div').filter({has:page.locator('dt',{hasText:label})}).locator('dd')).toHaveText(value);
+ expect((await(await request.get(url+'?author=true')).json()).revision).toBe(before.revision);
+ const response=page.waitForResponse(r=>r.url().endsWith(url+'/confirm')&&r.request().method()==='POST');
+ await confirmWorkshopStart(page);const result=await response;expect(result.ok()).toBe(true);const save=await result.json();
+ const canonical=await(await request.post(`/test/creative172/saves/${save.save}/canonical`)).json();
+ expect(canonical.world_state.camera).toMatchObject({controlled_actor_id:world.controlled_actor_id,pov_actor_id:ids[2],subject_id:ids[0],mode:world.camera.mode});
+ expect(canonical.world_state.meta.current_protagonist_id).toBe(world.protagonist_id);
+});
