@@ -29,13 +29,15 @@ def editor_contract():
     from backend.services.draft_world import FIELDS
     from backend.services.draft_initial import EXTENSIONS
     from backend.runtime_v3.models import Character,ScheduledEvent
-    enums={};schemas={}
+    enums={};schemas={};definitions={}
     for kind,model in dict(EXTENSIONS,actor=Character,scheduled_events=ScheduledEvent).items():
-        enums[kind]={};schemas[kind]=model.model_json_schema()['properties']
+        enums[kind]={};schema=model.model_json_schema();schemas[kind]=schema['properties'];definitions.update(schema.get('$defs',{}))
         for key,schema in schemas[kind].items():
             enum=schema.get('enum') or next((part['enum'] for part in schema.get('anyOf',[]) if 'enum' in part),None)
             if enum:enums[kind][key]=enum
-    return dict(fields={k:sorted(v) for k,v in FIELDS.items()},enums=enums,schemas=schemas)
+    from backend.services.draft_player_view import RESERVED_FIELDS
+    return dict(fields={k:sorted(v) for k,v in FIELDS.items()},enums=enums,schemas=schemas,definitions=definitions,
+                field_visibility_excluded=sorted(RESERVED_FIELDS))
 
 
 def calendar_notices(state):
@@ -46,3 +48,11 @@ def calendar_notices(state):
         if record.get('notice'):
             notices.append(f"{names.get(cid,cid)} · дата рождения: {record['notice']} (/world/characters/{cid}/birth_date)")
     return notices
+
+
+def event_times(state):
+    """Format only events already admitted by the caller's author/player projection."""
+    clock=state.get('world_clock',{})
+    return {eid:clock_view(dict(clock,minute=event['minute']))['label']
+            if event.get('minute') is not None else 'Дата неизвестна'
+            for eid,event in state.get('world',{}).get('events',{}).items()}

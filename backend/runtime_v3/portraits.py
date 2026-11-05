@@ -10,12 +10,20 @@ def life_period(state, cid):
     return age,stage
 
 
+def visual_age(state, cid):
+    age, stage = life_period(state, cid)
+    if stage in ('infant','child','adolescent'): return stage
+    if stage != 'adult': return None
+    return 'elderly' if age is not None and age >= 60 else 'mature_adult' if age is not None and age >= 35 else 'young_adult'
+
+
 def authorized(state, cid):
     from backend.runtime_v3.reproduction import known_birth
     return cid in state['characters'] and known_birth(state,cid,state['camera']['controlled_actor_id'])
 
 
 def select_portrait(state, cid):
+    if state['characters'][cid].get('portrait_mode') == 'procedural': return None
     age,stage=life_period(state,cid)
     rows=[]
     for p in state['characters'][cid].get('portraits',[]):
@@ -39,5 +47,11 @@ def silhouette(state,cid):
 def projection(state,cid):
     if not authorized(state,cid): return dict(portrait=None,silhouette='neutral')
     p=select_portrait(state,cid)
-    return dict(portrait={k:p[k] for k in ('id','asset_id','width','height','crop','label')} if p else None,
+    descriptor=state['characters'][cid].get('procedural_portrait')
+    # Legacy period-bound portraits retain their selection rules. Explicit artistic
+    # age choices persist independently of the canon; privacy gates below still apply.
+    if descriptor and descriptor.get('visual_age_mode') != 'manual' and descriptor.get('stage') != life_period(state,cid)[1]: descriptor=None
+    # Game births have private life/appearance semantics; do not disclose descriptors.
+    if is_game_birth(state,cid) and state['camera']['controlled_actor_id'] != cid: descriptor=None
+    return dict(procedural_portrait=descriptor, portrait={k:p[k] for k in ('id','asset_id','width','height','crop','label')} if p else None,
                 silhouette=silhouette(state,cid))

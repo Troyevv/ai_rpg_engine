@@ -1,5 +1,6 @@
 """Pre-game operations on the existing runtime aggregate, never a second world model."""
 from copy import deepcopy
+from backend.services.draft_player_view import BINDINGS, binding_errors, player_view
 import base64
 import hashlib
 import json
@@ -84,6 +85,11 @@ def prepare(original):
                 if field.endswith('_id') and value is not None and not isinstance(value,str):raise ValueError(f'{kind}/{key}/{field}: нужна строковая ссылка.')
                 if field in ('participants','witnesses','fact_ids','character_ids','event_ids') and (not isinstance(value,list) or any(not isinstance(x,str) for x in value)):
                     raise ValueError(f'{kind}/{key}/{field}: нужен список ссылок.')
+    # Consume one-shot visual instructions on every intake path, including an
+    # imported provider response. Creative hints must never become card prose.
+    if any('portrait_traits' in card for card in state['characters']):
+        from backend.services.draft_portraits import consume_authored_traits
+        consume_authored_traits(state)
     return sync(state)
 
 
@@ -122,7 +128,7 @@ def sync(state):
 
 
 def validate(state, *, canonical=True):
-    errors=[];warnings=[];world=state['world']
+    errors=binding_errors(state);warnings=[];world=state['world']
     cards=state['characters'];ids={c['id'] for c in cards}
     def require(ok,message):
         if not ok:errors.append(message)
@@ -386,7 +392,8 @@ def patch(state,kind,eid,field,value):
     if kind not in FIELDS:raise ValueError('Неизвестная сущность.')
     if kind=='character' and field.startswith('fields.'):
         key=field[7:]
-        if not key or '.' in key or len(key)>100 or not isinstance(value,str):raise ValueError('Некорректное поле карточки.')
+        if not key or '.' in key or len(key)>100:raise ValueError('Некорректное поле карточки.')
+        if not isinstance(value,str):raise ValueError(f'Поле «{key}» должно быть текстом. Получено значение другого типа; прежнее значение сохранено.')
         target['fields'][key]=value
     elif field in FIELDS[kind]:
         if kind=='actor' and field in MOTIVATION_FIELDS:value=motivation_records(value,eid,field)
@@ -463,6 +470,10 @@ def dependencies(state,kind,eid, *, original=None):
                 result.append({'kind':group,'id':key})
     if kind=='character' and eid in (state.get('protagonist_id'),state.get('controlled_actor_id')):result.append({'kind':'start','id':eid})
     if kind=='scene' and eid==state.get('camera',{}).get('scene_id'):result.append({'kind':'camera','id':eid})
+    if kind=='fact':
+        for cid,fields in state.get(BINDINGS,{}).items():
+            if any(eid in refs for refs in fields.values()):
+                result.append({'kind':'character','id':cid})
     return result
 
 
@@ -473,7 +484,9 @@ def remove(state,kind,eid):
     state=deepcopy(state)
     if kind in ('character','location'):
         key='characters' if kind=='character' else 'locations';state[key]=[x for x in state[key] if x['id']!=eid]
-        if kind=='character':state['world']['characters'].pop(eid,None)
+        if kind=='character':
+            state['world']['characters'].pop(eid,None)
+            state.get(BINDINGS,{}).pop(eid,None)
     elif kind in GROUPS and kind!='actor':state['world'][GROUPS[kind]].pop(eid)
     else:raise ValueError('Эту сущность удалять нельзя.')
     return sync(state)
@@ -497,54 +510,6 @@ def add(state,kind):
         if kind not in templates:raise ValueError('Тип не поддерживается.')
         state['world'][GROUPS[kind]][eid]=templates[kind]
     return sync(state),eid
-
-
-def player_view(state):
-    """Server-side actor knowledge projection; hidden entries never reach the browser."""
-    actor=state['controlled_actor_id'];world=state['world'];meta=state.get('scene_meta',{})
-    known={k['fact_id'] for k in world['knowledge'].values() if k['actor_id']==actor and k['status']=='known'}
-    def visible(item):return not item.get('director_only') and (not item.get('secret') or actor in item.get('visible_to_ids',[]))
-    public=deepcopy({k:state[k] for k in ('campaign','characters','world','locations','protagonist_id','controlled_actor_id','camera','world_clock') if k in state})
-    public['sections']={};public['story_notes']='';public.pop('memory',None);public.pop('knowledge',None)
-    public.pop('facts',None);public.pop('events',None);public.pop('plans',None)
-    public['campaign']['description']=public['campaign'].get('public_description','')
-    public['campaign']['rules']=''
-    public['world']={**{kind:{} for kind in KINDS},'version':2}
-    if 'communication' in world:public['world']['communication']=deepcopy(world['communication'])
-    scene=world['scenes'].get(state.get('camera',{}).get('scene_id'),{})
-    public['scene']=scene.get('text','');public['scene_meta']={**meta,'present_ids':scene.get('participants',[])}
-    public['characters']=[c for c in public['characters'] if not c.get('hidden') or c['id']==actor or c['id'] in scene.get('participants',[]) or actor in c.get('visible_to_ids',[])]
-    visible_ids={c['id'] for c in public['characters']}
-    for c in public['characters']:
-        c.pop('text',None)
-        c.pop('hidden',None);c.pop('visible_to_ids',None)
-        c['fields']={k:v for k,v in c['fields'].items() if k in ('Внешность','Роль','Возраст') or c['id']==actor and k not in ('Секрет','Скрытые мотивы')}
-        if c['id']==actor:public['world']['characters'][actor]=deepcopy(world['characters'][actor])
-    public['world']['facts']={key:deepcopy(f) for key,f in world['facts'].items() if (key in known or not f.get('secret')) and not f.get('director_only') and set(f.get('character_ids',[]))<=visible_ids}
-    # Knowledge records with "unknown" must not expose the existence of their facts.
-    public['world']['knowledge']={key:deepcopy(k) for key,k in world['knowledge'].items() if k['actor_id']==actor and k['fact_id'] in public['world']['facts'] and k['status'] in ('known','suspected')}
-    public['world']['relationships']={key:deepcopy(r) for key,r in world['relationships'].items() if not r.get('director_only') and (r.get('source_id')==actor or actor in r.get('visible_to_ids',[])) and r.get('source_id') in visible_ids and r.get('target_id') in visible_ids}
-    public['relationships']=[dict(source_id=r.get('source_id',''),target_id=r.get('target_id',''),text=r.get('context','')) for r in public['world']['relationships'].values()]
-    public['world']['threads']={key:deepcopy(t) for key,t in world['threads'].items() if actor in t.get('visible_to_ids',[]) and not t.get('director_only') and set(t.get('character_ids',[]))<=visible_ids}
-    for thread in public['world']['threads'].values():
-        thread['state']=thread.get('public_state','')
-        thread.pop('last_event_id',None)
-        thread.pop('relevance',None)
-    public['world']['events']={key:deepcopy(e) for key,e in world['events'].items() if (actor in e.get('participants',[]) or actor in e.get('witnesses',[]) or e.get('player_observed')) and not e.get('director_only')}
-    if scene:
-        public['world']['scenes'][state['camera']['scene_id']]=deepcopy(scene)
-        # An event might reference a hidden fact; remove its links, not its visible text.
-        public['world']['scenes'][state['camera']['scene_id']]['event_ids']=[key for key in scene.get('event_ids',[]) if key in public['world']['events']]
-    for event in public['world']['events'].values():event['fact_ids']=[key for key in event.get('fact_ids',[]) if key in public['world']['facts']]
-    for fact in public['world']['facts'].values():fact['evidence']=[]
-    # Explicitly hidden places remain author-only; generator instructions forbid secrets in public place descriptions.
-    public['locations']=[loc for loc in public['locations'] if visible(loc)]
-    for group in ('facts','relationships','threads','events','scenes'):
-        for item in public['world'][group].values():
-            for marker in ('director_only','visible_to_ids','secret_intentions','private_notes'):item.pop(marker,None)
-    for loc in public['locations']:
-        for marker in ('director_only','visible_to_ids'):loc.pop(marker,None)
-    return public
 
 
 def export_markdown(state):

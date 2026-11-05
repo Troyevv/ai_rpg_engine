@@ -56,7 +56,9 @@ def canonical_slice(state, scope, extraction=False, query=""):
         cid != scope.controlled_actor_id, cid not in scope.present_actor_ids,
         cid not in scope.remote_actor_ids, -scope.actor_scores.get(cid,0), cid))[:8]
     for character in current['characters'].values():
-        character.pop('portraits', None)
+        # Presentation metadata belongs to the UI, never to either LLM context.
+        for field in ('portraits', 'procedural_portrait', 'portrait_mode'):
+            character.pop(field, None)
         from backend.runtime_v3.appearance import context_profile as appearance_context
         character['appearance']=appearance_context(state,character['id'],observer=scope.pov_actor_id or scope.controlled_actor_id,omniscient=extraction,known_actor_ids=scope.relevant_actor_ids)
         if character['appearance'] is None: character.pop('appearance')

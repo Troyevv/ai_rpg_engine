@@ -20,6 +20,7 @@ class Change(Revision):
     value: Any = None
     source_id: int | None = None
     warnings_ack: bool = False
+    field_visibility: Literal['default'] | list[str] | None = None
 
 from backend.services.world_creation_settings import CreationSettings, CalendarPresets
 
@@ -159,19 +160,28 @@ def install(app,repo,preparation,credentials,job):
         return repo.draft(wid,True)
 
     @app.get('/api/workspaces/{wid}/draft/raw')
-    def raw(wid:str):
+    def raw(wid:str,job_id:str|None=None):
         current=repo.workspace(wid)['job']
         if not current:raise ValueError('Нет задания.')
-        saved=repo.preparation_job(current['id'])
+        saved=repo.preparation_job(job_id or current['id'])
+        if not saved or saved['workspace_id']!=wid:raise ValueError('Задание не принадлежит черновику.')
         journal=json.loads(saved.get('response_journal') or '{}')
         # Explicit allowlist: never export config, credentials or authorization headers.
         keys=('editor','generation_contract','creative','creative_history','responses','pending','errors','review_failures','repair_failures','http_failures','review_recoveries',
               'active_response','empty_requests','empty_retries','empty_retry_history','response_retries',
               'quality','quality_attempts','review_strategies','review_resolutions','review_preparation_failures','internal_errors',
               'accepted_reviews','unknown_attempts','recovery_epoch','reserved_tokens','reserved_cost','actual_tokens','actual_cost','fragment_recoveries','binding')
-        requests=[{k:r.get(k) for k in ('id','stage','status','finish_reason','usage_json','input_tokens','output_tokens','cost_usd')} for r in repo.request_log(job_id=current['id'])]
+        requests=[{k:r.get(k) for k in ('id','stage','status','finish_reason','usage_json','input_tokens','output_tokens','cost_usd')} for r in repo.request_log(job_id=saved['id'])]
         draft=repo.draft(wid,True)
-        return {'current_diagnostics':draft['validation'].get('diagnostics',[]),'current_start_block_reason':draft.get('start_block_reason'),
+        config=json.loads(saved['config_json'])
+        operation=config.get('_draft_task') or saved['kind']
+        return {'job_id':saved['id'],'operation':operation,'target':config.get('_draft_target'),
+                'application':{'status':saved['status'],'phase':saved.get('phase'),'error':saved.get('error') or None},
+                'model_response':{'text':saved.get('narrative') or None,'available':bool(saved.get('narrative')),
+                                  'source':'preparation_job.narrative','request_ids':[r['id'] for r in requests]},
+                'snapshot_description':'Последнее сохранённое состояние; не ответ модели на запрос правки.',
+                'last_saved_state':{'version_id':draft.get('version_id'),'state':draft.get('candidate') or draft.get('state')},
+                'current_diagnostics':draft['validation'].get('diagnostics',[]),'current_start_block_reason':draft.get('start_block_reason'),
                 'candidate_snapshot':draft.get('candidate') or draft.get('state'),'candidate_version':draft.get('version_id'),
                 'author_input':{'text':json.loads(saved['config_json']).get('_draft_source',json.loads(saved['config_json']).get('_draft_input','')),'source_text':draft.get('source_text'),'outline':draft.get('outline')},
                 'requests':requests,**{k:journal[k] for k in keys if k in journal},'recovery':{'status':saved['status'],'phase':saved.get('phase'),
@@ -184,7 +194,9 @@ def install(app,repo,preparation,credentials,job):
 
     @app.patch('/api/workspaces/{wid}/draft')
     def change(wid:str,body:Change):
-        eid=repo.edit_draft(wid,body.revision,body.operation,body.kind,body.entity_id,body.field,body.value,body.source_id,body.warnings_ack)
+        if 'field_visibility' in body.model_fields_set and body.field_visibility is None:
+            raise ValueError('Политика поля: default или список ID фактов.')
+        eid=repo.edit_draft(wid,body.revision,body.operation,body.kind,body.entity_id,body.field,body.value,body.source_id,body.warnings_ack,field_visibility=body.field_visibility)
         return {**repo.draft(wid,True),'entity_id':eid}
 
     @app.get('/api/workspaces/{wid}/draft/dependencies')
@@ -232,5 +244,12 @@ def install(app,repo,preparation,credentials,job):
     def export(wid:str,version_id:int,format:Literal['md','txt','json']='md'):
         value=repo.draft(wid,True)
         if value['version_id']!=version_id:raise ValueError('Версия изменилась. Обнови редактор.')
-        text=json.dumps(value.get('candidate') if value.get('candidate') is not None else value['state'],ensure_ascii=False,indent=2) if format=='json' else domain.export_markdown(value['state'])
+        from backend.services.draft_portraits import export_assets
+        import base64
+        state=value.get('candidate') if value.get('candidate') is not None else value['state']
+        assets=export_assets(repo,wid,state) if state and 'world' in state and 'characters' in state['world'] else {}
+        if format=='json': text=json.dumps({'state':state,'portrait_assets':assets} if assets else state,ensure_ascii=False,indent=2)
+        else:
+            text=domain.export_markdown(value['state'])
+            if assets: text+='\n<!-- AI_RPG_PORTRAITS_V1 '+base64.b64encode(json.dumps(assets).encode()).decode()+' -->\n'
         return PlainTextResponse(text,media_type='application/json' if format=='json' else 'text/plain',headers={'Content-Disposition':f'attachment; filename="world.{format}"'})

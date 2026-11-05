@@ -383,7 +383,7 @@ class StateResolver:
         for i, item in self.records(raw,'character_changes',evidence=False):
             cid = self.actor(item.get('id'),'character_changes',i)
             actor = s['characters'][cid]
-            for protected in ('personality','values','fields','appearance','portraits'):
+            for protected in ('personality','values','fields','appearance','portraits','procedural_portrait','portrait_mode'):
                 if protected in item:
                     self.warn('character_changes',i,'Личность изменяется только частичной evidence-bound дельтой.',protected,cid,'personality_full_replace_rejected')
             if actor['life_status'] == 'dead':

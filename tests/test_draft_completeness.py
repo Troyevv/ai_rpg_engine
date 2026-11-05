@@ -19,7 +19,11 @@ SOURCE=Path('tests/fixtures/initial_world/volkov_user_brief.txt').read_text()
 DINNER=SOURCE+'\nУточнение: вчера вечером Сергей сообщил правду об усыновлении за семейным ужином. Присутствовала вся семья: Сергей, Марина, Тимур, Катя и Илья. Это раскрытие произошло после описанного прежнего состояния незнания.\n'
 
 
-def real():return json.loads(REAL_PATH.read_text())
+def real():
+    value=json.loads(REAL_PATH.read_text())
+    assert value['world'].get('contacts',{}) == {}
+    value['world'].pop('contacts',None)  # Provider contract; source fixture stays verbatim.
+    return value
 def candidate():return draft_world.prepare(draft_initial.normalize(real()))
 
 
@@ -164,7 +168,7 @@ def test_real_response_review_repair_start_turn_reload(api):
             request=json.loads(kw['messages'][-1]['content'])
             assert len(request['errors'])==len(corrections())
             yield json.dumps({'patches':corrections()},ensure_ascii=False)
-        else:yield REAL_PATH.read_text()
+        else:yield json.dumps(real(),ensure_ascii=False)
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         res=client.post(path+'/generate',json={'revision':0,'text':DINNER,'config':dict(REMOTE,context_length=65536),'api_key':'test'})
         job=wait_job(client,res.json()['id']);assert job['status']=='saved',job
@@ -200,7 +204,7 @@ def test_unresolved_semantics_require_warning_ack_and_repair_budget_is_shared(tm
             yield json.dumps({'issues':[dict(path='/world/characters/c1/intentions',message='Незаданное намерение.')]})
         elif 'patches' in kw['messages'][0]['content']:
             yield json.dumps({'patches':[dict(path='/world/characters/c1/intentions',value=['Скрыть своё эмоциональное состояние'])]})
-        else:yield REAL_PATH.read_text()
+        else:yield json.dumps(real(),ensure_ascii=False)
     with pytest.raises(ValueError,match='Две попытки|Цикл значений|не дало прогресса'):
         run(Preparation(repo),jid,cfg,None,Handle(),None,stream)
     assert len(calls)==4  # generation + cached review + 2 repairs, never regeneration

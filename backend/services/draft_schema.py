@@ -115,6 +115,7 @@ def world_state_schema():
     schema = {'$schema':'https://json-schema.org/draft/2020-12/schema','title':'WorldState',
             'description':'Один готовый к игре мир; пользовательская идея — канон, остальные детали придумываются творчески.',
             **obj({'schema_version':{'const':1},'campaign':campaign,'sections':obj({}),
+                   'card_field_facts':entries(entries(IDS,'Поле карточки → ID фактов, раскрываемых этим текстом.'),'ID персонажа → привязки видимости для мастерской. Не заполнять без необходимости.'),
                    'story_notes':{'type':'string'},
                    'locations':array(obj({'id':ID,'name':text('Название локации'),'text':text('Физические детали и игровые возможности.')},('id','name','text')),minimum=1),
                    'characters':array(character,'Значимые персонажи, каждый с полной постоянной карточкой.',1),

@@ -8,7 +8,7 @@ test('portrait upload crop history original and deletion remain usable',async({p
  await page.goto('/');await nav(page,'Мир');await nav(page,'Персонажи');await pickCharacter(page,'qa_vera');
  const pencil=page.getByRole('button',{name:'Редактировать портрет'});await expect(pencil).toBeVisible();
  const fallback=page.locator('.character-profile .portrait-control .character-avatar');
- await expect(fallback.locator('svg')).toBeVisible();
+ await expect(fallback.locator('img.procedural-portrait')).toBeVisible();
  await pencil.click();
  const input=page.getByLabel('Файл портрета');
  const png=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=160;c.height=240;const ctx=c.getContext('2d')!;ctx.fillStyle='#916744';ctx.fillRect(0,0,320,480);ctx.fillStyle='#ecd2ae';ctx.fillRect(80,60,160,200);return c.toDataURL('image/png').split(',')[1]});
@@ -35,7 +35,7 @@ test('portrait upload crop history original and deletion remain usable',async({p
  await page.getByLabel('По горизонтали').fill('0.6');await page.getByRole('button',{name:'Сохранить',exact:true}).click();await expect(page.getByRole('heading',{name:'Портрет персонажа',exact:true})).toHaveCount(0);await pencil.click();await expect(page.getByLabel('Возраст от',{exact:true})).toHaveValue('30');await expect(page.getByLabel('Возраст до',{exact:true})).toHaveValue('50');
  await page.screenshot({animations:'disabled',path:test.info().outputPath('portrait-editor.png')});
  await page.getByRole('button',{name:'Удалить портрет',exact:true}).click();await page.getByRole('button',{name:'Подтвердить удаление'}).click();
- await expect(page.getByRole('heading',{name:'Портрет персонажа',exact:true})).toHaveCount(0);await expect(fallback.locator('svg')).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Портрет персонажа',exact:true})).toHaveCount(0);await expect(fallback.locator('img.procedural-portrait')).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width);
  await page.screenshot({animations:'disabled',path:test.info().outputPath('portrait-card.png')});
  expect(errors).toEqual([]);

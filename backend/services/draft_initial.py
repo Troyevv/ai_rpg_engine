@@ -141,10 +141,16 @@ def normalize_calendar(clock):
 SERVER_FIELDS = frozenset(('birth_provenance', 'birth_date_provenance', 'authoring',
     'source_turn', 'source_sequence', 'emotion_source_sequence', 'field_facts', 'revision',
     'applied', 'remote_source_ids', 'confirmed_once', 'review_required', 'reviewed_signature',
-    'time_reference_minute'))
+    'time_reference_minute', 'portraits', 'procedural_portrait', 'portrait_mode'))
 
 
-def prompt_schema():
+def validate_generated_input(raw):
+    """Provider boundary only: legacy imports retain their contact records."""
+    if isinstance(raw,dict) and isinstance(raw.get('world'),dict) and 'contacts' in raw['world']:
+        raise DraftErrors([error('/world/contacts','Телефонная книга не входит в контракт генерации. Удалите свойство contacts.','forbidden')])
+
+
+def prompt_schema(*, initial_portraits=False):
     # Keep the descriptive editor schema; omit duplicate prose from the provider
     # schema. Property names such as title/description are data, not annotations.
     from backend.services.draft_schema import world_state_schema
@@ -158,6 +164,7 @@ def prompt_schema():
     # Contacts remain an accepted legacy/editor extension, not generation work.
     # Runtime derives recipients from canonical characters and enabled channels.
     schema['properties']['world']['properties'].pop('contacts', None)
+    schema['properties']['world']['additionalProperties'] = False
     # Explicit communication profile is injected by code, never generated twice.
     communication=schema['properties']['world']['properties']['communication']['properties']
     for key in ('profile_version','preset','letter','courier','telegram','landline','magic','delivery_policy','delivery_minutes','author_note'):
@@ -175,6 +182,22 @@ def prompt_schema():
                     node['required'] = [key for key in node['required'] if key not in SERVER_FIELDS]
             for child in node.values(): omit_server_fields(child)
     omit_server_fields(schema)
+    # Motivation provenance belongs to Runtime; Knowledge's same-named field
+    # remains an authorable reference to a historical event.
+    actor=schema['properties']['world']['properties']['characters']['additionalProperties']
+    def omit_motivation_source(node):
+        if isinstance(node,list):
+            for child in node:omit_motivation_source(child)
+        elif isinstance(node,dict):
+            if 'properties' in node:
+                node['properties'].pop('source_event_id',None)
+                if 'required' in node:node['required']=[k for k in node['required'] if k!='source_event_id']
+            for child in node.values():omit_motivation_source(child)
+    for key in ('goals','intentions','obligations'):
+        omit_motivation_source(actor['properties'][key])
+    if initial_portraits:
+        from backend.services.portrait_traits import input_schema
+        schema['properties']['characters']['items']['properties']['portrait_traits'] = input_schema()
     return schema
 
 

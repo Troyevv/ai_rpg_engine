@@ -1,5 +1,13 @@
 import {expect,type Page} from '@playwright/test';
 export async function nav(page:Page,name:string){
+ if(await page.locator('.ww-shell').isVisible()){
+  if(name==='Создать')return;
+  if(name==='Настройки'||name==='Игра'){
+   if((page.viewportSize()?.width||1440)<=760)await page.getByRole('button',{name:'Разделы мастерской',exact:true}).click();
+   await page.getByRole('button',{name:name==='Настройки'?'Модели и настройки':'Вернуться к игре',exact:true}).click();return;
+  }
+ }
+
  const button=page.getByRole('button',{name,exact:true}).last();
  if((page.viewportSize()?.width||1440)<768){
   await expect(page.getByRole('dialog')).toHaveCount(0);await page.getByRole('button',{name:'Меню игры'}).click();

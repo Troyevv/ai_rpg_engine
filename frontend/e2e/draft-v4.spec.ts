@@ -1,3 +1,4 @@
+import {workshopNav,draftsMenu} from './workshop-navigation';
 import {test,expect} from '@playwright/test';
 import {nav} from './navigation';
 
@@ -16,7 +17,7 @@ test('creation settings and JSON continuation survive editor start and reload',a
   const sent=page.waitForRequest(r=>r.url().endsWith('/draft/generate'));
   await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
   expect((await sent).postDataJSON().creation_settings.primary_genre).toBe('family_saga');
-  await expect(page.getByRole('heading',{name:'Посмотри, что получилось'})).toBeVisible();
+  await expect(page.locator('.ww-hero h1')).toBeVisible();
   const draft=await(await request.get(`/api/workspaces/${workspace.id}/draft?author=true`)).json();
   expect(draft.state.creation_settings.npc_expressiveness).toBe('hyperbolized');
   expect(draft.validation.errors).toEqual([]);
@@ -43,6 +44,7 @@ test('failed world remains editable and starts without regeneration',async({page
   const url=`/api/workspaces/${workspace.id}/draft`;
   await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('error');
   await page.reload();await nav(page,'Создать');
+  await workshopNav(page,'Проверка мира');
   await page.getByRole('button',{name:'Открыть результат в редакторе автора'}).click();
   await page.getByRole('button',{name:'Показать всё',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -72,6 +74,7 @@ test('review protocol failure survives reload and resumes only review',async({pa
   await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
   await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('error');
   await page.reload();await nav(page,'Создать');
+  await workshopNav(page,'Проверка мира');
   await expect(page.getByRole('heading',{name:'Смысловая проверка не завершена'})).toBeVisible();
   await expect(page.getByRole('button',{name:'Начать с предупреждениями',exact:true})).toBeEnabled();
   await page.getByRole('button',{name:'Автор мира',exact:true}).click();
@@ -105,26 +108,30 @@ test('structured motivations render and edit without losing lifecycle metadata',
   await page.getByLabel('Описание мира или текст импорта').fill('TEST_MOTIVATION_OBJECTS. Сохрани заданные цели и намерения.');
   await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
   await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('saved');
-  await page.getByRole('group',{name:'Разделы мира'}).getByRole('button',{name:'Персонажи',exact:true}).click();
-  await expect(page.getByText('Цели: Текущая goals',{exact:true})).toBeVisible();
+  await workshopNav(page,'Персонажи');
+  await page.locator('.ww-character-card').first().click();await page.getByRole('button',{name:'Цели',exact:true}).click();
+  await page.locator('.ww-dossier-fields summary').first().click();
+  await expect(page.locator('.ww-dossier-fields')).toContainText('Текущая goals');
+  await page.getByRole('button',{name:'Готово',exact:true}).click();
   await expect(page.getByText('[object Object]',{exact:false})).toHaveCount(0);
   await page.getByRole('button',{name:'Автор мира',exact:true}).click();
   await page.getByRole('button',{name:'Показать всё',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await page.getByText('Состояние, цели и намерения',{exact:true}).click();
+  await page.locator('.ww-character-card').first().click();await page.getByRole('button',{name:'Цели',exact:true}).click();
   const before=await(await request.get(url+'?author=true')).json();
   const cid=before.state.protagonist_id;
   for (const [field,label] of [['goals','Цели'],['intentions','Намерения'],['obligations','Обязательства']]) {
     await page.getByRole('button',{name:`Изменить ${label}`,exact:true}).click();
-    const input=page.getByRole('dialog').getByLabel(label,{exact:true});
-    const records=JSON.parse(await input.inputValue());
-    expect(records).toEqual(before.state.world.characters[cid][field]);
+    const input=page.locator('.ww-field-dialog').getByLabel('Описание',{exact:true}).first();
+    const records=structuredClone(before.state.world.characters[cid][field]);
+    await expect(input).toHaveValue(records[0].text);
     records[0].text=`Редактирование ${field}`;
-    await input.fill(JSON.stringify(records,null,2));
+    await input.fill(records[0].text);
     await page.getByRole('button',{name:'Сохранить поле',exact:true}).click();
-    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.locator('.ww-field-dialog')).toHaveCount(0);
     await expect.poll(async()=> (await(await request.get(url+'?author=true')).json()).state.world.characters[cid][field]).toEqual(records);
   }
+  await page.getByRole('button',{name:'Готово',exact:true}).click();await workshopNav(page,'Проверка мира');
   await page.getByRole('button',{name:'Повторить проверку',exact:true}).click();
   await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('saved');
   await page.screenshot({path:`test-results/motivations-${page.viewportSize()?.width}.png`,fullPage:true});
@@ -153,6 +160,7 @@ test('fragment recovery survives reload and repeats only rejected continuation',
   await expect(page.getByRole('heading',{name:'Восстановление ответа'})).toBeVisible();
   await expect(page.getByRole('button',{name:'Открыть результат в редакторе автора'})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Исправить поле',exact:true})).toHaveCount(0);
+  await workshopNav(page,'Проверка мира');
   await page.getByText('Повторить проблемное продолжение',{exact:true}).click();
   await page.screenshot({path:`test-results/fragment-recovery-${info.project.name}.png`,fullPage:true});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth));
@@ -177,18 +185,21 @@ test('previous world is labelled separately from an incomplete new response',asy
   expect((await request.post(url+'/import',{data:{revision:0,text:source.source_md}})).ok()).toBeTruthy();
   await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),w.id);
   await page.goto('/');await nav(page,'Создать');
-  await page.getByRole('button',{name:'Изменить замысел',exact:true}).click();
+  await workshopNav(page,'Идея и генерация');
+  await page.getByRole('button',{name:'Открыть замысел автора'}).click();await page.getByRole('button',{name:'Показать всё',exact:true}).click();
   await page.getByLabel('Описание мира или текст импорта').fill(`TEST_FRAGMENT_RECOVERY previous ${info.project.name}. Новый мир.`);
   await page.getByRole('button',{name:'Создать новую версию мира',exact:true}).click();
   await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('error');
   await page.reload();await nav(page,'Создать');
   await expect(page.getByRole('heading',{name:'Ранее сохранённый мир',exact:true})).toBeVisible();
-  await expect(page.getByRole('heading',{name:'Посмотри, что получилось',exact:true})).toHaveCount(0);
+  await expect(page.locator('.ww-hero h1')).toBeVisible();
   await expect(page.getByRole('button',{name:'Начать игру в предыдущем мире',exact:true})).toBeVisible();
+  await workshopNav(page,'Проверка мира');
   await page.getByText('Повторить проблемное продолжение',{exact:true}).click();
   await page.getByRole('button',{name:'Запросить только последнее продолжение',exact:true}).click();
   await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('saved');
-  await expect(page.getByRole('heading',{name:'Посмотри, что получилось',exact:true})).toBeVisible();
+  await workshopNav(page,'Обзор мира');
+  await expect(page.locator('.ww-hero h1')).toBeVisible();await expect(page.getByRole('heading',{name:'Ранее сохранённый мир',exact:true})).toHaveCount(0);
 });
 
 test('saved symmetric duplicates offer lossless merge after reconnect',async({page,request},info)=>{
@@ -206,6 +217,7 @@ test('saved symmetric duplicates offer lossless merge after reconnect',async({pa
   await page.reload();await nav(page,'Создать');
   await page.getByRole('button',{name:'Автор мира',exact:true}).click();
   await page.getByRole('button',{name:'Показать всё',exact:true}).click();
+  await workshopNav(page,'Проверка мира');
   await expect(page.getByRole('heading',{name:'Две записи одной связи'})).toBeVisible();
   await expect(page.getByText('/world/objective_relations/a',{exact:true})).toBeVisible();
   await expect(page.getByText('/world/objective_relations/b',{exact:true})).toBeVisible();

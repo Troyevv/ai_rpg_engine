@@ -3,8 +3,8 @@ import {nav,actor,pickCharacter} from './navigation';
 const evidence=process.env.PORTRAIT_EVIDENCE||'/tmp/portrait-polish-evidence';
 const phase=process.env.PR121_BEFORE?'before':'after';
 test.use({video:'off'});
-async function seed(page:Page,request:APIRequestContext,hidden=false){
- const r=await request.post(`/test/phone-seed?incoming=false&polish=true&hidden=${hidden}`);expect(r.ok(),await r.text()).toBeTruthy();const s=await r.json();
+async function seed(page:Page,request:APIRequestContext,hidden=false,legacy=false){
+ const r=await request.post(`/test/phone-seed?incoming=false&polish=true&hidden=${hidden}&legacy_portraits=${legacy}`);expect(r.ok(),await r.text()).toBeTruthy();const s=await r.json();
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),s);return s;
 }
 async function dossier(page:Page){await nav(page,'Мир');await nav(page,'Персонажи');return page.locator('.inspector-workspace')}
@@ -108,7 +108,7 @@ test('portrait viewer, editor, error recovery, semantic tabs and resize drafts',
  const input=page.getByLabel('Текст цели или намерения');await input.fill('Длинный черновик цели — сохранить после изменения ширины.');await page.setViewportSize({width:393,height:900});await expect(input).toHaveValue('Длинный черновик цели — сохранить после изменения ширины.');await expect(input).toBeFocused();await page.keyboard.press('Escape');
  await page.keyboard.press('Escape');
  // A failed image URL must not poison a different character or a subsequent upload.
- await page.route('**/qa_kirill/portraits/assets/*',r=>r.fulfill({status:404,body:''}));await page.reload();const again=await dossier(page);await again.getByRole('tab',{name:'Обзор',exact:true}).click();await expect(again.locator('.portrait-control .avatar-fallback')).toBeVisible();
+ await page.route('**/qa_kirill/portraits/assets/*',r=>r.fulfill({status:404,body:''}));await page.reload();const again=await dossier(page);await again.getByRole('tab',{name:'Обзор',exact:true}).click();await expect(again.locator('.portrait-control .procedural-portrait')).toBeVisible();await expect(again.locator('.portrait-control .procedural-portrait')).toHaveAttribute('src',/^data:image\/svg/);
  await pickCharacter(page,'qa_vera');await expect(again.locator('.portrait-control img')).toBeVisible();
  await page.unroute('**/qa_kirill/portraits/assets/*');await pickCharacter(page,'qa_kirill');await expect(again.locator('.portrait-control img')).toBeVisible();
  await page.evaluate(()=>document.documentElement.style.fontSize='24px');expect(await again.evaluate(e=>e.scrollWidth<=e.clientWidth+1)).toBe(true);
@@ -174,7 +174,7 @@ test('temporary phone owner and real outgoing API use its portrait',async({page,
 });
 
 test('fallback geometry, neutral identity and long text at each size',async({page,request},info)=>{
- test.skip(phase==='before');test.setTimeout(90000);await seed(page,request);await page.goto('/');const d=await dossier(page);
+ test.skip(phase==='before');test.setTimeout(90000);await seed(page,request,false,true);await page.goto('/');const d=await dossier(page);
  for(const [cid,sex] of [['qa_kirill','male'],['qa_vera','female'],['qa_oleg','neutral']]){
   await pickCharacter(page,cid);
   const avatar=d.locator('.portrait-control>.character-avatar');await expect(avatar).toHaveClass(new RegExp('avatar-'+sex));await expect(avatar.locator('svg')).toHaveAttribute('data-silhouette',sex);

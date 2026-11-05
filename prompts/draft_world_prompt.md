@@ -41,3 +41,5 @@ birth dates are separate choices; do not change one to satisfy another.
 Связь: не генерируй телефонную книгу, записи contacts или номера персонажей.
 Доступность живых канонических персонажей через включённые каналы определяет Runtime;
 знакомство, наличие устройства и сохранённого контакта для обращения не требуются.
+
+Keep ordinary dossiers and locations spoiler-free. If a card field must reveal a secret, bind card_field_facts[character_id][field] to its fact IDs. Link private motivations via dependencies.facts and events via fact_ids; use visible_to_ids and public_state on private relationships/threads.

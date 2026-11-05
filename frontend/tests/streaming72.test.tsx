@@ -181,3 +181,18 @@ it('letter streams as literal prose while ordinary code fences remain ordinary',
  expect(host.textContent).toContain('```python');
  expect(fetch).not.toHaveBeenCalled();
 });
+
+it('a late queued refresh cannot erase an observed review phase within the same attempt',async()=>{
+ class Stream extends EventTarget {static last:Stream;onopen=noop;onerror=noop;constructor(){super();Stream.last=this}close(){}}
+ vi.stubGlobal('EventSource',Stream);
+ function Reader({initial}:{initial:Job}){const {job}=useJob(initial,noop);return <div>{job?.phase||'queued'}</div>}
+ const queued={...initialJob,attempt_epoch:1,phase:''};
+ await render(<Reader initial={queued}/>);
+ await act(()=>Stream.last.dispatchEvent(new MessageEvent('snapshot',{data:JSON.stringify({...queued,phase:'reviewing'})})));
+ expect(host.textContent).toBe('reviewing');
+ await render(<Reader initial={{...queued}}/>);
+ expect(host.textContent).toBe('reviewing');
+ // A genuinely new attempt is allowed to start queued again.
+ await render(<Reader initial={{...queued,attempt_epoch:2}}/>);
+ expect(host.textContent).toBe('queued');
+});

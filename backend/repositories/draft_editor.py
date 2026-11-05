@@ -3,14 +3,9 @@ import json
 
 
 class DraftEditorStorage:
-    def _editor_unstarted(self,db,wid):
-        if db.execute("SELECT 1 FROM document_versions WHERE kind='draft_save' AND owner LIKE ?",(wid+':%',)).fetchone():
-            raise ValueError('AI-редактор доступен только до Start Game. Создайте новый черновик.')
-
     def _begin_world_edit(self,db,wid,config,revision):
         from backend.services.draft_initial import inspect_candidate
         from backend.repositories.drafts import candidate_hash
-        self._editor_unstarted(db,wid)
         head=self._draft_head(db,wid)
         if not head:raise ValueError('Сначала создайте мир.')
         base=json.loads(head['content'])
@@ -29,7 +24,6 @@ class DraftEditorStorage:
             journal=json.loads(job['response_journal'])
             if job['status']!='generating' or journal.get('recovery_epoch',0)!=epoch:return
             self._draft_workspace(db,job['workspace_id'],job['revision'],idle=False)
-            self._editor_unstarted(db,job['workspace_id'])
             db.execute("UPDATE preparation_jobs SET status='saved',phase='preview' WHERE id=?",(jid,))
 
     def world_edits(self,wid,author=False):
@@ -56,10 +50,9 @@ class DraftEditorStorage:
     def decide_world_edit(self,wid,jid,revision,decision,accept_conflicts=False,accept_warnings=False):
         from backend.repositories.drafts import candidate_hash
         from backend.services.draft_editor import accepted_state,manual_conflicts,differences
-        from backend.services.draft_changes import validate_transition
+        from backend.services.draft_changes import validate_candidate
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
-            self._editor_unstarted(db,wid)
             job=db.execute("SELECT * FROM preparation_jobs WHERE id=? AND workspace_id=? AND kind='draft_editor'",(jid,wid)).fetchone()
             if not job:raise ValueError('Предложение не принадлежит черновику.')
             journal=json.loads(job['response_journal']);edit=journal['editor']
@@ -76,7 +69,7 @@ class DraftEditorStorage:
                 if job['status']!='saved' or edit['status']!='preview':raise ValueError('Предложение ещё не проверено.')
                 current=json.loads(head['content'])
                 if candidate_hash(current['state'])!=edit['before_hash']:raise ValueError('Кандидат изменился.')
-                trial=validate_transition(current['state'],edit['candidate'],editing=True)
+                trial=validate_candidate(current['state'],edit['candidate'],editing=True)
                 if differences(current['state'],trial)!=edit['diff']:raise ValueError('Предпросмотр изменился.')
                 if edit.get('proposal',{}).get('conflicts'):raise ValueError('Уточните инструкцию: в предложении есть нерешённые авторские конфликты.')
                 review=edit.get('review',{})

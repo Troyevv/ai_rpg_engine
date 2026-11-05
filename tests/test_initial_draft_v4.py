@@ -19,7 +19,7 @@ FULL=(Path(__file__).parent/'fixtures/initial_world/volkov_user_brief.txt').read
 
 
 def rich():
-    state=fixture();ids=[c['id'] for c in state['characters']]
+    state=fixture();state['world'].pop('contacts',None);ids=[c['id'] for c in state['characters']]
     # This is the healthy transport fixture. Placeholder recovery is exercised
     # independently with raw E4 and test_issue44_final.
     for i,card in enumerate(state['characters']):
@@ -124,7 +124,9 @@ def test_source_settings_continuation_editor_start_reload(api,source):
         assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
         repo=Repository(repo.path)
         assert repo.get_snapshot(sid)['world_state']['roles']['job']['title']=='Старший юрист'
-    public=client.get(path).json();assert 'organizations' not in public['state']['world']
+    public=client.get(path).json();assert 'apex' in public['state']['world']['organizations']
+    assert public['state']['world']['roles']['job']['title']=='Старший юрист'
+    assert 'evidence' not in public['state']['world']['roles']['job']
     assert 'response_journal' not in public['job'] and 'test-secret' not in json.dumps(public)
 
 

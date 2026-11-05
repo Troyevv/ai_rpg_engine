@@ -1,7 +1,21 @@
+import {ReferenceChecklist} from './workshop/ReferenceChecklist';
+import {RelationshipMap} from './workshop/RelationshipMap';
+import {RecordPreview} from './workshop/RecordPreview';
+import {useWorkshopBack} from './workshop/useWorkshopBack';
+import {ReadableText} from './workshop/ReadableText';
+import {FieldVisibility,fromBinding,wirePolicy,type FieldPolicy} from './workshop/FieldVisibility';
+import {DossierRecords} from './workshop/DossierRecords';
+import {RecordCollection} from './workshop/RecordCollection';
+import {WorkshopShell,type WorkshopSection} from './workshop/WorkshopShell';
+import {CharacterCollection,CharacterCard,emptyCollection,type CollectionView,type WorkshopCharacter} from './workshop/CharacterCollection';
+import {CharacterDossier} from './workshop/CharacterDossier';
+import {StructuredValueEditor} from './workshop/StructuredValueEditor';
+import {Home,Users,MapPin,Link,BookOpen,ShieldCheck,ArrowRight,Search,Plus,Clock} from 'lucide-react';
+import './styles/world-workshop.css';
 import {WorldAIEditor} from './WorldAIEditor';
 import {CommunicationEditor,CommunicationSettings,type CommunicationProfile} from './CommunicationSettings';
 import {CalendarProfileEditor} from './CalendarProfileEditor';
-import {RuntimeValue, resolver, recordTitle, runtimeLabels, enumLabels} from './runtimePresentation';
+import {RuntimeValue, resolver, recordTitle, runtimeLabels, enumLabels, characterRefs} from './runtimePresentation';
 import {WorldCreationSettings, defaultCreation, type Creation} from './WorldCreationSettings';
 import {SectionTabs} from "./components/ui/section-tabs";
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
@@ -21,6 +35,7 @@ import { Trash2 } from 'lucide-react';
 type Item = Record<string, unknown>;
 type WorkspacePick = { id: string; name: string; revision: number };
 type DraftState = {
+    card_field_facts?:Record<string,Record<string,string[]>>;
     campaign: Item;
     characters: (Item & {
         id: string;
@@ -42,16 +57,19 @@ type DraftState = {
     };
 };
 type Draft = {
-    editor?:{fields:Record<string,string[]>;enums:Record<string,Record<string,string[]>>;schemas:Record<string,Record<string,Item>>} | null;
+    author?:boolean;
+    portraits?:Record<string,Partial<WorkshopCharacter>>;
+    editor?:{field_visibility_excluded?:string[];fields:Record<string,string[]>;definitions?:Record<string,Item>;enums:Record<string,Record<string,string[]>>;schemas:Record<string,Record<string,Item>>} | null;
     creation_settings?: Partial<Creation>;
-    presentation?: {clock:{label:string;effective?:{month_names:string[];weekday_names:string[];month_lengths:(number|null)[];year:number|null;regional?:{country:string;subdivision:string|null}|null;seasons:{name:string;month:number;day:number}[];observances:{name:string;month:number;day:number}[]}};notices?:string[]} | null;
+    presentation?: {clock:{label:string;effective?:{month_names:string[];weekday_names:string[];month_lengths:(number|null)[];year:number|null;regional?:{country:string;subdivision:string|null}|null;seasons:{name:string;month:number;day:number}[];observances:{name:string;month:number;day:number}[]}};notices?:string[];event_times?:Record<string,string>} | null;
     id: string;
     name: string;
     revision: number;
     version_id: number | null;
+    games?: {world:number;save:number;version_id:number}[];
     candidate?: Record<string,unknown> | null;
     relation_merges?: {ids:string[];paths:string[];differences:string[];safe:boolean;records:Item[]}[];
-    review?: {status:string;reason?:string;issues?:{message:string;severity:string;protocol_warnings?:unknown[]}[]} | null;
+    review?: {status:string;reason?:string;issues?:{message:string;severity:string;path?:string|null;patch_paths?:string[];related_paths?:string[];protocol_warnings?:unknown[]}[]} | null;
     pending_editor?: boolean;
     creative_status?: 'running' | 'applied' | 'rejected' | 'cancelled' | 'interrupted' | null;
     quality_status?: 'running' | 'accepted' | 'partial' | 'rejected' | 'cancelled' | null;
@@ -88,21 +106,35 @@ const motivationText = (value: unknown, activeOnly=false): string => !Array.isAr
     .map(v=>typeof v==='string' ? v : v && typeof v.text==='string' ? v.text+(activeOnly ? '' : ` [${motivationStatuses[v.status] || v.status}]`) : 'Некорректная запись')
     .join(' · ');
 const structuredField = (field:string,value:unknown,schema?:Item) => !!schema && [schema,...(schema.anyOf as Item[] || [])].some(s=>s.type==='object' || '$ref' in s || s.type==='array' && ((s.items as Item)?.type==='object' || !!(s.items as Item)?.['$ref'])) || motivationFields.includes(field) || !!(value && typeof value==='object' && field!=='dimensions' && (!Array.isArray(value) || value.some(x=>typeof x==='object')));
-const labels: Record<string, string> = { public_description: 'Аннотация для игрока', title: 'Название', setting: 'Обстановка', era: 'Эпоха', genre: 'Жанр', tone: 'Тон', description: 'Описание', rules: 'Правила повествования', name: 'Имя / название', aliases: 'Другие имена', location: 'Местоположение', situation: 'Сейчас', goals: 'Цели', intentions: 'Намерения', emotion: 'Эмоциональное состояние', obligations: 'Обязательства', source_id: 'От кого', target_id: 'К кому', context: 'Динамика отношений', dimensions: 'Показатели отношений', visible_to_ids: 'Кому известна информация', text: 'Описание', secret: 'Приватный факт', story_secret: 'Сюжетная тайна', secret_subject_ids: 'О ком тайна', secret_existence: 'Показывать существование', owner_id: 'Чья тайна', character_ids: 'Связанные персонажи', evidence: 'Основания', actor_id: 'Кто знает', fact_id: 'Факт', status: 'Статус', source_event_id: 'Источник знания', state: 'Текущее развитие', public_state: 'Известное герою состояние', relevance: 'Значимость', participants: 'Участники', start_minute: 'Начало · минуты недели', end_minute: 'Конец · минуты недели', protagonist_id: 'Основной герой', controlled_actor_id: 'Управляемый персонаж', scene_id: 'Стартовая сцена', minute: 'Игровое время · минуты недели', witnesses: 'Свидетели', fact_ids: 'Факты', player_observed: 'Известно игроку' };
+const labels: Record<string, string> = { public_description: 'Аннотация для игрока', title: 'Название', setting: 'Обстановка', era: 'Эпоха', genre: 'Жанр', tone: 'Тон', description: 'Описание', rules: 'Правила повествования', name: 'Имя / название', aliases: 'Другие имена', location: 'Местоположение', situation: 'Сейчас', goals: 'Цели', intentions: 'Намерения', emotion: 'Эмоциональное состояние', obligations: 'Обязательства', source_id: 'От кого', target_id: 'К кому', context: 'Динамика отношений', dimensions: 'Показатели отношений', visible_to_ids: 'Кому известна информация', text: 'Описание', secret: 'Приватный факт', story_secret: 'Сюжетная тайна', secret_subject_ids: 'О ком тайна', secret_keeper_ids: 'Кто хранит тайну', secret_biography_ids: 'Чья скрытая биография', secret_existence: 'Показывать существование', owner_id: 'Чья тайна', character_ids: 'Связанные персонажи', evidence: 'Основания', actor_id: 'Кто знает', fact_id: 'Факт', status: 'Статус', source_event_id: 'Источник знания', state: 'Текущее развитие', public_state: 'Известное герою состояние', relevance: 'Значимость', participants: 'Участники', start_minute: 'Начало · минуты недели', end_minute: 'Конец · минуты недели', protagonist_id: 'Основной герой', controlled_actor_id: 'Управляемый персонаж', scene_id: 'Стартовая сцена', minute: 'Игровое время · минуты недели', witnesses: 'Свидетели', fact_ids: 'Факты', player_observed: 'Известно игроку' };
 Object.assign(labels,{parent_id:'Родительская локация',location_id:'Локация',organization_id:'Организация',kind:'Тип',since:'Начало периода',until:'Конец периода',physical_state:'Физическое состояние',life_status:'Жизненный статус',birth_date:'Дата рождения',calendar:'Календарь',appearance:'Внешность',personality:'Характер',values:'Ценности',capabilities:'Возможности',developmental_stage:'Этап жизни',claim:'Структурированный факт',holder_id:'У кого находится'});
-Object.assign(labels,runtimeLabels);
-const fields: Record<string, string[]> = { campaign: ['title', 'setting', 'era', 'genre', 'tone', 'description', 'rules'], actor: ['location', 'situation', 'goals', 'intentions', 'emotion', 'obligations'], relationship: ['source_id', 'target_id', 'context', 'dimensions', 'visible_to_ids'], location: ['name', 'text'], fact: ['text', 'secret', 'story_secret', 'secret_subject_ids', 'secret_existence', 'character_ids', 'evidence'], knowledge: ['actor_id', 'fact_id', 'status', 'source_event_id'], thread: ['description', 'state', 'public_state', 'status', 'character_ids', 'relevance', 'visible_to_ids'], scene: ['location', 'participants', 'text', 'start_minute', 'end_minute', 'status'], event: ['text', 'participants', 'witnesses', 'minute', 'fact_ids', 'player_observed'], start: ['protagonist_id', 'controlled_actor_id', 'scene_id', 'minute'] };
+Object.assign(labels,runtimeLabels,{appearance:'Особые приметы',personality:'Черты характера'});
+const fields: Record<string, string[]> = { campaign: ['title', 'setting', 'era', 'genre', 'tone', 'description', 'rules'], actor: ['location', 'situation', 'goals', 'intentions', 'emotion', 'obligations'], relationship: ['source_id', 'target_id', 'context', 'dimensions', 'visible_to_ids'], location: ['name', 'text'], fact: ['text', 'secret', 'story_secret', 'secret_subject_ids', 'secret_keeper_ids', 'secret_biography_ids', 'secret_existence', 'character_ids', 'evidence'], knowledge: ['actor_id', 'fact_id', 'status', 'source_event_id'], thread: ['description', 'state', 'public_state', 'status', 'character_ids', 'relevance', 'visible_to_ids'], scene: ['location', 'participants', 'text', 'start_minute', 'end_minute', 'status'], event: ['text', 'participants', 'witnesses', 'minute', 'fact_ids', 'player_observed'], start: ['protagonist_id', 'controlled_actor_id', 'scene_id', 'minute'] };
+const versionReasons:Record<string,string>={patch:'Изменение поля',portrait:'Портрет персонажа',draft_world:'Мир создан',generation_candidate:'Промежуточная версия генерации',import:'Импорт мира',restore:'Восстановление версии',add:'Добавление записи',remove:'Удаление записи',ai_edit:'Изменения с ИИ',draft_field:'Поле изменено с ИИ',draft_character:'Карточка изменена с ИИ',calendar:'Настройки календаря',communication:'Настройки связи'};
 const extensionGroups: Record<string,string> = {objective_relations:'Родство и социальные связи',organizations:'Организации',residences:'Проживание',roles:'Профессии и роли',possessions:'Значимое имущество',conditions:'Обстоятельства',pregnancies:'Беременности',contacts:'Контакты',reproductive_events:'Репродуктивные события',naming_decisions:'Выбор имён',scheduled_events:'Будущие события и договорённости'};
 const groups = [['Персонажи', 'character', 'characters'], ['Отношения', 'relationship', 'relationships'], ['Места', 'location', 'locations'], ['Факты и тайны', 'fact', 'facts'], ['Знания персонажей', 'knowledge', 'knowledge'], ['Сюжетные линии', 'thread', 'threads'], ['Сцены', 'scene', 'scenes'], ['События', 'event', 'events']];
 const short = (value: unknown, max = 180) => { const s = String(value || '').replace(/\s+/g, ' ').trim(); return s.length > max ? s.slice(0, max).trimEnd() + '…' : s; };
 const dimensions: Record<string,string> = {trust:'Доверие',affection:'Привязанность',attraction:'Влечение',irritation:'Раздражение',fear:'Страх',jealousy:'Ревность',respect:'Уважение'};
 const strength = (n: number) => Math.abs(n) < 25 ? 'слабое' : Math.abs(n) < 60 ? 'заметное' : 'сильное';
-export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
+type WorkshopView={section:WorkshopSection;collection:CollectionView;selected:string;subsection:Record<string,string>};
+const viewKey=(wid:string,author:boolean)=>`workshop-view:${wid}:${author?'author':'reader'}`;
+function storedView(wid:string,author=false):Partial<WorkshopView>{
+    try{
+        const saved=JSON.parse(sessionStorage.getItem(viewKey(wid,author))||'{}');
+        // Navigation can survive a reload; search terms are private to each view.
+        const route=sessionStorage.getItem('workshop-section:'+wid);
+        return route?{...saved,section:route}:saved;
+    }catch{return {}}
+}
+export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettings }: {
+    onBack?:()=>void;
+    onSettings?:()=>void;
     prefs: Preferences;
     apiKey: string;
     onWorld: (id: number) => void;
     onGame: (world: number, save: number) => void;
 }) {
+    useWorkshopBack(onBack);
     const [creation, setCreation] = useState<Creation>(()=>{try{return {...defaultCreation,...JSON.parse(localStorage.getItem('worldCreationSettings')||'{}')}}catch{return defaultCreation}});
     useEffect(()=>{localStorage.setItem('worldCreationSettings',JSON.stringify(creation));},[creation]);
     const [candidatePath,setCandidatePath] = useState('');
@@ -110,8 +142,22 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
     const [residenceGrouping,setResidenceGrouping] = useState('actor');
     const [structuredEdit, setStructuredEdit] = useState('');
     const [mode, setMode] = useState('quick');
-    const [section, setSection] = useState<'overview'|'characters'|'world'|'relations'|'story'|'start'|'more'>('overview');
-    const [selectedCharacter, setSelectedCharacter] = useState('');
+    const initialView=useRef(storedView(localStorage.getItem('draftWorkspace')||'')).current;
+    const [section, setSection] = useState<WorkshopSection>(initialView.section||'overview');
+    const [collection,setCollection]=useState<CollectionView>(initialView.collection||emptyCollection);
+    const [subsection,setSubsection]=useState<Record<string,string>>(initialView.subsection||{});
+    const [draftsOpen,setDraftsOpen]=useState(false);
+    const [dossierOpen,setDossierOpen]=useState(false);
+    const [searchOpen,setSearchOpen]=useState(false);
+    const [search,setSearch]=useState('');
+    const [recordTarget,setRecordTarget]=useState<{kind:string;id:string}|null>(null);
+    const [pendingVisibility,setPendingVisibility]=useState<FieldPolicy|null>(null);
+    const [editError,setEditError]=useState('');
+    const [editRevision,setEditRevision]=useState(0);
+    const dossierTrigger=useRef<HTMLElement|null>(null);
+    const openPerson=(cid:string)=>{dossierTrigger.current=document.activeElement as HTMLElement;setSelectedCharacter(cid);setDossierOpen(true)};
+    const viewBuffers=useRef(new Map<string,{section:WorkshopSection;collection:CollectionView;selected:string;subsection:Record<string,string>}>());
+    const [selectedCharacter, setSelectedCharacter] = useState(initialView.selected||'');
     const [editingIdea, setEditingIdea] = useState(false);
     const [workspace, dispatchWorkspace] = useReducer(workshopIdentityReducer<Draft>, localStorage.getItem('draftWorkspace') || '', initialWorkshopIdentity<Draft>);
     const {id, draft, loading} = workspace;
@@ -123,7 +169,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
     const [author, setAuthor] = useState(false);
     const [authorAsk, setAuthorAsk] = useState(false);
     const [authorAcknowledged, setAuthorAcknowledged] = useState(false);
-    const [text, setText] = useState('');
+    const [text, setText] = useState(()=>sessionStorage.getItem('workshop-idea:'+ (localStorage.getItem('draftWorkspace')||''))||'');
     const [importFormat, setImportFormat] = useState<'text'|'json'>('text');
     const [importFile, setImportFile] = useState('');
     const detectedImport = useMemo(() => detectWorldImport(text, importFile ? importFormat : undefined), [text, importFile, importFormat]);
@@ -134,7 +180,9 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
     const resumeGuard = useRef(false);
     const [emptyRetry, setEmptyRetry] = useState<{token:string;epoch:number}|null>(null);
     const [edit, setEdit] = useState<Target | null>(null);
+    const fieldTrigger=useRef<HTMLElement|null>(null);
     const [value, setValue] = useState<unknown>('');
+    const [fieldJob,setFieldJob]=useState<string|null>(null);
     const [instruction, setInstruction] = useState('');
     const [ack, setAck] = useState(false);
     const [confirmStart, setConfirmStart] = useState(false);
@@ -151,13 +199,25 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
             id: string;
         }[];
     } | null>(null);
-    const selectWorkspace = (wid: string, nextDraft: Draft | null = null) => {
+    const selectWorkspace = (wid: string, nextDraft: Draft | null = null, nextAuthor=author) => {
         if (nextDraft && String(nextDraft.id) !== String(wid)) throw new Error('Workspace identity mismatch');
+        viewBuffers.current.set(viewKey(id,author),{section,collection,selected:selectedCharacter,subsection});
+        sessionStorage.setItem('workshop-idea:'+id,text);
+        const view=viewBuffers.current.get(viewKey(wid,nextAuthor))||storedView(wid,nextAuthor);
+        setSearch('');setSearchOpen(false);setRecordTarget(null);setAuthor(nextAuthor);
+        setSection(view?.section||'overview');setCollection(view?.collection||emptyCollection);setSubsection(view?.subsection||{});setSelectedCharacter(view?.selected||'');setDossierOpen(false);
+        setText(sessionStorage.getItem('workshop-idea:'+wid)||'');
         loadController.current?.abort();
         if (wid) localStorage.setItem('draftWorkspace', wid);
         else localStorage.removeItem('draftWorkspace');
         dispatchWorkspace({type: 'select', id: wid, draft: nextDraft, request: ++requestSequence.current});
         setEdit(null); setRemoval(null); setConfirmStart(false);
+    };
+    const switchView = (next:boolean) => {
+        if(next===author)return;
+        setSearch('');setSearchOpen(false);setRecordTarget(null);
+        setCollection(storedView(id,next).collection||emptyCollection);
+        setAuthor(next);
     };
     const refresh = async () => {
         if (!id) return;
@@ -178,7 +238,17 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
     useEffect(() => { if (mode !== 'import' && importFormat === 'json') {
         setText(''); setImportFormat('text'); setImportFile('');
     } }, [mode, importFormat]);
-    useEffect(() => { void api<typeof list>('/workspaces').then(setList).catch(e => toast.error(e.message)); }, []);
+    useEffect(() => {
+        const controller=new AbortController(), initialId=id;
+        void api<typeof list>('/workspaces',undefined,'GET',controller.signal).then(items=>{
+            if(controller.signal.aborted)return;
+            setList(items);
+            if(initialId && localStorage.getItem('draftWorkspace')===initialId && !items.some(w=>w.id===initialId)){
+                selectWorkspace('',null,false);
+            }
+        }).catch(e=>{if(!controller.signal.aborted)toast.error(e.message)});
+        return ()=>controller.abort();
+    }, []);
     useEffect(() => {
         void refresh();
         return () => loadController.current?.abort();
@@ -202,14 +272,15 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
         editing: ['Обновляем выбранное поле…', 'Модель подготавливает новую версию поля.'],
     };
     const status = phaseStatus[job?.phase || ''] || ['Ожидаем запуска генерации…', 'Задание создано и ожидает запуска модели.'];
-    const run = async (fn: () => Promise<void>) => { setBusy(true); try {
+    const operationGuard=useRef(false);
+    const run = async (fn: () => Promise<void>) => { if(operationGuard.current)return;operationGuard.current=true;setBusy(true); try {
         await fn();
     }
     catch (e) {
         toast.error((e as Error).message);
     }
     finally {
-        setBusy(false);
+        operationGuard.current=false;setBusy(false);
     } };
     const resume = async (options: Item = {}) => {
         if (resumeGuard.current || active(job)) return;
@@ -222,15 +293,57 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
         });
         resumeGuard.current = false; setResuming(false);
     };
-    const change = (body: Item) => run(async () => { await api(`/workspaces/${id}/draft`, { revision: draft?.revision, ...body }, 'PATCH'); refresh(); });
-    const generate = (body: Item) => run(async () => { const j = await api<Job>(`/workspaces/${id}/draft/generate`, { revision: draft?.revision, config: prefs.summary, api_key: apiKey, ...body }); dispatchWorkspace({type:'update',id,update:d => d ? {...d,job:j} : d}); setEdit(null); });
-    const openEdit = (target: Target) => { setEdit(target); setValue(target.value); setStructuredEdit(JSON.stringify(target.value ?? null,null,2)); setInstruction(''); setAck(false); };
-    const state = draft?.state;
+    const change = (body: Item) => run(async () => { const updated=await api<Draft&{entity_id?:string}>(`/workspaces/${id}/draft`, { revision: draft?.revision, ...body }, 'PATCH'); await refresh();if(body.operation==='add'&&body.kind==='relationship'&&updated.entity_id)setRecordTarget({kind:'relationship',id:updated.entity_id}); });
+    const generate = async (body: Item) => {
+        if(operationGuard.current)return;
+        operationGuard.current=true;setBusy(true);setEditError('');
+        try {
+            const j=await api<Job>(`/workspaces/${id}/draft/generate`,{revision:editRevision,config:prefs.summary,api_key:apiKey,...body});
+            setFieldJob(j.id);
+            dispatchWorkspace({type:'update',id,update:d=>d?{...d,job:j}:d});
+        } catch(e) {setEditError((e as Error).message)}
+        finally {operationGuard.current=false;setBusy(false)}
+    };
+    const editBufferKey=(target:Target)=>`workshop-field:${id}:${target.kind}:${target.id}:${target.field}`;
+    const openEdit = (target: Target) => {
+        let saved:{value:unknown;structured:string;revision:number;instruction?:string;jobId?:string;visibility?:FieldPolicy}|null=null;
+        try{saved=JSON.parse(sessionStorage.getItem(editBufferKey(target))||'null')}catch{/* isolated invalid UI buffer */}
+        fieldTrigger.current=document.activeElement instanceof HTMLElement?document.activeElement:null;
+        setPendingVisibility(saved?.visibility??null);
+        setEdit(target);setValue(saved?saved.value:target.value);setStructuredEdit(saved?saved.structured:JSON.stringify(target.value??null,null,2));setEditRevision(saved?.revision??draft?.revision??0);setEditError(saved&&saved.revision!==draft?.revision?'Мир изменился с момента ввода. Проверьте значение и явно разрешите сохранение в текущую версию.':'');setInstruction(saved?.instruction||'');setFieldJob(saved?.jobId||null);setAck(false);setRelated([]);if(target.field==='__character')void api<{kind:string;id:string}[]>(`/workspaces/${id}/draft/dependencies?kind=character&entity_id=${target.id}`).then(setRelated).catch(e=>toast.error(e.message));
+    };
+    useEffect(()=>{sessionStorage.setItem('workshop-idea:'+id,text)},[id,text]);
+    useEffect(()=>{sessionStorage.setItem('workshop-section:'+id,section);sessionStorage.setItem(viewKey(id,author),JSON.stringify({section,collection,selected:selectedCharacter,subsection}))},[id,author,section,collection,selectedCharacter,subsection]);
+    useEffect(()=>{if(edit)sessionStorage.setItem(editBufferKey(edit),JSON.stringify({value,structured:structuredEdit,revision:editRevision,instruction,jobId:fieldJob,visibility:pendingVisibility}))},[edit,value,structuredEdit,editRevision,instruction,fieldJob,pendingVisibility]);
+    useEffect(()=>{
+        if(!edit||!fieldJob||job?.id!==fieldJob||active(job)||loading||draft?.job?.status!==job.status)return;
+        if(job.status==='error'||job.status==='stopped') {
+            setEditError(job.error||'Изменение остановлено. Прежнее значение сохранено.');
+            return;
+        }
+        if(job.status==='saved') {
+            sessionStorage.removeItem(editBufferKey(edit));
+            setFieldJob(null);setEdit(null);toast.success(`Поле «${edit.label}» сохранено`);
+        }
+    },[fieldJob,job?.id,job?.status,draft?.revision,draft?.job?.status,loading,edit]);
+    const state = !!draft?.author===author ? draft?.state : null;
+    const excludedVisibility=draft?.editor?.field_visibility_excluded;
+    const fieldName=edit?.field.startsWith('fields.')?edit.field.slice(7):'';
+    const canDeclareVisibility=!!(author&&state&&edit?.kind==='character'&&fieldName&&excludedVisibility&&!excludedVisibility.includes(fieldName));
+    const existingVisibility=fromBinding(edit&&state?.card_field_facts?.[edit.id]?.[fieldName]||undefined);
+    const fieldVisibility=pendingVisibility??existingVisibility;
+    const visibilityDirty=canDeclareVisibility&&JSON.stringify(wirePolicy(fieldVisibility))!==JSON.stringify(wirePolicy(existingVisibility));
+    const visibilityFacts:[string,string][]=canDeclareVisibility?Object.entries(state!.world.facts||{}).filter(([fid,f])=>
+      f.secret||f.story_secret||f.visibility==='secret'||typeof fieldVisibility==='object'&&fieldVisibility.after.includes(fid))
+      .map(([fid,f])=>[fid,String(f.text||'Факт без описания')]):[];
+    const invalidVisibility=canDeclareVisibility&&typeof fieldVisibility==='object'&&
+      (!fieldVisibility.after.length||fieldVisibility.after.some(fid=>!visibilityFacts.some(([key])=>key===fid)));
+    const fieldDirty=!!edit&&(JSON.stringify(value)!==JSON.stringify(edit.value)||visibilityDirty);
     const editSchema=edit ? draft?.editor?.schemas?.[edit.kind]?.[edit.field] : undefined;
     const editTypes=[editSchema,...(editSchema?.anyOf as Item[] || [])].filter(Boolean).map(s=>s?.type);
     const nullableEdit=editTypes.includes('null');
     const previousWorld = !!state && !!(job as Job & {transport_incomplete?:boolean})?.transport_incomplete;
-    const characters = state?.characters || [];
+    const characters = (state?.characters || []).map(c=>({...c,...draft?.portraits?.[c.id]}));
     const actor = state?.controlled_actor_id;
     const resolve = resolver(state || {characters:[],locations:[],world:{}});
     const person = (cid: unknown) => resolve('actor_id',cid) || 'Неизвестно';
@@ -253,26 +366,63 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
     ][] | null => {
         const typed=edit && draft?.editor?.enums[edit.kind]?.[field];
         if(typed)return typed.map(v=>[v,enumLabels[v] || v]);
-        if (['protagonist_id', 'controlled_actor_id', 'source_id', 'target_id', 'owner_id', 'actor_id', 'character_ids', 'secret_subject_ids', 'visible_to_ids', 'participants', 'witnesses'].includes(field))
+        if (characterRefs.has(field))
             return characters.map(c => [c.id, c.name]);
         const group = field === 'scene_id' ? 'scenes' : field === 'fact_id' || field === 'fact_ids' ? 'facts' : field === 'source_event_id' ? 'events' : null;
         if (group)
             return Object.entries(state?.world[group] || {}).map(([k, v]) => [k, String(v.text || v.location || k)]);
-        if (['location','location_id','parent_id','location_ids'].includes(field)) return (state?.locations || []).map(p=>[p.id,p.name]);
-        if (field === 'organization_id') return Object.entries(state?.world.organizations || {}).map(([id,v])=>[id,String(v.name || id)]);
+        if (['location','location_id','location_ids'].includes(field)||field==='parent_id'&&edit?.kind!=='organizations') return (state?.locations || []).map(p=>[p.id,p.name]);
+        if (field === 'organization_id'||field==='parent_id'&&edit?.kind==='organizations') return Object.entries(state?.world.organizations || {}).map(([id,v])=>[id,String(v.name || id)]);
+        const linked=field==='pregnancy_id'?'pregnancies':field==='condition_id'?'conditions':field==='depends_on'?'scheduled_events':field==='replaced_by'||field==='life_fact_id'||field==='parentage_complete_fact_id'?'facts':field==='contact_id'?'contacts':null;
+        if(linked)return Object.entries(state?.world[linked]||{}).map(([key,item])=>[key,recordTitle(linked,item,resolve,author)]);
         if (field === 'secret_existence') return [['hidden','Скрыть существование'],['discoverable','Показывать безымянный слот']];
         if (field === 'status')
             return (edit?.kind === 'knowledge' ? ['known', 'suspected', 'unknown', 'outdated', 'refuted', 'superseded'] : edit?.kind === 'thread' ? ['active', 'developing', 'dormant', 'resolved'] : ['active', 'closed']).map(x => [x, enumLabels[x] || x]);
         return null;
     };
-    const row = (kind: string, eid: string, field: string, v: unknown, editable=true) => <div className="draft-field" key={field}><div className="draft-field-heading"><span>{labels[field] || field.replace('fields.', '')}</span>{author && editable && (field.startsWith('fields.') || draft?.editor?.fields[kind]?.includes(field)) && <Button variant="ghost" size="sm" disabled={locked} aria-label={`Изменить ${labels[field] || field}`} onClick={() => {setStructuredEdit(JSON.stringify(v,null,2));openEdit({ kind, id: eid, field, value: v, label: labels[field] || field.replace('fields.', '') });}}>Изменить</Button>}</div>{v && typeof v==='object' && field!=='capabilities' ? <details><summary>{field==='calendar' ? enumLabels[String(((v as Item).profile as Item)?.system || 'gregorian')] : `Сведения · ${Array.isArray(v)?v.length:Object.keys(v).length}`}</summary><RuntimeValue field={field} value={v} resolve={resolve} author={author}/></details> : <RuntimeValue field={field} value={v} resolve={resolve} author={author}/>}</div>;
-    const extension = (key:string,title:string) => {
-        const records=Object.entries(state?.world[key] || {});
-        const render=([eid,item]:[string,Item])=><details className="workshop-detail" key={eid}><summary>{recordTitle(key,item,resolve,author)}{item.status?' · '+(enumLabels[String(item.status)] || String(item.status)):''}</summary>{Object.entries(item).filter(([field])=>!['id','revision','source_turn','turn_id','provenance','applied'].includes(field)).map(([field,v])=>row(key,eid,field,v))}<details><summary>Технические сведения</summary><pre>{JSON.stringify(item,null,2)}</pre></details></details>;
-        return <details className="workshop-detail" key={key}><summary>{title} · {records.length}</summary>{!records.length && <p>Нет записей</p>}{key==='residences' && records.length>0 ? <><label>Группировать по <select aria-label="Группировка проживания" value={residenceGrouping} onChange={e=>setResidenceGrouping(e.target.value)}><option value="actor">персонажам</option><option value="location">местам</option></select></label>{Array.from(new Set(records.map(([,v])=>String(v[residenceGrouping==='actor'?'actor_id':'location_id'])))).map(id=><section key={id}><h5>{resolve(residenceGrouping==='actor'?'actor_id':'location_id',id)}</h5>{records.filter(([,v])=>v[residenceGrouping==='actor'?'actor_id':'location_id']===id).map(render)}</section>)}</>:records.map(render)}</details>;
+    const capabilitySummary=(value:Item)=>{
+        const abilities:Record<string,string>={conscious:'без сознания',can_perceive:'не воспринимает происходящее',can_act:'не может действовать',can_speak:'не может говорить',can_move:'не может передвигаться'};
+        if(Object.keys(abilities).every(k=>value[k]===true))return 'Основные возможности сохранены';
+        const limits=Object.entries(abilities).filter(([k])=>value[k]===false).map(([,label])=>label);
+        return limits.length?'Ограничения: '+limits.join(', '):'Указанные возможности';
     };
+    const row = (kind: string, eid: string, field: string, v: unknown, editable=true) => <div className="draft-field" key={field}><div className="draft-field-heading"><span>{labels[field] || field.replace('fields.', '')}</span>{author && editable && (field.startsWith('fields.') || draft?.editor?.fields[kind]?.includes(field)) && <Button variant="ghost" size="sm" disabled={locked} aria-label={`Изменить ${labels[field] || field}`} onClick={() => {setStructuredEdit(JSON.stringify(v,null,2));openEdit({ kind, id: eid, field, value: v, label: labels[field] || field.replace('fields.', '') });}}>Изменить</Button>}</div>{v && typeof v==='object' ? <details><summary>{field==='capabilities'?capabilitySummary(v as Item):field==='calendar' ? enumLabels[String(((v as Item).profile as Item)?.system || 'gregorian')] : `Сведения · ${Array.isArray(v)?v.length:Object.keys(v).length}`}</summary><RuntimeValue field={field} value={v} resolve={resolve} author={author}/></details> : <RuntimeValue field={field} value={v} resolve={resolve} author={author}/>}</div>;
+    const recordPreview=(kind:string)=>['relationship','objective_relations','fact','thread','event','scene','location','organizations'].includes(kind)?(eid:string,item:Item)=><RecordPreview {...{kind,item,characters,author}} id={eid} wid={id} knowledge={state?.world.knowledge||{}} sceneLabel={place(item.location)} currentScene={eid===state?.camera.scene_id} onOpen={openPerson}/>:undefined;
+    const extensionFields=(key:string,eid:string,item:Item,inDossier=false)=>{
+      const present=(v:unknown)=>v!=null && v!=='' && (typeof v!=='object'||Object.keys(v).length>0);
+      const values=Object.entries(item).filter(([k])=>!['id','revision','source_turn','turn_id','provenance','applied'].includes(k));
+      if(inDossier&&!author){
+        // The surrounding row already names the person, subject and status.
+        const caption=new Set(['status','actor_id','context',...(key==='roles'?['title','organization_id']:key==='residences'?['location_id']:key==='conditions'?['description']:['source_id','target_id','kind'])]);
+        const extra=values.filter(([k,v])=>!caption.has(k)&&present(v));
+        return <>{!!item.context&&<p className="workshop-literary">{String(item.context)}</p>}
+          {extra.length>0&&<dl className="ww-reader-properties">{extra.map(([k,v])=><div key={k}><dt>{labels[k]||k}</dt><dd><RuntimeValue field={k} value={v} resolve={resolve}/></dd></div>)}</dl>}
+          {!item.context&&!extra.length&&<p className="ww-dossier-note">Дополнительных сведений пока нет.</p>}</>;
+      }
+      const show=([k,v]:[string,unknown])=>row(key,eid,k,v);
+      const optional=author&&inDossier?values.filter(([,v])=>!present(v)):[];
+      const main=author&&!inDossier?values:values.filter(([,v])=>present(v));
+      return <>{main.map(show)}
+        {optional.length>0&&<details><summary>Дополнительные поля · {optional.length}</summary>{optional.map(show)}</details>}
+        {author&&<details><summary>Технические сведения</summary><pre>{JSON.stringify(item,null,2)}</pre></details>}</>;
+    };
+    const dossierRecords=(kind:'roles'|'residences'|'conditions'|'objective_relations')=>{
+      const rows=Object.entries(state?.world[kind]||{}).filter(([,r])=>kind==='objective_relations'
+        ? [r.source_id,r.target_id].includes(selectedCharacter)
+        : r.actor_id===selectedCharacter||(Array.isArray(r.character_ids)&&r.character_ids.includes(selectedCharacter)));
+      if(!rows.length)return null;
+      const describe=(r:Item)=>{
+        if(kind==='roles')return {title:String(r.title||'Роль без названия'),subtitle:r.organization_id?resolve('organization_id',r.organization_id):null};
+        if(kind==='residences')return {title:place(r.location_id),subtitle:null};
+        if(kind==='conditions')return {title:String(r.description||'Обстоятельство'),subtitle:null};
+        return {title:recordTitle(kind,r,resolve,author),subtitle:null};
+      };
+      return <DossierRecords key={kind+selectedCharacter+author} heading={extensionGroups[kind]} entries={rows} describe={describe}
+        render={(eid,r)=>extensionFields(kind,eid,r,true)}/>;
+    };
+    const extension = (key:string,title:string,filter?:(item:Item)=>boolean) => <RecordCollection onClose={()=>setRecordTarget(null)} key={id+key+author} entries={Object.entries(state?.world[key]||{}).filter(([,item])=>!filter||filter(item))} initialSelected={recordTarget?.kind===key?recordTarget.id:undefined} groupBy={key==='residences'?item=>resolve(residenceGrouping==='actor'?'actor_id':'location_id',item[residenceGrouping==='actor'?'actor_id':'location_id'])||'Не указано':undefined} tools={key==='residences'?<label>Группировать по <select aria-label="Группировка проживания" value={residenceGrouping} onChange={e=>setResidenceGrouping(e.target.value)}><option value="actor">персонажам</option><option value="location">местам</option></select></label>:undefined} title={title} kind={key} card={recordPreview(key)} storageKey={`workshop:${id}:${key}:${author}`} disabled={locked} describe={item=>recordTitle(key,item,resolve,author)} render={(eid,item)=>extensionFields(key,eid,item)}/>;
     const entity = (kind: string, eid: string, item: Item) => <div className="draft-entity" key={eid}>
- {kind === 'character' ? <>{row(kind, eid, 'name', item.name)}{Array.isArray(item.aliases) && item.aliases.length > 0 ? row(kind, eid, 'aliases', item.aliases) : null}{Object.entries(item.fields as Record<string, string>).filter(([k]) => !['Сейчас', 'Чего хочет', 'Намерения'].includes(k)).map(([k, v]) => row(kind, eid, 'fields.' + k, v))}<details><summary>Состояние, цели и намерения</summary>{[...fields.actor,...Object.keys(state?.world.characters[eid] || {}).filter(f=>!fields.actor.includes(f) && !!draft?.editor?.fields.actor?.includes(f))].map(f => row('actor', eid, f, state?.world.characters[eid]?.[f] ?? null))}<details><summary>Технические сведения состояния</summary><pre>{JSON.stringify(state?.world.characters[eid],null,2)}</pre></details></details></> : [...fields[kind],...Object.keys(item).filter(f=>!fields[kind].includes(f) && !['id','revision','source_turn','time_semantics'].includes(f))].map(f => row(kind, eid, f, item[f] ?? (['secret','story_secret'].includes(f) ? false : f==='secret_existence' ? 'hidden' : ['secret_subject_ids','character_ids', 'visible_to_ids', 'participants', 'witnesses', 'fact_ids', 'evidence'].includes(f) ? [] : '')))}
+ {kind === 'character' ? <>{row(kind, eid, 'name', item.name)}{Array.isArray(item.aliases) && item.aliases.length > 0 ? row(kind, eid, 'aliases', item.aliases) : null}{Object.entries(item.fields as Record<string, string>).filter(([k]) => !['Сейчас', 'Чего хочет', 'Намерения'].includes(k)).map(([k, v]) => row(kind, eid, 'fields.' + k, v))}<details><summary>Состояние, цели и намерения</summary>{[...fields.actor,...Object.keys(state?.world.characters[eid] || {}).filter(f=>!fields.actor.includes(f) && !!draft?.editor?.fields.actor?.includes(f))].map(f => row('actor', eid, f, state?.world.characters[eid]?.[f] ?? null))}<details><summary>Технические сведения состояния</summary><pre>{JSON.stringify(state?.world.characters[eid],null,2)}</pre></details></details></> : [...fields[kind],...Object.keys(item).filter(f=>!fields[kind].includes(f) && !['id','revision','source_turn','time_semantics'].includes(f))].map(f => row(kind, eid, f, (f in item ? item[f] : (['secret','story_secret'].includes(f) ? false : f==='secret_existence' ? 'hidden' : ['secret_subject_ids','secret_keeper_ids','secret_biography_ids','character_ids', 'visible_to_ids', 'participants', 'witnesses', 'fact_ids', 'evidence'].includes(f) ? [] : ''))))}
  {author && <div className="actions">{kind === 'character' && <Button variant="outline" disabled={locked} onClick={() => { setEdit({ kind, id: eid, field: '__character', value: '', label: 'Перегенерировать персонажа целиком' }); setInstruction(''); setAck(false); setRelated([]); void api<{
         kind: string;
         id: string;
@@ -281,24 +431,78 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
         id: string;
     }[]>(`/workspaces/${id}/draft/dependencies?kind=${kind}&entity_id=${eid}`); setRemoval({ kind, id: eid, deps }); })}>Удалить</Button></div>}
  </div>;
+    const editContext=()=>{
+        if(!edit)return workspaceTitle;
+        const personName=characters.find(c=>c.id===edit.id)?.name;
+        if(personName)return personName;
+        const placeName=state?.locations.find(l=>l.id===edit.id)?.name;
+        if(placeName)return placeName;
+        const groups:Record<string,string>={fact:'facts',thread:'threads',event:'events',relationship:'relationships'};
+        const group=groups[edit.kind]||edit.kind;
+        const item=state?.world[group]?.[edit.id];
+        return item?(group==='relationships'?`${person(item.source_id)} → ${person(item.target_id)}`:recordTitle(group,item,resolve,author)):workspaceTitle;
+    };
+    const dossierKnowledge=(cid:string)=>{
+      const beliefs=Object.entries(state?.world.knowledge||{}).filter(([,k])=>k.actor_id===cid);
+      const byFact=new Map(beliefs.map(([,k])=>[k.fact_id,k]));
+      const available=facts.filter(([fid,f])=>['character_ids','secret_subject_ids','secret_keeper_ids','secret_biography_ids']
+        .some(key=>Array.isArray(f[key])&&f[key].includes(cid))||['known','suspected'].includes(String(byFact.get(fid)?.status)));
+      return [
+        ...available.map(([fid,f])=><details className="workshop-detail" key={'fact:'+fid}>
+          <summary>{short(f.text,150)}</summary>{author?entity('fact',fid,f):<p>{String(f.text)}</p>}
+          {!author&&byFact.has(fid)&&<small>{byFact.get(fid)?.status==='known'?'Известно персонажу':'Персонаж подозревает'}</small>}
+        </details>),
+        ...(author?beliefs.map(([eid,k])=><div key={'belief:'+eid} className="ww-dossier-belief">{entity('knowledge',eid,k)}</div>):[])
+      ];
+    };
+    const collectionRecords=(kind:string,title:string,entries:[string,Item][],describe:(item:Item)=>string,scope='')=> <RecordCollection onClose={()=>setRecordTarget(null)} initialSelected={recordTarget?.kind===kind?recordTarget.id:undefined} key={id+kind+author+scope} {...{entries,title,kind,describe}} card={recordPreview(kind)} selectionEntries={kind==='relationship'?relations:undefined} caption={kind==='event'?(eid)=>draft?.presentation?.event_times?.[eid]||'Дата неизвестна':undefined} disabled={locked} storageKey={`workshop:${id}:${kind}:${author}${scope?':'+scope:''}`} onAdd={author?()=>void change({operation:'add',kind}):undefined} render={(eid,item)=>author?entity(kind,eid,item):<RuntimeValue field="record" value={item} resolve={resolve}/>}/>;
     if (mode === 'scenario')
         return <><Button className="workshop-back" variant="ghost" onClick={() => setMode('quick')}>← Генератор мира</Button><Preparation worldSettings={<WorldCreationSettings value={creation} onChange={setCreation} disabled={locked}/>} prefs={prefs} apiKey={apiKey} onWorld={onWorld} onDraft={wid => { selectWorkspace(wid); setUseIdea(true); setMode('quick'); }}/></>;
-    return <main className="preparation world-workshop" aria-busy={loading} data-workspace-id={id} data-draft-workspace-id={draft?.id || ''}>
-      <header className="workshop-heading">
-        <p className="eyebrow">Мастерская историй</p>
-        <h1>{state ? String(state.campaign.title || draft?.name) : 'Придумай свою историю'}</h1>
-        <p>Расскажи, во что хочется играть. Генератор разовьёт идею: придумает мир, персонажей и начальную ситуацию.</p>
-      </header>
+    const selectedCard=characters.find(c=>c.id===selectedCharacter) as WorkshopCharacter|undefined;
+    const navigate=(next:WorkshopSection)=>{setRecordTarget(null);setSection(next);if(next==='idea')setEditingIdea(true)};
+    const pageHeader=(title:string,description:string)=><header className="ww-page-head"><div><p className="ww-eyebrow">Мастерская миров</p><h1>{title}</h1><p>{description}</p></div></header>;
+    const tab=(key:string,items:[string,string][])=>{const value=subsection[key]||items[0][0];return <SectionTabs label={key} value={value} onChange={value=>setSubsection({...subsection,[key]:value})} items={items.map(([id,label])=>({id,label}))}/>};
+    const currentSub=(key:string,fallback:string)=>subsection[key]||fallback;
+    const reviewLink=(path:string)=>{
+        const parts=path.split('/').slice(1).map(v=>v.replace(/~1/g,'/').replace(/~0/g,'~'));
+        const root=parts[0];const group=root==='world'?parts[1]:root;
+        const eid=root==='world'?parts[2]:group==='characters'?state?.characters[Number(parts[1])]?.id:group==='locations'?state?.locations[Number(parts[1])]?.id:undefined;
+        const field=root==='world'?parts[3]:parts[2];
+        if(group==='characters'&&eid&&characters.some(c=>c.id===eid))return {label:person(eid)+(field?' · '+(labels[field]||field):''),open:()=>openPerson(eid)};
+        const routes:Record<string,[WorkshopSection,string,string,string]>={locations:['world','Места','locations','location'],organizations:['world','Места','organizations','organizations'],residences:['world','Места','residences','residences'],roles:['world','Места','roles','roles'],conditions:['world','Места','conditions','conditions'],possessions:['world','Места','possessions','possessions'],contacts:['world','Места','contacts','contacts'],relationships:['relations','Связи','feelings','relationship'],objective_relations:['relations','Связи','objective_relations','objective_relations'],pregnancies:['relations','Связи','pregnancies','pregnancies'],facts:['knowledge','Знания','facts','fact'],knowledge:['knowledge','Знания','knowledge','knowledge'],threads:['story','','','thread'],events:['timeline','Хронология','events','event'],scheduled_events:['timeline','Хронология','scheduled_events','scheduled_events'],reproductive_events:['timeline','Хронология','reproductive_events','reproductive_events'],naming_decisions:['timeline','Хронология','naming_decisions','naming_decisions']};
+        const route=routes[group];
+        const item=group==='locations'?state?.locations.find(l=>l.id===eid):eid?state?.world[group]?.[eid]:null;
+        if(route&&item&&eid)return {label:short(group==='locations'?String(item.name):recordTitle(group,item,resolve,author),100)+(field?' · '+(labels[field]||field):''),open:()=>{setSection(route[0]);if(route[1])setSubsection({...subsection,[route[1]]:route[2]});setRecordTarget({kind:route[3],id:eid})}};
+        if(['campaign','world_clock','camera','protagonist_id','controlled_actor_id'].includes(root)||group==='scenes')return {label:'Сцена и правила',open:()=>navigate('start')};
+        return null;
+    };
+    const reviewLinks=(paths:(string|null|undefined)[])=><div className="ww-review-links">{[...new Set(paths.filter((v):v is string=>!!v))].map(path=>{const link=reviewLink(path);return link?<button key={path} onClick={link.open}>{link.label} →</button>:null})}</div>;
+    const allIssues=[...new Set([...(draft?.validation.errors||[]),...(draft?.validation.warnings||[]),...(draft?.import_warnings||[]),...(draft?.review?.issues||[]).map(issue=>issue.message)])];
+    const viewChanging=!!draft?.state&&!!draft.author!==author;
+    const showIdea=(!state&&!viewChanging)||section==='idea';
+    // The original creative brief may explicitly spell out future plot twists.
+    // Preserve the author's input locally, but never mount it in an existing world's reader view.
+    const canOpenBrief=author||!id||!!draft&&!state&&!viewChanging&&!draft.version_id;
+    const workspaceTitle=String(state?.campaign.title||draft?.name||'Новая история');
+    return <main className="world-workshop" aria-busy={loading} data-workspace-id={id} data-draft-workspace-id={draft?.id || ''}>
+    <WorkshopShell workspaceId={id} section={showIdea?'idea':section} onSection={navigate} title={workspaceTitle} revision={draft?.revision} loading={loading} busy={busy} author={author} onAuthor={()=>author?switchView(false):authorAcknowledged?switchView(true):setAuthorAsk(true)} onStart={()=>setConfirmStart(true)} startLabel={draft?.games?.length?'Начать игру из этой версии':active(job)?'Остановить проверку и начать':draft?.start_warning?'Начать с предупреждениями':previousWorld?'Начать игру в предыдущем мире':'Подтвердить мир и начать игру'} canStart={!!state&&!busy&&!loading&&!!draft?.technical_valid} counts={{characters:characters.length,world:state?.locations.length,relations:relations.length,story:threads.length,knowledge:facts.length,review:allIssues.length}} onDrafts={()=>setDraftsOpen(true)} onContinue={draft?.games?.length?()=>onGame(draft.games![0].world,draft.games![0].save):undefined} onBack={onBack} onSettings={onSettings} onSearch={()=>setSearchOpen(true)}>
+    {previousWorld&&<section className="ww-panel" role="status"><h2>Ранее сохранённый мир</h2><p>Новая генерация не завершена. Сейчас показана предыдущая сохранённая версия; она не заменена неполным ответом.</p><button className="ww-text-button" onClick={()=>navigate('review')}>Продолжить генерацию →</button></section>}
+    {!previousWorld&&job?.status==='error'&&section!=='review'&&section!=='idea'&&section!=='ai'&&<section className="ww-panel" role="status"><h2>Задание требует внимания</h2><p>Полученный результат сохранён. Откройте проверку, чтобы увидеть причину и доступные способы продолжения.</p><button className="ww-text-button" onClick={()=>navigate('review')}>Открыть проверку →</button></section>}
+    {viewChanging&&<p role="status">Загружаем выбранный вид мира…</p>}
+    {showIdea&&!canOpenBrief&&!!state&&<section className="ww-panel"><p className="ww-eyebrow">Замысел мира</p><h1>{workspaceTitle}</h1><ReadableText text={String(state.campaign.public_description||'')} /><p>Исходный замысел может содержать неизвестные герою тайны.</p><button className="ww-soft" onClick={()=>authorAcknowledged?switchView(true):setAuthorAsk(true)}>Открыть замысел автора</button></section>}
+    {showIdea&&canOpenBrief&&<>{pageHeader('Придумай свою историю','Свободный замысел станет миром, который можно прочитать, изменить и проверить перед началом игры.')}
       <nav className="workshop-paths" aria-label="Способ создания">
         <button className={mode === 'quick' ? 'selected' : ''} onClick={() => setMode('quick')}>По моей идее</button>
         <button onClick={() => setMode('scenario')}>Со Сценаристом</button>
         <button className={mode === 'import' ? 'selected' : ''} onClick={() => setMode('import')}>Импортировать</button>
       </nav>
-      <details className="workshop-continue"><summary>Мои черновики {draft ? `· ${draft.name}` : ''}</summary>
+      </>}
+      <Dialog open={draftsOpen} onOpenChange={setDraftsOpen}><DialogContent><DialogHeader><DialogTitle>Мои черновики</DialogTitle><DialogDescription>Выберите мир, создайте новый или восстановите удалённый.</DialogDescription></DialogHeader>
+      <details className="workshop-continue" open><summary>Мои черновики {draft ? `· ${draft.name}` : ''}</summary>
         <div className="workshop-draft-list">
-          <button disabled={locked} className={!id ? 'selected' : ''} onClick={() => { selectWorkspace(''); setAuthor(false); setUseIdea(false); setText(''); }}>+ Новая история</button>
+          <button disabled={locked} className={!id ? 'selected' : ''} onClick={() => { selectWorkspace('',null,false); setName('Новая история'); setUseIdea(false); setDraftsOpen(false); }}>+ Новая история</button>
           {list.map(w => <div className="workshop-draft-row" data-workspace-id={w.id} key={w.id}>
-            <button disabled={locked} className={id === w.id ? 'selected' : ''} onClick={() => { selectWorkspace(w.id); setAuthor(false); setUseIdea(false); setText(''); }}>{w.name}</button>
+            <button disabled={locked} className={id === w.id ? 'selected' : ''} onClick={() => { selectWorkspace(w.id,null,false); setUseIdea(false); setDraftsOpen(false); }}>{w.name}</button>
             <Button variant="ghost" size="sm" aria-label={`Удалить черновик «${w.name}»`} disabled={locked} onClick={() => setDeleteDraft(w)}><Trash2 size={16}/></Button>
           </div>)}
         </div>
@@ -306,6 +510,8 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
           {removed.length === 0 ? <p>Корзина пуста.</p> : removed.map(w => <div className="workshop-draft-row" data-workspace-id={w.id} key={w.id}><span>{w.name}</span><Button variant="ghost" size="sm" disabled={locked} onClick={() => void run(async () => { await api(`/workspaces/${w.id}/restore`,{revision:w.revision}); setList(await api<WorkspacePick[]>('/workspaces')); setRemoved(await api<WorkspacePick[]>('/workspaces?deleted=true')); selectWorkspace(w.id); toast.success('Черновик восстановлен'); })}>Восстановить</Button></div>)}
         </details>
       </details>
+      </DialogContent></Dialog>
+      {(showIdea||section==='review'||section==='ai'&&job?.kind==='draft_editor')&&<>
       {job?.status==='error' && (job as Job & {transport_incomplete?:boolean}).transport_incomplete && <section role="status"><h3>Восстановление ответа</h3><p>Полученный ответ сохранён. Продолжение проверит сборку, запросит недостающий конец при необходимости и завершит проверку мира. Полный проверенный мир ещё не готов.</p></section>}
       {((job?.resumable && !(job as Job & {fragment_recovery?:boolean;transport_blocked?:boolean}).fragment_recovery && !(job as Job & {transport_blocked?:boolean}).transport_blocked) || (draft?.review?.status==='stale' && job?.status==='saved' && job.kind!=='draft_editor')) && <Button disabled={locked} onClick={()=>void resume({})}>{job?.kind==='draft_editor' ? 'Продолжить AI-редактирование' : draft?.creative_status && draft.creative_status !== 'applied' ? 'Продолжить творческое развитие' : draft?.review && !(job as Job & {transport_incomplete?:boolean})?.transport_incomplete ? 'Повторить проверку' : 'Продолжить сохранённую генерацию'}</Button>}
       {draft?.creative_status && ['rejected','cancelled','interrupted'].includes(draft.creative_status) && !active(job) && <p role="status">Творческое развитие не завершено. Последний кандидат сохранён; его можно открыть в редакторе.</p>}
@@ -318,10 +524,10 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
       {(job?.status === 'error' || job?.status === 'stopped') && <div>{author && <Button variant="outline" onClick={()=>void run(async()=>{download(JSON.stringify(await api(`/workspaces/${id}/draft/raw`),null,2),'generation-response.json');})}>Скачать исходный ответ и диагностику</Button>}
       {(job as Job & {unknown_outcome?:boolean}).unknown_outcome && <details><summary>Восстановить запрос с неизвестным исходом</summary><p>Провайдер мог списать оплату. Повтор может быть оплачен ещё раз; полученный текст останется в истории.</p><Button disabled={locked} onClick={()=>void resume({acknowledge_unknown:true})}>Повторить с возможной повторной оплатой</Button></details>}</div>}
       {!resuming && !active(job) && draft?.review && ['failed','running','not_started','stale'].includes(draft.review.status) && <section className="workshop-review" role="status"><h3>Смысловая проверка не завершена</h3><p>Мир сохранён. Автоматическая проверка не завершилась. Это не установленная ошибка поля мира.</p><p>{draft.review.reason || 'При технической готовности можно начать с предупреждениями без повторной проверки.'}</p></section>}
-      {author && draft?.review?.issues && draft.review.issues.length>0 && <details className="workshop-detail"><summary>Замечания смысловой проверки · {draft.review.issues.length}</summary>{draft.review.issues.map((issue,i)=><div key={i}><p>{issue.severity==='blocker'?'Противоречие':'Рекомендация'}: {issue.message}</p>{issue.protocol_warnings && <details><summary>Диагностика ссылок отчёта</summary><pre>{JSON.stringify(issue.protocol_warnings,null,2)}</pre></details>}</div>)}</details>}
+      {author && draft?.review?.issues && draft.review.issues.length>0 && <details className="workshop-detail"><summary>Замечания смысловой проверки · {draft.review.issues.length}</summary>{draft.review.issues.map((issue,i)=><div key={i}><p>{issue.severity==='blocker'?'Противоречие':'Рекомендация'}: {issue.message}</p>{reviewLinks([issue.path,...issue.patch_paths||[],...issue.related_paths||[]])}{issue.protocol_warnings && <details><summary>Диагностика ссылок отчёта</summary><pre>{JSON.stringify(issue.protocol_warnings,null,2)}</pre></details>}</div>)}</details>}
       {draft?.start_warning && <p role="status">{draft.start_warning} Можно начать с предупреждениями.</p>}
       {draft?.start_block_reason && <p role="alert">Запуск заблокирован: {draft.start_block_reason}</p>}
-      {!state && draft?.version_id && !(job as Job & {transport_incomplete?:boolean})?.transport_incomplete && job && <Button variant="outline" onClick={()=>authorAcknowledged ? setAuthor(true) : setAuthorAsk(true)}>Открыть результат в редакторе автора</Button>}
+      {!state && draft?.version_id && !(job as Job & {transport_incomplete?:boolean})?.transport_incomplete && job && <Button variant="outline" onClick={()=>authorAcknowledged ? switchView(true) : setAuthorAsk(true)}>Открыть результат в редакторе автора</Button>}
       {author && draft?.relation_merges?.map((merge,i)=><section className="workshop-review" key={i}>
         <h3>Две записи одной связи</h3>
         <p>{merge.safe?'Структурированные данные совпадают. Объединение сохранит оба описания и ссылки. Смысловая проверка проверит согласованность текста.':'Записи различаются: повторите проверку для локального исправления противоречия.'}</p>
@@ -337,7 +543,8 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
         <Button variant="outline" onClick={()=>void refresh()}>Проверить структуру локально</Button>
         <details><summary>Полный кандидат (включая тайны)</summary><pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify(draft.candidate,null,2)}</pre></details>
       </section>}
-      {(!state || editingIdea) && <section className="workshop-inspiration">
+      </>}
+      {showIdea && canOpenBrief && <section className="workshop-inspiration">
         <div className="workshop-inspiration-head"><span className="workshop-step">01 · ЗАМЫСЕЛ</span><h2>{mode === 'import' ? 'Загрузи готовую выжимку' : 'С чего начинается история?'}</h2></div>
         <p>{mode === 'import' ? 'Подойдёт .md, .txt или готовый .json мира. Можно вставить текст выжимки ниже.' : 'Пиши свободно, как Сценаристу: персонажи, атмосфера, отношения, важные события. Пробелы генератор заполнит сам.'}</p>
         {mode === 'quick' && !useIdea && <p className="workshop-footnote">Генератор сразу превратит замысел в готовый мир и выжимку. Сценарист доступен отдельно.</p>}
@@ -365,12 +572,14 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
             }
             else {
               const j = await api<Job>(`/workspaces/${wid}/draft/generate`, {revision: current.revision, task: 'world', text, use_idea: useIdea, creation_settings: creation, config: prefs.summary, api_key: apiKey});
+              sessionStorage.setItem('workshop-idea:'+wid,text);
               selectWorkspace(wid, {...current, job: j});
             }
-            setEditingIdea(false);
+            if(!id)sessionStorage.removeItem('workshop-idea:');
+            setEditingIdea(false);setSection('overview');
             if (mode === 'import' && detectedImport.format === 'json') {setText(''); setImportFormat('text'); setImportFile('');}
           })}>{mode === 'import' ? 'Открыть в редакторе' : state ? 'Создать новую версию мира' : 'Развить идею и создать мир'}</Button>
-          {state && <Button variant="ghost" onClick={() => setEditingIdea(false)}>Вернуться к миру</Button>}
+          {state && <Button variant="ghost" onClick={() => {setEditingIdea(false);setSection('overview')}}>Вернуться к миру</Button>}
         </div>
       </section>}
       {(resuming || active(job)) && <section className="workshop-generating" role="status" aria-live="polite" aria-label="Ход проверки мира">
@@ -379,89 +588,70 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame }: {
       </section>}
       <Dialog open={!!deleteDraft} onOpenChange={open => { if (!open) setDeleteDraft(null); }}><DialogContent><DialogHeader><DialogTitle>Удалить «{deleteDraft?.name}»?</DialogTitle><DialogDescription>Черновик переместится в удалённые. Готовые игровые сохранения не затрагиваются.</DialogDescription></DialogHeader><div className="workshop-dialog-actions"><Button variant="ghost" onClick={() => setDeleteDraft(null)}>Отмена</Button><Button disabled={busy} onClick={() => void run(async () => { if (!deleteDraft) return; await api(`/workspaces/${deleteDraft.id}`,{revision:deleteDraft.revision},'DELETE'); setList(await api<WorkspacePick[]>('/workspaces')); setRemoved(await api<WorkspacePick[]>('/workspaces?deleted=true')); if (id === deleteDraft.id) { selectWorkspace(''); } setDeleteDraft(null); toast.success('Черновик перемещён в удалённые'); })}>Удалить</Button></div></DialogContent></Dialog>
       {!resuming && !active(job) && (job?.response_diagnostic?.message || job?.error) && <p className="workshop-error" role="alert">{job?.response_diagnostic?.message || job?.error}</p>}
+      {(showIdea||section==='review'||section==='ai'&&job?.kind==='draft_editor')&&<>
+      {(job?.pinned_config||job?.effective_config)&&<details className="workshop-detail ww-request-details"><summary>Параметры запроса</summary>
       {job?.pinned_config && <p className="workshop-hint">Модель задания: {job.pinned_config.provider} / {job.pinned_config.model} · Thinking генерации: {job.pinned_config.thinking || 'off'} · Thinking проверки: off</p>}
       {job?.effective_config && <p className="workshop-hint" aria-label="Фактические параметры запроса">Последний запрос: {job.effective_config.provider} / {job.effective_config.model} · Thinking: {job.effective_config.thinking} · Контекст: {job.effective_config.context_length} · Лимит ответа: {job.effective_config.max_tokens} · Попытка: {(job.attempt_epoch || 0)+1}</p>}
+      </details>}
       {job?.status==='saved' && draft?.review?.status==='completed' && <p role="status">Смысловая проверка завершена. Результат сохранён.</p>}
       {calendarNotices.map((notice,i)=><p key={i} role="status">{notice}</p>)}
-      {state && <section className="workshop-result">
+      </>}
+      {state && !showIdea && <section className="workshop-result">
         {job?.status === 'saved' && ['partial','rejected'].includes(draft?.quality_status || '') && <p className="workshop-hint" role="status">Мир сохранён. {draft?.quality_status === 'partial' ? 'Некоторые творческие детали модель оставила неполными.' : 'Необязательное дополнение не было принято; проверенные данные сохранены.'} Проверить и дополнить детали можно в режиме «Автор мира».</p>}
-        <div className="workshop-result-heading"><div><span className="workshop-step">{previousWorld ? 'ПРЕДЫДУЩИЙ МИР' : '02 · МИР ГОТОВ'}</span><h2>{previousWorld ? 'Ранее сохранённый мир' : 'Посмотри, что получилось'}</h2></div>
-          <Button variant="ghost" disabled={locked} onClick={() => {setEditingIdea(true); setText(draft?.source_text || text);}}>Изменить замысел</Button></div>
         <div className="workshop-result-toolbar">
-          <div className="workshop-view"><span>Вид:</span><button className={!author ? 'selected' : ''} aria-pressed={!author} onClick={() => setAuthor(false)}>Игрок</button><button className={author ? 'selected' : ''} aria-pressed={author} onClick={() => authorAcknowledged ? setAuthor(true) : setAuthorAsk(true)}>Автор мира</button></div>
-          <span className="workshop-hint">{author ? 'Полное состояние: секреты и намерения NPC доступны для редактирования.' : `То, что доступно персонажу ${person(actor)}.`}</span>
+          <div className="workshop-view"><span>Вид:</span><button className={!author ? 'selected' : ''} aria-pressed={!author} onClick={() => switchView(false)}>Игрок</button><button className={author ? 'selected' : ''} aria-pressed={author} onClick={() => authorAcknowledged ? switchView(true) : setAuthorAsk(true)}>Автор мира</button></div>
+          <span className="workshop-hint">{author ? 'Полное состояние: секреты и намерения NPC доступны для редактирования.' : `Сведения о мире для чтения. Тайны, неизвестные персонажу ${person(actor)}, скрыты.`}</span>
         </div>
-        {author && draft && <WorldAIEditor wid={id} revision={draft.revision} job={job} locked={locked} prefs={prefs} apiKey={apiKey} refresh={refresh} resolve={resolve} onJob={next=>dispatchWorkspace({type:'update',id,update:d=>d?{...d,job:next}:d})}/>}
-        {(draft?.validation.errors.length || draft?.validation.warnings.length || draft?.import_warnings.length) ? <details className="workshop-review" open={!!draft?.validation.errors.length}>
+        {section==='ai'&&!author&&<div className="ww-empty"><h2>Изменения с ИИ</h2><p>Редактор работает с полным авторским миром, включая тайны и знания персонажей.</p><button onClick={()=>authorAcknowledged?switchView(true):setAuthorAsk(true)}>Открыть авторский редактор</button></div>}
+        {section==='ai' && author && draft && <WorldAIEditor wid={id} revision={draft.revision} job={job} locked={locked} prefs={prefs} apiKey={apiKey} refresh={refresh} resolve={resolve} onJob={next=>dispatchWorkspace({type:'update',id,update:d=>d?{...d,job:next}:d})}/>}
+        {section==='review' && (draft?.validation.errors.length || draft?.validation.warnings.length || draft?.import_warnings.length) ? <details className="workshop-review" open={!!draft?.validation.errors.length}>
           <summary>Проверка мира · {draft?.validation.errors.length || 0} ошибок · {(draft?.validation.warnings.length || 0) + (draft?.import_warnings.length || 0)} замечаний</summary>
           {[...(draft?.validation.errors || []), ...(draft?.validation.warnings || []), ...(draft?.import_warnings || [])].map((x,i)=><p key={i}>{x}</p>)}
         </details> : null}
-        <SectionTabs className="workshop-tabs" label="Разделы мира" value={section} onChange={setSection} items={([['overview','Обзор'],['characters','Персонажи'],['world','Места и факты'],['relations','Отношения'],['story','Сюжет'],['start','Начало'],['more','Ещё']] as const).map(([id,label])=>({id,label}))}/>
-
         <div className="workshop-content" key={section}>
           {section === 'overview' && <>
-            <p className="workshop-kicker">Твой мир</p><h3>{String(state.campaign.title || draft?.name)}</h3>
-            {state.campaign.description && <p className="workshop-literary">{short(state.campaign.description,340)}</p>}
-            <div className="workshop-overview-grid"><section><h4>О мире</h4>{named('Жанр',state.campaign.genre)}{named('Тон',state.campaign.tone)}{named('Место',state.campaign.setting)}{named('Время',state.campaign.era)}</section>
-              <section><h4>Главный герой</h4><button className="workshop-text-link" onClick={() => {setSelectedCharacter(state.protagonist_id);setSection('characters');}}>{person(state.protagonist_id)} →</button>{named('Возраст',actorCard?.fields['Возраст'])}{named('Роль',actorCard?.fields['Роль'])}{actorCard?.fields['Характер'] && <p>{short(actorCard.fields['Характер'],170)}</p>}</section></div>
-            <section className="workshop-overview-section"><h4>Стартовая точка</h4><p>{weekTime()} · {place(beginning?.location || actorState?.location)}</p>{Boolean(beginning?.text) && <p className="workshop-literary">{short(beginning?.text,240)}</p>}<button className="workshop-text-link" onClick={() => setSection('start')}>Начало игры →</button></section>
-            <section className="workshop-overview-section"><h4>Ключевые персонажи · {characters.length}</h4><div className="workshop-mini-list">{characters.filter(c=>c.id!==state.protagonist_id).slice(0,7).map(c=><button key={c.id} onClick={() => {setSelectedCharacter(c.id);setSection('characters');}}><strong>{c.name}</strong><span>{short(c.fields['Роль'],95)}</span></button>)}</div><button className="workshop-text-link" onClick={() => setSection('characters')}>Все персонажи →</button></section>
-            {relations.some(([,r])=>r.source_id===actor) && <section className="workshop-overview-section"><h4>Связи героя</h4><div className="workshop-mini-list">{relations.filter(([,r])=>r.source_id===actor).slice(0,5).map(([k,r])=><button key={k} onClick={() => setSection('relations')}><strong>{person(r.target_id)}</strong><span>{short(r.context,110)}</span></button>)}</div></section>}
-            {facts.length>0 && <section className="workshop-overview-section"><h4>Известные обстоятельства</h4><ul>{facts.slice(0,5).map(([k,f])=><li key={k}>{short(f.text,180)}</li>)}</ul><button className="workshop-text-link" onClick={() => setSection('world')}>Все доступные факты →</button></section>}
-            {threads.length>0 && <section className="workshop-overview-section"><h4>Открытые линии</h4><ul>{threads.slice(0,3).map(([k,t])=><li key={k}>{short(t.description,170)}</li>)}</ul><button className="workshop-text-link" onClick={() => setSection('story')}>Сюжет →</button></section>}
+            <section className="ww-hero"><div className="ww-eyebrow">Ваш мир. Ваши истории.</div><h1>{workspaceTitle}</h1><ReadableText text={String(state.campaign.description||state.campaign.public_description||'Начните с персонажей и первой сцены — все детали мира можно раскрыть и изменить.')}/><div className="ww-hero-meta"><span>{String(state.campaign.setting||'Место не задано')}</span><span>{String(state.campaign.genre||'Жанр не задан')}</span><span>{weekTime()}</span></div>{author&&<button className="ww-text-button" onClick={()=>navigate('start')}>Изменить описание и правила →</button>}</section>
+            <div className="ww-stats">{([['characters',characters.length,'Персонажей',Users],['world',state.locations.length,'Локаций',MapPin],['relations',relations.length,'Отношений',Link],['story',threads.length,'Сюжетных линий',BookOpen]] as const).map(([key,count,label,Icon])=><button key={key} onClick={()=>navigate(key)}><Icon/><div><strong>{count}</strong><span>{label}</span></div></button>)}</div>
+            <div className="ww-overview-grid"><div><header className="ww-section-head"><h2>Те, кто оживляет историю</h2><button onClick={()=>navigate('characters')}>Все персонажи <ArrowRight size={16}/></button></header><div className="ww-characters-grid is-overview">{characters.slice(0,4).map(c=><CharacterCard key={c.id} card={c as WorkshopCharacter} wid={id} author={author} protagonist={state.protagonist_id} onOpen={openPerson}/>)}</div><section className="ww-panel ww-opening"><p className="ww-eyebrow">Первая сцена</p><h2>{place(beginning?.location||actorState?.location)}</h2><p className="workshop-literary">{String(beginning?.text||actorState?.situation||'Стартовая ситуация пока не описана.')}</p><p>{weekTime()}</p><button className="ww-text-button" onClick={()=>navigate('start')}>Открыть начало истории →</button></section></div><aside className="ww-overview-aside"><section className="ww-panel"><h3><ShieldCheck size={20}/>{allIssues.length?'Миру нужно немного внимания':'Готовность мира'}</h3><p>{draft?.technical_valid?'Структура мира корректна.':'Проверьте ошибки перед запуском.'}</p>{draft?.start_warning&&<p role="status">{draft.start_warning} Можно начать с предупреждениями.</p>}{allIssues.slice(0,3).map((message,i)=><p className="ww-issue-summary" key={i}>{message}</p>)}<button className="ww-soft" onClick={()=>navigate('review')}>Перейти к проверке <ArrowRight size={16}/></button></section><section className="ww-panel"><h3>У истории есть продолжение</h3><p>Опишите, что изменить. Сначала появится предложение — решение останется за вами.</p><button className="ww-text-button" onClick={()=>navigate('ai')}>Изменить с ИИ →</button></section></aside></div>
           </>}
-          {section === 'characters' && <>
-            <h3>Персонажи</h3><p className="workshop-hint">Выбери человека, чтобы посмотреть его историю и состояние.</p>
-            <div className="workshop-character-list">{characters.map(c => <button key={c.id} className={(selectedCharacter || characters[0]?.id) === c.id ? 'selected' : ''} onClick={() => setSelectedCharacter(c.id)}><span>{c.name}</span>{c.id === state.protagonist_id && <small>ГГ</small>}</button>)}</div>
-            {characters.filter(c => c.id === (selectedCharacter && characters.some(x=>x.id===selectedCharacter) ? selectedCharacter : characters[0]?.id)).map(c => <article className="workshop-person" key={c.id}>
-              <h4>{c.name}{c.id === state.protagonist_id && <span className="workshop-badge">ГГ</span>}</h4>
-              <p className="workshop-person-role">{[c.fields['Возраст'],c.fields['Роль']].filter(Boolean).join(' · ')}</p>
-              {author ? entity('character', c.id, c) : <>
-                {c.fields['Характер'] && <section className="workshop-person-section"><h5>Характер</h5><p className="workshop-literary">{short(c.fields['Характер'],230)}</p><details><summary>Полное описание</summary><p>{c.fields['Характер']}</p></details></section>}
-                {c.fields['Внешность'] && <section className="workshop-person-section"><h5>Внешность</h5><p>{short(c.fields['Внешность'],170)}</p><details><summary>Подробнее</summary><p>{c.fields['Внешность']}</p></details></section>}
-                {(['Стиль общения','Привычки','Сильные стороны','Слабости','Страхи и уязвимости'] as const).filter(key => !!c.fields[key]).map(key => <details className="workshop-detail" key={key}><summary>{key}</summary><p>{c.fields[key]}</p></details>)}
-                {c.id===actor && actorState && <section className="workshop-person-section"><h5>Сейчас</h5>{named('Место',actorState.location)}{named('Занятие',actorState.situation)}{named('Состояние',actorState.emotion)}{!!motivationText(actorState.goals,true) && <p>Цели: {motivationText(actorState.goals,true)}</p>}{!!motivationText(actorState.intentions,true) && <p>Намерения: {motivationText(actorState.intentions,true)}</p>}</section>}
-                {relations.some(([,r])=>r.source_id===c.id) && <section className="workshop-person-section"><h5>Отношения</h5>{relations.filter(([,r])=>r.source_id===c.id).map(([k,r])=><button key={k} className="workshop-text-link" onClick={()=>setSection('relations')}>{person(r.target_id)} · {short(r.context,100)} →</button>)}</section>}
-                {c.id===actor && facts.length>0 && <section className="workshop-person-section"><h5>Известные факты</h5><ul>{facts.filter(([,f])=>(f.character_ids as string[] || []).includes(c.id)).slice(0,5).map(([k,f])=><li key={k}>{short(f.text,150)}</li>)}</ul></section>}
-                {c.fields['Биография'] && <details className="workshop-detail"><summary>Биография и прошлое</summary><p>{c.fields['Биография']}</p></details>}
-                {c.id===actor && c.fields['Статус'] && <details className="workshop-detail"><summary>Подробный статус</summary><p>{c.fields['Статус']}</p></details>}
-              </>}
-            </article>)}
-            {author && <Button variant="outline" disabled={locked} onClick={() => void change({operation:'add',kind:'character'})}>+ Добавить персонажа</Button>}
-          </>}
-          {section === 'world' && <><h3>Места и факты</h3>
-            {author && Object.entries(extensionGroups).filter(([key])=>key!=='objective_relations').map(([key,title])=>extension(key,title))}
-            <h4>Места · {state.locations.length}</h4>{state.locations.length ? state.locations.map(loc => <details className="workshop-detail" key={loc.id}><summary><strong>{loc.name}</strong><span>{short(loc.text,130)}</span></summary>{author ? entity('location',loc.id,loc) : <p>{String(loc.text || '')}</p>}</details>) : <p className="workshop-hint">Нет доступной информации.</p>}
-            {author && <Button variant="outline" disabled={locked} onClick={() => void change({operation:'add',kind:'location'})}>+ Добавить место</Button>}
-            <div className="workshop-subsection"><h4>{author ? 'Факты и тайны' : 'Известные факты'} · {facts.length}</h4>{facts.length ? facts.map(([key,item])=><details className="workshop-detail" key={key}><summary><strong>{short(item.text,140)}</strong>{author && item.secret ? <span>Тайна</span> : null}</summary>{author ? entity('fact',key,item) : <p>{String(item.text || '')}</p>}</details>) : <p className="workshop-hint">Нет доступной информации.</p>}{author && <Button variant="outline" disabled={locked} onClick={() => void change({operation:'add',kind:'fact'})}>+ Добавить факт</Button>}
-              {author && <>
-              <details className="workshop-detail"><summary>Кто что знает</summary>{Object.entries(state.world.knowledge || {}).map(([key,item])=><details className="workshop-detail" key={key}><summary>{recordTitle('knowledge',item,resolve,author)} · {enumLabels[String(item.status)] || String(item.status)}</summary>{entity('knowledge',key,item)}</details>)}<Button variant="outline" disabled={locked} onClick={() => void change({operation:'add',kind:'knowledge'})}>+ Добавить знание</Button></details>
-              </>}
-            </div>
-          </>}
-          {section === 'relations' && <><h3>Отношения · {relations.length}</h3>{author && extension('objective_relations',extensionGroups.objective_relations)}<h4>Направленные чувства</h4>{relations.length ? relations.map(relation) : <p className="workshop-hint">Нет доступной информации.</p>}{author && <Button variant="outline" disabled={locked} onClick={() => void change({operation:'add',kind:'relationship'})}>+ Добавить отношение</Button>}</>}
-          {section === 'story' && <><h3>{author ? 'Сюжетные линии' : 'Известные предпосылки'} · {threads.length}</h3>{threads.length ? threads.map(([key,item])=><details className="workshop-detail" key={key}><summary><strong>{short(item.description,150)}</strong><span>{String(item.status || '')}</span></summary><p>{String(item.description || '')}</p>{Boolean(item.state) && <p>{String(item.state)}</p>}{author && entity('thread',key,item)}</details>) : <p className="workshop-hint">Нет доступной информации.</p>}{author && <><Button variant="outline" disabled={locked} onClick={() => void change({operation:'add',kind:'thread'})}>+ Добавить линию</Button><details className="workshop-detail"><summary>Уже произошедшие события</summary>{Object.entries(state.world.events || {}).map(([key,item])=><details className="workshop-detail" key={key}><summary>{String(item.text || key)}</summary>{entity('event',key,item)}</details>)}<Button variant="outline" disabled={locked} onClick={() => void change({operation:'add',kind:'event'})}>+ Добавить событие</Button></details></>}</>}
-            {section === 'start' && <><h3>Начало игры</h3>{author&&draft?<CommunicationEditor wid={id} revision={draft.revision} profile={(state.world.communication||{}) as CommunicationProfile} disabled={locked} refresh={refresh}/>:<CommunicationSettings value={(state.world.communication||{}) as CommunicationProfile}/>} {author&&draft&&<CalendarProfileEditor wid={id} revision={draft.revision} profile={((state.world_clock as unknown as {calendar?:{profile?:Record<string,unknown>}}).calendar?.profile||{})} selection={draft.creation_settings?.calendar_start?.presets} disabled={locked} refresh={refresh}/>}{draft?.presentation?.clock.effective && <section aria-label="Действующий календарь"><h4>Действующий календарь</h4><p>{draft.presentation.clock.effective.weekday_names.join(' · ')}</p><p>{draft.presentation.clock.effective.month_names.map((name,i)=>`${name}: ${draft.presentation!.clock.effective!.month_lengths[i] ?? '28–29 (год неизвестен)'}`).join(' · ')}</p><p>Сезоны: {draft.presentation.clock.effective.seasons.length ? draft.presentation.clock.effective.seasons.map(s=>`${s.name} — ${s.day}.${s.month}`).join(' · ') : 'Не заданы'}. Праздники: {draft.presentation.clock.effective.regional ? `${draft.presentation.clock.effective.regional.country} · годозависимый набор; ближайшие даты — в предпросмотре` : draft.presentation.clock.effective.observances.length ? draft.presentation.clock.effective.observances.map(o=>`${o.name} — ${o.day}.${o.month}`).join(' · ') : 'Не заданы'}.</p></section>}{author && row('clock','clock','calendar',(state.world_clock as unknown as Item).calendar || {})}<div className="workshop-start"><div><span>Когда</span><strong>{weekTime()}</strong></div><div><span>Где</span><strong>{place(beginning?.location || actorState?.location)}</strong></div><div><span>Управление</span><strong>{person(actor)}</strong></div><div><span>Рядом</span><strong>{(beginning?.participants as string[] || []).filter(cid=>cid!==actor).map(person).join(' · ') || 'Пока никто'}</strong></div></div>
+          {section==='characters'&&<CharacterCollection characters={characters as WorkshopCharacter[]} wid={id} author={author} protagonist={state.protagonist_id} view={collection} setView={setCollection} onOpen={openPerson} onAdd={()=>void change({operation:'add',kind:'character'})} disabled={locked}/>}
+          {section==='world'&&<>{pageHeader('Места и сообщества','Где проходит жизнь и что объединяет людей.')}{tab('Места',[['locations','Локации'],['organizations','Сообщества'],['residences','Проживание'],['roles','Роли'],['conditions','Обстоятельства'],['possessions','Имущество'],['contacts','Контакты']])}{currentSub('Места','locations')==='locations'?collectionRecords('location','Места',state.locations.map(l=>[l.id,l]),l=>String(l.name||l.text||'Место')):extension(currentSub('Места','locations'),extensionGroups[currentSub('Места','locations')])}</>}
+          {section==='knowledge'&&<>{pageHeader('Факты и знания','Что известно, что скрыто и кто владеет информацией.')}{tab('Знания',[['facts','Факты и тайны'],['knowledge','Кто что знает']])}{currentSub('Знания','facts')==='facts'?collectionRecords('fact',author?'Факты и тайны':'Доступные факты',facts,f=>String(f.text||'Факт')):collectionRecords('knowledge','Знания персонажей',Object.entries(state.world.knowledge||{}),k=>recordTitle('knowledge',k,resolve,author))}</>}
+          {section==='relations'&&<>{pageHeader('Связи и семьи','Объективные связи и направленные чувства — разные записи мира.')}{tab('Связи',[['feelings','Направленные чувства'],['objective_relations','Семья и связи'],['pregnancies','Беременности']])}{currentSub('Связи','feelings')==='feelings'?<RelationshipMap key={id+author} {...{characters,author,actor}} wid={id} entries={relations} initialActor={recordTarget?.kind==='relationship'?String(state.world.relationships[recordTarget.id]?.source_id||''):undefined} onOpen={openPerson}>{source=>collectionRecords('relationship',`Чувства · ${person(source)}`,relations.filter(([,r])=>r.source_id===source),r=>`${person(r.source_id)} → ${person(r.target_id)} · ${String(r.context||'')}`,source)}</RelationshipMap>:extension(currentSub('Связи','feelings'),extensionGroups[currentSub('Связи','feelings')])}</>}
+          {section==='story'&&<>{pageHeader('Нити вашей истории','Открытые возможности и развивающиеся линии. Они не принимают решения за героя.')}{collectionRecords('thread','Сюжетные линии',threads,t=>String(t.description||'Сюжетная линия'))}</>}
+          {section==='timeline'&&<>{pageHeader('Хронология','Предыстория отдельно от планов и будущих договорённостей.')}{tab('Хронология',[['events','Прошедшие события'],['scenes','Сцены'],['scheduled_events','Будущие события'],['reproductive_events','Семейные события'],['naming_decisions','Выбор имён']])}{currentSub('Хронология','events')==='events'?collectionRecords('event','Уже произошедшие события',Object.entries(state.world.events||{}).sort(([,a],[,b])=>Number(a.minute??Infinity)-Number(b.minute??Infinity)),e=>String(e.text||'Событие')):currentSub('Хронология','events')==='scenes'?collectionRecords('scene','Сцены',Object.entries(state.world.scenes||{}),s=>`${place(s.location)} · ${String(s.text||'Сцена')}`):extension(currentSub('Хронология','events'),extensionGroups[currentSub('Хронология','events')])}</>}
+            {section === 'start' && <>{pageHeader('Сцена и правила','Герой, камера, время и правила вашей истории.')}<details className="workshop-detail"><summary>Описание и правила мира</summary>{author?fields.campaign.concat('public_description').map(f=>row('campaign','',f,state.campaign[f]??'')):<RuntimeValue field="record" value={Object.fromEntries(Object.entries(state.campaign).filter(([k,v])=>k!=='public_description'&&!!v))} resolve={resolve}/>}</details>{author&&draft?<CommunicationEditor wid={id} revision={draft.revision} profile={(state.world.communication||{}) as CommunicationProfile} disabled={locked} refresh={refresh}/>:<CommunicationSettings value={(state.world.communication||{}) as CommunicationProfile}/>} {author&&draft&&<CalendarProfileEditor wid={id} revision={draft.revision} profile={((state.world_clock as unknown as {calendar?:{profile?:Record<string,unknown>}}).calendar?.profile||{})} selection={draft.creation_settings?.calendar_start?.presets} disabled={locked} refresh={refresh}/>}{draft?.presentation?.clock.effective && <section aria-label="Действующий календарь"><h4>Действующий календарь</h4><p>{draft.presentation.clock.effective.weekday_names.join(' · ')}</p><p>{draft.presentation.clock.effective.month_names.map((name,i)=>`${name}: ${draft.presentation!.clock.effective!.month_lengths[i] ?? '28–29 (год неизвестен)'}`).join(' · ')}</p><p>Сезоны: {draft.presentation.clock.effective.seasons.length ? draft.presentation.clock.effective.seasons.map(s=>`${s.name} — ${s.day}.${s.month}`).join(' · ') : 'Не заданы'}. Праздники: {draft.presentation.clock.effective.regional ? `${draft.presentation.clock.effective.regional.country} · годозависимый набор; ближайшие даты — в предпросмотре` : draft.presentation.clock.effective.observances.length ? draft.presentation.clock.effective.observances.map(o=>`${o.name} — ${o.day}.${o.month}`).join(' · ') : 'Не заданы'}.</p></section>}{author && row('clock','clock','calendar',(state.world_clock as unknown as Item).calendar || {})}<div className="workshop-start"><div><span>Когда</span><strong>{weekTime()}</strong></div><div><span>Где</span><strong>{place(beginning?.location || actorState?.location)}</strong></div><div><span>Управление</span><strong>{person(actor)}</strong></div><div><span>Рядом</span><strong>{(beginning?.participants as string[] || []).filter(cid=>cid!==actor).map(person).join(' · ') || 'Пока никто'}</strong></div></div>
               {actorState?.situation && <p className="workshop-literary">{String(actorState.situation)}</p>}{beginning?.text && <section className="workshop-overview-section"><h4>Текущая ситуация</h4><p className="workshop-literary">{String(beginning.text)}</p></section>}
               {author && <>{Object.entries(state.world.scenes || {}).map(([key,item])=><details className="workshop-detail" key={key}><summary>{place(item.location)}</summary>{entity('scene',key,item)}</details>)}<Button variant="outline" disabled={locked} onClick={() => void change({operation:'add',kind:'scene'})}>+ Добавить сцену</Button><details className="workshop-detail"><summary>Изменить стартовых участников и время</summary>{fields.start.map(f=>row('start','',f,f==='scene_id'?state.camera.scene_id:f==='minute'?state.world_clock.minute:state[f as 'protagonist_id'|'controlled_actor_id']))}</details></>}
             </>}
-          {section === 'more' && <><h3>Дополнительно</h3><details className="workshop-detail"><summary>Стиль и правила повествования</summary>{author ? fields.campaign.map(f=>row('campaign','',f,state.campaign[f] || '')) : <p>{String(state.campaign.genre || '')} · {String(state.campaign.tone || '')}</p>}</details>
-            <details className="workshop-detail"><summary>История версий · {draft?.history.length}</summary>{draft?.history.map((v,i)=><div className="workshop-version" key={v.id}><span>Версия {draft.history.length-i} · {v.reason}</span>{author && <Button disabled={locked||v.id===draft.version_id} variant="outline" onClick={() => void change({operation:'restore',source_id:v.id})}>Восстановить</Button>}</div>)}</details>
+          {section === 'more' && <>{pageHeader('Можно вернуться назад','История версий, исходные материалы и экспорт мира.')}<button className="ww-soft" onClick={()=>setDraftsOpen(true)}>Мои черновики и корзина</button><details className="workshop-detail"><summary>Стиль и правила повествования</summary>{author ? fields.campaign.map(f=>row('campaign','',f,state.campaign[f] || '')) : <p>{String(state.campaign.genre || '')} · {String(state.campaign.tone || '')}</p>}</details>
+            <details className="workshop-detail"><summary>История версий · {draft?.history.length}</summary>{draft?.history.map((v,i)=><div className="workshop-version" key={v.id}><span>Версия {draft.history.length-i} · {versionReasons[v.reason]||'Обновление мира'}</span>{author && <Button disabled={locked||v.id===draft.version_id} variant="outline" onClick={() => void change({operation:'restore',source_id:v.id})}>Восстановить</Button>}</div>)}</details>
             {author && <>{Object.entries(state.world).filter(([key])=>!['version','characters','relationships','facts','knowledge','threads','scenes','events',...Object.keys(extensionGroups)].includes(key)).map(([key,v])=><details className="workshop-detail" key={key}><summary>{runtimeLabels[key] || key} · просмотр</summary><RuntimeValue field={key} value={v} resolve={resolve} author/></details>)}<details className="workshop-detail"><summary>Исходный замысел или импорт</summary><Markdown text={draft?.source_text || 'Исходный текст не сохранён.'}/></details>{draft?.outline && <details className="workshop-detail"><summary>Как сценарист развил идею</summary><Markdown text={draft.outline}/></details>}<div className="workshop-export">{['md','txt','json'].map(format=><Button key={format} variant="outline" onClick={()=>void run(async()=>{const response=await fetch(`/api/workspaces/${id}/draft/export?version_id=${draft?.version_id}&format=${format}`);if(!response.ok)throw new Error('Не удалось экспортировать мир');download(await response.text(),`world.${format}`)})}>{format === 'json' ? 'Экспорт JSON' : `Скачать .${format}`}</Button>)}</div></>}
           </>}
         </div>
-        <div className="workshop-finish"><p>{previousWorld ? 'Новая генерация ещё не завершена. Здесь доступен предыдущий мир, а не её результат.' : 'Всё готово? Начни игру в этом мире. Его можно будет редактировать до подтверждения.'}</p><Button disabled={busy || loading || !draft?.technical_valid} onClick={() => setConfirmStart(true)}>{active(job) ? 'Остановить проверку и начать' : draft?.start_warning ? 'Начать с предупреждениями' : previousWorld ? 'Начать игру в предыдущем мире' : 'Подтвердить мир и начать игру'}</Button></div>
+        {section==='review'&&!author&&<section className="ww-empty"><ShieldCheck/><h2>Этот раздел доступен автору</h2><p>Здесь могут быть скрытые сведения о мире.</p><button className="ww-primary" onClick={()=>authorAcknowledged?switchView(true):setAuthorAsk(true)}>Открыть авторский взгляд</button></section>}
+        {section==='review'&&author&&<>{pageHeader('Проверка мира','Ошибки структуры, смысловые замечания и состояние проверки.')}<section className="ww-panel"><h3>{draft?.technical_valid?'Структура корректна':'Структура требует исправления'}</h3><p>Смысловая проверка: {({completed:'завершена',stale:'устарела',running:'выполняется',failed:'прервана'} as Record<string,string>)[draft?.review?.status||'']||'не выполнялась'}</p><p>{draft?.review?.reason}</p>{draft?.review?.issues?.map((issue,i)=><article key={i} className="ww-issue-summary"><strong>{issue.severity==='blocker'?'Противоречие':'Замечание'}</strong><p>{issue.message}</p>{reviewLinks([issue.path,...issue.patch_paths||[],...issue.related_paths||[]])}</article>)}{!allIssues.length&&!draft?.review?.issues?.length&&<p>Замечаний в текущем отчёте нет.</p>}</section>{draft?.validation.diagnostics?.map((issue,i)=><article className="ww-panel" key={i}><p>{issue.message}</p>{reviewLinks([issue.path])}<details><summary>Путь диагностики</summary><code>{issue.path}</code></details></article>)}</>}
+        {(section==='review'||section==='start')&&<div className="workshop-finish"><p>{previousWorld?'Новая генерация не завершена. Доступен предыдущий мир.':'Запуск сохранит выбранную версию и откроет настоящую игру.'}</p><Button disabled={busy||loading||!draft?.technical_valid} onClick={()=>setConfirmStart(true)}>Перейти к запуску</Button></div>}
       </section>}
- <Dialog open={authorAsk} onOpenChange={setAuthorAsk}><DialogContent><DialogHeader><DialogTitle>Открыть вид автора?</DialogTitle><DialogDescription>Ты увидишь тайны, неизвестные персонажам факты и скрытые намерения. Это может раскрыть будущие события.</DialogDescription></DialogHeader><Button onClick={() => { setAuthorAsk(false); setAuthorAcknowledged(true); setAuthor(true); }}>Показать всё</Button></DialogContent></Dialog>
+    </WorkshopShell>
+    <CharacterDossier open={dossierOpen} onClose={()=>setDossierOpen(false)} card={selectedCard} characters={characters as WorkshopCharacter[]} wid={id} author={author} locked={locked} actor={state?.world.characters?.[selectedCharacter]||{}} onAddValues={()=>openEdit({kind:'actor',id:selectedCharacter,field:'values',value:state?.world.characters?.[selectedCharacter]?.values??{},label:'Ценности'})}
+      actorFields={author?Array.from(new Set([...fields.actor,...draft?.editor?.fields.actor||[]])):
+        [...fields.actor,'location_id','birth_date','biological_sex','life_status','developmental_stage','physical_state','capabilities','reproductive_capability','identity_components','display_name','name_history','personality','values']}
+      row={row} life={[dossierRecords('conditions'),dossierRecords('roles'),dossierRecords('residences')]}
+      refresh={refresh} onSelect={setSelectedCharacter} returnFocus={()=>dossierTrigger.current?.isConnected&&dossierTrigger.current.focus()}
+      connections={[...relations.filter(([,r])=>r.source_id===selectedCharacter||r.target_id===selectedCharacter).map(relation),dossierRecords('objective_relations')]}
+      knowledge={dossierKnowledge(selectedCharacter)} onRegenerate={()=>{if(selectedCard)openEdit({kind:'character',id:selectedCard.id,field:'__character',value:'',label:'Перегенерировать персонажа целиком'})}} onDelete={()=>void run(async()=>{const deps=await api<{kind:string;id:string}[]>(`/workspaces/${id}/draft/dependencies?kind=character&entity_id=${selectedCharacter}`);setRemoval({kind:'character',id:selectedCharacter,deps})})}/>
+    <Dialog open={searchOpen} onOpenChange={setSearchOpen}><DialogContent><DialogTitle>Поиск по миру</DialogTitle><DialogDescription>Поиск только по данным текущего взгляда.</DialogDescription><Input autoFocus aria-label="Поиск по миру" value={search} onChange={e=>setSearch(e.target.value)}/><div className="ww-search-results">{search.trim()&&characters.filter(c=>[c.name,...Object.values(c.fields)].join(' ').toLowerCase().includes(search.toLowerCase())).slice(0,30).map(c=><button key={c.id} onClick={()=>{setSearchOpen(false);openPerson(c.id)}}>{c.name}<small>Персонаж</small></button>)}{search.trim()&&[...facts.map(([key,f])=>({key,text:String(f.text),section:'knowledge' as const})),...(state?.locations||[]).map(l=>({key:l.id,text:l.name,section:'world' as const}))].filter(r=>r.text.toLowerCase().includes(search.toLowerCase())).slice(0,30).map(r=><button key={r.key} onClick={()=>{navigate(r.section);setSubsection(prev=>({...prev,[r.section==='world'?'Места':'Знания']:r.section==='world'?'locations':'facts'}));setRecordTarget({kind:r.section==='world'?'location':'fact',id:r.key});setSearchOpen(false)}}>{r.text}</button>)}</div></DialogContent></Dialog>
+ <Dialog open={authorAsk} onOpenChange={setAuthorAsk}><DialogContent><DialogHeader><DialogTitle>Открыть вид автора?</DialogTitle><DialogDescription>Ты увидишь тайны, неизвестные персонажам факты и скрытые намерения. Это может раскрыть будущие события.</DialogDescription></DialogHeader><Button onClick={() => { setAuthorAsk(false); setAuthorAcknowledged(true); switchView(true); }}>Показать всё</Button></DialogContent></Dialog>
  <Dialog open={!!edit} onOpenChange={o => { if (!o)
-        setEdit(null); }}><DialogContent><DialogHeader><DialogTitle>{edit?.label}</DialogTitle><DialogDescription>Меняется только выбранное поле. Остальные сущности сохраняются.</DialogDescription></DialogHeader>{edit && edit.field !== '__character' && <>{options(edit.field) ? Array.isArray(value) ? <div className="draft-options">{options(edit.field)!.map(([k, n]) => <label key={k}><input type="checkbox" checked={value.includes(k)} onChange={e => setValue(e.target.checked ? [...value, k] : value.filter(x => x !== k))}/>{n}</label>)}</div> : <select aria-label={edit.label} value={String(value ?? '')} onChange={e => setValue(e.target.value || null)}><option value="">Не указано</option>{options(edit.field)!.map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select> : editTypes.includes('boolean') && nullableEdit ? <select aria-label={edit.label} value={value==null?'unknown':String(value)} onChange={e=>setValue(e.target.value==='unknown'?null:e.target.value==='true')}><option value="unknown">Неизвестно</option><option value="true">Да</option><option value="false">Нет</option></select> : typeof value === 'boolean' ? <label><input type="checkbox" checked={value} onChange={e => setValue(e.target.checked)}/>Да</label> : typeof value === 'number' || editTypes.includes('integer') || editTypes.includes('number') ? <Input type="number" aria-label={edit.label} value={value==null?'':String(value)} onChange={e => setValue(e.target.value==='' && nullableEdit?null:Number(e.target.value))}/> : structuredField(edit.field,value,editSchema) ? <Textarea aria-label={edit.label} value={structuredEdit} onChange={e=>setStructuredEdit(e.target.value)}/> : value && typeof value === 'object' && !Array.isArray(value) ? <div>{['trust', 'affection', 'attraction', 'irritation', 'fear', 'jealousy', 'respect', ...Object.keys(value)].filter((v, i, a) => a.indexOf(v) === i).map(k => <label key={k}>{k}<Input type="number" value={String((value as Item)[k] ?? '')} onChange={e => { const next = { ...value } as Item; if (e.target.value === '')
+        setEdit(null); }}><DialogContent className="ww-field-dialog" onCloseAutoFocus={e=>{if(fieldTrigger.current?.isConnected){e.preventDefault();fieldTrigger.current.focus()}}}><DialogHeader><DialogTitle>{edit?.label}</DialogTitle><DialogDescription>{editContext()} · Меняется только выбранное поле.{edit?.field==='fields.Внешность'&&' Сохранённая иллюстрация настраивается отдельно — карандашом на портрете.'}</DialogDescription></DialogHeader>{editError&&<div><p role="alert">{editError}</p>{fieldJob&&<Button variant="outline" onClick={()=>void run(async()=>download(JSON.stringify(await api(`/workspaces/${id}/draft/raw?job_id=${fieldJob}`),null,2),'generation-response.json'))}>Скачать исходный ответ и диагностику</Button>}</div>}{fieldJob&&job?.id===fieldJob&&active(job)&&<div><p role="status">ИИ изменяет выбранное поле. Прежнее значение сохранено.</p><Button variant="outline" disabled={busy} onClick={()=>void run(async()=>{await api(`/jobs/${fieldJob}/stop`,{});await refresh()})}>Остановить изменение</Button></div>}{edit&&edit.field!=='__character'&&<p className="ww-field-status" role="status">{busy?'Сохраняем…':fieldDirty?'Есть несохранённые изменения. При закрытии ввод сохранится в этом браузере.':'Поле соответствует сохранённой версии.'}</p>}{edit?.field==='secret_keeper_ids'&&<p className="workshop-hint">Персонажи, которые сознательно хранят эту личную тайну. На старте они будут знать её содержание.</p>}{edit?.field==='secret_biography_ids'&&<p className="workshop-hint">Чью скрытую биографию описывает факт. Эта связь сама по себе не даёт персонажу знания тайны.</p>}{edit&&editRevision!==draft?.revision&&<Button variant="outline" onClick={()=>{setEditRevision(draft?.revision||0);setEditError('')}}>Использовать ввод для текущей версии</Button>}{edit && edit.field !== '__character' && <fieldset className="ww-field-input" disabled={locked}>{options(edit.field) ? Array.isArray(value) ? <ReferenceChecklist key={`${edit.kind}:${edit.id}:${edit.field}`} label={edit.label} options={options(edit.field)!} value={value} onChange={setValue}/> : <select aria-label={edit.label} value={String(value ?? '')} onChange={e => setValue(e.target.value || null)}><option value="">Не указано</option>{options(edit.field)!.map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select> : editTypes.includes('boolean') && nullableEdit ? <select aria-label={edit.label} value={value==null?'unknown':String(value)} onChange={e=>setValue(e.target.value==='unknown'?null:e.target.value==='true')}><option value="unknown">Неизвестно</option><option value="true">Да</option><option value="false">Нет</option></select> : typeof value === 'boolean' ? <label><input type="checkbox" checked={value} onChange={e => setValue(e.target.checked)}/>Да</label> : typeof value === 'number' || editTypes.includes('integer') || editTypes.includes('number') ? <Input type="number" aria-label={edit.label} value={value==null?'':String(value)} onChange={e => setValue(e.target.value==='' && nullableEdit?null:Number(e.target.value))}/> : structuredField(edit.field,value,editSchema) ? <StructuredValueEditor label={edit.label} field={edit.field} value={value} schema={editSchema} definitions={draft?.editor?.definitions} references={options} onChange={v=>{setValue(v);setStructuredEdit(JSON.stringify(v,null,2))}}/> : value && typeof value === 'object' && !Array.isArray(value) ? <div>{['trust', 'affection', 'attraction', 'irritation', 'fear', 'jealousy', 'respect', ...Object.keys(value)].filter((v, i, a) => a.indexOf(v) === i).map(k => <label key={k}>{runtimeLabels[k]||k}<Input type="number" min={-100} max={100} value={String((value as Item)[k] ?? '')} onChange={e => { const next = { ...value } as Item; if (e.target.value === '')
         delete next[k];
     else
-        next[k] = Number(e.target.value); setValue(next); }}/></label>)}</div> : <Textarea aria-label={edit.label} value={Array.isArray(value) ? value.join('\n') : String(value ?? '')} onChange={e => setValue(Array.isArray(value) ? e.target.value.split('\n') : e.target.value)}/>}{nullableEdit && <Button variant="outline" onClick={()=>{setValue(null);setStructuredEdit('null');}}>Оставить неизвестным</Button>}<Button disabled={locked} onClick={() => void run(async () => { await api(`/workspaces/${id}/draft`, { revision: draft?.revision, operation: 'patch', kind: edit.kind, entity_id: edit.id, field: edit.field, value: structuredField(edit.field,value,editSchema) ? JSON.parse(structuredEdit) : value, warnings_ack: ack }, 'PATCH'); setEdit(null); refresh(); })}>Сохранить поле</Button></>}
- {edit?.field === '__character' && <div><p>Связанные записи останутся неизменными; проверь их после изменения биографии:</p>{related.map(d => <p key={d.kind + d.id}>{d.kind} · {d.id}</p>)}</div>}<Textarea aria-label="Указание генератору" placeholder="Как изменить? Например: сделать характер мягче, сохранив биографию." value={instruction} onChange={e => setInstruction(e.target.value)}/><label><input type="checkbox" checked={ack} onChange={e => setAck(e.target.checked)}/> Изменить всё равно при семантических замечаниях</label><Button variant="outline" disabled={locked} onClick={() => edit && void generate({ task: edit.field === '__character' ? 'character' : 'field', kind: edit.kind, entity_id: edit.id, field: edit.field, text: instruction, warnings_ack: ack })}>Перегенерировать {edit?.field === '__character' ? 'персонажа' : 'поле'}</Button></DialogContent></Dialog>
+        next[k] = Number(e.target.value); setValue(next); }}/></label>)}</div> : ['name','title'].includes(edit.field) ? <Input aria-label={edit.label} value={String(value??'')} onChange={e=>setValue(e.target.value)}/> : <Textarea aria-label={edit.label} value={Array.isArray(value) ? value.join('\n') : String(value ?? '')} onChange={e => setValue(Array.isArray(value) ? e.target.value.split('\n') : e.target.value)}/>}{nullableEdit && <Button variant="outline" onClick={()=>{setValue(null);setStructuredEdit('null');}}>Оставить неизвестным</Button>}{canDeclareVisibility&&<FieldVisibility policy={fieldVisibility} onChange={setPendingVisibility} facts={visibilityFacts}/>}<Button disabled={locked||!fieldDirty||invalidVisibility||editRevision!==draft?.revision} onClick={() => {setBusy(true);setEditError('');void (async () => { await api(`/workspaces/${id}/draft`, { revision: editRevision, operation: 'patch', kind: edit.kind, entity_id: edit.id, field: edit.field, value: structuredField(edit.field,value,editSchema) ? JSON.parse(structuredEdit) : value, warnings_ack: ack, ...(visibilityDirty?{field_visibility:wirePolicy(fieldVisibility)}:{}) }, 'PATCH'); sessionStorage.removeItem(editBufferKey(edit));await refresh();setBusy(false);setEdit(null);toast.success(`Поле «${edit.label}» сохранено`); })().catch(e=>setEditError((e as Error).message)).finally(()=>setBusy(false))}}>Сохранить поле</Button></fieldset>}
+ {edit?.field === '__character' && <div><p>Связанные записи останутся неизменными; проверь их после изменения биографии:</p>{related.map(d => <p key={d.kind + d.id}>{d.kind} · {d.id}</p>)}</div>}<details className="ww-field-ai" open={edit?.field==='__character'||undefined}><summary>Изменить это поле с ИИ</summary><Textarea disabled={busy||active(job)} aria-label="Указание генератору" placeholder="Как изменить? Например: сделать характер мягче, сохранив биографию." value={instruction} onChange={e => setInstruction(e.target.value)}/><label><input type="checkbox" checked={ack} onChange={e => setAck(e.target.checked)}/> Изменить всё равно при семантических замечаниях</label>{(visibilityDirty||invalidVisibility)&&<p className="workshop-hint">Сохраните правило видимости или верните прежнее перед генерацией.</p>}<Button variant="outline" disabled={locked||visibilityDirty||invalidVisibility||editRevision!==draft?.revision} onClick={() => edit && void generate({ task: edit.field === '__character' ? 'character' : 'field', kind: edit.kind, entity_id: edit.id, field: edit.field, text: instruction, warnings_ack: ack })}>Перегенерировать {edit?.field === '__character' ? 'персонажа' : 'поле'}</Button></details></DialogContent></Dialog>
  <Dialog open={!!removal} onOpenChange={o => { if (!o)
         setRemoval(null); }}><DialogContent><DialogHeader><DialogTitle>Удалить запись?</DialogTitle><DialogDescription>{removal?.deps.length ? 'Сначала измени связанные записи. Автоматически удалять их нельзя.' : 'Будет создана новая версия. Предыдущую можно восстановить из истории.'}</DialogDescription></DialogHeader>{removal?.deps.map(d => <p key={d.kind + d.id}>{d.kind} · {characters.find(c => c.id === d.id)?.name || d.id}</p>)}<Button disabled={locked || !!removal?.deps.length} onClick={() => void run(async () => { await api(`/workspaces/${id}/draft`, { revision: draft?.revision, operation: 'remove', kind: removal?.kind, entity_id: removal?.id }, 'PATCH'); setRemoval(null); refresh(); })}>Удалить</Button></DialogContent></Dialog>
- <Dialog open={confirmStart} onOpenChange={setConfirmStart}><DialogContent><DialogHeader><DialogTitle>Начать эту историю?</DialogTitle><DialogDescription>Будет сохранена текущая версия мира. Повторной генерации или разбора текста не будет.</DialogDescription></DialogHeader>{draft?.pending_editor && <p>Предложение AI ещё не применено. Игра начнётся с текущей версии мира.</p>}{draft?.start_warning && <p>{draft.start_warning}</p>}{draft?.validation.warnings.map(x => <p key={x}>{x}</p>)}<Button disabled={busy || loading || !draft?.technical_valid} onClick={() => void run(async () => { const result = await api<{
+ <Dialog open={confirmStart} onOpenChange={setConfirmStart}><DialogContent><DialogHeader><DialogTitle>Начать эту историю?</DialogTitle><DialogDescription>{draft?.games?.length?'Изменения войдут в новое прохождение. Начатая игра останется без изменений.':'Будет сохранена текущая версия мира. Повторной генерации или разбора текста не будет.'}</DialogDescription></DialogHeader>{!!draft?.games?.length&&<Button variant="outline" onClick={()=>{const game=draft.games![0];setConfirmStart(false);onGame(game.world,game.save)}}>Продолжить существующую игру</Button>}<dl className="ww-launch-summary"><dt>Версия</dt><dd>#{draft?.version_id}</dd><dt>Главный герой</dt><dd>{person(state?.protagonist_id)}</dd><dt>Управляемый персонаж</dt><dd>{person(state?.controlled_actor_id)}</dd><dt>Камера / сцена</dt><dd>{place(beginning?.location)}</dd><dt>Когда</dt><dd>{weekTime()}</dd></dl>{draft?.pending_editor && <p>Предложение AI ещё не применено. Игра начнётся с текущей версии мира.</p>}{draft?.start_warning && <p>{draft.start_warning}</p>}{draft?.validation.warnings.map(x => <p key={x}>{x}</p>)}<Button disabled={busy || loading || !draft?.technical_valid} onClick={() => void run(async () => { const result = await api<{
         world: number;
         save: number;
     }>(`/workspaces/${id}/draft/confirm`, { revision: draft?.revision, version_id: draft?.version_id, accept_warnings:!!draft?.start_warning, stop_review:active(job) }); setConfirmStart(false); onGame(result.world, result.save); })}>Подтвердить и открыть игру</Button></DialogContent></Dialog>

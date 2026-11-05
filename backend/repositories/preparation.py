@@ -154,7 +154,6 @@ class Repository(PresentationStorage, DraftStorage, Storage):
             if job['kind'] not in ('draft_world','draft_editor') or job['status'] not in ('error','stopped','saved') or not journal:
                 raise ValueError('Нет сохранённого ответа для продолжения.')
             if job['kind']=='draft_editor':
-                self._editor_unstarted(db,job['workspace_id'])
                 head=self._draft_head(db,job['workspace_id'])
                 edit=journal['editor']
                 if edit['status'] in ('accepted','rejected') or not head or head['id']!=edit['base_version']:

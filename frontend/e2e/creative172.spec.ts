@@ -1,3 +1,4 @@
+import {workshopNav} from './workshop-navigation';
 import {test,expect} from '@playwright/test';
 import {nav} from './navigation';
 import {defaults} from '../src/types';
@@ -14,6 +15,7 @@ for(const skin of ['graphite','parchment']) for(const mode of ['complete','empty
   // the world/save selected by confirmation with the unrelated theme world.
   await page.goto('/');
   await page.evaluate(({wid,world})=>{localStorage.setItem('draftWorkspace',wid);localStorage.setItem('selection',JSON.stringify({world}));},{wid:workspace.id,world:theme.world});
+  await page.evaluate(skin=>localStorage.setItem('workshop-theme',JSON.stringify({theme_id:skin,mode:'manual'})),skin);
   await page.goto('/');await nav(page,'Создать');
   const generated=await request.post(url+'/generate',{data:{revision:0,text:'CREATIVE172: В приморском городе восстанавливают мастерскую после пожара. Происхождение героя неизвестно.',config:{...defaults.summary,provider:'deepseek',model:'deepseek-flash',thinking:'off',max_tokens:24000,context_length:131072},api_key:'offline'}});
   expect(generated.ok()).toBeTruthy();
@@ -31,6 +33,7 @@ for(const skin of ['graphite','parchment']) for(const mode of ['complete','empty
    await expect(page.getByRole('alert')).toContainText('Провайдер завершил запрос без видимого текста');
    const failed=await(await request.get(url+'?author=true')).json();expect(failed.candidate).toEqual(before.candidate);
    await page.reload();await nav(page,'Создать');
+   await workshopNav(page,'Проверка мира');
    await expect(page.getByText('Творческое развитие не завершено.',{exact:false})).toBeVisible();
    await page.getByRole('button',{name:'Повторить после сбоя провайдера'}).click();
    await page.getByRole('button',{name:'Подтвердить одну повторную проверку'}).click();
@@ -46,6 +49,7 @@ for(const skin of ['graphite','parchment']) for(const mode of ['complete','empty
    expect(failed.version_id).toBe(before.version_id);
    await page.reload();await nav(page,'Создать');
    await expect(alert).toContainText('HTTP 400');
+   await workshopNav(page,'Проверка мира');
    await expect(page.getByText('Творческое развитие не завершено.',{exact:false})).toBeVisible();
    await page.getByRole('button',{name:'Продолжить творческое развитие',exact:true}).click();
   }

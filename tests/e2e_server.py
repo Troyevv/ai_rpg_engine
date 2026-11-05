@@ -101,7 +101,10 @@ def stream(**kwargs):
         payload=json.loads(kwargs['messages'][1]['content'])
         kwargs['on_usage']({'prompt_tokens':100,'completion_tokens':20})
         kwargs['on_finish']('stop')
-        yield json.dumps(dict(proposal_hash=payload['proposal_hash'],patches=[dict(path='/changes/3/value/actor_id',value='craftswoman')],drop_indices=[]))
+        if payload['proposal']['changes'][-1].get('path')=='/sections/relationships':
+            yield json.dumps(dict(proposal_hash=payload['proposal_hash'],patches=[],drop_indices=[15]))
+        else:
+            yield json.dumps(dict(proposal_hash=payload['proposal_hash'],patches=[dict(path='/changes/3/value/actor_id',value='craftswoman')],drop_indices=[]))
         return
     from backend.services.draft_editor import MARKER as EDITOR_MARKER
     if kwargs['messages'][0]['content'].startswith(EDITOR_MARKER):
@@ -114,7 +117,14 @@ def stream(**kwargs):
         from test_draft_creative import additions,change
         payload=json.loads(kwargs['messages'][1]['content'])
         state=payload['candidate'];instruction=json.loads(payload['author_context'])['current_instruction']
-        if instruction=='DELETE184_LOCATION':
+        if instruction in ('Создай сестру Ильи','Создай сестру Ильи — Олю'):
+            filename='ilya_sister_olya.json' if instruction.endswith('Олю') else 'ilya_sister.json'
+            fixture=json.loads((Path(__file__).parent/'fixtures/draft_editor'/filename).read_text())
+            proposal=json.loads(fixture['reply']);proposal['candidate_hash']=payload['candidate_hash']
+            yield json.dumps(proposal,ensure_ascii=False);return
+        if instruction=='WORKSHOP188 пакет':
+            changes=[change('/campaign/description','Новая редакция мира для следующего прохождения.','replace')]
+        elif instruction=='DELETE184_LOCATION':
             changes=[change('/locations/1',state['locations'][1],'remove')]
         elif instruction=='DELETE184_HISTORY':
             index=next(i for i,c in enumerate(state['characters']) if c['id']=='archive184')
@@ -123,7 +133,7 @@ def stream(**kwargs):
         else:
             changes=additions(state)
             changes.append(change('/world/organizations/apex/name','Новая история организации','replace'))
-        yield json.dumps(dict(candidate_hash=payload['candidate_hash'],rationale='Вера возвращается в город. Её прошлое связано с мастерской и друзьями.',changes=changes),ensure_ascii=False)
+        yield json.dumps(dict(candidate_hash=payload['candidate_hash'],rationale='Меняется только описание мира; начатая игра сохранена.' if instruction=='WORKSHOP188 пакет' else 'Вера возвращается в город. Её прошлое связано с мастерской и друзьями.',changes=changes),ensure_ascii=False)
         return
     if kwargs['messages'][0]['content'].startswith('Ты создаёшь полноценный живой RPG-мир') and 'EDITOR173' in kwargs['messages'][1]['content']:
         from test_initial_draft_v4 import rich
@@ -253,7 +263,8 @@ def stream(**kwargs):
     if current_phone.get('communication'):
         camera=current_phone['camera']
         voice=current_phone['communication'].get('focus')=='call'
-        if phone_mode.startswith('office'):
+        # AI-editor fixtures reset the optional phone scenario between tests.
+        if (phone_mode or '').startswith('office'):
             from call_continuity_fixture import response,BEFORE,AFTER
             task=json.loads(next(m['content'].split('\n',1)[1] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')))
             if voice:
@@ -343,6 +354,7 @@ def stream(**kwargs):
                 if card.get('fields',{}).get(field,'').strip().lower() in ('','неизвестно','не указано','—'):card['fields'][field]=text
         if 'TEST_RELEASE_QUALITY' in full:candidate['characters'][1]['fields']['Внешность']='неизвестно'
         if 'TEST_CANDIDATE_RECOVERY' in full:candidate['protagonist_id']='missing'
+        candidate['world'].pop('contacts',None)  # Model output omits legacy phonebook defaults.
         value=json.dumps(candidate,ensure_ascii=False)
         if 'TEST_FRAGMENT_RECOVERY' in full:
             key=kwargs['messages'][1]['content'];count=fragment_attempts.get(key,0);fragment_attempts[key]=count+1
@@ -362,7 +374,13 @@ def stream(**kwargs):
                 raise OutputLimitReached()
             value=value[cut:]
     elif 'Ты редактор RPG' in full:
-        value=json.dumps({'value':'Обновлённая внешность'},ensure_ascii=False)
+        payload=json.loads(kwargs['messages'][-1]['content'])
+        if payload['instruction'].startswith('WORKSHOP188'):
+            assert payload['entity']['id']==payload['card']['id']=='maxim'
+            assert payload['current_value']==payload['card']['fields']['Внешность']
+            edited={'unexpected':'not a literary value'} if 'invalid' in payload['instruction'] else payload['current_value'].replace('тёмной стрижкой','светлой стрижкой')
+            value=json.dumps({'value':edited},ensure_ascii=False)
+        else:value=json.dumps({'value':'Обновлённая внешность'},ensure_ascii=False)
     elif kwargs.get('response_format') and runtime_v3_request(kwargs['messages']):
         block=next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only'))
         state=json.loads(block.split('\n',1)[1]);camera=state['camera']
@@ -708,7 +726,7 @@ if __name__ == '__main__':
         return {'world':seed['world'],'save':seed['save']}
 
     @app.post('/test/phone-seed')
-    def phone_seed(unread: bool = False, incoming: bool = True, decision: str = "silent", polish: bool = False, hidden: bool = False, strangers: bool = False):
+    def phone_seed(unread: bool = False, incoming: bool = True, decision: str = "silent", polish: bool = False, hidden: bool = False, strangers: bool = False, legacy_portraits: bool = False):
         global phone_mode
         phone_mode=decision
         from devtools.narrative_test_world import load_fixture
@@ -723,6 +741,11 @@ if __name__ == '__main__':
         snap=repo.get_snapshot(sid)
         from backend.runtime_v3.models import WorldHistoryV3
         batch=WorldHistoryV3().to_dict()
+        if legacy_portraits:
+            # Explicit pre-175 save fixture: preserve coverage of the old fallback.
+            for actor in snap['world_state']['characters'].values():
+                actor.pop('procedural_portrait', None)
+                actor.pop('portrait_mode', None)
         if strangers:
             snap['world_state']['contacts'] = {}
         if polish:

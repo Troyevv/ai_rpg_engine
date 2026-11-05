@@ -62,7 +62,7 @@ test('menu: all destinations, draft, anchor, nested Back and workspace state',as
  await expect(page.locator('.save-workspace')).toHaveCount(0);
  await expect(page.getByRole('button',{name:'Меню игры',exact:true})).toBeFocused();
  await nav(page,'Создать');await expect(page.locator('.world-workshop')).toBeVisible();
- await menu(page);await page.locator('.mobile-menu-resume').click();await expect(page.locator('.game')).toBeVisible();
+ await nav(page,'Игра');await expect(page.locator('.game')).toBeVisible();
  await nav(page,'Настройки');await expect(page.locator('.settings-dialog')).toBeVisible();await page.keyboard.press('Escape');
  await menu(page);const reading=page.getByRole('switch',{name:'Режим чтения'});
  await expect(reading).toHaveAttribute('aria-checked','false');await reading.click();await expect(reading).toHaveAttribute('aria-checked','true');await reading.click();

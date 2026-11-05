@@ -36,7 +36,9 @@ def provider(changes=None,calls=None):
         elif system.startswith(draft_completeness.MARKER):yield '{"issues":[]}'
         elif system.startswith(draft_creative.MARKER):
             data=json.loads(kw['messages'][1]['content']);yield json.dumps(dict(candidate_hash=data['candidate_hash'],rationale='Мир уже согласован.',changes=[]))
-        else:yield json.dumps(candidate(),ensure_ascii=False)
+        else:
+            initial=candidate();initial['world'].pop('contacts',None)
+            yield json.dumps(initial,ensure_ascii=False)
     return stream
 
 
@@ -139,10 +141,16 @@ def test_generation_editor_start_turn_save_reload(api):
     draft=client.get(url+'?author=true').json();_,edit=run_edit(client,url,draft)
     draft=client.get(url+'?author=true').json();assert decide(client,url,draft,edit).status_code==200
     draft=client.get(url+'?author=true').json()
+    from test_portraits import image
+    cid=draft['state']['characters'][0]['id']
+    first_portrait=client.post(url+f'/characters/{cid}/portraits',params={'revision':draft['revision']},content=image(),headers={'content-type':'image/png'})
+    assert first_portrait.status_code==200,first_portrait.text
+    first_portrait=first_portrait.json()['portrait']
+    original_image=client.get(url+f'/characters/{cid}/portraits/assets/'+first_portrait['asset_id']+'?author=true').content
+    draft=client.get(url+'?author=true').json()
     started=client.post(url+'/confirm',json={'revision':draft['revision'],'version_id':draft['version_id'],'accept_warnings':True})
     assert started.status_code==200,started.text
     sid=started.json()['save'];repo=app.state.repository
-    assert request(client,url,draft,key='after-start').status_code!=200
     from test_runtime_v3_engine import run as play, raw_for
     from test_engine import CONFIG
     from backend.runtime_v3.repository import read_history
@@ -156,6 +164,36 @@ def test_generation_editor_start_turn_save_reload(api):
             assert after['world_state'][section]==expected[section]
         with repo.connect() as db:history,_=read_history(db,after['history_head'])
         assert any(e['id']=='fire' for e in history['events'])
+    old=deepcopy(repo.get_snapshot(sid))
+    from backend.repositories import portraits
+    current=client.get(url+'?author=true').json()
+    cid=current['state']['characters'][0]['id']
+    edited=client.patch(url,json={'revision':current['revision'],'operation':'patch','kind':'campaign','field':'title','value':'Второе прохождение'})
+    assert edited.status_code==200,edited.text
+    _,edit=run_edit(client,url,edited.json(),lambda s:[change('/campaign/description','История после пожара: новое начало.','replace')],key='after-start')
+    current=client.get(url+'?author=true').json()
+    assert decide(client,url,current,edit).status_code==200
+    current=client.get(url+'?author=true').json()
+    portrait=client.post(url+f'/characters/{cid}/portraits',params={'revision':current['revision'],'replace_id':first_portrait['id']},content=image(size=(240,360)),headers={'content-type':'image/png'})
+    assert portrait.status_code==200,portrait.text
+    current=client.get(url+'?author=true').json()
+    assert decide(client,url,current,edit).status_code==200  # accepted package stays idempotent
+    second=client.post(url+'/confirm',json={'revision':current['revision'],'version_id':current['version_id'],'accept_warnings':True})
+    assert second.status_code==200,second.text
+    new_sid=second.json()['save'];assert new_sid!=sid
+    assert client.post(url+'/confirm',json={'revision':current['revision'],'version_id':current['version_id'],'accept_warnings':True}).json()['save']==new_sid
+    assert repo.get_snapshot(sid)==old
+    new=repo.get_snapshot(new_sid)
+    assert new['world_state']['knowledge']==old['world_state']['knowledge']
+    assert new['world_state']['characters'][cid]['portraits']!=old['world_state']['characters'][cid]['portraits']
+    assert portraits.asset(repo,new_sid,cid,portrait.json()['portrait']['asset_id'])!=original_image
+    assert portraits.asset(repo,sid,cid,first_portrait['asset_id'])==original_image
+    with pytest.raises(ValueError):portraits.asset(repo,sid,cid,portrait.json()['portrait']['asset_id'])
+    _,preview=run_edit(client,url,current,lambda s:[change('/campaign/tone','Спокойный','replace')],key='stale-after-start')
+    current=client.get(url+'?author=true').json()
+    patched=client.patch(url,json={'revision':current['revision'],'operation':'patch','kind':'campaign','field':'tone','value':'Драма'}).json()
+    assert decide(client,url,patched,preview).status_code==409
+    assert repo.get_snapshot(sid)==old and repo.get_snapshot(new_sid)==new
     assert client.get(f'/api/saves/{sid}').status_code==200
     assert 'craftswoman:fire' not in client.get(f'/api/saves/{sid}').json()['state']['world']['knowledge']
     assert repo.get_snapshot(sid)['authoring']['editor_instructions']
@@ -566,3 +604,15 @@ def test_resume_after_manual_edit_cannot_adopt_new_head(api):
     assert decide(client,url,updated,{'id':job['id']}).status_code==409
     actual=client.get(url+'?author=true').json()
     assert actual['state']==updated['state'] and actual['version_id']==updated['version_id']
+
+
+def test_editor_prompt_compacts_contract_without_cutting_canon(api):
+    from context_builder import estimate
+    client,_=api;_,_,before=setup(client)
+    prompt=draft_editor.messages(before,'Измени мир')
+    payload=json.loads(prompt[1]['content'])
+    assert payload['candidate']==before['state']
+    assert estimate(prompt)+512+256 <= 32768
+    schema=payload['world_schema']
+    assert schema['$defs']
+    assert 'portrait_traits' in schema['properties']['characters']['items']['properties']

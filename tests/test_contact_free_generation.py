@@ -74,3 +74,33 @@ def test_generated_world_without_contacts_start_send_call_reload(api):
     run(reloaded,jid,raw_for(snapshot))
     assert reloaded.get_job(jid)['status']=='saved'
     assert len(reloaded.get_snapshot(sid)['world_state']['remote_events'])==2
+
+import pytest
+from backend.services.draft_changes import apply_proposal, author_value
+from backend.repositories.drafts import candidate_hash
+
+
+@pytest.mark.parametrize('contacts',[{}, {'new':{'id':'new'}}])
+def test_model_contact_key_rejected_before_normalization(contacts):
+    from backend.services.draft_generation import decode_result
+    raw=rich();raw['world']['contacts']=contacts
+    with pytest.raises(ValueError,match='Телефонная книга'):
+        draft_initial.validate_generated_input(raw)
+    with pytest.raises(ValueError,match='Телефонная книга'):
+        decode_result(json.dumps(raw),None,{'_draft_task':'world'})
+
+
+@pytest.mark.parametrize('op',['add','replace','remove'])
+@pytest.mark.parametrize('path',['/world/contacts','/world/contacts/legacy','/world/contacts/legacy/label'])
+def test_editor_contact_operations_rejected(op,path):
+    state=rich()
+    proposal=dict(candidate_hash=candidate_hash(state),rationale='test',changes=[dict(op=op,path=path,value={},reason='test')])
+    with pytest.raises(ValueError):apply_proposal(state,json.dumps(proposal),editing=True)
+
+
+def test_editor_schema_and_semantic_repair_guard():
+    from backend.services.draft_editor import messages
+    world=json.loads(messages({'state':rich()},'test')[1]['content'])['world_schema']['properties']['world']
+    assert 'contacts' not in world['properties'] and world['additionalProperties'] is False
+    with pytest.raises(ValueError):author_value({}, {'legacy':{}},'/world/contacts')
+    assert author_value({'legacy':{}},{'legacy':{}},'/world/contacts')=={'legacy':{}}

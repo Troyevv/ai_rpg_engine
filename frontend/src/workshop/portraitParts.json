@@ -1,0 +1,196 @@
+[
+  {
+    "bg": [
+      "#72716a",
+      "#3e4f4d"
+    ],
+    "hair": [
+      "#3e352e",
+      "#242b29"
+    ],
+    "cloth": [
+      "#2c3434",
+      "#182323"
+    ],
+    "iris": "#5b5540",
+    "body": "<path d=\"M173 316 Q183 338 200 340 Q219 338 227 316 L271 337 Q311 349 328 402 L345 500 H56 L73 402 Q88 353 130 336Z\" fill=\"url(#cloth)\"/><path d=\"M172 319 Q198 355 228 319\" fill=\"none\" stroke=\"#555b51\" stroke-width=\"6\"/><path d=\"M103 369 L87 483 M293 370 L309 484\" stroke=\"#47514b\" stroke-width=\"2\" opacity=\".45\"/><path d=\"M151 355 Q139 411 151 473 M248 366 Q239 421 252 473\" fill=\"none\" stroke=\"#111e1f\" stroke-width=\"3\" opacity=\".32\"/><path d=\"M223 404 h34 v18 h-34Z\" fill=\"#9d9b83\" opacity=\".48\"/><path d=\"M228 410 h23 M228 415 h15\" stroke=\"#26332f\" stroke-width=\"2\"/>",
+    "backHair": "<path d=\"M133 219 L128 169 Q115 121 153 105 Q156 86 194 93 Q234 77 252 112 Q278 113 274 158 L266 225 L254 199 L147 196Z\" fill=\"url(#hair)\"/>",
+    "frontHair": "<path d=\"M135 188 L131 150 Q122 125 147 113 Q155 91 185 103 Q214 84 234 102 Q263 104 271 137 Q277 154 260 184 L255 155 Q231 149 226 129 Q215 155 185 156 L194 136 Q170 166 145 159 L145 188Z\" fill=\"url(#hair)\"/><path d=\"M148 131 Q172 110 194 114 M204 112 Q234 110 248 134 M147 145 Q174 128 181 121\" fill=\"none\" stroke=\"#71614a\" stroke-width=\"2.2\" stroke-linecap=\"round\" opacity=\".35\"/>",
+    "brows": "<path d=\"M151 190 Q167 183 184 188 M216 188 Q232 182 249 190\" stroke=\"#3a3029\" fill=\"none\" stroke-width=\"5\" stroke-linecap=\"round\"/>",
+    "extraFace": "<path d=\"M151 246 Q160 277 182 289 Q202 300 224 285 Q242 273 251 246 L245 270 Q226 302 202 305 Q176 301 156 275Z\" fill=\"#51443a\" opacity=\".2\"/><path d=\"M184 249 Q200 245 218 249\" stroke=\"#493d34\" stroke-width=\"4\" opacity=\".2\"/><g stroke=\"#5b4a3c\" stroke-width=\"1.2\" stroke-linecap=\"round\" opacity=\".3\"><path d=\"M163 263 l1 3 M170 274 l1 3 M181 281 l1 3 M191 286 l1 3 M207 287 l-1 3 M219 282 l-1 3 M231 274 l-1 3 M239 263 l-1 3\"/></g>",
+    "accessories": "<path d=\"M177 331 Q198 365 225 331\" fill=\"none\" stroke=\"#9c9984\" stroke-width=\"1.3\"/><path d=\"M198 354 v12 M194 358 h8\" stroke=\"#b4a67f\" stroke-width=\"2\"/>"
+  },
+  {
+    "bg": [
+      "#a68c74",
+      "#6b7460"
+    ],
+    "hair": [
+      "#69503b",
+      "#3f332e"
+    ],
+    "cloth": [
+      "#748571",
+      "#465d54"
+    ],
+    "skin": [
+      "#edc6aa",
+      "#d2a185",
+      "#b17c66"
+    ],
+    "iris": "#65715b",
+    "blush": "#c57e70",
+    "body": "<path d=\"M171 317 L197 348 L229 317 Q276 326 301 361 Q324 391 336 500 H66 Q76 396 101 361 Q128 329 171 317Z\" fill=\"url(#cloth)\"/><path d=\"M171 318 L197 348 L174 375 L150 333Z M229 318 L197 348 L219 374 L250 334Z\" fill=\"#93a18a\"/><path d=\"M197 350 L201 500\" stroke=\"#384e45\" stroke-width=\"2\"/><g fill=\"#c1bda0\"><circle cx=\"201\" cy=\"388\" r=\"3\"/><circle cx=\"201\" cy=\"428\" r=\"3\"/><circle cx=\"201\" cy=\"468\" r=\"3\"/></g><path d=\"M112 371 Q120 432 101 493 M289 370 Q279 434 297 491\" stroke=\"#a0ac8f\" stroke-width=\"1.5\" fill=\"none\" opacity=\".35\"/>",
+    "backHair": "<path d=\"M130 162 Q115 98 176 89 Q228 70 260 114 Q280 143 271 213 Q273 260 287 304 Q260 327 237 317 L215 272 L164 278 Q154 312 123 316 Q111 288 119 245Z\" fill=\"url(#hair)\"/><path d=\"M126 206 Q132 267 122 300 M262 193 Q248 252 273 299\" fill=\"none\" stroke=\"#927455\" stroke-width=\"3\" opacity=\".35\"/>",
+    "frontHair": "<path d=\"M137 200 Q122 159 138 123 Q156 91 195 97 Q231 87 252 122 Q271 151 262 200 L250 169 Q218 157 199 125 Q183 150 145 164Z\" fill=\"url(#hair)\"/><path d=\"M194 107 Q178 137 145 147 M204 109 Q224 139 251 153\" fill=\"none\" stroke=\"#ad8b62\" stroke-width=\"3\" opacity=\".38\"/><path d=\"M149 174 Q132 215 142 249\" fill=\"none\" stroke=\"#5a4436\" stroke-width=\"8\" stroke-linecap=\"round\"/>",
+    "brows": "<path d=\"M153 190 Q169 184 183 189 M216 189 Q231 185 246 191\" stroke=\"#6a4d3b\" fill=\"none\" stroke-width=\"3\" stroke-linecap=\"round\"/>",
+    "lips": "<path d=\"M182 257 Q195 252 201 255 Q208 252 220 256 Q204 273 182 257Z\" fill=\"#b7756a\"/><path d=\"M183 258 Q200 264 219 257\" stroke=\"#7e4b43\" stroke-width=\"1.2\" fill=\"none\"/><path d=\"M194 266 Q202 268 211 263\" stroke=\"#e6b29a\" stroke-width=\"1.5\" fill=\"none\"/>",
+    "accessories": "<circle cx=\"135\" cy=\"232\" r=\"3\" fill=\"#dec38b\"/><circle cx=\"265\" cy=\"232\" r=\"3\" fill=\"#dec38b\"/><path d=\"M178 321 Q199 349 222 322\" fill=\"none\" stroke=\"#c7b37c\" stroke-width=\"1.4\"/><circle cx=\"200\" cy=\"341\" r=\"3.5\" fill=\"#d2b77d\"/>"
+  },
+  {
+    "bg": [
+      "#9c7162",
+      "#654f4e"
+    ],
+    "hair": [
+      "#343437",
+      "#20282c"
+    ],
+    "cloth": [
+      "#b57659",
+      "#7a5148"
+    ],
+    "skin": [
+      "#e6bca3",
+      "#c9957c",
+      "#aa725f"
+    ],
+    "iris": "#6b6658",
+    "eyes": "sharp",
+    "eyeY": 207,
+    "face": "M145 142 C166 127 237 126 254 149 C264 178 261 222 252 245 C243 269 220 298 201 303 C182 299 159 273 148 248 C138 225 133 170 145 142Z",
+    "body": "<path d=\"M175 316 L200 340 L225 315 L265 330 Q303 344 321 403 L337 500 H61 L78 404 Q94 347 135 331Z\" fill=\"url(#cloth)\"/><path d=\"M175 316 L200 340 L225 315 L218 360 L184 360Z\" fill=\"#2c3233\"/><path d=\"M172 319 L200 362 L171 380 L146 330Z\" fill=\"#c1886b\"/><path d=\"M228 317 L201 362 L226 381 L255 329Z\" fill=\"#c1886b\"/><path d=\"M200 365 V500 M118 381 L103 500 M279 380 L294 500\" stroke=\"#633e3a\" stroke-width=\"2\" opacity=\".6\"/><path d=\"M229 406 h44 v39 h-44Z\" fill=\"none\" stroke=\"#d29a7b\" stroke-width=\"1.5\" opacity=\".5\"/><circle cx=\"202\" cy=\"402\" r=\"3\" fill=\"#d3b08a\"/>",
+    "backHair": "<path d=\"M126 151 Q128 93 182 88 Q238 75 265 124 Q276 143 272 201 L278 285 Q254 303 230 294 L222 260 L162 264 L155 293 Q130 296 115 282Z\" fill=\"url(#hair)\"/>",
+    "frontHair": "<path d=\"M127 198 L126 147 Q128 95 182 90 Q235 81 260 119 Q274 145 263 202 L253 177 Q214 152 194 121 Q177 159 141 174 L139 216Z\" fill=\"url(#hair)\"/><path d=\"M181 106 Q165 141 139 155 M199 105 Q218 137 251 157\" fill=\"none\" stroke=\"#7c7170\" stroke-width=\"2.3\" opacity=\".35\"/><path d=\"M130 211 L126 276 M265 209 L270 279\" stroke=\"#545155\" stroke-width=\"2\" opacity=\".5\"/>",
+    "brows": "<path d=\"M151 191 L167 183 L184 186 M215 187 L231 183 L248 191\" stroke=\"#393234\" fill=\"none\" stroke-width=\"3.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>",
+    "lips": "<path d=\"M184 259 Q194 253 201 256 Q208 254 219 258 Q204 268 184 259Z\" fill=\"#9e5b56\"/><path d=\"M185 259 Q202 261 218 258\" fill=\"none\" stroke=\"#643b3d\" stroke-width=\"1.4\"/>",
+    "accessories": "<path d=\"M133 232 V249 M267 232 V249\" stroke=\"#d6b884\" stroke-width=\"2.7\"/><circle cx=\"133\" cy=\"250\" r=\"2.4\" fill=\"#dbc692\"/><circle cx=\"267\" cy=\"250\" r=\"2.4\" fill=\"#dbc692\"/>"
+  },
+  {
+    "bg": [
+      "#9a8460",
+      "#686b51"
+    ],
+    "hair": [
+      "#47362b",
+      "#292a27"
+    ],
+    "cloth": [
+      "#5d6260",
+      "#343d3c"
+    ],
+    "skin": [
+      "#b8815d",
+      "#916044",
+      "#714735"
+    ],
+    "iris": "#4a3026",
+    "line": "#492b26",
+    "eyeWhite": "#d1b79a",
+    "lipColor": "#795046",
+    "blush": "#925d46",
+    "face": "M142 146 Q196 117 256 147 C270 173 266 215 257 245 Q248 279 220 294 Q201 303 179 291 Q151 277 143 248 C135 221 131 174 142 146Z",
+    "body": "<path d=\"M172 314 Q199 339 229 314 L268 332 Q309 347 331 405 L347 500 H51 L69 405 Q89 350 130 331Z\" fill=\"url(#cloth)\"/><path d=\"M172 315 L199 341 L228 315 L232 500 H171Z\" fill=\"#c0b49b\"/><path d=\"M171 315 L195 344 L168 381 L143 329Z M230 315 L201 345 L231 382 L254 328Z\" fill=\"#71756f\"/><path d=\"M159 383 L153 500 M241 383 L247 500\" stroke=\"#242e2e\" stroke-width=\"2\"/><path d=\"M102 390 h40 v42 h-40Z M258 390 h40 v42 h-40Z\" fill=\"none\" stroke=\"#929286\" stroke-width=\"1.5\" opacity=\".5\"/><g fill=\"#9a998a\"><circle cx=\"153\" cy=\"400\" r=\"2.5\"/><circle cx=\"153\" cy=\"449\" r=\"2.5\"/></g>",
+    "backHair": "<path d=\"M131 194 Q113 181 123 162 Q111 143 127 132 Q120 111 141 108 Q145 88 166 96 Q179 77 195 90 Q216 78 228 96 Q249 88 258 109 Q280 111 274 134 Q288 151 275 167 Q278 189 263 202 L250 159 L147 163Z\" fill=\"url(#hair)\"/>",
+    "frontHair": "<path d=\"M134 182 Q119 164 134 150 Q125 134 142 128 Q141 110 160 119 Q165 101 181 113 Q195 98 209 113 Q227 103 235 120 Q254 114 259 135 Q276 145 261 169 L253 181 L250 157 Q235 153 231 143 Q219 153 205 143 Q188 153 177 143 Q160 160 146 151 L144 180Z\" fill=\"url(#hair)\"/><g fill=\"none\" stroke=\"#8c6748\" stroke-width=\"2.2\" opacity=\".4\" stroke-linecap=\"round\"><path d=\"M145 134 q2-12 13-8 M167 123 q5-12 16-5 M192 119 q8-10 17 0 M218 128 q7-11 16-3 M240 137 q10-7 14 3 M136 155 q-5 9 3 13\"/></g>",
+    "nose": "<path d=\"M202 209 L197 233 Q190 242 201 244 Q213 246 214 238\" fill=\"none\" stroke=\"#764a36\" stroke-width=\"2.4\" stroke-linecap=\"round\"/><path d=\"M188 240 Q193 236 198 241 M208 241 Q214 237 220 241\" stroke=\"#5a3529\" stroke-width=\"1.8\" fill=\"none\"/>",
+    "lips": "<path d=\"M182 260 Q192 252 201 256 Q210 253 221 259 Q202 275 182 260Z\" fill=\"#785044\"/><path d=\"M184 260 Q201 264 220 259\" stroke=\"#54332e\" stroke-width=\"1.6\" fill=\"none\"/><path d=\"M193 268 Q202 271 212 265\" stroke=\"#bc8a68\" stroke-width=\"1.4\" fill=\"none\"/>",
+    "extraFace": "<path d=\"M155 256 Q162 280 184 292 Q201 304 222 291 Q242 278 249 255\" stroke=\"#543d2d\" stroke-width=\"5\" fill=\"none\" opacity=\".22\"/>"
+  },
+  {
+    "bg": [
+      "#9b9782",
+      "#68746d"
+    ],
+    "hair": [
+      "#716151",
+      "#4c453c"
+    ],
+    "cloth": [
+      "#b6a891",
+      "#867f6d"
+    ],
+    "skin": [
+      "#e1b69b",
+      "#c3947d",
+      "#a47360"
+    ],
+    "iris": "#657061",
+    "blush": "#bb7b69",
+    "eyeY": 208,
+    "face": "M145 146 Q199 119 254 147 C264 179 260 222 250 251 Q241 277 218 296 Q201 304 182 294 Q156 280 147 254 C135 227 133 173 145 146Z",
+    "body": "<path d=\"M173 316 Q198 337 227 316 L266 330 Q307 345 329 407 L345 500 H55 L72 408 Q93 350 132 333Z\" fill=\"url(#cloth)\"/><path d=\"M174 316 Q198 342 226 316 L243 500 H157Z\" fill=\"#d6c9ae\"/><path d=\"M171 318 L194 356 L164 500 H139 L150 336Z M230 317 L207 356 L237 500 H261 L252 334Z\" fill=\"#c0b39a\"/><path d=\"M110 368 Q122 421 98 500 M289 368 Q279 427 299 500\" fill=\"none\" stroke=\"#6e6e5f\" stroke-width=\"2\" opacity=\".4\"/><path d=\"M151 380 L162 381 M146 423 L156 425 M142 465 L152 467\" stroke=\"#e3d2af\" stroke-width=\"3\"/>",
+    "backHair": "<path d=\"M132 155 Q118 105 167 92 Q207 74 244 103 Q272 120 271 165 L275 250 Q254 274 232 275 L219 244 L165 250 Q148 272 124 251Z\" fill=\"url(#hair)\"/>",
+    "frontHair": "<path d=\"M135 202 Q124 176 130 144 Q134 106 171 101 Q217 83 246 119 Q266 141 263 198 L251 176 Q219 159 198 129 Q177 160 144 174Z\" fill=\"url(#hair)\"/><g fill=\"none\" stroke-linecap=\"round\"><path d=\"M195 108 Q179 137 143 154 M204 112 Q224 144 253 159 M131 191 Q126 222 135 246\" stroke=\"#baad91\" stroke-width=\"2.4\" opacity=\".46\"/><path d=\"M191 115 Q176 145 145 163 M211 112 Q238 141 259 151\" stroke=\"#d0c0a2\" stroke-width=\"1.2\" opacity=\".4\"/></g>",
+    "brows": "<path d=\"M153 190 Q169 185 183 192 M217 192 Q233 186 246 193\" stroke=\"#77604c\" fill=\"none\" stroke-width=\"3.3\" stroke-linecap=\"round\"/>",
+    "extraFace": "<g fill=\"none\" stroke=\"#a87764\" stroke-width=\"1.15\" stroke-linecap=\"round\" opacity=\".52\"><path d=\"M147 211 l-7 3 M148 215 l-7 5 M253 211 l7 4 M252 216 l7 5 M159 226 Q170 232 181 227 M219 227 Q231 232 242 226 M183 242 Q175 252 177 263 M219 243 Q227 252 225 264 M189 282 Q201 285 213 281 M166 171 Q199 165 231 172 M170 179 Q198 175 227 180\"/></g>",
+    "lips": "<path d=\"M183 260 Q195 254 201 257 Q209 255 219 260 Q204 270 183 260Z\" fill=\"#a46d62\"/><path d=\"M183 260 Q201 264 219 260\" stroke=\"#754c43\" stroke-width=\"1.2\" fill=\"none\"/>",
+    "accessories": "<circle cx=\"133\" cy=\"232\" r=\"4\" fill=\"#c8b57d\"/><circle cx=\"267\" cy=\"232\" r=\"4\" fill=\"#c8b57d\"/><path d=\"M177 326 Q200 353 223 326\" stroke=\"#8c8471\" stroke-width=\"2\" fill=\"none\"/><ellipse cx=\"201\" cy=\"346\" rx=\"5\" ry=\"7\" fill=\"#9b8c62\"/>"
+  },
+  {
+    "bg": [
+      "#7e8a8b",
+      "#515f6d"
+    ],
+    "hair": [
+      "#8d583b",
+      "#643f31"
+    ],
+    "cloth": [
+      "#687e85",
+      "#3d5360"
+    ],
+    "skin": [
+      "#ecc4a4",
+      "#d19d7e",
+      "#b37d61"
+    ],
+    "iris": "#758a82",
+    "blush": "#c77b60",
+    "face": "M141 143 Q199 120 257 145 C267 181 267 220 256 249 Q245 285 220 297 Q198 306 176 295 Q151 280 143 250 C133 221 130 175 141 143Z",
+    "body": "<path d=\"M172 315 Q199 342 228 315 L267 332 Q309 349 328 405 L346 500 H55 L72 404 Q92 350 132 332Z\" fill=\"url(#cloth)\"/><path d=\"M172 316 Q200 352 228 317\" stroke=\"#91a09e\" stroke-width=\"9\" fill=\"none\"/><path d=\"M173 319 Q199 352 226 320\" stroke=\"#455c64\" stroke-width=\"1.6\" fill=\"none\"/><path d=\"M104 373 L87 500 M294 372 L312 500\" stroke=\"#253e4b\" stroke-width=\"2\" opacity=\".5\"/><g stroke=\"#92a29f\" stroke-width=\"1\" opacity=\".2\"><path d=\"M122 395 v105 M143 385 v115 M164 384 v116 M186 385 v115 M209 385 v115 M232 384 v116 M254 384 v116 M276 395 v105\"/></g>",
+    "backHair": "<path d=\"M130 201 L125 151 Q120 119 150 109 Q170 84 202 93 Q235 85 255 112 Q278 122 274 153 L265 205 L252 165 L145 167Z\" fill=\"url(#hair)\"/>",
+    "frontHair": "<path d=\"M134 190 L130 154 Q123 133 143 126 Q142 112 163 113 Q173 94 193 108 Q211 94 225 109 Q246 104 255 126 Q278 136 263 165 L252 187 L250 156 Q233 153 219 137 Q186 165 147 153 L145 190Z\" fill=\"url(#hair)\"/><path d=\"M147 138 Q178 117 207 121 M218 117 Q241 121 252 142 M159 145 Q183 132 196 130\" fill=\"none\" stroke=\"#c38c57\" stroke-width=\"2.8\" opacity=\".5\"/>",
+    "extraFace": "<path d=\"M145 238 Q151 251 166 248 L182 254 Q200 267 220 254 L239 247 Q250 249 256 235 L252 265 Q240 298 215 308 Q201 314 186 307 Q156 296 149 267Z\" fill=\"url(#hair)\"/><path d=\"M178 251 Q191 244 200 250 Q209 245 223 251 L219 260 Q205 254 200 258 Q190 254 181 262Z\" fill=\"#724631\"/><path d=\"M185 264 Q202 267 217 262 Q202 275 185 264Z\" fill=\"#c88870\"/><path d=\"M163 268 l7 14 M178 281 l5 13 M194 283 l2 17 M212 283 l-3 14 M229 274 l-5 15 M242 261 l-6 13\" stroke=\"#c08b5c\" stroke-width=\"1.5\" opacity=\".4\" stroke-linecap=\"round\"/>",
+    "brows": "<path d=\"M151 190 Q168 183 184 190 M216 190 Q232 183 249 191\" stroke=\"#8e5e3c\" fill=\"none\" stroke-width=\"4.3\" stroke-linecap=\"round\"/>"
+  },
+  {
+    "bg": [
+      "#b19d83",
+      "#8b7b6b"
+    ],
+    "hair": [
+      "#917356",
+      "#66513f"
+    ],
+    "cloth": [
+      "#ded4bb",
+      "#b4b39d"
+    ],
+    "skin": [
+      "#efc9ad",
+      "#d4a58b",
+      "#b5846d"
+    ],
+    "iris": "#6e745e",
+    "blush": "#cc8775",
+    "face": "M144 143 Q199 120 255 146 C267 179 264 219 254 245 Q245 274 221 292 Q202 302 182 293 Q156 278 146 249 C135 224 132 176 144 143Z",
+    "body": "<path d=\"M172 317 Q199 337 228 317 L267 332 Q308 350 329 409 L346 500 H54 L72 408 Q92 351 133 334Z\" fill=\"url(#cloth)\"/><path d=\"M172 318 Q199 351 228 318\" stroke=\"#eee5cd\" stroke-width=\"7\" fill=\"none\"/><path d=\"M104 371 Q119 433 99 500 M294 374 Q280 434 303 500\" stroke=\"#8e9580\" stroke-width=\"1.8\" fill=\"none\" opacity=\".45\"/><path d=\"M166 414 Q197 398 228 415 L227 437 Q198 451 167 436Z\" fill=\"#8f9b81\" opacity=\".45\"/><path d=\"M185 421 Q198 405 211 421 L200 434Z\" fill=\"#e8dcc2\"/>",
+    "backHair": "<path d=\"M129 162 Q118 118 151 103 Q177 82 204 94 Q239 89 259 120 Q277 139 271 177 L268 236 Q251 256 236 256 L168 260 Q144 259 125 239Z\" fill=\"url(#hair)\"/>",
+    "frontHair": "<path d=\"M133 202 L127 160 Q123 119 158 109 Q182 89 213 101 Q249 101 263 134 Q274 155 264 202 L252 179 Q231 173 223 148 L215 176 Q190 171 183 151 L172 175 Q153 178 144 168 L143 207Z\" fill=\"url(#hair)\"/><path d=\"M147 138 Q164 117 183 122 M193 116 Q207 127 212 145 M222 120 Q245 137 251 155\" stroke=\"#c6a078\" stroke-width=\"2.4\" fill=\"none\" opacity=\".52\"/>",
+    "brows": "<path d=\"M154 191 Q169 187 183 192 M217 192 Q232 187 246 193\" stroke=\"#886747\" stroke-width=\"3\" fill=\"none\" stroke-linecap=\"round\"/>",
+    "extraFace": "<g fill=\"#b37b5e\" opacity=\".48\"><circle cx=\"158\" cy=\"231\" r=\"1.3\"/><circle cx=\"166\" cy=\"234\" r=\"1.3\"/><circle cx=\"173\" cy=\"230\" r=\"1\"/><circle cx=\"180\" cy=\"233\" r=\"1\"/><circle cx=\"219\" cy=\"232\" r=\"1.1\"/><circle cx=\"226\" cy=\"230\" r=\"1.1\"/><circle cx=\"235\" cy=\"233\" r=\"1.3\"/><circle cx=\"242\" cy=\"230\" r=\"1.1\"/></g>",
+    "lips": "<path d=\"M183 258 Q195 253 201 256 Q207 253 219 258 Q202 272 183 258Z\" fill=\"#bd7c70\"/><path d=\"M184 259 Q202 264 218 258\" stroke=\"#8f574a\" stroke-width=\"1.2\" fill=\"none\"/>",
+    "accessories": "<circle cx=\"134\" cy=\"231\" r=\"3\" fill=\"#cabd8e\"/><circle cx=\"266\" cy=\"231\" r=\"3\" fill=\"#cabd8e\"/><path d=\"M176 324 Q198 348 224 325\" stroke=\"#a38965\" stroke-width=\"1.3\" fill=\"none\"/><path d=\"M198 340 l-3 7 6 2 3-7Z\" fill=\"#bca477\"/>"
+  }
+]

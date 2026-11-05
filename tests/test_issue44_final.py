@@ -1,3 +1,4 @@
+from draft_provider_fixture import provider_world
 from draft_provider_fixture import accept_creative_unchecked
 """Final-contract regressions. Historical bytes first; continuation is controlled, not live."""
 from copy import deepcopy
@@ -275,7 +276,7 @@ def test_model_player_goal_recovery_preserves_source_agency(api,authored):
         if 'patches' in system:
             payload=json.loads(kw['messages'][1]['content']);assert source in payload['author_context']
             yield json.dumps({'patches':[dict(path='/world/characters/'+cid+'/short_goal',value='Поехать на юг' if authored else ''),dict(path='/world/characters/'+cid+'/goals',value=['Поехать на юг'] if authored else [])]});return
-        yield json.dumps(s)
+        yield provider_world(s)
     with patch('backend.services.preparation.chat_stream',side_effect=provider):
         response=client.post(url+'/generate',json=dict(revision=0,text=source,config=dict(REMOTE,context_length=262144),api_key='offline'))
         jid=response.json()['id'];job=wait_job(client,jid);assert job['status']=='saved',job
@@ -289,7 +290,7 @@ def test_browser_provider_protocol_recovers_after_known_outage(api):
     @accept_creative_unchecked
     def stream(**kw):
         if kw['messages'][0]['content'].startswith(review.MARKER):yield protocol_review(json.loads(kw['messages'][1]['content'])) or '{"issues":[]}'
-        else:yield json.dumps(rich())
+        else:yield provider_world(rich())
     client,app=api
     wid=client.post('/api/workspaces',json={'name':'Browser protocol parity'}).json()['id'];url=f'/api/workspaces/{wid}/draft'
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
@@ -312,7 +313,7 @@ def test_value_cycle_is_persisted_across_resume_epoch(api):
         if system.startswith(review.MARKER):yield json.dumps({'issues':[dict(path='/campaign/title',message='Controlled unresolved conflict')]})
         elif 'patches' in system:
             repairs.append(True);yield json.dumps({'patches':[dict(path='/campaign/title',value='B' if len(repairs)==1 else 'A')]})
-        else:yield json.dumps(s)
+        else:yield provider_world(s)
     with patch('backend.services.preparation.chat_stream',side_effect=provider):
         response=client.post(url+'/generate',json=dict(revision=0,text='Рассказ о соседях.',config=dict(REMOTE,context_length=262144),api_key='offline'))
         jid=response.json()['id'];assert wait_job(client,jid)['status']=='error'

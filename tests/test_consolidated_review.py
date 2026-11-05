@@ -173,8 +173,10 @@ def test_populated_synthetic_world_roundtrip_and_author_player_separation(api):
     assert author['presentation']['clock']['label']=='Пятница, 23 октября 2026, 08:00'
     for key in ('contacts','conditions','residences','possessions','objective_relations','organizations','roles'):
         assert author['state']['world'][key]
-    assert not player['state']['world'].get('contacts')
-    assert 'source_turn' not in player.get('editor',{}) if player.get('editor') else True
+    contact=player['state']['world']['contacts']['contact_b']
+    assert contact['label']=='Друг' and contact['address']=='local-b'
+    assert 'character_id' not in contact and 'provenance' not in contact
+    assert player['editor'] is None
     assert author['editor']['enums']['contacts']['kind']==['person','service','shared']
     started=client.post(url+'/confirm',json={'revision':author['revision'],'version_id':author['version_id']});assert started.status_code==200,started.text
     snap=app.state.repository.get_snapshot(started.json()['save'])['world_state']

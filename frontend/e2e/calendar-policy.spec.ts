@@ -1,5 +1,6 @@
 import {test,expect} from '@playwright/test';
 import {nav} from './navigation';
+import {workshopNav} from './workshop-navigation';
 
 test('E5 starts with warnings in Player View without new review',async({page,request},info)=>{
  const w=await(await request.post('/test/calendar-policy-e5')).json();
@@ -33,7 +34,7 @@ test('regional presets preview apply and custom edit preserve E5 authorship',asy
  await page.goto('/');await nav(page,'Создать');
  await page.getByRole('button',{name:'Автор мира',exact:true}).click();
  await page.getByRole('button',{name:'Показать всё',exact:true}).click();
- await page.getByRole('button',{name:/Начало игры/}).click();
+ await workshopNav(page,'Сцена и правила');
  await page.getByText('Праздники и сезоны мира',{exact:true}).click();
  await page.getByRole('button',{name:'Предпросмотр набора',exact:true}).click();
  await expect(page.getByLabel('Предпросмотр календаря')).toContainText('Россия');

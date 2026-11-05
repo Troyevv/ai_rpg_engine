@@ -25,8 +25,8 @@ def normalized_size(width, height):
     return round(width*scale),round(height*scale)
 
 
-def decode_image(content, mime):
-    if len(content)>MAX_BYTES or not content: raise ValueError('Изображение должно быть не больше 10 MiB.')
+def decode_image(content, mime, *, max_bytes=MAX_BYTES):
+    if len(content)>max_bytes or not content: raise ValueError(f'Изображение должно быть не больше {max_bytes//1024//1024} MiB.')
     expected=FORMATS.get(mime)
     if expected is None: raise ValueError('Поддерживаются PNG, JPEG и WebP.')
     try:
