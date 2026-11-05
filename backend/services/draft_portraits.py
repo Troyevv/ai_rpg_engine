@@ -108,7 +108,7 @@ def listing(repo,wid,cid,author=False):
         return dict(revision=w['revision'],portraits=[p for p in runtime['characters'][cid].get('portraits',[]) if not p['deleted']],
             **projection(runtime,cid),descriptor=runtime['characters'][cid]['procedural_portrait'],
             portrait_mode=runtime['characters'][cid].get('portrait_mode','auto'),
-            age_reference=dict(stage=life_period(runtime,cid)[1],visual_age=visual_age(runtime,cid)))
+            age_reference=dict(age=life_period(runtime,cid)[0],stage=life_period(runtime,cid)[1],visual_age=visual_age(runtime,cid)))
 
 
 def asset(repo,wid,cid,aid,author=False):
@@ -131,7 +131,14 @@ def edit(repo,wid,cid,revision,*,image=None,portrait_id=None,changes=None,remove
         _,record,state=load(repo,db,wid,cid,revision,editable=True)
         runtime=portrait_state(state);actor=runtime['characters'][cid]
         if descriptor is not None:
-            actor['procedural_portrait']=ProceduralPortrait.model_validate(descriptor).model_dump()
+            art=ProceduralPortrait.model_validate(descriptor)
+            if art.visual_age_mode == 'auto':
+                # Resolve once at explicit save, never silently redraw on a birthday.
+                art.stage=life_period(runtime,cid)[1]
+                art.visual_age=visual_age(runtime,cid)
+            elif art.visual_age_mode == 'manual' and art.visual_age is None:
+                raise ValueError('Выберите визуальный возраст.')
+            actor['procedural_portrait']=art.model_dump()
             actor['portrait_mode']=mode or 'procedural'
         elif mode is not None: actor['portrait_mode']=mode
         else:

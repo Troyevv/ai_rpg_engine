@@ -428,6 +428,8 @@ class ProceduralPortrait(StrictModel):
     accessory: int = Field(default=0, ge=0, le=7)
     palette: int = Field(default=0, ge=0, le=6)
     visual_age: Literal['infant','child','adolescent','young_adult','mature_adult','elderly'] | None = None
+    # Explicit artistic intent is independent of canonical developmental stage.
+    visual_age_mode: Literal['auto','manual'] | None = None
     # Optional material overrides. Absent keys retain the exact original v1 SVG.
     hair_color: int | None = Field(default=None, ge=0, le=6)
     clothing_color: int | None = Field(default=None, ge=0, le=6)
@@ -435,7 +437,7 @@ class ProceduralPortrait(StrictModel):
     @model_serializer(mode='wrap')
     def _sparse_colors(self, handler):
         result=handler(self)
-        for key in ('hair_color','clothing_color','visual_age'):
+        for key in ('hair_color','clothing_color','visual_age','visual_age_mode'):
             if result.get(key) is None: result.pop(key,None)
         return result
 

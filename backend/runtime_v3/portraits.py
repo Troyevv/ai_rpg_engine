@@ -48,8 +48,9 @@ def projection(state,cid):
     if not authorized(state,cid): return dict(portrait=None,silhouette='neutral')
     p=select_portrait(state,cid)
     descriptor=state['characters'][cid].get('procedural_portrait')
-    # A portrait for a different life period never becomes the current face.
-    if descriptor and descriptor.get('stage') != life_period(state,cid)[1]: descriptor=None
+    # Legacy period-bound portraits retain their selection rules. Explicit artistic
+    # age choices persist independently of the canon; privacy gates below still apply.
+    if descriptor and descriptor.get('visual_age_mode') != 'manual' and descriptor.get('stage') != life_period(state,cid)[1]: descriptor=None
     # Game births have private life/appearance semantics; do not disclose descriptors.
     if is_game_birth(state,cid) and state['camera']['controlled_actor_id'] != cid: descriptor=None
     return dict(procedural_portrait=descriptor, portrait={k:p[k] for k in ('id','asset_id','width','height','crop','label')} if p else None,

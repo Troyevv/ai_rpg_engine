@@ -12,7 +12,7 @@ export interface PortraitRef {
  label:string;stage?:string;min_age?:number|null;max_age?:number|null;order?:number;
 }
 export type PortraitSubject={id:string;name:string;fields?:Record<string,string>;portrait?:PortraitRef|null;silhouette?:string;procedural_portrait?:ProceduralPortrait|null};
-type Listing={revision:number;portraits:PortraitRef[];portrait:PortraitRef|null;descriptor?:ProceduralPortrait;portrait_mode?:'auto'|'procedural';age_reference?:{stage:string;visual_age?:ProceduralPortrait['visual_age']|null}};
+type Listing={revision:number;portraits:PortraitRef[];portrait:PortraitRef|null;descriptor?:ProceduralPortrait;portrait_mode?:'auto'|'procedural';age_reference?:{age?:number|null;stage:string;visual_age?:ProceduralPortrait['visual_age']|null}};
 const cropDefault={x:0.5,y:0.5,zoom:1};
 const path=(sid:number|undefined,cid:string,wid?:string)=>wid?`/workspaces/${encodeURIComponent(wid)}/draft/characters/${encodeURIComponent(cid)}/portraits`:`/saves/${sid}/characters/${encodeURIComponent(cid)}/portraits`;
 export const portraitUrl=(sid:number|undefined,cid:string,p:PortraitRef,wid?:string,author=false)=>'/api'+path(sid,cid,wid)+'/assets/'+p.asset_id+(wid?'?author='+author:'');

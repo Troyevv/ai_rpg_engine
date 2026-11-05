@@ -60,3 +60,13 @@ it('photo crop keeps natural proportions in nonsquare frames',()=>{
  expect(html).toContain('object-fit:cover');expect(html).toContain('object-position:20% 70%');
  expect(html).toContain('transform-origin:20% 70%');expect(html).toContain('scale(1.5)');
 });
+
+it('explicit adolescent art changes facial features without redrawing saved descriptors',()=>{
+ const saved={...base,visual_age:'adolescent' as const};
+ const before=proceduralPortrait(saved);
+ const explicit=proceduralPortrait({...saved,visual_age_mode:'manual'});
+ expect(explicit).not.toBe(before);
+ expect(decodeURIComponent(explicit!)).toContain('Q232 286 201 292');
+ expect(decodeURIComponent(before!)).not.toContain('Q232 286 201 292');
+ expect(proceduralPortrait({...saved})).toBe(before);
+});

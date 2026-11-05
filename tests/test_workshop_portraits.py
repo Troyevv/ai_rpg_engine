@@ -212,3 +212,39 @@ def test_spoiler_gated_appearance_blocks_the_image_and_direct_asset_until_known(
     assert client.get(url).json()['portraits']['sonya']['portrait']['asset_id']==aid
     assert client.get(path).json()['portrait']['asset_id']==aid
     assert client.get(original).status_code==200
+
+
+@pytest.mark.parametrize('visual',['infant','child','adolescent','young_adult','mature_adult','elderly'])
+def test_manual_age_persists_without_mutating_canon_and_auto_resolves_on_server(api,visual):
+    client,app=api;raw=fixture();cid=raw['characters'][0]['id']
+    raw['world']['characters'][cid].update(birth_date=None,developmental_stage='adult')
+    url,d=create(client,raw)
+    path=url+f'/characters/{cid}/portraits'
+    before=deepcopy(d['state']);descriptor=d['portraits'][cid]['procedural_portrait']
+    descriptor=dict(descriptor,visual_age=visual,visual_age_mode='manual',stage='infant')
+    saved=client.put(path+'/procedural',json={'revision':d['revision'],'descriptor':descriptor,'mode':'procedural'})
+    assert saved.status_code==200,saved.text
+    again=client.get(path+'?author=true').json()
+    assert again['descriptor']==descriptor and again['procedural_portrait']==descriptor
+    d=client.get(url+'?author=true').json();after=deepcopy(d['state'])
+    for key in ('procedural_portrait','portrait_mode'):
+        if key in before['world']['characters'][cid]: after['world']['characters'][cid][key]=before['world']['characters'][cid][key]
+        else: after['world']['characters'][cid].pop(key,None)
+    assert after==before
+    # A subsequent draft normalization / initial traits pass must not replace it.
+    from backend.services.draft_portraits import initialize,consume_authored_traits
+    copy=deepcopy(d['state']);copy['characters'][0]['portrait_traits']={'hair':'long'}
+    consume_authored_traits(copy);initialize(copy)
+    assert copy['world']['characters'][cid]['procedural_portrait']==descriptor
+    started=client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id'],'accept_warnings':True})
+    assert started.status_code==200,started.text
+    runtime=app.state.repository.get_snapshot(started.json()['save'])['world_state']
+    assert projection(runtime,cid)['procedural_portrait']==descriptor
+    # Client-supplied artistic age and stage cannot substitute for Runtime in auto mode.
+    auto=dict(descriptor,visual_age_mode='auto',visual_age='elderly',stage='unknown')
+    reset=client.put(path+'/procedural',json={'revision':d['revision'],'descriptor':auto,'mode':'procedural'})
+    assert reset.status_code==200,reset.text
+    ref=reset.json()['age_reference'];actual=reset.json()['descriptor']
+    assert actual['visual_age']==ref['visual_age'] and actual['stage']==ref['stage']
+    assert actual['visual_age_mode']=='auto'
+    assert app.state.repository.get_snapshot(started.json()['save'])['world_state']==runtime

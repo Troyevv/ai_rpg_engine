@@ -45,3 +45,27 @@ def test_real_calendar_boundaries_and_saved_descriptor():
     assert portraits.visual_age(runtime,cid)=='mature_adult'
     assert projection(runtime,cid)['procedural_portrait']==saved
     assert actor['developmental_stage']=='adult'
+
+
+@pytest.mark.parametrize('stage', ['infant', 'child', 'adolescent', 'adult'])
+@pytest.mark.parametrize('visual', ['infant', 'child', 'adolescent', 'young_adult', 'mature_adult', 'elderly'])
+def test_explicit_artistic_age_is_not_rejected_by_canonical_stage(monkeypatch, stage, visual):
+    state=fixture();cid=state['characters'][0]['id'];runtime=portrait_state(state)
+    art=default_descriptor(cid,'adult',age_style=visual)
+    art['visual_age_mode']='manual'
+    runtime['characters'][cid]['procedural_portrait']=art
+    monkeypatch.setattr(portraits,'life_period',lambda state,cid:(None,stage))
+    assert portraits.projection(runtime,cid)['procedural_portrait']==art
+    # It is still subject to the common visibility gate.
+    monkeypatch.setattr(portraits,'authorized',lambda state,cid:False)
+    assert portraits.projection(runtime,cid).get('procedural_portrait') is None
+
+
+def test_manual_art_never_bypasses_private_birth_appearance(monkeypatch):
+    state=fixture();cid=state['characters'][0]['id'];runtime=portrait_state(state)
+    runtime['characters'][cid]['procedural_portrait']=dict(default_descriptor(cid,'adult',age_style='elderly'),visual_age_mode='manual')
+    runtime['camera']['controlled_actor_id']='another'
+    runtime['characters'][cid]['birth_provenance']={'pregnancy_id':'private'}
+    monkeypatch.setattr(portraits,'authorized',lambda state,cid:True)
+    monkeypatch.setattr(portraits,'is_game_birth',lambda state,cid:True)
+    assert portraits.projection(runtime,cid)['procedural_portrait'] is None
