@@ -203,3 +203,20 @@ def test_review_revision_is_pinned_without_duplicate_versions(tmp_path):
     assert edited['review']['status']=='stale'
     assert edited['review']['checked_revision']==checked['revision']<edited['revision']
     assert 'checked_revision' not in repo.draft(w['id'],False)['review']
+
+
+def test_incomplete_history_snapshot_preserves_raw_data_and_is_read_only(tmp_path):
+    from backend.repositories.preparation import Repository
+    repo=Repository(tmp_path/'partial.sqlite');w=repo.create_workspace('partial')
+    cfg=dict(REMOTE,_draft_task='world',_draft_input='Мир',_draft_token_budget=30000)
+    jid=repo.begin_preparation(w['id'],'draft_world','Мир',cfg,0)
+    raw={'campaign':None,'characters':[None,{'id':'partial'}],'world_clock':['invalid clock']}
+    repo.save_draft_candidate(jid,raw,[])
+    with repo.connect() as db:
+        head=repo._draft_head(db,w['id']);revision=repo._draft_workspace(db,w['id'],idle=False)['revision']
+    view=repo.draft_version(w['id'],head['id'],True)
+    assert view['state']==raw
+    assert 'Некорректный календарь' in view['presentation']['clock']['label']
+    with repo.connect() as db:
+        assert repo._draft_head(db,w['id'])['id']==head['id']
+        assert repo._draft_workspace(db,w['id'],idle=False)['revision']==revision

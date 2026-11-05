@@ -88,7 +88,8 @@
 ## Validation
 
 - Production TypeScript/Vite build succeeded (existing large-chunk warning remains).
-- Final frontend suite: **132 passed** (19 files).
+- Final frontend suite: **133 passed** (19 files).
+- Historical preview also handles malformed/incomplete saved candidates without mutation: frontend regression and real SQLite regression passed. Final focused backend: **18 passed**, plus the new incomplete-history case **1 passed**.
 - Latest review/timeline/recovery verification: **34 passed**, plus **1 passed** for checked-revision/no-duplicate-version/stale projection.
 - Focused backend suites: 64 passed after fixing the new-card removal/manual-path regression.
 - Full backend run: **3203 passed, 1 skipped** in 917.64 s. Final targeted calendar/projection/Runtime handoff suite: **60 passed**.

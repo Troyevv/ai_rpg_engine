@@ -69,16 +69,24 @@ test('W01–W69 reference/current browser evidence at required viewport widths',
  await info.attach('comparison-metadata',{body:JSON.stringify({browser:browser.version(),referenceSHA256:'4122bcf37cbfd4c979e264e655896cc8d8783d51899a2aa9d170bd9f5c3e82e1',note:'Current branch and original reference; not pre-change master baseline or automatic visual acceptance.',metadata},null,2),contentType:'application/json'});
  // Theme portals inherit root tokens; switching must not mutate the world.
  const before=await(await request.get(`/api/workspaces/${w.id}/draft?author=true`)).json();
- await page.setViewportSize({width:info.project.name==='desktop'?1440:390,height:900});
+ await page.setViewportSize({width:info.project.name==='desktop'?1440:390,height:900});await ref.setViewportSize({width:info.project.name==='desktop'?1440:390,height:900});
  for(const theme of ['graphite','parchment','cyberpunk']){
+  await ref.locator('[data-action="navigate"][data-route="characters"]').first().evaluate((el:HTMLElement)=>el.click());
+  await ref.locator('[data-action="skins"]').first().evaluate((el:HTMLElement)=>el.click());
+  await ref.locator(`[data-action="set-skin"][data-skin="${theme}"]`).click();await expect(ref.locator('html')).toHaveAttribute('data-theme',theme);
+  await ref.locator('[data-action="close-modal"]').first().click();await expect(ref.getByRole('dialog')).toHaveCount(0);
+  await ref.locator('.cast-card').first().click();await expect(ref.getByRole('dialog')).toBeVisible();await ref.evaluate(()=>document.fonts.ready);
+  await ref.screenshot({path:info.outputPath(`skin-${theme}-dossier-reference.png`),animations:'disabled'});
+  await ref.locator('[data-action="close-modal"]').first().click();
+
   if(info.project.name==='mobile')await page.getByRole('button',{name:'Разделы мастерской',exact:true}).click();
   await page.locator(info.project.name==='desktop'?'.ww-sidebar':'.ww-menu-dialog').getByRole('button',{name:'Оформление',exact:true}).click();
-  await page.getByLabel('Тема мира',{exact:true}).selectOption(theme);await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
-  await page.keyboard.press('Escape');if(info.project.name==='mobile')await page.keyboard.press('Escape');
+  await page.getByRole('combobox',{name:'Тема мира',exact:true}).selectOption(theme);await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
+  await page.keyboard.press('Escape');await expect(page.getByRole('dialog',{name:'Оформление мастерской',exact:true})).toHaveCount(0);if(info.project.name==='mobile'){await page.keyboard.press('Escape');await expect(page.locator('.ww-menu-dialog')).toHaveCount(0);}
   await workshopNav(page,'Персонажи');await page.locator('.ww-character-card').first().click();
   await expect(page.locator('.ww-dossier-dialog')).toBeVisible();await page.evaluate(()=>document.fonts.ready);
   await page.screenshot({path:info.outputPath(`skin-${theme}-dossier.png`),animations:'disabled'});
-  const portal=await page.locator('.ww-dossier-dialog').evaluate(el=>{const style=getComputedStyle(el);return {font:style.fontFamily,background:style.backgroundColor,color:style.color}});
+  const portal=await page.locator('.ww-dossier-dialog').evaluate(el=>{const style=getComputedStyle(el);const overlay=document.querySelector('.dialog-overlay');return {font:style.fontFamily,background:style.backgroundColor,color:style.color,overlay:overlay?{background:getComputedStyle(overlay).backgroundColor,blur:getComputedStyle(overlay).backdropFilter}:null}});
   await info.attach(`skin-${theme}-portal`,{body:JSON.stringify(portal),contentType:'application/json'});
   await page.keyboard.press('Escape');await expect(page.locator('.ww-character-card').first()).toBeFocused();
  }

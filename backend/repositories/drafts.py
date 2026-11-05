@@ -186,7 +186,7 @@ class DraftStorage(DraftEditorStorage):
             if not row:raise ValueError('Версия не принадлежит черновику.')
             record=json.loads(row['content']);state=record['state']
             return {'id':row['id'],'reason':row['reason'],'created_at':row['created_at'],
-                    'state':state,'presentation':{'clock':clock_view(state.get('world_clock',{}))}}
+                    'state':state,'presentation':{'clock':clock_view(state.get('world_clock',{}) if isinstance(state,dict) else {})}}
 
     @staticmethod
     def _portrait_view(state,visible,author):

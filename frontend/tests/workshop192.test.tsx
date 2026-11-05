@@ -1,3 +1,4 @@
+import {VersionPreview} from '../src/workshop/VersionPreview';
 import {reviewIssues} from '../src/workshop/reviewIssues';
 import {act,type ReactNode} from 'react';
 import {createRoot,type Root} from 'react-dom/client';
@@ -79,4 +80,12 @@ it('review display keeps strongest priority and every path without duplicate ser
  const rows=reviewIssues([{message:'Не задан участник',severity:'blocker',path:'/world/scenes/a/participants'},{message:'Подробнее опиши город',severity:'recommendation'}],{warnings:['/world/scenes/a/participants: Не задан участник'],diagnostics:[{message:'Не задан участник',path:'/world/scenes/b/participants'}]},['Не задан участник']);
  expect(rows).toHaveLength(2);expect(rows[0]).toMatchObject({message:'Не задан участник',severity:'error',paths:['/world/scenes/a/participants','/world/scenes/b/participants']});expect(rows[0].sources).toContain('Импорт');expect(rows[1].severity).toBe('recommendation');
  expect(reviewIssues()).toEqual([]);
+});
+
+it('version preview can inspect an incomplete saved candidate without mutation',async()=>{
+ vi.mocked(api).mockResolvedValueOnce({id:1,created_at:'2026-11-05T10:00:00Z',reason:'generation_candidate',state:{campaign:null,characters:[null,{id:'partial'}],locations:null,world:{scenes:{scene:{participants:['missing'],text:'Сохранённый фрагмент'}}}},presentation:{clock:{label:'Дата неизвестна'}}});
+ await mount(<VersionPreview wid="a" version={1} revision={5} head={2} onClose={()=>{}} onRestore={async()=>{}}/>);
+ expect(document.querySelector('.ww-version-preview')?.textContent).toContain('Неполный снимок мира');expect(document.body.textContent).toContain('Сохранённый фрагмент');
+ expect(api).toHaveBeenCalledExactlyOnceWith('/workspaces/a/draft/versions/1?author=true',undefined,'GET',expect.any(AbortSignal));
+ expect(button('Восстановить выбранную версию').disabled).toBe(true);
 });

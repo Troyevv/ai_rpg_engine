@@ -6,6 +6,7 @@ MONTHS=('января','февраля','марта','апреля','мая','и
 
 
 def clock_view(clock):
+    if clock is not None and not isinstance(clock,dict):return {'label':'Некорректный календарь — проверьте диагностику'}
     clock=clock or {};minute=clock.get('minute',0)
     state={'meta':{'world_time':minute,'calendar':clock.get('calendar')}}
     try:
