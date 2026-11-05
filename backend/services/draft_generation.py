@@ -29,7 +29,6 @@ def messages_for(repo,job,config):
         if settings.communication is not None:instructions+='\nТехнологии связи communication заданы явно: не меняй каналы, доставку и дату по жанру или эпохе. author_note — антураж, не разрешение включить канал.'
         instructions+='\nЦелевой состав NPC: '+json.dumps(settings.cast_targets([]),ensure_ascii=False)
         instructions+='\nЧисла NPC — ориентир, не квота. Именованные NPC входят в состав. Выразительность меняет подачу, а не характер. Темп и риск не создают предысторию.'
-        instructions+='\nНе генерируй телефонную книгу, contacts и номера персонажей: Runtime определяет адресатов из живых канонических NPC независимо от знакомства, контактов и устройств.'
         instructions+='\nНе выводи пустые технические defaults (dependencies, review_required, reviewed_signature) и производные поля, когда схема позволяет их опустить. Непустые метаданные Motivation, факты, биографии и тайны сохраняй полностью.'
         instructions+='\nРазработай пригодный для немедленной игры мир. Недостающие детали концепции дополни самостоятельно; исходная идея не является исчерпывающей спецификацией.'
         from backend.services.draft_initial import prompt_schema, compact_schema, SECRET_AUTHORING_RULES
@@ -72,7 +71,10 @@ def decode_result(text,state,config):
     from backend.services.draft_response import strict_loads
     try:value=strict_loads(text)
     except ValueError as exc:raise ValueError('Модель вернула незавершённый или некорректный JSON. Предыдущая версия сохранена.') from exc
-    if config['_draft_task']=='world':return domain.prepare(value)
+    if config['_draft_task']=='world':
+        from backend.services.draft_initial import validate_generated_input
+        validate_generated_input(value)
+        return domain.prepare(value)
     if not isinstance(value,dict) or set(value)!={'value'}:raise ValueError('Для поля разрешён только объект {value: ...}.')
     target=config['_draft_target']
     if config['_draft_task']=='character':
@@ -148,6 +150,7 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         repo.draft_phase(jid,'validating')
         try:
             raw=strict_loads(result)
+            if not recovered_candidate: draft_initial.validate_generated_input(raw)
             if isinstance(raw,dict):
                 if not recovered_candidate:
                     raw['creation_settings']=config.get('_creation_settings',{})
@@ -236,6 +239,11 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         if reply is None:return
         try:
             updated=draft_repair.apply(result,reply,paths)
+            if recovered_candidate:
+                before_contacts=strict_loads(result).get('world',{}).get('contacts',{})
+                after_contacts=strict_loads(updated).get('world',{}).get('contacts',{})
+                if before_contacts != after_contacts:
+                    raise ValueError('Телефонная книга не входит в коррекцию модели.')
             if paths is not None and strict_loads(updated)==strict_loads(result):
                 journal.setdefault('no_progress',[]).append(dict(input_hash=repair_input_hash,slot=slot))
                 repo.save_response_journal(jid,journal)

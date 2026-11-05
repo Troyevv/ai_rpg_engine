@@ -59,6 +59,8 @@ def author_value(old, new, path=""):
     result = deepcopy(new)
     errors, removable = [], []
     def walk(previous, value, at):
+        if at == "/world/contacts" and previous != value:
+            raise ProposalError("Телефонная книга не входит в авторские изменения.", world_paths=[at])
         if isinstance(value, dict):
             prior = previous if isinstance(previous, dict) else {}
             model = (Motivation if re.fullmatch(r'/world/characters/[^/]+/(goals|intentions|obligations)/[^/]+', at)
@@ -331,6 +333,8 @@ def validate_candidate(state, trial, *, editing=False):
     if not editing:
         for path in state.get('authoring', {}).get('manual_paths', []):
             preserve(state, trial, path)
+    if state.get('world',{}).get('contacts',{}) != trial.get('world',{}).get('contacts',{}):
+        raise ValueError('Телефонная книга не входит в авторские изменения.')
     if editing:validate_removals(state,trial)
     normalized, report = inspect_candidate(trial)
     if report['errors']:

@@ -144,6 +144,12 @@ SERVER_FIELDS = frozenset(('birth_provenance', 'birth_date_provenance', 'authori
     'time_reference_minute', 'portraits', 'procedural_portrait', 'portrait_mode'))
 
 
+def validate_generated_input(raw):
+    """Provider boundary only: legacy imports retain their contact records."""
+    if isinstance(raw,dict) and isinstance(raw.get('world'),dict) and 'contacts' in raw['world']:
+        raise DraftErrors([error('/world/contacts','Телефонная книга не входит в контракт генерации. Удалите свойство contacts.','forbidden')])
+
+
 def prompt_schema(*, initial_portraits=False):
     # Keep the descriptive editor schema; omit duplicate prose from the provider
     # schema. Property names such as title/description are data, not annotations.
@@ -158,6 +164,7 @@ def prompt_schema(*, initial_portraits=False):
     # Contacts remain an accepted legacy/editor extension, not generation work.
     # Runtime derives recipients from canonical characters and enabled channels.
     schema['properties']['world']['properties'].pop('contacts', None)
+    schema['properties']['world']['additionalProperties'] = False
     # Explicit communication profile is injected by code, never generated twice.
     communication=schema['properties']['world']['properties']['communication']['properties']
     for key in ('profile_version','preset','letter','courier','telegram','landline','magic','delivery_policy','delivery_minutes','author_note'):
