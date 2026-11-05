@@ -5,6 +5,20 @@ WEEKDAYS=('Понедельник','Вторник','Среда','Четверг
 MONTHS=('января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря')
 
 
+def launch_view(state, visible):
+    """Camera/agency labels from canon, names only from the authorized projection."""
+    names={c['id']:c['name'] for c in visible.get('characters',[])}
+    person=lambda cid,empty: names.get(cid,'Скрытый персонаж') if cid else empty
+    camera=state.get('camera',{});actor=state.get('controlled_actor_id')
+    # Runtime ContextScope uses explicit POV, then controlled actor. Camera
+    # subject identifies framing and never silently becomes POV or control.
+    pov=camera.get('pov_actor_id') or actor
+    return dict(protagonist=person(state.get('protagonist_id'),'Мир без протагониста'),
+        controlled_actor=person(actor,'Нет управляемого персонажа'),
+        camera_mode='Наблюдатель' if camera.get('mode')=='observer' else 'Взгляд персонажа',
+        pov=person(pov,'Наблюдение за сценой'),subject=person(camera.get('subject_id'),'Сцена целиком'))
+
+
 def clock_view(clock):
     if clock is not None and not isinstance(clock,dict):return {'label':'Некорректный календарь — проверьте диагностику'}
     clock=clock or {};minute=clock.get('minute',0)

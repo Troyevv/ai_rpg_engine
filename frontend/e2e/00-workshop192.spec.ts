@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {nav} from './navigation';
-import {authorView,workshopNav} from './workshop-navigation';
+import {authorView,workshopNav,confirmWorkshopStart} from './workshop-navigation';
 import {creationMethod} from './idea-navigation';
 
 const source=JSON.parse(readFileSync(new URL('../../tests/fixtures/initial_world/workshop188.json',import.meta.url),'utf8'));
@@ -39,6 +39,8 @@ test('W01 W16 W34 W52 real SQLite creation, cancellation, search and version pre
  await page.locator('.workshop-version').last().getByRole('button',{name:'Посмотреть версию',exact:true}).click();await expect(page.locator('.ww-version-preview').getByRole('heading',{name:source.campaign.title,exact:true})).toHaveText(source.campaign.title);
  expect((await(await request.get(url+'?author=true')).json()).revision).toBe(after.revision);
  await page.getByRole('button',{name:'Закрыть просмотр',exact:true}).click();expect((await(await request.get(url+'?author=true')).json()).state).toEqual(after.state);
+ await workshopNav(page,'Проверка мира');await page.getByRole('button',{name:'Решения проверки · 0',exact:true}).click();await expect(page.getByText('Подтверждённых решений пока нет.',{exact:true})).toBeVisible();
+ expect((await(await request.get(url+'?author=true')).json()).revision).toBe(after.revision);
 });
 
 test('W01–W69 reference/current browser evidence at required viewport widths',async({page,request,browser},info)=>{
@@ -92,4 +94,25 @@ test('W01–W69 reference/current browser evidence at required viewport widths',
  }
  const after=await(await request.get(`/api/workspaces/${w.id}/draft?author=true`)).json();expect(after.state).toEqual(before.state);expect(after.revision).toBe(before.revision);
  await ref.close();
+});
+
+for(const observer of [false,true])test(`W68 server launch summary and real handoff: observer=${observer}`,async({page,request})=>{
+ const world=structuredClone(source),ids=world.characters.map((c:{id:string})=>c.id);
+ world.protagonist_id=observer?null:ids[0];world.controlled_actor_id=observer?null:ids[1];
+ world.camera={...world.camera,mode:observer?'observer':'actor',pov_actor_id:ids[2],subject_id:ids[0]};
+ for(const c of world.characters)c.is_player=c.id===world.protagonist_id;
+ world.world.scenes[world.camera.scene_id].participants=ids;
+ const w=await(await request.post('/api/workspaces',{data:{name:'Роли запуска'}})).json(),url=`/api/workspaces/${w.id}/draft`;
+ expect((await request.post(url+'/import',{data:{revision:0,format:'json',text:JSON.stringify(world)}})).ok()).toBe(true);
+ await page.addInitScript(wid=>localStorage.setItem('draftWorkspace',wid),w.id);await page.goto('/');await nav(page,'Создать');await authorView(page);
+ const before=await(await request.get(url+'?author=true')).json();
+ await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
+ const summary=page.locator('.ww-launch-summary');
+ for(const [label,value] of [['Главный герой',observer?'Мир без протагониста':world.characters[0].name],['Управляемый персонаж',observer?'Нет управляемого персонажа':world.characters[1].name],['Носитель POV',world.characters[2].name],['Фокус камеры',world.characters[0].name]])await expect(summary.locator('div').filter({has:page.locator('dt',{hasText:label})}).locator('dd')).toHaveText(value);
+ expect((await(await request.get(url+'?author=true')).json()).revision).toBe(before.revision);
+ const response=page.waitForResponse(r=>r.url().endsWith(url+'/confirm')&&r.request().method()==='POST');
+ await confirmWorkshopStart(page);const result=await response;expect(result.ok()).toBe(true);const save=await result.json();
+ const canonical=await(await request.post(`/test/creative172/saves/${save.save}/canonical`)).json();
+ expect(canonical.world_state.camera).toMatchObject({controlled_actor_id:world.controlled_actor_id,pov_actor_id:ids[2],subject_id:ids[0],mode:world.camera.mode});
+ expect(canonical.world_state.meta.current_protagonist_id).toBe(world.protagonist_id);
 });

@@ -175,8 +175,12 @@ def validate(state, *, canonical=True):
     require(all(re.fullmatch(r'[\w-]{1,100}',cid) for cid in ids),'Некорректный Character ID.')
     require(len({c['name'].strip().casefold() for c in cards})==len(cards),'Повтор имени: проверь identities персонажей.')
     require(bool(cards) and all(c['name'].strip() for c in cards),'Нужны персонажи с именами.')
-    require(state.get('protagonist_id') in ids,'Не выбран protagonist.')
-    require(state.get('controlled_actor_id') in ids,'Не выбран controlled actor для старта.')
+    require('protagonist_id' in state and (state['protagonist_id'] is None or state['protagonist_id'] in ids),'Неизвестный protagonist.')
+    camera=state.get('camera',{})
+    require(camera.get('mode','actor') in ('actor','observer'),'Неизвестный режим камеры.')
+    require(state.get('controlled_actor_id') in ids or ('controlled_actor_id' in state and state['controlled_actor_id'] is None and camera.get('mode')=='observer'),'Не выбран controlled actor для старта.')
+    for field in ('pov_actor_id','subject_id'):
+        require(camera.get(field) is None or isinstance(camera[field],str) and camera[field] in ids,'Неизвестный персонаж камеры: '+field)
     require(set(world['characters'])==ids,'Character cards и character state не совпадают.')
     minute=state.get('world_clock',{}).get('minute')
     require(type(minute) is int and minute>=0,'Нужно игровое время (минута от начала недели).')
@@ -269,7 +273,7 @@ def validate(state, *, canonical=True):
         require(c.get('minute') is None or type(c['minute']) is int and c['minute']>=0,f'Персонаж {cid}: некорректное время.')
         require(not c.get('last_event_id') or c['last_event_id'] in world['events'],f'Персонаж {cid}: неизвестное последнее событие.')
     start=world['scenes'].get(state.get('camera',{}).get('scene_id'),{})
-    require(state.get('controlled_actor_id') in start.get('participants',[]),'Управляемый персонаж должен присутствовать в стартовой сцене.')
+    require(state.get('controlled_actor_id') is None or state['controlled_actor_id'] in start.get('participants',[]),'Управляемый персонаж должен присутствовать в стартовой сцене.')
     require(type(start.get('end_minute')) is int and type(minute) is int and start['end_minute']<=minute,'Стартовая сцена находится позже часов мира.')
     if not isinstance(start.get('text'),str) or not start['text'].strip():warnings.append('Стартовая ситуация пока не описана.')
     for c in cards:

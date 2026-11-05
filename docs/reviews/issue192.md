@@ -59,7 +59,7 @@
 | W42 | Start scene is first tab; world/narrative and calendar/communication are separate. | Communication E2E navigation updated; browser pending. |
 | W43 | Date/time editor previews via Runtime calendar arithmetic, including custom profiles. | Calendar unit tests added; browser invalid-date/save timing pending. |
 | W44 | Communication screen links to existing contact section. | Browser navigation pending. |
-| W45 | Distinguishes absent/stale/completed review; merges severity and paths; category counts/filter; pins checked revision. | Priority/duplicate unit test and revision/no-op/stale SQLite test. OPEN: confirmed-resolution history and full recovery browser acceptance. |
+| W45 | Distinguishes absent/stale/completed review; merges severity and paths; category counts/filter; pins checked revision. | Priority/duplicate unit test and revision/no-op/stale SQLite test. The author-only decision history now reuses accepted re-audit issue IDs, reasons and basis, distinguishes disproved/replaced, and marks changed-candidate history. SQLite and render tests verify privacy, no-write behavior and stale-address suppression. OPEN: generic fixed-issue matching across independent reports and full recovery browser acceptance. |
 | W46 | Scene diagnostics route to exact scene in chronology. | Browser diagnostic fixture pending. |
 | W47 | No fabricated repair action: real recovery or existing field navigation. | Existing server recovery unchanged; browser pending. |
 | W48 | AI examples, world/version context, three steps and empty proposal area. | Component/build checks; visual pending. |
@@ -82,13 +82,13 @@
 | W65 | No scenario checkbox in import; empty input cannot submit. | Existing import API remains deterministic; browser pending. |
 | W66 | Import continues to use existing path without LLM request. | Existing import tests retained. |
 | W67 | Launch pins wid/revision/version; warnings/stale/stop require separate choices; changed conditions invalidate. | Component test; existing real launch E2E updated for explicit choices. |
-| W68 | Summary separates protagonist, control, camera, scene/place/time; scene edit preserves camera fields. | Runtime handoff suite in full run; observer/no-protagonist browser pending. |
+| W68 | Summary separates protagonist, control, camera, scene/place/time; scene edit preserves camera fields. | Found and fixed migration dropping explicit POV/subject. Server launch projection keeps subject separate from POV and hides inaccessible names. SQLite handoff covers different protagonist/control/POV and observer without protagonist; E2E added. 158 related backend tests passed. |
 | W69 | Full launch summary and real API handoff; existing-save continuation retained. | Existing post-start save/portrait/AI tests retained; browser acceptance open. |
 
 ## Validation
 
 - Production TypeScript/Vite build succeeded (existing large-chunk warning remains).
-- Final frontend suite: **133 passed** (19 files).
+- Final frontend suite: **134 passed** (20 files).
 - Historical preview also handles malformed/incomplete saved candidates without mutation: frontend regression and real SQLite regression passed. Final focused backend: **18 passed**, plus the new incomplete-history case **1 passed**.
 - Latest review/timeline/recovery verification: **34 passed**, plus **1 passed** for checked-revision/no-duplicate-version/stale projection.
 - Focused backend suites: 64 passed after fixing the new-card removal/manual-path regression.
@@ -102,10 +102,18 @@ Run [42069720818](https://github.com/Troyevv/ai_rpg_engine/actions/runs/42069720
 - Desktop artifact: [13435284825](https://github.com/Troyevv/ai_rpg_engine/actions/runs/42069720818/artifacts/13435284825).
 - Mobile artifact: [13437102576](https://github.com/Troyevv/ai_rpg_engine/actions/runs/42069720818/artifacts/13437102576).
 - Inspected all eleven desktop sections at 1440, plus mobile overview/cards/start/AI at 360. Original data is the prototype's demo; current data is `workshop188.json`. Different counts, names and portrait content are not pixel regressions. Location artwork remains excluded by the issue.
-- Confirmed composition defects: an overlong overview lead/geography pushed cards below the fold, mobile collection controls occupied an extra row, start settings were below the context, AI composition lacked a panel and heading hierarchy. Follow-up changes shorten expandable previews, group collection controls, place start controls beside the textual preview, and restore the AI panel. Their final screenshots must still be reviewed.
+- Confirmed composition defects: an overlong overview lead/geography pushed cards below the fold, mobile collection controls occupied an extra row, start settings were below the context, AI composition lacked a panel and heading hierarchy. Follow-up changes shorten expandable previews, group collection controls, place start controls beside the textual preview, and restore the AI panel. Reviewed the follow-up desktop overview/start/cards/AI captures from `2060d80`: the start controls precede the context, the overview lead is bounded, and the AI composer has its own panel. Mobile and complete interaction-state acceptance remain open.
 - Fixed test defects without suppressing checks: mobile search opens from the mobile menu; snapshot title is selected by accessible name; dossier tabs use `tab` semantics. The full jobs were cancelled by the newer commit, so their overall result is **not passed**.
 - Extended the next evidence run with geometry/font/DPR/focus metadata and real Graphite/Parchment/Cyberpunk dossier portals, focus restoration and unchanged-canon assertions.
 
 ## Remaining acceptance gate
 
 Keep the PR as draft until browser evidence is generated and reviewed, the pinned-master baseline is reproduced in an authorized browser environment, long-copy/crowded-world/skins/motion/keyboard cases pass, and all rows above have actual acceptance evidence. Do not close Issue 192 based on this ledger, a green build or an implementation report alone.
+
+- Added explicit accepted re-audit decisions without inferring fixes from disappearing messages. Backend ownership/privacy/no-write/staleness regression passed; frontend outcome/stale-link regression added. The decision list does not claim that an opined or reformulated warning is a fixed world defect.
+
+## Completed CI run and follow-up
+
+At `43e991a`, run [42075038214](https://github.com/Troyevv/ai_rpg_engine/actions/runs/42075038214) completed: backend **3209 passed, 1 skipped**, frontend passed, all four smoke jobs passed. Full E2E: desktop **162/163** and **152/159**, mobile **151 passed / 1 failed / 11 skipped** and **141 passed / 5 failed / 13 skipped**. Existing project skips are unchanged.
+
+Confirmed defects fixed in follow-up: list portraits were vertically centered after the added personality text increased row height; reload during a scenario job hid the path back to its editor. Updated obsolete assertions for the explicitly requested AI action surface, version-number success message and rejection of pasted JSON arrays. No assertions were disabled or made optional. The separate POV migration defect was found by inspection and covered by real SQLite handoff tests. These follow-ups require a new complete CI result.

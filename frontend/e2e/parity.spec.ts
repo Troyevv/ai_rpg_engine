@@ -120,7 +120,7 @@ test("streaming survives disconnect; stop keeps a draft and cannot save it as a 
   ).toBeVisible();
   await page.reload();
   await nav(page,'Создать');
-  await creationMethod(page,'Со Сценаристом');
+  await page.getByRole('button',{name:'Вернуться к Сценаристу',exact:true}).click();
   await page
     .getByRole("button", { name: "Остановить генерацию", exact: true })
     .click();

@@ -220,3 +220,71 @@ def test_incomplete_history_snapshot_preserves_raw_data_and_is_read_only(tmp_pat
     with repo.connect() as db:
         assert repo._draft_head(db,w['id'])['id']==head['id']
         assert repo._draft_workspace(db,w['id'],idle=False)['revision']==revision
+
+
+def test_confirmed_review_decisions_are_owned_author_only_and_read_only(tmp_path):
+    from backend.repositories.preparation import Repository
+    from backend.repositories.drafts import candidate_hash
+    from backend.services.draft_completeness import issue_identity
+    from test_initial_draft_v4 import rich
+    repo=Repository(tmp_path/'decisions.sqlite');w=repo.create_workspace('review')
+    state=rich();cfg=dict(REMOTE,_draft_task='world',_draft_input='Мир',_draft_token_budget=30000)
+    jid=repo.begin_preparation(w['id'],'draft_world','Мир',cfg,0)
+    issue={'message':'Закрытое авторское замечание','path':'/campaign/title'}
+    row=dict(issue_id=issue_identity(issue),resolution='disproved',reason='Название существует.',basis=[{'path':'/campaign/title'}])
+    journal={'review_failures':[dict(signature='s',candidate_hash=candidate_hash(state),response=json.dumps({'issues':[issue]}))],
+             'review_resolutions':[dict(signature='s',decisions=[row])], 'accepted_reviews':{}}
+    repo.save_response_journal(jid,journal)
+    repo.save_draft_candidate(jid,state,[],review={'status':'completed','signature':'s','issues':[]})
+    before=repo.draft(w['id'],True)
+    assert before['review_decisions']==[]  # Parsed but not accepted is not evidence.
+    journal['accepted_reviews']['s']=[]
+    repo.save_response_journal(jid,journal)
+    confirmed=repo.draft(w['id'],True)
+    assert confirmed['review_decisions'][0]['message']==issue['message']
+    assert confirmed['review_decisions'][0]['applies_to_current']
+    assert confirmed['revision']==before['revision'] and confirmed['history']==before['history']
+    assert repo.draft(w['id'],False)['review_decisions']==[]
+    other=repo.create_workspace('other');assert repo.draft(other['id'],True)['review_decisions']==[]
+    repo.preparation_progress(jid,'','error')
+    repo.edit_candidate(w['id'],confirmed['revision'],'/campaign/title','Изменённый мир')
+    stale=repo.draft(w['id'],True)
+    assert len(stale['review_decisions'])==1 and not stale['review_decisions'][0]['applies_to_current']
+
+
+@pytest.mark.parametrize('observer',[False,True])
+def test_launch_camera_roles_survive_real_handoff_without_transferring_agency(api,observer):
+    client,app=api
+    state=json.loads((Path(__file__).parent/'fixtures/initial_world/workshop188.json').read_text())
+    ids=[c['id'] for c in state['characters']]
+    state['protagonist_id']=None if observer else ids[0]
+    state['controlled_actor_id']=None if observer else ids[1]
+    state['camera'].update(mode='observer' if observer else 'actor',pov_actor_id=ids[2],subject_id=ids[0])
+    for c in state['characters']:c['is_player']=c['id']==state['protagonist_id']
+    scene=state['world']['scenes'][state['camera']['scene_id']];scene['participants']=ids
+    wid=client.post('/api/workspaces',json={'name':'Раздельные роли'}).json()['id'];url=f'/api/workspaces/{wid}/draft'
+    imported=client.post(url+'/import',json={'revision':0,'format':'json','text':json.dumps(state)})
+    assert imported.status_code==200,imported.text
+    before=client.get(url+'?author=true').json();launch=before['presentation']['launch']
+    assert launch['pov']==state['characters'][2]['name']
+    assert launch['subject']==state['characters'][0]['name']
+    assert launch['controlled_actor']==('Нет управляемого персонажа' if observer else state['characters'][1]['name'])
+    result=client.post(url+'/confirm',json={'revision':before['revision'],'version_id':before['version_id'],'accept_warnings':True})
+    assert result.status_code==200,result.text
+    sid=result.json()['save'];saved=app.state.repository.get_snapshot(sid)
+    camera=saved['world_state']['camera']
+    assert camera['controlled_actor_id']==state['controlled_actor_id']
+    assert camera['pov_actor_id']==ids[2] and camera['subject_id']==ids[0]
+    assert camera['mode']==state['camera']['mode']
+    assert saved['world_state']['meta']['current_protagonist_id']==state['protagonist_id']
+    assert client.get(f'/api/saves/{sid}').status_code==200
+
+
+def test_launch_labels_do_not_expose_hidden_names_or_confuse_subject_with_pov():
+    from backend.services.draft_presentation import launch_view
+    state={'protagonist_id':'a','controlled_actor_id':'b','camera':{'mode':'observer','subject_id':'c','pov_actor_id':'hidden'}}
+    visible={'characters':[{'id':'a','name':'Герой'},{'id':'b','name':'Игрок'},{'id':'c','name':'Фокус'}]}
+    view=launch_view(state,visible)
+    assert view['pov']=='Скрытый персонаж' and view['subject']=='Фокус' and view['controlled_actor']=='Игрок'
+    state['camera'].pop('pov_actor_id')
+    assert launch_view(state,visible)['pov']=='Игрок'

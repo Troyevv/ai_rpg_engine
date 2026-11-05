@@ -23,7 +23,8 @@ for(const skin of ['graphite','parchment'])test(`literary appearance, failed edi
   if(section==='Хронология'){
    const ai=menu.getByRole('button',{name:'Изменить с ИИ',exact:true});
    await expect(ai).not.toHaveClass(/active/);
-   expect(await ai.evaluate(e=>getComputedStyle(e).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+   // W10 gives the AI action a persistent surface without marking it current.
+   expect(await ai.evaluate(e=>getComputedStyle(e).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
    await ai.focus();await expect(ai).toBeFocused();
   }
   if(info.project.name==='mobile')await page.keyboard.press('Escape');

@@ -61,7 +61,7 @@ for(const skin of ['graphite','parchment']) test(`AI editor preview, confirmatio
   await expect(page.getByRole('dialog').getByRole('alert')).toBeVisible();
   await page.getByRole('button',{name:'Подтвердить изменения',exact:true}).click();
  }
- await expect(editor.getByText('Изменения сохранены.',{exact:false})).toBeVisible();
+ await expect(editor.getByRole('status').filter({hasText:/Изменения сохранены в версии #\d+\./})).toBeVisible();
  const accepted=await(await request.get(url+'?author=true')).json();expect(accepted.state.world.roles.craft.organization_id).toBe('workshop');
  expect(accepted.history.filter((v:{reason:string})=>v.reason==='ai_edit')).toHaveLength(1);
  expect((await(await request.get(url+'/edits')).json()).edits).toEqual([]);

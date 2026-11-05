@@ -11,7 +11,7 @@ for (const [name,text,fileFormat,format,error] of [
  ['plain text','Герой находится на кухне.',undefined,'text',false],
  ['md file is explicit text','{"hello":"world"}','text','text',false],
  ['txt file is explicit text','{"campaign":','text','text',false],
- ['array is not auto JSON','[]',undefined,'text',false],
+ ['pasted JSON array is rejected as a non-world','[]',undefined,'json',true],
  ['empty text','   ',undefined,'text',false],
  ['json file with non-object','[]','json','json',true],
 ] as const) {

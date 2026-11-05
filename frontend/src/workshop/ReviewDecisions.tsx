@@ -1,0 +1,5 @@
+import type {ReactNode} from 'react';
+export type ReviewDecision={issue_id:string;signature:string;message:string;resolution:'disproved'|'replaced';reason:string;paths:string[];applies_to_current:boolean};
+export function ReviewDecisions({items,links}:{items:ReviewDecision[];links:(paths:string[])=>ReactNode}){
+ return <section aria-label="Решения повторной проверки"><p>Здесь только явные решения завершённого повторного аудита. Исчезновение замечания из отчёта само по себе не считается исправлением.</p>{!items.length&&<p>Подтверждённых решений пока нет.</p>}{items.map(item=><article className="ww-panel ww-review-issue" key={item.signature+item.issue_id}><span className="ww-record-badge">{item.resolution==='disproved'?'Опровергнуто проверкой':'Переформулировано проверкой'}</span><h3>{item.message}</h3><p>{item.reason}</p><small>{item.applies_to_current?'Основания относятся к текущему содержимому мира.':'Историческое решение: мир после этой проверки изменился.'}</small>{item.applies_to_current?links(item.paths):<p>Повторите проверку, чтобы оценить текущий мир.</p>}</article>)}</section>;
+}

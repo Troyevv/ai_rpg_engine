@@ -250,7 +250,7 @@ def normalize(value):
             if not isinstance(item,dict): problems.append(error('/world/'+section+'/'+key,'Ожидался объект.','object_type'));continue
             if section not in ('relationships','knowledge'): item.setdefault('id',key)
     if problems:raise DraftErrors(problems)
-    for field in ('scene_id','actor_id'):
+    for field in ('scene_id','actor_id','pov_actor_id','subject_id'):
         if value['camera'].get(field) is not None and not isinstance(value['camera'][field],str):problems.append(error('/camera/'+field,'Ожидался строковый ID.','string_type'))
     for sid,scene in world['scenes'].items():
         if 'participants' in scene and (not isinstance(scene['participants'],list) or any(not isinstance(cid,str) for cid in scene['participants'])):problems.append(error('/world/scenes/'+escape(sid)+'/participants','Ожидался список ID.','list_type'))
@@ -368,7 +368,13 @@ def validate_typed(state, *, advisory_age=False):
                 except (ValueError,TypeError,KeyError) as exc:
                     problems.append(error('/world/characters/'+escape(cid)+'/birth_date',str(exc),'calendar_date',expected='YYYY-MM-DD'))
     for field in ('protagonist_id','controlled_actor_id'):
+        if field in state and state[field] is None and (field=='protagonist_id' or state.get('camera',{}).get('mode')=='observer'):continue
         if (not isinstance(state.get(field),str) or state.get(field) not in ids): problems.append(error('/'+field,'Неизвестный персонаж.','reference',allowed=sorted(ids)))
+    for field in ('pov_actor_id','subject_id'):
+        if state.get('camera',{}).get(field) is not None and state['camera'][field] not in ids:
+            problems.append(error('/camera/'+field,'Неизвестный персонаж камеры.','reference',allowed=sorted(ids)))
+    if state.get('camera',{}).get('mode') not in ('actor','observer'):
+        problems.append(error('/camera/mode','Неизвестный режим камеры.','enum'))
     for index,place in enumerate(state['locations']):
         check(m.Location,{k:v for k,v in place.items() if k in m.Location.model_fields},f'/locations/{index}')
         if place.get('parent_id') is not None and place['parent_id'] not in locations:
@@ -534,7 +540,7 @@ def cross_record_errors(state):
             if row.get('source_id') in cycle and row.get('target_id') in cycle:problems.append(error(ptr('world','objective_relations',key,'target_id'),'Цикл родства.','cycle'))
     camera=state.get('camera',{});sid=camera.get('scene_id')
     if sid not in world['scenes']:problems.append(error('/camera/scene_id','Неизвестная стартовая сцена.','reference',allowed=sorted(world['scenes'])))
-    elif state.get('controlled_actor_id') not in world['scenes'][sid].get('participants',[]):
+    elif state.get('controlled_actor_id') is not None and state['controlled_actor_id'] not in world['scenes'][sid].get('participants',[]):
         problems.append(error(ptr('world','scenes',sid,'participants'),'Управляемый персонаж отсутствует в сцене.','scene',related_paths=['/controlled_actor_id']))
     return problems
 
