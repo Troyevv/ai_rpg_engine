@@ -22,15 +22,16 @@ for(const skin of ['graphite','parchment','cyberpunk'])test(`genre catalog visua
  await page.setViewportSize({width:info.project.name==='mobile'?390:1440,height:900});
  await page.addInitScript(s=>localStorage.setItem('workshop-theme',JSON.stringify({theme_id:s,mode:'manual'})),skin);
  await open(page);await capture(page,info,`default-${skin}`);
+ if(info.project.name==='mobile'){const card=await page.locator('.genre-card').first().boundingBox();expect(card!.y+card!.height).toBeLessThan(820)}
  await page.locator('.genre-group-picker .atelier-disclosure-trigger').click();await capture(page,info,`groups-${skin}`);
  await page.locator('.genre-group-picker .atelier-disclosure-trigger').click();
- await page.locator('.genre-card').first().scrollIntoViewIfNeeded();await capture(page,info,`cards-${skin}`);
+ await page.locator('.genre-card').first().evaluate(el=>el.scrollIntoView({block:'center'}));await capture(page,info,`cards-${skin}`);
  // Same policy as the pre-change screenshots, in all three skins.
  await chooseGenre(page,'Романтика');await chooseGenre(page,'Драма','secondary');await top(page);await capture(page,info,`after-baseline-${skin}`);
  await page.getByLabel('Найти жанр').fill('темное фентези');
  await expect(page.locator('.genre-card')).toHaveCount(1);await expect(page.locator('.genre-card')).toContainText('Тёмное фэнтези');
  await page.getByLabel('Найти жанр').scrollIntoViewIfNeeded();await capture(page,info,`search-${skin}`);
- await page.getByLabel('Найти жанр').fill('жанр которого не существует');await expect(page.getByText('Жанры не найдены',{exact:true})).toBeVisible();await capture(page,info,`empty-${skin}`);
+ await page.getByLabel('Найти жанр').fill('жанр которого не существует');await expect(page.getByText('Жанры не найдены',{exact:true})).toBeVisible();await page.locator('.genre-no-results').evaluate(el=>el.scrollIntoView({block:'center'}));await capture(page,info,`empty-${skin}`);
  await page.getByRole('button',{name:'Сбросить поиск и группы',exact:true}).click();await expect(page.getByLabel('Найти жанр')).toBeFocused();
  await chooseGenre(page,'Сверхъестественный триллер');await chooseGenre(page,'Династическая сага','secondary');await chooseGenre(page,'Музыкальная драма','secondary');
  await top(page);await capture(page,info,`selected-${skin}`);

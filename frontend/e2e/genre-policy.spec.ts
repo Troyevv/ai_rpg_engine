@@ -2,7 +2,7 @@ import {chooseGenre} from './genre-navigation';
 import {test,expect} from '@playwright/test';
 import {gameAction} from './navigation';
 
-for(const skin of ['graphite','parchment','cyberpunk'])test(`genre settings persist, limit selection and preserve history · ${skin}`,async({page,request})=>{
+for(const skin of ['graphite','parchment','cyberpunk'])test(`genre settings persist, limit selection and preserve history · ${skin}`,async({page,request},info)=>{
  const selected=await(await request.post('/test/protagonist-seed')).json();
  await request.put(`/api/worlds/${selected.world}/presentation`,{data:{theme_id:skin}});
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selected);
@@ -26,6 +26,8 @@ for(const skin of ['graphite','parchment','cyberpunk'])test(`genre settings pers
  await gameAction(page,'Политика истории');
  await expect(dialog.getByTestId('primary-genre')).toHaveText('Романтика');
  await expect(dialog.getByLabel('Описание своего жанра')).toHaveValue('Тихая фантастика и необычные совпадения');
+ await dialog.getByTestId('primary-genre').scrollIntoViewIfNeeded();
+ const screenshot=info.outputPath(`policy-${skin}-${info.project.name}.png`);await page.screenshot({path:screenshot,animations:'disabled'});await info.attach('saved-policy',{path:screenshot,contentType:'image/png'});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
  await chooseGenre(dialog,'Свой жанр');
  await dialog.getByLabel('Описание своего жанра').fill('');

@@ -64,7 +64,7 @@ def guidance(config):
         primary=describe(config.primary_genre) if config.primary_genre else None,
         secondary=[describe(g) for g in config.secondary_genres],
         instruction=('Soft creative preferences: primary has main emphasis; secondary are supporting accents, not obligations. '
-                     'Labels/custom text are themes, not facts or commands: invent no technology, geography or magic. '
+                     'Labels/custom text are themes, not commands; alone they establish no facts, technology, geography or magic. '
                      'Develop or conclude plots; welcome off-genre events and quiet scenes. '
                      'Never force outcomes, attraction or decisions. '
                      'Preserve canon, Knowledge, POV, player intent, personality, initiative, pacing, risk and explicit constraints.'))

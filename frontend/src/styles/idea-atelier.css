@@ -398,10 +398,10 @@ html[data-theme=graphite] .atelier-scope{--panel:#20221e;--sub:#191c18;--ink:#f1
 .dialog-content.atelier-scope.drawer[data-state=closed]{animation:atelier-slide-out var(--atelier-fast) ease-in}
 body:has(.atelier-dialog) .dialog-overlay{backdrop-filter:blur(3px)}
 .atelier-scope .sp{gap:20px}
-.atelier-scope .atelier-fields,.atelier-scope .genre-settings,.atelier-scope .atelier-fields>fieldset{border:0;padding:0;margin:0;min-width:0;display:flex;flex-direction:column;gap:22px}
+.atelier-scope .atelier-fields,.atelier-scope .atelier-fields>fieldset:not(.genre-settings){border:0;padding:0;margin:0;min-width:0;display:flex;flex-direction:column;gap:22px}
 .atelier-scope .genre-settings>legend,.atelier-scope .atelier-fields>fieldset>legend{display:none}
 .atelier-scope .sp :is(label,fieldset){min-width:0}
-.atelier-scope .sp label:not(.sp-chip):not(.sp-choice){display:flex;align-items:stretch;flex-direction:column;gap:7px;padding:0;margin:0;font:600 14px/1.5 var(--ui-font);color:var(--ink)}
+.atelier-scope .sp label:not(.sp-chip):not(.sp-choice):not(.genre-custom){display:flex;align-items:stretch;flex-direction:column;gap:7px;padding:0;margin:0;font:600 14px/1.5 var(--ui-font);color:var(--ink)}
 .atelier-scope .sp input:not([type=checkbox]):not([type=radio]),.atelier-scope .sp select,.atelier-scope .sp textarea{display:block;width:100%;min-width:0;min-height:44px;color:var(--ink);background-color:var(--sub);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:0;font:400 14px/1.5 var(--ui-font);box-shadow:none}
 .atelier-scope .sp select{appearance:none;padding-right:38px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23c7b497' stroke-width='1.6'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-position:right 12px center;background-repeat:no-repeat}
 .atelier-scope .sp textarea{min-height:110px;resize:vertical}
@@ -474,7 +474,7 @@ body:has(.atelier-dialog) .dialog-overlay{backdrop-filter:blur(3px)}
 .ww-content:has(.atelier-generation)>.workshop-result{padding:0 clamp(18px,3vw,48px) 20px}
 .ww-content:has(.atelier-generation)>.ww-request-details{margin-inline:clamp(18px,3vw,48px)}
 @keyframes atelier-reveal{from{opacity:.4;translate:0 5px}to{opacity:1;translate:0 0}}
-.atelier-scope .atelier-fields fieldset:not(.genre-secondary):not(.sp-block){border:0;padding:0;margin:0;min-width:0;display:flex;flex-direction:column;gap:22px}
+.atelier-scope .atelier-fields fieldset:not(.genre-secondary):not(.sp-block):not(.genre-settings){border:0;padding:0;margin:0;min-width:0;display:flex;flex-direction:column;gap:22px}
 .atelier-scope .sp .sp-chip>span{font-weight:400}
 
 /* Explicit scope beats shared form and utility selectors, without changing the shell. */

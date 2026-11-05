@@ -24,6 +24,7 @@
 .genre-settings .genre-target button[aria-pressed=true]{background:var(--surface-1);color:var(--accent);border-color:var(--border-strong,var(--border));box-shadow:0 2px 8px #00000012}
 .genre-search{display:flex;align-items:center;gap:10px;border:1px solid var(--border-strong,var(--border));border-radius:8px;padding:0 12px;background:var(--bg);color:var(--text-secondary)}
 .genre-search:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.genre-settings .genre-search input:focus-visible{outline:none!important}
 .genre-settings .genre-search input{border:0!important;box-shadow:none!important;background:transparent!important;min-width:0;width:100%;padding:12px 0!important;min-height:46px;font:inherit;color:var(--text);outline:none}
 .genre-settings .genre-search button{display:grid;place-items:center;width:36px;min-height:36px;border:0;background:none;color:var(--text-secondary)}
 .genre-groups{display:flex;flex-wrap:wrap;gap:6px}
@@ -75,7 +76,7 @@
 /* Scope beyond the atelier's generic fieldset spacing without changing its shell. */
 .atelier-scope .atelier-fields fieldset.genre-settings{display:grid;gap:18px}
 @media(max-width:760px){.dialog-content.atelier-scope.folio-modal.drawer:has(.genre-settings){width:calc(100vw - 34px)}}
-@media(max-width:540px){.atelier-scope .atelier-fields fieldset.genre-settings{gap:15px}}
+@media(max-width:540px){.atelier-scope .atelier-fields fieldset.genre-settings{gap:12px}}
 .genre-chips>div{min-width:0;max-width:100%}
 .genre-search input::-webkit-search-cancel-button{display:none}
 @media(max-width:540px){.genre-settings .genre-search button{width:44px;min-height:44px}.genre-settings .genre-reset button,.genre-settings .genre-text-action{min-height:44px}}
@@ -86,3 +87,5 @@
 .genre-group-picker .atelier-disclosure-trigger{min-height:46px}
 .genre-group-picker .genre-groups{padding:3px 0 12px}
 .atelier-dialog:has(.genre-settings) .modal-actions{position:sticky;bottom:0;z-index:2;background:var(--panel);padding-top:12px;padding-bottom:12px;box-shadow:0 -8px 16px var(--panel)}
+
+.atelier-scope .sp p.genre-limit{font-size:12px;line-height:1.5}

@@ -28,7 +28,7 @@ export function GenreSettings({value,onChange,disabled=false,creation=false}:{va
  };
  return <fieldset disabled={disabled} className="genre-settings" aria-describedby={`${id}-hint`}>
   <legend>{t('Жанры истории','Story genres')}</legend>
-  <p id={`${id}-hint`} className="genre-intro">{t('Выберите главный акцент и до трёх оттенков истории. Жанры направляют повествование, сохраняя свободу персонажей и правила мира.','Choose a main emphasis and up to three accents. Genres guide the story while preserving character agency and world rules.')}</p>
+  <p id={`${id}-hint`} className="genre-intro">{t('Основной жанр задаёт акцент, дополнительные — оттенки истории.','The primary genre sets the emphasis; secondary genres add accents.')}</p>
   <div className="genre-selection" aria-label={t('Выбранные жанры','Selected genres')}>
    <div className="genre-primary">
     <div className="genre-eyebrow"><Star size={14}/>{t('Основной жанр','Primary genre')}</div>
@@ -68,7 +68,7 @@ export function GenreSettings({value,onChange,disabled=false,creation=false}:{va
    {genreGroups.map(g=><button type="button" key={g.id} aria-pressed={group===g.id} onClick={()=>setGroup(g.id)}>{g[locale]}</button>)}
   </div></AtelierDisclosure>
   <div className="genre-result-heading"><span role="status">{t('Найдено','Found')}: {results.length}</span><span>{target==='primary'?t('Нажмите, чтобы сделать основным','Choose a primary genre'):t('Нажмите, чтобы добавить или убрать','Choose to add or remove')}</span></div>
-  <p id={`${id}-limit`} className="genre-limit" data-full={value.secondary_genres.length===3}>{value.secondary_genres.length===3?t('Выбраны все 3 оттенка. Уберите один, чтобы добавить другой. Основной жанр можно менять свободно.','All 3 accents are selected. Remove one to add another. You can still change the primary genre.'):t('До 3 дополнительных жанров. Уже основной жанр нельзя добавить повторно.','Up to 3 secondary genres. The primary genre cannot be added twice.')}</p>
+  {target==='secondary'&&<p id={`${id}-limit`} className="genre-limit" data-full={value.secondary_genres.length===3}>{value.secondary_genres.length===3?t('Выбраны все 3 оттенка. Уберите один, чтобы добавить другой. Основной жанр можно менять свободно.','All 3 accents are selected. Remove one to add another. You can still change the primary genre.'):t('До 3 дополнительных жанров. Уже основной жанр нельзя добавить повторно.','Up to 3 secondary genres. The primary genre cannot be added twice.')}</p>}
   <motion.div className="genre-results" key={`${group}:${query}`} initial={reduce?false:{opacity:.4,y:8}} animate={{opacity:1,y:0}} transition={{duration:.2}}>
    {results.length?genreGroups.filter(g=>results.some(r=>r.group===g.id)).map(g=><section key={g.id} className="genre-group-section" aria-label={g[locale]}>
     <h3>{g[locale]}<span>{results.filter(r=>r.group===g.id).length}</span></h3>
