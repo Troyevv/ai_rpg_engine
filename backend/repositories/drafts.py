@@ -102,7 +102,8 @@ class DraftStorage(DraftEditorStorage):
                 public_job.pop('pinned_config',None);public_job.pop('effective_config',None)
                 public_job['narrative']=''
             games=[json.loads(r[0]) for r in db.execute("SELECT content FROM document_versions WHERE kind='draft_save' AND owner LIKE ? ORDER BY id DESC",(wid+':%',))]
-            visible=state if author else domain.player_view(state) if state else None
+            reader=domain.player_view(state) if state and (not author or technical_valid) else None
+            visible=state if author else reader
             return {'games':[{k:g[k] for k in ('world','save','version_id')} for g in games],'id':wid,'name':w['name'],'revision':w['revision'],'version_id':head['id'] if head else None,
                 # Safe lineage metadata: identifies the saved version, never its private content.
                 'version_origin_job_id':record.get('origin_job') if record else None,
@@ -110,13 +111,13 @@ class DraftStorage(DraftEditorStorage):
                 'candidate':raw if candidate and author else None,
                 'relation_merges':relation_plans(raw) if raw and author else [],
                 'editor':editor_contract() if author else None,
-                'presentation':{'clock':clock_view(visible['world_clock']), 'event_times':event_times(visible), 'notices':calendar_notices(state) if author else []} if visible else None,
+                'presentation':{'clock':clock_view(visible['world_clock']), 'event_times':event_times(visible), 'scene_times':event_times(visible,'scenes','start_minute'), 'thread_visibility':{tid:('known' if tid in reader['world']['threads'] else 'author') for tid in visible['world']['threads']} if reader else {}, 'notices':calendar_notices(state) if author else []} if visible else None,
                 'creation_settings':(raw.get('creation_settings',{}) if raw else json.loads(latest['config_json']).get('_creation_settings',{}) if latest else {}) if author else {},
                 'state':visible,
                 'portraits':self._portrait_view(state,visible,author),
                 'validation':report if author else {'errors':['Мир пока не готов к запуску. Откройте редактор автора.'] if report['errors'] else [],'warnings':['У автора есть замечания к черновику.'] if report['warnings'] and not (record and (record.get('origin_job') or review_metadata(record))) else []},
                 'review':review_metadata(record) if record and author else ({'status':review_metadata(record).get('status')} if record and review_metadata(record) else None),
-                'pending_editor':bool(latest and json.loads(latest['response_journal'] or '{}').get('editor',{}).get('status')=='preview'),
+                'pending_editor':bool(latest and (json.loads(latest['response_journal'] or '{}').get('editor',{}).get('status')=='preview' or json.loads(latest['response_journal'] or '{}').get('field_proposal',{}).get('status')=='preview')),
                 'creative_status':creative_status,
                 'quality_status':quality_status,  # Safe summary; raw reasons stay author-only.
                 'start_block_reason':None,
@@ -126,6 +127,66 @@ class DraftStorage(DraftEditorStorage):
                 'source_text':record.get('source','') if record and author else '',
                 'outline':record.get('outline','') if record and author else '',
                 'history':history,'job':public_job,'author':author}
+
+    def finish_field_preview(self,jid,value,warnings):
+        """The existing scoped generator prepares a proposal without writing canon."""
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            job=db.execute('SELECT * FROM preparation_jobs WHERE id=?',(jid,)).fetchone()
+            if not job or job['status']!='generating':return
+            self._draft_workspace(db,job['workspace_id'],job['revision'],idle=False)
+            config=json.loads(job['config_json']);head=self._draft_head(db,job['workspace_id'])
+            if not config.get('_preview_only') or config['_draft_task'] not in ('field','character'):raise ValueError('Нет адресного предложения.')
+            target=config['_draft_target'];state=json.loads(head['content'])['state'];item=domain.entity(state,target['kind'],target['id'])
+            before={key:item[key] for key in ('name','aliases','fields')} if config['_draft_task']=='character' else item.get('fields',{}).get(target['field'][7:]) if target['field'].startswith('fields.') else item.get(target['field'])
+            journal=json.loads(job['response_journal'] or '{}')
+            journal['field_proposal']={'status':'preview','base_version':head['id'],'target':target,'before':before,'value':value,'warnings':warnings}
+            db.execute("UPDATE preparation_jobs SET response_journal=?,status='saved',phase='preview' WHERE id=?",(dump(journal),jid))
+
+    def field_proposal(self,wid,jid,author=False):
+        if not author:raise ValueError('Предложение доступно только автору.')
+        with self.connect() as db:
+            self._draft_workspace(db,wid,idle=False)
+            job=db.execute('SELECT * FROM preparation_jobs WHERE id=? AND workspace_id=?',(jid,wid)).fetchone()
+            if not job:raise ValueError('Задание не принадлежит черновику.')
+            proposal=json.loads(job['response_journal'] or '{}').get('field_proposal')
+            if not proposal:raise ValueError('Предложение ещё не готово.')
+            head=self._draft_head(db,wid)
+            return dict(proposal,stale=not head or head['id']!=proposal['base_version'])
+
+    def decide_field_proposal(self,wid,jid,revision,decision,accept_warnings=False):
+        from backend.services.draft_generation import decode_result
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE');self._draft_workspace(db,wid,revision)
+            job=db.execute('SELECT * FROM preparation_jobs WHERE id=? AND workspace_id=?',(jid,wid)).fetchone()
+            if not job:raise ValueError('Задание не принадлежит черновику.')
+            journal=json.loads(job['response_journal'] or '{}');proposal=journal.get('field_proposal')
+            if not proposal or proposal['status']!='preview':raise ValueError('Предложение уже рассмотрено или отсутствует.')
+            if decision=='accept':
+                head=self._draft_head(db,wid)
+                if not head or head['id']!=proposal['base_version']:raise ValueError('Предложение устарело. Мир изменился.')
+                record=json.loads(head['content']);config=json.loads(job['config_json'])
+                state=decode_result(dump({'value':proposal['value']}),record['state'],config)
+                report=domain.validate(state)
+                if report['errors']:raise ValueError('; '.join(report['errors']))
+                if report['warnings'] and not accept_warnings:raise ValueError('Подтвердите предупреждения перед применением.')
+                review=review_metadata(record)
+                if review:review=dict(review,status='stale',reason='Поле изменено автором.')
+                self._write_draft(db,wid,state,job['kind'],record.get('source',''),record.get('warnings',[]),outline=record.get('outline',''),generated=record.get('generated',False),review=review,origin_job=record.get('origin_job'))
+                proposal['status']='accepted'
+            elif decision=='reject':proposal['status']='rejected'
+            else:raise ValueError('Неизвестное решение.')
+            db.execute('UPDATE preparation_jobs SET response_journal=? WHERE id=?',(dump(journal),jid))
+
+    def draft_version(self,wid,version_id,author=False):
+        if not author:raise ValueError('Просмотр версии доступен только в режиме автора.')
+        with self.connect() as db:
+            self._draft_workspace(db,wid,idle=False)
+            row=db.execute("SELECT * FROM document_versions WHERE id=? AND kind='world_draft' AND owner=?",(version_id,wid)).fetchone()
+            if not row:raise ValueError('Версия не принадлежит черновику.')
+            record=json.loads(row['content']);state=record['state']
+            return {'id':row['id'],'reason':row['reason'],'created_at':row['created_at'],
+                    'state':state,'presentation':{'clock':clock_view(state.get('world_clock',{}))}}
 
     @staticmethod
     def _portrait_view(state,visible,author):
@@ -263,10 +324,16 @@ class DraftStorage(DraftEditorStorage):
                 if field_visibility is not None:
                     from backend.services.draft_player_view import set_binding
                     set_binding(state,eid,field[7:],field_visibility)
-            elif operation=='add':state,eid=domain.add(state,kind)
+            elif operation=='patch_fields':
+                if not isinstance(value,dict) or not value:raise ValueError('Нужны изменённые поля.')
+                for key,new in value.items():state=domain.patch(state,kind,eid,key,new,synchronize=False)
+            elif operation=='add':state,eid=domain.add(state,kind,value)
             elif operation=='remove':state=domain.remove(state,kind,eid)
             else:raise ValueError('Неизвестная операция.')
             state=domain.prepare(state);after=domain.validate(state)
+            if operation in ('add','patch_fields'):
+                new_errors=set(after['errors'])-set(before['errors'])
+                if new_errors:raise ValueError('; '.join(sorted(new_errors)))
             new_warnings=set(after['warnings'])-set(before['warnings'])
             if new_warnings and not ack:raise ValueError('Возможные связанные противоречия: '+'; '.join(new_warnings)+'. Подтверди «Изменить всё равно».')
             review=review_metadata(record)

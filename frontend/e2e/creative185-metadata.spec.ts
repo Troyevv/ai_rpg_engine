@@ -1,3 +1,4 @@
+import {confirmWorkshopStart} from './workshop-navigation';
 import {workshopNav} from './workshop-navigation';
 import {test,expect} from '@playwright/test';
 import {nav} from './navigation';
@@ -33,7 +34,7 @@ test('paid rejected creative resumes through review and save without regeneratio
  expect(after.state.world.possessions.poss_sonya_tablet).toBeTruthy();
  await page.reload();await nav(page,'Создать');
  await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
- await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+ await confirmWorkshopStart(page);
  await expect(page.getByRole('button',{name:'Начать игру',exact:true})).toBeVisible();
  const selected=await page.evaluate(()=>JSON.parse(localStorage.getItem('selection')!));
  const author=await(await request.get(`/api/saves/${selected.save}/author-state`)).json();

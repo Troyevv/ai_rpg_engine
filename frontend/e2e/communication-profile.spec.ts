@@ -1,3 +1,4 @@
+import {confirmWorkshopStart} from './workshop-navigation';
 import {generateIdea} from './idea-navigation';
 import {workshopNav,draftsMenu} from './workshop-navigation';
 import { test, expect } from "@playwright/test";
@@ -47,7 +48,7 @@ for (const skin of ["graphite", "parchment"])
     await page
       .getByRole("button", { name: "Показать всё", exact: true })
       .click();
-    await workshopNav(page,'Сцена и правила');
+    await workshopNav(page,'Сцена и правила');await page.getByRole('button',{name:'Календарь и связь',exact:true}).click();
     const editor = page
       .locator(".workshop-content")
       .getByRole("region", { name: "Технологии связи" });
@@ -97,9 +98,7 @@ for (const skin of ["graphite", "parchment"])
       (r) =>
         r.url().endsWith("/draft/confirm") && r.request().method() === "POST",
     );
-    await page
-      .getByRole("button", { name: "Подтвердить и открыть игру", exact: true })
-      .click();
+    await confirmWorkshopStart(page);
     const selected = await (await confirmed).json();
     await request.put(`/api/worlds/${selected.world}/presentation`, {
       data: { theme_id: skin },

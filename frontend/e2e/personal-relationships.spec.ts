@@ -1,3 +1,4 @@
+import {confirmWorkshopStart} from './workshop-navigation';
 import {test,expect,type Page} from '@playwright/test';
 import {nav,pickCharacter,searchCharacter,actor} from './navigation';
 const dossier=(page:Page)=>page.locator('.inspector-workspace');
@@ -136,7 +137,7 @@ test('Volkov canon: real editor import, Start Game, partner navigation, POV and 
  await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),w.id);
  await page.goto('/');await nav(page,'Создать');
  await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
- await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+ await confirmWorkshopStart(page);
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();
  await expect(page.locator('.turn')).toHaveCount(1,{timeout:60000});
  const check=async()=>{

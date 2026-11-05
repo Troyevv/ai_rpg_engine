@@ -25,7 +25,7 @@ test('player reads ordinary NPC and world records without receiving the hidden p
  await expect(dossier).toContainText('Старший брат Сони, вырос в Сосновке.');
  await dossier.getByRole('button',{name:'Цели'}).click();
  await expect(dossier).toContainText('Закрыть накопившиеся дела до возвращения в Тверь.');
- await dossier.getByRole('button',{name:'Сейчас',exact:true}).click();
+ await dossier.getByRole('tab',{name:'Сейчас',exact:true}).click();
  await expect(dossier).toContainText('менеджер по закупкам',{ignoreCase:true});
  await expect(dossier.getByRole('button',{name:/Изменить|Удалить|Добавить|Сохранить/})).toHaveCount(0);
  if(process.env.WW_READING_CAPTURE) {

@@ -25,6 +25,20 @@ def clock_view(clock):
     except (ValueError,KeyError,IndexError,TypeError):return {'label':'Некорректный календарь — проверьте диагностику'}
 
 
+def time_selection(clock, minute, selected_date=None):
+    """Resolve a calendar date using the same ordinal functions as Runtime."""
+    from backend.runtime_v3.calendar import ordinal
+    if minute<0:raise ValueError('Время должно быть неотрицательным.')
+    if selected_date is not None:
+        calendar=clock.get('calendar') or {}
+        if not calendar.get('start_date'):raise ValueError('Сначала задайте начальную дату календаря.')
+        profile=calendar.get('profile') or {}
+        days=ordinal(selected_date,profile)-ordinal(calendar['start_date'],profile)
+        minute=(calendar['start_minute']//1440+days)*1440+minute%1440
+        if minute<0:raise ValueError('Дата находится до начала отсчёта мира.')
+    return clock_view(dict(clock,minute=minute))
+
+
 def editor_contract():
     from backend.services.draft_world import FIELDS
     from backend.services.draft_initial import EXTENSIONS
@@ -50,9 +64,9 @@ def calendar_notices(state):
     return notices
 
 
-def event_times(state):
+def event_times(state,group='events',field='minute'):
     """Format only events already admitted by the caller's author/player projection."""
     clock=state.get('world_clock',{})
-    return {eid:clock_view(dict(clock,minute=event['minute']))['label']
-            if event.get('minute') is not None else 'Дата неизвестна'
-            for eid,event in state.get('world',{}).get('events',{}).items()}
+    return {eid:clock_view(dict(clock,minute=event[field]))['label']
+            if event.get(field) is not None else 'Дата неизвестна'
+            for eid,event in state.get('world',{}).get(group,{}).items()}

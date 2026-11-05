@@ -13,7 +13,7 @@ class Import(Revision):
     format: Literal['text','json'] = 'text'
 
 class Change(Revision):
-    operation: Literal['patch','add','remove','restore']
+    operation: Literal['patch','patch_fields','add','remove','restore']
     kind: str = ''
     entity_id: str = ''
     field: str = ''
@@ -40,6 +40,7 @@ class Generate(Revision,Credential):
     budget: ResponseBudget = Field(default_factory=ResponseBudget)
     creation_settings: CreationSettings = Field(default_factory=CreationSettings)
     task: Literal['world','field','character'] = 'world'
+    preview: bool = False
     text: str = Field(default='',max_length=100000)
     use_idea: bool = False
     kind: str = ''
@@ -203,6 +204,26 @@ def install(app,repo,preparation,credentials,job):
         eid=repo.edit_draft(wid,body.revision,body.operation,body.kind,body.entity_id,body.field,body.value,body.source_id,body.warnings_ack,field_visibility=body.field_visibility)
         return {**repo.draft(wid,True),'entity_id':eid}
 
+    @app.get('/api/workspaces/{wid}/draft/field-proposals/{jid}')
+    def field_proposal(wid:str,jid:str,author:bool=False):
+        return repo.field_proposal(wid,jid,author)
+
+    @app.post('/api/workspaces/{wid}/draft/field-proposals/{jid}')
+    def field_decision(wid:str,jid:str,body:EditDecision):
+        repo.decide_field_proposal(wid,jid,body.revision,body.decision,body.accept_warnings)
+        return repo.draft(wid,True)
+
+    @app.get('/api/workspaces/{wid}/draft/time')
+    def draft_time(wid:str,minute:int,date:str|None=None):
+        from backend.services.draft_presentation import time_selection
+        state=repo.draft(wid,False)['state']
+        if not state:raise ValueError('Мир ещё не создан.')
+        return time_selection(state['world_clock'],minute,date)
+
+    @app.get('/api/workspaces/{wid}/draft/versions/{version_id}')
+    def draft_version(wid:str,version_id:int,author:bool=False):
+        return repo.draft_version(wid,version_id,author)
+
     @app.get('/api/workspaces/{wid}/draft/dependencies')
     def dependencies(wid:str,kind:str,entity_id:str):
         state=repo.draft(wid,True)['state']
@@ -231,7 +252,7 @@ def install(app,repo,preparation,credentials,job):
         if body.task=='world' and body.creation_settings.calendar_start.presets is None:
             body.creation_settings.calendar_start.presets=CalendarPresets()
         config={**body.config.model_dump(),'_draft_task':body.task,'_draft_input':body.text,'_use_idea':body.use_idea,
-                '_creation_settings':body.creation_settings.model_dump(), '_warnings_ack':body.warnings_ack,'_draft_target':{'kind':body.kind,'id':body.entity_id,'field':body.field}}
+                '_preview_only':body.preview, '_creation_settings':body.creation_settings.model_dump(), '_warnings_ack':body.warnings_ack,'_draft_target':{'kind':body.kind,'id':body.entity_id,'field':body.field}}
         if body.budget.max_total_tokens is not None:config['_draft_token_budget']=body.budget.max_total_tokens
         if body.budget.max_cost_usd is not None:config['_draft_cost_budget_usd']=str(body.budget.max_cost_usd)
         jid=preparation.submit(wid,'draft_'+body.task,body.text,config,body.revision,credentials.resolve(body.config.provider,body.key()))
@@ -257,15 +278,16 @@ def install(app,repo,preparation,credentials,job):
         return result
 
     @app.get('/api/workspaces/{wid}/draft/export')
-    def export(wid:str,version_id:int,format:Literal['md','txt','json']='md'):
+    def export(wid:str,version_id:int,format:Literal['md','txt','json','plain']='md'):
         value=repo.draft(wid,True)
         if value['version_id']!=version_id:raise ValueError('Версия изменилась. Обнови редактор.')
         from backend.services.draft_portraits import export_assets
         import base64
         state=value.get('candidate') if value.get('candidate') is not None else value['state']
         assets=export_assets(repo,wid,state) if state and 'world' in state and 'characters' in state['world'] else {}
-        if format=='json': text=json.dumps({'state':state,'portrait_assets':assets} if assets else state,ensure_ascii=False,indent=2)
+        if format=='plain': text=domain.export_markdown(value['state'],readable_text=True)
+        elif format=='json': text=json.dumps({'state':state,'portrait_assets':assets} if assets else state,ensure_ascii=False,indent=2)
         else:
             text=domain.export_markdown(value['state'])
             if assets: text+='\n<!-- AI_RPG_PORTRAITS_V1 '+base64.b64encode(json.dumps(assets).encode()).decode()+' -->\n'
-        return PlainTextResponse(text,media_type='application/json' if format=='json' else 'text/plain',headers={'Content-Disposition':f'attachment; filename="world.{format}"'})
+        return PlainTextResponse(text,media_type='application/json' if format=='json' else 'text/plain',headers={'Content-Disposition':f'attachment; filename="world.{"txt" if format=="plain" else format}"'})

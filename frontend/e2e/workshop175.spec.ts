@@ -1,3 +1,4 @@
+import {confirmWorkshopStart} from './workshop-navigation';
 import {test,expect} from '@playwright/test';
 import {nav} from './navigation';
 import {workshopNav,authorView} from './workshop-navigation';
@@ -79,7 +80,7 @@ test('workshop portrait illustration and uploaded original survive Start Game',a
  await expect(page.getByRole('heading',{name:'Портрет персонажа',exact:true})).toHaveCount(0);
  await expect(page.locator('.ww-dossier-aside>.portrait-control img')).toHaveAttribute('src',/\/assets\//);
  await page.getByRole('button',{name:'Готово',exact:true}).click();
- await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+ await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();await confirmWorkshopStart(page);
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.choices button')).toHaveCount(6);
  await nav(page,'Персонажи');await pickCharacter(page,state.characters[0].id);
  await expect(page.locator('.character-profile .portrait-control .procedural-portrait')).toHaveAttribute('src',svg!);

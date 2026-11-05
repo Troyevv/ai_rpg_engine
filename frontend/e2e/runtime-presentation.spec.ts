@@ -1,3 +1,4 @@
+import {confirmWorkshopStart} from './workshop-navigation';
 import {workshopNav,draftsMenu} from './workshop-navigation';
 import {test,expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
@@ -81,7 +82,7 @@ test('populated Runtime world has names, typed values, calendar, edit and reload
  expect(player.state.world.contacts.contact_b).not.toHaveProperty('character_id');
  expect(player.state.world.contacts.contact_b).not.toHaveProperty('provenance');
  await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
- await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+ await confirmWorkshopStart(page);
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.choices button')).toHaveCount(6);
  await page.reload();await expect(page.locator('.choices button')).toHaveCount(6);
 });

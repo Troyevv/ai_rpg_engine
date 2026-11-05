@@ -1,3 +1,4 @@
+import {confirmWorkshopStart} from './workshop-navigation';
 import {test,expect,type Locator,type Page} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {nav,pickCharacter} from './navigation';
@@ -90,7 +91,7 @@ test('manual visual age: Anna, persistence, full artwork and Runtime handoff',as
  await page.getByRole('button',{name:'Редактировать портрет',exact:true}).click();await page.getByRole('button',{name:'Настроить иллюстрацию',exact:true}).click();
  await selector.selectOption('infant');await page.getByRole('button',{name:'Сохранить иллюстрацию',exact:true}).click();await expect(page.locator('.portrait-dialog')).toHaveCount(0);
  await page.getByRole('button',{name:'Готово',exact:true}).click();
- await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
+ await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();await confirmWorkshopStart(page);
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.choices button')).toHaveCount(6);
  await nav(page,'Персонажи');await pickCharacter(page,cid);
  await expect(page.locator('.character-profile .portrait-control .procedural-portrait')).toHaveAttribute('src',previews.get('infant')!);

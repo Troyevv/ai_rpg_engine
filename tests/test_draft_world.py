@@ -170,7 +170,7 @@ def test_field_isolation_and_dependencies():
     with pytest.raises(ValueError):domain.remove(state,'character',cid)
     with pytest.raises(ValueError):domain.patch(state,'character',cid,'id','replacement')
     with pytest.raises(ValueError):decode_result('{"value":"Имя","extra":"oops"}',state,{'_draft_task':'field','_draft_target':{'kind':'character','id':cid,'field':'name'}})
-    new,eid=domain.add(state,'character')
+    new,eid=domain.add(state,'character',{'name':'Новый знакомый'})
     assert domain.remove(new,'character',eid)==state
 
 

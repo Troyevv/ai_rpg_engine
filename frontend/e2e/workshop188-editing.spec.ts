@@ -1,3 +1,4 @@
+import {confirmWorkshopStart} from './workshop-navigation';
 import {test,expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {nav} from './navigation';
@@ -35,7 +36,7 @@ for(const skin of ['graphite','parchment'])test(`literary appearance, failed edi
  const dossier=page.locator('.ww-dossier-dialog');
  await expect(dossier.locator('.draft-field-heading').getByText('Внешность',{exact:true})).toHaveCount(1);
  await expect(dossier.getByRole('button',{name:'Изменить Особые приметы',exact:true})).toHaveCount(0);
- await dossier.getByRole('button',{name:'Личность',exact:true}).click();
+ await dossier.getByRole('tab',{name:'Личность',exact:true}).click();
  await expect(dossier.locator('.draft-field-heading').getByText('Личность',{exact:true})).toHaveCount(0);
  await expect(dossier.locator('.draft-field-heading').getByText('Внешность',{exact:true})).toHaveCount(0);
  await expect(dossier.getByRole('button',{name:'Добавить ценности',exact:true})).toBeVisible();
@@ -44,7 +45,7 @@ for(const skin of ['graphite','parchment'])test(`literary appearance, failed edi
  for(const label of ['Черты характера','Ценности'])await dossier.locator('.draft-field').filter({has:page.locator('.draft-field-heading').getByText(label,{exact:true})}).locator(':scope > details > summary').click();
  await expect(dossier.getByRole('heading',{name:'Бережно относится к близким',exact:true})).toBeVisible();await expect(dossier.getByRole('heading',{name:'Семья важнее карьеры',exact:true})).toBeVisible();
  await dossier.getByLabel('Переключить досье').selectOption('maxim');
- await dossier.getByRole('button',{name:'Основное',exact:true}).click();
+ await dossier.getByRole('tab',{name:'Основное',exact:true}).click();
  await dossier.getByRole('button',{name:'Изменить fields.Внешность',exact:true}).click();
  const field=page.locator('.ww-field-dialog');const old=source.characters.find((c:any)=>c.id==='maxim').fields.Внешность;
  await expect(field.getByLabel('Внешность',{exact:true})).toHaveValue(old);
@@ -57,11 +58,11 @@ for(const skin of ['graphite','parchment'])test(`literary appearance, failed edi
  await field.getByRole('button',{name:'Закрыть',exact:true}).click();await dossier.getByRole('button',{name:'Изменить fields.Внешность',exact:true}).click();
  await field.locator('summary').filter({hasText:'Изменить это поле с ИИ'}).click();await expect(field.getByLabel('Указание генератору')).toHaveValue('WORKSHOP188 invalid');
  await field.getByLabel('Указание генератору').fill('WORKSHOP188 Измени только цвет волос на светлый.');await field.getByRole('checkbox').check();await field.getByRole('button',{name:'Перегенерировать поле',exact:true}).click();
- await expect(field).toHaveCount(0);await expect(dossier).toContainText('светлой стрижкой');
+ await expect(field.getByRole('heading',{name:'Вариант от ИИ',exact:true})).toBeVisible();expect((await(await request.get(url+'?author=true')).json()).state).toEqual(before.state);const proposal=field.locator('.ww-field-proposal');for(const check of await proposal.getByRole('checkbox').all())await check.check();await proposal.getByRole('button',{name:'Применить вариант',exact:true}).click();await expect(field).toHaveCount(0);await expect(dossier).toContainText('светлой стрижкой');
  const after=await(await request.get(url+'?author=true')).json();const oldCard=before.state.characters.find((c:any)=>c.id==='maxim'),newCard=after.state.characters.find((c:any)=>c.id==='maxim');
  expect(newCard).toEqual({...oldCard,fields:{...oldCard.fields,Внешность:old.replace('тёмной стрижкой','светлой стрижкой')}});expect(after.state.world).toEqual(before.state.world);
  await page.reload();await nav(page,'Создать');await authorView(page);await workshopNav(page,'Персонажи');await page.getByLabel('Поиск персонажей').fill('Максим');await page.getByRole('button',{name:'Досье Максим Ковалёв',exact:true}).click();await expect(dossier).toContainText('светлой стрижкой');
- await dossier.getByRole('button',{name:'Готово',exact:true}).click();await page.locator('.ww-topbar .ww-primary').click();await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();await expect(page.locator('.world-workshop')).toHaveCount(0);
+ await dossier.getByRole('button',{name:'Готово',exact:true}).click();await page.locator('.ww-topbar .ww-primary').click();await confirmWorkshopStart(page);await expect(page.locator('.world-workshop')).toHaveCount(0);
  const started=await(await request.get(url+'?author=true')).json();expect(started.games).toHaveLength(1);
  const saved=await(await request.get(`/api/saves/${started.games[0].save}/author-state`)).json();
  await nav(page,'Создать');await authorView(page);await workshopNav(page,'Изменить с ИИ');await expect(page.getByLabel('Что изменить в мире?')).toBeEnabled();await expect(page.locator('.ww-ai-compose')).toContainText('Начатая игра останется без изменений');

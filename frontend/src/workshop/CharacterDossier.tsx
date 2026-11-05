@@ -1,4 +1,4 @@
-import {Children,useState,type ReactNode} from 'react';
+import {Children,useId,useState,type ReactNode} from 'react';
 import {Dialog,DialogContent,DialogTitle,DialogDescription} from '../components/ui/dialog';
 import {CharacterAvatar,PortraitControl} from '../Portrait';
 import {SectionTabs} from '../components/ui/section-tabs';
@@ -20,10 +20,10 @@ type Props={
  open:boolean;onClose:()=>void;card?:WorkshopCharacter;characters:WorkshopCharacter[];wid:string;author:boolean;locked:boolean;
  actor:Item;actorFields:string[];row:(kind:string,id:string,field:string,value:unknown,editable?:boolean)=>ReactNode;
  onAddValues:()=>void;connections:ReactNode[];knowledge:ReactNode[];life:ReactNode[];refresh:()=>void|Promise<void>;onSelect:(id:string)=>void;
- onRegenerate:()=>void;onDelete:()=>void;returnFocus:()=>void;
+ onEdit:()=>void;protagonist?:string;locationLabel:string;onRegenerate:()=>void;onDelete:()=>void;returnFocus:()=>void;
 };
-export function CharacterDossier({open,onClose,card,characters,wid,author,locked,actor,actorFields,row,onAddValues,connections,knowledge,life,refresh,onSelect,onRegenerate,onDelete,returnFocus}:Props) {
- const [tab,setTab]=useState<Tab>('profile');
+export function CharacterDossier({open,onClose,card,characters,wid,author,locked,actor,actorFields,row,onAddValues,connections,knowledge,life,refresh,onSelect,onRegenerate,onDelete,returnFocus,onEdit,protagonist,locationLabel}:Props) {
+ const [tab,setTab]=useState<Tab>('profile');const panel=useId();const [query,setQuery]=useState('');
  const appearance=actor.appearance as {items?:Item;legacy_text?:string}|undefined;
  const personality=actor.personality as {items?:Item;evidence?:Item}|undefined;
  const hasValues=filled(actor.values);
@@ -64,17 +64,17 @@ export function CharacterDossier({open,onClose,card,characters,wid,author,locked
    {card&&<div className="ww-dossier"><aside className="ww-dossier-aside">
     {author?<PortraitControl key={wid+card.id} card={card} workspaceId={wid} refresh={refresh} disabled={locked}/>:<CharacterAvatar subject={card} workspaceId={wid} size="100%"/>}
     {!card.portrait&&card.procedural_portrait&&<small className="ww-dossier-illustration-note">Стилизованная иллюстрация</small>}
-    <h2>{card.name}</h2><p>{[card.fields['Возраст'],card.fields['Роль']].filter(Boolean).join(' · ')}</p>
-    <label>Другие персонажи<select aria-label="Переключить досье" value={card.id} onChange={e=>onSelect(e.target.value)}>
-     {characters.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+    <h2>{card.name}</h2>{card.id===protagonist&&<span className="ww-record-badge">Главный герой</span>}<p>{locationLabel}</p><p>{[card.fields['Возраст'],card.fields['Роль']].filter(Boolean).join(' · ')}</p>
+    <label>Найти персонажа<input type="search" aria-label="Найти персонажа в досье" value={query} onChange={e=>setQuery(e.target.value)}/></label><label>Другие персонажи<select aria-label="Переключить досье" value={card.id} onChange={e=>onSelect(e.target.value)}>
+     {characters.filter(c=>c.id===card.id||c.name.toLocaleLowerCase('ru').includes(query.trim().toLocaleLowerCase('ru'))).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
     <div className="ww-dossier-nav">{characters.slice(Math.max(0,index-3),Math.max(0,index-3)+7).map(c=>
      <button key={c.id} onClick={()=>onSelect(c.id)} aria-label={`Досье ${c.name}`} aria-pressed={c.id===card.id}>
       <CharacterAvatar subject={c} workspaceId={wid} author={author} size={32}/></button>)}</div>
-    {author&&<div className="ww-dossier-actions"><button disabled={locked} onClick={onRegenerate}>Вариант всей карточки</button>
+    {author&&<div className="ww-dossier-actions"><button disabled={locked} onClick={onEdit}>Редактировать карточку</button><button disabled={locked} onClick={onRegenerate}>Вариант всей карточки</button>
      <button disabled={locked} onClick={onDelete}>Удалить персонажа</button></div>}
    </aside><section className="ww-dossier-body">
-    <SectionTabs label="Разделы досье" value={tab} onChange={setTab} items={tabs.map(([id,label])=>({id,label}))}/>
-    <div className="ww-dossier-fields" key={card.id+tab}>{rows.length?rows:<p className="ww-dossier-note">{unavailable[tab]}</p>}</div>
+    <SectionTabs tablist panelId={panel} label="Разделы досье" value={tab} onChange={setTab} items={tabs.map(([id,label])=>({id,label}))}/>
+    <div role="tabpanel" id={panel} aria-labelledby={`${panel}-tab-${tab}`} className="ww-dossier-fields" key={card.id+tab}>{rows.length?rows:<p className="ww-dossier-note">{unavailable[tab]}</p>}</div>
    </section></div>}
    <footer className="ww-dossier-footer"><span>{author?'Правки поля сохраняются после подтверждения. История версий доступна в мастерской.':'Режим игрока · только чтение'}</span><button onClick={onClose}>Готово</button></footer>
   </DialogContent>

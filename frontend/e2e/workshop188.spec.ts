@@ -56,7 +56,7 @@ test('field status, failed save, restored input, required structured fields and 
  await page.getByRole('button',{name:'Изменить fields.Внешность',exact:true}).click();await expect(field.getByLabel('Внешность',{exact:true})).toHaveValue(text);
  await field.getByRole('button',{name:'Сохранить поле',exact:true}).click();await expect(field).toHaveCount(0);await expect(page.getByText('Поле «Внешность» сохранено',{exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'Изменить fields.Внешность',exact:true})).toBeFocused();
- await page.getByRole('button',{name:'Цели',exact:true}).click();await page.getByRole('button',{name:'Изменить Цели',exact:true}).click();await page.getByRole('button',{name:'Добавить запись',exact:true}).click();
+ await page.getByRole('tab',{name:'Цели',exact:true}).click();await page.getByRole('button',{name:'Изменить Цели',exact:true}).click();await page.getByRole('button',{name:'Добавить запись',exact:true}).click();
  await expect(field.getByLabel('Идентификатор',{exact:true})).toHaveAttribute('aria-required','true');
  await field.getByLabel('Идентификатор',{exact:true}).fill('audit_goal');await field.getByLabel('Описание',{exact:true}).fill('Подготовить салон к открытию');
  await expect(field.getByText('Дополнительные поля · 9',{exact:true})).toBeVisible();
@@ -99,7 +99,7 @@ test('reference relationship map uses existing directed edges and preserves doss
  await page.getByRole('button',{name:'Сохранить поле',exact:true}).click();await expect(page.locator('.ww-field-dialog')).toHaveCount(0);
  await expect(page.locator('.ww-record-dialog')).toBeVisible();await expect(page.locator('.ww-record-dialog .dialog-title')).toContainText('Нина Петровна');await page.keyboard.press('Escape');
  await page.getByRole('combobox',{name:'Чьи отношения показать'}).selectOption('sergey_volkov');await page.locator('.ww-relation-list').getByRole('button',{name:'Добавить',exact:true}).click();
- await expect(page.locator('.ww-record-dialog')).toBeVisible();await expect(page.locator('.ww-record-dialog')).toContainText('От кого');await page.keyboard.press('Escape');
+ const creation=page.locator('.ww-create-dialog');await expect(creation).toBeVisible();await expect(creation.getByLabel('От кого')).toHaveValue('sergey_volkov');await expect(creation.getByLabel('К кому')).toHaveValue('');await creation.getByRole('button',{name:'Отмена',exact:true}).click();
  await page.getByRole('combobox',{name:'Чьи отношения показать'}).selectOption('sergey_volkov');await expect(page.locator('.ww-record-dialog')).toHaveCount(0);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
@@ -120,7 +120,7 @@ test('secret roles have named character selectors and survive Start Game indepen
   await dialog.getByRole('button',{name:'Сохранить поле',exact:true}).click();await expect(dialog).toHaveCount(0);
   await expect(page.locator('.ww-record-dialog')).toContainText(name);
  }
- await page.keyboard.press('Escape');await workshopNav(page,'Персонажи');await page.getByLabel('Поиск персонажей').fill('Виктория');await page.getByRole('button',{name:'Досье Виктория Соловьёва',exact:true}).click();await page.getByRole('button',{name:'Знания',exact:true}).click();await expect(page.locator('.ww-dossier-fields')).toContainText(state.world.facts[fid].text);
+ await page.keyboard.press('Escape');await workshopNav(page,'Персонажи');await page.getByLabel('Поиск персонажей').fill('Виктория');await page.getByRole('button',{name:'Досье Виктория Соловьёва',exact:true}).click();await page.getByRole('tab',{name:'Знания',exact:true}).click();await expect(page.locator('.ww-dossier-fields')).toContainText(state.world.facts[fid].text);
  const draft=await(await request.get(url+'?author=true')).json();const fact=draft.state.world.facts[fid];
  expect(fact.secret_keeper_ids).toEqual(['ilya']);expect(fact.secret_biography_ids).toEqual(['viktoria_solovyova']);
  expect(fact.secret_subject_ids).toEqual(state.world.facts[fid].secret_subject_ids);

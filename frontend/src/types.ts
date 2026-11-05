@@ -167,7 +167,7 @@ export interface Job {
   attempt_epoch?: number;
   resumable?: boolean;
   replaces_id?:number|null;
-  phase?: "scenario" | "world" | "retrying" | "validating" | "saving" | "editing" | "developing" | "reviewing" | "improving" | "continuing" | "";
+  phase?: "scenario" | "world" | "retrying" | "validating" | "saving" | "editing" | "preview" | "proposing" | "developing" | "reviewing" | "improving" | "continuing" | "";
   progress_chars?: number;
   id: string;
   status: string;
