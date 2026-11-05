@@ -87,8 +87,10 @@ test('W01–W69 reference/current browser evidence at required viewport widths',
   await page.keyboard.press('Escape');await expect(page.getByRole('dialog',{name:'Оформление мастерской',exact:true})).toHaveCount(0);if(info.project.name==='mobile'){await page.keyboard.press('Escape');await expect(page.locator('.ww-menu-dialog')).toHaveCount(0);}
   await workshopNav(page,'Персонажи');await page.locator('.ww-character-card').first().click();
   await expect(page.locator('.ww-dossier-dialog')).toBeVisible();await page.evaluate(()=>document.fonts.ready);
+  if(info.project.name==='mobile'){const boxes=await page.locator('.ww-dossier-identity').evaluate(el=>Array.from(el.children).map(c=>{const b=c.getBoundingClientRect();return {top:b.top,bottom:b.bottom}}));for(let i=1;i<boxes.length;i++)expect(boxes[i].top,'identity rows must not overlap').toBeGreaterThanOrEqual(boxes[i-1].bottom);const input=page.getByLabel('Найти персонажа в досье');await expect(input).toBeVisible();await expect(page.getByLabel('Переключить досье')).toBeVisible();}
   await page.screenshot({path:info.outputPath(`skin-${theme}-dossier.png`),animations:'disabled'});
   const portal=await page.locator('.ww-dossier-dialog').evaluate(el=>{const style=getComputedStyle(el);const overlay=document.querySelector('.dialog-overlay');return {font:style.fontFamily,background:style.backgroundColor,color:style.color,overlay:overlay?{background:getComputedStyle(overlay).backgroundColor,blur:getComputedStyle(overlay).backdropFilter}:null}});
+  expect(portal.overlay?.blur).toBe('blur(9px)');
   await info.attach(`skin-${theme}-portal`,{body:JSON.stringify(portal),contentType:'application/json'});
   await page.keyboard.press('Escape');await expect(page.locator('.ww-character-card').first()).toBeFocused();
  }
@@ -102,13 +104,14 @@ for(const observer of [false,true])test(`W68 server launch summary and real hand
  world.camera={...world.camera,mode:observer?'observer':'actor',pov_actor_id:ids[2],subject_id:ids[0]};
  for(const c of world.characters)c.is_player=c.id===world.protagonist_id;
  world.world.scenes[world.camera.scene_id].participants=ids;
+ const opening=world.world.scenes[world.camera.scene_id];opening.text='Выбранная сцена у окна.';world.world.scenes.other_opening={...opening,id:'other_opening',text:'Другая сцена в том же месте.'};
  const w=await(await request.post('/api/workspaces',{data:{name:'Роли запуска'}})).json(),url=`/api/workspaces/${w.id}/draft`;
  expect((await request.post(url+'/import',{data:{revision:0,format:'json',text:JSON.stringify(world)}})).ok()).toBe(true);
  await page.addInitScript(wid=>localStorage.setItem('draftWorkspace',wid),w.id);await page.goto('/');await nav(page,'Создать');await authorView(page);
  const before=await(await request.get(url+'?author=true')).json();
  await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
  const summary=page.locator('.ww-launch-summary');
- for(const [label,value] of [['Главный герой',observer?'Мир без протагониста':world.characters[0].name],['Управляемый персонаж',observer?'Нет управляемого персонажа':world.characters[1].name],['Носитель POV',world.characters[2].name],['Фокус камеры',world.characters[0].name]])await expect(summary.locator('div').filter({has:page.locator('dt',{hasText:label})}).locator('dd')).toHaveText(value);
+ for(const [label,value] of [['Главный герой',observer?'Мир без протагониста':world.characters[0].name],['Управляемый персонаж',observer?'Нет управляемого персонажа':world.characters[1].name],['Носитель POV',world.characters[2].name],['Фокус камеры',world.characters[0].name],['Стартовая сцена',opening.text]])await expect(summary.locator('div').filter({has:page.locator('dt',{hasText:label})}).locator('dd')).toHaveText(value);
  expect((await(await request.get(url+'?author=true')).json()).revision).toBe(before.revision);
  const response=page.waitForResponse(r=>r.url().endsWith(url+'/confirm')&&r.request().method()==='POST');
  await confirmWorkshopStart(page);const result=await response;expect(result.ok()).toBe(true);const save=await result.json();

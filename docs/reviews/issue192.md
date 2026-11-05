@@ -29,7 +29,7 @@
 | W12 | Read/action/revision states separated; field dirty/saving state reflects actual state. | Review failed/pending requests and child-dialog status propagation. |
 | W13 | Existing theme typography retained. | OPEN: measure font families, weight, widths in all required themes. |
 | W14 | Overview panel surfaces differentiated using skin tokens. | Visual/theme acceptance pending. |
-| W15 | Existing modal backdrop retained. | OPEN: compare opacity/blur against original in real browser. |
+| W15 | Existing modal backdrop retained. | Compared actual Graphite/Parchment/Cyberpunk portals: the global UI override removed blur. Restored the exact #175 scrim `#070a09ba` / `blur(9px)` only in the workshop; #190 atelier remains separate. Computed-style E2E assertion added; final capture pending. |
 | W16 | Local create form before mutation; name/description required; cancel does not write. | Backend + component tests; E2E added. |
 | W17 | Explicit ordered source/target; backend rejects self/missing/duplicate pair. | SQLite test verifies exact edge and no extra revision. |
 | W18 | Full cards show personality; overview stays compact; portrait contract retained. | Crop and card density need browser review. |
@@ -117,3 +117,9 @@ Keep the PR as draft until browser evidence is generated and reviewed, the pinne
 At `43e991a`, run [42075038214](https://github.com/Troyevv/ai_rpg_engine/actions/runs/42075038214) completed: backend **3209 passed, 1 skipped**, frontend passed, all four smoke jobs passed. Full E2E: desktop **162/163** and **152/159**, mobile **151 passed / 1 failed / 11 skipped** and **141 passed / 5 failed / 13 skipped**. Existing project skips are unchanged.
 
 Confirmed defects fixed in follow-up: list portraits were vertically centered after the added personality text increased row height; reload during a scenario job hid the path back to its editor. Updated obsolete assertions for the explicitly requested AI action surface, version-number success message and rejection of pasted JSON arrays. No assertions were disabled or made optional. The separate POV migration defect was found by inspection and covered by real SQLite handoff tests. These follow-ups require a new complete CI result.
+
+- W68 launch modal now shows the complete selected scene text; the browser fixture contains two distinct scenes at the same place.
+
+- Mobile Graphite dossier capture exposed overlapping age/location/search rows caused by several children sharing hard-coded grid rows. Replaced that layout with explicit identity and switcher groups; added browser geometry assertions in all three skins.
+
+- Mobile overview still hid cards below an oversized hero. Moved full setting/genre into an accessible disclosure, restored the corner edit action and four-column mobile statistics, and retained expandable untruncated source text.

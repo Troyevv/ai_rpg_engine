@@ -64,9 +64,9 @@ export function CharacterDossier({open,onClose,card,characters,wid,author,locked
    {card&&<div className="ww-dossier"><aside className="ww-dossier-aside">
     {author?<PortraitControl key={wid+card.id} card={card} workspaceId={wid} refresh={refresh} disabled={locked}/>:<CharacterAvatar subject={card} workspaceId={wid} size="100%"/>}
     {!card.portrait&&card.procedural_portrait&&<small className="ww-dossier-illustration-note">Стилизованная иллюстрация</small>}
-    <h2>{card.name}</h2>{card.id===protagonist&&<span className="ww-record-badge">Главный герой</span>}<p>{locationLabel}</p><p>{[card.fields['Возраст'],card.fields['Роль']].filter(Boolean).join(' · ')}</p>
-    <label>Найти персонажа<input type="search" aria-label="Найти персонажа в досье" value={query} onChange={e=>setQuery(e.target.value)}/></label><label>Другие персонажи<select aria-label="Переключить досье" value={card.id} onChange={e=>onSelect(e.target.value)}>
-     {characters.filter(c=>c.id===card.id||c.name.toLocaleLowerCase('ru').includes(query.trim().toLocaleLowerCase('ru'))).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+    <div className="ww-dossier-identity"><h2>{card.name}</h2>{card.id===protagonist&&<span className="ww-record-badge">Главный герой</span>}<p>{locationLabel}</p><p>{[card.fields['Возраст'],card.fields['Роль']].filter(Boolean).join(' · ')}</p></div>
+    <div className="ww-dossier-switcher"><label>Найти персонажа<input type="search" aria-label="Найти персонажа в досье" value={query} onChange={e=>setQuery(e.target.value)}/></label><label>Другие персонажи<select aria-label="Переключить досье" value={card.id} onChange={e=>onSelect(e.target.value)}>
+     {characters.filter(c=>c.id===card.id||c.name.toLocaleLowerCase('ru').includes(query.trim().toLocaleLowerCase('ru'))).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label></div>
     <div className="ww-dossier-nav">{characters.slice(Math.max(0,index-3),Math.max(0,index-3)+7).map(c=>
      <button key={c.id} onClick={()=>onSelect(c.id)} aria-label={`Досье ${c.name}`} aria-pressed={c.id===card.id}>
       <CharacterAvatar subject={c} workspaceId={wid} author={author} size={32}/></button>)}</div>

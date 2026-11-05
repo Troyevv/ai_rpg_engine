@@ -249,3 +249,30 @@ html[data-theme="graphite"] .dialog-content[class*="ww-"]{--ui-font:"Workshop Sa
 @media(max-width:760px){.ww-start-layout{grid-template-columns:1fr;gap:0}.ww-collection-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center}.ww-collection-toolbar>.ww-search-field{grid-column:1;grid-row:1;min-width:0;max-width:100%;width:100%;flex-basis:auto}.ww-collection-toolbar>.ww-view-toggle{grid-column:2;grid-row:1}.ww-collection-toolbar>.ww-filters{grid-column:1/-1;grid-row:2;overflow-x:auto;max-width:100%;padding-bottom:4px}.ww-filters>button{flex:none}.ww-content .world-ai-editor .ai-editor-heading h3{font-size:31px}.ww-ai-compose{padding:18px}}
 
 .world-workshop .ww-content .ww-readable>.workshop-literary{font:400 14px/1.7 var(--ui-font)}
+
+/* The workshop modal scrim follows #175; the later idea atelier owns its own overlay. */
+body:has(.world-workshop):not(:has(.atelier-dialog)) .dialog-overlay{background:#070a09ba;backdrop-filter:blur(9px)}
+
+.ww-dossier-switcher input{width:100%;min-width:0;margin-top:8px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface-1);color:var(--text)}
+@media(max-width:760px){
+ .ww-dossier-aside{grid-template-areas:"portrait identity" "note note" "people people" "switch switch" "actions actions";align-items:start;gap:10px 17px}
+ .ww-dossier-aside>.portrait-control,.ww-dossier-aside>.character-avatar{grid-area:portrait}
+ .ww-dossier-identity{grid-area:identity;display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+ .ww-dossier-identity h2{margin:0;font-size:24px}.ww-dossier-identity p{line-height:1.45}
+ .ww-dossier-identity p:last-child{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+ .ww-dossier-identity .ww-record-badge{font-size:10px;padding:3px 7px}
+ .ww-dossier-aside>.ww-dossier-illustration-note{grid-area:note;font-size:10px;margin:0}
+ .ww-dossier-aside>.ww-dossier-nav{grid-area:people;margin:0;padding:2px 0}
+ .ww-dossier-switcher{grid-area:switch;display:grid;grid-template-columns:1fr 1fr;gap:10px;min-width:0}
+ .ww-dossier-switcher label{grid-column:auto;margin:0;min-width:0;font-size:10px}.ww-dossier-switcher input,.ww-dossier-switcher select{margin-top:4px;min-height:42px;font-size:16px;padding:8px;width:100%}
+ .ww-dossier-aside>.ww-dossier-actions{grid-area:actions;margin:0;gap:4px 12px}
+}
+
+.ww-hero{position:relative}.ww-hero>.ww-eyebrow{padding-right:42px}
+.ww-hero-edit{position:absolute;right:16px;top:16px;display:grid;place-items:center;width:40px;height:40px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);color:var(--text)}
+.ww-hero-description{margin:12px 0 0;padding:0;border:0;background:none}.ww-hero-description>summary{font-size:12px;color:var(--text-muted);cursor:pointer}.ww-hero-description>p{font-size:13px;line-height:1.6;margin:12px 0}
+.ww-hero-meta>span{display:flex;align-items:center;gap:6px;min-width:0;overflow-wrap:anywhere}
+@media(max-width:760px){
+ .ww-stats{grid-template-columns:repeat(4,minmax(0,1fr))}.ww-stats button{padding:14px 7px;display:block;text-align:center;border-bottom:0;min-width:0}.ww-stats button:nth-child(3){border-right:1px solid var(--border)}.ww-stats svg{display:none}.ww-stats span{font-size:9px;overflow-wrap:anywhere}
+ .ww-hero-meta{margin-top:16px;gap:6px 12px}.ww-hero .ww-readable>button{font-size:12px;padding:4px 0}.ww-hero-description>summary{padding:4px 0}
+}
