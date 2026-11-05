@@ -60,10 +60,10 @@ type DraftState = {
         name: string;
     })[];
     world: Record<string, Record<string, Item>>;
-    protagonist_id: string;
-    controlled_actor_id: string;
+    protagonist_id: string|null;
+    controlled_actor_id: string|null;
     camera: {
-        scene_id: string; mode?:string; subject_id?:string; pov_actor_id?:string;
+        scene_id: string; mode?:string; subject_id?:string|null; pov_actor_id?:string|null;
     };
     world_clock: {
         minute: number;

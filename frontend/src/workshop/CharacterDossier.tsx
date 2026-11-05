@@ -21,7 +21,7 @@ type Props={
  open:boolean;onClose:()=>void;card?:WorkshopCharacter;characters:WorkshopCharacter[];wid:string;author:boolean;locked:boolean;
  actor:Item;actorFields:string[];row:(kind:string,id:string,field:string,value:unknown,editable?:boolean)=>ReactNode;
  onAddValues:()=>void;connections:ReactNode[];knowledge:ReactNode[];life:ReactNode[];refresh:()=>void|Promise<void>;onSelect:(id:string)=>void;
- onEdit:()=>void;protagonist?:string;locationLabel:string;onRegenerate:()=>void;onDelete:()=>void;returnFocus:()=>void;
+ onEdit:()=>void;protagonist?:string|null;locationLabel:string;onRegenerate:()=>void;onDelete:()=>void;returnFocus:()=>void;
 };
 export function CharacterDossier({open,onClose,card,characters,wid,author,locked,actor,actorFields,row,onAddValues,connections,knowledge,life,refresh,onSelect,onRegenerate,onDelete,returnFocus,onEdit,protagonist,locationLabel}:Props) {
  const [tab,setTab]=useState<Tab>('profile');const panel=useId();const [query,setQuery]=useState('');

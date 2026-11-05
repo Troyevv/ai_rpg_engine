@@ -4,7 +4,7 @@ import type {WorkshopCharacter} from './CharacterCollection';
 type Item=Record<string,unknown>;
 
 /** A bounded view of existing edges. Selecting a node never creates a relationship. */
-export function RelationshipMap({characters,entries,wid,author,actor,initialActor,onOpen,children}:{characters:WorkshopCharacter[];entries:[string,Item][];wid:string;author:boolean;actor?:string;initialActor?:string;onOpen:(id:string)=>void;children:(source:string)=>ReactNode}){
+export function RelationshipMap({characters,entries,wid,author,actor,initialActor,onOpen,children}:{characters:WorkshopCharacter[];entries:[string,Item][];wid:string;author:boolean;actor?:string|null;initialActor?:string;onOpen:(id:string)=>void;children:(source:string)=>ReactNode}){
  const key=`workshop:${wid}:relationship-person:${author}`;
  const [selected,setSelected]=useState(()=>initialActor||sessionStorage.getItem(key)||actor||characters[0]?.id||'');
  useEffect(()=>{if(initialActor)setSelected(initialActor)},[initialActor]);
