@@ -201,7 +201,7 @@ html[data-theme="graphite"] :is(.world-workshop,.dialog-content.ww-dossier-dialo
 .ww-create-dialog footer,.ww-record-editor footer,.ww-version-preview footer,.ww-start-dialog footer{display:flex;gap:12px;justify-content:flex-end;flex-wrap:wrap;position:sticky;bottom:-24px;padding:16px 0;background:var(--surface-elevated)}
 .ww-feelings{display:grid;gap:18px}.ww-feeling{display:grid;grid-template-columns:minmax(0,1fr) 80px;align-items:center;gap:8px}.ww-feeling output{text-align:right;font-variant-numeric:tabular-nums}.ww-feeling input[type=range]{accent-color:var(--accent);width:100%;min-width:0}.ww-feeling button{justify-self:start;background:transparent;border:0;color:var(--text-muted);text-decoration:underline}.ww-feeling input[type=number]{width:80px}
 .ww-launch-cover{border-bottom:1px solid var(--border);padding:20px 0;background:radial-gradient(ellipse at top right,var(--surface-2),transparent)}
-.ww-launch-cover h2{font:30px/1.2 'Workshop Bookman',Georgia,serif;overflow-wrap:anywhere}
+.ww-launch-cover h2{font:30px/1.2 var(--story-font,Georgia,serif);overflow-wrap:anywhere}
 .ww-launch-summary{display:grid;grid-template-columns:1fr 1fr;gap:16px}.ww-launch-summary>div{min-width:0}.ww-launch-summary dd{margin:5px 0;overflow-wrap:anywhere}.ww-launch-summary dt{font-size:12px;color:var(--text-muted)}
 .ww-start-dialog>label{display:flex;gap:10px;align-items:flex-start;line-height:1.5}.ww-start-dialog input[type=checkbox]{flex:none;margin-top:5px}
 .ww-version-preview{width:min(900px,calc(100vw - 24px));max-width:none}.ww-field-proposal .ai-diff-values{grid-template-columns:1fr 1fr}
@@ -235,3 +235,8 @@ html[data-theme="graphite"] :is(.world-workshop,.dialog-content.ww-dossier-dialo
 .ww-timeline .ww-record-caption>svg{left:auto;right:-35px;top:0;background:var(--bg)}
 .ww-timeline-end{padding:28px 0 12px 190px;color:var(--text-muted);font-style:italic}
 @media(max-width:600px){.ww-record-grid.ww-timeline{padding-left:24px}.ww-timeline .ww-record-card{padding:20px}.ww-timeline .ww-record-card::before{left:-16px}.ww-timeline .ww-record-caption{position:relative;right:auto;top:auto;width:auto;text-align:left;font-size:12px}.ww-timeline .ww-record-caption>svg{left:-47px;right:auto;top:0}.ww-timeline-end{padding-left:24px}}
+
+/* Keep diagnostic priority visible without relying on color alone. */
+.ww-review-counts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:20px 0}.ww-review-counts button{padding:18px 14px;background:var(--surface-1);border:1px solid var(--border);border-radius:12px;color:var(--text);text-align:left}.ww-review-counts strong{display:block;font-size:26px}.ww-review-counts span{font-size:12px;color:var(--text-muted)}.ww-review-counts button[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft)}.ww-review-issue{margin-top:16px;border-left-width:3px}.ww-review-issue.is-error{border-left-color:var(--danger,#d87575)}.ww-review-issue.is-warning{border-left-color:var(--accent)}.ww-review-issue>small{font-size:11px;color:var(--text-muted)}
+html[data-theme="graphite"] .dialog-content[class*="ww-"]{--ui-font:"Workshop Sans","Segoe UI",sans-serif;--story-font:"Workshop Book",Georgia,serif;font-family:var(--ui-font)}
+@media(max-width:430px){.ww-review-counts{gap:6px}.ww-review-counts button{padding:12px 8px}.ww-review-counts span{font-size:11px;overflow-wrap:anywhere}}

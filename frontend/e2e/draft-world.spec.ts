@@ -114,7 +114,7 @@ for (const extension of ['md', 'txt', 'json']) {
   await page.getByLabel('Файл мира').setInputFiles({name:filename,mimeType:extension==='json'?'application/json':'text/plain',buffer:Buffer.from(content,'utf8')});
   if (extension==='json') {
    await expect(page.getByRole('status')).toContainText(filename);
-   await expect(page.getByLabel('Описание мира или текст импорта')).toHaveCount(0);
+   await expect(page.getByLabel('Описание мира или текст импорта')).toHaveValue(content);await expect(page.getByLabel('Описание мира или текст импорта')).toBeEditable();
   } else await expect(page.getByLabel('Описание мира или текст импорта')).toHaveValue(content);
   await page.getByRole('button',{name:'Открыть в редакторе',exact:true}).click();
   await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();

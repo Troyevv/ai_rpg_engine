@@ -51,7 +51,7 @@
 | W34 | Thread/fact/scene/event creation forms use single atomic add. | Six-type SQLite tests; browser cancel/create added. |
 | W35 | Story-secret slice uses projected story_secret, distinct from private facts. | Player-view suite retained; browser slice/POV pending. |
 | W36 | Short thread heading + expandable original description; badge from server projection. | Server badge/projection test; long-copy visual pending. |
-| W37 | Separate desktop date column, timeline axis, card surface and ending. | OPEN: rendered spacing and temporal-category labels need acceptance. |
+| W37 | Separate desktop date column, timeline axis, card surface, ending and server-projected today/past/future labels. | Runtime day classification unit test; rendered spacing still needs acceptance. |
 | W38 | Scene time uses calendar presenter; scene text distinguishes same-location cards. | Calendar presenter retained; browser fixture pending. |
 | W39 | Private facts and story secrets have distinct labels and slices. | Existing canonical flags unchanged; browser pending. |
 | W40 | Quick fact-text edit opens existing scoped editor; full record retains knowledge context. | Scoped field tests; browser pending. |
@@ -59,7 +59,7 @@
 | W42 | Start scene is first tab; world/narrative and calendar/communication are separate. | Communication E2E navigation updated; browser pending. |
 | W43 | Date/time editor previews via Runtime calendar arithmetic, including custom profiles. | Calendar unit tests added; browser invalid-date/save timing pending. |
 | W44 | Communication screen links to existing contact section. | Browser navigation pending. |
-| W45 | Distinguishes absent/stale/completed review; deduplicates messages with paths; text filter. | OPEN: severity hierarchy and full error/recovery browser cases need acceptance. |
+| W45 | Distinguishes absent/stale/completed review; merges severity and paths; category counts/filter; pins checked revision. | Priority/duplicate unit test and revision/no-op/stale SQLite test. OPEN: confirmed-resolution history and full recovery browser acceptance. |
 | W46 | Scene diagnostics route to exact scene in chronology. | Browser diagnostic fixture pending. |
 | W47 | No fabricated repair action: real recovery or existing field navigation. | Existing server recovery unchanged; browser pending. |
 | W48 | AI examples, world/version context, three steps and empty proposal area. | Component/build checks; visual pending. |
@@ -88,10 +88,11 @@
 ## Validation
 
 - Production TypeScript/Vite build succeeded (existing large-chunk warning remains).
-- Final frontend suite: **131 passed** (19 files).
+- Final frontend suite: **132 passed** (19 files).
+- Latest review/timeline/recovery verification: **34 passed**, plus **1 passed** for checked-revision/no-duplicate-version/stale projection.
 - Focused backend suites: 64 passed after fixing the new-card removal/manual-path regression.
 - Full backend run: **3203 passed, 1 skipped** in 917.64 s. Final targeted calendar/projection/Runtime handoff suite: **60 passed**.
-- Playwright discovery: **642 tests / 92 files**. Remote CI execution is in progress. No E2E success, visual acceptance, physical phone testing or real DeepSeek result is claimed.
+- Playwright discovery: **644 tests / 92 files**. CI at `3cfacfc`: all four selected smoke jobs passed (desktop/mobile). Full E2E remains in progress; subsequent changes still require a fresh run. No full E2E success, visual acceptance, physical phone testing or real DeepSeek result is claimed.
 
 ## Remaining acceptance gate
 

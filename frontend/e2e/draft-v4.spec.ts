@@ -117,7 +117,7 @@ test('structured motivations render and edit without losing lifecycle metadata',
   await generateIdea(page);
   await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('saved');
   await workshopNav(page,'Персонажи');
-  await page.locator('.ww-character-card').first().click();await page.getByRole('button',{name:'Цели',exact:true}).click();
+  await page.locator('.ww-character-card').first().click();await page.getByRole('tab',{name:'Цели',exact:true}).click();
   await page.locator('.ww-dossier-fields summary').first().click();
   await expect(page.locator('.ww-dossier-fields')).toContainText('Текущая goals');
   await page.getByRole('button',{name:'Готово',exact:true}).click();
@@ -125,7 +125,7 @@ test('structured motivations render and edit without losing lifecycle metadata',
   await page.getByRole('button',{name:'Автор мира',exact:true}).click();
   await page.getByRole('button',{name:'Показать всё',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await page.locator('.ww-character-card').first().click();await page.getByRole('button',{name:'Цели',exact:true}).click();
+  await page.locator('.ww-character-card').first().click();await page.getByRole('tab',{name:'Цели',exact:true}).click();
   const before=await(await request.get(url+'?author=true')).json();
   const cid=before.state.protagonist_id;
   for (const [field,label] of [['goals','Цели'],['intentions','Намерения'],['obligations','Обязательства']]) {

@@ -23,7 +23,7 @@ for(const skin of ['graphite','parchment']) {
   await page.reload();await nav(page,'Создать');
   await page.getByRole('button',{name:'Автор мира',exact:true}).click();
   await page.getByRole('button',{name:'Показать всё',exact:true}).click();
-  await workshopNav(page,'Сцена и правила');
+  await workshopNav(page,'Сцена и правила');await page.getByRole('button',{name:'Календарь и связь',exact:true}).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme',skin);
   await page.getByText('Праздники и сезоны мира',{exact:true}).click();
   const preview=page.getByLabel('Предпросмотр календаря');

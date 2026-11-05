@@ -1,3 +1,4 @@
+import {reviewIssues} from './workshop/reviewIssues';
 import {WorldTimeEditor} from './workshop/WorldTimeEditor';
 import {RecordEditor,type RecordEditTarget} from './workshop/RecordEditor';
 import {FieldProposal} from './workshop/FieldProposal';
@@ -72,7 +73,7 @@ type Draft = {
     portraits?:Record<string,Partial<WorkshopCharacter>>;
     editor?:{field_visibility_excluded?:string[];fields:Record<string,string[]>;definitions?:Record<string,Item>;enums:Record<string,Record<string,string[]>>;schemas:Record<string,Record<string,Item>>} | null;
     creation_settings?: Partial<Creation>;
-    presentation?: {clock:{label:string;effective?:{month_names:string[];weekday_names:string[];month_lengths:(number|null)[];year:number|null;regional?:{country:string;subdivision:string|null}|null;seasons:{name:string;month:number;day:number}[];observances:{name:string;month:number;day:number}[]}};notices?:string[];event_times?:Record<string,string>;scene_times?:Record<string,string>;thread_visibility?:Record<string,string>} | null;
+    presentation?: {clock:{label:string;effective?:{month_names:string[];weekday_names:string[];month_lengths:(number|null)[];year:number|null;regional?:{country:string;subdivision:string|null}|null;seasons:{name:string;month:number;day:number}[];observances:{name:string;month:number;day:number}[]}};notices?:string[];event_times?:Record<string,string>;event_periods?:Record<string,'today'|'past'|'future'>;scene_times?:Record<string,string>;thread_visibility?:Record<string,string>} | null;
     id: string;
     name: string;
     revision: number;
@@ -82,7 +83,7 @@ type Draft = {
     games?: {world:number;save:number;version_id:number}[];
     candidate?: Record<string,unknown> | null;
     relation_merges?: {ids:string[];paths:string[];differences:string[];safe:boolean;records:Item[]}[];
-    review?: {status:string;reason?:string;issues?:{message:string;severity:string;path?:string|null;patch_paths?:string[];related_paths?:string[];protocol_warnings?:unknown[]}[]} | null;
+    review?: {status:string;reason?:string;checked_revision?:number;issues?:{message:string;severity:string;path?:string|null;patch_paths?:string[];related_paths?:string[];protocol_warnings?:unknown[]}[]} | null;
     pending_editor?: boolean;
     creative_status?: 'running' | 'applied' | 'rejected' | 'cancelled' | 'interrupted' | null;
     quality_status?: 'running' | 'accepted' | 'partial' | 'rejected' | 'cancelled' | null;
@@ -183,6 +184,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
     const [removed, setRemoved] = useState<WorkspacePick[]>([]);
     const [deleteError,setDeleteError]=useState('');
     const [reviewQuery,setReviewQuery]=useState('');
+    const [reviewSeverity,setReviewSeverity]=useState('all');
     const [timeValid,setTimeValid]=useState(true);
     const [deleteDraft, setDeleteDraft] = useState<WorkspacePick | null>(null);
     const [author, setAuthor] = useState(false);
@@ -502,7 +504,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
         ...(author?beliefs.map(([eid,k])=><div key={'belief:'+eid} className="ww-dossier-belief">{entity('knowledge',eid,k)}</div>):[])
       ];
     };
-    const collectionRecords=(kind:string,title:string,entries:[string,Item][],describe:(item:Item)=>string,scope='')=> <RecordCollection onClose={()=>setRecordTarget(null)} initialSelected={recordTarget?.kind===kind?recordTarget.id:undefined} key={id+kind+author+scope} {...{entries,title,kind,describe}} card={recordPreview(kind)} selectionEntries={kind==='relationship'?relations:undefined} searchText={item=>[describe(item),item.text,item.description,item.context,...Array.isArray(item.aliases)?item.aliases:[]].filter(Boolean).join(' ')} caption={kind==='event'?(eid)=>draft?.presentation?.event_times?.[eid]||'Дата неизвестна':kind==='scene'?(eid)=>draft?.presentation?.scene_times?.[eid]||'Дата неизвестна':undefined} disabled={locked} storageKey={`workshop:${id}:${kind}:${author}${scope?':'+scope:''}`} onAdd={author?()=>void change({operation:'add',kind,source:kind==='relationship'?scope:undefined}):undefined} render={(eid,item)=>author?entity(kind,eid,item):<RuntimeValue field="record" value={item} resolve={resolve}/>}/>;
+    const collectionRecords=(kind:string,title:string,entries:[string,Item][],describe:(item:Item)=>string,scope='')=> <RecordCollection onClose={()=>setRecordTarget(null)} initialSelected={recordTarget?.kind===kind?recordTarget.id:undefined} key={id+kind+author+scope} {...{entries,title,kind,describe}} card={kind==='event'?(eid,item)=><>{draft?.presentation?.event_periods?.[eid]&&<span className="ww-record-badge">{{today:'Сегодня',past:'Предыстория',future:'Позднее стартового времени'}[draft.presentation.event_periods[eid]]}</span>}{recordPreview(kind)?.(eid,item)}</>:recordPreview(kind)} selectionEntries={kind==='relationship'?relations:undefined} searchText={item=>[describe(item),item.text,item.description,item.context,...Array.isArray(item.aliases)?item.aliases:[]].filter(Boolean).join(' ')} caption={kind==='event'?(eid)=>draft?.presentation?.event_times?.[eid]||'Дата неизвестна':kind==='scene'?(eid)=>draft?.presentation?.scene_times?.[eid]||'Дата неизвестна':undefined} disabled={locked} storageKey={`workshop:${id}:${kind}:${author}${scope?':'+scope:''}`} onAdd={author?()=>void change({operation:'add',kind,source:kind==='relationship'?scope:undefined}):undefined} render={(eid,item)=>author?entity(kind,eid,item):<RuntimeValue field="record" value={item} resolve={resolve}/>}/>;
     const validateIdea = async () => {
         await api('/world-creation/validate',{workspace_id:id||null,name,revision:draft?.revision||0,
           task:'world',text,use_idea:useIdea,creation_settings:creation,config:prefs.summary});
@@ -563,8 +565,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
         return null;
     };
     const reviewLinks=(paths:(string|null|undefined)[])=><div className="ww-review-links">{[...new Set(paths.filter((v):v is string=>!!v))].map(path=>{const link=reviewLink(path);return link?<button key={path} onClick={link.open}>{link.label} →</button>:null})}</div>;
-    const rawIssues=[...(draft?.review?.issues||[]).map(i=>({message:i.message,paths:[i.path,...i.patch_paths||[],...i.related_paths||[]]})),...(draft?.validation.diagnostics||[]).map(i=>({message:i.message,paths:[i.path]})),...[...(draft?.validation.errors||[]),...(draft?.validation.warnings||[]),...(draft?.import_warnings||[])].map(message=>({message,paths:[] as string[]}))];
-    const overviewIssues=[...new Map(rawIssues.map(issue=>[issue.message,issue])).values()].map(issue=>({...issue,paths:[...new Set(rawIssues.filter(i=>i.message===issue.message).flatMap(i=>i.paths))]}));
+    const overviewIssues=reviewIssues(draft?.review?.issues,draft?.validation,draft?.import_warnings);
     const allIssues=[...new Set([...(draft?.validation.errors||[]),...(draft?.validation.warnings||[]),...(draft?.import_warnings||[]),...(draft?.review?.issues||[]).map(issue=>issue.message)])];
     const viewChanging=!!draft?.state&&!!draft.author!==author;
     const showIdea=(!state&&!viewChanging)||section==='idea';
@@ -725,7 +726,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
           </>}
         </div>
         {section==='review'&&!author&&<section className="ww-empty"><ShieldCheck/><h2>Этот раздел доступен автору</h2><p>Здесь могут быть скрытые сведения о мире.</p><button className="ww-primary" onClick={()=>authorAcknowledged?switchView(true):setAuthorAsk(true)}>Открыть авторский взгляд</button></section>}
-        {section==='review'&&author&&<>{pageHeader('Проверка мира','Ошибки структуры, смысловые замечания и состояние проверки.')}<p>Совпадающие пары активных семейных связей: {draft?.relation_merges?.length||0}. Это структурная проверка; она не оценивает смысл описаний.</p><section className="ww-panel"><h3>{draft?.technical_valid?'Структура корректна':'Структура требует исправления'}</h3><p>Смысловая проверка: {({completed:'завершена',stale:'устарела',running:'выполняется',failed:'прервана'} as Record<string,string>)[draft?.review?.status||'']||'не выполнялась'}</p><p>{draft?.review?.reason}</p>{draft?.review?.status==='completed'&&!allIssues.length&&!draft?.review?.issues?.length&&<p>Замечаний в текущем отчёте нет.</p>}</section><label className="ww-search-field">Найти замечание<input aria-label="Поиск замечаний" value={reviewQuery} onChange={e=>setReviewQuery(e.target.value)}/></label>{overviewIssues.filter(issue=>(issue.message+issue.paths.join(' ')).toLocaleLowerCase('ru').includes(reviewQuery.toLocaleLowerCase('ru'))).map((issue,i)=><article className="ww-panel" key={i}><p>{issue.message}</p>{reviewLinks(issue.paths)}{issue.paths.length>0&&<details><summary>Пути диагностики</summary>{issue.paths.map(path=><p key={path}><code>{path}</code></p>)}</details>}</article>)}</>}
+        {section==='review'&&author&&<>{pageHeader('Проверка мира','Ошибки структуры, смысловые замечания и состояние проверки.')}<p>Совпадающие пары активных семейных связей: {draft?.relation_merges?.length||0}. Это структурная проверка; она не оценивает смысл описаний.</p><section className="ww-panel"><h3>{draft?.technical_valid?'Структура корректна':'Структура требует исправления'}</h3><p>Смысловая проверка: {({completed:'завершена',stale:'устарела',running:'выполняется',failed:'прервана'} as Record<string,string>)[draft?.review?.status||'']||'не выполнялась'}</p><p>{draft?.review?.reason}</p>{draft?.review?.checked_revision!==undefined&&<p>Проверена ревизия {draft.review.checked_revision} · текущая ревизия {draft.revision}</p>}{draft?.review?.status==='completed'&&!allIssues.length&&!draft?.review?.issues?.length&&<p>Замечаний в текущем отчёте нет.</p>}</section><div className="ww-review-counts">{([['error','Ошибки'],['warning','Предупреждения'],['recommendation','Рекомендации']] as const).map(([severity,label])=><button key={severity} aria-pressed={reviewSeverity===severity} onClick={()=>setReviewSeverity(reviewSeverity===severity?'all':severity)}><strong>{overviewIssues.filter(i=>i.severity===severity).length}</strong><span>{label}</span></button>)}</div><label className="ww-search-field">Найти замечание<input aria-label="Поиск замечаний" value={reviewQuery} onChange={e=>setReviewQuery(e.target.value)}/></label>{overviewIssues.filter(issue=>(reviewSeverity==='all'||issue.severity===reviewSeverity)&&(issue.message+issue.paths.join(' ')).toLocaleLowerCase('ru').includes(reviewQuery.toLocaleLowerCase('ru'))).map((issue,i)=><article className={`ww-panel ww-review-issue is-${issue.severity}`} key={issue.message}><span className="ww-record-badge">{{error:'Ошибка',warning:'Предупреждение',recommendation:'Рекомендация'}[issue.severity]}</span><p>{issue.message}</p><small>{issue.sources.join(' · ')}</small>{reviewLinks(issue.paths)}{issue.paths.length>0&&<details><summary>Пути диагностики</summary>{issue.paths.map(path=><p key={path}><code>{path}</code></p>)}</details>}</article>)}</>}
         {(section==='review'||section==='start')&&<div className="workshop-finish"><p>{previousWorld?'Новая генерация не завершена. Доступен предыдущий мир.':'Запуск сохранит выбранную версию и откроет настоящую игру.'}</p><Button disabled={busy||loading||!draft?.technical_valid} onClick={()=>setConfirmStart(launchSnapshot())}>Перейти к запуску</Button></div>}
       </section>}
     </>}</WorkshopShell>

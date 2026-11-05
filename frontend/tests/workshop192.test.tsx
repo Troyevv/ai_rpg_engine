@@ -1,3 +1,4 @@
+import {reviewIssues} from '../src/workshop/reviewIssues';
 import {act,type ReactNode} from 'react';
 import {createRoot,type Root} from 'react-dom/client';
 import {afterEach,expect,it,vi} from 'vitest';
@@ -72,4 +73,10 @@ it('feelings preserve unknown dimensions instead of silently assigning zero',asy
  const update=vi.fn();await mount(<FeelingEditor value={{trust:0,custom:23}} onChange={update}/>);
  expect(update).not.toHaveBeenCalled();expect(document.body.textContent).toContain('custom');
  expect(document.querySelectorAll('input[type=range]').length).toBeGreaterThanOrEqual(7);
+});
+
+it('review display keeps strongest priority and every path without duplicate serialized diagnostics',()=>{
+ const rows=reviewIssues([{message:'Не задан участник',severity:'blocker',path:'/world/scenes/a/participants'},{message:'Подробнее опиши город',severity:'recommendation'}],{warnings:['/world/scenes/a/participants: Не задан участник'],diagnostics:[{message:'Не задан участник',path:'/world/scenes/b/participants'}]},['Не задан участник']);
+ expect(rows).toHaveLength(2);expect(rows[0]).toMatchObject({message:'Не задан участник',severity:'error',paths:['/world/scenes/a/participants','/world/scenes/b/participants']});expect(rows[0].sources).toContain('Импорт');expect(rows[1].severity).toBe('recommendation');
+ expect(reviewIssues()).toEqual([]);
 });

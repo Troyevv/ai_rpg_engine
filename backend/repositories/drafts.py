@@ -2,7 +2,7 @@
 import hashlib
 import json
 from backend.services import draft_world as domain
-from backend.services.draft_presentation import clock_view,editor_contract,calendar_notices,event_times
+from backend.services.draft_presentation import clock_view,editor_contract,calendar_notices,event_times,event_periods
 from backend.services.draft_relations import plans as relation_plans
 
 
@@ -111,7 +111,7 @@ class DraftStorage(DraftEditorStorage):
                 'candidate':raw if candidate and author else None,
                 'relation_merges':relation_plans(raw) if raw and author else [],
                 'editor':editor_contract() if author else None,
-                'presentation':{'clock':clock_view(visible['world_clock']), 'event_times':event_times(visible), 'scene_times':event_times(visible,'scenes','start_minute'), 'thread_visibility':{tid:('known' if tid in reader['world']['threads'] else 'author') for tid in visible['world']['threads']} if reader else {}, 'notices':calendar_notices(state) if author else []} if visible else None,
+                'presentation':{'clock':clock_view(visible['world_clock']), 'event_times':event_times(visible), 'event_periods':event_periods(visible), 'scene_times':event_times(visible,'scenes','start_minute'), 'thread_visibility':{tid:('known' if tid in reader['world']['threads'] else 'author') for tid in visible['world']['threads']} if reader else {}, 'notices':calendar_notices(state) if author else []} if visible else None,
                 'creation_settings':(raw.get('creation_settings',{}) if raw else json.loads(latest['config_json']).get('_creation_settings',{}) if latest else {}) if author else {},
                 'state':visible,
                 'portraits':self._portrait_view(state,visible,author),
@@ -200,7 +200,9 @@ class DraftStorage(DraftEditorStorage):
         if origin_job:record['origin_job']=origin_job
         if review is not None:
             record['review']=dict(review)
-            if reason=='draft_world' and review.get('status')=='completed':record['review']['candidate_hash']=candidate_hash(state)
+            if reason=='draft_world' and review.get('status')=='completed':
+                record['review']['candidate_hash']=candidate_hash(state)
+                record['review']['checked_revision']=self._draft_workspace(db,wid,idle=False)['revision']+1
         self._record_document(db,'world_draft',wid,dump(record),True,reason,source_id)
         db.execute('UPDATE preparation_workspaces SET revision=revision+1 WHERE id=?',(wid,))
 
@@ -216,6 +218,10 @@ class DraftStorage(DraftEditorStorage):
             previous=json.loads(head['content']) if head else {}
             if review is None:review=review_metadata(previous)
             if review is not None:review=dict(review,candidate_hash=candidate_hash(value))
+            if review is not None and review.get('status')=='completed':
+                old_review=previous.get('review') or {}
+                same_review={k:v for k,v in old_review.items() if k!='checked_revision'}=={k:v for k,v in review.items() if k!='checked_revision'}
+                review=dict(review,checked_revision=old_review.get('checked_revision',job['revision']+1) if same_review else job['revision']+1)
             if previous.get('origin_job')==jid and previous.get('candidate') and previous.get('state')==value and previous.get('diagnostics')==diagnostics and previous.get('review')==review:return
             record=dict(state=value,origin_job=jid,candidate=True,source=config.get('_draft_source',config.get('_draft_input','')),warnings=[],diagnostics=diagnostics,review=review)
             self._record_document(db,'world_draft',job['workspace_id'],dump(record),True,'generation_candidate',None)

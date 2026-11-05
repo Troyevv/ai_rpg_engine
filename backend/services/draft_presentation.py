@@ -70,3 +70,12 @@ def event_times(state,group='events',field='minute'):
     return {eid:clock_view(dict(clock,minute=event[field]))['label']
             if event.get(field) is not None else 'Дата неизвестна'
             for eid,event in state.get('world',{}).get(group,{}).items()}
+
+
+def event_periods(state):
+    """Classify admitted events relative to Runtime's local day, not wall time."""
+    from backend.runtime_v3.calendar import MINUTES_PER_DAY
+    now=state.get('world_clock',{}).get('minute',0)
+    return {eid:('today' if event['minute']//MINUTES_PER_DAY==now//MINUTES_PER_DAY else 'past' if event['minute']<now else 'future')
+            for eid,event in state.get('world',{}).get('events',{}).items()
+            if isinstance(event.get('minute'),(int,float)) and not isinstance(event.get('minute'),bool)}

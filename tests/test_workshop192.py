@@ -176,3 +176,30 @@ def test_whole_card_preview_preserves_identity_and_requires_decision(api):
     result=next(c for c in final['state']['characters'] if c['id']==cid)
     assert result==dict(card,**proposed);assert len(calls)==1;assert not final['pending_editor']
     assert client.post(endpoint,json={'revision':final['revision'],'decision':'accept','accept_warnings':True}).status_code==409
+
+
+def test_event_periods_use_world_day_and_preserve_unknown_dates():
+    from backend.services.draft_presentation import event_periods
+    state={'world_clock':{'minute':2880},'world':{'events':{'old':{'minute':2879},'today':{'minute':2880},'later_today':{'minute':4319},'future':{'minute':4320},'unknown':{'minute':None}}}}
+    assert event_periods(state)=={'old':'past','today':'today','later_today':'today','future':'future'}
+
+
+def test_review_revision_is_pinned_without_duplicate_versions(tmp_path):
+    from backend.repositories.preparation import Repository
+    from test_initial_draft_v4 import rich
+    repo=Repository(tmp_path/'review.sqlite');w=repo.create_workspace('review')
+    cfg=dict(REMOTE,_draft_task='world',_draft_input='Мир',_draft_token_budget=30000)
+    jid=repo.begin_preparation(w['id'],'draft_world','Мир',cfg,0)
+    review={'status':'completed','issues':[]}
+    repo.save_draft_candidate(jid,rich(),[],review=review)
+    checked=repo.draft(w['id'],True)
+    assert checked['review']['checked_revision']==checked['revision']
+    repo.save_draft_candidate(jid,rich(),[],review=review)
+    repeated=repo.draft(w['id'],True)
+    assert (repeated['revision'],repeated['history'])==(checked['revision'],checked['history'])
+    repo.preparation_progress(jid,'','error')
+    repo.edit_candidate(w['id'],checked['revision'],'/campaign/title','Новое название')
+    edited=repo.draft(w['id'],True)
+    assert edited['review']['status']=='stale'
+    assert edited['review']['checked_revision']==checked['revision']<edited['revision']
+    assert 'checked_revision' not in repo.draft(w['id'],False)['review']
