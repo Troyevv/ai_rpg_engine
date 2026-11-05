@@ -39,7 +39,7 @@ test('large per-task contexts persist and resume a world rejected before the fir
   const sent=page.waitForRequest(r=>r.url().endsWith('/draft/resume'));
   await resume.click();
   expect((await sent).postDataJSON().context_length).toBe(262144);
-  await expect(page.locator('.ww-hero h1, .atelier-result h3')).toBeVisible();
+  await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
   const completed=await(await request.get(url)).json();
   expect(completed.job.id).toBe(failed.job.id);
   expect(completed.validation.errors).toEqual([]);

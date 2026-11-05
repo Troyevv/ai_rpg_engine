@@ -21,7 +21,7 @@ test('creation settings and JSON continuation survive editor start and reload',a
   const sent=page.waitForRequest(r=>r.url().endsWith('/draft/generate'));
   await generateIdea(page);
   expect((await sent).postDataJSON().creation_settings.primary_genre).toBe('family_saga');
-  await expect(page.locator('.ww-hero h1, .atelier-result h3')).toBeVisible();
+  await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
   const draft=await(await request.get(`/api/workspaces/${workspace.id}/draft?author=true`)).json();
   expect(draft.state.creation_settings.npc_expressiveness).toBe('hyperbolized');
   expect(draft.validation.errors).toEqual([]);
@@ -201,14 +201,14 @@ test('previous world is labelled separately from an incomplete new response',asy
   await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('error');
   await page.reload();await nav(page,'Создать');
   await expect(page.getByRole('heading',{name:'Ранее сохранённый мир',exact:true})).toBeVisible();
-  await expect(page.locator('.ww-hero h1, .atelier-result h3')).toBeVisible();
+  await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
   await expect(page.getByRole('button',{name:'Начать игру в предыдущем мире',exact:true})).toBeVisible();
   await workshopNav(page,'Проверка мира');
   await page.getByText('Повторить проблемное продолжение',{exact:true}).click();
   await page.getByRole('button',{name:'Запросить только последнее продолжение',exact:true}).click();
   await expect.poll(async()=> (await(await request.get(url)).json()).job?.status).toBe('saved');
   await workshopNav(page,'Обзор мира');
-  await expect(page.locator('.ww-hero h1, .atelier-result h3')).toBeVisible();await expect(page.getByRole('heading',{name:'Ранее сохранённый мир',exact:true})).toHaveCount(0);
+  await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();await expect(page.getByRole('heading',{name:'Ранее сохранённый мир',exact:true})).toHaveCount(0);
 });
 
 test('saved symmetric duplicates offer lossless merge after reconnect',async({page,request},info)=>{

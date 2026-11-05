@@ -21,7 +21,7 @@ test('calendar settings persist and resolve exact time',async({page,request},inf
  await closeIdeaGroup(page);
  await page.getByLabel('Описание мира или текст импорта').fill('TEST_JSON_CONTINUATION. Сейчас 23.10.2026, 06:00, пятница. Соседи на кухне.');
  await generateIdea(page);
- await expect(page.locator('.ww-hero h1, .atelier-result h3')).toBeVisible();
+ await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
  const draft=await(await request.get(`/api/workspaces/${workspace.id}/draft?author=true`)).json();
  expect(draft.state.world_clock.minute%1440).toBe(720);
  expect(draft.state.world_clock.calendar.start_date).toBe('1370-10-23');

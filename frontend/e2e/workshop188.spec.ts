@@ -9,7 +9,7 @@ test('new workspace retains the submitted idea without copying it into the next 
  const idea='Друзья встречаются на кухне. Придумай их прошлое и отношения.';
  await page.getByLabel('Описание мира или текст импорта').fill(idea);
  await generateIdea(page);
- await expect(page.locator('.ww-hero h1, .atelier-result h3')).toBeVisible();
+ await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
  const wid=await page.evaluate(()=>localStorage.getItem('draftWorkspace'));
  await workshopNav(page,'Идея и генерация');
  await expect(page.getByLabel('Описание мира или текст импорта')).toHaveCount(0);

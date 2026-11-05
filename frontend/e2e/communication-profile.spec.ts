@@ -41,7 +41,7 @@ for (const skin of ["graphite", "parchment"])
       .fill("Соседи разговаривают на кухне.");
     await generateIdea(page);
     await expect(
-      page.locator('.ww-hero h1, .atelier-result h3'),
+      page.locator('.ww-hero h1, .fl-result h2'),
     ).toBeVisible();
     await page.getByRole("button", { name: "Автор мира", exact: true }).click();
     await page
@@ -86,7 +86,7 @@ for (const skin of ["graphite", "parchment"])
       .getByRole("button", { name: "Повторить проверку", exact: true })
       .click();
     await workshopNav(page,'Обзор мира');
-    await expect(page.locator('.ww-hero h1, .atelier-result h3')).toBeVisible();
+    await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
     await page
       .getByRole("button", {
         name: "Подтвердить мир и начать игру",
