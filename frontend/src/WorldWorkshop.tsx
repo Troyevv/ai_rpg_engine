@@ -175,7 +175,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
     const [author, setAuthor] = useState(false);
     const [authorAsk, setAuthorAsk] = useState(false);
     const [authorAcknowledged, setAuthorAcknowledged] = useState(false);
-    const [text, setText] = useState(()=>initialBuffer?.text||sessionStorage.getItem('workshop-idea:'+ (localStorage.getItem('draftWorkspace')||''))||'');
+    const [text, setText] = useState(()=>initialBuffer?.text??sessionStorage.getItem('workshop-idea:'+ (localStorage.getItem('draftWorkspace')||''))??'');
     const [importFormat, setImportFormat] = useState<'text'|'json'>('text');
     const [importFile, setImportFile] = useState('');
     const detectedImport = useMemo(() => detectWorldImport(text, importFile ? importFormat : undefined), [text, importFile, importFormat]);
@@ -214,7 +214,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
         setSection(view?.section||'overview');setCollection(view?.collection||emptyCollection);setSubsection(view?.subsection||{});setSelectedCharacter(view?.selected||'');setDossierOpen(false);
         const buffer=readIdeaBuffer(wid);
         restoredCreation.current=!!buffer;
-        setText(buffer?.text||sessionStorage.getItem('workshop-idea:'+wid)||'');
+        setText(buffer?.text??sessionStorage.getItem('workshop-idea:'+wid)??'');
         setName(buffer?.name||nextDraft?.name||'');setUseIdea(buffer?.useIdea||false);
         setCreation(buffer?.creation||{...structuredClone(defaultCreation),...nextDraft?.creation_settings});
         loadController.current?.abort();
@@ -638,7 +638,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
       {job?.status==='saved' && draft?.review?.status==='completed' && <p role="status">Смысловая проверка завершена. Результат сохранён.</p>}
       {calendarNotices.map((notice,i)=><p key={i} role="status">{notice}</p>)}
       </>}
-      {state && !showIdea && <section className="workshop-result">
+      {state && <section className="workshop-result">
         {job?.status === 'saved' && ['partial','rejected'].includes(draft?.quality_status || '') && <p className="workshop-hint" role="status">Мир сохранён. {draft?.quality_status === 'partial' ? 'Некоторые творческие детали модель оставила неполными.' : 'Необязательное дополнение не было принято; проверенные данные сохранены.'} Проверить и дополнить детали можно в режиме «Автор мира».</p>}
         <div className="workshop-result-toolbar">
           <div className="workshop-view"><span>Вид:</span><button className={!author ? 'selected' : ''} aria-pressed={!author} onClick={() => switchView(false)}>Игрок</button><button className={author ? 'selected' : ''} aria-pressed={author} onClick={() => authorAcknowledged ? switchView(true) : setAuthorAsk(true)}>Автор мира</button></div>

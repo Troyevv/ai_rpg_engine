@@ -71,7 +71,9 @@ def test_real_generation_502_review_reuses_candidate_and_job(api):
     assert client.post('/api/world-creation/validate',json=data).status_code==200
     wid=client.post('/api/workspaces',json={'name':data['name']}).json()['id'];url=f'/api/workspaces/{wid}/draft'
     data.pop('name')
-    def stream(**kwargs):yield from provider.stream(kwargs)
+    def stream(**kwargs):
+        assert provider.matches(kwargs)
+        yield from provider.stream(kwargs)
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         started=client.post(url+'/generate',json=dict(data,api_key='offline-fixture'))
         assert started.status_code==200,started.text

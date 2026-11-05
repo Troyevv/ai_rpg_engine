@@ -56,11 +56,12 @@ for(const width of [360,390,412,430,1280,1440,1920]){
 test('new visitor can begin with an idea without making a workspace', async ({page}) => {
   await page.goto('/');
   await nav(page,'Создать');
-  await expect(page.getByRole('heading',{name:'Придумай свою историю'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'По моей идее'})).toBeVisible();
   await page.getByLabel('Название черновика').fill('Вечер в клинике');
   await page.getByLabel('Описание мира или текст импорта').fill('Вечером врач заканчивает дежурство. Придумай коллег, привычки, отношения и начало истории.');
   await generateIdea(page);
   await expect(page.locator('.ww-hero h1, .atelier-result h3')).toBeVisible();
+  await workshopNav(page,'Обзор мира');
   await expect(page.locator('.workshop-content')).toBeVisible();
   await expect(page.locator('main')).not.toContainText('Тайная встреча у маяка');
   await page.reload();await nav(page,'Создать');

@@ -4,7 +4,7 @@ import {nav} from './navigation';
 import {defaults} from '../src/types';
 const idea='В княжестве Валлор письма носят гонцы, но у каждой гильдии есть мобильный телефон. Башни связи принадлежат короне. Я играю за ученицу картографа. Накануне ярмарки на телефон мастера приходит звонок с башни, сгоревшей десять лет назад.';
 async function group(page:Page,name:string){await page.locator('.atelier-param').filter({hasText:name}).click()}
-async function done(page:Page){await page.getByRole('dialog').getByRole('button',{name:'Готово',exact:true}).click()}
+async function done(page:Page){await page.getByRole('dialog').getByRole('button',{name:'Готово',exact:true}).click();await expect(page.locator('.atelier-dialog')).toHaveCount(0)}
 for(const skin of ['graphite','parchment'])test(`idea190: visual, panels, validation, persistence · ${skin}`,async({page,request},info)=>{
  await page.setViewportSize(info.project.name==='mobile'?{width:390,height:844}:{width:1363,height:936});
  await page.addInitScript(skin=>{localStorage.setItem('workshop-theme',JSON.stringify({theme_id:skin,mode:'manual'}))},skin);
@@ -19,7 +19,7 @@ for(const skin of ['graphite','parchment'])test(`idea190: visual, panels, valida
  await expect(page.getByLabel('Набор технологий связи',{exact:true})).toHaveValue('custom');
  await page.evaluate(()=>document.fonts.ready);
  await expect.poll(()=>page.locator('.atelier-hero img').evaluate(el=>(el as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
- await page.locator('.ww-scroll').evaluate(el=>{el.scrollTop=0});
+ await page.locator('.ww-scroll, .atelier-editor textarea').evaluateAll(elements=>elements.forEach(el=>{el.scrollTop=0}));
  const shot=info.outputPath(`idea190-${skin}-${info.project.name}.png`);await page.screenshot({path:shot});await info.attach('Эталонный экран '+skin,{path:shot,contentType:'image/png'});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width);
  await group(page,'Жанры истории');await page.getByLabel('Основной жанр',{exact:true}).selectOption('custom');await done(page);
@@ -30,7 +30,7 @@ for(const skin of ['graphite','parchment'])test(`idea190: visual, panels, valida
  expect(await(await request.get('/api/workspaces')).json()).toEqual(before);
  await page.getByRole('dialog').locator('textarea').fill('Драма и загадка');await done(page);
  await group(page,'Календарь и начало');await page.getByLabel('Календарь начала игры').selectOption('custom');
- await page.getByLabel('Год начала',{exact:true}).fill('2026');await page.getByLabel('Месяц начала',{exact:true}).fill('01');await page.getByLabel('День начала',{exact:true}).fill('31');await done(page);
+ await page.getByLabel('Год начала',{exact:true}).pressSequentially('2026');await page.getByLabel('Месяц начала',{exact:true}).fill('01');await page.getByLabel('День начала',{exact:true}).fill('31');await done(page);
  await page.getByRole('button',{name:'Проверить замысел',exact:true}).click();await expect(page.getByRole('dialog').getByRole('alert').first()).toBeVisible();
  expect(await(await request.get('/api/workspaces')).json()).toEqual(before);
  await page.getByLabel('День начала',{exact:true}).fill('30');await done(page);
@@ -87,11 +87,12 @@ test('idea190: real generation, reload, HTTP502 review recovery and author revis
  // Edit through the existing author editor, preserving revision protection.
  if(info.project.name==='mobile'){await page.getByRole('button',{name:'Разделы мастерской',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Сцена и правила',exact:true}).click()}
  else await page.locator('.ww-sidebar').getByRole('button',{name:'Сцена и правила',exact:true}).click();
+ await page.locator('summary').filter({hasText:'Описание и правила мира'}).click();
  await page.getByRole('button',{name:'Изменить Название',exact:true}).click();
  await page.getByRole('dialog').locator('input,textarea').first().fill('Отредактированный мир');
- await page.getByRole('dialog').getByRole('button',{name:'Сохранить',exact:true}).click();
+ await page.getByRole('dialog').getByRole('button',{name:'Сохранить поле',exact:true}).click();
  await expect.poll(async()=> (await(await request.get(url+'?author=true')).json()).state.campaign.title).toBe('Отредактированный мир');
- expect((await(await request.get(url+'?author=true')).json()).revision).toBeGreaterThan(after.revision);
+ const edited=await(await request.get(url+'?author=true')).json();expect(edited.revision).toBeGreaterThan(after.revision);expect(edited.review.status).toBe('stale');
 });
 
 
@@ -103,14 +104,14 @@ test('idea190: saved scenario, isolated drafts and reuse after a rejected launch
  await request.put('/api/credentials/deepseek',{data:{api_key:'offline-idea190'}});
  await page.evaluate(wid=>localStorage.setItem('draftWorkspace',wid),a.id);await page.reload();await nav(page,'Создать');
  await page.getByLabel('Взять за основу сценарий этого черновика').check();
- await group(page,'Мир и география');await page.getByLabel('География').fill('Только мир А');await done(page);
+ await group(page,'Мир и география');await page.getByLabel('География',{exact:true}).fill('Только мир А');await done(page);
  await draftsMenu(page);await page.locator(`[data-workspace-id="${b.id}"]`).getByRole('button',{name:'Другой замысел',exact:true}).click();
  await expect(page.getByLabel('Взять за основу сценарий этого черновика')).not.toBeChecked();
  await page.getByLabel('Описание мира или текст импорта').fill('Второй мир');
- await group(page,'Мир и география');await expect(page.getByLabel('География')).toHaveValue('');await page.getByLabel('География').fill('Только мир Б');await done(page);
+ await group(page,'Мир и география');await expect(page.getByLabel('География',{exact:true})).toHaveValue('');await page.getByLabel('География',{exact:true}).fill('Только мир Б');await done(page);
  await draftsMenu(page);await page.locator(`[data-workspace-id="${a.id}"]`).getByRole('button',{name:'Сценарий Валлора',exact:true}).click();
  await expect(page.getByLabel('Описание мира или текст импорта')).toHaveValue('');await expect(page.getByLabel('Взять за основу сценарий этого черновика')).toBeChecked();
- await group(page,'Мир и география');await expect(page.getByLabel('География')).toHaveValue('Только мир А');await done(page);
+ await group(page,'Мир и география');await expect(page.getByLabel('География',{exact:true})).toHaveValue('Только мир А');await done(page);
  await page.getByRole('button',{name:'Проверить замысел',exact:true}).click();await page.getByRole('button',{name:'Создать мир',exact:true}).click();
  await expect.poll(async()=> (await(await request.get(`/api/workspaces/${a.id}/draft`)).json()).job?.status).toBe('saved');
  // A new workspace must be adopted even when its first generation request fails.
@@ -125,7 +126,7 @@ test('idea190: saved scenario, isolated drafts and reuse after a rejected launch
   return route.continue();
  });
  await page.getByRole('button',{name:'Проверить замысел',exact:true}).click();await page.getByRole('button',{name:'Создать мир',exact:true}).click();
- await expect(page.getByText('Временный сбой запуска',{exact:true}).first()).toBeVisible();
+ await expect(page.getByRole('alert').first()).toContainText('Временный сбой запуска');
  const wid=await page.locator('.world-workshop').getAttribute('data-workspace-id');expect(wid).toBeTruthy();
  await page.getByRole('button',{name:'Проверить замысел',exact:true}).click();await page.getByRole('button',{name:'Создать мир',exact:true}).dblclick();
  await expect.poll(async()=> (await(await request.get(`/api/workspaces/${wid}/draft`)).json()).job?.status).toBe('saved');

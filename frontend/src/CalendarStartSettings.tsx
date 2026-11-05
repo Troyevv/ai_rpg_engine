@@ -13,7 +13,7 @@ export function CalendarStartSettings({value,onChange}:{value:CalendarStart;onCh
  useEffect(()=>{setLengths(profile.month_lengths.join(', '));setMonths(profile.month_names.join(', '));setWeekdays(profile.weekday_names.join(', '));},[value.mode]);
  const parts=dateParts;
 
- const setDatePart=(index:number,text:string)=>{const next=[parts[0]||'',parts[1]||'',parts[2]||''];next[index]=text;setDateParts(next);change({date:next.every(p=>!p)?null:next.map((p,i)=>/^\d+$/.test(p)?p.padStart(i===0?4:2,'0'):p).join('-')});};
+ const setDatePart=(index:number,text:string)=>{const next=[parts[0]||'',parts[1]||'',parts[2]||''];next[index]=text;setDateParts(next);change({date:next.every(p=>!p)?null:next.join('-')});};
  const saveDate=()=>change({date:parts.length===3&&parts.every(p=>/^\d+$/.test(p))?parts.map((p,i)=>p.padStart(i===0?4:2,'0')).join('-'):parts.every(p=>!p)?null:parts.join('-')});
 
  return <fieldset><legend>Календарь и начало игры</legend>

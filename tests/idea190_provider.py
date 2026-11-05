@@ -38,5 +38,6 @@ class IdeaProvider:
         else:
             self.world_calls+=1
             state=rich()
+            state['campaign']['title']='ATELIER190 · Город друзей'
             if self.custom_calendar:state['world_clock']['calendar']={}
             yield json.dumps(state,ensure_ascii=False)

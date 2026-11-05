@@ -37,9 +37,9 @@ export function creationError(error:unknown):{message:string;group?:CreationGrou
  const details=error instanceof ApiError?error.details.detail:null;
  const first=Array.isArray(details)?details[0] as {loc?:string[];msg?:string}:null;
  const path=first?.loc?.join('.')||'';const raw=(first?.msg|| (error as Error).message||'Не удалось проверить замысел.').replace(/^Value error, /,'');
- const message=raw==='custom genre requires a description'?'Добавьте описание своего жанра.':raw;
+ const message=raw==='custom genre requires a description'?'Добавьте описание своего жанра.':raw==='day is out of range for month'?'Дата отсутствует в выбранном календаре.':raw.replace('Input should be greater than or equal to','Значение должно быть не меньше').replace('Input should be less than or equal to','Значение должно быть не больше');
  const group=path.includes('calendar')?'calendar':/genre|жанр/i.test(path+message)?'genre':/npc|cast/.test(path)?'cast':/pacing|risk/.test(path)?'narrative':/geography|world_type/.test(path)?'world':undefined;
- const field=group==='genre'?'Описание своего жанра':path.includes('core_npcs')?'Важные NPC':path.includes('secondary_npcs')?'Второстепенные NPC':group==='calendar'?(/дат|день|месяц/i.test(message)?'День начала':path.includes('month_lengths')?'Длины месяцев':path.includes('month_names')?'Названия месяцев':path.includes('weekday_names')?'Дни недели':'Календарь начала игры'):undefined;
+ const field=group==='genre'?'Описание своего жанра':path.includes('core_npcs')?'Важные NPC':path.includes('secondary_npcs')?'Второстепенные NPC':group==='calendar'?(path.includes('weekday')?'Первый день недели':path.includes('time')?'Время начала':/дат|день|месяц|day|month|year/i.test(message)?'День начала':path.includes('month_lengths')?'Длины месяцев':path.includes('month_names')?'Названия месяцев':path.includes('weekday_names')?'Дни недели':'Календарь начала игры'):undefined;
  return {message,group,field};
 }
 type Props={id:string;name:string;text:string;useIdea:boolean;creation:Creation;disabled:boolean;saved:boolean;

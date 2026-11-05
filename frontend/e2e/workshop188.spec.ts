@@ -24,7 +24,7 @@ test('new workspace retains the submitted idea without copying it into the next 
  expect((await(await request.get(`/api/workspaces/${wid}/draft?author=true`)).json()).source_text).toContain(idea);
  await draftsMenu(page);await page.getByRole('button',{name:'+ Новая история',exact:true}).click();
  await expect(page.getByLabel('Описание мира или текст импорта')).toHaveValue('');
- await expect(page.getByLabel('Название черновика')).toHaveValue('Новая история');
+ await expect(page.getByLabel('Название черновика')).toHaveValue('');
 });
 
 test('field status, failed save, restored input, required structured fields and scroll context',async({page,request},info)=>{
