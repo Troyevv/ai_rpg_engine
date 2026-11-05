@@ -56,7 +56,7 @@ test('field status, failed save, restored input, required structured fields and 
  await page.getByRole('button',{name:'Изменить fields.Внешность',exact:true}).click();await expect(field.getByLabel('Внешность',{exact:true})).toHaveValue(text);
  await field.getByRole('button',{name:'Сохранить поле',exact:true}).click();await expect(field).toHaveCount(0);await expect(page.getByText('Поле «Внешность» сохранено',{exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'Изменить fields.Внешность',exact:true})).toBeFocused();
- await page.getByRole('tab',{name:'Цели',exact:true}).click();await page.getByRole('button',{name:'Изменить Цели',exact:true}).click();await page.getByRole('button',{name:'Добавить запись',exact:true}).click();
+ await page.getByRole('tab',{name:'Цели',exact:true}).click();await page.locator('.ww-empty-motives > summary').click();await page.getByRole('button',{name:'Изменить Цели',exact:true}).click();await page.getByRole('button',{name:'Добавить запись',exact:true}).click();
  await expect(field.getByLabel('Идентификатор',{exact:true})).toHaveAttribute('aria-required','true');
  await field.getByLabel('Идентификатор',{exact:true}).fill('audit_goal');await field.getByLabel('Описание',{exact:true}).fill('Подготовить салон к открытию');
  await expect(field.getByText('Дополнительные поля · 9',{exact:true})).toBeVisible();

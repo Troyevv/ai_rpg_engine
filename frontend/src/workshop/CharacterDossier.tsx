@@ -38,7 +38,7 @@ export function CharacterDossier({open,onClose,card,characters,wid,author,locked
     if(author||card.aliases?.length)entries.push(row('character',card.id,'aliases',card.aliases||[]));
    }
    for(const [key,value] of Object.entries(card.fields)){
-    if(cardSection(key)===tab && (author||filled(value)) && !(dynamic[key]&&filled(actor[dynamic[key]]))){
+    if(cardSection(key)===tab && (author||filled(value)) && !(dynamic[key]&&Object.hasOwn(actor,dynamic[key]))){
      const field=row('character',card.id,'fields.'+key,value);
      if(tab==='goals'&&!filled(value))emptyMotives.push(<div key={'card:'+key}><small>Описание в карточке</small>{field}</div>);
      else entries.push(field);

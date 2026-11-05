@@ -30,15 +30,15 @@
 | W13 | Existing theme typography retained. | OPEN: measure font families, weight, widths in all required themes. |
 | W14 | Overview panel surfaces differentiated using skin tokens. | Visual/theme acceptance pending. |
 | W15 | Existing modal backdrop retained. | Compared actual Graphite/Parchment/Cyberpunk portals: the global UI override removed blur. Restored the exact #175 scrim `#070a09ba` / `blur(9px)` only in the workshop; #190 atelier remains separate. Computed-style E2E assertion added; final capture pending. |
-| W16 | Local create form before mutation; name/description required; cancel does not write. | Backend + component tests; E2E added. |
+| W16 | Local create form before mutation; nonempty name required, description editable; cancel does not write. | Backend + component tests; E2E added. |
 | W17 | Explicit ordered source/target; backend rejects self/missing/duplicate pair. | SQLite test verifies exact edge and no extra revision. |
 | W18 | Full cards show personality; overview stays compact; portrait contract retained. | Crop and card density need browser review. |
 | W19 | Family/organization filters use projected objective relations and roles. | Fixture/browser filter verification pending. |
 | W20 | Pagination controls omitted for one page; existing bounded 12-card pages retained. | Existing 240-character E2E retained; rerun required. |
-| W21 | Dossier hero/current-location context and character-name label. Empty motives collapse into one disclosure while retaining separate card and Runtime editors. | Added real SQLite/browser case for empty legacy/canonical intentions. Existing six skin portal pairs inspected; compact mobile actions need fresh captures. |
+| W21 | Dossier hero/current-location context and character-name label. Empty motives collapse into one disclosure. Compatibility card projections do not duplicate canonical Runtime fields; every real editable contract remains available. | Added real SQLite/browser case for empty legacy/canonical intentions. Existing six skin portal pairs inspected; compact mobile actions need fresh captures. |
 | W22 | Mobile horizontal portrait strip and searchable all-person select. | Browser touch/keyboard and 240+ people pending. |
 | W23 | Isolated per-world multi-field buffers; one patch_fields transaction; explicit discard. | Backend/component tests cover atomic fields, conflict and buffers. |
-| W24 | Existing field/card generator can produce a scoped preview; apply/reject is separate. | SQLite controlled-provider test: one call, unchanged canon before decision, stale rejection. Real-provider browser acceptance pending. |
+| W24 | Existing field/card generator can produce a scoped preview; apply/reject is separate. | SQLite controlled-provider test: one call, unchanged canon before decision, stale rejection. Controlled-provider browser case passed in `workshop188-editing.spec.ts` at `3d8ac38`; paid-provider calls are not an acceptance requirement. |
 | W25 | Existing procedural/photo/manual-age behavior retained; hover scaling is outside crop. | Existing portrait suites retained; browser recheck pending. |
 | W26 | Collection search includes description/text/context/aliases. | Browser localized search pending. |
 | W27 | Place/org metadata, starting-place badge, projected participants and organization locations. | Browser hierarchy and long-content check pending. |
@@ -93,7 +93,7 @@
 - Latest review/timeline/recovery verification: **34 passed**, plus **1 passed** for checked-revision/no-duplicate-version/stale projection.
 - Focused backend suites: 64 passed after fixing the new-card removal/manual-path regression.
 - Full backend run: **3203 passed, 1 skipped** in 917.64 s. Final targeted calendar/projection/Runtime handoff suite: **60 passed**.
-- Playwright discovery: **644 tests / 92 files**. CI at `3cfacfc`: all four selected smoke jobs passed (desktop/mobile). Full E2E remains in progress; subsequent changes still require a fresh run. No full E2E success, visual acceptance, physical phone testing or real DeepSeek result is claimed.
+- Playwright discovery: **644 tests / 92 files**. CI at `3cfacfc`: all four selected smoke jobs passed (desktop/mobile). Full E2E remains in progress; subsequent changes still require a fresh run. No full E2E success, visual acceptance, physical phone testing or paid-provider result is claimed.
 
 ## Browser evidence reviewed
 
@@ -142,6 +142,10 @@ The branch includes `master@cc326ce9f0377a1f305f9baa1dc37d82f62e4de7` (relations
 - W45 stores observed structural fix history in author-only draft metadata, outside world canon. The original typed review predicates remain the single verifier. Same-job manual versions retain history; a new generation resets it. Repeated identical completed reports do not create versions or duplicate fixes. No migration or extra LLM call is introduced.
 - Section entry animation now also wraps review and AI screens. A new browser test records actual opacity/translation/animation frames for original/current section and dossier transitions, reduced motion and mobile menu movement. It also verifies Escape, portal removal and restored focus. The test is added, not yet claimed passed.
 - Inspected Graphite/Parchment/Cyberpunk dossier pairs on desktop and mobile from `3d8ac38`. The repaired mobile identity rows no longer overlap. Search and the three text actions still made the mobile header unnecessarily tall; mobile actions now share the avatar row as 44px icon buttons with accessible names. The original full text remains on desktop. A geometry assertion checks that the strip and actions do not overlap and the header leaves room for content. Fresh screenshots are required.
-- Added W21/W22 browser coverage at 360×800 / 390×844 / 430×932 for empty motives, both independent editors, a long-name search, preserving the active tab while changing characters, avatar navigation and focus return.
+- Added W21/W22 browser coverage at 360×800 / 390×844 / 430×932 for empty motives, the canonical editor without a duplicate compatibility field, a long-name search, preserving the active tab while changing characters, avatar navigation and focus return.
 
-Local validation for this continuation: the tracking/completeness/recovery/initial-draft/workshop backend selection passed **78 tests**; frontend passed **137 tests**; production build succeeded. Local browser execution remains blocked before any page assertion by Chromium's Unix-socket sandbox error. GitHub Actions is the browser execution environment; no physical Android/IME or real-provider acceptance is inferred from it.
+Local validation for this continuation: the tracking/completeness/recovery/initial-draft/workshop backend selection passed **78 tests**; frontend passed **137 tests**; production build succeeded. Local browser execution remains blocked before any page assertion by Chromium's Unix-socket sandbox error. GitHub Actions is the browser execution environment; no physical Android/IME acceptance is inferred from it. Appendix 6 explicitly uses controlled provider responses and forbids paid API calls for this audit.
+
+Run [42106147109](https://github.com/Troyevv/ai_rpg_engine/actions/runs/42106147109) at `f0fbfa0` completed successfully: backend **3213 passed, 1 skipped**, frontend and all four smoke jobs passed, **all four Full E2E shards passed**. This verifies the two modal/trash timing regressions and the exact-viewport capture driver. The newer W11/W21/W45, motion and atomic-editor tests described above require their own fresh CI run; this success is not attributed to those later changes.
+
+The new atomic-editor browser test uses a real concurrent API write, expects HTTP 409 without partial mutation, reloads the stored buffer, explicitly discards it, then verifies that changing two fields creates exactly one revision/version.
