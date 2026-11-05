@@ -30,7 +30,7 @@ for(const skin of ['graphite','parchment','cyberpunk'])test(`genre catalog visua
  await chooseGenre(page,'Романтика');await chooseGenre(page,'Драма','secondary');await top(page);await capture(page,info,`after-baseline-${skin}`);
  await page.getByLabel('Найти жанр').fill('темное фентези');
  await expect(page.locator('.genre-card')).toHaveCount(1);await expect(page.locator('.genre-card')).toContainText('Тёмное фэнтези');
- await page.getByLabel('Найти жанр').scrollIntoViewIfNeeded();await capture(page,info,`search-${skin}`);
+ await page.locator('.genre-card').first().evaluate(el=>el.scrollIntoView({block:'center'}));await capture(page,info,`search-${skin}`);
  await page.getByLabel('Найти жанр').fill('жанр которого не существует');await expect(page.getByText('Жанры не найдены',{exact:true})).toBeVisible();await page.locator('.genre-no-results').evaluate(el=>el.scrollIntoView({block:'center'}));await capture(page,info,`empty-${skin}`);
  await page.getByRole('button',{name:'Сбросить поиск и группы',exact:true}).click();await expect(page.getByLabel('Найти жанр')).toBeFocused();
  await chooseGenre(page,'Сверхъестественный триллер');await chooseGenre(page,'Династическая сага','secondary');await chooseGenre(page,'Музыкальная драма','secondary');
@@ -38,7 +38,7 @@ for(const skin of ['graphite','parchment','cyberpunk'])test(`genre catalog visua
  await page.getByLabel('Найти жанр').fill('морские');
  const capped=page.getByRole('button',{name:'Дополнительный жанр: Морские приключения',exact:true});await expect(capped).toHaveAttribute('aria-disabled','true');
  await capped.focus();await capped.press('Enter');await expect(page.locator('.genre-count')).toHaveText('3 из 3');
- await capped.scrollIntoViewIfNeeded();await capture(page,info,`limit-${skin}`);
+ await capped.evaluate(el=>el.scrollIntoView({block:'center'}));await capture(page,info,`limit-${skin}`);
  await page.getByRole('button',{name:'Убрать Драма',exact:true}).click();await expect(page.getByRole('button',{name:'Убрать Династическая сага',exact:true})).toBeFocused();
  await chooseGenre(page,'Морские приключения','secondary');
  // Promote an accent without duplicates; no mandatory secondary replacement.

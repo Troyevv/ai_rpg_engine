@@ -92,3 +92,49 @@ by the execution sandbox's Unix-socket restrictions; no local browser pass is cl
 
 These checks establish deterministic behavior, not live model literary quality.
 No live DeepSeek request, paid model call or physical-device verification is claimed.
+
+### Durable visual review
+
+The following small contact sheets are derived from actual Chromium screenshots,
+not mockups. Before: master `559456b` through baseline commit `2d872a7`.
+After: implementation `485188e`. Both comparison sides select **Romance + Drama**.
+Desktop screenshots are retained at 1440×900; mobile screenshots are normalized
+to their 390×900 CSS-pixel viewport. Overview desktop sheets crop only the drawer.
+
+| Skin | Desktop before / after | Mobile before / after |
+|---|---|---|
+| Graphite | [Comparison](media/genre193/graphite-desktop.webp) | [Comparison](media/genre193/graphite-mobile.webp) |
+| Parchment | [Comparison](media/genre193/parchment-desktop.webp) | [Comparison](media/genre193/parchment-mobile.webp) |
+| Cyberpunk | [Comparison](media/genre193/cyberpunk-desktop.webp) | [Comparison](media/genre193/cyberpunk-mobile.webp) |
+
+[Default catalog — desktop](media/genre193/catalog-desktop.webp) ·
+[Default catalog — mobile](media/genre193/catalog-mobile.webp)
+
+Browser review caught and corrected inherited atelier fieldset spacing and custom
+label padding; the first mobile card now fits fully above the footer at 390×900.
+The existing shell, skin typography and disclosure transitions remain intact.
+
+[Browser evidence run](https://github.com/Troyevv/ai_rpg_engine/actions/runs/42131072733):
+all four smoke shards passed (88 passed, 4 existing mobile skips). The skips are
+outside the genre scenarios. Full regression results are reported in the PR.
+The workflow retains detailed artifacts for 7 days; these contact sheets remain
+in the repository. `genre-catalog.spec.ts` reproduces all detailed states.
+
+| State / behavior | Screenshot or trace evidence in smoke artifacts |
+|---|---|
+| Default catalog, expanded groups, cards | `default-*`, `groups-*`, `cards-*` |
+| Same policy as baseline | `after-baseline-*` |
+| Alias search, empty results, reset/focus | `search-*`, `empty-*`, catalog trace |
+| Primary + 3 secondary; disabled cap | `selected-*`, `limit-*` |
+| Custom invalid / long text | `invalid-custom-*`, `custom-long-*` |
+| Saved policy in an existing game, all skins | `policy-*` in shard 1 |
+| RU/EN, 200% text zoom, narrow viewport | `english-text-zoom-*`, `compact-input-viewport-*` |
+| Keyboard, removal focus, reset/undo, reload | Catalog and policy E2E actions/assertions |
+| Entry animation start/intermediate/end | Catalog trace + `motion-frame-samples` JSON attachment |
+| Reduced motion | Computed opacity/transform and transition assertions |
+| Generation → atomic handoff → policy edit → reload | Controlled-provider catalog E2E |
+
+Keyboard-space testing uses an emulated 360×480 viewport with focused input.
+It is **not** a physical Android keyboard test. Screen-reader semantics are
+asserted through roles, labels and focus; no human assistive-technology session
+is claimed. These limitations do not change the implemented controls.
