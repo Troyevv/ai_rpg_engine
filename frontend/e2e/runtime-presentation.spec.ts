@@ -26,7 +26,7 @@ test('populated Runtime world has names, typed values, calendar, edit and reload
  await workshopNav(page,'Персонажи');
  await page.locator('.ww-character-card').first().click();
  await expect(page.getByText('Взрослый',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Сейчас',exact:true}).click();
+ await page.getByRole('tab',{name:'Сейчас',exact:true}).click();
  const capabilities=page.locator('.draft-field').filter({has:page.getByRole('button',{name:'Изменить Возможности',exact:true})});
  await capabilities.locator('summary').click();
  await expect(page.getByText('Может передвигаться',{exact:true})).toBeVisible();

@@ -33,10 +33,10 @@ test('W01 W16 W34 W52 real SQLite creation, cancellation, search and version pre
  await form.getByLabel('Название или краткое описание').fill('Найти старый телескоп');await form.getByLabel('Описание',{exact:true}).fill('Уникальная обсерватория на крыше.');
  await form.getByRole('button',{name:'Создать запись',exact:true}).click();await expect(page.locator('.ww-record-dialog')).toContainText('Уникальная обсерватория');
  const after=await(await request.get(url+'?author=true')).json();expect(after.revision).toBe(before.revision+1);expect(after.history).toHaveLength(before.history.length+1);
- await page.keyboard.press('Escape');await page.locator('.ww-topbar').getByRole('button',{name:'Поиск по миру',exact:true}).click();
+ await page.keyboard.press('Escape');if((page.viewportSize()?.width||1440)>760)await page.locator('.ww-topbar').getByRole('button',{name:'Поиск по миру',exact:true}).click();else{await page.getByRole('button',{name:'Разделы мастерской',exact:true}).click();await page.locator('.ww-menu-dialog').getByRole('button',{name:'Поиск по миру',exact:true}).click();}
  await page.getByRole('dialog').getByRole('textbox',{name:'Поиск по миру',exact:true}).fill('обсерватория');await page.locator('.ww-search-results button').click();await expect(page.locator('.ww-record-dialog')).toContainText('Найти старый телескоп');
  await page.keyboard.press('Escape');await workshopNav(page,'История и файлы');await page.getByText(`История версий · ${after.history.length}`,{exact:true}).click();
- await page.locator('.workshop-version').last().getByRole('button',{name:'Посмотреть версию',exact:true}).click();await expect(page.locator('.ww-version-preview h2')).toHaveText(source.campaign.title);
+ await page.locator('.workshop-version').last().getByRole('button',{name:'Посмотреть версию',exact:true}).click();await expect(page.locator('.ww-version-preview').getByRole('heading',{name:source.campaign.title,exact:true})).toHaveText(source.campaign.title);
  expect((await(await request.get(url+'?author=true')).json()).revision).toBe(after.revision);
  await page.getByRole('button',{name:'Закрыть просмотр',exact:true}).click();expect((await(await request.get(url+'?author=true')).json()).state).toEqual(after.state);
 });
@@ -52,7 +52,8 @@ test('W01–W69 reference/current browser evidence at required viewport widths',
  const ref=await page.context().newPage();await ref.goto(referenceURL);await ref.evaluate(()=>document.fonts.ready);
  const widths=info.project.name==='desktop'?[1280,1440,1920]:[360,390,412,430];
  const screens=[['overview','Обзор мира'],['characters','Персонажи'],['places','Места и сообщества'],['relations','Связи и семьи'],['story','Сюжеты'],['timeline','Хронология'],['knowledge','Факты и знания'],['settings','Сцена и правила'],['review','Проверка мира'],['ai','Изменить с ИИ'],['history','История и файлы']];
- const metadata:{width:number;route:string;fonts:string[];scrollWidth:number;viewport:number}[]=[];
+ const metadata:Record<string,unknown>[]=[];
+ const measure=()=>{const box=(selector:string)=>{const node=document.querySelector(selector);if(!node)return null;const r=node.getBoundingClientRect(),style=getComputedStyle(node);return {x:r.x,y:r.y,width:r.width,height:r.height,font:style.font,fontFamily:style.fontFamily,color:style.color,background:style.backgroundColor}};return {viewport:{width:innerWidth,height:innerHeight,dpr:devicePixelRatio},theme:document.documentElement.dataset.theme||'reference graphite',focus:document.activeElement?.getAttribute('aria-label')||document.activeElement?.tagName,scrollTop:document.querySelector('.ww-scroll,.content')?.scrollTop||0,heading:box('.ww-content h1,#main h1'),panel:box('.ww-panel,.panel'),card:box('.ww-character-card,.cast-card'),scrollWidth:document.documentElement.scrollWidth}};
  for(const width of widths){
   await page.setViewportSize({width,height:900});await ref.setViewportSize({width,height:900});
   for(const [route,label] of screens){
@@ -60,11 +61,27 @@ test('W01–W69 reference/current browser evidence at required viewport widths',
    await workshopNav(page,label);await page.evaluate(()=>document.fonts.ready);await expect(page.locator('.ww-content')).toBeVisible();
    const metrics=await page.evaluate(()=>({fonts:[getComputedStyle(document.querySelector('.ww-content')!).fontFamily,getComputedStyle((document.querySelector('.ww-content h1,.ww-content h2,.ww-content h3')||document.querySelector('.ww-content'))!).fontFamily],scrollWidth:document.documentElement.scrollWidth,viewport:innerWidth}));
    expect(metrics.scrollWidth,`${width} ${route} horizontal overflow`).toBeLessThanOrEqual(width);
-   metadata.push({width,route,...metrics});
+   metadata.push({width,route,fixture:'workshop188.json',role:'author',fontsReady:await page.evaluate(()=>document.fonts.status),current:await page.evaluate(measure),reference:await ref.evaluate(measure),...metrics});
    await ref.screenshot({path:info.outputPath(`${width}-${route}-reference.png`),animations:'disabled'});
    await page.screenshot({path:info.outputPath(`${width}-${route}-current.png`),animations:'disabled'});
   }
  }
  await info.attach('comparison-metadata',{body:JSON.stringify({browser:browser.version(),referenceSHA256:'4122bcf37cbfd4c979e264e655896cc8d8783d51899a2aa9d170bd9f5c3e82e1',note:'Current branch and original reference; not pre-change master baseline or automatic visual acceptance.',metadata},null,2),contentType:'application/json'});
+ // Theme portals inherit root tokens; switching must not mutate the world.
+ const before=await(await request.get(`/api/workspaces/${w.id}/draft?author=true`)).json();
+ await page.setViewportSize({width:info.project.name==='desktop'?1440:390,height:900});
+ for(const theme of ['graphite','parchment','cyberpunk']){
+  if(info.project.name==='mobile')await page.getByRole('button',{name:'Разделы мастерской',exact:true}).click();
+  await page.locator(info.project.name==='desktop'?'.ww-sidebar':'.ww-menu-dialog').getByRole('button',{name:'Оформление',exact:true}).click();
+  await page.getByLabel('Тема мира',{exact:true}).selectOption(theme);await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
+  await page.keyboard.press('Escape');if(info.project.name==='mobile')await page.keyboard.press('Escape');
+  await workshopNav(page,'Персонажи');await page.locator('.ww-character-card').first().click();
+  await expect(page.locator('.ww-dossier-dialog')).toBeVisible();await page.evaluate(()=>document.fonts.ready);
+  await page.screenshot({path:info.outputPath(`skin-${theme}-dossier.png`),animations:'disabled'});
+  const portal=await page.locator('.ww-dossier-dialog').evaluate(el=>{const style=getComputedStyle(el);return {font:style.fontFamily,background:style.backgroundColor,color:style.color}});
+  await info.attach(`skin-${theme}-portal`,{body:JSON.stringify(portal),contentType:'application/json'});
+  await page.keyboard.press('Escape');await expect(page.locator('.ww-character-card').first()).toBeFocused();
+ }
+ const after=await(await request.get(`/api/workspaces/${w.id}/draft?author=true`)).json();expect(after.state).toEqual(before.state);expect(after.revision).toBe(before.revision);
  await ref.close();
 });

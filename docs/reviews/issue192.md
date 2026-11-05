@@ -11,7 +11,7 @@
 
 ## Status conventions
 
-**Implemented** means code exists; it does not imply browser acceptance. **Preserved** means the existing implementation was retained. Every visual item still requires rendered reference/current comparison; motion, keyboard, focus, physical mobile keyboard and theme acceptance are open until observed. There is no agreed design deviation beyond those already authorized by Issues 175/190 (real Runtime, projected canon, existing skins/portraits, separate Narrative, real presets and recovery).
+**Implemented** means code exists; it does not imply browser acceptance. **Preserved** means the existing implementation was retained. The initial 77 base-state pairs have been captured; every visual item still requires its complete interaction-state comparison; motion, keyboard, focus, physical mobile keyboard and theme acceptance are open until observed. There is no agreed design deviation beyond those already authorized by Issues 175/190 (real Runtime, projected canon, existing skins/portraits, separate Narrative, real presets and recovery).
 
 | ID | Implementation / retained contract | Acceptance evidence or remaining work |
 |---|---|---|
@@ -93,6 +93,17 @@
 - Focused backend suites: 64 passed after fixing the new-card removal/manual-path regression.
 - Full backend run: **3203 passed, 1 skipped** in 917.64 s. Final targeted calendar/projection/Runtime handoff suite: **60 passed**.
 - Playwright discovery: **644 tests / 92 files**. CI at `3cfacfc`: all four selected smoke jobs passed (desktop/mobile). Full E2E remains in progress; subsequent changes still require a fresh run. No full E2E success, visual acceptance, physical phone testing or real DeepSeek result is claimed.
+
+## Browser evidence reviewed
+
+Run [42069720818](https://github.com/Troyevv/ai_rpg_engine/actions/runs/42069720818) at `3cfacfc` produced **77 original/current pairs** (11 sections × 7 widths). The screenshot tests completed in both projects and detected no document-level horizontal overflow. This does not establish local-panel overflow, motion or full acceptance.
+
+- Desktop artifact: [13435284825](https://github.com/Troyevv/ai_rpg_engine/actions/runs/42069720818/artifacts/13435284825).
+- Mobile artifact: [13437102576](https://github.com/Troyevv/ai_rpg_engine/actions/runs/42069720818/artifacts/13437102576).
+- Inspected all eleven desktop sections at 1440, plus mobile overview/cards/start/AI at 360. Original data is the prototype's demo; current data is `workshop188.json`. Different counts, names and portrait content are not pixel regressions. Location artwork remains excluded by the issue.
+- Confirmed composition defects: an overlong overview lead/geography pushed cards below the fold, mobile collection controls occupied an extra row, start settings were below the context, AI composition lacked a panel and heading hierarchy. Follow-up changes shorten expandable previews, group collection controls, place start controls beside the textual preview, and restore the AI panel. Their final screenshots must still be reviewed.
+- Fixed test defects without suppressing checks: mobile search opens from the mobile menu; snapshot title is selected by accessible name; dossier tabs use `tab` semantics. The full jobs were cancelled by the newer commit, so their overall result is **not passed**.
+- Extended the next evidence run with geometry/font/DPR/focus metadata and real Graphite/Parchment/Cyberpunk dossier portals, focus restoration and unchanged-canon assertions.
 
 ## Remaining acceptance gate
 
