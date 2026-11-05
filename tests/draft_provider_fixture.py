@@ -55,3 +55,12 @@ def protocol_review(request):
             raise ProviderHTTPError('Controlled temporary reviewer outage',502)
         return json.dumps({'resolutions':[dict(issue_id=p['issue_id'],resolution='replaced',reason='Проверка исходных ролей завершена; блокирующего противоречия нет.',issues=[dict(message='Необязательное уточнение роли',severity='recommendation')]) for p in request['pending_issues']]})
     return '{"issues":[{"message":"Необязательное уточнение роли","severity":"recommendation"}]}'
+
+
+def provider_world(state):
+    """Adapt a legacy canonical snapshot to the current provider input contract."""
+    from copy import deepcopy
+    raw=deepcopy(state)
+    assert not raw['world'].get('contacts'), 'Do not discard meaningful legacy records'
+    raw['world'].pop('contacts',None)
+    return json.dumps(raw,ensure_ascii=False)

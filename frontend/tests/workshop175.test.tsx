@@ -39,3 +39,14 @@ it('neutral descriptors use the identical game avatar and initials',()=>{
  expect(proceduralPortrait({...base,form:'neutral'})).toBeNull();
  expect(decodeURIComponent(proceduralPortrait({...base,eyes:7})!)).toContain('#6f8998');
 });
+it('age categories change geometry, retain deterministic legacy output',()=>{
+ const legacy=proceduralPortrait(base);
+ const infant=decodeURIComponent(proceduralPortrait({...base,visual_age:'infant'})!);
+ const child=proceduralPortrait({...base,visual_age:'child'});
+ const teen=proceduralPortrait({...base,visual_age:'adolescent'});
+ const mature=proceduralPortrait({...base,visual_age:'mature_adult'});
+ const elderly=proceduralPortrait({...base,visual_age:'elderly'});
+ expect(infant).toContain('scale(1.16 1.12)');
+ expect(new Set([legacy,child,teen,mature,elderly]).size).toBe(5);
+ expect(proceduralPortrait(base)).toBe(legacy);
+});

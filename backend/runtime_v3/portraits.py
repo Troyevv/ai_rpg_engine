@@ -10,6 +10,13 @@ def life_period(state, cid):
     return age,stage
 
 
+def visual_age(state, cid):
+    age, stage = life_period(state, cid)
+    if stage in ('infant','child','adolescent'): return stage
+    if stage != 'adult': return None
+    return 'elderly' if age is not None and age >= 60 else 'mature_adult' if age is not None and age >= 35 else 'young_adult'
+
+
 def authorized(state, cid):
     from backend.runtime_v3.reproduction import known_birth
     return cid in state['characters'] and known_birth(state,cid,state['camera']['controlled_actor_id'])

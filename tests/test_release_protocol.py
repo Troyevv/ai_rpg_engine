@@ -1,3 +1,4 @@
+from draft_provider_fixture import provider_world
 from draft_provider_fixture import accept_creative_unchecked
 """Untrusted provider replies: real handlers, never successful handler stubs."""
 from copy import deepcopy
@@ -233,7 +234,7 @@ def test_api_protocol_recovery_to_game_without_manual_world_edit(api,scenario):
         if system.startswith('Один необязательный пакет'):yield '{"patches":[],"preserved_unknown":null}';return
         if 'patches' in system:yield '{"patches":[{"path":"/campaign/title","value":"Верное"}]}';return
         assert len(calls)==1
-        yield json.dumps(state,ensure_ascii=False)
+        yield provider_world(state)
     from contextlib import nullcontext
     legacy=patch('backend.services.draft_generation.run',side_effect=legacy_generation) if scenario=='quality_partial' else nullcontext()
     with legacy, patch('backend.services.preparation.chat_stream',side_effect=provider):
@@ -328,7 +329,7 @@ def test_internal_quality_error_is_not_success_or_provider_protocol_error(api):
     @accept_creative_unchecked
     def provider(**kw):
         system=kw['messages'][0]['content']
-        yield '{"issues":[]}' if system.startswith(review.MARKER) else '{"patches":[]}' if system.startswith('Один необязательный пакет') else json.dumps(state)
+        yield '{"issues":[]}' if system.startswith(review.MARKER) else '{"patches":[]}' if system.startswith('Один необязательный пакет') else provider_world(state)
     with patch('backend.services.draft_generation.run',side_effect=legacy_generation),patch('backend.services.preparation.chat_stream',side_effect=provider),patch.object(quality,'decode',side_effect=TypeError('Internal injected defect')):
         r=client.post(url+'/generate',json=dict(revision=0,text='Мир',config=dict(REMOTE,context_length=262144),api_key='offline'))
         job=wait_job(client,r.json()['id']);assert job['status']=='error' and 'internal_error' in job['error']
@@ -362,7 +363,7 @@ def test_cast_bound_contract_budget_and_preservation(api,settings,count):
     @accept_creative_unchecked
     def stream(**kw):
         if kw['messages'][0]['content'].startswith(MARKER):yield '{"issues":[]}'
-        else:yield json.dumps(state,ensure_ascii=False)
+        else:yield provider_world(state)
     with patch('backend.services.preparation.chat_stream',side_effect=stream):
         reply=client.post(url+'/generate',json=dict(revision=0,text='Город ремесленников.',config=dict(REMOTE,context_length=262144),api_key='offline',creation_settings=settings))
         job=wait_job(client,reply.json()['id']);assert job['status']=='saved',job

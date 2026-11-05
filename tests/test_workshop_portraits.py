@@ -130,7 +130,7 @@ def test_primary_art_direction_becomes_one_portable_descriptor(api):
     assert not report['errors'], report
     assert 'portrait_traits' not in candidate['characters'][0] and candidate['characters'][0]['fields']['Внешность']==description
     desc=candidate['world']['characters'][cid]['procedural_portrait']
-    assert desc==dict(default_descriptor(cid,'adult'),face=3,hair=0,hair_color=0,eyes=2,clothing=2,clothing_color=0)
+    assert desc==dict(default_descriptor(cid,'adult',age_style='young_adult'),face=3,hair=0,hair_color=0,eyes=2,clothing=2,clothing_color=0)
     url,d=create(client,candidate)
     assert d['portraits'][cid]['procedural_portrait']==desc
     # New hints or literary edits never replace a portrait that has already been saved.
@@ -155,7 +155,7 @@ def test_portrait_uses_only_exact_public_initial_features():
     assert from_feature(source_event_id='a_private_view')==base
     assert from_feature(revision=2)==base
     assert from_feature(text='Кажутся серыми только при плохом освещении.')==base
-    assert default_descriptor('maxim','child',hints={'form':'human','eyes':'grey'})['form']=='neutral'
+    assert default_descriptor('maxim','child',hints={'form':'human','eyes':'grey'})['form']=='human'
     assert default_descriptor('maxim','adult',hints={'form':'neutral','eyes':'grey'})['form']=='neutral'
     assert default_descriptor('maxim','adult',hints={'hair_color':'<script>', 'clothing':['shirt']})==base
     assert 'hair_color' not in base and 'clothing_color' not in base

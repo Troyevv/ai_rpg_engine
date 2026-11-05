@@ -1,6 +1,7 @@
 """Build a pre-upgrade rejected checkpoint using real generation persistence."""
 import json
 from pathlib import Path
+from copy import deepcopy
 from unittest.mock import patch
 from backend.services import draft_creative
 from test_api import REMOTE, wait_job
@@ -12,7 +13,10 @@ def seed_rejected(client):
         if kw['messages'][0]['content'].startswith(draft_creative.MARKER):
             value=json.loads(data['creative']['original_reply'])
             value['candidate_hash']=json.loads(kw['messages'][1]['content'])['candidate_hash']
-        else:value=data['candidate']
+        else:
+            value=deepcopy(data['candidate'])
+            assert not value['world'].get('contacts')
+            value['world'].pop('contacts',None)
         kw['on_finish']('stop');kw['on_usage']({'prompt_tokens':100,'completion_tokens':20})
         yield json.dumps(value,ensure_ascii=False)
     workspace=client.post('/api/workspaces',json={'name':'Сосновка: восстановление'}).json()

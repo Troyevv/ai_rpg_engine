@@ -123,3 +123,56 @@ test('workshop accessibility: keyboard, narrow height, all skin presets and scal
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:`/tmp/workshop175-text200-${info.project.name}.png`});
 });
+
+test('portrait layout: canonical ages, shared map artwork, full frames and scalable initials',async({page,request},info)=>{
+ const {readFileSync}=await import('node:fs');
+ const state=JSON.parse(readFileSync(new URL('../../tests/fixtures/initial_world/runtime_presentation.json',import.meta.url),'utf8'));
+ const ages=[24,1,8,16,44,75,34,60];
+ for(const [i,card] of state.characters.entries()){
+  const actor=state.world.characters[card.id];delete actor.procedural_portrait;
+  actor.birth_date=`${2026-ages[i]}-01-01`;actor.developmental_stage=ages[i]<2?'infant':ages[i]<13?'child':ages[i]<18?'adolescent':'adult';
+  card.fields['Возраст']=String(ages[i]);
+ }
+ state.characters[0].name='Анна Соколова';
+ const workspace=await(await request.post('/api/workspaces',{data:{name:'Возраст и портреты'}})).json();const url=`/api/workspaces/${workspace.id}/draft`;
+ expect((await request.post(url+'/import',{data:{revision:0,format:'json',text:JSON.stringify(state)}})).ok()).toBeTruthy();
+ let draft=await(await request.get(url+'?author=true')).json();
+ expect(state.characters.slice(0,6).map((c:{id:string})=>draft.portraits[c.id].procedural_portrait.visual_age)).toEqual(['young_adult','infant','child','adolescent','mature_adult','elderly']);
+ await page.addInitScript(wid=>localStorage.setItem('draftWorkspace',wid),workspace.id);await page.goto('/');await nav(page,'Создать');await authorView(page);await workshopNav(page,'Персонажи');
+ const card=page.getByRole('button',{name:'Досье Анна Соколова',exact:true});
+ const src=await card.locator('.procedural-portrait').getAttribute('src');expect(src).toMatch(/^data:image\/svg/);
+ for(const mode of ['Список','Карточки']){
+  await page.getByRole('button',{name:mode,exact:true}).click();
+  const bounds=await card.locator('.ww-card-art').boundingBox();expect(bounds!.width/bounds!.height).toBeCloseTo(.8,2);
+  await expect(card.locator('.procedural-portrait')).toHaveAttribute('src',src!);
+ }
+ await page.screenshot({path:`/tmp/workshop175-ages-${info.project.name}.png`});
+ await workshopNav(page,'Связи и семьи');
+ await page.getByLabel('Чьи отношения показать').selectOption(state.characters[1].id);
+ const node=page.getByRole('button',{name:'Отношения Анна Соколова',exact:true});
+ await expect(node.locator('.procedural-portrait')).toHaveAttribute('src',src!);
+ await node.click();await expect(page.locator('.ww-graph-node.is-center .procedural-portrait')).toHaveAttribute('src',src!);
+ await page.reload();await expect(page.locator('.ww-graph-node.is-center .procedural-portrait')).toHaveAttribute('src',src!);
+ // The same existing sidebar markup is stressed without creating 1000 canon objects.
+ const mobile=(page.viewportSize()?.width||1440)<=760;
+ if(mobile)await page.getByRole('button',{name:'Разделы мастерской',exact:true}).click();
+ const menu=page.locator(mobile?'.ww-menu-dialog':'.ww-sidebar');
+ for(const count of ['0','9','10','100','1000']){
+  const badge=menu.locator('nav small').first();await badge.evaluate((el,text)=>{el.textContent=text},count);
+  expect(await badge.evaluate(el=>el.scrollHeight<=el.clientHeight&&getComputedStyle(el).whiteSpace==='nowrap')).toBe(true);
+  expect(await menu.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+ }
+ if(mobile)await page.getByRole('dialog').getByRole('button',{name:'Закрыть',exact:true}).click();
+ // Persist the common neutral renderer, including three initials, then reload.
+ const cid=state.characters[0].id;draft=await(await request.get(url+'?author=true')).json();
+ expect((await request.put(url+`/characters/${cid}/portraits/procedural`,{data:{revision:draft.revision,mode:'procedural',descriptor:{...draft.portraits[cid].procedural_portrait,form:'neutral'}}})).ok()).toBeTruthy();
+ await page.reload();await workshopNav(page,'Персонажи');
+ const initials=card.locator('.portrait-initials');await expect(initials).toHaveText('АС');
+ const big=await initials.evaluate(el=>parseFloat(getComputedStyle(el).fontSize));
+ await page.getByRole('button',{name:'Список',exact:true}).click();
+ const small=await initials.evaluate(el=>parseFloat(getComputedStyle(el).fontSize));expect(big).toBeGreaterThan(small);expect(small).toBeGreaterThanOrEqual(9);
+ await workshopNav(page,'Связи и семьи');
+ expect(await page.locator('.ww-graph-node.is-center .character-avatar svg path').first().evaluate(el=>getComputedStyle(el).fill)).not.toBe('none');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:`/tmp/workshop175-map-${info.project.name}.png`});
+});

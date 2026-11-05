@@ -4,7 +4,7 @@ import hashlib
 import json
 import uuid
 from backend.runtime_v3.models import ProceduralPortrait
-from backend.runtime_v3.portraits import life_period, projection
+from backend.runtime_v3.portraits import life_period, projection, visual_age
 from backend.repositories.portraits import mutate
 
 
@@ -15,16 +15,16 @@ def portrait_state(state):
         meta={'world_time':state['world_clock']['minute'],'calendar':state['world_clock'].get('calendar')})
 
 
-def default_descriptor(cid,stage,actor=None,hints=None):
+def default_descriptor(cid,stage,actor=None,hints=None,age_style=None):
     from backend.services.portrait_traits import graphic_choices
     seed=hashlib.sha256(('workshop-portrait-v1:'+cid).encode()).hexdigest()[:32]
     # Neutral graphic choices never become canonical appearance facts.
     values=[int(seed[i:i+2],16) for i in range(0,14,2)]
-    form = 'human' if stage=='adult' and not (isinstance(hints,dict) and hints.get('form')=='neutral') else 'neutral'
+    form = 'human' if stage in ('infant','child','adolescent','adult') and not (isinstance(hints,dict) and hints.get('form')=='neutral') else 'neutral'
     choices=dict(face=values[0]%7,hair=values[1]%8,skin=values[2]%7,eyes=values[3]%7,
         clothing=0,accessory=0,palette=values[6]%7)
     if form=='human': choices.update(graphic_choices(actor or {}, hints))
-    return ProceduralPortrait(seed=seed,stage=stage,form=form,**choices).model_dump()
+    return ProceduralPortrait(seed=seed,stage=stage,form=form,visual_age=age_style,**choices).model_dump()
 
 
 def consume_authored_traits(state):
@@ -39,14 +39,14 @@ def consume_authored_traits(state):
                 raise ValueError('portrait_traits: используйте только поддерживаемые признаки из схемы.')
         cid=card['id'];actor=runtime['characters'].get(cid)
         if isinstance(hints,dict) and hints and actor is not None and not actor.get('procedural_portrait'):
-            actor['procedural_portrait']=default_descriptor(cid,life_period(runtime,cid)[1],actor,hints)
+            actor['procedural_portrait']=default_descriptor(cid,life_period(runtime,cid)[1],actor,hints,visual_age(runtime,cid))
 
 
 def initialize(state):
     runtime=portrait_state(state)
     for cid,actor in runtime['characters'].items():
         if not actor.get('procedural_portrait'):
-            actor['procedural_portrait']=default_descriptor(cid,life_period(runtime,cid)[1],actor)
+            actor['procedural_portrait']=default_descriptor(cid,life_period(runtime,cid)[1],actor,age_style=visual_age(runtime,cid))
     return state
 
 
@@ -107,7 +107,8 @@ def listing(repo,wid,cid,author=False):
         runtime=portrait_state(state)
         return dict(revision=w['revision'],portraits=[p for p in runtime['characters'][cid].get('portraits',[]) if not p['deleted']],
             **projection(runtime,cid),descriptor=runtime['characters'][cid]['procedural_portrait'],
-            portrait_mode=runtime['characters'][cid].get('portrait_mode','auto'))
+            portrait_mode=runtime['characters'][cid].get('portrait_mode','auto'),
+            age_reference=dict(stage=life_period(runtime,cid)[1],visual_age=visual_age(runtime,cid)))
 
 
 def asset(repo,wid,cid,aid,author=False):

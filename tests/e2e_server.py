@@ -354,6 +354,7 @@ def stream(**kwargs):
                 if card.get('fields',{}).get(field,'').strip().lower() in ('','неизвестно','не указано','—'):card['fields'][field]=text
         if 'TEST_RELEASE_QUALITY' in full:candidate['characters'][1]['fields']['Внешность']='неизвестно'
         if 'TEST_CANDIDATE_RECOVERY' in full:candidate['protagonist_id']='missing'
+        candidate['world'].pop('contacts',None)  # Model output omits legacy phonebook defaults.
         value=json.dumps(candidate,ensure_ascii=False)
         if 'TEST_FRAGMENT_RECOVERY' in full:
             key=kwargs['messages'][1]['content'];count=fragment_attempts.get(key,0);fragment_attempts[key]=count+1

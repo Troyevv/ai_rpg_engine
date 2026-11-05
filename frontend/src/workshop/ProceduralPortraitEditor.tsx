@@ -2,8 +2,9 @@ import {useState,useId,type ReactNode} from 'react';
 import {type ProceduralPortrait} from './proceduralPortrait';
 import {Button} from '../components/ui/button';
 const choices = {face:['Овальное','Узкое','Угловатое','Широкое','Вытянутое','Округлое','Мягкое'],hair:['Короткие','Длинные','Каре','Кудрявые','Средние','Волнистые','Чёлка','Без волос'],skin:['Светлая','Тёплая','Бежевая','Смуглая','Оливковая','Персиковая','Песочная'],eyes:['Ореховые','Зелёные','Серые','Карие','Серо-зелёные','Голубые','Светло-зелёные','Серо-голубые'],clothing:['Нейтральная туника','Футболка','Рубашка','Жакет','Куртка','Кардиган','Джемпер','Свитер'],accessory:['Без аксессуаров','Цепочка','Серьги и подвеска','Длинные серьги','Без украшений','Кулон','Без украшений','Подвеска'],palette:['Графит','Шалфей','Терракота','Охра','Лён','Сланец','Песок']};
+const ageLabels={infant:'Младенец',child:'Ребёнок',adolescent:'Подросток',young_adult:'Молодой взрослый',mature_adult:'Зрелый взрослый',elderly:'Пожилой'};
 const colors={hair_color:['Чёрные','Каштановые','Светлые','Тёмно-русые','Рыжие','Седые','Белые'],clothing_color:['Тёмный','Светлый','Синий','Зелёный','Коричневый','Красный','Песочный']};
-export function ProceduralPortraitEditor({descriptor,appearance,mode,disabled,onSave,renderPreview}:{renderPreview:(p:ProceduralPortrait)=>ReactNode;appearance?:string;descriptor:ProceduralPortrait;mode:'auto'|'procedural';disabled:boolean;onSave:(p:ProceduralPortrait,mode:'auto'|'procedural')=>Promise<void>}) {
+export function ProceduralPortraitEditor({descriptor,appearance,ageReference,mode,disabled,onSave,renderPreview}:{renderPreview:(p:ProceduralPortrait)=>ReactNode;appearance?:string;ageReference?:{stage:string;visual_age?:ProceduralPortrait['visual_age']|null};descriptor:ProceduralPortrait;mode:'auto'|'procedural';disabled:boolean;onSave:(p:ProceduralPortrait,mode:'auto'|'procedural')=>Promise<void>}) {
  const [open,setOpen]=useState(false);const panelId=useId();
  const [status,setStatus]=useState('');const [compare,setCompare]=useState(false);
  const [value,setValue]=useState(descriptor);const [selected,setSelected]=useState(mode);
@@ -12,6 +13,7 @@ export function ProceduralPortraitEditor({descriptor,appearance,mode,disabled,on
  <p>Иллюстрация условная: родинки, часы, медицинская форма и особенности телосложения не поддерживаются. Они остаются в литературном описании.</p>
  <button type="button" aria-pressed={compare} onClick={()=>setCompare(!compare)}>Свериться с описанием внешности</button>
  {compare&&<p>Сравните варианты с текстом и выберите поддерживаемые признаки ниже. Автоматическое распознавание текста здесь не выполняется. Изменения сохраняются только по подтверждению.</p>}
+ {ageReference?.visual_age&&<div className="portrait-age-reference"><p>Возраст в мире: {ageLabels[ageReference.visual_age]}. Сохранённый рисунок: {value.visual_age?ageLabels[value.visual_age]:'исходный стиль'}. Иллюстрация не меняется автоматически при дне рождения.</p><Button variant="ghost" disabled={disabled||(value.visual_age===ageReference.visual_age&&value.stage===ageReference.stage)} onClick={()=>{setCompare(true);setValue({...value,stage:ageReference.stage,visual_age:ageReference.visual_age!})}}>Учесть текущий возраст</Button></div>}
  <div className="procedural-editor-grid"><div className="portrait-comparison">
  {compare&&<figure><figcaption>Сохранённый вариант</figcaption>{renderPreview(descriptor)}</figure>}
  <figure><figcaption>{dirty?'Предлагаемый вариант':'Текущий вариант'}</figcaption>{renderPreview(value)}</figure>

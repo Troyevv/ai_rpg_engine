@@ -100,7 +100,8 @@ def test_legacy_rejection_resume_review_confirm_and_versions(api):
         if system.startswith(draft_creative.MARKER):
             p=json.loads(data['creative']['current_reply']);p['candidate_hash']=json.loads(kw['messages'][1]['content'])['candidate_hash'];value=p
         elif system.startswith(draft_completeness.MARKER):value={'issues':[]}
-        else:value=data['candidate']
+        else:
+            value=deepcopy(data['candidate']);value['world'].pop('contacts',None)
         kw['on_finish']('stop');kw['on_usage']({'prompt_tokens':100,'completion_tokens':20})
         yield json.dumps(value,ensure_ascii=False)
     wid=client.post('/api/workspaces',json={'name':'Sosnovka185'}).json()['id'];url=f'/api/workspaces/{wid}/draft'

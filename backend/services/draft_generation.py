@@ -150,7 +150,8 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         repo.draft_phase(jid,'validating')
         try:
             raw=strict_loads(result)
-            if not recovered_candidate: draft_initial.validate_generated_input(raw)
+            if not recovered_candidate and journal['generation_contract']['version'] != 'legacy':
+                draft_initial.validate_generated_input(raw)
             if isinstance(raw,dict):
                 if not recovered_candidate:
                     raw['creation_settings']=config.get('_creation_settings',{})

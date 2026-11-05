@@ -19,7 +19,7 @@ FULL=(Path(__file__).parent/'fixtures/initial_world/volkov_user_brief.txt').read
 
 
 def rich():
-    state=fixture();ids=[c['id'] for c in state['characters']]
+    state=fixture();state['world'].pop('contacts',None);ids=[c['id'] for c in state['characters']]
     # This is the healthy transport fixture. Placeholder recovery is exercised
     # independently with raw E4 and test_issue44_final.
     for i,card in enumerate(state['characters']):

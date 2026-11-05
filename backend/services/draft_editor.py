@@ -62,13 +62,13 @@ def author_context(base, instruction):
 
 
 def messages(base, instruction):
-    from backend.services.draft_initial import prompt_schema
+    from backend.services.draft_initial import prompt_schema, compact_schema
     from backend.services.draft_initial import SECRET_AUTHORING_RULES
     state=base['state']
     return [dict(role='system',content=MARKER+'\n'+RULES+'\n'+SECRET_AUTHORING_RULES),
             dict(role='user',content=json.dumps(dict(author_context=author_context(base,instruction),
                 candidate=state,candidate_hash=candidate_hash(state),
-                world_schema=prompt_schema(initial_portraits=True),response_schema=Proposal.model_json_schema()),ensure_ascii=False))]
+                world_schema=compact_schema(prompt_schema(initial_portraits=True)),response_schema=Proposal.model_json_schema()),ensure_ascii=False))]
 
 
 def rebased_path(before, after, path):

@@ -36,7 +36,9 @@ def provider(changes=None,calls=None):
         elif system.startswith(draft_completeness.MARKER):yield '{"issues":[]}'
         elif system.startswith(draft_creative.MARKER):
             data=json.loads(kw['messages'][1]['content']);yield json.dumps(dict(candidate_hash=data['candidate_hash'],rationale='Мир уже согласован.',changes=[]))
-        else:yield json.dumps(candidate(),ensure_ascii=False)
+        else:
+            initial=candidate();initial['world'].pop('contacts',None)
+            yield json.dumps(initial,ensure_ascii=False)
     return stream
 
 
