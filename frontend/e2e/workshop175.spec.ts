@@ -146,13 +146,15 @@ test('portrait layout: canonical ages, shared map artwork, full frames and scala
   const bounds=await card.locator('.ww-card-art').boundingBox();expect(bounds!.width/bounds!.height).toBeCloseTo(.8,2);
   await expect(card.locator('.procedural-portrait')).toHaveAttribute('src',src!);
  }
- await page.screenshot({path:`/tmp/workshop175-ages-${info.project.name}.png`});
+ await page.screenshot({path:info.outputPath(`workshop175-ages-${info.project.name}.png`)});
  await workshopNav(page,'Связи и семьи');
  await page.getByLabel('Чьи отношения показать').selectOption(state.characters[1].id);
  const node=page.getByRole('button',{name:'Отношения Анна Соколова',exact:true});
  await expect(node.locator('.procedural-portrait')).toHaveAttribute('src',src!);
  await node.click();await expect(page.locator('.ww-graph-node.is-center .procedural-portrait')).toHaveAttribute('src',src!);
- await page.reload();await expect(page.locator('.ww-graph-node.is-center .procedural-portrait')).toHaveAttribute('src',src!);
+ await page.reload();await nav(page,'Создать');await authorView(page);await workshopNav(page,'Связи и семьи');
+ await expect(page.getByLabel('Чьи отношения показать')).toHaveValue(state.characters[0].id);
+ await expect(page.locator('.ww-graph-node.is-center .procedural-portrait')).toHaveAttribute('src',src!);
  // The same existing sidebar markup is stressed without creating 1000 canon objects.
  const mobile=(page.viewportSize()?.width||1440)<=760;
  if(mobile)await page.getByRole('button',{name:'Разделы мастерской',exact:true}).click();
@@ -163,10 +165,10 @@ test('portrait layout: canonical ages, shared map artwork, full frames and scala
   expect(await menu.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
  }
  if(mobile)await page.getByRole('dialog').getByRole('button',{name:'Закрыть',exact:true}).click();
- // Persist the common neutral renderer, including three initials, then reload.
+ // Persist the common neutral renderer, then reload and reopen the workshop.
  const cid=state.characters[0].id;draft=await(await request.get(url+'?author=true')).json();
  expect((await request.put(url+`/characters/${cid}/portraits/procedural`,{data:{revision:draft.revision,mode:'procedural',descriptor:{...draft.portraits[cid].procedural_portrait,form:'neutral'}}})).ok()).toBeTruthy();
- await page.reload();await workshopNav(page,'Персонажи');
+ await page.reload();await nav(page,'Создать');await authorView(page);await workshopNav(page,'Персонажи');
  const initials=card.locator('.portrait-initials');await expect(initials).toHaveText('АС');
  const big=await initials.evaluate(el=>parseFloat(getComputedStyle(el).fontSize));
  await page.getByRole('button',{name:'Список',exact:true}).click();
@@ -174,5 +176,5 @@ test('portrait layout: canonical ages, shared map artwork, full frames and scala
  await workshopNav(page,'Связи и семьи');
  expect(await page.locator('.ww-graph-node.is-center .character-avatar svg path').first().evaluate(el=>getComputedStyle(el).fill)).not.toBe('none');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
- await page.screenshot({path:`/tmp/workshop175-map-${info.project.name}.png`});
+ await page.screenshot({path:info.outputPath(`workshop175-map-${info.project.name}.png`)});
 });

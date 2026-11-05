@@ -17,9 +17,11 @@ const cropDefault={x:0.5,y:0.5,zoom:1};
 const path=(sid:number|undefined,cid:string,wid?:string)=>wid?`/workspaces/${encodeURIComponent(wid)}/draft/characters/${encodeURIComponent(cid)}/portraits`:`/saves/${sid}/characters/${encodeURIComponent(cid)}/portraits`;
 export const portraitUrl=(sid:number|undefined,cid:string,p:PortraitRef,wid?:string,author=false)=>'/api'+path(sid,cid,wid)+'/assets/'+p.asset_id+(wid?'?author='+author:'');
 function cropStyle(p:PortraitRef):CSSProperties {
- const {width:w,height:h,crop:c}=p;
- const rw=w/Math.min(w,h)*c.zoom, rh=h/Math.min(w,h)*c.zoom;
- return {width:`${rw*100}%`,height:`${rh*100}%`,maxWidth:'none',left:`${-(rw-1)*c.x*100}%`,top:`${-(rh-1)*c.y*100}%`};
+ const c=p.crop;
+ // Cover preserves the source aspect ratio in both circular and 4:5 frames.
+ // Anchoring the zoom at the crop point retains the existing square-crop math.
+ return {width:'100%',height:'100%',maxWidth:'none',left:0,top:0,objectFit:'cover',
+  objectPosition:`${c.x*100}% ${c.y*100}%`,transform:`scale(${c.zoom})`,transformOrigin:`${c.x*100}% ${c.y*100}%`};
 }
 export function CharacterAvatar({subject,saveId,workspaceId,author=false,onClick,size=48}:{subject:PortraitSubject;saveId?:number;workspaceId?:string;author?:boolean;onClick?:()=>void;size?:number|string}) {
  const p=subject.portrait;

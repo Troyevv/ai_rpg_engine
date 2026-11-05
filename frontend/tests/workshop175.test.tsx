@@ -50,3 +50,13 @@ it('age categories change geometry, retain deterministic legacy output',()=>{
  expect(new Set([legacy,child,teen,mature,elderly]).size).toBe(5);
  expect(proceduralPortrait(base)).toBe(legacy);
 });
+
+it.each([['Анна','А'],['Анна Соколова','АС'],['Анна Александровна Соколова','ААС'],['Анна Александровна Соколова Длинная','ААС']])('initials stay bounded for %s',(name,initials)=>{
+ const html=renderToStaticMarkup(<CharacterAvatar subject={{id:'a',name}} size={320}/>);
+ expect(html).toContain(`data-count="${initials.length}"`);expect(html).toContain(`>${initials}</span>`);
+});
+it('photo crop keeps natural proportions in nonsquare frames',()=>{
+ const html=renderToStaticMarkup(<CharacterAvatar subject={{id:'a',name:'Анна',portrait:{id:'p',asset_id:'a',width:320,height:480,label:'',crop:{x:.2,y:.7,zoom:1.5}}}} workspaceId="w" size="100%"/>);
+ expect(html).toContain('object-fit:cover');expect(html).toContain('object-position:20% 70%');
+ expect(html).toContain('transform-origin:20% 70%');expect(html).toContain('scale(1.5)');
+});

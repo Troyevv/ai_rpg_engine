@@ -604,3 +604,15 @@ def test_resume_after_manual_edit_cannot_adopt_new_head(api):
     assert decide(client,url,updated,{'id':job['id']}).status_code==409
     actual=client.get(url+'?author=true').json()
     assert actual['state']==updated['state'] and actual['version_id']==updated['version_id']
+
+
+def test_editor_prompt_compacts_contract_without_cutting_canon(api):
+    from context_builder import estimate
+    client,_=api;_,_,before=setup(client)
+    prompt=draft_editor.messages(before,'Измени мир')
+    payload=json.loads(prompt[1]['content'])
+    assert payload['candidate']==before['state']
+    assert estimate(prompt)+512+256 <= 32768
+    schema=payload['world_schema']
+    assert schema['$defs']
+    assert 'portrait_traits' in schema['properties']['characters']['items']['properties']
