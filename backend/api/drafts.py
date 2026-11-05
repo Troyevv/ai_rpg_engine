@@ -48,6 +48,10 @@ class Generate(Revision,Credential):
     warnings_ack: bool = False
     config: ModelConfig
 
+class ValidateWorld(Generate):
+    workspace_id: str | None = None
+    name: str = Field(default='', max_length=120)
+
 class Resume(Credential):
     revision: int | None = None
     max_tokens: int | None = Field(default=None,ge=256,le=65536)
@@ -204,9 +208,21 @@ def install(app,repo,preparation,credentials,job):
         state=repo.draft(wid,True)['state']
         return domain.dependencies(state,kind,entity_id)
 
+    def validate_world_input(body:Generate, wid:str|None):
+        if not body.text.strip() and not body.use_idea:
+            raise ValueError('Опиши желаемый мир.')
+        if body.use_idea and (not wid or not repo.workspace(wid)['idea'].strip()):
+            raise ValueError('В этом черновике нет сохранённого сценария.')
+
+    @app.post('/api/world-creation/validate')
+    def validate_world(body:ValidateWorld):
+        # Same Pydantic contracts as generate, without creating a workspace/job.
+        validate_world_input(body, body.workspace_id)
+        return {'valid': True}
+
     @app.post('/api/workspaces/{wid}/draft/generate')
     def generate(wid:str,body:Generate):
-        if body.task=='world' and not body.text.strip() and not body.use_idea:raise ValueError('Опиши желаемый мир.')
+        if body.task=='world':validate_world_input(body,wid)
         if body.task!='world':
             state=repo.draft(wid,True)['state']
             domain.entity(state,body.kind,body.entity_id)

@@ -26,7 +26,7 @@ export type CommunicationProfile = Partial<Record<Channel, boolean>> & {
   ring_timeout_minutes?: number;
   emergency_numbers?: Record<string, string>;
 };
-const ru = [
+export const communicationNames = [
   "Сообщения и чаты",
   "Мобильные звонки",
   "Письма",
@@ -70,13 +70,15 @@ export function CommunicationSettings({
   value,
   onChange,
   disabled = false,
+  compact = false,
 }: {
   value: CommunicationProfile | null;
   onChange?: (v: CommunicationProfile) => void;
   disabled?: boolean;
+  compact?: boolean;
 }) {
   const english = gameLocale().startsWith("en"),
-    names = english ? en : ru,
+    names = english ? en : communicationNames,
     index = english ? 1 : 0;
   const [catalog, setCatalog] = useState<Record<string, CommunicationProfile>>(
       {},
@@ -100,6 +102,28 @@ export function CommunicationSettings({
   const enabled = channels.filter((c) => v[c]);
   const change = (patch: Partial<CommunicationProfile>) =>
     onChange?.({ ...v, ...patch, preset: "custom" });
+  const selectPreset = (id:string) => onChange?.(id === 'custom' ? {...v,preset:id} : {...catalog[id],author_note:v.author_note||''});
+  const toggle = (c:Channel,checked:boolean) => {
+    const next={...v,[c]:checked};
+    change({[c]:checked,presentation:next.text_message||next.voice_call?'phone':'none',
+      delivery_policy:{...v.delivery_policy,[c]:v.delivery_policy?.[c]||defaultPolicy(c)}});
+  };
+  if(compact&&onChange)return <section className="atelier-communication" aria-label="Технологии связи">
+    <header><h2>Технологии связи</h2><small>{enabled.length} из 7</small></header>
+    <fieldset disabled={disabled} className="atelier-comm-body"><label>Набор технологий
+      <select aria-label="Набор технологий связи" value={v.preset||'none'} onChange={e=>selectPreset(e.target.value)}>
+        {Object.entries(presets).map(([id,label])=><option key={id} value={id} disabled={!catalog[id]}>{label[index]}</option>)}
+      </select><small>Выберите основу. Эпоху мира задаёт замысел.</small></label>
+      <fieldset className="atelier-channels"><legend>Доступные каналы</legend><div>{channels.map((c,i)=><label key={c} className={v[c]?'enabled':''} title={policies[v.delivery_policy?.[c]||defaultPolicy(c)][index]}>
+        <input type="checkbox" checked={!!v[c]} onChange={e=>toggle(c,e.target.checked)}/>{names[i]}
+      </label>)}</div></fieldset>
+    </fieldset>
+    <footer><small>Личные разговоры доступны всегда</small><details><summary>Правила и особенности</summary>
+      <dl>{enabled.map(c=><div key={c}><dt>{names[channels.indexOf(c)]}</dt><dd>{policies[v.delivery_policy?.[c]||defaultPolicy(c)][index]}</dd></div>)}</dl>
+      <label>Особенности связи в мире<Textarea disabled={disabled} value={v.author_note||''} maxLength={2000} onChange={e=>change({author_note:e.target.value})}/></label>
+      <p>Описание не включает каналы и не меняет правила доставки. Адресат может не ответить.</p>
+    </details></footer>{error&&<p role="alert">{error}</p>}
+  </section>;
   return (
     <section
       className="communication-settings"
@@ -160,13 +184,7 @@ export function CommunicationSettings({
                 key={id}
                 aria-pressed={v.preset === id}
                 disabled={!catalog[id]}
-                onClick={() =>
-                  onChange(
-                    id === "custom"
-                      ? { ...v, preset: id }
-                      : { ...catalog[id], author_note: v.author_note || "" },
-                  )
-                }
+                onClick={() => selectPreset(id)}
               >
                 {presets[id][index]}
               </button>
@@ -179,20 +197,7 @@ export function CommunicationSettings({
                   <input
                     type="checkbox"
                     checked={!!v[c]}
-                    onChange={(e) => {
-                      const next = { ...v, [c]: e.target.checked };
-                      change({
-                        [c]: e.target.checked,
-                        presentation:
-                          next.text_message || next.voice_call
-                            ? "phone"
-                            : "none",
-                        delivery_policy: {
-                          ...v.delivery_policy,
-                          [c]: v.delivery_policy?.[c] || defaultPolicy(c),
-                        },
-                      });
-                    }}
+                    onChange={e => toggle(c,e.target.checked)}
                   />
                   {names[i]}
                 </label>

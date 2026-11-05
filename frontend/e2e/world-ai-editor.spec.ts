@@ -1,3 +1,4 @@
+import {generateIdea} from './idea-navigation';
 import {workshopNav,draftsMenu} from './workshop-navigation';
 import {test,expect} from '@playwright/test';
 import {nav} from './navigation';
@@ -16,7 +17,7 @@ for(const skin of ['graphite','parchment']) test(`AI editor preview, confirmatio
  await page.evaluate(skin=>localStorage.setItem('workshop-theme',JSON.stringify({theme_id:skin,mode:'manual'})),skin);
  await page.reload();await nav(page,'Создать');
  await page.getByLabel('Описание мира или текст импорта').fill('EDITOR173: Город и друзья после пожара.');
- await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+ await generateIdea(page);
  await expect(page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true})).toBeEnabled();
  const before=await(await request.get(url+'?author=true')).json();
  await expect(page.getByRole('heading',{name:'AI-редактор мира',exact:true})).toHaveCount(0);
@@ -89,7 +90,7 @@ for(const skin of ['graphite','parchment']) test(`AI editor preview, confirmatio
 test('AI editor empty response recovery, rejection and stale preview',async({page,request})=>{
  const workspace=await(await request.post('/test/editor173',{data:{fail:true}})).json();const url=`/api/workspaces/${workspace.id}/draft`;
  await page.goto('/');await page.evaluate(wid=>localStorage.setItem('draftWorkspace',wid),workspace.id);await page.reload();await nav(page,'Создать');
- await page.getByLabel('Описание мира или текст импорта').fill('EDITOR173: Друзья в городе.');await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+ await page.getByLabel('Описание мира или текст импорта').fill('EDITOR173: Друзья в городе.');await generateIdea(page);
  await expect(page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true})).toBeEnabled();
  await page.getByRole('button',{name:'Автор мира',exact:true}).click();await page.getByRole('button',{name:'Показать всё',exact:true}).click();await workshopNav(page,'Изменить с ИИ');
  const editor=page.locator('.world-ai-editor');await editor.getByLabel('Что изменить в мире?').fill('Добавь Веру.');await editor.getByRole('button',{name:'Предложить изменения',exact:true}).click();
@@ -113,7 +114,7 @@ test('AI editor workspace switch isolates input, errors, preview and late respon
  await page.goto('/');await page.evaluate(wid=>localStorage.setItem('draftWorkspace',wid),workspace.id);
  await page.reload();await nav(page,'Создать');
  await page.getByLabel('Описание мира или текст импорта').fill('EDITOR173: Два разных мира.');
- await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+ await generateIdea(page);
  await expect(page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true})).toBeEnabled();
  const first=await(await request.get(url+'?author=true')).json();
  const second=await(await request.post('/api/workspaces',{data:{name:'Второй мир'}})).json();
@@ -159,7 +160,7 @@ test('AI editor refuses dangling locations and archived NPC references without m
  await page.goto('/');await page.evaluate(wid=>localStorage.setItem('draftWorkspace',wid),workspace.id);
  await page.reload();await nav(page,'Создать');
  await page.getByLabel('Описание мира или текст импорта').fill('EDITOR173: Проверка удаления.');
- await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+ await generateIdea(page);
  await expect(page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true})).toBeEnabled();
  const draft=await(await request.get(url+'?author=true')).json();const state=draft.state;
  state.characters.push({...structuredClone(state.characters.at(-1)),id:'archive184',name:'Архивный персонаж'});

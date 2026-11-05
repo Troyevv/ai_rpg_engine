@@ -1,3 +1,4 @@
+import {generateIdea} from './idea-navigation';
 import {test,expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {nav} from './navigation';
@@ -7,8 +8,8 @@ test('new workspace retains the submitted idea without copying it into the next 
  await page.goto('/');await nav(page,'Создать');
  const idea='Друзья встречаются на кухне. Придумай их прошлое и отношения.';
  await page.getByLabel('Описание мира или текст импорта').fill(idea);
- await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
- await expect(page.locator('.ww-hero h1')).toBeVisible();
+ await generateIdea(page);
+ await expect(page.locator('.ww-hero h1, .atelier-result h3')).toBeVisible();
  const wid=await page.evaluate(()=>localStorage.getItem('draftWorkspace'));
  await workshopNav(page,'Идея и генерация');
  await expect(page.getByLabel('Описание мира или текст импорта')).toHaveCount(0);

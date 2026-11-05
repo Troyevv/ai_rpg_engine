@@ -1,3 +1,4 @@
+import {generateIdea} from './idea-navigation';
 import {workshopNav,draftsMenu} from './workshop-navigation';
 import { test, expect } from "@playwright/test";
 import { nav } from "./navigation";
@@ -19,11 +20,9 @@ for (const skin of ["graphite", "parchment"])
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/");
     await nav(page, "Создать");
-    await page.getByText("Настройки генератора", { exact: true }).click();
+
     const profile = page.getByRole("region", { name: "Технологии связи" });
-    await profile
-      .getByRole("button", { name: "Современность", exact: true })
-      .click();
+    await profile.getByLabel("Набор технологий связи",{exact:true}).selectOption("modern");
     await profile
       .getByRole("checkbox", { name: "Письма", exact: true })
       .check();
@@ -31,19 +30,18 @@ for (const skin of ["graphite", "parchment"])
       .getByRole("checkbox", { name: "Магическая связь", exact: true })
       .check();
     await expect(
-      profile.getByRole("button", { name: "Пользовательский", exact: true }),
-    ).toHaveAttribute("aria-pressed", "true");
+      profile.getByLabel("Набор технологий связи",{exact:true}),
+    ).toHaveValue("custom");
+    await profile.getByText("Правила и особенности",{exact:true}).click();
     await profile
       .getByLabel("Особенности связи в мире")
       .fill("1350 год: смартфоны, письма и магия.");
     await page
       .getByLabel("Описание мира или текст импорта")
       .fill("Соседи разговаривают на кухне.");
-    await page
-      .getByRole("button", { name: "Развить идею и создать мир", exact: true })
-      .click();
+    await generateIdea(page);
     await expect(
-      page.locator('.ww-hero h1'),
+      page.locator('.ww-hero h1, .atelier-result h3'),
     ).toBeVisible();
     await page.getByRole("button", { name: "Автор мира", exact: true }).click();
     await page
@@ -88,7 +86,7 @@ for (const skin of ["graphite", "parchment"])
       .getByRole("button", { name: "Повторить проверку", exact: true })
       .click();
     await workshopNav(page,'Обзор мира');
-    await expect(page.locator('.ww-hero h1')).toBeVisible();
+    await expect(page.locator('.ww-hero h1, .atelier-result h3')).toBeVisible();
     await page
       .getByRole("button", {
         name: "Подтвердить мир и начать игру",
@@ -166,22 +164,18 @@ test("communication presets, keyboard and English labels", async ({
   await page.goto("/");
   await nav(page, "Создать");
   await page.evaluate(() => (document.documentElement.lang = "en"));
-  await page.getByText("Настройки генератора", { exact: true }).click();
+  await page.getByLabel("Описание мира или текст импорта").fill("x");
   // Trigger the parent render after changing the existing locale source.
-  await page.getByLabel("География", { exact: true }).fill("x");
-  const profile = page.locator(".communication-settings").first();
-  const button = profile.getByRole("button", { name: /1939/ });
-  await button.focus();
-  await page.keyboard.press("Enter");
+
+  const profile = page.locator(".atelier-communication");
+  await profile.getByRole("combobox").selectOption("1939");
   await expect(
     profile.getByRole("checkbox", { name: "Letters", exact: true }),
   ).toBeChecked();
   await expect(
     profile.getByRole("checkbox", { name: "Telegrams", exact: true }),
   ).toBeChecked();
-  await profile
-    .getByRole("button", { name: "No remote communication", exact: true })
-    .click();
+  await profile.getByRole("combobox").selectOption("none");
   await expect(profile.locator("input:checked")).toHaveCount(0);
   await page.evaluate(() => (document.documentElement.style.fontSize = "200%"));
   expect(

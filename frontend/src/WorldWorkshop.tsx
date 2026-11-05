@@ -1,3 +1,6 @@
+import {IdeaGeneration} from './workshop/IdeaGeneration';
+import {IdeaAtelier} from './workshop/IdeaAtelier';
+import {readIdeaBuffer,writeIdeaBuffer} from './workshop/ideaBuffer';
 import {ReferenceChecklist} from './workshop/ReferenceChecklist';
 import {RelationshipMap} from './workshop/RelationshipMap';
 import {RecordPreview} from './workshop/RecordPreview';
@@ -135,8 +138,11 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
     onGame: (world: number, save: number) => void;
 }) {
     useWorkshopBack(onBack);
-    const [creation, setCreation] = useState<Creation>(()=>{try{return {...defaultCreation,...JSON.parse(localStorage.getItem('worldCreationSettings')||'{}')}}catch{return defaultCreation}});
-    useEffect(()=>{localStorage.setItem('worldCreationSettings',JSON.stringify(creation));},[creation]);
+    const initialBuffer=useRef(readIdeaBuffer(localStorage.getItem('draftWorkspace')||'')).current;
+    const restoredCreation=useRef(!!initialBuffer);
+    const [inputSaved,setInputSaved]=useState(true);
+    const [launchError,setLaunchError]=useState('');
+    const [creation,setCreation]=useState<Creation>(()=>initialBuffer?.creation||structuredClone(defaultCreation));
     const [candidatePath,setCandidatePath] = useState('');
     const [candidateValue,setCandidateValue] = useState('');
     const [residenceGrouping,setResidenceGrouping] = useState('actor');
@@ -169,12 +175,12 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
     const [author, setAuthor] = useState(false);
     const [authorAsk, setAuthorAsk] = useState(false);
     const [authorAcknowledged, setAuthorAcknowledged] = useState(false);
-    const [text, setText] = useState(()=>sessionStorage.getItem('workshop-idea:'+ (localStorage.getItem('draftWorkspace')||''))||'');
+    const [text, setText] = useState(()=>initialBuffer?.text||sessionStorage.getItem('workshop-idea:'+ (localStorage.getItem('draftWorkspace')||''))||'');
     const [importFormat, setImportFormat] = useState<'text'|'json'>('text');
     const [importFile, setImportFile] = useState('');
     const detectedImport = useMemo(() => detectWorldImport(text, importFile ? importFormat : undefined), [text, importFile, importFormat]);
-    const [name, setName] = useState('Новая история');
-    const [useIdea, setUseIdea] = useState(false);
+    const [name, setName] = useState(initialBuffer?.name||'');
+    const [useIdea, setUseIdea] = useState(initialBuffer?.useIdea||false);
     const [busy, setBusy] = useState(false);
     const [resuming, setResuming] = useState(false);
     const resumeGuard = useRef(false);
@@ -202,11 +208,15 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
     const selectWorkspace = (wid: string, nextDraft: Draft | null = null, nextAuthor=author) => {
         if (nextDraft && String(nextDraft.id) !== String(wid)) throw new Error('Workspace identity mismatch');
         viewBuffers.current.set(viewKey(id,author),{section,collection,selected:selectedCharacter,subsection});
-        sessionStorage.setItem('workshop-idea:'+id,text);
+        writeIdeaBuffer(id,{text,name,useIdea,creation});
         const view=viewBuffers.current.get(viewKey(wid,nextAuthor))||storedView(wid,nextAuthor);
-        setSearch('');setSearchOpen(false);setRecordTarget(null);setAuthor(nextAuthor);
+        setSearch('');setSearchOpen(false);setRecordTarget(null);setAuthor(nextAuthor);setLaunchError('');
         setSection(view?.section||'overview');setCollection(view?.collection||emptyCollection);setSubsection(view?.subsection||{});setSelectedCharacter(view?.selected||'');setDossierOpen(false);
-        setText(sessionStorage.getItem('workshop-idea:'+wid)||'');
+        const buffer=readIdeaBuffer(wid);
+        restoredCreation.current=!!buffer;
+        setText(buffer?.text||sessionStorage.getItem('workshop-idea:'+wid)||'');
+        setName(buffer?.name||nextDraft?.name||'');setUseIdea(buffer?.useIdea||false);
+        setCreation(buffer?.creation||{...structuredClone(defaultCreation),...nextDraft?.creation_settings});
         loadController.current?.abort();
         if (wid) localStorage.setItem('draftWorkspace', wid);
         else localStorage.removeItem('draftWorkspace');
@@ -254,7 +264,8 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
         return () => loadController.current?.abort();
     }, [id, author]);
     const savedCreation=JSON.stringify(draft?.creation_settings||{});
-    useEffect(()=>{const saved=JSON.parse(savedCreation);if(Object.keys(saved).length)setCreation({...defaultCreation,...saved});},[id,savedCreation]);
+    useEffect(()=>{const saved=JSON.parse(savedCreation);if(!restoredCreation.current&&draft?.id===id&&draft.author){setCreation({...structuredClone(defaultCreation),...saved});setName(draft.name);restoredCreation.current=true;}},[id,savedCreation,draft?.id]);
+    useEffect(()=>{if(!id||restoredCreation.current)setInputSaved(writeIdeaBuffer(id,{text,name,useIdea,creation}));},[id,text,name,useIdea,creation]);
     const { job, reconnecting } = useJob(draft?.job, refresh);
     const locked = busy || loading || active(job);
     const phaseStatus: Record<string, [string,string]> = {
@@ -456,6 +467,37 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
       ];
     };
     const collectionRecords=(kind:string,title:string,entries:[string,Item][],describe:(item:Item)=>string,scope='')=> <RecordCollection onClose={()=>setRecordTarget(null)} initialSelected={recordTarget?.kind===kind?recordTarget.id:undefined} key={id+kind+author+scope} {...{entries,title,kind,describe}} card={recordPreview(kind)} selectionEntries={kind==='relationship'?relations:undefined} caption={kind==='event'?(eid)=>draft?.presentation?.event_times?.[eid]||'Дата неизвестна':undefined} disabled={locked} storageKey={`workshop:${id}:${kind}:${author}${scope?':'+scope:''}`} onAdd={author?()=>void change({operation:'add',kind}):undefined} render={(eid,item)=>author?entity(kind,eid,item):<RuntimeValue field="record" value={item} resolve={resolve}/>}/>;
+    const validateIdea = async () => {
+        await api('/world-creation/validate',{workspace_id:id||null,name,revision:draft?.revision||0,
+          task:'world',text,use_idea:useIdea,creation_settings:creation,config:prefs.summary});
+    };
+    const startIdea = async () => {
+        if(operationGuard.current||active(job))return;
+        operationGuard.current=true;setBusy(true);setLaunchError('');
+        let wid=id;
+        try {
+            let current=draft;
+            if(!current) {
+                if(wid)throw new Error('Дождитесь загрузки черновика.');
+                const w=await api<Workspace>('/workspaces',{name:name.trim()||'Новая история'});
+                wid=w.id;current={id:wid,name:w.name,revision:w.revision,version_id:null,state:null,
+                  validation:{errors:[],warnings:[]},import_warnings:[],source_text:'',outline:'',history:[],job:null};
+                // Adopt identity before the second request. A failed/retried request reuses it.
+                writeIdeaBuffer(wid,{text,name:w.name,useIdea,creation});
+                sessionStorage.setItem('workshop-idea:'+wid,text);
+                setList(items=>[w,...items]);selectWorkspace(wid,current);
+                sessionStorage.removeItem('workshop-idea-form:');sessionStorage.removeItem('workshop-idea:');
+            }
+            const j=await api<Job>(`/workspaces/${wid}/draft/generate`,{revision:current.revision,task:'world',text,use_idea:useIdea,creation_settings:creation,config:prefs.summary,api_key:apiKey});
+            selectWorkspace(wid,{...current,job:j});
+            setEditingIdea(false);setSection('idea');
+        } catch(e) {
+            setLaunchError((e as Error).message);setEditingIdea(true);
+            // A lost generate response may still have started a job. Reconcile before another launch.
+            if(wid){const next=await api<Draft>(`/workspaces/${wid}/draft?author=${author}`).catch(()=>null);if(next){selectWorkspace(wid,next);setLaunchError((e as Error).message);if(next.job)setEditingIdea(false)}}
+            throw e;
+        } finally {operationGuard.current=false;setBusy(false)}
+    };
     if (mode === 'scenario')
         return <><Button className="workshop-back" variant="ghost" onClick={() => setMode('quick')}>← Генератор мира</Button><Preparation worldSettings={<WorldCreationSettings value={creation} onChange={setCreation} disabled={locked}/>} prefs={prefs} apiKey={apiKey} onWorld={onWorld} onDraft={wid => { selectWorkspace(wid); setUseIdea(true); setMode('quick'); }}/></>;
     const selectedCard=characters.find(c=>c.id===selectedCharacter) as WorkshopCharacter|undefined;
@@ -489,8 +531,8 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
     {previousWorld&&<section className="ww-panel" role="status"><h2>Ранее сохранённый мир</h2><p>Новая генерация не завершена. Сейчас показана предыдущая сохранённая версия; она не заменена неполным ответом.</p><button className="ww-text-button" onClick={()=>navigate('review')}>Продолжить генерацию →</button></section>}
     {!previousWorld&&job?.status==='error'&&section!=='review'&&section!=='idea'&&section!=='ai'&&<section className="ww-panel" role="status"><h2>Задание требует внимания</h2><p>Полученный результат сохранён. Откройте проверку, чтобы увидеть причину и доступные способы продолжения.</p><button className="ww-text-button" onClick={()=>navigate('review')}>Открыть проверку →</button></section>}
     {viewChanging&&<p role="status">Загружаем выбранный вид мира…</p>}
-    {showIdea&&!canOpenBrief&&!!state&&<section className="ww-panel"><p className="ww-eyebrow">Замысел мира</p><h1>{workspaceTitle}</h1><ReadableText text={String(state.campaign.public_description||'')} /><p>Исходный замысел может содержать неизвестные герою тайны.</p><button className="ww-soft" onClick={()=>authorAcknowledged?switchView(true):setAuthorAsk(true)}>Открыть замысел автора</button></section>}
-    {showIdea&&canOpenBrief&&<>{pageHeader('Придумай свою историю','Свободный замысел станет миром, который можно прочитать, изменить и проверить перед началом игры.')}
+    {showIdea&&!canOpenBrief&&!!state&&(!job||job.kind!=='draft_world'||editingIdea)&&<section className="ww-panel"><p className="ww-eyebrow">Замысел мира</p><h1>{workspaceTitle}</h1><ReadableText text={String(state.campaign.public_description||'')} /><p>Исходный замысел может содержать неизвестные герою тайны.</p><button className="ww-soft" onClick={()=>authorAcknowledged?switchView(true):setAuthorAsk(true)}>Открыть замысел автора</button></section>}
+    {showIdea&&canOpenBrief&&mode!=='quick'&&<>{pageHeader('Придумай свою историю','Свободный замысел станет миром, который можно прочитать, изменить и проверить перед началом игры.')}
       <nav className="workshop-paths" aria-label="Способ создания">
         <button className={mode === 'quick' ? 'selected' : ''} onClick={() => setMode('quick')}>По моей идее</button>
         <button onClick={() => setMode('scenario')}>Со Сценаристом</button>
@@ -500,9 +542,9 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
       <Dialog open={draftsOpen} onOpenChange={setDraftsOpen}><DialogContent><DialogHeader><DialogTitle>Мои черновики</DialogTitle><DialogDescription>Выберите мир, создайте новый или восстановите удалённый.</DialogDescription></DialogHeader>
       <details className="workshop-continue" open><summary>Мои черновики {draft ? `· ${draft.name}` : ''}</summary>
         <div className="workshop-draft-list">
-          <button disabled={locked} className={!id ? 'selected' : ''} onClick={() => { selectWorkspace('',null,false); setName('Новая история'); setUseIdea(false); setDraftsOpen(false); }}>+ Новая история</button>
+          <button disabled={locked} className={!id ? 'selected' : ''} onClick={() => { selectWorkspace('',null,false);  setDraftsOpen(false); }}>+ Новая история</button>
           {list.map(w => <div className="workshop-draft-row" data-workspace-id={w.id} key={w.id}>
-            <button disabled={locked} className={id === w.id ? 'selected' : ''} onClick={() => { selectWorkspace(w.id,null,false); setUseIdea(false); setDraftsOpen(false); }}>{w.name}</button>
+            <button disabled={locked} className={id === w.id ? 'selected' : ''} onClick={() => { selectWorkspace(w.id,null,false); setDraftsOpen(false); }}>{w.name}</button>
             <Button variant="ghost" size="sm" aria-label={`Удалить черновик «${w.name}»`} disabled={locked} onClick={() => setDeleteDraft(w)}><Trash2 size={16}/></Button>
           </div>)}
         </div>
@@ -511,11 +553,12 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
         </details>
       </details>
       </DialogContent></Dialog>
+      {showIdea&&job?.kind==='draft_world'&&draft&&!editingIdea&&<IdeaGeneration job={job} draft={draft} title={workspaceTitle} description={String(state?.campaign.public_description||'')} onEditor={()=>{setSection('overview');if(!author){if(authorAcknowledged)switchView(true);else setAuthorAsk(true)}}} onEdit={()=>setEditingIdea(true)}/>}
       {(showIdea||section==='review'||section==='ai'&&job?.kind==='draft_editor')&&<>
       {job?.status==='error' && (job as Job & {transport_incomplete?:boolean}).transport_incomplete && <section role="status"><h3>Восстановление ответа</h3><p>Полученный ответ сохранён. Продолжение проверит сборку, запросит недостающий конец при необходимости и завершит проверку мира. Полный проверенный мир ещё не готов.</p></section>}
       {((job?.resumable && !(job as Job & {fragment_recovery?:boolean;transport_blocked?:boolean}).fragment_recovery && !(job as Job & {transport_blocked?:boolean}).transport_blocked) || (draft?.review?.status==='stale' && job?.status==='saved' && job.kind!=='draft_editor')) && <Button disabled={locked} onClick={()=>void resume({})}>{job?.kind==='draft_editor' ? 'Продолжить AI-редактирование' : draft?.creative_status && draft.creative_status !== 'applied' ? 'Продолжить творческое развитие' : draft?.review && !(job as Job & {transport_incomplete?:boolean})?.transport_incomplete ? 'Повторить проверку' : 'Продолжить сохранённую генерацию'}</Button>}
       {draft?.creative_status && ['rejected','cancelled','interrupted'].includes(draft.creative_status) && !active(job) && <p role="status">Творческое развитие не завершено. Последний кандидат сохранён; его можно открыть в редакторе.</p>}
-      {job?.response_diagnostic?.code === 'provider_http_rejection' && !active(job) && <p className="workshop-hint">HTTP-отказ не применён к миру. Перед продолжением проверь причину: для ошибки параметров нужно исправить настройки или сборку запроса. Неизменённый запрос с известной причиной HTTP 400 повторно не отправляется.</p>}
+      {job?.response_diagnostic?.code === 'provider_http_rejection' && job.response_diagnostic.http_status === 400 && !active(job) && <p className="workshop-hint">HTTP-отказ не применён к миру. Перед продолжением проверь причину: для ошибки параметров нужно исправить настройки или сборку запроса. Неизменённый запрос с известной причиной HTTP 400 повторно не отправляется.</p>}
       {job?.empty_retry_token && <Button disabled={locked} onClick={()=>setEmptyRetry({token:job.empty_retry_token!,epoch:job.attempt_epoch || 0})}>Повторить после сбоя провайдера</Button>}
       <Dialog open={!!emptyRetry} onOpenChange={open=>{if(!open)setEmptyRetry(null)}}><DialogContent><DialogHeader><DialogTitle>Повторная проверка после сбоя</DialogTitle><DialogDescription>Провайдер завершил запрос без текста. Если временный сбой устранён, можно подтвердить одну новую проверку сохранённого мира. Это новый запрос, который может быть оплачен. Предыдущие ответы и расходы сохранятся, общий бюджет не сбрасывается. Каждому повтору нужно новое подтверждение; автоматических повторов не будет.</DialogDescription></DialogHeader><div className="workshop-dialog-actions"><Button variant="ghost" onClick={()=>setEmptyRetry(null)}>Отмена</Button><Button disabled={locked} onClick={()=>{if(!emptyRetry)return;const retry=emptyRetry;setEmptyRetry(null);void resume({retry_empty_response:retry.token,expected_epoch:retry.epoch})}}>Подтвердить одну повторную проверку</Button></div></DialogContent></Dialog>
       {job?.resumable && <p className="workshop-hint">Модель и Thinking генерации закреплены за заданием. Смысловая проверка выполняется с Thinking Off; из текущих настроек применяются контекст и потолок ответа. Общий бюджет не сбрасывается.</p>}
@@ -544,17 +587,18 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
         <details><summary>Полный кандидат (включая тайны)</summary><pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify(draft.candidate,null,2)}</pre></details>
       </section>}
       </>}
-      {showIdea && canOpenBrief && <section className="workshop-inspiration">
+      {showIdea&&launchError&&<p role="alert" className="workshop-error">{launchError} Черновик сохранён; повтор использует тот же мир.</p>}
+      {showIdea&&canOpenBrief&&mode==='quick'&&(!job||job.kind!=='draft_world'||editingIdea)&&!active(job)&&!resuming&&<IdeaAtelier key={id} id={id} name={name||draft?.name||''} text={text} useIdea={useIdea} creation={creation} disabled={locked} saved={inputSaved} onName={setName} onText={setText} onScenario={setUseIdea} onCreation={setCreation} validate={validateIdea} launch={startIdea} onMethod={setMode} onBack={state?()=>{setEditingIdea(false);setSection('overview')}:undefined}/>}
+      {showIdea && canOpenBrief && mode==='import' && <section className="workshop-inspiration">
         <div className="workshop-inspiration-head"><span className="workshop-step">01 · ЗАМЫСЕЛ</span><h2>{mode === 'import' ? 'Загрузи готовую выжимку' : 'С чего начинается история?'}</h2></div>
         <p>{mode === 'import' ? 'Подойдёт .md, .txt или готовый .json мира. Можно вставить текст выжимки ниже.' : 'Пиши свободно, как Сценаристу: персонажи, атмосфера, отношения, важные события. Пробелы генератор заполнит сам.'}</p>
-        {mode === 'quick' && !useIdea && <p className="workshop-footnote">Генератор сразу превратит замысел в готовый мир и выжимку. Сценарист доступен отдельно.</p>}
+        {!useIdea && <p className="workshop-footnote">Генератор сразу превратит замысел в готовый мир и выжимку. Сценарист доступен отдельно.</p>}
         {mode === 'import' && <Input type="file" accept=".md,.txt,.json" disabled={locked} aria-label="Файл мира" onChange={e => { const f = e.target.files?.[0]; if (f) void run(async () => {const content = await f.text(); setText(content); setImportFormat(f.name.toLowerCase().endsWith('.json') ? 'json' : 'text'); setImportFile(f.name);}); }}/ >}
         {mode === 'import' && <p role="status">Распознано: {detectedImport.format === 'json' ? detectedImport.error ? 'JSON (ошибка)' : 'JSON World State' : 'текстовая выжимка'}{importFile && ` · ${importFile}`}{importFile && importFormat === 'json' && <> · Будет импортирован готовый World State. <Button variant="ghost" disabled={locked} onClick={() => {setText(''); setImportFormat('text'); setImportFile('');}}>Вставить текст выжимки</Button></>}</p>}
         {mode === 'import' && detectedImport.error && <p className="workshop-error" role="alert">{detectedImport.error}</p>}
         {!id && <Input aria-label="Название черновика" value={name} onChange={e => setName(e.target.value)} placeholder="Название истории (можно изменить позже)" />}
-        {mode !== 'import' && <WorldCreationSettings value={creation} onChange={setCreation} disabled={locked}/>}
-        {!(mode === 'import' && importFile && importFormat === 'json') && <Textarea className="workshop-idea-input" value={text} onChange={e => {setText(e.target.value); setImportFile(''); setImportFormat('text');}} aria-label="Описание мира или текст импорта" placeholder={mode === 'import' ? 'Вставь здесь текст выжимки или JSON мира…' : 'Например: современная клиника. Я играю за врача. Придумай важных коллег и напряжённые, но живые отношения. Сейчас четверг, 14:00…'} />}
-        {mode === 'quick' && draft && <label className="workshop-scenario-option"><input type="checkbox" checked={useIdea} onChange={e => setUseIdea(e.target.checked)}/> Взять за основу сценарий этого черновика</label>}
+                {!(mode === 'import' && importFile && importFormat === 'json') && <Textarea className="workshop-idea-input" value={text} onChange={e => {setText(e.target.value); setImportFile(''); setImportFormat('text');}} aria-label="Описание мира или текст импорта" placeholder={mode === 'import' ? 'Вставь здесь текст выжимки или JSON мира…' : 'Например: современная клиника. Я играю за врача. Придумай важных коллег и напряжённые, но живые отношения. Сейчас четверг, 14:00…'} />}
+        {draft && <label className="workshop-scenario-option"><input type="checkbox" checked={useIdea} onChange={e => setUseIdea(e.target.checked)}/> Взять за основу сценарий этого черновика</label>}
         <div className="workshop-create-actions">
           <Button disabled={locked || (!text.trim() && !useIdea) || (mode === 'import' && !!detectedImport.error)} onClick={() => void run(async () => {
             if (mode === 'import' && detectedImport.error) throw new Error(detectedImport.error);
@@ -563,7 +607,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
               const w = await api<Workspace>('/workspaces', {name: name.trim() || 'Новая история'});
               wid = w.id; current = {id: wid, name: w.name, revision: w.revision, version_id: null, state: null,
                 validation: {errors: [], warnings: []}, import_warnings: [], source_text: '', outline: '', history: [], job: null};
-              setList(items => [w, ...items]);
+              setList(items => [w, ...items]);selectWorkspace(wid,current);
             }
             if (mode === 'import') {
               const imported = await api<Draft>(`/workspaces/${wid}/draft/import`, {text, format: detectedImport.format, revision: current.revision});

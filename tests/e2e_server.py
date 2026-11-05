@@ -45,6 +45,7 @@ def runtime_v3_request(messages):
     return any('RawTurnResult v3' in message['content'] for message in messages)
 
 
+idea190_provider=None
 editor173_control=None
 creative172_control=None
 review170_control=None
@@ -60,6 +61,8 @@ story168_gate=None
 
 def stream(**kwargs):
     global phone_mode, group_semantic_fail_once, npc_review_start_payload, story168_payload
+    if idea190_provider is not None and idea190_provider.matches(kwargs):
+        yield from idea190_provider.stream(kwargs);return
     if story168_payload is not None:
         from story_notifications_fixture import TEXT
         if kwargs.get('response_format'):
@@ -562,6 +565,18 @@ if __name__ == '__main__':
         from fastapi.testclient import TestClient
         from creative185_fixture import seed_rejected
         return seed_rejected(TestClient(app))
+
+    @app.post('/test/idea190')
+    def configure_idea190(body:dict):
+        global idea190_provider
+        from idea190_provider import IdeaProvider
+        idea190_provider=IdeaProvider(body.get('fail_review',False))
+        return {'ready':True}
+
+    @app.post('/test/idea190/release')
+    def release_idea190():
+        idea190_provider.gate.set()
+        return {'world_calls':idea190_provider.world_calls,'review_calls':idea190_provider.review_calls}
 
     @app.post('/test/creative172')
     def seed_creative172(body:dict):
