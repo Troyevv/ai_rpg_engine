@@ -83,6 +83,13 @@ def create_app(db_path=None, recover=True):
     @app.exception_handler(RequestValidationError)
     async def validation_error(request, exc):
         # Pydantic's default response echoes input, which may include API keys.
+        # Preflight needs field-level feedback before any workspace is created.
+        # Return only validator messages/paths, never input, ctx or the request body.
+        if request.url.path == '/api/world-creation/validate':
+            return JSONResponse({'detail': [
+                {'loc': list(e['loc']), 'msg': e['msg'], 'type': e['type']}
+                for e in exc.errors()
+            ]}, status_code=422)
         return JSONResponse({'detail': 'Некорректный запрос', 'fields': [list(e['loc']) for e in exc.errors()]}, status_code=422)
 
     @app.get('/api/health')
@@ -561,6 +568,9 @@ def create_app(db_path=None, recover=True):
     dist = ROOT / 'frontend' / 'dist'
     if (dist / 'assets').is_dir():
         app.mount('/assets', StaticFiles(directory=dist / 'assets'), name='assets')
+
+    if (dist / 'fonts').is_dir():
+        app.mount('/fonts', StaticFiles(directory=dist / 'fonts'), name='fonts')
 
     @app.get('/sw.js', include_in_schema=False)
     def service_worker():

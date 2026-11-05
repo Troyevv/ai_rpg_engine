@@ -1,3 +1,4 @@
+import {creationMethod} from './idea-navigation';
 import {generateIdea} from './idea-navigation';
 import {workshopNav,draftsMenu} from './workshop-navigation';
 import {test,expect} from '@playwright/test';
@@ -105,7 +106,7 @@ for (const extension of ['md', 'txt', 'json']) {
    if (r.url().includes('/generate')) generationRequests++;
   });
   await page.goto('/'); await nav(page,'Создать');
-  await page.getByRole('button',{name:'Импортировать',exact:true}).click();
+  await creationMethod(page,'Импортировать');
   await page.getByLabel('Название черновика').fill(source.name);
   await expect(page.getByLabel('Файл мира')).toHaveAttribute('accept','.md,.txt,.json');
   await page.getByLabel('Файл мира').setInputFiles({name:filename,mimeType:extension==='json'?'application/json':'text/plain',buffer:Buffer.from(content,'utf8')});
@@ -150,7 +151,7 @@ for (const input of ['state', 'wrapper', 'markdown', 'broken']) {
    if (r.url().includes('/generate')) generationRequests++;
   });
   await page.goto('/');await nav(page,'Создать');
-  await page.getByRole('button',{name:'Импортировать',exact:true}).click();
+  await creationMethod(page,'Импортировать');
   await page.getByLabel('Название черновика').fill(source.name);
   const textarea=page.getByLabel('Описание мира или текст импорта');
   await textarea.fill(text);
@@ -200,7 +201,7 @@ for (const format of ['json','text']) {
   await page.goto('/');await nav(page,'Создать');
   const workshop=page.locator('.world-workshop');
   await expect(workshop).toHaveAttribute('aria-busy','false');
-  await page.getByRole('button',{name:'Импортировать',exact:true}).click();
+  await creationMethod(page,'Импортировать');
   const content=format==='json'?JSON.stringify(canonical.state):markdown;
   await page.getByLabel('Описание мира или текст импорта').fill(content);
   const createdPromise=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/workspaces'&&r.request().method()==='POST');

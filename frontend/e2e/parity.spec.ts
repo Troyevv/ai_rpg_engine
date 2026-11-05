@@ -1,3 +1,4 @@
+import {creationMethod} from './idea-navigation';
 import {nav} from "./navigation";
 import { test, expect } from "@playwright/test";
 
@@ -13,7 +14,7 @@ test("scenario → summary → world → save → start → action → regenerat
   await page.getByLabel("API-ключ DeepSeek").fill("fixture-key");
   await page.getByRole("button", { name: "Сохранить настройки" }).click();
   await nav(page,'Создать');
-  await page.getByRole('button',{name:'Со Сценаристом',exact:true}).click();
+  await creationMethod(page,'Со Сценаристом');
   await page.getByLabel("Название сценария").fill("Вечер в общем доме");
   await page
     .getByRole("button", { name: "Новый сценарий", exact: true })
@@ -104,7 +105,7 @@ test("streaming survives disconnect; stop keeps a draft and cannot save it as a 
   await page.addInitScript((id) => localStorage.setItem("workspace", id), w.id);
   await page.goto("/");
   await nav(page,'Создать');
-  await page.getByRole('button',{name:'Со Сценаристом',exact:true}).click();
+  await creationMethod(page,'Со Сценаристом');
   await page.getByLabel("Идея или правки сценария").fill("Друзья");
   await page
     .getByRole("button", { name: "Написать сценарий", exact: true })
@@ -119,7 +120,7 @@ test("streaming survives disconnect; stop keeps a draft and cannot save it as a 
   ).toBeVisible();
   await page.reload();
   await nav(page,'Создать');
-  await page.getByRole('button',{name:'Со Сценаристом',exact:true}).click();
+  await creationMethod(page,'Со Сценаристом');
   await page
     .getByRole("button", { name: "Остановить генерацию", exact: true })
     .click();

@@ -9,7 +9,8 @@
     "call-continuity.spec.ts",
     "calendar.spec.ts",
     "genealogy156.spec.ts",
-    "mobile-menu126.spec.ts"
+    "mobile-menu126.spec.ts",
+    "idea190.spec.ts"
   ],
   "domains": {
     "phone": {
@@ -92,6 +93,7 @@
     "call-continuity.spec.ts": "one world during and after NPC hangup: graphite",
     "calendar.spec.ts": "canonical date, observances and server time skip preview survive reload",
     "genealogy156.spec.ts": "six generations retain all supplied relations and fit with fixed portrait geometry",
-    "mobile-menu126.spec.ts": "menu: all destinations, draft, anchor, nested Back and workspace state"
+    "mobile-menu126.spec.ts": "menu: all destinations, draft, anchor, nested Back and workspace state",
+    "idea190.spec.ts": "idea190: real generation, reload, HTTP502 review recovery and author revision"
   }
 }

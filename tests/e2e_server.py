@@ -570,7 +570,14 @@ if __name__ == '__main__':
     def configure_idea190(body:dict):
         global idea190_provider
         from idea190_provider import IdeaProvider
-        idea190_provider=IdeaProvider(body.get('fail_review',False))
+        idea190_provider=IdeaProvider(body.get('fail_review',False),body.get('custom_calendar',False))
+        if body.get('release'):idea190_provider.gate.set()
+        if body.get('scenario'):
+            repo=app.state.repository
+            workspace=repo.create_workspace('Сценарий Валлора')
+            with repo.connect() as db:
+                db.execute('UPDATE preparation_workspaces SET idea=? WHERE id=?',('ATELIER190. Сохранённый сценарий о друзьях.',workspace['id']))
+            return workspace
         return {'ready':True}
 
     @app.post('/test/idea190/release')

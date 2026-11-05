@@ -10,3 +10,9 @@ export async function generateIdea(page:Page){
  await expect(page.getByRole('region',{name:'Сводка замысла'})).toBeVisible();
  await page.getByRole('button',{name:'Создать мир',exact:true}).click();
 }
+
+export async function creationMethod(page:Page,name:string){
+ const menu=page.locator('.atelier-method');
+ if(await menu.isVisible()&&await menu.getAttribute('open')===null)await menu.locator('summary').click();
+ await page.getByRole('button',{name,exact:true}).click();
+}

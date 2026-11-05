@@ -205,10 +205,10 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
             id: string;
         }[];
     } | null>(null);
-    const selectWorkspace = (wid: string, nextDraft: Draft | null = null, nextAuthor=author) => {
+    const selectWorkspace = (wid: string, nextDraft: Draft | null = null, nextAuthor=author,saveCurrent=true) => {
         if (nextDraft && String(nextDraft.id) !== String(wid)) throw new Error('Workspace identity mismatch');
         viewBuffers.current.set(viewKey(id,author),{section,collection,selected:selectedCharacter,subsection});
-        writeIdeaBuffer(id,{text,name,useIdea,creation});
+        if(saveCurrent)writeIdeaBuffer(id,{text,name,useIdea,creation});
         const view=viewBuffers.current.get(viewKey(wid,nextAuthor))||storedView(wid,nextAuthor);
         setSearch('');setSearchOpen(false);setRecordTarget(null);setAuthor(nextAuthor);setLaunchError('');
         setSection(view?.section||'overview');setCollection(view?.collection||emptyCollection);setSubsection(view?.subsection||{});setSelectedCharacter(view?.selected||'');setDossierOpen(false);
@@ -264,7 +264,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
         return () => loadController.current?.abort();
     }, [id, author]);
     const savedCreation=JSON.stringify(draft?.creation_settings||{});
-    useEffect(()=>{const saved=JSON.parse(savedCreation);if(!restoredCreation.current&&draft?.id===id&&draft.author){setCreation({...structuredClone(defaultCreation),...saved});setName(draft.name);restoredCreation.current=true;}},[id,savedCreation,draft?.id]);
+    useEffect(()=>{const saved=JSON.parse(savedCreation);if(!restoredCreation.current&&draft?.id===id&&(draft.author||!draft.version_id)){setCreation({...structuredClone(defaultCreation),...saved});setName(draft.name);restoredCreation.current=true;}},[id,savedCreation,draft?.id,draft?.author,draft?.version_id]);
     useEffect(()=>{if(!id||restoredCreation.current)setInputSaved(writeIdeaBuffer(id,{text,name,useIdea,creation}));},[id,text,name,useIdea,creation]);
     const { job, reconnecting } = useJob(draft?.job, refresh);
     const locked = busy || loading || active(job);
@@ -323,7 +323,6 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
         setPendingVisibility(saved?.visibility??null);
         setEdit(target);setValue(saved?saved.value:target.value);setStructuredEdit(saved?saved.structured:JSON.stringify(target.value??null,null,2));setEditRevision(saved?.revision??draft?.revision??0);setEditError(saved&&saved.revision!==draft?.revision?'Мир изменился с момента ввода. Проверьте значение и явно разрешите сохранение в текущую версию.':'');setInstruction(saved?.instruction||'');setFieldJob(saved?.jobId||null);setAck(false);setRelated([]);if(target.field==='__character')void api<{kind:string;id:string}[]>(`/workspaces/${id}/draft/dependencies?kind=character&entity_id=${target.id}`).then(setRelated).catch(e=>toast.error(e.message));
     };
-    useEffect(()=>{sessionStorage.setItem('workshop-idea:'+id,text)},[id,text]);
     useEffect(()=>{sessionStorage.setItem('workshop-section:'+id,section);sessionStorage.setItem(viewKey(id,author),JSON.stringify({section,collection,selected:selectedCharacter,subsection}))},[id,author,section,collection,selectedCharacter,subsection]);
     useEffect(()=>{if(edit)sessionStorage.setItem(editBufferKey(edit),JSON.stringify({value,structured:structuredEdit,revision:editRevision,instruction,jobId:fieldJob,visibility:pendingVisibility}))},[edit,value,structuredEdit,editRevision,instruction,fieldJob,pendingVisibility]);
     useEffect(()=>{
@@ -484,17 +483,16 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
                   validation:{errors:[],warnings:[]},import_warnings:[],source_text:'',outline:'',history:[],job:null};
                 // Adopt identity before the second request. A failed/retried request reuses it.
                 writeIdeaBuffer(wid,{text,name:w.name,useIdea,creation});
-                sessionStorage.setItem('workshop-idea:'+wid,text);
                 setList(items=>[w,...items]);selectWorkspace(wid,current);
-                sessionStorage.removeItem('workshop-idea-form:');sessionStorage.removeItem('workshop-idea:');
+                try{sessionStorage.removeItem('workshop-idea-form:');sessionStorage.removeItem('workshop-idea:')}catch{/* The open form remains usable if browser storage is unavailable. */}
             }
             const j=await api<Job>(`/workspaces/${wid}/draft/generate`,{revision:current.revision,task:'world',text,use_idea:useIdea,creation_settings:creation,config:prefs.summary,api_key:apiKey});
-            selectWorkspace(wid,{...current,job:j});
+            selectWorkspace(wid,{...current,job:j},author,false);
             setEditingIdea(false);setSection('idea');
         } catch(e) {
             setLaunchError((e as Error).message);setEditingIdea(true);
             // A lost generate response may still have started a job. Reconcile before another launch.
-            if(wid){const next=await api<Draft>(`/workspaces/${wid}/draft?author=${author}`).catch(()=>null);if(next){selectWorkspace(wid,next);setLaunchError((e as Error).message);if(next.job)setEditingIdea(false)}}
+            if(wid){const next=await api<Draft>(`/workspaces/${wid}/draft?author=${author}`).catch(()=>null);if(next){selectWorkspace(wid,next,author,false);setLaunchError((e as Error).message);if(next.job)setEditingIdea(false)}}
             throw e;
         } finally {operationGuard.current=false;setBusy(false)}
     };
@@ -587,7 +585,7 @@ export function WorldWorkshop({ prefs, apiKey, onWorld, onGame, onBack, onSettin
         <details><summary>Полный кандидат (включая тайны)</summary><pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify(draft.candidate,null,2)}</pre></details>
       </section>}
       </>}
-      {showIdea&&launchError&&<p role="alert" className="workshop-error">{launchError} Черновик сохранён; повтор использует тот же мир.</p>}
+      {showIdea&&launchError&&<p role="alert" className="workshop-error">{launchError} {id?'Черновик сохранён; повтор использует тот же мир.':'Замысел остаётся в открытой форме.'}</p>}
       {showIdea&&canOpenBrief&&mode==='quick'&&(!job||job.kind!=='draft_world'||editingIdea)&&!active(job)&&!resuming&&<IdeaAtelier key={id} id={id} name={name||draft?.name||''} text={text} useIdea={useIdea} creation={creation} disabled={locked} saved={inputSaved} onName={setName} onText={setText} onScenario={setUseIdea} onCreation={setCreation} validate={validateIdea} launch={startIdea} onMethod={setMode} onBack={state?()=>{setEditingIdea(false);setSection('overview')}:undefined}/>}
       {showIdea && canOpenBrief && mode==='import' && <section className="workshop-inspiration">
         <div className="workshop-inspiration-head"><span className="workshop-step">01 · ЗАМЫСЕЛ</span><h2>{mode === 'import' ? 'Загрузи готовую выжимку' : 'С чего начинается история?'}</h2></div>

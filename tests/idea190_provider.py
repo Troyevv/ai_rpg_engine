@@ -7,8 +7,9 @@ from backend.services.draft_completeness import MARKER as REVIEW
 from draft_provider_fixture import creative_noop
 
 class IdeaProvider:
-    def __init__(self, fail_review=False):
+    def __init__(self, fail_review=False, custom_calendar=False):
         self.fail_review=fail_review
+        self.custom_calendar=custom_calendar
         self.gate=Event()
         self.world_calls=0
         self.review_calls=0
@@ -36,4 +37,6 @@ class IdeaProvider:
             else:yield '{"issues":[]}'
         else:
             self.world_calls+=1
-            yield json.dumps(rich(),ensure_ascii=False)
+            state=rich()
+            if self.custom_calendar:state['world_clock']['calendar']={}
+            yield json.dumps(state,ensure_ascii=False)

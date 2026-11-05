@@ -1,3 +1,4 @@
+import {creationMethod} from './idea-navigation';
 import {ideaGroup,closeIdeaGroup} from './idea-navigation';
 import {test,expect} from '@playwright/test';
 import {nav} from './navigation';
@@ -66,7 +67,7 @@ test('Quick and Scenario share independent presets and preview',async({page},inf
  await page.getByLabel('Страна праздников',{exact:true}).selectOption('BR');
  await page.getByLabel('Сезоны',{exact:true}).selectOption('south');
  await closeIdeaGroup(page);await page.locator('.atelier-method summary').click();
- await page.getByRole('button',{name:'Со Сценаристом',exact:true}).click();
+ await creationMethod(page,'Со Сценаристом');
  await page.getByText('Настройки генератора',{exact:true}).click();
  await expect(page.getByLabel('Страна праздников',{exact:true})).toHaveValue('BR');
  await expect(page.getByLabel('Сезоны',{exact:true})).toHaveValue('south');
