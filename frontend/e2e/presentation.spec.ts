@@ -98,7 +98,7 @@ test('legacy world defaults, auto selection, keyboard tabs and reduced motion re
  await expect(page.locator('.background-turn')).toHaveCount(1);
  await expect(page.locator('.narrative-divider')).toHaveText('Тем временем');
  await noOverflow(page);
- await nav(page,'Создать');await expect(page.getByRole('heading',{name:'Придумай свою историю'})).toBeVisible();
+ await nav(page,'Создать');await expect(page.getByRole('heading',{name:'По моей идее'})).toBeVisible();
 });
 
 for(const size of [{width:1920,height:1080},{width:1366,height:768},{width:360,height:800},{width:430,height:932}]){

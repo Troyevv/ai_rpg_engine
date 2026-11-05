@@ -45,6 +45,7 @@ def runtime_v3_request(messages):
     return any('RawTurnResult v3' in message['content'] for message in messages)
 
 
+idea190_provider=None
 editor173_control=None
 creative172_control=None
 review170_control=None
@@ -60,6 +61,8 @@ story168_gate=None
 
 def stream(**kwargs):
     global phone_mode, group_semantic_fail_once, npc_review_start_payload, story168_payload
+    if idea190_provider is not None and idea190_provider.matches(kwargs):
+        yield from idea190_provider.stream(kwargs);return
     if story168_payload is not None:
         from story_notifications_fixture import TEXT
         if kwargs.get('response_format'):
@@ -532,6 +535,16 @@ llm.unload_all_models = lambda: 1
 if __name__ == '__main__':
     path = os.getenv('E2E_DB_PATH') or str(Path(tempfile.mkdtemp())/'e2e.sqlite3')
     app = create_app(path)
+    # Approved prototype snapshot is test-only. No simulator is mounted in production.
+    import zipfile
+    from starlette.staticfiles import StaticFiles
+    from starlette.routing import Mount
+    reference_dir=Path(tempfile.mkdtemp(prefix='idea190-reference-'))
+    with zipfile.ZipFile(Path(__file__).parent/'fixtures/idea190-reference.zip') as archive:
+        archive.extractall(reference_dir)
+    import shutil
+    shutil.copyfile(Path(__file__).parents[1]/'frontend/src/assets/idea-folio.webp',reference_dir/'folio.webp')
+    app.router.routes.insert(0, Mount('/test/idea190/reference',app=StaticFiles(directory=reference_dir)))
     from backend.tabletop.dice import DiceEngine
     from tabletop_fixture import Fixed
     class BrowserDice(DiceEngine):
@@ -562,6 +575,25 @@ if __name__ == '__main__':
         from fastapi.testclient import TestClient
         from creative185_fixture import seed_rejected
         return seed_rejected(TestClient(app))
+
+    @app.post('/test/idea190')
+    def configure_idea190(body:dict):
+        global idea190_provider
+        from idea190_provider import IdeaProvider
+        idea190_provider=IdeaProvider(body.get('fail_review',False),body.get('custom_calendar',False),transport_stream=provider_chat_stream)
+        if body.get('release'):idea190_provider.gate.set()
+        if body.get('scenario'):
+            repo=app.state.repository
+            workspace=repo.create_workspace('Сценарий Валлора')
+            with repo.connect() as db:
+                db.execute('UPDATE preparation_workspaces SET idea=? WHERE id=?',('ATELIER190. Сохранённый сценарий о друзьях.',workspace['id']))
+            return workspace
+        return {'ready':True}
+
+    @app.post('/test/idea190/release')
+    def release_idea190():
+        idea190_provider.gate.set()
+        return {'world_calls':idea190_provider.world_calls,'review_calls':idea190_provider.review_calls}
 
     @app.post('/test/creative172')
     def seed_creative172(body:dict):

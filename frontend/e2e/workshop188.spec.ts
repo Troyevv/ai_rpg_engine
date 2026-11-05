@@ -1,3 +1,4 @@
+import {generateIdea} from './idea-navigation';
 import {test,expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {nav} from './navigation';
@@ -7,8 +8,8 @@ test('new workspace retains the submitted idea without copying it into the next 
  await page.goto('/');await nav(page,'Создать');
  const idea='Друзья встречаются на кухне. Придумай их прошлое и отношения.';
  await page.getByLabel('Описание мира или текст импорта').fill(idea);
- await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
- await expect(page.locator('.ww-hero h1')).toBeVisible();
+ await generateIdea(page);
+ await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
  const wid=await page.evaluate(()=>localStorage.getItem('draftWorkspace'));
  await workshopNav(page,'Идея и генерация');
  await expect(page.getByLabel('Описание мира или текст импорта')).toHaveCount(0);
@@ -23,7 +24,7 @@ test('new workspace retains the submitted idea without copying it into the next 
  expect((await(await request.get(`/api/workspaces/${wid}/draft?author=true`)).json()).source_text).toContain(idea);
  await draftsMenu(page);await page.getByRole('button',{name:'+ Новая история',exact:true}).click();
  await expect(page.getByLabel('Описание мира или текст импорта')).toHaveValue('');
- await expect(page.getByLabel('Название черновика')).toHaveValue('Новая история');
+ await expect(page.getByLabel('Название черновика')).toHaveValue('');
 });
 
 test('field status, failed save, restored input, required structured fields and scroll context',async({page,request},info)=>{

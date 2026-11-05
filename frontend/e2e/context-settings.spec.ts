@@ -1,3 +1,4 @@
+import {generateIdea} from './idea-navigation';
 import {test,expect} from '@playwright/test';
 import {nav} from './navigation';
 
@@ -15,7 +16,7 @@ test('large per-task contexts persist and resume a world rejected before the fir
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await nav(page,'Создать');
   await page.getByLabel('Описание мира или текст импорта').fill('Соседи на кухне.\n'+'Подробность. '.repeat(2500));
-  await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
+  await generateIdea(page);
   const resume=page.getByRole('button',{name:'Продолжить сохранённую генерацию',exact:true});
   await expect(resume).toBeVisible();
   const url=`/api/workspaces/${workspace.id}/draft`;
@@ -38,7 +39,7 @@ test('large per-task contexts persist and resume a world rejected before the fir
   const sent=page.waitForRequest(r=>r.url().endsWith('/draft/resume'));
   await resume.click();
   expect((await sent).postDataJSON().context_length).toBe(262144);
-  await expect(page.locator('.ww-hero h1')).toBeVisible();
+  await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
   const completed=await(await request.get(url)).json();
   expect(completed.job.id).toBe(failed.job.id);
   expect(completed.validation.errors).toEqual([]);

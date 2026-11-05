@@ -162,12 +162,12 @@ export interface Job {
   empty_retry_token?: string | null;
   effective_config?: {provider:string;model:string;thinking:string;context_length:number;max_tokens:number} | null;
   pinned_config?: {provider:string;model:string;thinking:string;context_length:number;max_tokens:number};
-  response_diagnostic?: {code:string;message:string} | null;
+  response_diagnostic?: {code:string;message:string;http_status?:number} | null;
   presentation?: PresentationRoute;
   attempt_epoch?: number;
   resumable?: boolean;
   replaces_id?:number|null;
-  phase?: "scenario" | "world" | "retrying" | "validating" | "saving" | "editing" | "";
+  phase?: "scenario" | "world" | "retrying" | "validating" | "saving" | "editing" | "developing" | "reviewing" | "improving" | "continuing" | "";
   progress_chars?: number;
   id: string;
   status: string;

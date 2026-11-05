@@ -1,3 +1,5 @@
+import {creationMethod} from './idea-navigation';
+import {ideaGroup,closeIdeaGroup} from './idea-navigation';
 import {test,expect} from '@playwright/test';
 import {nav} from './navigation';
 import {workshopNav} from './workshop-navigation';
@@ -54,16 +56,18 @@ test('regional presets preview apply and custom edit preserve E5 authorship',asy
 
 test('Quick and Scenario share independent presets and preview',async({page},info)=>{
  await page.goto('/');await nav(page,'Создать');
- await page.getByText('Настройки генератора',{exact:true}).click();
+ await ideaGroup(page,'Мир и география');
  await page.getByLabel('Тип мира',{exact:true}).selectOption('real_world');
  await page.getByLabel('География',{exact:true}).fill('Россия, Москва');
+ await ideaGroup(page,'Календарь и начало');
  await page.getByLabel('Дата начала',{exact:true}).fill('2026-10-23');
  await page.getByRole('button',{name:'Предпросмотр календаря',exact:true}).click();
  await expect(page.getByLabel('Предпросмотр календаря')).toContainText('Россия');
  await page.getByLabel('Праздники',{exact:true}).selectOption('country');
  await page.getByLabel('Страна праздников',{exact:true}).selectOption('BR');
  await page.getByLabel('Сезоны',{exact:true}).selectOption('south');
- await page.getByRole('button',{name:'Со Сценаристом',exact:true}).click();
+ await closeIdeaGroup(page);await page.locator('.atelier-method').click();
+ await creationMethod(page,'Со Сценаристом');
  await page.getByText('Настройки генератора',{exact:true}).click();
  await expect(page.getByLabel('Страна праздников',{exact:true})).toHaveValue('BR');
  await expect(page.getByLabel('Сезоны',{exact:true})).toHaveValue('south');

@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
+import {MessageCircle,Phone,Mail,Footprints,RadioTower,Radio,PhoneCall,Sparkles,Check,Plus,ChevronDown,Info,NotebookPen,Smartphone} from "lucide-react";
+import {AtelierDisclosure} from "./workshop/AtelierDisclosure";
 import { api } from "./api";
 import { gameLocale } from "./gameDate";
 import { Button } from "./components/ui/button";
 import { Textarea } from "./components/ui/textarea";
 import "./styles/communication-settings.css";
+const channelIcons=[MessageCircle,Phone,Mail,Footprints,RadioTower,PhoneCall,Sparkles];
 export const channels = [
   "text_message",
   "voice_call",
@@ -26,7 +29,7 @@ export type CommunicationProfile = Partial<Record<Channel, boolean>> & {
   ring_timeout_minutes?: number;
   emergency_numbers?: Record<string, string>;
 };
-const ru = [
+export const communicationNames = [
   "Сообщения и чаты",
   "Мобильные звонки",
   "Письма",
@@ -70,13 +73,15 @@ export function CommunicationSettings({
   value,
   onChange,
   disabled = false,
+  compact = false,
 }: {
   value: CommunicationProfile | null;
   onChange?: (v: CommunicationProfile) => void;
   disabled?: boolean;
+  compact?: boolean;
 }) {
   const english = gameLocale().startsWith("en"),
-    names = english ? en : ru,
+    names = english ? en : communicationNames,
     index = english ? 1 : 0;
   const [catalog, setCatalog] = useState<Record<string, CommunicationProfile>>(
       {},
@@ -100,6 +105,29 @@ export function CommunicationSettings({
   const enabled = channels.filter((c) => v[c]);
   const change = (patch: Partial<CommunicationProfile>) =>
     onChange?.({ ...v, ...patch, preset: "custom" });
+  const selectPreset = (id:string) => onChange?.(id === 'custom' ? {...v,preset:id} : {...catalog[id],author_note:v.author_note||''});
+  const toggle = (c:Channel,checked:boolean) => {
+    const next={...v,[c]:checked};
+    change({[c]:checked,presentation:next.text_message||next.voice_call?'phone':'none',
+      delivery_policy:{...v.delivery_policy,[c]:v.delivery_policy?.[c]||defaultPolicy(c)}});
+  };
+  if(compact&&onChange)return <section className="paper comm-card atelier-communication" aria-label="Технологии связи">
+    <header className="card-head comm-head"><div className="title-line"><Radio className="section-icon"/><h2>Технологии связи</h2></div><span className="count-badge" aria-live="polite">{enabled.length} из 7</span></header>
+    <fieldset disabled={disabled} className="comm-body"><div className="era"><label htmlFor="atelier-communication-preset">Набор технологий</label>
+      <div className="select-wrap"><select id="atelier-communication-preset" aria-label="Набор технологий связи" value={v.preset||'none'} onChange={e=>selectPreset(e.target.value)}>
+        {Object.entries(presets).map(([id,label])=><option key={id} value={id} disabled={!catalog[id]}>{id==='custom'&&!english?'Свой набор':label[index]}</option>)}
+      </select><ChevronDown size={15}/></div><p>Выберите основу. Эпоху мира задаёт замысел.</p></div>
+      <fieldset className="channel-set"><legend>Доступные каналы</legend><div className="chips">{channels.map((c,i)=>{const Icon=channelIcons[i];return <label key={c} className="channel" data-selected={!!v[c]} title={names[i]+' · '+policies[v.delivery_policy?.[c]||defaultPolicy(c)][index]}>
+        <input type="checkbox" checked={!!v[c]} onChange={e=>toggle(c,e.target.checked)}/><Icon size={14}/><span>{names[i]}</span>{v[c]?<Check className="on selection-mark" size={13}/>:<Plus className="off" size={12}/>}
+      </label>})}</div></fieldset>
+    </fieldset>
+    <div className="comm-bottom"><span><Info size={14}/>Личные разговоры доступны всегда</span></div>
+    <AtelierDisclosure className="comm-disclosure" title={<><NotebookPen size={14}/>Правила и особенности</>}>
+     <div className="comm-extra"><div><strong>Доставка</strong>{enabled.length?<ul>{enabled.map(c=><li key={c}>{names[channels.indexOf(c)]}<span>{policies[v.delivery_policy?.[c]||defaultPolicy(c)][index]}</span></li>)}</ul>:<p>Удалённые каналы выключены.</p>}
+     {v.presentation==='phone'&&<p className="horiz"><Smartphone size={15}/>В игре доступен телефон.</p>}</div>
+     <label>Особенности связи в мире<Textarea disabled={disabled} value={v.author_note||''} maxLength={2000} placeholder="Например, мобильные телефоны есть только у городских гильдий…" onChange={e=>change({author_note:e.target.value})}/><small>Описание уточняет обычаи. Каналы включаются отдельно.</small></label></div>
+    </AtelierDisclosure>{error&&<p className="sp-error" role="alert">{error}</p>}
+  </section>;
   return (
     <section
       className="communication-settings"
@@ -160,13 +188,7 @@ export function CommunicationSettings({
                 key={id}
                 aria-pressed={v.preset === id}
                 disabled={!catalog[id]}
-                onClick={() =>
-                  onChange(
-                    id === "custom"
-                      ? { ...v, preset: id }
-                      : { ...catalog[id], author_note: v.author_note || "" },
-                  )
-                }
+                onClick={() => selectPreset(id)}
               >
                 {presets[id][index]}
               </button>
@@ -179,20 +201,7 @@ export function CommunicationSettings({
                   <input
                     type="checkbox"
                     checked={!!v[c]}
-                    onChange={(e) => {
-                      const next = { ...v, [c]: e.target.checked };
-                      change({
-                        [c]: e.target.checked,
-                        presentation:
-                          next.text_message || next.voice_call
-                            ? "phone"
-                            : "none",
-                        delivery_policy: {
-                          ...v.delivery_policy,
-                          [c]: v.delivery_policy?.[c] || defaultPolicy(c),
-                        },
-                      });
-                    }}
+                    onChange={e => toggle(c,e.target.checked)}
                   />
                   {names[i]}
                 </label>

@@ -1,3 +1,5 @@
+import {creationMethod} from './idea-navigation';
+import {generateIdea} from './idea-navigation';
 import {workshopNav,draftsMenu} from './workshop-navigation';
 import {test,expect} from '@playwright/test';
 import {nav} from './navigation';
@@ -8,10 +10,10 @@ for(const width of [360,390,412,430,1280,1440,1920]){
   await page.addInitScript(id=>localStorage.setItem('draftWorkspace',id),workspace.id);
   await page.goto('/');await nav(page,'Создать');
   await page.getByLabel('Описание мира или текст импорта').fill('Драмеди. Восемь соседей собрались на кухне; один скрывает встречу у маяка. Сохрани направленные отношения.');
-  await page.getByRole('button',{name:'Развить идею и создать мир',exact:true}).click();
-  await expect(page.locator('.ww-hero h1')).toBeVisible();
+  await generateIdea(page);
+  await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
   await expect(page.locator('main')).not.toContainText('Тайная встреча у маяка');
-  await expect(page.locator('.workshop-view')).toContainText('Игрок');
+  await expect(page.getByRole('button',{name:'Открыть вид автора',exact:true})).toHaveAttribute('title','Взгляд героя');
   await workshopNav(page,'Сцена и правила');
   await expect(page.locator('.workshop-content')).toContainText('Кухня');
   await workshopNav(page,'Факты и знания');
@@ -42,7 +44,7 @@ for(const width of [360,390,412,430,1280,1440,1920]){
   await workshopNav(page,'Проверка мира');
   await expect(page.getByRole('heading',{name:'Смысловая проверка не завершена'})).toBeVisible();
   await page.getByRole('button',{name:'Повторить проверку',exact:true}).click();
-  await expect(page.getByRole('status',{name:'Ход проверки мира'})).toHaveCount(0);await workshopNav(page,'Обзор мира');await expect(page.locator('.ww-hero h1')).toBeVisible();
+  await expect(page.getByRole('status',{name:'Ход проверки мира'})).toHaveCount(0);await workshopNav(page,'Обзор мира');await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
   await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();
   await page.getByRole('button',{name:'Подтвердить и открыть игру',exact:true}).click();
   await expect(page.getByRole('button',{name:'Начать игру',exact:true})).toBeVisible();
@@ -54,15 +56,16 @@ for(const width of [360,390,412,430,1280,1440,1920]){
 test('new visitor can begin with an idea without making a workspace', async ({page}) => {
   await page.goto('/');
   await nav(page,'Создать');
-  await expect(page.getByRole('heading',{name:'Придумай свою историю'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'По моей идее'})).toBeVisible();
   await page.getByLabel('Название черновика').fill('Вечер в клинике');
   await page.getByLabel('Описание мира или текст импорта').fill('Вечером врач заканчивает дежурство. Придумай коллег, привычки, отношения и начало истории.');
-  await page.getByRole('button',{name:'Развить идею и создать мир'}).click();
-  await expect(page.locator('.ww-hero h1')).toBeVisible();
+  await generateIdea(page);
+  await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
+  await workshopNav(page,'Обзор мира');
   await expect(page.locator('.workshop-content')).toBeVisible();
   await expect(page.locator('main')).not.toContainText('Тайная встреча у маяка');
   await page.reload();await nav(page,'Создать');
-  await expect(page.locator('.ww-hero h1')).toBeVisible();
+  await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
 });
 
 test('draft trash and responsive workshop width', async ({page,request}) => {
@@ -104,7 +107,7 @@ for (const extension of ['md', 'txt', 'json']) {
    if (r.url().includes('/generate')) generationRequests++;
   });
   await page.goto('/'); await nav(page,'Создать');
-  await page.getByRole('button',{name:'Импортировать',exact:true}).click();
+  await creationMethod(page,'Импортировать');
   await page.getByLabel('Название черновика').fill(source.name);
   await expect(page.getByLabel('Файл мира')).toHaveAttribute('accept','.md,.txt,.json');
   await page.getByLabel('Файл мира').setInputFiles({name:filename,mimeType:extension==='json'?'application/json':'text/plain',buffer:Buffer.from(content,'utf8')});
@@ -113,7 +116,7 @@ for (const extension of ['md', 'txt', 'json']) {
    await expect(page.getByLabel('Описание мира или текст импорта')).toHaveCount(0);
   } else await expect(page.getByLabel('Описание мира или текст импорта')).toHaveValue(content);
   await page.getByRole('button',{name:'Открыть в редакторе',exact:true}).click();
-  await expect(page.locator('.ww-hero h1')).toBeVisible();
+  await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
   expect(importBody?.format).toBe(extension==='json'?'json':'text');
   expect(importBody?.text).toBe(content);
   expect(generationRequests).toBe(0);
@@ -149,7 +152,7 @@ for (const input of ['state', 'wrapper', 'markdown', 'broken']) {
    if (r.url().includes('/generate')) generationRequests++;
   });
   await page.goto('/');await nav(page,'Создать');
-  await page.getByRole('button',{name:'Импортировать',exact:true}).click();
+  await creationMethod(page,'Импортировать');
   await page.getByLabel('Название черновика').fill(source.name);
   const textarea=page.getByLabel('Описание мира или текст импорта');
   await textarea.fill(text);
@@ -165,7 +168,7 @@ for (const input of ['state', 'wrapper', 'markdown', 'broken']) {
   }
   await expect(page.getByRole('status')).toContainText(input==='markdown' ? 'Распознано: текстовая выжимка' : 'Распознано: JSON World State');
   await submit.click();
-  await expect(page.locator('.ww-hero h1')).toBeVisible();
+  await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
   expect(bodies).toHaveLength(1);
   expect(bodies[0].format).toBe(input==='markdown' ? 'text' : 'json');
   expect(generationRequests).toBe(0);
@@ -199,13 +202,13 @@ for (const format of ['json','text']) {
   await page.goto('/');await nav(page,'Создать');
   const workshop=page.locator('.world-workshop');
   await expect(workshop).toHaveAttribute('aria-busy','false');
-  await page.getByRole('button',{name:'Импортировать',exact:true}).click();
+  await creationMethod(page,'Импортировать');
   const content=format==='json'?JSON.stringify(canonical.state):markdown;
   await page.getByLabel('Описание мира или текст импорта').fill(content);
   const createdPromise=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/workspaces'&&r.request().method()==='POST');
   await page.getByRole('button',{name:'Открыть в редакторе',exact:true}).click();
   const created=await (await createdPromise).json();
-  await expect(page.locator('.ww-hero h1')).toBeVisible();
+  await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
   const invariant=async()=>{
    await expect(workshop).toHaveAttribute('data-workspace-id',created.id);
    await expect(workshop).toHaveAttribute('data-draft-workspace-id',created.id);
@@ -272,7 +275,7 @@ test('late author GET cannot replace a newer player view or workspace identity',
  });
  await page.goto('/');await nav(page,'Создать');
  const workshop=page.locator('.world-workshop');
- await expect(page.locator('.ww-hero h1')).toBeVisible();
+ await expect(page.locator('.ww-hero h1, .fl-result h2')).toBeVisible();
  await expect(workshop).toHaveAttribute('aria-busy','false');
  await page.getByRole('button',{name:'Автор мира',exact:true}).click();
  await page.getByRole('button',{name:'Показать всё',exact:true}).click();
