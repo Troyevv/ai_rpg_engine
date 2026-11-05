@@ -524,3 +524,7 @@ html[data-theme=graphite] .atelier-scope .fl-alert{border-color:#745440;backgrou
 html[data-theme=graphite] .atelier-scope .fl-result{background:linear-gradient(120deg,var(--fl-paper) 55%,#272c21)}
 html[data-theme=graphite] .atelier-scope .fl-result .fl-bookmark{background:#353d2e;color:#b4be9f}
 html[data-theme=graphite] .atelier-scope .fl-stages li.done .fl-stage-no{background:#272e24;border-color:#43503c}
+
+/* The generic mobile dialog is a bottom sheet; the approved atelier keeps centered folios. */
+.dialog-content.atelier-scope.folio-modal:not(.drawer){left:50%;top:50%;right:auto;bottom:auto;transform:translate(-50%,-50%);border-radius:14px}
+html[data-theme=graphite] .atelier-scope .primary:disabled{opacity:1;background:#49463a;border-color:#575243;color:#c1baaa}

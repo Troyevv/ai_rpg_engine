@@ -5,6 +5,18 @@ import {defaults} from '../src/types';
 async function capture(page:Page,info:TestInfo,name:string){
  await page.mouse.move(0,0);
  await page.evaluate(()=>document.fonts.ready);
+ const art=page.locator('.hero-art');
+ if(await art.count())await art.evaluate(async el=>{const url=getComputedStyle(el).backgroundImage.match(/url\("?([^")]+)/)?.[1];if(url){const image=new Image();image.src=url;await image.decode()}});
+ const brief=page.locator('.idea-atelier > div').filter({has:page.locator('.atelier-hero')});
+ if(await brief.count())await expect(brief).toHaveCSS('opacity','1');
+ const dialog=page.locator('.atelier-dialog:not(.drawer)');
+ if(await dialog.count()){
+  const bounds=await dialog.boundingBox(),close=await dialog.locator('.dialog-close').boundingBox();
+  expect(bounds).not.toBeNull();expect(close).not.toBeNull();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);expect(bounds!.y).toBeGreaterThanOrEqual(0);
+  expect(close!.x).toBeGreaterThanOrEqual(bounds!.x);expect(close!.y).toBeGreaterThanOrEqual(bounds!.y);
+  expect(close!.x+close!.width).toBeLessThanOrEqual(bounds!.x+bounds!.width);
+ }
  const review=page.getByRole('region',{name:'Сводка замысла'});
  if(await review.count())await expect(review).toHaveCSS('opacity','1');
  const path=info.outputPath(`${name}-${info.project.name}.png`);
