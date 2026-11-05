@@ -98,3 +98,20 @@ test('manual visual age: Anna, persistence, full artwork and Runtime handoff',as
  await expect(page.locator('.character-profile .portrait-control .procedural-portrait')).toHaveAttribute('src',previews.get('infant')!);
  await info.attach('computed-geometry',{body:JSON.stringify(geometry,null,2),contentType:'application/json'});
 });
+
+
+test('neutral cards use the same gap-free frame in grid and list',async({page,request},info)=>{
+ const state=JSON.parse(readFileSync(new URL('../../tests/fixtures/initial_world/runtime_presentation.json',import.meta.url),'utf8'));
+ const cid=state.characters[0].id;state.characters[0].name='Анна Соколова';
+ state.characters[1].fields['Роль']='Длинная роль соседнего персонажа с дополнительными строками текста для проверки вертикального выравнивания.';
+ const w=await(await request.post('/api/workspaces',{data:{name:'Нейтральный портрет'}})).json();const url=`/api/workspaces/${w.id}/draft`;
+ expect((await request.post(url+'/import',{data:{revision:0,format:'json',text:JSON.stringify(state)}})).ok()).toBeTruthy();
+ const draft=await(await request.get(url+'?author=true')).json();
+ expect((await request.put(url+`/characters/${cid}/portraits/procedural`,{data:{revision:draft.revision,mode:'procedural',descriptor:{...draft.portraits[cid].procedural_portrait,form:'neutral'}}})).ok()).toBeTruthy();
+ await page.addInitScript(wid=>localStorage.setItem('draftWorkspace',wid),w.id);await page.goto('/');await nav(page,'Создать');await authorView(page);await workshopNav(page,'Персонажи');
+ await expect(page.locator('.ww-menu-dialog')).toHaveCount(0);
+ const card=page.getByRole('button',{name:'Досье Анна Соколова',exact:true});
+ await expect(card.locator('.portrait-initials')).toHaveText('АС');await fullArt(page,card);
+ await card.screenshot({path:info.outputPath(`anna-neutral-${info.project.name}.png`),animations:'disabled'});
+ await page.getByRole('button',{name:'Список',exact:true}).click();await fullArt(page,card);
+});

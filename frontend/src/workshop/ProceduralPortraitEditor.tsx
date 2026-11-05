@@ -8,7 +8,7 @@ export function ProceduralPortraitEditor({descriptor,appearance,ageReference,mod
  const [open,setOpen]=useState(false);const panelId=useId();
  const [status,setStatus]=useState('');const [compare,setCompare]=useState(false);
  const [value,setValue]=useState(descriptor);const [selected,setSelected]=useState(mode);
- const ageSelection=value.visual_age_mode==='auto'?'auto':value.visual_age_mode==='manual'?value.visual_age:value.visual_age===ageReference?.visual_age?'auto':value.visual_age||'legacy';
+ const ageSelection=value.visual_age_mode==='auto'?'auto':value.visual_age_mode==='manual'?value.visual_age:value.visual_age&&value.visual_age===ageReference?.visual_age?'auto':value.visual_age||'legacy';
  const selectAge=(choice:string)=>{setCompare(true);setValue({...value,...(choice==='auto'?{visual_age_mode:'auto' as const,visual_age:ageReference?.visual_age||undefined,stage:ageReference?.stage||value.stage}:{visual_age_mode:'manual' as const,visual_age:choice as NonNullable<ProceduralPortrait['visual_age']>})})};
  const dirty=JSON.stringify(value)!==JSON.stringify(descriptor)||selected!==mode;
  return <section className="procedural-editor"><button type="button" aria-expanded={open} aria-controls={panelId} onClick={()=>setOpen(!open)}>Настроить иллюстрацию</button><div id={panelId} hidden={!open}><p>При создании мира иллюстрация может учитывать заданные черты. Неописанные детали получают условный вариант. Редактирование текста не меняет сохранённый портрет.</p>
