@@ -223,3 +223,37 @@ def test_crisis_extension_cannot_replace_original_save_or_rewrite_plan(tmp_path)
     write(tmp_path/'crisis-extension.json', receipt)
     with pytest.raises(ValueError, match='Unexpected'):
         extend_crisis(tmp_path, manifest, operations())
+
+
+@pytest.mark.parametrize('interrupt', [False, True])
+def test_stage_b_keeps_raw_stream_without_credentials_or_refunding_interruption(tmp_path, interrupt):
+    ledger, _ = authorized(tmp_path)
+    dispatched = []
+    @ledger.wrap
+    def source(provider, model, max_tokens, on_usage, messages, api_key):
+        dispatched.append(True)
+        on_usage(dict(prompt_tokens=100, completion_tokens=2))
+        yield '{"events":'
+        yield '[]}'
+    stream = source('deepseek', 'deepseek-flash', 4096, None, [{'role':'user','content':'fixture'}], 'test-secret-value')
+    assert next(stream) == '{"events":'
+    folder = tmp_path/'stage-b/provider-streams'
+    path = next(folder.glob('*.jsonl'))
+    # A killed process still leaves every already-consumed chunk on disk.
+    assert json.loads(path.read_text().splitlines()[-1]) == dict(event='chunk', text='{"events":')
+    if interrupt:
+        stream.close()
+    else:
+        assert list(stream) == ['[]}']
+    raw = path.read_text()
+    assert 'test-secret-value' not in raw and 'api_key' not in raw and 'on_usage' not in raw
+    records = [json.loads(line) for line in raw.splitlines()]
+    assert records[0]['messages'] == [{'role':'user','content':'fixture'}]
+    assert records[-1]['complete'] is not interrupt
+    with sqlite3.connect(ledger.path) as db:
+        reservation = db.execute('SELECT settled FROM reservations ORDER BY id DESC LIMIT 1').fetchone()[0]
+    assert reservation == int(not interrupt)
+    if interrupt:
+        with pytest.raises(RuntimeError, match='Unknown paid outcome'):
+            list(source('deepseek', 'deepseek-flash', 4096, None, [], 'test-secret-value'))
+        assert dispatched == [True] and path.read_text() == raw

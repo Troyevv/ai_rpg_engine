@@ -2,6 +2,8 @@
 import inspect
 import sqlite3
 import json
+import os
+from pathlib import Path
 from functools import wraps
 
 MODEL = 'deepseek-flash'
@@ -148,7 +150,33 @@ class Budget:
                     consumer(usage)
 
             p['on_usage'] = receipt
-            yield from stream(**p)
-            self.settle(rid, usage_receipt)
+            audit = None
+            complete = False
+            def record(value):
+                if audit:
+                    audit.write(json.dumps(value, ensure_ascii=False, allow_nan=False) + '\n')
+                    audit.flush()
+                    os.fsync(audit.fileno())
+            try:
+                if self.stage_b:
+                    # LTA's production tracker omits raw responses. Preserve every
+                    # paid chunk independently; never serialize credentials/callbacks.
+                    folder = Path(self.stage_b) / 'provider-streams'
+                    folder.mkdir(parents=True, exist_ok=True)
+                    audit = (folder / f'{rid:06d}.jsonl').open('x', encoding='utf-8')
+                    record(dict(event='request', reservation_id=rid, **{
+                        k: p[k] for k in ('provider', 'model', 'messages', 'max_tokens',
+                                         'temperature', 'thinking', 'response_format') if k in p}))
+                for chunk in stream(**p):
+                    record(dict(event='chunk', text=chunk))
+                    yield chunk
+                self.settle(rid, usage_receipt)
+                complete = True
+            finally:
+                if audit:
+                    try:
+                        record(dict(event='end', complete=complete, usage=usage_receipt))
+                    finally:
+                        audit.close()
 
         return guarded
