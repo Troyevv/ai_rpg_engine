@@ -89,7 +89,15 @@ def execute(storage, job, handle, chat_stream):
     # Zero-budget jobs still have a recorded request/before boundary for regenerate.
     storage.save_context(job["id"], captured, before)
     text = "Длительный переход: " + calendar_label(after["world_state"])
-    if report["interruption"]:
+    if (report["interruption"] or {}).get("kind") == "pregnancy_due":
+        from backend.runtime_v3.kinship import knowledge_status
+        state = after["world_state"]
+        process = state["pregnancies"][report["interruption"]["source_id"]]
+        observer = state["camera"]["pov_actor_id"] or state["camera"]["controlled_actor_id"]
+        if knowledge_status(state, observer, process["fact_id"]) == "known":
+            text += "\nНаступил срок родов."
+        text += "\nПереход остановлен. Продолжи обычным ходом и выбери, как отреагирует твой персонаж."
+    elif report["interruption"]:
         text += "\nПереход прерван: требуется решение игрока."
     text += f"\nРазрешено групп: {len(report['accepted'])}. Нерешённых причин: {len(report['unresolved'])}."
     storage.job_progress(job["id"], "validating", narrative=text, complete=True)

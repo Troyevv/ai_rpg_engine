@@ -13,13 +13,23 @@ def plan(state, kind, history=None, scope=None):
     due = [eid for eid in scope.scheduled_event_ids if eid in scope.acting_scheduled_event_ids
            and scheduled_due(state, state['scheduled_events'][eid]) is not None
            and scheduled_due(state, state['scheduled_events'][eid]) <= now]
+    continuity = scope.continuity_decision
     if kind != 'background':
-        due=[eid for eid in due if eid not in state.get('pregnancies',{}) or state['knowledge'].get(str(scope.controlled_actor_id)+':'+state['pregnancies'][eid]['fact_id'],{}).get('status')=='known']
+        from backend.runtime_v3.kinship import knowledge_status
+        observer = scope.pov_actor_id or scope.controlled_actor_id
+        def visible_boundary(eid):
+            pregnancy = state.get('pregnancies', {}).get(eid)
+            return not pregnancy or knowledge_status(state, observer, pregnancy['fact_id']) == 'known'
+        if continuity and continuity.get('compression'):
+            compression = continuity['compression']
+            continuity = dict(continuity, compression=dict(compression, boundary_ids=[
+                eid for eid in compression['boundary_ids'] if visible_boundary(eid)]))
+        due = [eid for eid in due if visible_boundary(eid)]
     from backend.runtime_v3.pacing import evaluate, prompt_policy
     scope.pacing_decision = scope.pacing_decision or evaluate(state, scope)
     from backend.runtime_v3.initiative import scene_plan
     if scope.initiative_decision is None: scope.initiative_decision = scene_plan(state, scope)
-    return dict(continuity=scope.continuity_decision, scene_agency=scope.initiative_decision, narrative_policy=prompt_policy(scope.pacing_decision),recent_event_ids=scope.event_ids, actors=sorted(scope.relevant_actor_ids),
+    return dict(continuity=continuity, scene_agency=scope.initiative_decision, narrative_policy=prompt_policy(scope.pacing_decision),recent_event_ids=scope.event_ids, actors=sorted(scope.relevant_actor_ids),
         location_ids=scope.location_ids,
         acting_actor_ids=sorted(cid for cid in scope.present_actor_ids | scope.observed_actor_ids | scope.remote_actor_ids | scope.active_actor_ids if capabilities(state,cid)['can_act']),
         referenced_actor_ids=sorted(scope.referenced_actor_ids),

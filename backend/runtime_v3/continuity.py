@@ -10,7 +10,7 @@ from typing import Literal
 from pydantic import Field
 from backend.runtime_v3.models import StrictModel, fatal
 from backend.runtime_v3.calendar import scheduled_boundary
-from backend.runtime_v3.commitments import commitment_ready
+from backend.runtime_v3.commitments import temporal_boundaries
 
 
 class ContinuityBeat(StrictModel):
@@ -125,15 +125,17 @@ def compression_limit(state, actors, max_minutes=30):
     now = state['meta']['world_time']
     limit = max_minutes
     boundaries = []
-    for event in state['scheduled_events'].values():
-        due = scheduled_boundary(state, event)
-        if not commitment_ready(state, event) or due is None: continue
+    for event in temporal_boundaries(state):
+        due = event['due_minute']
         relevant = bool(set(event['character_ids']) & actors or event.get('interrupts') or
                         event.get('location_id') and event['location_id'] == state['camera']['location_id'])
         if relevant and due <= now+limit:
-            limit = max(0, due-now)
-            boundaries = [event['id']]
-    return dict(max_minutes=limit, boundary_ids=boundaries)
+            remaining = max(0, due-now)
+            if remaining < limit:
+                boundaries.clear()
+            limit = remaining
+            boundaries.append(event['id'])
+    return dict(max_minutes=limit, boundary_ids=sorted(boundaries))
 
 
 def recorded(messages):
@@ -168,7 +170,14 @@ def validate_temporal_boundaries(resolver, elapsed):
             updated['status'] != 'pending' or next_due is not None and next_due > now
         ):
             boundaries[eid] = updated
-    boundary = compression_limit(dict(state, scheduled_events=boundaries), actors, elapsed)
+    # Only already-due processes can be discharged during this turn. Keep
+    # future boundaries from before, even if Extraction claims a later birth.
+    pregnancies = {
+        pid: resolver.state['pregnancies'][pid] if p['due_minute'] <= now else p
+        for pid, p in state['pregnancies'].items()
+    }
+    boundary = compression_limit(dict(state, scheduled_events=boundaries, pregnancies=pregnancies),
+                                 actors, elapsed)
     if elapsed > boundary['max_minutes']:
         fatal('Обычный ход пересекает временную границу договорённости.',
               'ordinary_temporal_boundary', repairable=False)

@@ -14,9 +14,8 @@ from backend.runtime_v3.models import (
     assert_world_state_v3_invariants,
     identity,
 )
-from backend.runtime_v3.commitments import commitment_ready
+from backend.runtime_v3.commitments import temporal_boundaries
 from backend.runtime_v3.calendar import (
-    scheduled_boundary,
     current_time,
     age_on,
     profile_of,
@@ -96,6 +95,16 @@ def relevance(snapshot, scope):
     }
 
 
+def player_interruption(boundaries, controlled, start):
+    event = min((e for e in boundaries if controlled in e["character_ids"]),
+                key=lambda e: (e["due_minute"], e["id"]),
+                default=None)
+    if event is None:
+        return None
+    return dict(kind=event["boundary_kind"],
+                minute=max(start, event["due_minute"]), source_id=event["id"])
+
+
 def plan(snapshot, request, history=None):
     request = AdvanceRequest.model_validate(request)
     s = snapshot["world_state"]
@@ -107,23 +116,7 @@ def plan(snapshot, request, history=None):
     )
     levels = relevance(snapshot, scope)
     controlled = s["camera"]["controlled_actor_id"]
-    pending = [e for e in s["scheduled_events"].values() if e["status"] == "pending"]
-
-    due = [
-        (max(start, minute), e)
-        for e in pending
-        if (minute := scheduled_boundary(s, e)) is not None
-        and minute <= target
-        and commitment_ready(s, e)
-    ]
-    interruptions = sorted(
-        (
-            (minute, e)
-            for minute, e in due
-            if controlled and controlled in e["character_ids"]
-        ),
-        key=lambda pair: (pair[0], pair[1]["id"]),
-    )
+    due = [e for e in temporal_boundaries(s) if e["due_minute"] <= target]
     interruption = None
     if s["meta"].get("protagonist_required"):
         interruption = dict(kind="protagonist_required", minute=start)
@@ -133,9 +126,8 @@ def plan(snapshot, request, history=None):
         call = active_call(s, controlled)
         if call and call["status"] == "answered" and not call_incapacitation(s, call):
             interruption = dict(kind="remote_call", minute=start, source_id=call["id"])
-    if interruption is None and interruptions:
-        minute, event = interruptions[0]
-        interruption = dict(kind="commitment", minute=minute, source_id=event["id"])
+    if interruption is None:
+        interruption = player_interruption(due, controlled, start)
     actual = interruption["minute"] if interruption else target
     candidates = {}
 
@@ -171,20 +163,12 @@ def plan(snapshot, request, history=None):
             tuple(domains),
         )
 
-    for minute, event in due:
-        add(
-            "scheduled",
-            event["id"],
-            event["character_ids"],
-            minute,
-            80,
-            event["description"],
-        )
-    for p in s["pregnancies"].values():
-        if p["status"] != "born" and p["due_minute"] <= actual:
-            # One process candidate, not a duplicate of its scheduled cause.
-            candidates.pop(identity("advance", "scheduled", p["id"]), None)
-            add("birth", p["id"], p["parent_ids"], p["due_minute"], 90)
+    for event in due:
+        if event["boundary_kind"] == "pregnancy_due":
+            add("birth", event["id"], event["character_ids"], event["due_minute"], 90)
+        else:
+            add("scheduled", event["id"], event["character_ids"], event["due_minute"],
+                80, event["description"])
     for t in s["threads"].values():
         if t["status"] in ("active", "developing"):
             add(
@@ -572,6 +556,10 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 raise ValueError("Время группы задаётся Runtime, а не Extraction.")
             from backend.runtime_v3.long_term_promotions import prepare
 
+            birth_sources = [c.source_id for c in group if c.kind == "birth"]
+            if any(not isinstance(row, dict) or row.get("pregnancy_id") not in birth_sources
+                   for row in raw.records["births"]):
+                raise ValueError("Рождение не входит в причины выбранной фоновой группы.")
             promotions = prepare(raw, result, [c.id for c in group])
             allowed = {cid for c in group for cid in c.actor_ids}
             # Prevent arbitrary remote facets and unscheduled player choices from
@@ -702,26 +690,12 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 )
             )
             report["diagnostics"].extend(resolved.warnings)
-            if protected:
-                for event in resolved.state["scheduled_events"].values():
-                    due = scheduled_boundary(resolved.state, event)
-                    ready = commitment_ready(resolved.state, event)
-                    if (
-                        event["status"] == "pending"
-                        and protected in event["character_ids"]
-                        and ready
-                        and due is not None
-                        and due <= report["actual_target"]
-                    ):
-                        stop = max(minute, due)
-                        if (
-                            report["interruption"] is None
-                            or stop < report["actual_target"]
-                        ):
-                            report["actual_target"] = stop
-                            report["interruption"] = dict(
-                                kind="commitment", minute=stop, source_id=event["id"]
-                            )
+            stop = player_interruption(temporal_boundaries(resolved.state), protected, minute)
+            if stop and stop["minute"] <= report["actual_target"] and (
+                report["interruption"] is None or stop["minute"] < report["actual_target"]
+            ):
+                report["actual_target"] = stop["minute"]
+                report["interruption"] = stop
             if resolved.state["meta"].get("protagonist_required"):
                 report["actual_target"] = minute
                 report["interruption"] = dict(
