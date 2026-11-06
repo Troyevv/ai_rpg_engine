@@ -3,9 +3,13 @@ import json
 import re
 import time
 
-from playwright.sync_api import expect
-
 from .scenarios import CASES
+
+
+def expect(locator):
+    # Storage/budget recovery tests do not require the optional browser package.
+    from playwright.sync_api import expect as browser_expect
+    return browser_expect(locator)
 
 
 def button(page, name):

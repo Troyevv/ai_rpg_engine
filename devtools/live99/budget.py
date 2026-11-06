@@ -38,7 +38,8 @@ def reserve_action(directory, folder, meta, limit):
         if db.execute('SELECT count(*) FROM qa_actions').fetchone()[0] >= limit:
             raise RuntimeError('QA cumulative action budget exhausted')
         db.execute('INSERT INTO qa_actions VALUES(?,?)',
-                   (str(folder.relative_to(directory)), json.dumps(meta, ensure_ascii=False)))
+                   (str(folder.resolve()) if (directory / 'budget.sqlite').is_symlink()
+                    else str(folder.relative_to(directory)), json.dumps(meta, ensure_ascii=False)))
 
 
 class Budget:
@@ -47,6 +48,22 @@ class Budget:
         with sqlite3.connect(path) as db:
             db.execute('''CREATE TABLE IF NOT EXISTS reservations
                 (id INTEGER PRIMARY KEY, input INTEGER, output INTEGER, settled INTEGER DEFAULT 0)''')
+            db.execute('CREATE TABLE IF NOT EXISTS spending_caps (name TEXT PRIMARY KEY, ceiling INTEGER NOT NULL)')
+
+    def cap_additional(self, name, allowance):
+        """Persist once in the shared ledger; restarting cannot renew an allowance."""
+        if type(allowance) is not int or not 0 < allowance <= LIMIT_NUSD:
+            raise ValueError('Invalid additional allowance')
+        with sqlite3.connect(self.path) as db:
+            db.execute('BEGIN IMMEDIATE')
+            previous = db.execute('SELECT ceiling FROM spending_caps WHERE name=?', (name,)).fetchone()
+            if previous:
+                return previous[0]
+            spent = db.execute('SELECT coalesce(sum(input),0)*?+coalesce(sum(output),0)*? '
+                               'FROM reservations', (INPUT, OUTPUT)).fetchone()[0]
+            ceiling = min(LIMIT_NUSD, spent + allowance)
+            db.execute('INSERT INTO spending_caps VALUES(?,?)', (name, ceiling))
+            return ceiling
 
     def reserve(self, max_tokens):
         if type(max_tokens) is not int or not 0 < max_tokens <= 32000:
@@ -58,7 +75,9 @@ class Budget:
             ).fetchone()
             inp += CONTEXT
             out += max_tokens
-            if count >= LIMIT_CALLS or inp + out > LIMIT_TOKENS or inp * INPUT + out * OUTPUT > LIMIT_NUSD:
+            cap = db.execute('SELECT min(ceiling) FROM spending_caps').fetchone()[0]
+            ceiling = min(LIMIT_NUSD, cap if cap is not None else LIMIT_NUSD)
+            if count >= LIMIT_CALLS or inp + out > LIMIT_TOKENS or inp * INPUT + out * OUTPUT > ceiling:
                 raise RuntimeError('QA request, token or USD budget exhausted')
             return db.execute('INSERT INTO reservations(input,output) VALUES(?,?)',
                               (CONTEXT, max_tokens)).lastrowid

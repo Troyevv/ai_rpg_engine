@@ -15,7 +15,6 @@ import time
 from decimal import Decimal
 
 import requests
-from playwright.sync_api import sync_playwright
 
 from .budget import Budget, MODEL, INPUT, OUTPUT, action_ledger, reserve_action
 from .browser import compare_prose, inspect_ui, open_save, plan, play, configure_context
@@ -122,7 +121,7 @@ def preflight(browser, base, directory, manifest):
     return all(row.get('ok') for row in results)
 
 
-def step(browser, base, directory, manifest, case, i, limit, retry=None):
+def step(browser, base, directory, manifest, case, i, limit, retry=None, operation=None, lineage_index=0):
     path, seed = directory / 'game.sqlite', manifest['seeds'][case]
     sid = seed['save']
     folder = directory / case / f'{i:03d}'
@@ -130,13 +129,19 @@ def step(browser, base, directory, manifest, case, i, limit, retry=None):
         folder = folder / 'retries' / '001'
     before = snapshot(path, sid)
     kind, action = plan(case, i, before)
+    if operation:
+        kind, action = operation['kind'], operation.get('action', '')
     if retry:
         kind, action = retry[1]['kind'], retry[1]['action']
     with closing(sqlite3.connect(path)) as db:
         cursor = db.execute('SELECT coalesce(max(rowid),0) FROM game_jobs').fetchone()[0]
+    if operation and 'job_cursor' in operation:
+        cursor = operation['job_cursor']
     meta = dict(sha=revision(), source_sha=manifest['sha'], case=case, step=i, save=sid, kind=kind, action=action,
                 started=now(), job_cursor=cursor, mobile=(list(CASES).index(case)+i)%2==1)
     meta['context_length'] = FAMILY_CONTEXT if case == 'family' else 32768
+    if operation and operation.get('job_id'):
+        meta['job_id'] = operation['job_id']
     if retry:
         meta.update(operation='retry-extraction', job_id=retry[2]['id'],
                     original_request_ids=retry[3], original_narrative_sha256=hashlib.sha256(
@@ -168,7 +173,8 @@ def step(browser, base, directory, manifest, case, i, limit, retry=None):
             retry_candidate(directory, manifest, case, i, allow_pending=folder)
             play(page, base, sid, 'retry', action, job_id=retry[2]['id'])
         else:
-            play(page, base, sid, kind, action, choice_index)
+            play(page, base, sid, kind, action, choice_index,
+                 job_id=operation.get('job_id') if operation else None)
         after = snapshot(path, sid)
         projected = page.request.get(f'{base}/api/saves/{sid}').json()
         oracle(before, after, projected, 'turn' if kind == 'choice' else kind)
@@ -178,7 +184,7 @@ def step(browser, base, directory, manifest, case, i, limit, retry=None):
         if kind in ('variant','rollback'):
             # The immediately preceding regeneration used step 0 as its parent turn.
             filename = 'after.json.gz' if kind == 'variant' else 'before.json.gz'
-            with gzip.open(directory / case / '000' / filename, 'rt') as source:
+            with gzip.open(directory / case / f'{lineage_index:03d}' / filename, 'rt') as source:
                 target = json.load(source)['snapshot']
             if any(after['snapshot'].get(k) != target.get(k) for k in ('world_state','history_head')):
                 raise ValueError('Restored variant / rollback differs from its recorded snapshot')
@@ -340,6 +346,7 @@ def report(directory, manifest):
 
 
 def run(args, directory, manifest):
+    from playwright.sync_api import sync_playwright
     live = args.command in ('run', 'retry-extraction')
     validate_revision(directory, manifest, revision())
     if live:
