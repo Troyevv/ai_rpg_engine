@@ -250,7 +250,11 @@ class StateResolver:
             cid = self.actor(item.get('actor_id'),'movements',i)
             target = item.get('to_location_id')
             if not isinstance(target,str) or target not in s['locations']:
-                fatal('неизвестное конечное место перемещения','movement_endpoint_invalid',repairable=True,index=i)
+                fatal('Для подтверждённого прибытия укажи ID установленной локации. Если описан только уход '
+                      'без пункта назначения, сохрани Event ухода, исключи ушедшего из final_scene.present_character_ids '
+                      'и опусти только неподтверждённую запись прибытия. Не угадывай ID. Сохрани подтверждённые этапы маршрута.',
+                      'movement_endpoint_invalid', repairable=True, section='movements', index=i,
+                      field='to_location_id', entity=cid)
             initial_placement = self.before['meta']['turn_id'] == 0 and self.before['camera']['location_id'] is None
             if cid == self.protected_actor_id and target != s['characters'][cid]['location_id'] and not initial_placement and not self.movement_authorized(item, raw):
                 fatal('Перемещение управляемого персонажа требует происхождения.', 'movement_agency', repairable=True, section='movements', index=i, entity=cid)
