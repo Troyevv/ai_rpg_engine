@@ -62,6 +62,66 @@ def test_grounded_npc_response(state, action, kind, phase, status, text):
     assert out.state['knowledge'] == state['knowledge']
 
 
+@pytest.mark.parametrize(('phase', 'kind', 'status'), [
+    ('accept', 'proposal', 'resolved'), ('refuse', 'proposal', 'rejected'),
+    ('answer', 'question', 'resolved'), ('end', 'decision', 'resolved'),
+    ('redirect', 'decision', 'resolved'),
+])
+def test_response_cannot_borrow_evidence_from_another_event(state, phase, kind, status):
+    silence = 'Вера молча листает альбом.'
+    unrelated = 'Тимур отодвинул чашку.'
+    raw = photo_turn(state, silence, kind=kind, status=status)
+    if kind == 'decision':
+        raw['continuity_beats'][0].update(actor_id=VERA, target_ids=[ACTOR_ID])
+    raw['events'].append(dict(id='cup', text=unrelated, evidence=unrelated,
+                              participants=['qa_timur'], witnesses=[ACTOR_ID]))
+    raw['scene_actions'] = [npc_reply(phase, unrelated)]
+    out = StateResolver(state, silence + ' ' + unrelated, ACTION).resolve(raw)
+
+    source, other = out.history['events']
+    assert source['player_evidence'] == ACTION and source['evidence'] == silence
+    assert other['local_id'] == 'cup' and other['evidence'] == unrelated
+    assert 'scene_action' not in source and 'continuity' not in source
+    assert {(w['section'], w['code'], w['action']) for w in out.warnings} >= {
+        ('scene_actions', 'initiative_response_unconfirmed', 'drop_record'),
+        ('continuity_beats', 'continuity_npc_response_unconfirmed', 'drop_record'),
+    }
+    assert out.state['knowledge'] == state['knowledge']
+
+
+def test_silence_event_survives_invented_assent(state):
+    silence = 'Вера молча листает альбом.'
+    raw = photo_turn(state, silence)
+    raw['scene_actions'] = [npc_reply('accept', ASSENT)]
+    out = StateResolver(state, silence, ACTION).resolve(raw)
+    event, = out.history['events']
+    assert event['text'] == silence and event['player_evidence'] == ACTION
+    assert 'scene_action' not in event and 'continuity' not in event
+    assert any(w['code'] == 'continuity_npc_response_unconfirmed' for w in out.warnings)
+
+
+def test_response_uses_full_event_evidence_not_a_text_fragment(state):
+    text = 'Вера перечитала слова «Я согласна» на обороте снимка и промолчала.'
+    raw = photo_turn(state, text)
+    raw['scene_actions'] = [npc_reply('accept', 'Я согласна')]
+    out = StateResolver(state, text, ACTION).resolve(raw)
+    event, = out.history['events']
+    assert 'scene_action' not in event and 'continuity' not in event
+    assert event['evidence'] == text
+
+
+def test_response_can_reference_event_summary_with_normalized_typography(state):
+    narrative = 'Вера придвинула стопку к Кириллу. «Давай смотреть».'
+    summary = 'Вера сказала «да» и взяла фотографии.'
+    raw = photo_turn(state, narrative)
+    raw['events'][0]['evidence'] = summary
+    raw['scene_actions'] = [npc_reply('accept', '  Вера сказала "да"   и взяла фотографии.')]
+    out = StateResolver(state, narrative, ACTION).resolve(raw)
+    event, = out.history['events']
+    assert event['continuity'][0]['evidence'] == summary
+    assert event['scene_action']['phase'] == 'accept'
+
+
 @pytest.mark.parametrize(('event_change', 'reply_change', 'beat_change', 'warning'), [
     ({}, None, {'status': 'open'}, 'continuity_npc_response_unconfirmed'),
     ({}, {'phase': 'offer'}, {}, 'continuity_npc_response_unconfirmed'),

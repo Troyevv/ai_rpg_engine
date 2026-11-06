@@ -444,10 +444,10 @@ Only available scene/established remote channels; referenced authors do not beco
 Keep existing literary style and active game language. Do not narrate runtime labels.
 """
 EXTRACTION_CONTRACT += """
-scene_actions: optional NPC action on THIS source_event_id. Attempt/offer/silence != consent.
-Romance: adult=true. Interruptible EXTERNAL response=open; player_supplied requires current
-player_evidence. response_event_id must be the answered pending_response_ids Event.
-Involuntary outcomes need canonical consequences. knowledge_ids=own actor:fact; suspected only for inquiry.
+scene_actions: omit if uncertain. accept/answer/refuse/end/redirect: copy full evidence of THIS source_event_id.
+Offer/attempt/silence != consent. Romance: adult=true. Interruptible EXTERNAL: response=open;
+player_supplied needs current player_evidence. response_event_id=answered pending_response_ids Event.
+Involuntary: canonical consequences. knowledge_ids=own actor:fact; suspected for inquiry only.
 """
 
 NARRATIVE_CONTRACT += """

@@ -84,11 +84,15 @@ def validate_actions(resolver, raw, events):
         event = events.get(claim.source_event_id)
         if cid == external or not event or cid not in event['participants'] or not set(claim.target_ids) <= set(event['participants']):
             warning('initiative_event_invalid'); continue
-        if claim.phase in ('accept', 'answer', 'refuse') and (
-                not claim.evidence.strip() or not event['evidence'].strip()
-                or not resolver.narrative.strip()
-                or event['medium'] == 'message' and event.get('author_id') != cid):
-            warning('initiative_response_unconfirmed'); continue
+        if claim.phase in ('accept', 'answer', 'refuse', 'end', 'redirect'):
+            # These phases can attest to an NPC decision in continuity. Bind the
+            # action to this Event's evidence before discarding its duplicate.
+            # Extraction owns the phase's meaning; the Event may summarize prose.
+            evidence = normalized(claim.evidence)
+            if (not evidence or evidence != normalized(event['evidence'])
+                    or not resolver.narrative.strip()
+                    or event['medium'] == 'message' and event.get('author_id') != cid):
+                warning('initiative_response_unconfirmed'); continue
         if claim.source_event_id in seen:
             warning('initiative_duplicate'); continue
         if claim.response_event_id is not None and (claim.response != 'player_supplied' or claim.response_event_id not in (resolver.continuity_decision or {}).get('pending_response_ids', [])):
