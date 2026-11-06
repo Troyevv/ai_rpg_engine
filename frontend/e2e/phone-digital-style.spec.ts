@@ -33,6 +33,8 @@ for(const group of [false,true]) {
   await expect(phone.locator('.phone-message')).toHaveCount(1);
   await phone.getByRole('button',{name:'Повторить',exact:true}).click();
   await expect(phone.locator('.phone-message')).toHaveCount(group?4:2);
+  // Delivery renders the bubble before the open chat commits its automatic read.
+  await expect(phone.getByRole('button',{name:'Прочитать',exact:true})).toHaveCount(0);
   const saved=await view();expect(saved.job.status).toBe('saved');
   const rows=saved.state.phone.events;
   expect(rows[0].content).toBe(outgoing);expect(rows[1].content).toBe(text);
