@@ -1,5 +1,26 @@
 # #99 — браузерная регрессия с DeepSeek
 
+## Stage B Retest → Stage C
+
+После merge #211 и продуктовых #210/#213/#215/#217/#218 используется тот же runner.
+`prepare-stage-c RUN --parent STAGE_B --reviewed` копирует историческую SQLite,
+сохраняет ledger и один дополнительный лимит $2 на retest + продолжение вместе.
+`preflight RUN --stage C` запрещает LLM-запросы. `run RUN --stage C --reviewed
+--phase retest` повторяет только заранее записанные post-fix случаи. `--case` и
+`--step` ограничивают группу и максимальный индекс, не сбрасывая прогресс.
+
+После проверки canonical State/History/Knowledge/agency результат записывается в
+`semantic-reviews/CASE.json` (`case`, `status=passed`, непустой `checks` со всеми true
+и конкретными доказательствами). `review-stage-c RUN --case CASE --reviewed`
+привязывает review к хешам retest. Только затем `run RUN --stage C --reviewed
+--phase continue` допускает соответствующую группу; held-группы остаются закрыты.
+Повторный запуск не повторяет существующие paid attempts. 120 новых action
+reservations и 320 calls — верхние safety caps, не целевое число ходов.
+
+[Отчёт Stage C](live99-stage-c-20261107.md) отделяет live результаты от offline
+регрессий, unknown outcomes и непроверенных гипотез. Не использовать продолжение
+Stage A/B вместо нового допуска Stage C и не копировать ledger с обнулением расходов.
+
 ## Отдельно разрешённый Stage B
 
 После merge #202 Stage B использует тот же runner, browser actions, oracle и ledger.

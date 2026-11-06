@@ -153,9 +153,15 @@ def validate(directory, manifest):
     if str(ledger) != manifest['ledger']:
         raise ValueError('Historical ledger link changed')
     with closing(sqlite3.connect(ledger)) as db:
-        auth = Budget(ledger, directory).stage_b_baseline(db)
-        if list(auth) != manifest['authorization'] or auth[2]+100 != manifest['action_limit']:
-            raise ValueError('Stage B allowance or action baseline changed')
+        if manifest.get('stage') == 'C':
+            from .stage_c import MAX_ACTIONS
+            auth = Budget(ledger, stage_c=directory).phase_baseline(db)
+            ceiling = auth[2] + MAX_ACTIONS
+        else:
+            auth = Budget(ledger, directory).stage_b_baseline(db)
+            ceiling = auth[2] + 100
+        if list(auth) != manifest['authorization'] or ceiling != manifest['action_limit']:
+            raise ValueError('Paid stage allowance or action baseline changed')
     if rows(directory)[:len(manifest['baseline_reservations'])] != manifest['baseline_reservations']:
         raise ValueError('Historical spending changed')
     if action_ledger(directory) < manifest['baseline_actions']:

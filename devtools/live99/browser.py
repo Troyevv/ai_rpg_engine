@@ -85,7 +85,8 @@ def configure_context(page, context_length):
 
 def play(page, base, sid, kind, action, choice_index=None, job_id=None, options=None):
     prefix = f'{base}/api/saves/{sid}'
-    endpoint = {'phone':'/phone/dispatch', 'switch':'/protagonist', 'lta':'/long-term',
+    endpoint = {'phone':'/phone/dispatch', 'phone-group':'/phone/dispatch', 'phone-call':'/phone/dispatch',
+                'call-end':'/phone', 'switch':'/protagonist', 'lta':'/long-term',
                 'rollback':'/rollback', 'variant':'/variant'}.get(kind, '/turns')
 
     def matches(response):
@@ -107,6 +108,19 @@ def play(page, base, sid, kind, action, choice_index=None, job_id=None, options=
             button(phone, 'Повторить').click()
         elif kind == 'start':
             button(page, 'Начать игру').click()
+        elif kind == 'background':
+            button(page, 'Мир без ГГ').click()
+        elif kind == 'call-speech':
+            call = page.get_by_role('dialog', name='Сцена звонка')
+            if not call.is_visible():
+                page.get_by_role('button', name=re.compile('Вернуться к звонку')).click()
+            call.get_by_label('Реплика в звонке').fill(action)
+            call.get_by_label('Сказать собеседнику').click()
+        elif kind == 'call-end':
+            call = page.get_by_role('dialog', name='Сцена звонка')
+            if not call.is_visible():
+                page.get_by_role('button', name=re.compile('Вернуться к звонку')).click()
+            button(call, 'Завершить звонок').click()
         elif kind == 'turn':
             page.get_by_label('Своё действие или реплика').fill(action)
             button(page, 'Отправить действие').click()
@@ -137,20 +151,26 @@ def play(page, base, sid, kind, action, choice_index=None, job_id=None, options=
             dialog.get_by_label('Новый главный герой').select_option(action)
             button(dialog, 'Проверить и посмотреть').click()
             button(dialog, 'Подтвердить смену').click()
-        elif kind == 'phone':
+        elif kind in ('phone', 'phone-call', 'phone-group'):
             page.get_by_role('button', name=re.compile('^Телефон')).click()
             phone = page.get_by_role('region', name='Телефон персонажа')
-            button(phone, 'Контакты').click()
-            phone.get_by_label('Поиск адресата').fill('Вера')
-            phone.get_by_role('button', name=re.compile('Написать: Вера')).first.click()
-            phone.get_by_label('Сообщение в телефоне').fill(action)
-            button(phone, 'Отправить сообщение').click()
+            if kind == 'phone-group':
+                button(phone, 'Переписки').click()
+                phone.locator('.phone-thread').filter(has_text='Общая переписка').click()
+            else:
+                button(phone, 'Контакты').click()
+                phone.get_by_label('Поиск адресата').fill('Вера')
+                phone.get_by_role('button', name=re.compile(
+                    'Позвонить: Вера' if kind == 'phone-call' else 'Написать: Вера')).first.click()
+            if kind != 'phone-call':
+                phone.get_by_label('Сообщение в телефоне').fill(action)
+                button(phone, 'Отправить сообщение').click()
     response = pending.value
     if not response.ok:
         raise ValueError(f'{endpoint} HTTP {response.status}: {response.text()[:500]}')
     result = response.json()
-    job = result.get('job') if kind == 'phone' else result
-    if kind in ('start','turn','choice','phone','regenerate','lta','retry','phone-retry'):
+    job = result.get('job') if kind in ('phone','phone-call','phone-group') else result
+    if kind in ('start','turn','choice','phone','phone-call','phone-group','call-speech','background','regenerate','lta','retry','phone-retry'):
         deadline = time.monotonic() + 240
         while job['status'] in ('generating','extracting','validating') and time.monotonic() < deadline:
             page.wait_for_timeout(600)
@@ -159,7 +179,7 @@ def play(page, base, sid, kind, action, choice_index=None, job_id=None, options=
             page.request.post(base + '/api/jobs/' + job['id'] + '/stop', data={})
         if job['status'] != 'saved':
             raise ValueError(f"Job {job['id']} status {job['status']}: {job.get('error', '')}")
-    if kind == 'phone':
+    if kind in ('phone','phone-group'):
         expect(page.locator('.phone-message.outgoing').filter(has_text=action).last).to_be_visible()
 
 
