@@ -295,7 +295,9 @@ def birth(r,c,event):
     # A witnessed birth reveals the outcome; unrelated characters receive nothing.
     # Witnessing delivery does not disclose an earlier naming conversation.
     # Names use their own accepted communication/observation Knowledge path.
-    reveal(r,event,[p['fact_id'],p['count_fact_id'],*p['sex_fact_ids'].values(),*fids])
+    # Observing a delivery does not establish biological sex. Specific
+    # observations/disclosures use the existing per-fact knowledge_gained path.
+    reveal(r,event,[p['fact_id'],p['count_fact_id'],*fids])
 
 
 def advance_due(state):

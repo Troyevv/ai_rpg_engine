@@ -585,12 +585,12 @@ def _seed_reproduction(repository,save_id,checkpoint):
     snapshot=repository.get_snapshot(save_id)
     config=dict(model='deterministic-fixture',context_length=32768,max_tokens=2000,update_tokens=4096)
     text='Кирилл и Вера подтвердили взаимное согласие; интимная встреча взрослых состоялась.'
-    def commit(text,raw,kind):
+    def commit(text,raw,kind,player_input):
         nonlocal snapshot
-        r=StateResolver(snapshot['world_state'],text,text).resolve(raw)
+        r=StateResolver(snapshot['world_state'],text,player_input).resolve(raw)
         if r.warnings: raise ValueError('Reproduction QA replay: '+str(r.warnings))
-        jid=repository.begin_job(save_id,text,kind,config)
-        repository.save_context(jid,build_context(snapshot,repository.list_turns(save_id),text,kind,32768,2000),snapshot)
+        jid=repository.begin_job(save_id,player_input,kind,config)
+        repository.save_context(jid,build_context(snapshot,repository.list_turns(save_id),player_input,kind,32768,2000),snapshot)
         repository.job_progress(jid,'validating',narrative=text,complete=True)
         snapshot['world_state']=r.state;snapshot['character_cards'].extend(r.cards)
         repository.commit_job(jid,snapshot,[],{},history_batch=r.history)
@@ -604,12 +604,23 @@ def _seed_reproduction(repository,save_id,checkpoint):
         gestational_actor_id='qa_vera',impregnating_actor_id=ACTOR_ID,protection='unprotected',
         consent_actor_ids=[ACTOR_ID,'qa_vera'],parent_ids=[ACTOR_ID,'qa_vera'],
         assertion='completed_consensual_adult_event',evidence=text,player_evidence=text,player_assertion='explicit_choice')
-    commit(text,dict(raw(text),reproductive_events=[claim]),'start')
+    commit(text,dict(raw(text),reproductive_events=[claim]),'start',text)
     if checkpoint.startswith('newborn'):
         p=next(iter(snapshot['world_state']['pregnancies'].values()))
         text='Роды Веры завершились в доме. Кирилл присутствовал при рождении детей. Вера и Кирилл подтвердили, что они родители.'
-        commit(text,dict(raw(text,1440),births=[dict(pregnancy_id=p['id'],source_event_id='qa_reproduction_event',
-            assertion='birth_completed',disclosed_parent_ids=p['parent_ids'],location_id=snapshot['world_state']['camera']['location_id'],evidence=text)]),'turn')
+        # This newborn checkpoint has informed parents; completion alone does
+        # not convey each child's sex. Seed the observation via normal Knowledge.
+        observed = ', '.join('девочка' if child['sex'] == 'female' else 'мальчик' for child in p['children'])
+        disclosure = 'Вера и Кирилл увидели каждого ребёнка по очереди: ' + observed + '.'
+        scene = raw(text + ' ' + disclosure, 1440)
+        event = scene['events'][0]
+        event['fact_ids'] = list(p['sex_fact_ids'].values())
+        scene['knowledge_gained'] = [dict(actor_id=cid, fact_id=fid, source_event_id=event['id'],
+            evidence=disclosure) for cid in event['witnesses'] for fid in event['fact_ids']]
+        scene['births'] = [dict(pregnancy_id=p['id'], source_event_id=event['id'],
+            assertion='birth_completed', disclosed_parent_ids=p['parent_ids'],
+            location_id=snapshot['world_state']['camera']['location_id'], evidence=text)]
+        commit(event['text'], scene, 'turn', 'Я остаюсь рядом с Верой.')
 
 
 def _possessions(state):

@@ -147,6 +147,20 @@ def recorded(messages):
     return {}
 
 
+def ordinary_clock_actors(state):
+    camera = state['camera']
+    return {*camera['present_character_ids'], camera['controlled_actor_id'],
+            *(r['actor_id'] for r in camera.get('remote_interactions', []))}
+
+
+def due_births_in_scene_clock(state):
+    """Use the same canonical boundaries as the ordinary turn guard, including old saves."""
+    if not state.get('pregnancies'):
+        return []
+    due_ids = compression_limit(state, ordinary_clock_actors(state), 0)['boundary_ids']
+    return [state['pregnancies'][pid] for pid in due_ids if pid in state['pregnancies']]
+
+
 def validate_temporal_boundaries(resolver, elapsed):
     """Ordinary-turn guard, independent of Extraction's compression claim.
 
@@ -159,9 +173,7 @@ def validate_temporal_boundaries(resolver, elapsed):
     if resolver.mode == 'background' or resolver.runtime_time_skip or not elapsed:
         return
     state = resolver.before
-    actors = set(state['camera']['present_character_ids'])
-    actors.add(state['camera']['controlled_actor_id'])
-    actors.update(r['actor_id'] for r in state['camera'].get('remote_interactions', []))
+    actors = ordinary_clock_actors(state)
     now = state['meta']['world_time']
     boundaries = dict(state['scheduled_events'])
     for eid, event in state['scheduled_events'].items():

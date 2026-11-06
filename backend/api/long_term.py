@@ -4,6 +4,7 @@ from dataclasses import asdict
 from backend.api.schemas import Credential, ModelConfig
 from backend.runtime_v3.long_term import AdvanceRequest, plan
 from backend.runtime_v3.calendar import calendar_label
+from backend.runtime_v3.selectors import public_advance_choices
 from pydantic import Field
 import engine
 
@@ -37,9 +38,8 @@ def install(app, repo, credentials, public_job):
             requested_target=p.requested_target,
             actual_target=p.actual_target,
             label=calendar_label(snapshot["world_state"], p.actual_target),
-            interruption=p.interruption,
             candidate_count=len(p.candidates),
-            decisions=[asdict(c) for c in p.candidates if c.requires_player],
+            **public_advance_choices(p.interruption, [asdict(c) for c in p.candidates if c.requires_player]),
         )
 
     @app.post("/api/saves/{sid}/long-term")
