@@ -1,0 +1,184 @@
+import {confirmWorkshopStart} from './workshop-navigation';
+import {test,expect} from '@playwright/test';
+import {nav} from './navigation';
+import {workshopNav,authorView} from './workshop-navigation';
+
+test('workshop: 240 characters, long text, dossier, portraits and scoped search',async({page,request},info)=>{
+ const seed=await(await request.post('/test/seed')).json();const world=await(await request.get(`/api/worlds/${seed.world}`)).json();
+ const workspace=await(await request.post('/api/workspaces',{data:{name:'Большой мир'}})).json();const url=`/api/workspaces/${workspace.id}/draft`;
+ expect((await request.post(url+'/import',{data:{revision:0,text:world.source_md}})).ok()).toBeTruthy();
+ let draft=await(await request.get(url+'?author=true')).json();const state=draft.state;
+ state.campaign.title='Истории у моря';state.campaign.description='Портовый город, старые друзья и новая жизнь. '+ 'За окнами шумит дождь. '.repeat(100);
+ const sample=state.characters[0],actor=state.world.characters[sample.id];
+ for(let i=state.characters.length;i<240;i++){const id=`crowd_${i}`;state.characters.push({...sample,id,name:`Житель ${i}`,is_player:false});state.world.characters[id]={...actor,id,developmental_stage:'adult'}}
+ for(const actor of Object.values(state.world.characters) as {developmental_stage:string}[])actor.developmental_stage='adult';
+ expect((await request.post(url+'/import',{data:{revision:draft.revision,format:'json',text:JSON.stringify(state)}})).ok()).toBeTruthy();
+ await page.goto('/');await page.evaluate(wid=>localStorage.setItem('draftWorkspace',wid),workspace.id);await page.reload();await nav(page,'Создать');
+ await expect(page.locator('.ww-hero h1')).toHaveText('Истории у моря');await authorView(page);await page.evaluate(()=>document.fonts.ready);await page.screenshot({path:`/tmp/workshop175-overview-${info.project.name}.png`});
+ await workshopNav(page,'Персонажи');await expect(page.locator('.ww-character-card')).toHaveCount(12);
+ await page.screenshot({path:`/tmp/workshop175-${info.project.name}.png`});
+ for(const skin of ['parchment','cyberpunk','medieval','noir','graphite']){
+  if((page.viewportSize()?.width||1440)<=760)await page.getByRole('button',{name:'Разделы мастерской',exact:true}).click();
+  await page.getByRole('button',{name:'Оформление',exact:true}).click();
+  await page.getByRole('combobox',{name:'Тема мира',exact:true}).selectOption(skin);await expect(page.locator('html')).toHaveAttribute('data-theme',skin);
+  await page.getByRole('dialog').last().getByRole('button',{name:'Закрыть',exact:true}).click();
+  if((page.viewportSize()?.width||1440)<=760)await page.getByRole('dialog').getByRole('button',{name:'Закрыть',exact:true}).click();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth));
+ }
+ await page.getByLabel('Поиск персонажей').fill('Житель 239');await expect(page.locator('.ww-character-card')).toHaveCount(1);
+ await page.locator('.ww-character-card').click();await expect(page.getByRole('dialog',{name:'Досье персонажа'})).toBeVisible();
+ await expect(page.locator('.ww-dossier-aside>.portrait-control .procedural-portrait')).toHaveCount(1);
+ await page.screenshot({path:`/tmp/workshop175-dossier-clean-${info.project.name}.png`});
+ await page.getByRole('button',{name:'Изменить fields.Внешность',exact:true}).click();
+ await page.getByRole('dialog').last().getByLabel('Внешность',{exact:true}).fill('Длинное описание. '.repeat(1000));
+ await page.locator('.ww-field-dialog').getByRole('button',{name:'Закрыть',exact:true}).click();
+ await page.getByRole('button',{name:'Изменить fields.Внешность',exact:true}).click();
+ await expect(page.locator('.ww-field-dialog').getByLabel('Внешность',{exact:true})).toHaveValue('Длинное описание. '.repeat(1000));
+ await page.getByRole('button',{name:'Сохранить поле',exact:true}).click();
+ await expect.poll(async()=>(await(await request.get(url+'?author=true')).json()).state.characters.find((c:{id:string})=>c.id==='crowd_239').fields.Внешность).toBe('Длинное описание. '.repeat(1000));
+ await expect(page.getByRole('button',{name:'Изменить fields.Внешность',exact:true})).toBeEnabled();
+ await expect(page.locator('.ww-dossier-fields')).toContainText('Длинное описание.');
+ await page.screenshot({path:`/tmp/workshop175-dossier-${info.project.name}.png`});
+ await page.getByRole('button',{name:'Готово',exact:true}).click();
+ await expect(page.getByLabel('Поиск персонажей')).toHaveValue('Житель 239');
+ await workshopNav(page,'Обзор мира');await workshopNav(page,'Персонажи');await expect(page.getByLabel('Поиск персонажей')).toHaveValue('Житель 239');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(await page.evaluate(()=>innerWidth));
+});
+
+test('workshop portrait illustration and uploaded original survive Start Game',async({page,request})=>{
+ const {readFileSync}=await import('node:fs');
+ const {pickCharacter}=await import('./navigation');
+ const state=JSON.parse(readFileSync(new URL('../../tests/fixtures/initial_world/runtime_presentation.json',import.meta.url),'utf8'));
+ const workspace=await(await request.post('/api/workspaces',{data:{name:'Портреты в истории'}})).json();const url=`/api/workspaces/${workspace.id}/draft`;
+ expect((await request.post(url+'/import',{data:{revision:0,format:'json',text:JSON.stringify(state)}})).ok()).toBeTruthy();
+ await page.goto('/');await page.evaluate(wid=>localStorage.setItem('draftWorkspace',wid),workspace.id);await page.reload();await nav(page,'Создать');await authorView(page);await workshopNav(page,'Персонажи');
+ await page.locator('.ww-character-card').first().click();await page.getByRole('button',{name:'Редактировать портрет',exact:true}).click();
+ await page.getByText('Настроить иллюстрацию',{exact:true}).click();
+ await page.getByLabel('Вид изображения',{exact:true}).selectOption('neutral');
+ const fallback=page.locator('.portrait-comparison .character-avatar');
+ await expect(fallback.locator('svg')).toHaveCount(1);
+ await expect(fallback.locator('.portrait-initials')).not.toHaveText('');
+ await expect(fallback.locator('img')).toHaveCount(0);
+ await page.getByLabel('Вид изображения',{exact:true}).selectOption('human');await page.getByLabel('Волосы',{exact:true}).selectOption('3');
+ await page.getByText('Свериться с описанием внешности',{exact:true}).click();
+ await expect(page.locator('.portrait-literary-reference p')).toHaveText(state.characters[0].fields['Внешность']);
+ await page.getByRole('combobox',{name:'Цвет волос',exact:true}).selectOption({label:'Рыжие'});
+ await page.getByRole('combobox',{name:'Цвет одежды',exact:true}).selectOption({label:'Тёмный'});
+ await page.getByLabel('Предпочтение',{exact:true}).selectOption('procedural');
+ let release!:()=>void,received!:()=>void;const gate=new Promise<void>(r=>release=r),refreshStarted=new Promise<void>(r=>received=r);
+ await page.route(`**/api/workspaces/${workspace.id}/draft?author=true`,async route=>{const response=await route.fetch();received();await gate;await route.fulfill({response})},{times:1});
+ await page.getByRole('button',{name:'Сохранить иллюстрацию',exact:true}).click();await refreshStarted;
+ await expect(page.getByRole('heading',{name:'Портрет персонажа',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Сохранить иллюстрацию',exact:true})).toBeDisabled();release();
+ await expect(page.getByRole('heading',{name:'Портрет персонажа',exact:true})).toHaveCount(0);
+ const svg=await page.locator('.ww-dossier-aside>.portrait-control .procedural-portrait').getAttribute('src');expect(svg).toMatch(/^data:image\/svg/);
+ expect(decodeURIComponent(svg!)).toContain('#ad6742');expect(decodeURIComponent(svg!)).toContain('#393b40');
+ const second=state.characters[1].id;await page.getByLabel('Переключить досье').selectOption(second);await page.getByRole('button',{name:'Редактировать портрет',exact:true}).click();
+ const png=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=320;c.height=480;const ctx=c.getContext('2d')!;ctx.fillStyle='#41665a';ctx.fillRect(0,0,320,480);ctx.fillStyle='#c8b890';ctx.fillRect(80,60,160,200);return c.toDataURL('image/png').split(',')[1]});
+ await page.getByLabel('Файл портрета').setInputFiles({name:'portrait.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});
+ await page.getByLabel('Масштаб кадрирования').fill('1.5');await page.getByRole('button',{name:'Сохранить',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Портрет персонажа',exact:true})).toHaveCount(0);
+ await expect(page.locator('.ww-dossier-aside>.portrait-control img')).toHaveAttribute('src',/\/assets\//);
+ await page.getByRole('button',{name:'Готово',exact:true}).click();
+ await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();await confirmWorkshopStart(page);
+ await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.choices button')).toHaveCount(6);
+ await nav(page,'Персонажи');await pickCharacter(page,state.characters[0].id);
+ await expect(page.locator('.character-profile .portrait-control .procedural-portrait')).toHaveAttribute('src',svg!);
+ await pickCharacter(page,second);await expect(page.locator('.character-profile .portrait-control img')).toHaveAttribute('src',/\/api\/saves\/.*\/assets\//);
+ await page.reload();await nav(page,'Персонажи');await pickCharacter(page,second);await expect(page.locator('.character-profile .portrait-control img')).toBeVisible();
+ await nav(page,'Игра');
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ await expect(page.locator('.game-preserved')).not.toHaveAttribute('inert','');
+ for(const [index,action] of ['Осматриваюсь.','Продолжаю разговор.'].entries()){
+  await page.getByLabel('Своё действие или реплика').fill(action);
+  await page.getByRole('button',{name:'Отправить действие',exact:true}).click();
+  await expect(page.locator('.turn')).toHaveCount(index+2);
+  await expect(page.locator('.choices button')).toHaveCount(6);
+  await page.reload();await expect(page.locator('.turn')).toHaveCount(index+2);
+ }
+ await nav(page,'Персонажи');await pickCharacter(page,state.characters[0].id);
+ await expect(page.locator('.character-profile .portrait-control .procedural-portrait')).toHaveAttribute('src',svg!);
+ await pickCharacter(page,second);await expect(page.locator('.character-profile .portrait-control img')).toHaveAttribute('src',/\/api\/saves\/.*\/assets\//);
+});
+
+test('workshop accessibility: keyboard, narrow height, all skin presets and scaled text',async({page,request},info)=>{
+ test.setTimeout(90000);
+ const {readFileSync}=await import('node:fs');const {themes}=await import('../src/lib/skins');
+ const state=JSON.parse(readFileSync(new URL('../../tests/fixtures/initial_world/runtime_presentation.json',import.meta.url),'utf8'));
+ const workspace=await(await request.post('/api/workspaces',{data:{name:'Доступность мастерской'}})).json();
+ expect((await request.post(`/api/workspaces/${workspace.id}/draft/import`,{data:{revision:0,format:'json',text:JSON.stringify(state)}})).ok()).toBeTruthy();
+ await page.addInitScript(wid=>localStorage.setItem('draftWorkspace',wid),workspace.id);await page.goto('/');await nav(page,'Создать');await authorView(page);
+ await page.emulateMedia({reducedMotion:'reduce'});
+ if(info.project.name==='mobile')await page.getByRole('button',{name:'Разделы мастерской',exact:true}).click();
+ await page.getByRole('button',{name:'Оформление',exact:true}).click();
+ for(const skin of themes){await page.getByRole('combobox',{name:'Тема мира',exact:true}).selectOption(skin.id);await expect(page.locator('html')).toHaveAttribute('data-theme',skin.id)}
+ await page.getByRole('combobox',{name:'Тема мира',exact:true}).selectOption('graphite');
+ await page.keyboard.press('Escape');if(info.project.name==='mobile')await page.keyboard.press('Escape');
+ await workshopNav(page,'Персонажи');
+ const card=page.locator('.ww-character-card').first();await card.focus();await page.keyboard.press('Enter');await expect(page.getByRole('dialog',{name:'Досье персонажа'})).toBeVisible();
+ await page.keyboard.press('Escape');await expect(card).toBeFocused();
+ const widths=info.project.name==='desktop'?[768,1280,1440,1920]:[360,390,430];
+ for(const width of widths){await page.setViewportSize({width,height:600});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await card.click();await expect(page.getByRole('button',{name:'Готово',exact:true})).toBeInViewport();await page.keyboard.press('Escape')}
+ // Scale text independently of viewport geometry (a reproducible 200% text-zoom stress case).
+ await page.evaluate(()=>{const nodes=[...document.querySelectorAll<HTMLElement>('.ww-shell *')].filter(e=>!['SVG','PATH'].includes(e.tagName));const sizes=nodes.map(e=>parseFloat(getComputedStyle(e).fontSize));nodes.forEach((e,i)=>e.style.fontSize=sizes[i]*2+'px')});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:`/tmp/workshop175-text200-${info.project.name}.png`});
+});
+
+test('portrait layout: canonical ages, shared map artwork, full frames and scalable initials',async({page,request},info)=>{
+ const {readFileSync}=await import('node:fs');
+ const state=JSON.parse(readFileSync(new URL('../../tests/fixtures/initial_world/runtime_presentation.json',import.meta.url),'utf8'));
+ const ages=[24,1,8,16,44,75,34,60];
+ for(const [i,card] of state.characters.entries()){
+  const actor=state.world.characters[card.id];delete actor.procedural_portrait;
+  actor.birth_date=`${2026-ages[i]}-01-01`;actor.developmental_stage=ages[i]<2?'infant':ages[i]<13?'child':ages[i]<18?'adolescent':'adult';
+  card.fields['Возраст']=String(ages[i]);
+ }
+ state.characters[0].name='Анна Соколова';
+ const workspace=await(await request.post('/api/workspaces',{data:{name:'Возраст и портреты'}})).json();const url=`/api/workspaces/${workspace.id}/draft`;
+ expect((await request.post(url+'/import',{data:{revision:0,format:'json',text:JSON.stringify(state)}})).ok()).toBeTruthy();
+ let draft=await(await request.get(url+'?author=true')).json();
+ expect(state.characters.slice(0,6).map((c:{id:string})=>draft.portraits[c.id].procedural_portrait.visual_age)).toEqual(['young_adult','infant','child','adolescent','mature_adult','elderly']);
+ await page.addInitScript(wid=>localStorage.setItem('draftWorkspace',wid),workspace.id);await page.goto('/');await nav(page,'Создать');await authorView(page);await workshopNav(page,'Персонажи');
+ const card=page.getByRole('button',{name:'Досье Анна Соколова',exact:true});
+ const src=await card.locator('.procedural-portrait').getAttribute('src');expect(src).toMatch(/^data:image\/svg/);
+ for(const mode of ['Список','Карточки']){
+  await page.getByRole('button',{name:mode,exact:true}).click();
+  const bounds=await card.locator('.ww-card-art').boundingBox();expect(bounds!.width/bounds!.height).toBeCloseTo(.8,2);
+  await expect(card.locator('.procedural-portrait')).toHaveAttribute('src',src!);
+ }
+ await page.screenshot({path:info.outputPath(`workshop175-ages-${info.project.name}.png`),fullPage:true,animations:'disabled'});
+ await workshopNav(page,'Связи и семьи');
+ await page.getByLabel('Чьи отношения показать').selectOption(state.characters[1].id);
+ const node=page.getByRole('button',{name:'Отношения Анна Соколова',exact:true});
+ await expect(node.locator('.procedural-portrait')).toHaveAttribute('src',src!);
+ await node.click();await expect(page.locator('.ww-graph-node.is-center .procedural-portrait')).toHaveAttribute('src',src!);
+ await page.reload();await nav(page,'Создать');await authorView(page);await workshopNav(page,'Связи и семьи');
+ await expect(page.getByLabel('Чьи отношения показать')).toHaveValue(state.characters[0].id);
+ await expect(page.locator('.ww-graph-node.is-center .procedural-portrait')).toHaveAttribute('src',src!);
+ // The same existing sidebar markup is stressed without creating 1000 canon objects.
+ const mobile=(page.viewportSize()?.width||1440)<=760;
+ if(mobile)await page.getByRole('button',{name:'Разделы мастерской',exact:true}).click();
+ const menu=page.locator(mobile?'.ww-menu-dialog':'.ww-sidebar');
+ for(const count of ['0','9','10','100','1000']){
+  const badge=menu.locator('nav small').first();await badge.evaluate((el,text)=>{el.textContent=text},count);
+  expect(await badge.evaluate(el=>el.scrollHeight<=el.clientHeight&&getComputedStyle(el).whiteSpace==='nowrap')).toBe(true);
+  expect(await menu.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+ }
+ if(mobile)await page.getByRole('dialog').getByRole('button',{name:'Закрыть',exact:true}).click();
+ // Persist the common neutral renderer, then reload and reopen the workshop.
+ const cid=state.characters[0].id;draft=await(await request.get(url+'?author=true')).json();
+ expect((await request.put(url+`/characters/${cid}/portraits/procedural`,{data:{revision:draft.revision,mode:'procedural',descriptor:{...draft.portraits[cid].procedural_portrait,form:'neutral'}}})).ok()).toBeTruthy();
+ await page.reload();await nav(page,'Создать');await authorView(page);await workshopNav(page,'Персонажи');
+ const initials=card.locator('.portrait-initials');await expect(initials).toHaveText('АС');
+ const big=await initials.evaluate(el=>parseFloat(getComputedStyle(el).fontSize));
+ await page.getByRole('button',{name:'Список',exact:true}).click();
+ const small=await initials.evaluate(el=>parseFloat(getComputedStyle(el).fontSize));expect(big).toBeGreaterThan(small);expect(small).toBeGreaterThanOrEqual(9);
+ await workshopNav(page,'Связи и семьи');
+ expect(await page.locator('.ww-graph-node.is-center .character-avatar svg path').first().evaluate(el=>getComputedStyle(el).fill)).not.toBe('none');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ // Radix retains the closing mobile menu until its exit animation finishes.
+ await expect(page.locator('.ww-menu-dialog')).toHaveCount(0);
+ await expect(page.locator('.dialog-overlay')).toHaveCount(0);
+ await page.screenshot({path:info.outputPath(`workshop175-map-${info.project.name}.png`),fullPage:true,animations:'disabled'});
+});

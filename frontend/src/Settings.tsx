@@ -95,7 +95,7 @@ export function Settings({
         {(["idea", "summary", "game"] as const).map((key, index) => (
           <fieldset key={key}>
             <legend>
-              {["Сценарист", "Генератор выжимки", "Ведущий"][index]}
+              {["Сценарист", "Генератор мира и выжимки", "Ведущий"][index]}
             </legend>
             <div className="form-grid">
               <label>
@@ -148,6 +148,19 @@ export function Settings({
                 />
               </label>
               <label>
+                Бюджет контекста
+                <Input
+                  aria-label={`Контекст ${key}`}
+                  type="number"
+                  min="8192"
+                  step="1"
+                  list="context-options"
+                  value={draft[key].context_length}
+                  onChange={(e) => update(key, { context_length: +e.target.value })}
+                />
+                <span className="muted small">Входной запрос и ответ вместе. Выбери значение в пределах возможностей модели.</span>
+              </label>
+              <label>
                 Лимит ответа
                 <Input
                   type="number"
@@ -165,21 +178,6 @@ export function Settings({
                   <label>Последних ходов в контексте<Input type="number" min="2" max="20" value={draft.game.recent_turns} onChange={e=>update(key,{recent_turns:+e.target.value})}/></label>
                   <label>Максимум ходов в пакете памяти<Input type="number" min="2" max="20" value={draft.game.memory_batch} onChange={e=>update(key,{memory_batch:+e.target.value})}/></label>
                   </details>
-                  <label>
-                    Бюджет контекста
-                    <select
-                      value={draft.game.context_length}
-                      onChange={(e) =>
-                        update(key, { context_length: +e.target.value })
-                      }
-                    >
-                      {[8192, 16384, 32768, 65536, 131072].map((n) => (
-                        <option key={n} value={n}>
-                          {n}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
                   <label>
                     Лимит обработки мира
                     <Input
@@ -223,6 +221,11 @@ export function Settings({
             <option key={m} value={m} />
           ))}
         </datalist>
+        <datalist id="context-options">
+          {[8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576].map((n) => (
+            <option key={n} value={n} />
+          ))}
+        </datalist>
         {models.length > 0 && (
           <p className="muted small">Доступны: {models.join(", ")}</p>
         )}
@@ -244,7 +247,12 @@ export function Settings({
             </label>
             <label>
               Контекст
-              <select
+              <Input
+                aria-label="Контекст загрузки локальной модели"
+                type="number"
+                min="8192"
+                step="1"
+                list="context-options"
                 value={draft.local.context_length}
                 onChange={(e) =>
                   setDraft((d) => ({
@@ -252,11 +260,8 @@ export function Settings({
                     local: { ...d.local, context_length: +e.target.value },
                   }))
                 }
-              >
-                {[8192, 16384, 32768].map((n) => (
-                  <option key={n}>{n}</option>
-                ))}
-              </select>
+              />
+              <span className="muted small">Для локальных запросов учитывается фактический контекст загруженной модели.</span>
             </label>
             <label>
               Eval Batch Size

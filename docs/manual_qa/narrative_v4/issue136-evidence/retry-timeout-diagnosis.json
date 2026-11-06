@@ -1,0 +1,14 @@
+{
+  "run_result": "47 passed, 1 failed",
+  "failure": "Mobile runtime-handoff Retry UI assertion timed out at 12000ms; finally count assertion masked this primary failure.",
+  "terminal_job_status": "saved",
+  "terminal_job_error": "",
+  "timing_seconds": {
+    "extraction": 0.07244715800334234,
+    "validation_apply": 11.040897788006987,
+    "total": 13.218348141002934
+  },
+  "fix": "Await committed turn up to 30000ms; cleanup remains in finally, provider counts checked only after primary assertions succeed. Canonical and exact call-count checks retained.",
+  "environment": "Full backend and browser suites ran concurrently; cause of the individual validation delay was not profiled. Runtime did complete and save successfully.",
+  "retest": "3 mobile repeats passed; final 48-case matrix recorded separately."
+}

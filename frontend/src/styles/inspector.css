@@ -1,26 +1,4 @@
-.inspector-dialog {
-  left: auto;
-  right: 0;
-  top: 0;
-  transform: none;
-  border-radius: 0;
-  width: 440px;
-  max-width: 100%;
-  height: 100dvh;
-  max-height: 100dvh;
-  border-top: 0;
-  border-bottom: 0;
-  padding: 28px;
-}
 
-.inspector-dialog .prose {
-  font-size: 15px;
-  line-height: 1.8;
-}
-
-.inspector-dialog section {
-  margin: 22px 0;
-}
 
 .metadata {
   font-size: 11px;
@@ -100,12 +78,6 @@
 
 .character-profile h2 { margin:12px 0; overflow-wrap:anywhere; }
 
-.inspector-dialog .panel-tabs { gap:6px; }
-
-.inspector-dialog .panel-tabs button { min-height:44px; }
-
-.inspector-dialog select { max-width:100%; }
-
 .inspect-reveal > summary > .small { display:block; margin-top:5px; font-weight:400; }
 
 /* Inspector disclosure headings must not inherit the global flex summary row. */
@@ -169,7 +141,6 @@
 
 .relationship-dimension input {width:84px;min-height:42px}
 
-.inspector-dialog { border-radius:0; box-shadow:var(--shadow-panel); width:480px; }
 .character-header { padding:14px 0 20px; border-bottom:1px solid var(--border); margin-bottom:14px; }
 .character-header h2 { font-size:34px; margin:8px 0 12px; }
 .character-header .eyebrow { color:var(--text-muted); margin:0; }
@@ -187,5 +158,3 @@
 .world-timeline { border-left:1px solid var(--border-strong); padding-left:22px; margin-left:6px; }
 .world-timeline li { position:relative; }
 .world-timeline li::before { content:''; position:absolute; width:7px; height:7px; border-radius:50%; left:-26px; top:22px; background:var(--accent); }
-
-.inspector-dialog .dialog-title { font-size:23px; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }

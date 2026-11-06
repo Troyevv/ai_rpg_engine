@@ -1,0 +1,694 @@
+{
+  "groups": [
+    {
+      "id": "life",
+      "ru": "Жизнь и отношения",
+      "en": "Life & relationships"
+    },
+    {
+      "id": "drama",
+      "ru": "Драма",
+      "en": "Drama"
+    },
+    {
+      "id": "speculative",
+      "ru": "Фантастика",
+      "en": "Science fiction"
+    },
+    {
+      "id": "fantasy",
+      "ru": "Фэнтези",
+      "en": "Fantasy"
+    },
+    {
+      "id": "mystery",
+      "ru": "Мистика",
+      "en": "Mystery & suspense"
+    },
+    {
+      "id": "society",
+      "ru": "Общество и власть",
+      "en": "Society & power"
+    },
+    {
+      "id": "career",
+      "ru": "Карьера и творчество",
+      "en": "Career & creativity"
+    },
+    {
+      "id": "comedy",
+      "ru": "Комедия",
+      "en": "Comedy"
+    },
+    {
+      "id": "adventure",
+      "ru": "Приключения",
+      "en": "Adventure"
+    },
+    {
+      "id": "custom",
+      "ru": "Авторский жанр",
+      "en": "Your own genre"
+    }
+  ],
+  "genres": [
+    {
+      "id": "slice_of_life",
+      "group": "life",
+      "ru": {
+        "name": "Повседневность",
+        "description": "Повседневные занятия, отношения и небольшие перемены в жизни."
+      },
+      "en": {
+        "name": "Everyday life",
+        "description": "Everyday activities, relationships and small changes."
+      },
+      "aliases": [
+        "быт",
+        "повседневная жизнь",
+        "slice of life"
+      ],
+      "themes": "Everyday details, ordinary conversations and meaningful small changes."
+    },
+    {
+      "id": "family_saga",
+      "group": "life",
+      "ru": {
+        "name": "Семейная сага",
+        "description": "История семьи на протяжении лет и поколений. Будущие браки, дети и переходы героя заранее не определены."
+      },
+      "en": {
+        "name": "Family saga",
+        "description": "Family ties across generations, without predetermined marriages or children."
+      },
+      "aliases": [],
+      "themes": "Family ties, intergenerational perspectives and lasting consequences."
+    },
+    {
+      "id": "romance",
+      "group": "life",
+      "ru": {
+        "name": "Романтика",
+        "description": "Сближение и личные отношения, когда они согласуются с желаниями персонажей и вашим замыслом."
+      },
+      "en": {
+        "name": "Romance",
+        "description": "Closeness and relationships consistent with character intentions."
+      },
+      "aliases": [],
+      "themes": "Nuanced relationships, dialogue and emotional subtext; attraction is never guaranteed."
+    },
+    {
+      "id": "drama",
+      "group": "drama",
+      "ru": {
+        "name": "Драма",
+        "description": "Внутренние противоречия и сложные отношения без обязательной трагедии."
+      },
+      "en": {
+        "name": "Drama",
+        "description": "Conflicting values and relationships without mandatory tragedy."
+      },
+      "aliases": [],
+      "themes": "Conflicting values, difficult choices and their personal consequences."
+    },
+    {
+      "id": "detective",
+      "group": "mystery",
+      "ru": {
+        "name": "Детектив",
+        "description": "Наблюдения, улики и поиск объяснений. Преступление не обязательно."
+      },
+      "en": {
+        "name": "Detective",
+        "description": "Clues and competing explanations; crime is optional."
+      },
+      "aliases": [
+        "расследование",
+        "mystery",
+        "investigation"
+      ],
+      "themes": "Questions, clues and competing explanations grounded in available knowledge."
+    },
+    {
+      "id": "thriller",
+      "group": "mystery",
+      "ru": {
+        "name": "Триллер",
+        "description": "Ожидание, неопределённость и напряжение без предрешённого насилия."
+      },
+      "en": {
+        "name": "Thriller",
+        "description": "Suspense and uncertainty without predetermined violence."
+      },
+      "aliases": [],
+      "themes": "Uncertainty, suspense and consequential tension; constant crime is unnecessary."
+    },
+    {
+      "id": "science_fiction",
+      "group": "speculative",
+      "ru": {
+        "name": "Научная фантастика",
+        "description": "Научные идеи, технологии и их влияние на жизнь общества."
+      },
+      "en": {
+        "name": "Science fiction",
+        "description": "Science, technology and their human consequences."
+      },
+      "aliases": [
+        "sci-fi",
+        "sci fi",
+        "нф"
+      ],
+      "themes": "Speculative ideas and their human consequences within established world rules."
+    },
+    {
+      "id": "fantasy",
+      "group": "fantasy",
+      "ru": {
+        "name": "Фэнтези",
+        "description": "Необычный мир и возможное волшебство в пределах заданных правил."
+      },
+      "en": {
+        "name": "Fantasy",
+        "description": "Wonder within the established rules of the world."
+      },
+      "aliases": [
+        "фентези"
+      ],
+      "themes": "Wonder, imagination and the lived consequences of the established fantastic world."
+    },
+    {
+      "id": "horror",
+      "group": "mystery",
+      "ru": {
+        "name": "Ужасы",
+        "description": "Неизвестность и тревожная атмосфера. Не задаёт уровень риска или обязательные травмы."
+      },
+      "en": {
+        "name": "Horror",
+        "description": "Unease and the unknown; does not set risk or require injuries."
+      },
+      "aliases": [],
+      "themes": "Unease, vulnerability and the unfamiliar; harm is not required."
+    },
+    {
+      "id": "adventure",
+      "group": "adventure",
+      "ru": {
+        "name": "Приключения",
+        "description": "Открытия, путешествия и новые обстоятельства без обязательного героического подвига."
+      },
+      "en": {
+        "name": "Adventure",
+        "description": "Discovery and exploration without mandatory heroism."
+      },
+      "aliases": [],
+      "themes": "Discovery, exploration and encounters with meaningful consequences."
+    },
+    {
+      "id": "post_apocalyptic",
+      "group": "speculative",
+      "ru": {
+        "name": "Постапокалипсис",
+        "description": "Жизнь после крупных перемен мира; причины и последствия определяет ваш замысел."
+      },
+      "en": {
+        "name": "Post-apocalyptic",
+        "description": "Life after major disruption; the world defines its causes."
+      },
+      "aliases": [],
+      "themes": "Life after disruption, adaptation and rebuilding human connections."
+    },
+    {
+      "id": "historical",
+      "group": "society",
+      "ru": {
+        "name": "Исторический",
+        "description": "Жизнь в выбранной эпохе. Страна, даты и биографии не выводятся из названия жанра."
+      },
+      "en": {
+        "name": "Historical",
+        "description": "Life in the established era, without inventing dates or biographies."
+      },
+      "aliases": [],
+      "themes": "Lived experience and social detail consistent with the established era."
+    },
+    {
+      "id": "psychological_drama",
+      "group": "drama",
+      "ru": {
+        "name": "Психологическая драма",
+        "description": "Внутренние противоречия, субъективный опыт и тонкие перемены."
+      },
+      "en": {
+        "name": "Psychological drama",
+        "description": "Inner conflict, subjective experience and subtle changes."
+      },
+      "aliases": [
+        "психология",
+        "psychology"
+      ],
+      "themes": "Subjective experience, inner tensions and subtle emotional shifts; never assign player decisions."
+    },
+    {
+      "id": "political_drama",
+      "group": "drama",
+      "ru": {
+        "name": "Политическая драма",
+        "description": "Убеждения, публичные решения и их человеческая цена."
+      },
+      "en": {
+        "name": "Political drama",
+        "description": "Beliefs, public choices and their human cost."
+      },
+      "aliases": [
+        "политика",
+        "politics"
+      ],
+      "themes": "Competing public values, institutions and personal costs of political choices without predetermined winners."
+    },
+    {
+      "id": "crime_drama",
+      "group": "drama",
+      "ru": {
+        "name": "Криминальная драма",
+        "description": "Лояльность, ответственность и последствия нарушения закона."
+      },
+      "en": {
+        "name": "Crime drama",
+        "description": "Loyalty, responsibility and consequences around the law."
+      },
+      "aliases": [
+        "криминал",
+        "criminal"
+      ],
+      "themes": "Loyalty, accountability and tensions around established laws; do not require crimes or violence."
+    },
+    {
+      "id": "space_opera",
+      "group": "speculative",
+      "ru": {
+        "name": "Космическая опера",
+        "description": "Масштабные истории и далёкие горизонты в рамках заданного мира."
+      },
+      "en": {
+        "name": "Space opera",
+        "description": "Expansive stories and distant horizons within the authored world."
+      },
+      "aliases": [
+        "космос",
+        "космоопера",
+        "space"
+      ],
+      "themes": "Expansive perspectives, distant connections and personal stakes; do not invent spaceflight or technology."
+    },
+    {
+      "id": "dystopia",
+      "group": "speculative",
+      "ru": {
+        "name": "Антиутопия",
+        "description": "Общественное давление, свобода и цена привычного порядка."
+      },
+      "en": {
+        "name": "Dystopia",
+        "description": "Social pressure, freedom and the cost of accepted order."
+      },
+      "aliases": [
+        "дистопия",
+        "dystopian"
+      ],
+      "themes": "Tensions between social order and individual freedom; no mandatory oppression, rebellion or collapse."
+    },
+    {
+      "id": "alternate_history",
+      "group": "speculative",
+      "ru": {
+        "name": "Альтернативная история",
+        "description": "Последствия исторических развилок, заданных автором."
+      },
+      "en": {
+        "name": "Alternate history",
+        "description": "Consequences of historical divergences established by the author."
+      },
+      "aliases": [
+        "альтистория",
+        "alternative history"
+      ],
+      "themes": "Explore consequences of authored historical divergences without inventing dates, borders or past events."
+    },
+    {
+      "id": "cyberpunk",
+      "group": "speculative",
+      "ru": {
+        "name": "Киберпанк",
+        "description": "Личность, неравенство и власть технологий, если они есть в мире."
+      },
+      "en": {
+        "name": "Cyberpunk",
+        "description": "Identity, inequality and technological power where the world supports it."
+      },
+      "aliases": [
+        "cyber punk",
+        "кибер"
+      ],
+      "themes": "Identity, inequality and mediated power; never introduce technologies or implants absent from world canon."
+    },
+    {
+      "id": "dark_fantasy",
+      "group": "fantasy",
+      "ru": {
+        "name": "Тёмное фэнтези",
+        "description": "Неоднозначность и тревожное чудо без обязательной жестокости."
+      },
+      "en": {
+        "name": "Dark fantasy",
+        "description": "Ambiguity and unsettling wonder without mandatory cruelty."
+      },
+      "aliases": [
+        "темное фентези",
+        "dark"
+      ],
+      "themes": "Moral ambiguity and unsettling wonder within established rules; neither magic nor cruelty is required."
+    },
+    {
+      "id": "urban_fantasy",
+      "group": "fantasy",
+      "ru": {
+        "name": "Городское фэнтези",
+        "description": "Необычное рядом с привычной городской жизнью."
+      },
+      "en": {
+        "name": "Urban fantasy",
+        "description": "The unusual alongside familiar urban life."
+      },
+      "aliases": [
+        "urban",
+        "городское фентези"
+      ],
+      "themes": "Contrasts between familiar routines and established wonders; do not create cities or magical rules."
+    },
+    {
+      "id": "epic_fantasy",
+      "group": "fantasy",
+      "ru": {
+        "name": "Эпическое фэнтези",
+        "description": "Широкий масштаб и переплетение судеб без обязательного пророчества."
+      },
+      "en": {
+        "name": "Epic fantasy",
+        "description": "Broad scope and intersecting lives without a required prophecy."
+      },
+      "aliases": [
+        "эпик",
+        "high fantasy"
+      ],
+      "themes": "Interwoven lives and far-reaching stakes; no mandatory prophecy, chosen hero, war or supernatural powers."
+    },
+    {
+      "id": "mysticism",
+      "group": "mystery",
+      "ru": {
+        "name": "Мистика",
+        "description": "Совпадения, неоднозначные знаки и граница объяснимого."
+      },
+      "en": {
+        "name": "Mysticism",
+        "description": "Coincidences, ambiguous signs and the limits of explanation."
+      },
+      "aliases": [
+        "мистический",
+        "mystical"
+      ],
+      "themes": "Ambiguous signs and competing interpretations of the unfamiliar; do not confirm supernatural causes."
+    },
+    {
+      "id": "gothic",
+      "group": "mystery",
+      "ru": {
+        "name": "Готика",
+        "description": "Тени прошлого, выразительные места и тревожные семейные истории."
+      },
+      "en": {
+        "name": "Gothic",
+        "description": "Shadows of the past, evocative places and uneasy family histories."
+      },
+      "aliases": [
+        "готический",
+        "gothic fiction"
+      ],
+      "themes": "Atmospheric places, traces of the past and uneasy intimacy; no mandatory curses, secrets or deaths."
+    },
+    {
+      "id": "supernatural_thriller",
+      "group": "mystery",
+      "ru": {
+        "name": "Сверхъестественный триллер",
+        "description": "Напряжение вокруг необъяснимого без навязывания его природы."
+      },
+      "en": {
+        "name": "Supernatural thriller",
+        "description": "Suspense around the unexplained without imposing its nature."
+      },
+      "aliases": [
+        "паранормальный",
+        "paranormal"
+      ],
+      "themes": "Suspense around unexplained experiences; supernatural explanations remain subject to canon and available knowledge."
+    },
+    {
+      "id": "dynastic_saga",
+      "group": "society",
+      "ru": {
+        "name": "Династическая сага",
+        "description": "Наследие рода, преемственность и личные интересы поколений."
+      },
+      "en": {
+        "name": "Dynastic saga",
+        "description": "Dynastic legacy, continuity and personal interests across generations."
+      },
+      "aliases": [
+        "династия",
+        "dynasty"
+      ],
+      "themes": "Legacy, continuity and generational interests; never require heirs, marriages or succession outcomes."
+    },
+    {
+      "id": "court_intrigue",
+      "group": "society",
+      "ru": {
+        "name": "Придворные интриги",
+        "description": "Репутация, влияние и скрытые интересы в установленном круге власти."
+      },
+      "en": {
+        "name": "Court intrigue",
+        "description": "Reputation, influence and private interests around established power."
+      },
+      "aliases": [
+        "двор",
+        "интрига",
+        "court politics"
+      ],
+      "themes": "Reputation, influence and competing interests around existing power structures; no compulsory plots or betrayals."
+    },
+    {
+      "id": "war_drama",
+      "group": "society",
+      "ru": {
+        "name": "Военная драма",
+        "description": "Долг, близость и человеческий опыт конфликтов, уже заданных миром."
+      },
+      "en": {
+        "name": "War drama",
+        "description": "Duty, bonds and human experiences of conflicts established in the world."
+      },
+      "aliases": [
+        "война",
+        "military drama"
+      ],
+      "themes": "Human perspectives on established conflicts, duty and bonds; never create wars or require casualties."
+    },
+    {
+      "id": "music_drama",
+      "group": "career",
+      "ru": {
+        "name": "Музыкальная драма",
+        "description": "Творческий голос, совместная работа и отношения вокруг музыки."
+      },
+      "en": {
+        "name": "Music drama",
+        "description": "Creative voice, collaboration and relationships around music."
+      },
+      "aliases": [
+        "музыка",
+        "группа",
+        "musical",
+        "band"
+      ],
+      "themes": "Creative voice, musical collaboration and personal stakes; no mandatory talent, fame or career choices."
+    },
+    {
+      "id": "sports_drama",
+      "group": "career",
+      "ru": {
+        "name": "Спортивная драма",
+        "description": "Мастерство, соперничество и повседневная работа над собой."
+      },
+      "en": {
+        "name": "Sports drama",
+        "description": "Skill, rivalry and everyday practice."
+      },
+      "aliases": [
+        "спорт",
+        "sport"
+      ],
+      "themes": "Practice, teamwork and rivalry; do not guarantee victories, injuries or player ambition."
+    },
+    {
+      "id": "business_drama",
+      "group": "career",
+      "ru": {
+        "name": "Бизнес-драма",
+        "description": "Предпринимательство, ответственность и отношения в работе."
+      },
+      "en": {
+        "name": "Business drama",
+        "description": "Enterprise, responsibility and working relationships."
+      },
+      "aliases": [
+        "бизнес",
+        "предпринимательство",
+        "бизнес драма",
+        "entrepreneurship"
+      ],
+      "themes": "Enterprise, responsibility and competing professional interests without prescribed success, failure or misconduct."
+    },
+    {
+      "id": "comedy",
+      "group": "comedy",
+      "ru": {
+        "name": "Комедия",
+        "description": "Юмор характеров, диалогов и повседневных несовпадений."
+      },
+      "en": {
+        "name": "Comedy",
+        "description": "Humour in characters, dialogue and everyday incongruities."
+      },
+      "aliases": [
+        "юмор",
+        "humor",
+        "humour"
+      ],
+      "themes": "Characterful dialogue and situational incongruities; humour is optional and never overrides personality or consent."
+    },
+    {
+      "id": "satire",
+      "group": "comedy",
+      "ru": {
+        "name": "Сатира",
+        "description": "Иронический взгляд на общественные привычки и противоречия."
+      },
+      "en": {
+        "name": "Satire",
+        "description": "An ironic view of social habits and contradictions."
+      },
+      "aliases": [
+        "ирония",
+        "satirical"
+      ],
+      "themes": "Irony around established social habits and contradictions without turning characters into compulsory caricatures."
+    },
+    {
+      "id": "black_comedy",
+      "group": "comedy",
+      "ru": {
+        "name": "Чёрная комедия",
+        "description": "Мрачная ирония и абсурд без обязательных трагедий."
+      },
+      "en": {
+        "name": "Black comedy",
+        "description": "Dark irony and absurdity without mandatory tragedy."
+      },
+      "aliases": [
+        "черная комедия",
+        "чёрный юмор",
+        "dark comedy",
+        "black humor"
+      ],
+      "themes": "Dark irony and uncomfortable incongruities; no required deaths, cruelty or trivialisation of character experience."
+    },
+    {
+      "id": "survival",
+      "group": "adventure",
+      "ru": {
+        "name": "Выживание",
+        "description": "Практические решения, ресурсы и взаимопомощь в текущих условиях."
+      },
+      "en": {
+        "name": "Survival",
+        "description": "Practical choices, resources and mutual support in current conditions."
+      },
+      "aliases": [
+        "survivor",
+        "выжить"
+      ],
+      "themes": "Practical adaptation and mutual support under established conditions; never manufacture scarcity, injury or disasters."
+    },
+    {
+      "id": "exploration",
+      "group": "adventure",
+      "ru": {
+        "name": "Исследование",
+        "description": "Любопытство, наблюдения и постепенное открытие мира."
+      },
+      "en": {
+        "name": "Exploration",
+        "description": "Curiosity, observation and gradual discovery of the world."
+      },
+      "aliases": [
+        "экспедиция",
+        "discovery",
+        "исследования"
+      ],
+      "themes": "Curiosity, careful observation and discovery limited by viewpoint and knowledge; no guaranteed revelations."
+    },
+    {
+      "id": "nautical_adventure",
+      "group": "adventure",
+      "ru": {
+        "name": "Морские приключения",
+        "description": "Пути по воде, команды и встречи, когда это допускает мир."
+      },
+      "en": {
+        "name": "Nautical adventure",
+        "description": "Waterborne journeys, crews and encounters where the world allows them."
+      },
+      "aliases": [
+        "морской",
+        "море",
+        "пираты",
+        "sea",
+        "pirates"
+      ],
+      "themes": "Waterborne perspectives, cooperation and encounters where supported by canon; do not invent seas, ships or storms."
+    },
+    {
+      "id": "custom",
+      "group": "custom",
+      "ru": {
+        "name": "Свой жанр",
+        "description": "Направление задаётся вашим описанием ниже."
+      },
+      "en": {
+        "name": "Custom genre",
+        "description": "Themes from your description below."
+      },
+      "aliases": [
+        "собственный",
+        "авторский",
+        "own"
+      ],
+      "themes": ""
+    }
+  ]
+}

@@ -1,8 +1,8 @@
-import {useId, useRef} from 'react';
+import {useId, useRef, type ReactNode} from 'react';
 import {motion, useReducedMotion} from 'framer-motion';
 import {motionTiming,ease} from '../../motion';
 
-type Item<T extends string>={id:T;label:string};
+type Item<T extends string>={id:T;label:string;icon?:ReactNode};
 /** Shared segmented navigation. Existing button semantics remain for navigation groups. */
 export function SectionTabs<T extends string>({items,value,onChange,label,className='',tablist=false,panelId}:{items:readonly Item<T>[];value:T;onChange:(id:T)=>void;label:string;className?:string;tablist?:boolean;panelId?:string}){
  const id=useId();const ref=useRef<HTMLDivElement>(null);const reduced=useReducedMotion();
@@ -14,7 +14,7 @@ export function SectionTabs<T extends string>({items,value,onChange,label,classN
   onChange(items[next].id);ref.current?.querySelectorAll('button')[next]?.focus();
  }}>
  {items.map(t=><button key={t.id} type="button" role={tablist?'tab':undefined} id={tablist?`${panelId}-tab-${t.id}`:undefined} aria-controls={tablist?panelId:undefined} aria-selected={tablist?value===t.id:undefined} aria-pressed={!tablist?value===t.id:undefined} tabIndex={tablist&&value!==t.id?-1:0} className={value===t.id?'selected':''} onClick={()=>onChange(t.id)}>
- {value===t.id&&<motion.span className="tab-indicator" layoutId={reduced?undefined:`tabs-${id}`} transition={{duration:motionTiming.fast,ease}} aria-hidden="true"/>}<span className="tab-label">{t.label}</span>
+ {value===t.id&&<motion.span className="tab-indicator" layoutId={reduced?undefined:`tabs-${id}`} transition={{duration:motionTiming.fast,ease}} aria-hidden="true"/>}<span className="tab-label">{t.icon}{t.label}</span>
  </button>)}
  </div>;
 }

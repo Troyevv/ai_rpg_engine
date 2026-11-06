@@ -72,6 +72,7 @@ def test_risk_seam_blocks_autonomous_death_but_allows_explicit_death_and_success
     raw['life_changes'][0]['source_event_id']='death'
     class Permitted:
         def permits_autonomous_death(self,state,actor): return True
+    s['world_state']['meta']['narrative_risk'].update(preset='custom',protagonist_death=True)
     allowed=StateResolver(s['world_state'],text,'',death_policy=Permitted()).resolve(raw)
     assert allowed.state['meta']['protagonist_required']
     assert allowed.state['camera']['controlled_actor_id'] is None
@@ -302,9 +303,12 @@ def test_separate_secret_events_never_cross_reveal_holders():
     s=snapshot();d=draft(s)
     d['secrets']=[dict(text='Первая тайна',holders=['a'],evidence='Первое свидетельство',approved=True),
                   dict(text='Вторая тайна',holders=['b'],evidence='Второе свидетельство',approved=True)]
-    _,_,history=prepare(s,d,'new-person')
+    result,cid,history=prepare(s,d,'new-person')
     assert len(history['events'])==2
-    assert history['events'][0]['witnesses']==['a'] and history['events'][1]['witnesses']==['b']
+    assert history['events'][0]['witnesses']==[cid,'a'] and history['events'][1]['witnesses']==[cid,'b']
+    first,second=[e['fact_ids'][0] for e in history['events']]
+    assert 'b:'+first not in result['world_state']['knowledge']
+    assert 'a:'+second not in result['world_state']['knowledge']
     assert set(history['events'][0]['fact_ids']).isdisjoint(history['events'][1]['fact_ids'])
 
 

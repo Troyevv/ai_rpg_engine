@@ -43,7 +43,7 @@ def test_tattoo_canonical_history_and_no_knowledge_broadcast():
 
 
 @pytest.mark.parametrize('field,value',[('assertion','planned'),('source_event_id','missing'),('fact_id','missing'),
-    ('evidence','несуществующая цитата'),('expected_revision',2),('category','intrinsic'),('transition','established_trait')])
+    ('expected_revision',2),('category','intrinsic'),('transition','established_trait')])
 def test_invalid_optional_delta_is_local(field,value):
     s=migrate_v2(snapshot()).snapshot['world_state'];c=change();c[field]=value;r=resolve(s,c)
     assert r.warnings and not r.state['characters']['b']['appearance']['items']
@@ -193,3 +193,9 @@ def test_legacy_save_without_appearance_is_playable(tmp_path):
     ordinary_job(repo,sid,'start');ordinary_job(repo,sid);repo=Repository(repo.path);ordinary_job(repo,sid)
     p=repo.get_snapshot(sid)['world_state']['characters'][snap['character_cards'][0]['id']]['appearance']
     assert p['legacy_text']=='Серые глаза; сегодня в куртке.' and not p['items']
+
+
+def test_typed_visual_outcome_does_not_need_literal_quote():
+    s=migrate_v2(snapshot()).snapshot['world_state'];c=change();c['evidence']='Косвенное описание'
+    r=resolve(s,c)
+    assert r.state['characters']['b']['appearance']['items']['tattoo']['text']=='Маяк на плече'

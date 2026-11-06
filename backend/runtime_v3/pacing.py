@@ -177,82 +177,60 @@ def reject(code, **details):
 
 
 def validate_risk(resolver, raw):
-    """Check consequences before ANY facts, Knowledge or History are mutated.
+    """Enforce explicit risk exclusions, never candidate or classification permits.
 
-Semantic classification is supplied by the existing Extraction request. Runtime
-also derives minimum categories from structural changes; prose is never parsed
-for diagnoses. Unclassified conditions use conservative intersection rules.
-"""
-    state=resolver.before
-    _,risk=profiles(state)
-    events={e.get('id'):e for e in raw.records['events'] if isinstance(e,dict) and isinstance(e.get('id'),str) and resolver.supported(e)}
-    claims={}
-    if len(raw.records['consequences'])>24: reject('risk_budget_exceeded')
-    for item in raw.records['consequences']:
-        try: claim=ConsequenceClaim.model_validate(item).model_dump()
-        except (ValueError,TypeError): reject('risk_claim_invalid')
-        cid=claim['actor_id'];event=events.get(claim['source_event_id'])
-        if cid not in state['characters'] or not event or not isinstance(event.get('participants',[]),list) or cid not in event.get('participants',[]) or not resolver.supported(claim):
-            reject('risk_evidence_invalid')
-        if not explicit(resolver,claim) and not grounded(state,claim['basis_ids'],cid): reject('risk_grounding_missing')
-        claims.setdefault((claim['source_event_id'],cid),set()).add(claim['kind'])
-        if explicit(resolver,claim): continue
-        if claim['kind'] in ('npc_death','protagonist_death'):
-            main=state['meta'].get('current_protagonist_id') or state['camera'].get('controlled_actor_id')
-            if (claim['kind']=='protagonist_death') != (cid==main): reject('risk_severity_mismatch')
-            if not resolver.death_policy.permits_autonomous_death(state,cid): reject('risk_death_denied',entity=cid)
-        elif not risk[claim['kind']]: reject('risk_denied',consequence=claim['kind'],entity=cid)
-        # Existing causal processes may progress without manufacturing a new
-        # storyline. A new severe disruption needs the original Director permit.
-        continuing=any(key in state['conditions'] and state['conditions'][key]['actor_id']==cid
-            and state['conditions'][key]['status']=='active' for key in claim['basis_ids'])
-        severe=claim['kind'] in ('serious_illness','permanent_injury','major_accident','npc_death','protagonist_death')
-        if severe and not continuing:
-            selected=[c for c in (resolver.pacing_decision or {}).get('candidates',[]) if c['selected']]
-            if not any(c['id']==claim.get('candidate_id') and cid in c['actor_ids'] and
-                set(c.get('basis_ids',[c['source_id']])) & set(claim['basis_ids']) for c in selected):
-                reject('risk_pacing_required',entity=cid)
-
-    for section in ('life_changes','condition_changes','social_relation_changes','role_changes','residence_changes','events','character_changes'):
+    Risk booleans retain the existing user contract; intensity/candidate budgets
+    only guide generation. Runtime checks extracted typed outcomes, not prose.
+    """
+    state = resolver.before
+    _, risk = profiles(state)
+    valid = []
+    for index, item in enumerate(raw.records['consequences']):
+        try:
+            claim = ConsequenceClaim.model_validate(item).model_dump()
+        except (ValueError, TypeError):
+            resolver.warn('consequences', index, 'Повреждена вспомогательная классификация.', code='risk_claim_invalid')
+            continue
+        if claim['actor_id'] not in state['characters']:
+            resolver.warn('consequences', index, 'Неизвестный участник вспомогательной классификации.', code='risk_claim_invalid')
+            continue
+        if not explicit(resolver, claim) and not risk[claim['kind']]:
+            reject('risk_death_denied' if claim['kind'] in ('protagonist_death','npc_death') else 'risk_denied', consequence=claim['kind'], entity=claim['actor_id'])
+        valid.append(claim)
+    raw.records['consequences'] = valid
+    for item in raw.records['life_changes']:
+        if not isinstance(item, dict) or explicit(resolver, item): continue
+        cid = item.get('id')
+        if not isinstance(cid, str): continue
+        if cid in state['characters'] and item.get('life_status') == 'dead' and state['characters'][cid]['life_status'] != 'dead':
+            if not resolver.death_policy.permits_autonomous_death(state, cid):
+                reject('risk_death_denied', entity=cid)
+        caps=item.get('capabilities', {})
+        if isinstance(caps,dict) and any(v is False and state['characters'].get(cid,{}).get('capabilities',{}).get(k) is not False for k,v in caps.items()) and not any(risk[k] for k in ('injury','serious_illness','major_accident')):
+            reject('risk_denied', consequence='incapacity', entity=cid)
+    for item in raw.records['condition_changes']:
+        if not isinstance(item, dict) or explicit(resolver, item): continue
+        if not isinstance(item.get('id'),str) or not isinstance(item.get('effects',{}),dict): continue
+        old = state['conditions'].get(item['id'], {})
+        if item.get('status', 'active') != 'active': continue
+        if item.get('duration', old.get('duration')) == 'persistent' and old.get('duration') != 'persistent' and not risk['permanent_injury']:
+            reject('risk_denied', consequence='permanent_injury')
+        if any(v is False and old.get('effects',{}).get(k) is not False for k,v in item.get('effects', {}).items()) and not any(risk[k] for k in ('injury','serious_illness','major_accident')):
+            reject('risk_denied', consequence='incapacity')
+        if not old and not any(risk[k] for k in ('minor_illness','serious_illness','injury','permanent_injury','major_accident')):
+            reject('risk_denied', consequence='condition')
+    for section in ('social_relation_changes','role_changes','residence_changes'):
         for item in raw.records[section]:
-            if not isinstance(item,dict) or not isinstance(item.get('id'),str) or not resolver.supported(item) or explicit(resolver,item): continue
-            if any(key in item and not isinstance(item[key],dict) for key in ('effects','capabilities')): continue
-            cid=item.get('actor_id',item.get('id'))
-            if section=='condition_changes': cid=state['conditions'].get(item.get('id'),{}).get('actor_id',cid)
-            if not isinstance(cid,str) or not isinstance(item.get('source_event_id',''),str): continue
-            required=set()
-            declared=claims.get((item.get('source_event_id'),cid),set())
-            if section=='life_changes':
-                old=state['characters'].get(cid,{})
-                if item.get('life_status')=='dead' and old.get('life_status')!='dead':
-                    if not resolver.death_policy.permits_autonomous_death(state,cid): reject('risk_death_denied',entity=cid)
-                    if not declared & {'npc_death','protagonist_death'}: reject('risk_classification_required',entity=cid)
-                if any(v is False and old.get('capabilities',{}).get(k) is not False for k,v in item.get('capabilities',{}).items()):
-                    if not declared & {'serious_illness','injury','permanent_injury','major_accident'}: reject('risk_classification_required',entity=cid)
-            if section=='condition_changes' and item.get('status','active')=='active':
-                old=state['conditions'].get(item.get('id'),{})
-                if not old or item.get('duration')=='persistent' and old.get('duration')!='persistent' or any(v is False and old.get('effects',{}).get(k) is not False for k,v in item.get('effects',{}).items()):
-                    if not declared and any(v is False for v in item.get('effects',{}).values()):
-                        reject('risk_classification_required',entity=cid)
-                    if not declared:
-                        required.update(('serious_illness','injury') if any(v is False for v in item.get('effects',{}).values()) else ('minor_illness','injury'))
-                        if item.get('duration')=='persistent': required.add('permanent_injury')
-                    elif not declared & {'minor_illness','serious_illness','injury','permanent_injury','major_accident'}:
-                        reject('risk_classification_required',entity=cid)
-                    elif 'injury' in declared and item.get('duration')=='persistent' and 'permanent_injury' not in declared:
-                        reject('risk_severity_mismatch')
-                    elif any(v is False for v in item.get('effects',{}).values()) and not declared & {'serious_illness','injury','permanent_injury','major_accident'}:
-                        reject('risk_severity_mismatch')
-            if section=='social_relation_changes' and item.get('status')=='closed' and item.get('consequence_outcome')!='constructive':
-                required.add('relationship_loss')
-            if section=='role_changes' and item.get('status')=='closed' and item.get('consequence_outcome')!='constructive':
-                old=state['roles'].get(item.get('id'),{})
-                required.add('career_loss' if old.get('kind') in ('employment','education') else 'life_role_loss')
-            if section=='residence_changes' and item.get('status')=='closed' and item.get('transition')=='external' and item.get('consequence_outcome')!='constructive':
-                required.add('life_role_loss')
-            for key in required:
-                if not risk[key]: reject('risk_denied',consequence=key,entity=cid)
-    return claims
+            if not isinstance(item,dict) or not isinstance(item.get('id'),str) or explicit(resolver,item): continue
+            if item.get('status')!='closed' or item.get('consequence_outcome')=='constructive': continue
+            if section=='social_relation_changes': kind='relationship_loss'
+            elif section=='role_changes':
+                old=state['roles'].get(item['id'],{})
+                kind='career_loss' if old.get('kind') in ('employment','education') else 'life_role_loss'
+            elif item.get('transition')=='external': kind='life_role_loss'
+            else: continue
+            if not risk[kind]: reject('risk_denied', consequence=kind, entity=item['id'])
+    return valid
 
 
 def grounded(state, ids, actor):
@@ -271,67 +249,41 @@ def grounded(state, ids, actor):
 
 
 def validate_developments(resolver, raw):
-    """Declarations link accepted content to selected sources, never instantiate it."""
-    decision=resolver.pacing_decision
-    records=list(raw.records['narrative_developments'])
-    # Accepted severe outcomes must create pressure even if Extraction omitted
-    # the redundant development declaration. One source cannot authorize many events.
-    declared={r.get('candidate_id'):r.get('source_event_id') for r in records if isinstance(r,dict) and isinstance(r.get('candidate_id'),str)}
-    for claim in raw.records['consequences']:
-        cid=claim.get('candidate_id')
-        if not cid or explicit(resolver,claim): continue
-        if cid in declared:
-            if declared[cid]!=claim['source_event_id']: reject('pacing_candidate_reused')
-            continue
-        records.append(dict(candidate_id=cid,source_event_id=claim['source_event_id'],
-            assertion='established',evidence=claim['evidence']))
-        declared[cid]=claim['source_event_id']
-    if not records: return []
-    if not decision: reject('pacing_context_missing')
-    if len(records)>decision['budget']['candidates']: reject('pacing_budget_exceeded')
-    selected={c['id']:c for c in decision['candidates'] if c['selected']}
-    events={e.get('id'):e for e in raw.records['events'] if isinstance(e,dict) and isinstance(e.get('id'),str) and resolver.supported(e)}
-    canonical_events={event['local_id']:event['id'] for event in resolver.history.events}
-    accepted=[];seen=set()
-    for item in records:
-        try: claim=NarrativeDevelopment.model_validate(item)
-        except (ValueError,TypeError): reject('pacing_claim_invalid')
-        if claim.escalation>decision['profile']['escalation']: reject('pacing_escalation_limit')
-        candidate=selected.get(claim.candidate_id);event=events.get(claim.source_event_id)
-        if not candidate or not event or claim.source_event_id not in canonical_events or not resolver.supported(item) or claim.candidate_id in seen:
-            reject('pacing_candidate_invalid')
-        if not set(candidate['actor_ids']) & set(event.get('participants',[])): reject('pacing_grounding_missing')
+    """Record usable optional Director attribution without making it a permit."""
+    decision = resolver.pacing_decision or {}
+    candidates = {c['id']: c for c in decision.get('candidates', [])}
+    events = {e['local_id']: e for e in resolver.history.events}
+    accepted = []; seen = set()
+    rows = list(raw.records['narrative_developments'])
+    rows.extend(dict(candidate_id=c['candidate_id'], source_event_id=c['source_event_id'], assertion='established', evidence=c.get('evidence', '')) for c in raw.records['consequences'] if c.get('candidate_id') and not any(isinstance(r, dict) and r.get('candidate_id') == c['candidate_id'] for r in rows))
+    for index, item in enumerate(rows):
+        try:
+            claim = NarrativeDevelopment.model_validate(item)
+        except (ValueError, TypeError):
+            resolver.warn('narrative_developments', index, 'Некорректная аннотация.', code='pacing_claim_invalid'); continue
+        candidate = candidates.get(claim.candidate_id); event = events.get(claim.source_event_id)
+        if not candidate or not event or claim.candidate_id in seen:
+            resolver.warn('narrative_developments', index, 'Нет связанного кандидата/Event.', code='pacing_candidate_invalid'); continue
         seen.add(claim.candidate_id)
-        accepted.append(dict(source_id=claim.candidate_id,source_event_id=canonical_events[claim.source_event_id],family=candidate['family'],
-            minute=resolver.state['meta']['world_time'],weight=1. if candidate['family']=='external_disruption' else .6))
+        accepted.append(dict(source_id=claim.candidate_id, source_event_id=event['id'], family=candidate['family'],
+            minute=resolver.state['meta']['world_time'], weight=1. if candidate['family']=='external_disruption' else .6))
     return accepted
 
 
 def validate_threads(resolver, raw):
-    state=resolver.state;pacing,_=profiles(resolver.before)
-    prior=sum(t['status'] in ('active','developing') for t in resolver.before['threads'].values())
-    after=sum(t['status'] in ('active','developing') for t in state['threads'].values())
-    autonomous=[r for r in raw.records['thread_changes'] if isinstance(r,dict) and not explicit(resolver,r)]
-    new=[r for r in autonomous if r.get('id') not in resolver.before['threads'] or
-         resolver.before['threads'][r['id']]['status'] not in ('active','developing')]
-    opened=[r for r in new if state['threads'].get(r.get('id'),{}).get('status') in ('active','developing')]
-    if len(opened)>pacing['candidate_budget']: reject('pacing_budget_exceeded')
-    if opened and after>max(prior,pacing['thread_cap']): reject('pacing_thread_cap')
+    """Budgets guide generation; optional suggestions cannot leak secret sources."""
+    state=resolver.state
     main=state['meta'].get('current_protagonist_id')
-    for item in autonomous:
-        thread=state['threads'].get(item.get('id'))
+    for index,item in enumerate(raw.records['thread_changes']):
+        if not isinstance(item,dict) or not isinstance(item.get('id'),str): continue
+        thread=state['threads'].get(item['id'])
         if not thread or not main or main not in thread['character_ids']+thread.get('stakes_for',[]): continue
-        if state['meta']['outcome_preference']!='guaranteed_happy_path': continue
-        if thread['status']=='resolved':
-            if resolver.before['threads'].get(thread['id'],{}).get('status')=='resolved': continue
-            if item.get('resolution')!='favorable': reject('favorable_resolution_required')
-            continue
-        if not thread.get('favorable_path'): reject('favorable_path_required',entity=thread['id'])
-        basis=thread['favorable_path']['basis_ids']
-        if not grounded(state,basis,main): reject('favorable_path_ungrounded')
-        for key in basis:
-            if key in state['facts'] and state['knowledge'].get(main+':'+key,{}).get('status')!='known':
-                reject('favorable_path_unknown_basis')
+        path=thread.get('favorable_path')
+        if path and (not grounded(state,path['basis_ids'],main) or any(
+            key in state['facts'] and state['knowledge'].get(main+':'+key,{}).get('status')!='known'
+            for key in path['basis_ids'])):
+            thread['favorable_path']=None
+            resolver.warn('thread_changes',index,'Недоступные основания необязательной подсказки.',field='favorable_path',code='favorable_path_unknown_basis')
 
 
 def validate_resolved_consequences(resolver, raw):
@@ -360,7 +312,9 @@ def validate_resolved_consequences(resolver, raw):
     sections={'conditions':'condition_changes','characters':'life_changes',
         'objective_relations':'social_relation_changes','roles':'role_changes','residences':'residence_changes'}
     for claim in raw.records['consequences']:
-        if claim['source_event_id'] not in accepted_events: reject('risk_event_not_accepted')
+        if claim['source_event_id'] not in accepted_events:
+            from backend.runtime_v3.models import fatal
+            fatal('Нет события установленного последствия.', 'risk_event_not_accepted', repairable=True, section='consequences')
         kind=claim['kind'];actor=claim['actor_id']
         if kind=='major_accident': continue
         candidates=('roles','residences') if kind=='life_role_loss' else (domains[kind],)
@@ -376,7 +330,9 @@ def validate_resolved_consequences(resolver, raw):
                 else: valid=row['actor_id']==actor and row['status']==('active' if domain=='conditions' else 'closed')
                 if kind=='permanent_injury': valid=valid and row.get('duration')=='persistent'
                 if valid: matched=True
-        if not matched: reject('risk_canonical_consequence_missing',consequence=kind,entity=actor)
+        if not matched:
+            from backend.runtime_v3.models import fatal
+            fatal('Не извлечено обязательное последствие.', 'risk_canonical_consequence_missing', repairable=True, consequence=kind, entity=actor)
     if raw.records['consequences']:
         from copy import deepcopy
         resolver.history.state_changes.append(dict(kind='narrative_consequences',

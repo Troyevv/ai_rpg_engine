@@ -1,0 +1,279 @@
+{
+  "id": 3,
+  "revision": 7,
+  "physical_choice_source": {
+    "turn_id": 16,
+    "variant_id": "203d1fb2516d4661aa005fa660b1ded3"
+  },
+  "turns": [
+    {
+      "id": 13,
+      "sequence": 0,
+      "assistant_text": "Илья сидит в кабинете. Виктория ждёт за дверью и пока не стучит.",
+      "choices": [
+        {
+          "action": "Посмотреть на часы",
+          "speech": "",
+          "interaction_channel": "physical"
+        }
+      ],
+      "presentation": {
+        "surface": "physical",
+        "actor_id": "qa_kirill",
+        "call_id": null
+      }
+    },
+    {
+      "id": 14,
+      "sequence": 1,
+      "assistant_text": "Собеседник ответил. Разговор доступен в сцене.",
+      "choices": [],
+      "presentation": {
+        "surface": "phone",
+        "actor_id": "qa_kirill",
+        "call_id": "remote_735064c200984cfea456",
+        "conversation_id": null
+      }
+    },
+    {
+      "id": 15,
+      "sequence": 2,
+      "assistant_text": "Катя отвечает: «Да, договорились.».\n\nВиктория трижды стучит в дверь кабинета. Деревянная створка глухо отзывается.",
+      "choices": [
+        {
+          "action": "Подойти к двери и ответить Виктории",
+          "speech": "",
+          "interaction_channel": "physical"
+        },
+        {
+          "action": "Выйти из кабинета",
+          "speech": "",
+          "interaction_channel": "physical"
+        }
+      ],
+      "presentation": {
+        "surface": "call",
+        "actor_id": "qa_kirill",
+        "call_id": "remote_735064c200984cfea456",
+        "physical_events": [
+          {
+            "id": "event_f769bc7e9f6b4638ad24",
+            "source_record_id": "record_f272e7bcb6dc8b49e110",
+            "turn_id": 3,
+            "order": 0,
+            "minute": 543,
+            "physical_text": "Виктория трижды стучит в дверь кабинета. Деревянная створка глухо отзывается.",
+            "witnesses": [
+              "qa_kirill"
+            ]
+          }
+        ],
+        "physical_text": "Виктория трижды стучит в дверь кабинета. Деревянная створка глухо отзывается.",
+        "call_text": "Катя отвечает: «Да, договорились.»."
+      }
+    },
+    {
+      "id": 16,
+      "sequence": 3,
+      "assistant_text": "Катя говорит: «Я тебя слышу».\n\nЗа дверью Виктория повышает голос: «Илья, выходи, мне нужен ответ!»",
+      "choices": [
+        {
+          "action": "Подойти к двери и ответить Виктории",
+          "speech": "",
+          "interaction_channel": "physical"
+        },
+        {
+          "action": "Выйти из кабинета",
+          "speech": "",
+          "interaction_channel": "physical"
+        }
+      ],
+      "presentation": {
+        "surface": "call",
+        "actor_id": "qa_kirill",
+        "call_id": "remote_735064c200984cfea456",
+        "physical_events": [
+          {
+            "id": "event_4e8f12d15a9ab0b52f8d",
+            "source_record_id": "record_a6683489518b81601a64",
+            "turn_id": 4,
+            "order": 0,
+            "minute": 545,
+            "physical_text": "За дверью Виктория повышает голос: «Илья, выходи, мне нужен ответ!»",
+            "witnesses": [
+              "qa_kirill"
+            ]
+          }
+        ],
+        "physical_text": "За дверью Виктория повышает голос: «Илья, выходи, мне нужен ответ!»",
+        "call_text": "Катя говорит: «Я тебя слышу»."
+      }
+    },
+    {
+      "id": 17,
+      "sequence": 4,
+      "assistant_text": "Катя заканчивает разговор; в трубке щёлкает отбой.",
+      "choices": [],
+      "presentation": {
+        "surface": "call",
+        "actor_id": "qa_kirill",
+        "call_id": "remote_735064c200984cfea456",
+        "physical_events": [],
+        "physical_text": "",
+        "call_text": "Катя заканчивает разговор; в трубке щёлкает отбой."
+      }
+    }
+  ],
+  "world_clock": {
+    "minute": 547,
+    "last_event_time": "День 1 · 2026-10-05 · Пн · 09:07",
+    "calendar": {
+      "start_minute": 540,
+      "start_weekday": 0,
+      "start_date": "2026-10-05",
+      "profile": {
+        "id": "two-shores",
+        "system": "gregorian",
+        "month_lengths": [],
+        "month_names": [],
+        "weekday_names": [],
+        "observances": [
+          {
+            "id": "map-day",
+            "name": "День старых карт",
+            "month": 10,
+            "day": 5,
+            "character_ids": []
+          }
+        ],
+        "seasons": []
+      },
+      "labels": {
+        "480": "День 1 · 2026-10-05 · Пн · 08:00",
+        "540": "День 1 · 2026-10-05 · Пн · 09:00",
+        "543": "День 1 · 2026-10-05 · Пн · 09:03",
+        "545": "День 1 · 2026-10-05 · Пн · 09:05",
+        "547": "День 1 · 2026-10-05 · Пн · 09:07"
+      }
+    },
+    "projection": {
+      "world_time": 547,
+      "day": 1,
+      "date": "2026-10-05",
+      "weekday": 0,
+      "weekday_name": "monday",
+      "time": "09:07",
+      "day_period": "morning",
+      "season": null,
+      "summary": "Day 1 / 2026-10-05 / monday / 09:07 / morning"
+    },
+    "nearby": [
+      {
+        "id": "map-day:2026-10-05",
+        "date": "2026-10-05",
+        "kind": "observance",
+        "name": "День старых карт",
+        "character_ids": []
+      },
+      {
+        "id": "birthday:qa_vera:2026-10-06",
+        "date": "2026-10-06",
+        "kind": "birthday",
+        "name": null,
+        "character_ids": [
+          "qa_vera"
+        ]
+      }
+    ]
+  },
+  "phone_events": [
+    {
+      "id": "remote_735064c200984cfea456",
+      "channel": "VOICE_CALL",
+      "conversation_id": null,
+      "world_time": 540,
+      "status": "ended",
+      "destination": "qa-vera",
+      "outgoing": true,
+      "read_count": 0,
+      "recipient_count": 1,
+      "unread": false,
+      "content": "",
+      "subject": {
+        "id": "qa_vera",
+        "name": "Катя",
+        "portrait": null,
+        "silhouette": "neutral"
+      },
+      "label": "Катя",
+      "time_label": "День 1 · 2026-10-05 · Пн · 09:00"
+    }
+  ],
+  "scheduled_events": {
+    "office-meeting": {
+      "id": "office-meeting",
+      "time_semantics": "legacy",
+      "description": "Встреча с Катей",
+      "character_ids": [
+        "qa_kirill",
+        "qa_vera"
+      ],
+      "due_minute": null,
+      "status": "pending",
+      "condition": "",
+      "type": "event",
+      "location_id": null,
+      "interrupts": false,
+      "last_attempt_minute": null,
+      "temporal": {
+        "minute_offset": 60,
+        "date": null,
+        "weekday": null,
+        "day_offset": null,
+        "time": null,
+        "day_period": null
+      },
+      "time_reference_minute": 541,
+      "commitment": true,
+      "end_temporal": null,
+      "depends_on": [],
+      "started_minute": null,
+      "outcome": "",
+      "evidence": "Да, договорились.",
+      "source_turn": 5,
+      "remote_source_ids": [],
+      "remote_call_id": "remote_735064c200984cfea456",
+      "call_evidence": [
+        {
+          "source_id": "record_f272e7bcb6dc8b49e110:player",
+          "actor_id": "qa_kirill",
+          "quote": "Встретимся через час?",
+          "assertion": "proposal"
+        },
+        {
+          "source_id": "record_f272e7bcb6dc8b49e110:narrative",
+          "actor_id": "qa_vera",
+          "quote": "Да, договорились.",
+          "assertion": "assent"
+        }
+      ],
+      "call_time_source_id": "record_f272e7bcb6dc8b49e110:player",
+      "context_category": "PLAN",
+      "temporal_projection": {
+        "start_minute": 601,
+        "end_minute": 601,
+        "precision": "exact",
+        "relevance": "future",
+        "condition": "",
+        "exact_time": null
+      },
+      "interval_state": null,
+      "start_label": "День 1 · 2026-10-05 · Пн · 10:01",
+      "end_label": "День 1 · 2026-10-05 · Пн · 10:01",
+      "participants": [
+        "qa_kirill",
+        "qa_vera"
+      ]
+    }
+  }
+}

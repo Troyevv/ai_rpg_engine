@@ -1,3 +1,4 @@
+import {gameAction} from './navigation';
 import {test,expect} from '@playwright/test';
 
 test('long-term advance preview, zero-budget commit, reload and responsive results',async({page,request})=>{
@@ -5,9 +6,10 @@ test('long-term advance preview, zero-budget commit, reload and responsive resul
   const selected=await seed.json();
   await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selected);
   await page.goto('/');
-  await page.getByRole('button',{name:'Длительный переход',exact:true}).click();
-  const dialog=page.getByRole('dialog');
+  await gameAction(page,'Длительный переход');
+  const dialog=page.getByRole('dialog').last();
   await dialog.getByLabel('Количество единиц перехода').fill('15');
+  await dialog.getByText(/Подробности симуляции/).click();
   await dialog.getByLabel('Лимит обращений к модели').fill('0');
   const submit=dialog.getByRole('button',{name:'Подтвердить длительный переход'});
   await expect(submit).toBeEnabled();

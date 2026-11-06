@@ -1,0 +1,73 @@
+Playwright test source: 63ba1ac183d8d578d066a53df64e0c1c8f3fa540
+Production source: 38e1313ea0feb1ac15c43c48dc71f56f52492dbf
+
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> ai-rpg-frontend@2.0.0 test:e2e
+> playwright test narrative-authority136.spec.ts call-continuity.spec.ts phone133.spec.ts runtime-handoff.spec.ts pov.spec.ts knowledge.spec.ts long-term.spec.ts commitments.spec.ts narrative-continuity.spec.ts npc-initiative.spec.ts narrative-pacing.spec.ts streaming72.spec.ts
+
+
+Running 52 tests using 1 worker
+
+(node:35) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [desktop] › e2e/call-continuity.spec.ts:4:45 › one world during and after NPC hangup: graphite (9.2s)
+  ✓   2 [desktop] › e2e/call-continuity.spec.ts:4:45 › one world during and after NPC hangup: parchment (9.4s)
+  ✓   3 [desktop] › e2e/call-continuity.spec.ts:59:57 › optional call extraction recovers: office-recovery (6.7s)
+  ✓   4 [desktop] › e2e/call-continuity.spec.ts:59:57 › optional call extraction recovers: office-rejected (6.4s)
+  ✓   5 [desktop] › e2e/commitments.spec.ts:4:1 › canonical commitments and interval projection survive read-only browsing and reload (2.6s)
+  ✓   6 [desktop] › e2e/knowledge.spec.ts:4:1 › grounded correction shows current and old beliefs after reload without gossip (4.1s)
+  ✓   7 [desktop] › e2e/long-term.spec.ts:4:1 › long-term advance preview, zero-budget commit, reload and responsive results (7.1s)
+  ✓   8 [desktop] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 entry: real jobs turn reload turn (6.2s)
+  ✓   9 [desktop] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 doorway: real jobs turn reload turn (7.0s)
+  ✓  10 [desktop] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 optional-annotation: real jobs turn reload turn (5.9s)
+  ✓  11 [desktop] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 semantic-retry: real jobs turn reload turn (9.7s)
+  ✓  12 [desktop] › e2e/narrative-authority136.spec.ts:71:1 › 136 complete journey: arrival, interaction, threshold, call, agreement, reload, next turn (9.9s)
+  ✓  13 [desktop] › e2e/narrative-continuity.spec.ts:3:1 › completed meeting does not restart after departure and reload (4.1s)
+  ✓  14 [desktop] › e2e/narrative-pacing.spec.ts:3:1 › story policy presets custom risk and outcome persist without creating a turn (3.7s)
+  ✓  15 [desktop] › e2e/npc-initiative.spec.ts:3:1 › NPC opens interaction without input; external refusal survives reload (3.4s)
+  ✓  16 [desktop] › e2e/pov.spec.ts:3:1 › POV, backstage and prompt versions (6.0s)
+  ✓  17 [desktop] › e2e/pov.spec.ts:46:1 › scenario and summary deletion keeps restorable versions and saves (2.2s)
+  ✓  18 [desktop] › e2e/runtime-handoff.spec.ts:6:1 › original export identities and rejected opening recover through real API then turn reload turn (10.7s)
+(node:440) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  19 [desktop] › e2e/phone133.spec.ts:7:45 › 133 A B E F graphite: messages, choices, call and continuation (17.5s)
+  ✓  20 [desktop] › e2e/phone133.spec.ts:7:45 › 133 A B E F parchment: messages, choices, call and continuation (16.6s)
+  ✓  21 [desktop] › e2e/phone133.spec.ts:56:1 › 133 D: semantic failure and Retry preserve one response, one minute and choices (5.7s)
+  ✓  22 [desktop] › e2e/phone133.spec.ts:78:1 › 133 canonical agency repair commits once without narrative confirmation (4.2s)
+  ✓  23 [desktop] › e2e/streaming72.spec.ts:10:35 › controlled streaming, commit, scroll and journal motion (30.4s)
+  ✓  24 [desktop] › e2e/streaming72.spec.ts:10:35 › controlled streaming, commit, scroll and journal reduced (29.9s)
+  ✓  25 [desktop] › e2e/streaming72.spec.ts:84:1 › real Start Game → ordinary turn → persisted reload → next ordinary turn (5.5s)
+  ✓  26 [desktop] › e2e/streaming72.spec.ts:96:1 › leave for authoring and return during generation without losing the stream or draft (3.3s)
+(node:746) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  27 [mobile] › e2e/call-continuity.spec.ts:4:45 › one world during and after NPC hangup: graphite (8.9s)
+  ✓  28 [mobile] › e2e/call-continuity.spec.ts:4:45 › one world during and after NPC hangup: parchment (10.2s)
+  ✓  29 [mobile] › e2e/call-continuity.spec.ts:59:57 › optional call extraction recovers: office-recovery (7.5s)
+  ✓  30 [mobile] › e2e/call-continuity.spec.ts:59:57 › optional call extraction recovers: office-rejected (5.8s)
+  ✓  31 [mobile] › e2e/commitments.spec.ts:4:1 › canonical commitments and interval projection survive read-only browsing and reload (3.0s)
+  ✓  32 [mobile] › e2e/knowledge.spec.ts:4:1 › grounded correction shows current and old beliefs after reload without gossip (5.6s)
+  ✓  33 [mobile] › e2e/long-term.spec.ts:4:1 › long-term advance preview, zero-budget commit, reload and responsive results (10.4s)
+  ✓  34 [mobile] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 entry: real jobs turn reload turn (8.1s)
+  ✓  35 [mobile] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 doorway: real jobs turn reload turn (7.0s)
+  ✓  36 [mobile] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 optional-annotation: real jobs turn reload turn (7.6s)
+  ✓  37 [mobile] › e2e/narrative-authority136.spec.ts:7:2 › scene authority 136 semantic-retry: real jobs turn reload turn (11.9s)
+  ✓  38 [mobile] › e2e/narrative-authority136.spec.ts:71:1 › 136 complete journey: arrival, interaction, threshold, call, agreement, reload, next turn (11.4s)
+  ✓  39 [mobile] › e2e/narrative-continuity.spec.ts:3:1 › completed meeting does not restart after departure and reload (6.1s)
+  ✓  40 [mobile] › e2e/narrative-pacing.spec.ts:3:1 › story policy presets custom risk and outcome persist without creating a turn (3.5s)
+  ✓  41 [mobile] › e2e/npc-initiative.spec.ts:3:1 › NPC opens interaction without input; external refusal survives reload (3.4s)
+  ✓  42 [mobile] › e2e/pov.spec.ts:3:1 › POV, backstage and prompt versions (7.4s)
+  ✓  43 [mobile] › e2e/pov.spec.ts:46:1 › scenario and summary deletion keeps restorable versions and saves (3.6s)
+  ✓  44 [mobile] › e2e/runtime-handoff.spec.ts:6:1 › original export identities and rejected opening recover through real API then turn reload turn (14.8s)
+(node:1148) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  45 [mobile] › e2e/phone133.spec.ts:7:45 › 133 A B E F graphite: messages, choices, call and continuation (17.2s)
+  ✓  46 [mobile] › e2e/phone133.spec.ts:7:45 › 133 A B E F parchment: messages, choices, call and continuation (13.5s)
+  ✓  47 [mobile] › e2e/phone133.spec.ts:56:1 › 133 D: semantic failure and Retry preserve one response, one minute and choices (5.8s)
+  ✓  48 [mobile] › e2e/phone133.spec.ts:78:1 › 133 canonical agency repair commits once without narrative confirmation (5.4s)
+  ✓  49 [mobile] › e2e/streaming72.spec.ts:10:35 › controlled streaming, commit, scroll and journal motion (43.5s)
+  ✓  50 [mobile] › e2e/streaming72.spec.ts:10:35 › controlled streaming, commit, scroll and journal reduced (58.0s)
+  ✓  51 [mobile] › e2e/streaming72.spec.ts:84:1 › real Start Game → ordinary turn → persisted reload → next ordinary turn (6.6s)
+  ✓  52 [mobile] › e2e/streaming72.spec.ts:96:1 › leave for authoring and return during generation without losing the stream or draft (4.3s)
+
+  52 passed (8.8m)

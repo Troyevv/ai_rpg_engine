@@ -73,12 +73,12 @@ def test_complete_retains_history_and_projects_active(field,text,evidence):
 
 def test_agency_and_obligation_explicit_source():
     state=initial();quote='Хорошо, завтра отвезу тебя.'
-    p=dict(final_scene=dict(location_id='hall',present_character_ids=['a']),character_changes=[dict(id='a',situation='У двери',emotion='злится',evidence='Я сжал кулак у двери.',
+    p=dict(final_scene=dict(location_id='room',present_character_ids=['a']),character_changes=[dict(id='a',situation='У двери',emotion='злится',evidence='Я сжал кулак у двери.',
       intentions_updates=[dict(text='Ударить Юру',status='active',evidence='Я сжал кулак у двери.')],
       obligations_updates=[dict(text='Отвезти тебя завтра',status='active',evidence=quote)])])
     result=StateResolver(state,'Я сжал кулак у двери.',quote).resolve(p)
     actor=result.state['characters']['a']
-    assert actor['location_id']=='hall' and actor['situation']=='У двери'
+    assert actor['location_id']=='room' and actor['situation']=='У двери'
     assert not actor['emotion'] and not actor['intentions']
     assert active_texts(actor['obligations'])==['Отвезти тебя завтра']
     p['character_changes']=[dict(id='a',emotion='страшно',player_evidence={'emotion':'Мне страшно'})]
@@ -87,11 +87,11 @@ def test_agency_and_obligation_explicit_source():
     assert result.state['characters']['a']['emotion_source_sequence']==0
 
 
-def test_noncurrent_evidence_does_not_complete():
+def test_auxiliary_quote_does_not_override_extracted_completion():
     state=initial();state['characters']['a']['intentions']=[Motivation(id='x',text='Получить документы').model_dump()]
     p=dict(final_scene=dict(location_id='room',present_character_ids=['a']),character_changes=[dict(id='a',intentions_updates=[dict(id='x',status='completed',evidence='Я посмотрел в окно.')])])
     r=StateResolver(state,'Он закрыл дверь.','').resolve(p)
-    assert r.state['characters']['a']['intentions'][0]['status']=='active'
+    assert r.state['characters']['a']['intentions'][0]['status']=='completed'
 
 
 def test_relationship_semantics_hidden_new_pairs():
@@ -187,7 +187,7 @@ def test_long_skip_batch_hidden_state_and_knowledge(db):
 def test_confirmed_scene_can_refresh_controlled_situation_without_emotion():
     state=initial();state['characters']['a']['situation']='Сидит дома'
     evidence='Разговор окончен. Все стоят у двери.'
-    raw=dict(final_scene=dict(location_id='hall',present_character_ids=['a'],situation='Стоит у двери после разговора',situation_evidence=evidence))
+    raw=dict(final_scene=dict(location_id='room',present_character_ids=['a'],situation='Стоит у двери после разговора',situation_evidence=evidence))
     result=StateResolver(state,evidence,'').resolve(raw)
     assert result.state['characters']['a']['situation']=='Стоит у двери после разговора'
     assert not result.state['characters']['a']['emotion']

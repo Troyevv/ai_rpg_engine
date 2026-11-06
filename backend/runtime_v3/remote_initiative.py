@@ -5,14 +5,16 @@ polling. Accepted events are staged with the job's immutable original context.
 """
 
 import json
+from backend.runtime_v3.remote_decision import RemoteDecision, parse as parse_decision, VERSION
 from copy import deepcopy
 from backend.runtime_v3.models import identity, Character, WorldHistoryV3
 from backend.runtime_v3.remote_models import RemoteCommand, RemoteProposal
-from backend.runtime_v3.remote import apply, active_call, members, participants
+from backend.runtime_v3.remote import apply, active_call, members, participants, recipient_eligible
 from backend.runtime_v3.life import capabilities
 
 
 def opportunities(state):
+    from backend.runtime_v3.group_planning import pending as group_pending, ready as group_ready
     cfg = state["meta"]["communication"]
     external = state["camera"]["controlled_actor_id"]
     if not external or not (cfg["text_message"] or cfg["voice_call"]):
@@ -83,6 +85,11 @@ def opportunities(state):
     for e in reversed(list(state["remote_events"].values())):
         if e["channel"] != "TEXT_MESSAGE":
             continue
+        conversation = state['conversations'].get(e['conversation_id'])
+        if conversation and conversation['group']:
+            # Series owns explicit reads by its speakers. Never drain an NPC
+            # group backlog through one additional LLM decision per message.
+            continue
         for actor in e["delivered_to"]:
             if actor == external or not capabilities(state, actor)["can_act"]:
                 continue
@@ -97,8 +104,10 @@ def opportunities(state):
                 )
                 if len(result) >= 4:
                     return result[:4]
-    # Select from established intentions/threads, then test explicit paths. A
-    # contact is eligibility, not a reason to invent a social interaction.
+    # Established intentions/threads motivate initiative. Existing remote
+    # history/contacts bound this optional planner's attention, not eligibility:
+    # ordinary Narrative can author a direct canonical attempt without either.
+    # Enumerating the directory must not add planning calls or per-NPC polling.
     basis = {}
     for cid, c in state["characters"].items():
         if cid == external or not capabilities(state, cid)["can_act"]:
@@ -126,6 +135,11 @@ def opportunities(state):
                 if cid not in latest or latest[cid]["ordinal"] < e["ordinal"]:
                     basis.setdefault(cid, []).append(e["id"])
     for cid, ids in sorted(basis.items()):
+        if not capabilities(state,cid)["can_act"] or not any(
+            recipient_eligible(state, cid, external, channel)
+            for channel in ("TEXT_MESSAGE", "VOICE_CALL")
+        ):
+            continue
         recent = latest.get(cid)
         if recent and (
             recent["turn_id"] >= state["meta"]["turn_id"] - 2
@@ -137,13 +151,11 @@ def opportunities(state):
             for c in state["contacts"].values()
             if c["owner_id"] == cid
             and c["character_id"] == external
-            and c["available"]
-            and not c["blocked"]
         ]
         paths += [
             dict(conversation_id=c["id"])
             for c in state["conversations"].values()
-            if c["group"] and {cid, external} <= members(c)
+            if {cid, external} <= members(c) and not group_pending(state, c["id"]) and (not c["group"] or group_ready(state,c))
         ]
         if paths:
             result.append(
@@ -161,10 +173,12 @@ def opportunities(state):
 
 
 def planning_context(snapshot, options):
+    from backend.runtime_v3.remote_authoring import speaker_context, option_audience, text_style_instructions
     state = snapshot["world_state"]
     actors = {r["actor_id"] for r in options if r["actor_id"] in state["characters"]}
     cards = {c["id"]: c for c in snapshot["character_cards"]}
     data = []
+    source_ids = {eid for option in options for eid in option.get('basis_ids', [])}
     for cid in sorted(actors):
         c = state["characters"][cid]
         knowledge = [
@@ -176,20 +190,19 @@ def planning_context(snapshot, options):
             for k, v in state["knowledge"].items()
             if v["actor_id"] == cid and v["status"] in ("known", "suspected")
         ][:8]
+        voice = speaker_context(snapshot, cid, option_audience(state, cid, options))
         data.append(
             dict(
                 id=cid,
                 name=c["display_name"] or cards.get(cid, {}).get("name", cid),
-                situation=c["situation"][:400],
+                situation=voice["situation"],
                 intentions=[
                     r["text"][:300] for r in c["intentions"] if r["status"] == "active"
                 ][:3],
-                personality=[
-                    dict(field=i["field"], text=i["text"][:200])
-                    for i in list(
-                        (c.get("personality") or {}).get("items", {}).values()
-                    )[:6]
-                ],
+                personality=voice['personality'],
+                legacy_voice=voice['legacy_voice'],
+                relationships=voice['relationships'],
+                emotion=voice['emotion'],
                 knowledge=knowledge,
                 pending=[
                     dict(
@@ -199,7 +212,7 @@ def planning_context(snapshot, options):
                         content=e["content"][:1000] if cid in e["read_by"] else None,
                     )
                     for e in state["remote_events"].values()
-                    if cid in e["recipient_ids"]
+                    if cid in e["recipient_ids"] and (not source_ids or e['id'] in source_ids)
                 ][-4:],
             )
         )
@@ -207,15 +220,17 @@ def planning_context(snapshot, options):
         dict(
             role="system",
             content="Select at most ONE optional grounded autonomous remote action. "
-            'Return JSON {"action":null} or {"action":RemoteProposal}. No prose. '
+            'Return a JSON object with required outer action: an operation object or null. No prose. '
+            'Example (substitute only listed IDs): {"action":{"actor_id":"npc_1","action":"answer","event_id":"call_1","basis_ids":["call_1"]}}. '
+            'No action example: {"action":null}. Outer action is the decision; inner action is the operation. '
             "Do not control the external actor. Do not invent knowledge. Use listed basis IDs and paths only. "
             "Message content is authored testimony in the active game language. "
             "Answer or decline only a listed actual pending incoming call; no forced answer. "
             "An endpoint may remain unavailable (action:null). Only a meaningful reached individual "
             "may identify: speaker_name, existing_character_id only from the exact-address existing_ids list. "
             "Do not invent a biography or turn an organization into a person; identify an individual operator. "
-            "Schema: "
-            + json.dumps(RemoteProposal.model_json_schema(), ensure_ascii=False),
+            + text_style_instructions(state["meta"]["communication"]) + "Schema: "
+            + json.dumps(RemoteDecision.model_json_schema(), ensure_ascii=False),
         ),
         dict(
             role="user",
@@ -225,6 +240,7 @@ def planning_context(snapshot, options):
                     actors=data,
                     world_time=state["meta"]["world_time"],
                     language=snapshot.get("campaign", {}).get("language", "ru"),
+                    communication_profile=state["meta"]["communication"],
                 ),
                 ensure_ascii=False,
             ),
@@ -232,7 +248,7 @@ def planning_context(snapshot, options):
     ]
 
 
-def accept(snapshot, proposal, options, operation_id):
+def accept(snapshot, proposal, options, operation_id, *, response_request=None):
     p = RemoteProposal.model_validate(proposal)
     permitted = next(
         (
@@ -261,6 +277,7 @@ def accept(snapshot, proposal, options, operation_id):
         if not any(
             path.get("contact_id") == p.contact_id
             and path.get("conversation_id") == p.conversation_id
+            and path.get("character_id") == p.character_id
             for path in permitted.get("paths", [])
         ):
             raise ValueError("remote_unreachable")
@@ -275,11 +292,12 @@ def accept(snapshot, proposal, options, operation_id):
         operation_id=operation_id,
         action=p.action,
         contact_id=p.contact_id,
+        character_id=p.character_id,
         conversation_id=p.conversation_id,
         event_id=p.event_id,
         content=p.content,
     )
-    return apply(snapshot, cmd, actor_id=p.actor_id, autonomous=True)
+    return apply(snapshot, cmd, actor_id=p.actor_id, autonomous=True, response_request=response_request)
 
 
 def _identify_endpoint(snapshot, proposal, operation_id):
@@ -383,40 +401,98 @@ def _identify_endpoint(snapshot, proposal, operation_id):
     return result, batch.to_dict()
 
 
-def stage(snapshot, generate, operation_id):
+def stage(snapshot, generate, operation_id, *, context_limit=32768, history_events=()):
     if "_remote_batch" in snapshot:
         return snapshot
-    from backend.runtime_v3.initiative import scene_plan
-    from backend.runtime_v3.scope import ContextScope
+    from backend.runtime_v3.group_planning import opportunities as group_options, context as group_context
+    from backend.runtime_v3.group_planning import GroupSemantics, accept_series, record_attempt, GROUP_TEXT_CONTEXT
+    from backend.runtime_v3.remote_decision import RemoteStageDecision, decode
 
-    state = snapshot["world_state"]
-    scope = ContextScope(
-        state["camera"]["controlled_actor_id"],
-        present_actor_ids=set(state["camera"]["present_character_ids"]),
-    )
-    options = scene_plan(state, scope).get("remote_opportunities", [])
-    if not options:
+    options = opportunities(snapshot['world_state'])
+    groups = group_options(snapshot['world_state'], history_events)
+    if not options and not groups:
         return snapshot
-    answer = "".join(
-        generate(
-            "remote_initiative",
-            planning_context(snapshot, options),
-            1200,
-            0.2,
-            response_format={"type": "json_object"},
-        )
-    )
-    proposed = json.loads(answer).get("action")
+    messages = planning_context(snapshot, options)
+    if groups:
+        messages[0]['content'] = messages[0]['content'].split('Schema: ', 1)[0] + (
+            ' Alternatively choose ONE optional group_series, or null if no conversation is appropriate. '
+            'New canonical context permits an attempt immediately; its importance is YOUR creative judgment. '
+            'Spontaneous conversation needs no new event or prior intention: everyday life, work, relationships, '
+            'rumours, humour, invitations and old topics are welcome. The conversation ID in basis is a scheduling '
+            'opportunity only, never factual evidence. Cooldown limits attempts, not subject matter. '
+            'A short series uses different autonomous speakers; never author the controlled actor. '
+            'Each speaker may use ONLY their own knowledge and read history. Subsequent speakers '
+            'must set read_previous=true to perceive preceding messages in this series; cite the initiating basis IDs. '
+            'event_cues and gm_story_context are author-only context, NEVER character knowledge. A thread ID is a planning cue, '
+            'not proof the speaker knows its secrets. Use it to motivate an inquiry, not to assert unknown information. '
+            'No filler or mandatory reply. No physical movement. '
+            + GROUP_TEXT_CONTEXT + 'Schema: '
+            + json.dumps(RemoteStageDecision.model_json_schema(), ensure_ascii=False))
+        data = json.loads(messages[1]['content'])
+        data.update(groups=group_context(snapshot, groups), controlled_actor_id=snapshot['world_state']['camera']['controlled_actor_id'],
+                    controlled_actor_name=snapshot['world_state']['characters'].get(snapshot['world_state']['camera']['controlled_actor_id'], {}).get('display_name'))
+        messages[1]['content'] = json.dumps(data, ensure_ascii=False)
+    from context_builder import estimate
+    if groups and estimate(messages) + 2400 + 512 > context_limit:
+        result = deepcopy(snapshot)
+        batch = {'state_changes':[dict(kind='remote_deferred', code='group_context_budget')]}
+        record_attempt(result, groups[0]['conversation_id'], operation_id, batch,
+            event_ids=[e['id'] for e in groups[0].get('event_cues', [])])
+        result['_remote_batch'] = batch
+        return result
+    answer = ''.join(generate('remote_initiative', messages, 2400 if groups else 1200, 0.2,
+                              response_format={'type':'json_object'}))
     result = deepcopy(snapshot)
-    if proposed is not None:
-        try:
+    batch = {'state_changes': []}
+    attempted = groups[0]['conversation_id'] if groups else None
+    try:
+        value = decode(answer)
+        if groups and isinstance(value, dict) and 'group_series' in value:
+            decision = RemoteStageDecision.model_validate(value)
+            proposed = decision.action.model_dump() if decision.action else None
+            series = decision.group_series
+            diagnostic = dict(contract='remote-group/1')
+        else:
+            proposed, diagnostic = parse_decision(answer)
+            series = None
+        if series:
+            if series.conversation_id not in {g['conversation_id'] for g in groups}:
+                raise ValueError('group_not_offered')
+            attempted = series.conversation_id
+            from backend.runtime_v3.calendar import current_time
+            semantic_messages = [dict(role='system', content=(
+                'Group response extraction/1. Interpret ONLY the supplied authored messages. '
+                'Return one valid JSON object matching the schema, for example {"requests":[]} when no answer is needed. '
+                'Return requests for explicit questions, invitations or voluntary decisions addressed to '
+                'controlled_actor_id. Mere mentions/greetings need no answer. Never invent a player reply. '
+                'Each request cites message_index, target_id, exact evidence and expires_at in canonical minutes '
+                'when the request loses relevance, using the stated deadline or present scene context, not an arbitrary distant date. '
+                'No arbitrary consent, facts or physical changes. Schema: '
+                + json.dumps(GroupSemantics.model_json_schema(), ensure_ascii=False))),
+                dict(role='user', content=json.dumps(dict(series=series.model_dump(),
+                    controlled_actor_id=snapshot['world_state']['camera']['controlled_actor_id'],
+                    world_time=snapshot['world_state']['meta']['world_time'],
+                    current_time=current_time(snapshot['world_state'])), ensure_ascii=False))]
+            if estimate(semantic_messages) + 1200 + 512 > context_limit:
+                raise ValueError('group_semantic_context_budget')
+            semantics = GroupSemantics.model_validate_json(''.join(generate('remote_group_semantics', semantic_messages,
+                1200, 0.1, response_format={'type':'json_object'})))
+            result, batch = accept_series(snapshot, series, semantics, groups, operation_id)
+        elif proposed is not None:
             result, batch = accept(snapshot, proposed, options, operation_id)
-            result["_remote_batch"] = batch
-        except ValueError as exc:
-            # Rejection is recorded, but never enters Narrative as an actual cue.
-            result["_remote_batch"] = {
-                "state_changes": [dict(kind="remote_rejected", code=str(exc)[:300])]
-            }
-    else:
-        result["_remote_batch"] = {"state_changes": [dict(kind="remote_no_action")]}
+            conv = snapshot['world_state']['conversations'].get(proposed.get('conversation_id'))
+            if proposed['action'] == 'send' and conv and conv['group']:
+                attempted = conv['id']
+        else:
+            batch = {'state_changes':[dict(kind='remote_no_action')]}
+        batch.setdefault('state_changes', []).append(dict(kind='remote_decision_parser', **diagnostic))
+    except (ValueError, KeyError, TypeError, RuntimeError) as exc:
+        result = deepcopy(snapshot)
+        batch = {'state_changes':[dict(kind='remote_rejected',
+            code='group_provider_failed' if isinstance(exc, RuntimeError) else 'decision_runtime',
+            error_type=type(exc).__name__)]}
+    if attempted:
+        record_attempt(result, attempted, operation_id, batch,
+            event_ids=[e['id'] for g in groups if g['conversation_id']==attempted for e in g.get('event_cues', [])])
+    result['_remote_batch'] = batch
     return result

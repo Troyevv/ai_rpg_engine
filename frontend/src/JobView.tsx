@@ -7,6 +7,7 @@ const labels: Record<string, string> = {
   extracting: "Обновляет состояние мира",
   validating: "Завершает ход",
   saved: "Готово",
+  committing: "Загружает сохранённый ход…",
   error: "Не удалось завершить",
   stopped: "Генерация остановлена",
 };
@@ -18,8 +19,10 @@ export function JobView({
   saveId,
   onCharacter,
   links = true,
+  statusOnly = false,
 }: {
   job: Job | null;
+  statusOnly?: boolean;
   reconnecting?: boolean;
   stop: () => void;
   worldId?: number;
@@ -31,6 +34,7 @@ export function JobView({
   if (job.status === "saved") return null;
   return (
     <section className={`job ${job.narrative ? "job-streaming" : ""}`}>
+      {job.narrative && <p className="muted" role="status">Предварительная сцена — изменения ещё не сохранены в мире.</p>}
       <details open>
         <summary>
           <span className="job-label" role="status" aria-live="polite">
@@ -39,13 +43,13 @@ export function JobView({
             ) : (
               <span className="status-dot" />
             )}
-            {job.kind === "background" && job.status === "extracting" ? "Обновляет последствия закулисной сцены" : labels[job.status] || job.status}
+            {job.kind==='communication'&&active(job)?'Обрабатывает связь…':job.kind === "background" && job.status === "extracting" ? "Обновляет последствия закулисной сцены" : labels[job.status] || job.status}
           </span>
           <span className="muted">Свернуть / раскрыть</span>
         </summary>
-        {active(job)&&<ol className="generation-stages" aria-label="Продолжение истории">{[['generating','Создаёт сцену'],['extracting','Обновляет мир'],['validating','Завершает ход']].map(([stage,label])=><li key={stage} aria-current={job.status===stage?'step':undefined}><span aria-hidden="true">{job.status===stage?'●':'○'}</span> {label}</li>)}</ol>}
-        {job.user_text && <div className="player-action"><span className="eyebrow">Твоё действие</span><Markdown text={job.user_text}/></div>}
-        {job.narrative && (
+        {active(job)&&<ol className="generation-stages" aria-label="Продолжение истории">{(job.kind==='communication'?[['generating','Решение собеседника'],['validating','Сохраняет результат']]:[['generating','Создаёт сцену'],['extracting','Обновляет мир'],['validating','Завершает ход']]).map(([stage,label])=><li key={stage} aria-current={job.status===stage?'step':undefined}><span aria-hidden="true">{job.status===stage?'●':'○'}</span> {label}</li>)}</ol>}
+        {!statusOnly && job.user_text && <div className="player-action"><span className="eyebrow">Твоё действие</span><Markdown text={job.user_text}/></div>}
+        {!statusOnly && job.narrative && (
           <Markdown
             text={job.narrative}
             worldId={worldId}

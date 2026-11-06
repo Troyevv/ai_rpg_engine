@@ -78,3 +78,19 @@ configured observances и birthdays. Чтение не изменяет world_ti
 Автотесты: `tests/test_calendar_v2.py`, `tests/test_narrative_test_world.py`,
 `tests/test_background_time.py`;
 UI desktop/mobile: `frontend/e2e/calendar.spec.ts`.
+
+## C3. Regional presets and optional review (#44, 2026-10-26)
+
+Reset the existing checkpoint into a fresh isolated save (does not overwrite saves):
+
+```bash
+RPG_DEV_TOOLS=1 python scripts/narrative_test_world.py --db /tmp/narrative-calendar-policy.sqlite3 --checkpoint calendar-evening
+```
+
+Follow [the calendar/start-policy checklist](calendar-start-policy-v2.md). Import the
+existing fixture's export as an author draft, apply RU/north, then switch only
+holidays to US. The fixture's own Bridge Day, Vera's DOB, calendar anchor and pending
+Friday trip remain unchanged. Preview remains read-only. Confirm, ordinary turn,
+reload and rollback preserve the regional profile and author overrides. Automated
+`test_existing_78_calendar_checkpoint_preserves_presets_through_turn_reload_rollback`
+uses the same `calendar-evening` source and real repository/engine paths.

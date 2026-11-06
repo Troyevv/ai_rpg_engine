@@ -1,0 +1,9 @@
+{
+  "contract": "narrative-authority-v1",
+  "status": "NOT RUN",
+  "model": null,
+  "results": [],
+  "calls": 0,
+  "limitation": "Only the explicitly labelled benchmark cases; no claim of universal semantic accuracy.",
+  "reason": "Live evaluation was not requested or safe provider configuration is unavailable."
+}

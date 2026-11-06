@@ -9,8 +9,9 @@ from test_pov_documents import generate_background
 from backend.services.timeline import current_time,label,parse_time
 
 
-def intro(storage,sid,actor,source=None,bad=False):
-    jid=storage.begin_job(sid,'','pov',{**CONFIG,'actor_id':actor,'source_turn_id':source})
+def intro(storage,sid,actor,source=None,bad=False,retry=None):
+    if retry: storage.retry_job(retry,CONFIG)
+    jid=retry or storage.begin_job(sid,'','pov',{**CONFIG,'actor_id':actor,'source_turn_id':source})
     def stream(**kw):
         if kw.get('response_format'):
             block=next(m['content'] for m in kw['messages'] if m['content'].startswith('Текущее состояние / GM-only'))
@@ -29,7 +30,7 @@ def test_pov_intro_commits_actor_and_choices_atomically(db):
     failed=intro(repo,sid,'character_2',bad=True)
     assert repo.get_job(failed)['status']=='error'
     assert repo.get_save(sid)==before
-    jid=intro(repo,sid,'character_2')
+    jid=intro(repo,sid,'character_2',retry=failed)
     assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
     save=repo.get_save(sid);turn=repo.list_turns(sid)[-1]
     assert save['state']['controlled_actor_id']=='character_2'

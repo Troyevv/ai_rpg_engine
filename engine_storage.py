@@ -6,6 +6,11 @@ import uuid
 ACTIVE = ('generating', 'extracting', 'validating')
 
 
+class ExistingJob(Exception):
+    def __init__(self, job_id):
+        self.job_id = job_id
+
+
 class EngineStorage:
     def init_engine(self):
         with self.connect() as db:
@@ -26,6 +31,8 @@ class EngineStorage:
                 narrative TEXT NOT NULL DEFAULT '', narrative_complete INTEGER NOT NULL DEFAULT 0,
                 error TEXT NOT NULL DEFAULT '', config_json TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))''')
+            columns={r['name'] for r in db.execute('PRAGMA table_info(game_jobs)')}
+            if 'attempt_epoch' not in columns: db.execute('ALTER TABLE game_jobs ADD COLUMN attempt_epoch INTEGER NOT NULL DEFAULT 0')
             db.execute("CREATE UNIQUE INDEX IF NOT EXISTS active_game_job ON game_jobs(save_id) WHERE status IN ('generating','extracting','validating')")
             db.execute('''CREATE TABLE IF NOT EXISTS archived_turns (
                 id INTEGER PRIMARY KEY, save_id INTEGER NOT NULL, reason TEXT NOT NULL, payload TEXT NOT NULL)''')
@@ -43,14 +50,58 @@ class EngineStorage:
             return dict(row)
 
     def begin_job(self, save_id, user_text, kind, config):
-        if kind not in ('start', 'turn', 'regenerate','background','pov','long_term'):
+        if kind not in ('start', 'turn', 'regenerate','background','pov','long_term','communication'):
             raise ValueError('Неизвестный тип хода.')
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
-            self._assert_idle(db, save_id)
             save = db.execute('SELECT * FROM saves WHERE id=?', (save_id,)).fetchone()
             if save is None:
                 raise ValueError('Прохождение не найдено.')
+            if kind == 'communication':
+                from backend.runtime_v3.communication import Continuation
+                config = dict(config)
+                command = config.pop('remote_command', None)
+                command_created = False
+                if command:
+                    if command['action'] not in ('send', 'call'):
+                        raise ValueError('Продолжение доступно для отправки сообщения или вызова.')
+                    is_duplicate = any(e['operation_id']==command['operation_id'] for e in json.loads(save['state_json'])['world_state']['remote_events'].values())
+                    if not is_duplicate and db.execute("SELECT 1 FROM game_jobs WHERE save_id=? AND revision=? AND narrative_complete=1 AND status IN ('error','stopped')",(save_id,save['revision'])).fetchone():
+                        raise ValueError('Предыдущее действие ещё не обработано. Повтори его обработку.')
+                    # Command + registration are atomic; provider work happens after commit.
+                    prior_revision = save['revision']
+                    snap = self._remote_action(db, save_id, config.get('expected_revision'), command)
+                    event = next(e for e in snap['world_state']['remote_events'].values() if e['operation_id'] == command['operation_id'])
+                    config['communication'] = dict(source_event_id=event['id'], owner_id=event['sender_id'], request_id=command['operation_id'])
+                    save = db.execute('SELECT * FROM saves WHERE id=?', (save_id,)).fetchone()
+                    command_created = save['revision'] != prior_revision
+                r = Continuation.model_validate(config.get('communication', {}))
+                snap = json.loads(save['state_json'])
+                if snap['world_state']['camera']['controlled_actor_id'] != r.owner_id:
+                    raise ValueError('Владелец телефона изменился.')
+                receipt = db.execute("""WITH RECURSIVE lineage(id,parent_id,payload_json) AS (
+                    SELECT id,parent_id,payload_json FROM world_history_v3 WHERE id=?
+                    UNION ALL SELECT h.id,h.parent_id,h.payload_json FROM world_history_v3 h JOIN lineage l ON h.id=l.parent_id)
+                    SELECT j.value FROM lineage,json_each(lineage.payload_json,'$.state_changes') j
+                    WHERE json_extract(j.value,'$.kind')='communication_receipt' AND json_extract(j.value,'$.request_id')=? LIMIT 1""", (snap.get('history_head'),r.request_id)).fetchone()
+                if receipt:
+                    previous_id = json.loads(receipt[0])['job_id']
+                    previous = db.execute('SELECT config_json FROM game_jobs WHERE id=?',(previous_id,)).fetchone()
+                    if not previous or json.loads(previous[0]).get('communication') != r.model_dump():
+                        raise ValueError('ID продолжения уже использован с другими данными.')
+                    raise ExistingJob(previous_id)
+                existing = db.execute("SELECT id,config_json FROM game_jobs WHERE save_id=? AND revision=? AND kind='communication' ORDER BY rowid DESC", (save_id,save['revision'])).fetchall()
+                for old in existing:
+                    previous = json.loads(old['config_json']).get('communication', {})
+                    if previous == r.model_dump():
+                        raise ExistingJob(old['id'])
+                    if previous.get('request_id') == r.request_id:
+                        raise ValueError('ID продолжения уже использован с другими данными.')
+                if command:
+                    if not command_created:
+                        raise ValueError('Исходный запрос уже обработан в другой ветке. Для нового ожидания используй явное продолжение связи.')
+                    config['expected_revision'] = save['revision']
+            self._assert_idle(db, save_id)
             if config.get('expected_revision', save['revision']) != save['revision']:
                 raise ValueError('Сейв уже изменился. Обнови страницу перед следующим действием.')
             last = db.execute('SELECT * FROM turns WHERE save_id=? ORDER BY sequence DESC LIMIT 1', (save_id,)).fetchone()
@@ -58,6 +109,9 @@ class EngineStorage:
                 raise ValueError('Игра уже начата.')
             if kind not in ('start','pov') and last is None:
                 raise ValueError('Сначала начни игру.')
+            pending=db.execute("SELECT 1 FROM game_jobs WHERE save_id=? AND revision=? AND narrative_complete=1 AND status IN ('error','stopped')",(save_id,save['revision'])).fetchone()
+            if pending and kind!='regenerate':
+                raise ValueError('Текст сцены уже сохранён, состояние ещё не применено. Повтори обработку состояния.')
             before, replaces = save['state_json'], None
             if kind=='pov':
                 from backend.runtime_v3.camera import transition
@@ -84,15 +138,15 @@ class EngineStorage:
                     original=db.execute('SELECT config_json FROM game_jobs WHERE id=?',(v['job_id'],)).fetchone()
                     if original and '_prompts' in json.loads(original[0]):
                         config=dict(config,_prompts=json.loads(original[0])['_prompts'])
-                        for key in ('_context_selection','long_term_advance','time_skip','actor_id','source_turn_id','source_node_id','camera_actor_id','camera_scene_id','camera_direct'):
+                        for key in ('_context_selection','long_term_advance','communication','interaction_channel','time_skip','actor_id','source_turn_id','source_node_id','camera_actor_id','camera_scene_id','camera_direct'):
                             if key in json.loads(original[0]):config[key]=json.loads(original[0])[key]
                 if context_json is None:
                     raise ValueError('У старого хода нет снимка исходного контекста. Точная перегенерация недоступна.')
                 before, replaces, user_text, kind = last['before_json'], last['id'], last['user_text'], last['kind']
             from backend.runtime_v3.models import assert_world_state_v3_invariants
             before_snapshot=json.loads(before)
-            if kind == 'long_term' and (before_snapshot.get('mode') == 'tabletop' or before_snapshot.get('runtime') == 'tabletop'):
-                raise ValueError('Длительный переход доступен только в Narrative.')
+            from backend.runtime_v3.repository import restore_biographical_secrets
+            restore_biographical_secrets(db, before_snapshot)
             before_snapshot['world_state']=assert_world_state_v3_invariants(before_snapshot['world_state'])
             from backend.runtime_v3.protagonist import initialize
             initialize(before_snapshot)
@@ -105,6 +159,9 @@ class EngineStorage:
             if kind == 'long_term':
                 from backend.runtime_v3.long_term import plan
                 plan(before_snapshot, config.get('long_term_advance', {}))
+            if kind == 'communication':
+                from backend.runtime_v3.communication import validate
+                validate(before_snapshot, config.get('communication', {}))
             from backend.runtime_v3.camera import controlled
             if kind == 'turn' and controlled(json.loads(before)) is None and not config.get('time_skip'):
                 raise ValueError('Камера наблюдает мир. Выбери персонажа для управления или продолжи наблюдение.')
@@ -121,6 +178,11 @@ class EngineStorage:
                     raise ValueError('Напиши действие.')
             from backend.runtime_v3.camera import controlled
             config = dict(config)
+            if kind == 'turn' and config.get('interaction_channel') == 'call':
+                from backend.runtime_v3.remote import active_call
+                call = active_call(validated_state, validated_state['camera']['controlled_actor_id'])
+                if not call or call['status'] != 'answered':
+                    raise ValueError('Нет соединённого звонка для телефонной реплики.')
             config.setdefault('_prompts',self.prompt_snapshot(db))
             job_id = uuid.uuid4().hex
             db.execute('''INSERT INTO game_jobs(id,save_id,revision,before_json,user_text,kind,replaces_id,status,config_json)
@@ -129,6 +191,8 @@ class EngineStorage:
             session_id = self.ensure_session(db, save_id)
             db.execute('UPDATE game_jobs SET context_json=?,memory_before_json=?,session_id=? WHERE id=?', (context_json,memory_before,session_id,job_id))
             db.execute('UPDATE game_jobs SET pov_actor_id=? WHERE id=?',(None if kind=='background' else config.get('actor_id') if kind=='pov' else controlled(json.loads(before)),job_id))
+            if kind == 'communication':
+                db.execute('UPDATE game_jobs SET narrative_complete=1 WHERE id=?',(job_id,))
         return job_id
 
     @staticmethod
@@ -142,8 +206,8 @@ class EngineStorage:
         with self.connect() as db:
             db.execute("""UPDATE game_jobs SET status=?, narrative=COALESCE(?,narrative),
                         narrative_complete=MAX(narrative_complete,?), error=?
-                        WHERE id=? AND status IN ('generating','extracting','validating')""",
-                       (status, narrative, int(complete), error, job_id))
+                        WHERE id=? AND status IN ('generating','extracting','validating') AND (? IS NULL OR attempt_epoch=?)""",
+                       (status, narrative, int(complete), error, job_id, getattr(self,'worker_epoch',None),getattr(self,'worker_epoch',None)))
 
     def retry_job(self, job_id, config=None):
         with self.connect() as db:
@@ -157,15 +221,15 @@ class EngineStorage:
                 raise ValueError('Сейв изменился. Этот черновик устарел.')
             settings = json.loads(job['config_json'])
             if config:
-                settings.update({k:v for k,v in config.items() if k not in ('target_turn_id','rollback_following','expected_revision','_prompts','actor_id','source_turn_id','source_node_id')})
+                settings.update({k:v for k,v in config.items() if k not in ('target_turn_id','rollback_following','expected_revision','_prompts','actor_id','source_turn_id','source_node_id','communication','remote_command')})
             session_id = self.ensure_session(db, job['save_id'])
-            db.execute("UPDATE game_jobs SET status='extracting',error='',warnings_json='[]',config_json=?,session_id=? WHERE id=?", (json.dumps(settings),session_id,job_id))
+            db.execute("UPDATE game_jobs SET status='extracting',attempt_epoch=attempt_epoch+1,error='',warnings_json='[]',config_json=?,session_id=? WHERE id=?", (json.dumps(settings),session_id,job_id))
 
     def commit_job(self, job_id, state, choices, changes, timing=None, history_batch=None):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             job = db.execute('SELECT * FROM game_jobs WHERE id=?', (job_id,)).fetchone()
-            if job is None or job['status'] != 'validating':
+            if job is None or job['status'] != 'validating' or (getattr(self,'worker_epoch',None) is not None and self.worker_epoch!=job['attempt_epoch']):
                 raise ValueError('Ход остановлен или уже сохранён.')
             save = db.execute('SELECT revision FROM saves WHERE id=?', (job['save_id'],)).fetchone()
             if save['revision'] != job['revision']:
@@ -182,7 +246,9 @@ class EngineStorage:
             from backend.runtime_v3.repository import append_history
             assert_world_state_v3_invariants(state['world_state'],json.loads(job['before_json'])['world_state'])
             if history_batch is not None:
-                state=dict(state,history_head=append_history(db,state.get('history_head'),history_batch))
+                state=dict(state,history_head=append_history(db,state.get('history_head'),history_batch, before=json.loads(job['before_json'])['world_state'], after=state['world_state']))
+            from backend.runtime_v3.surfaces import committed_route
+            changes = dict(changes, presentation=committed_route(dict(job), history_batch))
             after = json.dumps(state, ensure_ascii=False)
             values = (job['user_text'], job['narrative'], job['before_json'], after, job['kind'],
                       json.dumps(choices,ensure_ascii=False), json.dumps(changes,ensure_ascii=False))

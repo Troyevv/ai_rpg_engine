@@ -3,7 +3,7 @@
 The existing Extraction call generates up to six `{action, speech}` suggestions.
 `Choice context / controlled actor` is a disposable projection in the existing
 Context Builder, not persisted state or a recommendation service. No schema or
-SQL migration, new dependency, model call, UI or Tabletop change is required.
+SQL migration, new dependency, model call, or UI change is required.
 
 The projection uses camera control identity, #67 canonical personality (including
 communication/habits), #75 actionable motivations/values, outbound relationships

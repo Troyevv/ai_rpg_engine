@@ -500,7 +500,10 @@ def test_message_agreement_uses_existing_commitment_pipeline_and_read_proof():
             )
         )
 
-    assert "remote-plan" not in resolve(s, record).state["scheduled_events"]
+    from backend.services.world_delta_errors import StructuralDeltaError
+    before=deepcopy(s)
+    with pytest.raises(StructuralDeltaError) as exc: resolve(s, record)
+    assert exc.value.code=='commitment_remote_unperceived' and s==before
     s = command(s, "read", event_id=second["id"])
     accepted = resolve(s, record)
     assert (
@@ -512,8 +515,9 @@ def test_message_agreement_uses_existing_commitment_pipeline_and_read_proof():
         == first["world_time"]
     )
     assert accepted.history["state_changes"]
-    invalid = resolve(s, dict(record, player_evidence="Я обещаю другое."))
-    assert "remote-plan" not in invalid.state["scheduled_events"]
+    with pytest.raises(StructuralDeltaError) as exc:
+        resolve(s, dict(record, player_evidence="Я обещаю другое."))
+    assert exc.value.code=='controlled_actor_unsupported'
 
 
 def test_endpoint_identity_establishment_is_lazy_address_bound_and_service_specific():
@@ -595,14 +599,14 @@ def test_former_group_member_can_read_delivery_but_not_future_membership():
         command(s, "send", conversation_id=gid, content="После выхода")
 
 
-def test_existing_direct_conversation_does_not_bypass_contact_block():
+def test_existing_direct_conversation_ignores_legacy_contact_gate():
     s = command(phone(), "send", contact_id="a-b", content="Привет")
     gid = next(iter(s["world_state"]["conversations"]))
     s = command(s, "edit_contact", contact_id="a-b", blocked=True)
-    with pytest.raises(ValueError):
-        command(s, "send", conversation_id=gid, content="Заблокирован")
-    with pytest.raises(ValueError):
-        command(s, "call", conversation_id=gid)
+    sent = command(s, "send", conversation_id=gid, content="Доступен без контакта")
+    assert len(sent["world_state"]["remote_events"]) == 2
+    called = command(s, "call", conversation_id=gid)
+    assert list(called["world_state"]["remote_events"].values())[-1]["status"] == "ringing"
 
 
 def test_extraction_call_audibility_cannot_create_physical_witness_knowledge():
@@ -905,3 +909,18 @@ def test_shared_emergency_number_preserves_selected_service_in_call_log():
     event = next(iter(snap["world_state"]["remote_events"].values()))
     assert event["destination"] == "qa-shared" and event["service"] == "police"
     assert projection(snap)["events"][0]["label"] == "Полиция"
+
+
+def test_direct_reply_without_reverse_contact():
+    s=phone();del s['world_state']['contacts']['b-a']
+    s=command(s,'send',contact_id='a-b',content='Привет')
+    event=list(s['world_state']['remote_events'].values())[-1]
+    s,_=accept(s,dict(action='read',actor_id='b',event_id=event['id'],basis_ids=[event['id']]),opportunities(s['world_state']),'read-one-way')
+    options=opportunities(s['world_state'])
+    candidate=next(o for o in options if o['actor_id']=='b' and 'send' in o['actions'])
+    assert {'conversation_id':event['conversation_id']} in candidate['paths']
+    s,_=accept(s,dict(action='send',actor_id='b',conversation_id=event['conversation_id'],basis_ids=[event['id']],content='Привет в ответ'),options,'reply-one-way')
+    reply=list(s['world_state']['remote_events'].values())[-1]
+    assert reply['conversation_id']==event['conversation_id']
+    assert 'a' in reply['delivered_to']
+    assert 'b-a' not in s['world_state']['contacts']

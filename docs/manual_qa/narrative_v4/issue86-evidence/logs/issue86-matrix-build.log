@@ -1,0 +1,23 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> ai-rpg-frontend@2.0.0 build
+> tsc -b && vite build
+
+vite v7.3.6 building client environment for production...
+transforming...
+✓ 3688 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                          0.82 kB │ gzip:   0.44 kB
+dist/assets/GameCalendar-D1-0B2xV.css    8.08 kB │ gzip:   1.67 kB
+dist/assets/Genealogy-BnuhLJ6X.css      15.87 kB │ gzip:   2.67 kB
+dist/assets/index-B5oA2Kia.css         154.04 kB │ gzip:  30.51 kB
+dist/assets/GameCalendar-DwdO_M5q.js    88.43 kB │ gzip:  25.94 kB
+dist/assets/Genealogy-D5wP9bnn.js      232.56 kB │ gzip:  78.27 kB
+dist/assets/index-UtZ9t-NJ.js          870.00 kB │ gzip: 266.40 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 5.16s

@@ -38,7 +38,7 @@ class RuntimeStorage:
             for table, columns in {
                 'llm_requests': {'response_text':'TEXT','duration':'REAL','finish_reason':'TEXT'},
                 'turns': {'pov_actor_id':'TEXT', 'audience_json':"TEXT NOT NULL DEFAULT '[]'", 'node_id': 'TEXT', 'active_variant_id': 'TEXT', 'memory_archived': 'INTEGER NOT NULL DEFAULT 0', 'timing_json':'TEXT'},
-                'game_jobs': {'repair_diagnostics_json':"TEXT NOT NULL DEFAULT '[]'", 'pov_actor_id':'TEXT', 'audience_json':"TEXT NOT NULL DEFAULT '[]'", 'context_json': 'TEXT', 'memory_before_json': 'TEXT', 'warnings_json': "TEXT NOT NULL DEFAULT '[]'", 'session_id': 'TEXT', 'timing_json':'TEXT'},
+                'game_jobs': {'private_artifacts_json':"TEXT NOT NULL DEFAULT '[]'", 'repair_diagnostics_json':"TEXT NOT NULL DEFAULT '[]'", 'pov_actor_id':'TEXT', 'audience_json':"TEXT NOT NULL DEFAULT '[]'", 'context_json': 'TEXT', 'memory_before_json': 'TEXT', 'warnings_json': "TEXT NOT NULL DEFAULT '[]'", 'session_id': 'TEXT', 'timing_json':'TEXT'},
             }.items():
                 existing = {r['name'] for r in db.execute(f'PRAGMA table_info({table})')}
                 for name, declaration in columns.items():
@@ -90,6 +90,18 @@ class RuntimeStorage:
                 config['_context_selection'] = selection
                 db.execute('UPDATE game_jobs SET config_json=? WHERE id=?', (dump(config), job_id))
 
+    def save_communication_context(self, job_id, frames, before, warnings=None):
+        """Checkpoint bounded provider decisions, guarded against stopped/stale workers.
+
+        The original before snapshot is immutable. Only this job's captured
+        frame responses grow; retries replay them and variants record the result.
+        """
+        with self.connect() as db:
+            db.execute("""UPDATE game_jobs SET context_json=?,memory_before_json=COALESCE(memory_before_json,?),warnings_json=COALESCE(?,warnings_json)
+                WHERE id=? AND kind='communication' AND status IN ('generating','extracting')
+                AND (? IS NULL OR attempt_epoch=?)""",
+                (dump(frames),dump(before),dump(warnings) if warnings is not None else None,job_id,getattr(self,'worker_epoch',None),getattr(self,'worker_epoch',None)))
+
     def record_repair(self, job_id, diagnostic):
         with self.connect() as db:
             records=json.loads(db.execute('SELECT repair_diagnostics_json FROM game_jobs WHERE id=?',(job_id,)).fetchone()[0] or '[]')
@@ -109,7 +121,7 @@ class RuntimeStorage:
               dump(messages), dump(diagnostics), dump(config), dump(price_snapshot(config, datetime.now(timezone.utc)))))
         return rid
 
-    def finish_request(self, rid, status, usage, duration=None, finish_reason=None, response_text=None):
+    def finish_request(self, rid, status, usage, duration=None, finish_reason=None, response_text=None, provider_error=None):
         from backend.services.usage import usage_values, cost
         inp, out, cached = usage_values(usage)
         with self.connect() as db:
@@ -117,6 +129,8 @@ class RuntimeStorage:
             amount = cost(inp, out, cached, pricing)
             db.execute('UPDATE llm_requests SET status=?,usage_json=?,input_tokens=?,output_tokens=?,cached_input_tokens=?,cost_usd=?,duration=?,finish_reason=?,response_text=? WHERE id=?',
                        (status, dump(usage) if usage is not None else None, inp, out, cached, amount, duration, finish_reason, response_text, rid))
+            if provider_error is not None:
+                db.execute("UPDATE llm_requests SET diagnostics_json=json_set(diagnostics_json,'$.provider_error',json(?)) WHERE id=?",(dump(provider_error),rid))
 
     def request_log(self, save_id=None, workspace_id=None, job_id=None):
         field, value = ('save_id', save_id) if save_id is not None else ('workspace_id', workspace_id) if workspace_id else ('job_id', job_id)
@@ -307,11 +321,25 @@ class RuntimeStorage:
             return after
 
     def update_narrative_policy(self, save_id, revision, policy):
-        from copy import deepcopy
         from backend.services.narrative_policy import PolicyUpdate
+        validated=PolicyUpdate.model_validate(dict(policy,revision=revision)).model_dump(exclude={'revision'} | ({'genre'} if 'genre' not in policy else set()))
+        self._update_game_policy(save_id, revision, validated, 'narrative_policy_changed')
+
+    def configure_weather(self, save_id, revision, profile):
+        from backend.runtime_v3.models import WeatherProfile
+        snapshot=self.get_snapshot(save_id)
+        state=snapshot['world_state']
+        if state['meta'].get('weather') is not None:
+            raise ValueError('Климат уже установлен. Его история сохраняется.')
+        if not set(profile['regions']) <= set(state['locations']):
+            raise ValueError('Регион погоды отсутствует в мире.')
+        value=WeatherProfile.model_validate(dict(profile,since_minute=state['meta']['world_time'])).model_dump()
+        self._update_game_policy(save_id, revision, {'weather':value}, 'weather_configured')
+
+    def _update_game_policy(self, save_id, revision, validated, kind):
+        from copy import deepcopy
         from backend.runtime_v3.repository import append_history, migrate_snapshot
         from backend.repositories.living_world import project
-        validated=PolicyUpdate.model_validate(dict(policy,revision=revision)).model_dump(exclude={'revision'})
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             self._assert_idle(db,save_id)
@@ -319,14 +347,12 @@ class RuntimeStorage:
             if not row: raise ValueError('Прохождение не найдено.')
             if row['revision']!=revision: raise ValueError('Сейв изменился. Обнови страницу.')
             source=json.loads(row['state_json'])
-            if source.get('mode')=='tabletop' or source.get('runtime')=='tabletop':
-                raise ValueError('Настройки доступны только в Narrative.')
             prior,_=migrate_snapshot(db,source)
             after=deepcopy(prior);meta=after['world_state']['meta']
             previous={k:meta[k] for k in validated}
             if previous==validated:return
             meta.update(validated)
-            batch=dict(state_changes=[dict(kind='narrative_policy_changed',before=previous,after=validated,
+            batch=dict(state_changes=[dict(kind=kind,before=previous,after=validated,
                 turn_id=meta['turn_id'],minute=meta['world_time'])])
             after['history_head']=append_history(db,prior.get('history_head'),batch)
             parent=db.execute('SELECT active_variant_id FROM turns WHERE save_id=? ORDER BY sequence DESC LIMIT 1',(save_id,)).fetchone()
@@ -336,38 +362,45 @@ class RuntimeStorage:
             db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?',(dump(after),save_id))
 
     def remote_action(self, save_id, revision, command):
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            return self._remote_action(db, save_id, revision, command)
+
+    def _remote_action(self, db, save_id, revision, command):
+        """Shared transaction boundary for controls and dispatch + continuation."""
         from backend.runtime_v3.remote import apply
         from backend.runtime_v3.remote_models import RemoteCommand
         from backend.runtime_v3.repository import append_history, migrate_snapshot
         from backend.runtime_v3.milestones import stable_id
         from backend.repositories.living_world import project
         command = RemoteCommand.model_validate(command).model_dump()
-        digest = stable_id('remote_command', command)
+        digest_command = {k:v for k,v in command.items() if k != 'channel' or v != 'TEXT_MESSAGE'}
+        digest = stable_id('remote_command', digest_command)
+        row = db.execute('SELECT * FROM saves WHERE id=?', (save_id,)).fetchone()
+        if not row: raise ValueError('Прохождение не найдено.')
+        source = json.loads(row['state_json'])
+        prior, _ = migrate_snapshot(db, source)
+        receipt = db.execute("""WITH RECURSIVE lineage(id,parent_id,payload_json) AS (
+            SELECT id,parent_id,payload_json FROM world_history_v3 WHERE id=?
+            UNION ALL SELECT h.id,h.parent_id,h.payload_json FROM world_history_v3 h JOIN lineage l ON h.id=l.parent_id)
+            SELECT j.value FROM lineage,json_each(lineage.payload_json,'$.state_changes') j
+            WHERE json_extract(j.value,'$.operation_id')=? AND json_extract(j.value,'$.kind')='remote_receipt' LIMIT 1""",
+            (prior.get('history_head'), command['operation_id'])).fetchone()
+        if receipt:
+            if json.loads(receipt[0])['command_digest'] != digest: raise ValueError('ID операции уже использован с другими данными.')
+            return prior
+        self._assert_idle(db, save_id)
+        if row['revision'] != revision: raise ValueError('Сейв изменился. Обнови телефон.')
+        after, batch = apply(prior, command)
+        batch['state_changes'].append(dict(kind='remote_receipt', operation_id=command['operation_id'],command_digest=digest))
+        after['history_head'] = append_history(db, prior.get('history_head'), batch, before=prior['world_state'], after=after['world_state'])
+        parent = db.execute('SELECT active_variant_id FROM turns WHERE save_id=? ORDER BY sequence DESC LIMIT 1',(save_id,)).fetchone()
+        db.execute('INSERT INTO actor_switches(save_id,revision,before_json,after_json,parent_variant_id) VALUES(?,?,?,?,?)',
+            (save_id, revision, dump(prior), dump(after), parent[0] if parent else None))
+        project(db, save_id, after)
+        db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?', (dump(after),save_id))
+        return after
+
+    def uses_private_transport(self, save_id):
         with self.connect() as db:
-            db.execute('BEGIN IMMEDIATE')
-            self._assert_idle(db, save_id)
-            row = db.execute('SELECT * FROM saves WHERE id=?', (save_id,)).fetchone()
-            if not row: raise ValueError('Прохождение не найдено.')
-            source = json.loads(row['state_json'])
-            if source.get('mode')=='tabletop' or source.get('runtime')=='tabletop':
-                raise ValueError('Телефон доступен только в Narrative.')
-            prior, _ = migrate_snapshot(db, source)
-            receipt = db.execute("""WITH RECURSIVE lineage(id,parent_id,payload_json) AS (
-                SELECT id,parent_id,payload_json FROM world_history_v3 WHERE id=?
-                UNION ALL SELECT h.id,h.parent_id,h.payload_json FROM world_history_v3 h JOIN lineage l ON h.id=l.parent_id)
-                SELECT j.value FROM lineage,json_each(lineage.payload_json,'$.state_changes') j
-                WHERE json_extract(j.value,'$.operation_id')=? AND json_extract(j.value,'$.kind')='remote_receipt' LIMIT 1""",
-                (prior.get('history_head'), command['operation_id'])).fetchone()
-            if receipt:
-                if json.loads(receipt[0])['command_digest'] != digest: raise ValueError('ID операции уже использован с другими данными.')
-                return prior
-            if row['revision'] != revision: raise ValueError('Сейв изменился. Обнови телефон.')
-            after, batch = apply(prior, command)
-            batch['state_changes'].append(dict(kind='remote_receipt', operation_id=command['operation_id'],command_digest=digest))
-            after['history_head'] = append_history(db, prior.get('history_head'), batch)
-            parent = db.execute('SELECT active_variant_id FROM turns WHERE save_id=? ORDER BY sequence DESC LIMIT 1',(save_id,)).fetchone()
-            db.execute('INSERT INTO actor_switches(save_id,revision,before_json,after_json,parent_variant_id) VALUES(?,?,?,?,?)',
-                (save_id, revision, dump(prior), dump(after), parent[0] if parent else None))
-            project(db, save_id, after)
-            db.execute('UPDATE saves SET state_json=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?', (dump(after),save_id))
-            return after
+            return db.execute("SELECT 1 FROM llm_requests WHERE save_id=? AND json_extract(config_json, '$.private_artifacts')=1 LIMIT 1", (save_id,)).fetchone() is not None

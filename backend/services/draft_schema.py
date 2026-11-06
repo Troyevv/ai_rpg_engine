@@ -68,7 +68,7 @@ def world_state_schema():
                     'dimensions': obj({key:{'type':'number','minimum':-100,'maximum':100} for key in RELATION_DIMENSIONS},description=RELATION_CONTRACT,additional=False),
                     'visible_to_ids': IDS},('source_id','target_id','context','dimensions'))
     fact = obj({'id':ID,'text':text('Объективный факт мира, включая собственные тайны значимых персонажей.'),
-                'secret':{'type':'boolean'},'owner_id':OPTIONAL_ID,'character_ids':IDS,
+                'secret':{'type':'boolean','description':'Приватность, НЕ сюжетная значимость.'},'story_secret':{'type':'boolean','description':'Явная сюжетная тайна. Бытовые просьбы и приватная переписка сами по себе не тайны.'},'secret_subject_ids':IDS,'secret_keeper_ids':IDS,'secret_biography_ids':IDS,'secret_existence':{'enum':['hidden','discoverable']},'owner_id':OPTIONAL_ID,'character_ids':IDS,
                 'evidence':array(text('Основание для раскрытия'))},('id','text','secret','character_ids','evidence'))
     knowledge = obj({'actor_id':ID,'fact_id':ID,'status':{'type':'string','enum':['known','suspected','unknown']},
                      'source_event_id':OPTIONAL_ID},('actor_id','fact_id','status'),
@@ -82,15 +82,17 @@ def world_state_schema():
                  'evidence':{'type':'string'},'source_sequence':{'type':'integer','minimum':0},
                  'player_observed':{'type':'boolean'}},('id','text','participants','witnesses','minute','scene_id','fact_ids','player_observed'))
     scheduled = obj({'id':ID,'description':text('Отложенное событие при наличии причин и сроков.'),
-                     'due_minute':MINUTE,'participants':IDS,'status':{'type':'string','enum':['pending','resolved','cancelled']},
+                     'due_minute':OPTIONAL_MINUTE,'participants':IDS,'status':{'type':'string','enum':['pending','resolved','cancelled']},
                      'resolved_event_id':OPTIONAL_ID},('id','description','due_minute','participants','status'))
     from backend.runtime_v3.models import TemporalValue
     temporal_schema = TemporalValue.model_json_schema()
+    temporal_schema['oneOf']=[{'required':[key], 'properties':{key:{'not':{'type':'null'}},**{other:{'type':'null'} for other in ('date','weekday','day_offset') if other!=key}}} for key in ('date','weekday','day_offset')]
+    temporal_schema['not']={'required':['time','day_period'],'properties':{'time':{'type':'string'},'day_period':{'type':'string'}}}
     scheduled['properties'].update(
         temporal=temporal_schema, end_temporal=temporal_schema,
         commitment={'type':'boolean'}, depends_on=IDS,
         type={'type':'string'}, condition={'type':'string'}, interrupts={'type':'boolean'},
-        started_minute=OPTIONAL_MINUTE, evidence={'type':'string'},
+        started_minute=OPTIONAL_MINUTE, time_reference_minute=OPTIONAL_MINUTE, location_id=OPTIONAL_ID, evidence={'type':'string'},
         source_turn={'type':['integer','null'],'minimum':0},
         outcome={'enum':['','fulfilled','blocked','missed','cancelled','dependency_cancelled']})
     world = obj({'version':{'const':2},'characters':entries(actor,'Ключ — тот же ID, что в characters.'),
@@ -110,9 +112,10 @@ def world_state_schema():
         'description':'Подробная концепция мира, включая закрытые вводные.',
         'public_description':'Краткое описание без спойлеров.','rules':'Правила авторского повествования.'}.items()},
         ('title','setting','era','genre','tone','description','public_description','rules'))
-    return {'$schema':'https://json-schema.org/draft/2020-12/schema','title':'WorldState',
+    schema = {'$schema':'https://json-schema.org/draft/2020-12/schema','title':'WorldState',
             'description':'Один готовый к игре мир; пользовательская идея — канон, остальные детали придумываются творчески.',
             **obj({'schema_version':{'const':1},'campaign':campaign,'sections':obj({}),
+                   'card_field_facts':entries(entries(IDS,'Поле карточки → ID фактов, раскрываемых этим текстом.'),'ID персонажа → привязки видимости для мастерской. Не заполнять без необходимости.'),
                    'story_notes':{'type':'string'},
                    'locations':array(obj({'id':ID,'name':text('Название локации'),'text':text('Физические детали и игровые возможности.')},('id','name','text')),minimum=1),
                    'characters':array(character,'Значимые персонажи, каждый с полной постоянной карточкой.',1),
@@ -121,6 +124,9 @@ def world_state_schema():
                    'world_clock':obj({'calendar':calendar_schema(),'minute':MINUTE,'last_event_time':text('День N (день недели) HH:MM, согласован с minute.')},('minute','last_event_time')),
                    'world':world},('schema_version','campaign','locations','characters','protagonist_id',
                                   'controlled_actor_id','camera','world_clock','world'))}
+
+    from backend.services.draft_initial import extend_schema
+    return extend_schema(schema)
 
 
 def calendar_schema():

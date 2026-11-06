@@ -1,0 +1,22 @@
+{
+  "endpoint": "https://api.deepseek.com/chat/completions",
+  "payload_bytes": 10659,
+  "message_bytes": 9448,
+  "estimated_context_tokens": 5045,
+  "context_length": 32768,
+  "head_before": "a8c5e80328500208e19788837091118fe8d313b1",
+  "transport": "httpx.MockTransport; no live DeepSeek",
+  "model": "deepseek-flash",
+  "max_tokens": 4096,
+  "response_format": {
+    "type": "json_object"
+  },
+  "stream": true,
+  "stream_options": {
+    "include_usage": true
+  },
+  "temperature": 0.1,
+  "thinking": {
+    "type": "disabled"
+  }
+}

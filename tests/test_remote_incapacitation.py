@@ -117,16 +117,22 @@ def job(
                 )
             ]
     if reject:
-        payload["final_scene"]["present_character_ids"] = [
-            *camera["present_character_ids"],
-            "qa_vera",
+        # Extraction incorrectly attributes a voluntary hangup to the actor.
+        # This is validated after the deterministic Life/Remote reconciliation.
+        from backend.runtime_v3.remote import active_call
+
+        call = active_call(repo.get_snapshot(sid)["world_state"], ACTOR_ID)
+        payload["call_lifecycle_changes"] = [
+            dict(call_id=call["id"], actor_id=ACTOR_ID, assertion="completed_end", evidence=text)
         ]
     jid = repo.begin_job(sid, text if kind == "turn" else "", kind, CONFIG)
     calls = execute(repo, jid, payload, text if change else "В комнате тихо.")
     assert repo.get_job(jid)["status"] == (
         "error" if reject else "saved"
     ), repo.get_job(jid)["error"]
-    if not reject:
+    if reject:
+        assert "Не подтверждён фактический отбой" in repo.get_job(jid)["error"]
+    else:
         assert len(calls) == 2
     return repo.get_snapshot(sid)
 
@@ -279,7 +285,6 @@ def test_rejected_job_cannot_publish_partial_life_or_remote_state(tmp_path):
     repo, sid, _ = connected(tmp_path)
     before = repo.get_snapshot(sid)
     original_history = history(repo, before)
-    # Resolver's real false-colocation guard runs after Life + remote reconciliation.
     job(repo, sid, reject=True)
     assert Repository(repo.path).get_snapshot(sid) == before
     assert history(repo, before) == original_history

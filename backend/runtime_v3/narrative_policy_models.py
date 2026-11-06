@@ -92,7 +92,7 @@ class NarrativeDevelopment(PolicyModel):
     escalation: float = Field(default=0.,ge=0,le=1)
     candidate_id: str
     source_event_id: str
-    evidence: str = Field(min_length=1,max_length=2000)
+    evidence: str = Field(default="",max_length=2000)
     assertion: Literal['established']
 
 
@@ -104,4 +104,4 @@ class ConsequenceClaim(PolicyModel):
     actor_id: str
     source_event_id: str
     basis_ids: list[str] = Field(min_length=1,max_length=8)
-    evidence: str = Field(min_length=1,max_length=2000)
+    evidence: str = Field(default="",max_length=2000)

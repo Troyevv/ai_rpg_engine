@@ -1,0 +1,7 @@
+{
+  "reason": "The new semantic-retry test selected both legacy History audit and current-turn warning blocks with .delta-warnings, causing a strict-mode locator failure.",
+  "fix": "Select section.delta-warnings; keep exact revised-result label and no-dropped-record assertions.",
+  "production_impact": "None: trace showed the corrected Retry saved and the expected label was present.",
+  "implementation_commit": "38e1313ea0feb1ac15c43c48dc71f56f52492dbf",
+  "test_fix_commit": "63ba1ac183d8d578d066a53df64e0c1c8f3fa540"
+}

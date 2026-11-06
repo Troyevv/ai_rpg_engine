@@ -71,7 +71,7 @@ def test_external_exceptional_change_requires_player_and_completion():
     assert profile(run(s,kind='turning_point',change=delta(),player='Смотрю в окно.').state)['items']==profile(s)['items']
     assert not run(s,kind='turning_point',change=delta()).warnings
     r=StateResolver(s,'Она посмотрела в окно.',TEXT).resolve(payload(s,'b','turning_point',delta()))
-    assert profile(r.state)['items']==profile(s)['items']
+    assert profile(r.state)['items']!=profile(s)['items']
 
 
 def test_npc_experience_not_permission_after_external_switch():

@@ -12,3 +12,7 @@
 @import "./styles/motion.css";
 
 @import "./styles/skins.css";
+
+/* Structured Runtime values must fit both workshop columns and mobile screens. */
+.runtime-value, .runtime-value dd, .draft-field, .workshop-detail {min-width:0;overflow-wrap:anywhere;}
+.runtime-value dl{margin:0}.runtime-value dl>div{margin:.4rem 0}.runtime-value dt{font-weight:600}.runtime-value dd{margin:.15rem 0 .5rem 1rem}.runtime-value ul{padding-left:1.2rem}.world-workshop pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;}

@@ -18,10 +18,14 @@ def initialize(db):
     initialize_milestones(db)
 
 
-def append_history(db, parent_id, batch):
+def append_history(db, parent_id, batch, *, before=None, after=None):
     # No FK to historical records: imported damaged history must not invalidate
     # otherwise valid current state. Audit reports missing ancestors separately.
     hid = uuid.uuid4().hex
+    if before is not None and after is not None:
+        from backend.runtime_v3.notifications import record_story_changes
+        batch = deepcopy(batch)
+        record_story_changes(before, after, batch, hid)
     db.execute('INSERT INTO world_history_v3(id,parent_id,payload_json) VALUES(?,?,?)',
         (hid,parent_id,json.dumps(batch,ensure_ascii=False)))
     from backend.runtime_v3.milestones import index_batch
@@ -90,7 +94,9 @@ def migrate_snapshot(db, source):
     """Idempotent even when the same before snapshot occurs in many variants."""
     from hashlib import sha256
     if source.get('schema_version')==3:
-        return migrate_v2(source).snapshot,[]
+        snapshot = migrate_v2(source).snapshot
+        restore_biographical_secrets(db, snapshot)
+        return snapshot,[]
     digest=sha256(json.dumps(source,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
     row=db.execute('SELECT snapshot_json,report_json FROM world_migrations_v3 WHERE source_hash=?',(digest,)).fetchone()
     if row:return migrate_v2(json.loads(row[0])).snapshot,json.loads(row[1])
@@ -107,8 +113,9 @@ def committed_snapshot(db, before_snapshot, resolved):
     state=assert_world_state_v3_invariants(resolved.state,before_snapshot['world_state'])
     snapshot=deepcopy(before_snapshot)
     snapshot['world_state']=state
-    snapshot['character_cards'].extend(deepcopy(resolved.cards))
-    snapshot['history_head']=append_history(db,before_snapshot.get('history_head'),resolved.history)
+    from backend.services.npc_review import publish_cards
+    publish_cards(snapshot, resolved)
+    snapshot['history_head']=append_history(db,before_snapshot.get('history_head'),resolved.history, before=before_snapshot['world_state'], after=state)
     return snapshot
 
 
@@ -179,7 +186,7 @@ def advance_receipt_reader(storage, head):
     return read
 
 
-def relationship_reader(storage, head):
+def relationship_reader(storage, head, *, candidates=()):
     """Exact evidence lookup on the recorded BEFORE lineage, including tombstones.
 
     Filter receipts in SQLite rather than loading unbounded relationship history.
@@ -199,7 +206,10 @@ def relationship_reader(storage, head):
                 ), changes AS (
                     SELECT c.value AS value FROM batches, json_each(payload,'$.relationship_changes') c
                     WHERE c.type='object' AND json_extract(c.value,'$.entity')=?
-                ) SELECT e.value FROM batches, json_each(payload,'$.events') e
+                ), evidence AS (
+                    SELECT e.value, e.type FROM batches, json_each(payload,'$.events') e
+                    UNION ALL SELECT value, type FROM json_each(?)
+                ) SELECT DISTINCT e.value FROM evidence e
                 WHERE e.type='object' AND json_type(e.value,'$.turn_id')='integer'
                 AND json_extract(e.value,'$.turn_id') >= 0
                 AND json_extract(e.value,'$.id') IN (SELECT value FROM json_each(?))
@@ -209,7 +219,63 @@ def relationship_reader(storage, head):
                      json_extract(c.value,'$.turn_id') >= json_extract(e.value,'$.turn_id')) OR
                     EXISTS (SELECT 1 FROM json_each(c.value,'$.source_event_ids') used
                             WHERE used.value=json_extract(e.value,'$.id'))
-                ) LIMIT 8''', (head, pair, json.dumps(event_ids))).fetchall()
+                ) LIMIT 8''', (head, pair, json.dumps(list(candidates)), json.dumps(event_ids))).fetchall()
             cache[key] = [json.loads(row[0]) for row in rows]
         return deepcopy(cache[key])
     return read
+
+
+def restore_biographical_secrets(db, snapshot):
+    """Read-time compatibility, proven by the original onboarding History batch.
+
+    The 32-item limit is the original SecretDraft contract. Both independently
+    generated fact/event hashes, creation confirmation and operation receipt must
+    match. No text/subject/owner heuristics and no writes to historical snapshots.
+    Existing beliefs, including retired ones, always win.
+    """
+    from backend.runtime_v3.milestones import stable_id
+    from backend.runtime_v3.models import Knowledge
+    import json
+    state = snapshot['world_state']
+    candidates = {fid for fid, f in state['facts'].items()
+                  if fid.startswith('biography_') and not f.get('secret_keeper_ids')}
+    if not candidates or not snapshot.get('history_head'):
+        return
+    batches = db.execute('''WITH RECURSIVE lineage(id) AS (
+        SELECT ? UNION SELECT h.parent_id FROM world_history_v3 h JOIN lineage l ON h.id=l.id
+        WHERE h.parent_id IS NOT NULL)
+        SELECT payload_json FROM world_history_v3 WHERE id IN (SELECT id FROM lineage)
+        AND json_valid(payload_json) AND EXISTS (
+            SELECT 1 FROM json_each(payload_json,'$.state_changes') c
+            WHERE json_extract(CASE WHEN c.type='object' THEN c.value ELSE '{}' END,'$.kind')='character_creation')''',
+        (snapshot['history_head'],)).fetchall()
+    for row in batches:
+        batch = json.loads(row[0])
+        changes = batch.get('state_changes', [])
+        if not isinstance(changes, list):
+            continue
+        changes = [c for c in changes if isinstance(c, dict)]
+        creations = {c.get('entity'): c.get('id') for c in changes
+                     if c.get('kind') == 'character_creation' and c.get('source') == 'explicit_confirmation'}
+        events = {e.get('id'): e for e in batch.get('events', []) if isinstance(e, dict) and isinstance(e.get('id'), str)}
+        for receipt in changes:
+            cid = receipt.get('entity'); operation = receipt.get('operation_id')
+            if not isinstance(cid, str) or not isinstance(operation, str):
+                continue
+            if receipt.get('kind') != 'operation_receipt' or cid not in creations or cid not in state['characters'] or not operation:
+                continue
+            if creations[cid] != stable_id('onboarding', operation):
+                continue
+            for index in range(32):
+                fid = stable_id('biography', [operation, index])
+                eid = stable_id('onboarding-secret', [operation, index])
+                event = events.get(eid, {})
+                if fid not in candidates or event.get('participants') != [cid] or event.get('fact_ids') != [fid]:
+                    continue
+                fact = state['facts'][fid]
+                fact.update(story_secret=True, secret_subject_ids=list(dict.fromkeys([*fact.get('secret_subject_ids', []), cid])),
+                            secret_keeper_ids=[cid])
+                key = cid + ':' + fid
+                if key not in state['knowledge']:
+                    state['knowledge'][key] = Knowledge(actor_id=cid, fact_id=fid, confirmed_once=True,
+                        source_event_id=eid, evidence=event.get('text', ''), source_turn=event.get('turn_id', 0)).model_dump()

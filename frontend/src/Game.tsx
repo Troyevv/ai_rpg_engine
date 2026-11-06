@@ -1,12 +1,23 @@
+import {StoryNotifications} from './StoryNotifications';
+import type {StoryNotice} from './types';
+import {NpcReview} from './NpcReview';
+import {phoneText as t} from "./lib/phone";
+import {CurrentGame} from './CurrentGame';
+import {SceneClock} from './SceneClock';
+import {calendarDate} from './gameDate';
 import {advanceDomainLabel} from './lib/longTerm';
 import {LongTermAdvance} from './LongTermAdvance';
 import {SkinHeader} from './ThemeDecorationLayer';
 import {useTheme,themes} from './ThemeProvider';
 import {Phone} from './Phone';
+import {CallScene} from './CallScene';
 import {TimeSkip} from './TimeSkip';
 import {RuntimeNotifications} from './RuntimeNotifications';
 import {useMotionPreset} from "./motion";
-import {Timing} from './Timing';
+import {NarrativeTurn} from "./NarrativeTurn";
+import {useStableEvent} from "./hooks";
+import {useStoryScroll} from "./useStoryScroll";
+import {presentationEntries,surfaceEntries,physicalChoiceTurn} from "./presentationEntries";
 import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import {
@@ -30,7 +41,7 @@ import {
 } from "./types";
 import { Markdown } from "./Markdown";
 import { Diagnostics } from "./Diagnostics";
-import { JobView } from "./JobView";
+
 import { Button } from "./components/ui/button";
 import { Textarea } from "./components/ui/textarea";
 import {NarrativePolicy} from './NarrativePolicy';
@@ -38,20 +49,24 @@ import {Protagonist} from './Protagonist';
 import {WorldCamera} from "./WorldCamera";
 import {useMobile,MobileScene} from './mobile';
 export function Game({
+  presentationActive=true,
   world,
   save,
   refresh,
   choose,
   openLibrary,
+  openStory,
   openCharacter,
   prefs,
   apiKey,
 }: {
+  presentationActive?: boolean;
   world: World | null;
   save: Save | null;
   refresh: () => void;
   choose: (w: number, s?: number) => void;
   openLibrary: () => void;
+  openStory: (notice:StoryNotice) => void;
   openCharacter: (id: string) => void;
   prefs: Preferences;
   apiKey: string;
@@ -60,54 +75,71 @@ export function Game({
   const decoration=themes.find(t=>t.id===presentation.theme_id)?.decoration||'none';
   const mobile=useMobile();
   const [notices,setNotices]=useState(()=>localStorage.getItem('relationship-notices')!=='off');
-  const [away,setAway]=useState(false);
+
   const input=useRef<HTMLTextAreaElement>(null);
   const mainActor=save?.state.protagonist_id||save?.state.characters.find(c=>c.is_player)?.id;
   const actorId=save?.state.controlled_actor_id===undefined?mainActor:save.state.controlled_actor_id;
   const [policyOpen,setPolicyOpen]=useState(false);
+  const [timeSkipOpen,setTimeSkipOpen]=useState(false);
+  const [longTermOpen,setLongTermOpen]=useState(false);
   const [protagonistOpen,setProtagonistOpen]=useState(false);
   const [cameraOpen,setCameraOpen]=useState(false);
-  const draftKey=`draft-${save?.id}-${actorId}`;
+  const draftKey=`draft-${save?.id}-${actorId}-${save?.state.camera?.pov_actor_id}`;
   const [diagnostics, setDiagnostics] = useState(false);
   const [diagnosticJob, setDiagnosticJob] = useState<string|undefined>();
   const [draft, setDraft] = useState("");
   const draftRef=useRef(draft);draftRef.current=draft;
   const [requestBusy, setBusy] = useState(false);
+  const [phoneBusy, setPhoneBusy] = useState(false);
   const [controlCommit,setControlCommit]=useState<{saveId:number;revision:number}|null>(null);
   // A committed control command is not ready for another action until its
   // revision has reached the parent projection. refresh() itself is asynchronous.
-  const busy=requestBusy||!!(controlCommit&&save?.id===controlCommit.saveId&&save.revision<controlCommit.revision);
+  const busy=requestBusy||phoneBusy||!!(controlCommit&&save?.id===controlCommit.saveId&&save.revision<controlCommit.revision);
   const refreshControl=(after:Save)=>{setControlCommit({saveId:after.id,revision:after.revision});refresh()};
   const [submitted, setSubmitted] = useState<Job | null>(null);
-  const scroll = useRef<HTMLDivElement>(null);
-  const pinned = useRef(true);
+  const viewScope=`${save?.id}:${actorId}:${save?.state.camera?.pov_actor_id}`;
+  const {scroll,away,jumpToLatest,onScroll}=useStoryScroll(viewScope);
+  const [selectedCall,setSelectedCall]=useState<string|null>(null);
+  const activeCall=save?.state.phone?.events.find(e=>e.channel==='VOICE_CALL'&&e.status==='answered');
+  useEffect(()=>{setSelectedCall(activeCall?.id||null)},[viewScope,activeCall?.id]);
+  useEffect(()=>{const open=(e:Event)=>{
+    const id=(e as CustomEvent<string>).detail;
+    if(!save?.state.phone?.events.some(call=>call.id===id))return;
+    // An explicit journal open must expand even if hang-up persisted a collapsed panel.
+    sessionStorage.removeItem(`call-min:${save.id}:${save.state.phone.actor_id}:${save.state.camera?.pov_actor_id}:${id}`);
+    setSelectedCall(id);
+  };window.addEventListener('phone-call-open',open);return()=>window.removeEventListener('phone-call-open',open)},[save]);
   const reduced = useReducedMotion();
-  const turnMotion=useMotionPreset('fadeUp');
   const choicesMotion=useMotionPreset('staggerContainer');
   const choiceMotion=useMotionPreset('staggerItem');
-  const povMotion=useMotionPreset('povTransition');
   // The loaded journal is already visible. Animate only records added in this session.
-  const initialTurns=useRef(new Set(save?.turns.map(t=>t.id)||[]));
-  const initialChoice=useRef(save?.turns.at(-1)?.active_variant_id);
+  const choiceTurn=physicalChoiceTurn(save);
+  const choiceKey=`${viewScope}:${choiceTurn?.id}:${choiceTurn?.active_variant_id}`;
+  const initialChoice=useRef(choiceKey);
   const [selectedChoice,setSelectedChoice]=useState<number|null>(null);
-  useEffect(()=>{if(!busy)setSelectedChoice(null)},[save?.turns.at(-1)?.active_variant_id,busy]);
+  useEffect(()=>{setSelectedChoice(null)},[choiceKey]);
   useEffect(() => {
     setDraft(sessionStorage.getItem(draftKey) || "");
     setSubmitted(null);
-    pinned.current = true;
-  }, [save?.id,actorId]);
+  }, [draftKey]);
   const { job, reconnecting } = useJob(submitted ?? save?.job, refresh);
   const awaitingCommit=job?.status==='saved'&&job.revision===save?.revision&&!save?.turns.some(t=>t.variants?.some(v=>v.job_id===job.id));
-  const pending = active(job)||!!awaitingCommit;
+  const unapplied = !!job && ['error','stopped'].includes(job.status) && !!job.narrative_complete && job.revision === save?.revision;
+  const running = active(job)||!!job?.live&&job.status!=="saved"||!!awaitingCommit;
+  const [presented,setPresented]=useState<string|null>(null);
+  const streamedJob=useRef<string|null>(null);
+  if(active(job))streamedJob.current=job?.id||null;
+  const onPresented=useStableEvent((id:string)=>{if(id===job?.id)setPresented(id)});
+  const revealingCommit=(job?.presentation?.surface!=='call'||activeCall?.id===job.presentation.call_id)&&(submitted?.id===job?.id||streamedJob.current===job?.id)&&job?.kind!=='communication'&&job?.status==='saved'&&save?.turns.some(t=>t.variants?.find(v=>v.id===t.active_variant_id)?.job_id===job.id)&&presented!==job.id;
+  const pending = running||unapplied||!!revealingCommit;
+  const canAct = !!save && !!actorId && !save.state.protagonist_required && save.state.actor_capabilities?.can_act!==false;
+  const canSubmit = canAct && !busy && !pending && !!save?.turns.length;
+  useEffect(()=>{if(save?.state.protagonist_required)setProtagonistOpen(true)},[save?.id,save?.state.protagonist_required]);
 
-  useEffect(() => {
-    const id = requestAnimationFrame(() => {
-      if (scroll.current && pinned.current)
-        scroll.current.scrollTop = scroll.current.scrollHeight;
-    });
-    return () => cancelAnimationFrame(id);
-  }, [job?.narrative, save?.turns.length]);
+  const requestLock=useRef(false);
   const run = async (fn: () => Promise<void>) => {
+    if(requestLock.current)return;
+    requestLock.current=true;
     setBusy(true);
     try {
       await fn();
@@ -115,25 +147,26 @@ export function Game({
       toast.error((e as Error).message);
       refresh();
     } finally {
+      requestLock.current=false;
       setBusy(false);
     }
   };
-  const turn = (kind: "start" | "turn" | "regenerate" | "background", text = draft, target?:number, rollback=false, timeSkip?:{duration:number;reason:string}) =>
+  const turn = (kind: "start" | "turn" | "regenerate" | "background", text = draft, target?:number, rollback=false, timeSkip?:{duration:number;reason:string},channel:"physical"|"call"="physical") =>
     run(async () => {
-      if (!save) return;
+      if (!save || (kind === "turn" && !timeSkip && !canSubmit)) return;
       const j = await api<Job>(`/saves/${save.id}/turns`, {
         kind,
         text,
         target_turn_id: target,
         time_skip: timeSkip,
+        interaction_channel: kind==='turn'?channel:undefined,
         rollback_following: rollback,
         config: prefs.game,
         revision: save.revision,
         api_key: apiKey,
       });
       setSubmitted(j);
-      pinned.current = true;
-      if (kind === "turn" && text === draftRef.current) {
+      if (kind === "turn" && channel === "physical" && text === draftRef.current) {
         setDraft("");
         sessionStorage.removeItem(draftKey);
       }
@@ -141,16 +174,27 @@ export function Game({
   const switchActor=(actor:string,source?:number)=>void run(async()=>{
     if(!save)return;
     const after=await api<Save>(`/saves/${save.id}/protagonist`,{actor_id:actor,operation:'temporary',operation_id:crypto.randomUUID(),revision:save.revision});
-    refreshControl(after);pinned.current=true;setAway(false);
+    refreshControl(after);jumpToLatest();
   });
   const observe=(actor?:string,scene?:string)=>void run(async()=>{
     if(!save)return;
     if(actor){const after=await api<Save>(`/saves/${save.id}/protagonist`,{actor_id:actor,operation:'observe',operation_id:crypto.randomUUID(),revision:save.revision});refreshControl(after);return;}
     const j=await api<Job>(`/saves/${save.id}/camera`,{actor_id:actor,scene_id:scene,revision:save.revision,config:prefs.game,api_key:apiKey});
-    setSubmitted(j);pinned.current=true;setAway(false);
+    setSubmitted(j);jumpToLatest();
   });
   useEffect(()=>{if(!mobile||!input.current)return;const el=input.current;el.style.height='auto';el.style.height=Math.min(el.scrollHeight,132)+'px'},[draft,mobile]);
-  useEffect(()=>{if(!scroll.current)return;const observer=new ResizeObserver(()=>{if(pinned.current&&scroll.current)scroll.current.scrollTop=scroll.current.scrollHeight});const story=scroll.current.firstElementChild;if(story)observer.observe(story);return()=>observer.disconnect()},[world?.id,save?.id]);
+
+  const stableRun=useStableEvent(run);
+  const stableTurn=useStableEvent(turn);
+  const stopJob=useStableEvent(()=>void run(async()=>{
+    if(!job)return;
+    const stopped=await api<Job>(`/jobs/${job.id}/stop`,{});
+    setSubmitted(stopped);refresh();
+  }));
+  const allEntries=presentationEntries(save,job);
+  const entries=surfaceEntries(allEntries,'physical');
+  const renderEntry=(entry:typeof allEntries[number],toolsOnly=false)=>world&&save?<NarrativeTurn toolsOnly={toolsOnly} showTools={toolsOnly||entry.turn.presentation?.surface!=='call'} key={entry.identity} identity={entry.identity} t={entry.turn} i={save.turns.findIndex(t=>t.id===entry.turn.id)} save={save} world={world} prefs={prefs} mobile={mobile} busy={busy} running={pending} mainActor={mainActor} turn={stableTurn} run={stableRun} setSubmitted={setSubmitted} refresh={refresh} setDiagnosticJob={setDiagnosticJob} setDiagnostics={setDiagnostics} openCharacter={openCharacter} job={entry.job} reconnecting={entry.job?reconnecting:false} stop={stopJob} committed={entry.committed} onPresented={onPresented}/>:null;
+  const retry=job&&unapplied?<Button disabled={busy||job.live} onClick={()=>void run(async()=>{setSubmitted(await api<Job>(`/jobs/${job.id}/retry`,{config:prefs.game,api_key:apiKey}))})}>{t('retry')}</Button>:null;
   const meta = save?.scene_meta ?? world?.scene_meta;
   const state = save?.state ?? world?.state;
   if (!world)
@@ -178,11 +222,34 @@ export function Game({
     );
   return (
     <main className="game">
+      {save&&selectedCall&&<CallScene key={`${viewScope}:${selectedCall}`} save={save} callId={selectedCall} onSelect={setSelectedCall} obscured={diagnostics} job={job?.presentation?.call_id===selectedCall?job:null} reconnecting={reconnecting} stop={stopJob} stopping={busy} disabled={busy||pending||!canAct} recovery={job?.presentation?.call_id===selectedCall?retry:null} submit={async text=>{
+        let sent=false;
+        await run(async()=>{const j=await api<Job>(`/saves/${save.id}/turns`,{kind:'turn',text,interaction_channel:'call',config:prefs.game,revision:save.revision,api_key:apiKey});setSubmitted(j);sent=true});
+        if(!sent)throw new Error('Не удалось отправить реплику');
+      }} end={async()=>{await run(async()=>{const after=await api<Save>(`/saves/${save.id}/phone`,{revision:save.revision,command:{action:'end',event_id:selectedCall,operation_id:crypto.randomUUID()}});refreshControl(after);setSelectedCall(null);input.current?.focus()})}}>
+        {surfaceEntries(allEntries,'call',actorId,selectedCall).map(e=>renderEntry(e))}
+      </CallScene>}
+      {save&&<div className="narrative-toolbar" role="group" aria-label="Действия истории">
+        <CurrentGame refresh={refreshControl} save={save} disabled={busy||pending} notices={notices} onNotices={v=>{setNotices(v);localStorage.setItem('relationship-notices',v?'on':'off')}} policy={()=>setPolicyOpen(true)} protagonist={()=>setProtagonistOpen(true)} camera={()=>setCameraOpen(true)} openCharacter={openCharacter} timeSkip={()=>setTimeSkipOpen(true)} longTerm={()=>setLongTermOpen(true)}/>
+        <StoryNotifications key={`${save.id}:${actorId}`} save={save} active={presentationActive} enabled={notices} onOpen={openStory}/>
+      </div>}
+      {save&&<> <LongTermAdvance open={longTermOpen} onOpenChange={setLongTermOpen} save={save} disabled={busy||pending||!save.turns.length||!!save.state.protagonist_required} submit={async request=>{
+                      if(requestLock.current)throw new Error('Дождись завершения текущего действия.');
+                      requestLock.current=true;setBusy(true);
+                      try {
+                      const j=await api<Job>(`/saves/${save.id}/long-term`,{request,config:prefs.game,revision:save.revision,api_key:apiKey});
+                      setSubmitted(j);jumpToLatest();
+                      } catch(e) {refresh();throw e}
+                      finally {requestLock.current=false;setBusy(false)}
+                    }}/>
+                    <TimeSkip open={timeSkipOpen} onOpenChange={setTimeSkipOpen} save={save} disabled={busy||pending||!save.turns.length||!!save.state.protagonist_required} submit={(duration,reason)=>void turn('turn',actorId===null||save.state.actor_capabilities?.can_act===false?'':`Жду ${duration} минут.${reason?' '+reason:''}`,undefined,false,{duration,reason})}/>
+</>}
       <RuntimeNotifications save={save} job={submitted?job:null} enabled={notices}/>
-      {save&&<><Button variant="outline" disabled={busy||pending} onClick={()=>setProtagonistOpen(true)}>Сменить главного героя</Button>{save.state.protagonist_required&&<p role="alert">Главный герой умер. История продолжается: выбери или создай нового героя.</p>}<Protagonist save={save} open={protagonistOpen} onOpenChange={setProtagonistOpen} refresh={refreshControl} prefs={prefs} apiKey={apiKey}/></>}
-      {save&&<><Button variant="outline" disabled={busy||pending} onClick={()=>setPolicyOpen(true)}>Политика истории</Button><NarrativePolicy save={save} open={policyOpen} onOpenChange={setPolicyOpen} refresh={refreshControl}/></>}
+      {save&&<>{save.state.protagonist_required&&<p role="alert">Главный герой умер. История продолжается: выбери или создай нового героя.</p>}<Protagonist save={save} open={protagonistOpen} onOpenChange={setProtagonistOpen} refresh={refreshControl} prefs={prefs} apiKey={apiKey}/></>}
+      {save&&<><NarrativePolicy save={save} open={policyOpen} onOpenChange={setPolicyOpen} refresh={refreshControl}/></>}
       {save&&<WorldCamera save={save} open={cameraOpen} onOpenChange={setCameraOpen} busy={busy||pending} observe={observe} control={switchActor}/>}
-      {save&&<Diagnostics saveId={save.id} jobId={diagnosticJob} open={diagnostics} onOpenChange={setDiagnostics}/>}
+      {save&&<NpcReview key={save.id} save={save} locked={busy||pending} prefs={prefs} apiKey={apiKey} onCommit={refreshControl}/>}
+      {save&&<Diagnostics saveId={save.id} jobId={diagnosticJob} open={diagnostics} onOpenChange={setDiagnostics} historyTools={<>{allEntries.filter(e=>e.committed&&e.turn.presentation?.surface!=='physical').map(e=>renderEntry(e,true))}{job&&['error','stopped'].includes(job.status)&&<><p role="alert">{job.error}</p>{retry}</>}</>}/>}
       {mobile&&save?<MobileScene save={save} meta={meta} busy={busy||pending} switchActor={switchActor} background={()=>void turn("background","")} openCharacter={openCharacter} openCamera={()=>setCameraOpen(true)}/>:<>{save&&<div className="pov-controls">
         <label>Управляемый персонаж<select aria-label="Управляемый персонаж" value={actorId||""} disabled={busy||pending} onChange={e=>switchActor(e.target.value)}>{!actorId&&<option value="">Камера наблюдателя</option>}{save.state.characters.map(c=><option key={c.id} value={c.id}>{c.name}{c.id===mainActor?" · основной герой":""}</option>)}</select></label>
         {actorId!==mainActor&&<Button variant="ghost" size="sm" disabled={busy||pending} onClick={()=>switchActor(mainActor!)}>Вернуться к {save.state.characters.find(c=>c.id===mainActor)?.name.replace(" (ГГ)","")}</Button>}
@@ -190,10 +257,10 @@ export function Game({
         <Button variant="outline" size="sm" disabled={busy||pending||!save.turns.length} onClick={()=>void turn("background","")}>Мир без ГГ</Button>
       </div>}
       <div className="scene-bar">
-        <span>
+        <button className="scene-calendar-entry" aria-label="Открыть календарь" disabled={!save} onClick={()=>window.dispatchEvent(new CustomEvent('save-workspace',{detail:{section:'calendar'}}))}>
           <Clock size={14} />
-          {meta?.time || "Время не указано"}
-        </span>
+          <SceneClock save={save} fallback={meta?.time}/>
+        </button>
         <span>
           <MapPin size={14} />
           {meta?.location || "Место не указано"}
@@ -211,9 +278,9 @@ export function Game({
         </div>
       </div>
       </>}
-      {!!save?.state.world_clock?.nearby?.length&&<details className="skip-diagnostics"><summary>Ближайшие даты</summary><p className="muted small">Дата в календаре не означает, что запланировано празднование.</p>{save.state.world_clock.nearby.map(e=><p key={e.id}>{e.date} · {e.kind==='birthday'?`День рождения: ${e.character_ids.map(id=>save.state.characters.find(c=>c.id===id)?.name||id).join(', ')}`:e.name}</p>)}</details>}
-      {save?.state.last_long_term_advance&&<details className="skip-diagnostics" open><summary>Длительный переход{save.state.last_long_term_advance.interruption?' · прерван':''}</summary>
-        <p>Обращений к модели: {save.state.last_long_term_advance.llm_calls} / {save.state.last_long_term_advance.max_llm_calls}. Нерешённых причин: {save.state.last_long_term_advance.unresolved.length}.</p>
+      {!!save?.state.world_clock?.nearby?.length&&<details className="skip-diagnostics"><summary>Ближайшие даты</summary><p className="muted small">Дата в календаре не означает, что запланировано празднование.</p>{save.state.world_clock.nearby.map(e=><p key={e.id}>{calendarDate(e.date)} · {e.kind==='birthday'?`День рождения: ${e.character_ids.map(id=>save.state.characters.find(c=>c.id===id)?.name||id).join(', ')}`:e.name}</p>)}</details>}
+      {save?.state.last_long_term_advance&&<details className="skip-diagnostics advance-result" open><summary>Длительный переход{save.state.last_long_term_advance.interruption?' · прерван':''}</summary>
+        <details className="advance-result-details"><summary>Подробности симуляции</summary><p>Обращений к модели: {save.state.last_long_term_advance.llm_calls} / {save.state.last_long_term_advance.max_llm_calls}. Нерешённых причин: {save.state.last_long_term_advance.unresolved.length}.</p></details>
         {save.state.last_long_term_advance.accepted.length>0&&<><strong>События вне сцены — сведения для игрока</strong><p>Герой не узнаёт эти сведения автоматически.</p><ul>{save.state.last_long_term_advance.accepted.flatMap(g=>g.summaries).map((text,i)=><li key={i}>{text}</li>)}</ul></>}
         {save.state.last_long_term_advance.decisions.length>0&&<><strong>Требуется твоё решение</strong><ul>{save.state.last_long_term_advance.decisions.map(c=><li key={c.id}>{c.context||'Есть нерешённая возможность или обязательство героя.'}{c.domains?.length?` — ${c.domains.map(advanceDomainLabel).join(', ')}`:''}</li>)}</ul><p>Продолжи обычный ход, чтобы принять решение.</p></>}
       </details>}
@@ -221,16 +288,7 @@ export function Game({
       <div
         className="story-scroll"
         ref={scroll}
-        onScroll={() => {
-          if (scroll.current){
-            pinned.current =
-              scroll.current.scrollHeight -
-                scroll.current.scrollTop -
-                scroll.current.clientHeight <
-              80;
-            setAway(!pinned.current);
-          }
-        }}
+        onScroll={onScroll}
       >
         <div
           className="story"
@@ -268,55 +326,7 @@ export function Game({
             </div>
           ) : (
             <>
-              {save.turns.map((t, i) => (
-                <motion.article
-                  key={t.id}
-                  className={`turn ${t.kind==="background"?"background-turn":""}`}
-                  initial={initialTurns.current.has(t.id) ? false : "hidden"}
-                  animate="visible"
-                  variants={turnMotion}
-                >
-                  {t.kind==='pov'&&<motion.div className="pov-divider" variants={povMotion}><span>Другая точка зрения</span><strong>{save.state.characters.find(c=>c.id===t.pov_actor_id)?.name}</strong></motion.div>}
-                  {t.kind==='background'&&<div className="narrative-divider">Тем временем</div>}
-                  {t.user_text && (
-                    <div className="player-action" data-testid="player-action">
-                      <span className="eyebrow">Твоё действие</span>
-                      <Markdown text={t.user_text} />
-                    </div>
-                  )}
-                  <p className="turn-number">
-                    {t.kind==="background"?`Тем временем… · За кулисами · ход ${t.sequence}`:i === 0 ? "Первая сцена" : `Ход ${t.sequence}`}
-                    {t.kind!=="background"&&<span> · POV: {save.state.characters.find(c=>c.id===(t.pov_actor_id||mainActor))?.name}</span>}
-                  </p>
-                  <Markdown
-                    text={t.assistant_text}
-                    saveId={save.id}
-                    worldId={world.id}
-                    links={prefs.link_names}
-                    onCharacter={openCharacter}
-                  />
-                  {t.timing?.total!=null&&<details className="turn-timing"><summary>Время хода: {t.timing.total.toFixed(1)} с</summary><Timing timing={t.timing}/></details>}
-                  {mobile?<div className="mobile-variants">
-                    <Button size="icon" variant="ghost" aria-label="Ещё вариант" disabled={busy||pending||!t.variants?.some(v=>v.can_regenerate)} onClick={()=>{const later=i<save.turns.length-1;if(later&&!window.confirm('Откатить следующие ходы в архив?'))return;void turn('regenerate','',t.id,later)}}>↻</Button>
-                    {[-1,1].map((step)=>{const list=t.variants||[];const index=list.findIndex(v=>v.id===t.active_variant_id);const v=list[index+step];return <span className="variant-step" key={step}>{step===1&&<span>{index+1} / {list.length||1}</span>}<Button size="icon" variant="ghost" aria-label={step<0?'Предыдущий вариант':'Следующий вариант'} disabled={busy||pending||!v} onClick={()=>{const later=i<save.turns.length-1;if(later&&!window.confirm('Откатить следующие ходы в архив?'))return;void run(async()=>{await api(`/saves/${save.id}/turns/${t.id}/variant`,{variant_id:v.id,revision:save.revision,rollback_following:later});setSubmitted(null);refresh()})}}>{step<0?'‹':'›'}</Button></span>})}
-                    <Button size="icon" variant="ghost" aria-label="Контекст / usage" onClick={()=>{setDiagnosticJob(t.variants?.find(v=>v.id===t.active_variant_id)?.job_id||undefined);setDiagnostics(true)}}>⋯</Button>
-                  </div>:<div className="variant-controls">
-                    <span className="muted small">Вариант {(t.variants||[]).find(v=>v.id===t.active_variant_id)?.ordinal||1} / {t.variants?.length||1}</span>
-                    {(t.variants||[]).map(v=><Button key={v.id} size="sm" variant={v.id===t.active_variant_id?"outline":"ghost"} disabled={busy||pending||v.id===t.active_variant_id} onClick={()=>{
-                      const later = i<save.turns.length-1;
-                      if(later&&!window.confirm("Смена варианта откатит все последующие ходы. Они сохранятся в архиве. Продолжить?"))return;
-                      void run(async()=>{await api(`/saves/${save.id}/turns/${t.id}/variant`,{variant_id:v.id,revision:save.revision,rollback_following:later});setSubmitted(null);refresh()});
-                    }}>{v.ordinal}</Button>)}
-                    <Button size="sm" variant="ghost" title={t.variants?.some(v=>v.can_regenerate) ? "" : "У старого хода нет сохранённого контекста"} disabled={busy||pending||!t.variants?.some(v=>v.can_regenerate)} onClick={()=>{
-                      const later=i<save.turns.length-1;
-                      if(later&&!window.confirm("После успешной генерации последующие ходы будут откачены в архив. Продолжить?"))return;
-                      void turn("regenerate","",t.id,later);
-                    }}>Ещё вариант</Button>
-                    <Button size="sm" variant="ghost" onClick={()=>{setDiagnosticJob(t.variants?.find(v=>v.id===t.active_variant_id)?.job_id||undefined);setDiagnostics(true)}}>Контекст / usage</Button>
-                    {!!t.memory_archived&&<span className="muted small">В архиве памяти · полный текст сохранён</span>}
-                  </div>}
-                </motion.article>
-              ))}
+              {entries.map(e=>renderEntry(e))}
               {!save.turns.length && !job && (
                 <div className="empty-state">
                   <p>
@@ -325,22 +335,8 @@ export function Game({
                   </p>
                 </div>
               )}
-              <JobView
-                job={awaitingCommit&&job?{...job,status:"validating"}:job}
-                reconnecting={reconnecting}
-                worldId={world.id}
-                saveId={save.id}
-                onCharacter={openCharacter}
-                links={prefs.link_names}
-                stop={() =>
-                  run(async () => {
-                    await api(`/jobs/${job!.id}/stop`, {});
-                    setSubmitted(null);
-                    refresh();
-                  })
-                }
-              />
-              {job &&
+              {unapplied && (!job?.presentation||job.presentation.surface==='physical') && <p role="status">{job?.kind==='communication'?'Действие связи сохранено. Повтори обработку, чтобы завершить цикл.':'Текст сцены сохранён, состояние ещё не применено. Повтори обработку состояния.'}</p>}
+              {job && (!job.presentation||job.presentation.surface==='physical') &&
                 ["error", "stopped"].includes(job.status) &&
                 job.narrative_complete &&
                 job.revision === save.revision && (
@@ -365,21 +361,21 @@ export function Game({
                   Начать игру
                 </Button>
               )}
-              {save.turns.length > 0 && !pending && (
+              {save.turns.length > 0 && (
                 <>
                   {actorId===null&&<div className="background-exit">
-                    <Button variant="outline" disabled={busy} onClick={()=>observe(undefined,save.state.camera?.scene_id)}>Продолжить наблюдать</Button>
-                    <Button disabled={busy} onClick={()=>switchActor(mainActor!)}>Вернуться к {save.state.characters.find(c=>c.id===mainActor)?.name.replace(' (ГГ)','')}</Button>
-                    <label>Продолжить за персонажа…<select aria-label="Участник фоновой сцены" value="" disabled={busy} onChange={e=>switchActor(e.target.value,save.turns.at(-1)!.id)}><option value="">Выбрать участника</option>{save.state.characters.filter(c=>JSON.parse(save.turns.at(-1)?.audience_json||'[]').includes(c.id)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+                    <Button variant="outline" disabled={busy||pending} onClick={()=>observe(undefined,save.state.camera?.scene_id)}>Продолжить наблюдать</Button>
+                    <Button disabled={busy||pending} onClick={()=>switchActor(mainActor!)}>Вернуться к {save.state.characters.find(c=>c.id===mainActor)?.name.replace(' (ГГ)','')}</Button>
+                    <label>Продолжить за персонажа…<select aria-label="Участник фоновой сцены" value="" disabled={busy||pending} onChange={e=>switchActor(e.target.value,save.turns.at(-1)!.id)}><option value="">Выбрать участника</option>{save.state.characters.filter(c=>JSON.parse(save.turns.at(-1)?.audience_json||'[]').includes(c.id)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
                   </div>}
-                  {save.state.actor_capabilities?.can_act===false&&<p role="status">Персонаж сейчас не может действовать. Можно продолжить течение времени или наблюдать за миром.</p>}
-                  <motion.div className="choices" key={save.turns.at(-1)?.active_variant_id} variants={choicesMotion} initial={initialChoice.current===save.turns.at(-1)?.active_variant_id?false:"hidden"} animate="visible">
-                    {(save.state.actor_capabilities?.can_act!==false&&save.turns.at(-1)?.kind!=="background"&&(save.turns.at(-1)?.pov_actor_id||mainActor)===actorId?save.turns.at(-1)?.choices:[])?.filter(c=>!save.state.phone||(c.interaction_channel||"physical")===save.state.phone.focus).map((c, i) => (
+                  {save.state.actor_capabilities?.can_act===false&&<div><p role="status">Персонаж сейчас не может действовать. Можно продолжить течение времени или наблюдать за миром.</p>{actorId&&<Button disabled={busy||pending} onClick={()=>observe(actorId)}>Продолжить наблюдать за героем</Button>}</div>}
+                  <motion.div className="choices" key={choiceKey} variants={choicesMotion} initial={reduced||initialChoice.current===choiceKey?false:"hidden"} animate="visible">
+                    {(save.state.actor_capabilities?.can_act!==false&&(choiceTurn?.pov_actor_id||mainActor)===actorId?choiceTurn?.choices:[])?.filter(c=>(c.interaction_channel||"physical")==="physical").map((c, i) => (
                       <motion.button
                         variants={choiceMotion}
                         className={selectedChoice===i?"choice-selected":""}
                         key={i}
-                        disabled={busy}
+                        disabled={!canSubmit}
                         onClick={() => {
                           setSelectedChoice(i); void turn(
                             "turn",
@@ -395,13 +391,7 @@ export function Game({
                       </motion.button>
                     ))}
                   </motion.div>
-                  <div className="turn-actions">
-                    <LongTermAdvance save={save} disabled={busy||pending||!!save.state.protagonist_required} submit={request=>void run(async()=>{
-                      const j=await api<Job>(`/saves/${save.id}/long-term`,{request,config:prefs.game,revision:save.revision,api_key:apiKey});
-                      setSubmitted(j);pinned.current=true;
-                    })}/>
-                    <TimeSkip save={save} disabled={busy||pending||!!save.state.protagonist_required} submit={(duration,reason)=>void turn('turn',actorId===null||save.state.actor_capabilities?.can_act===false?'':`Жду ${duration} минут.${reason?' '+reason:''}`,undefined,false,{duration,reason})}/>
-                    <label className="small"><input type="checkbox" checked={notices} onChange={e=>{setNotices(e.target.checked);localStorage.setItem('relationship-notices',e.target.checked?'on':'off')}}/> Показывать изменения отношений</label>
+                  {!pending&&entries.at(-1)?.turn.id===save.turns.at(-1)?.id&&<div className="turn-actions">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -433,7 +423,7 @@ export function Game({
                       <Undo2 size={14} />
                       Откатить
                     </Button>
-                  </div>
+                  </div>}
                 </>
               )}
             </>
@@ -442,7 +432,7 @@ export function Game({
       </div>
       {save && (
         <div className="composer">
-          <Phone save={save} disabled={busy||pending} onCommit={refreshControl}/>
+          <Phone save={save} onBusyChange={setPhoneBusy} disabled={busy||pending} onCommit={refreshControl} config={prefs.game} apiKey={apiKey} onJob={setSubmitted} job={job}/>
           <div className="composer-inner">
             <Textarea
               ref={input}
@@ -453,16 +443,13 @@ export function Game({
                 setDraft(e.target.value);
                 sessionStorage.setItem(draftKey, e.target.value);
               }}
-              disabled={actorId===null}
-              placeholder={actorId===null?"Камера наблюдает мир — выбери персонажа для управления":"Что ты делаешь или говоришь?"}
+              disabled={!canAct}
+              placeholder={activeCall?"Физическая сцена: что ты делаешь рядом?":actorId===null?"Камера наблюдает мир — выбери персонажа для управления":"Что ты делаешь или говоришь?"}
               onKeyDown={(e) => {
                 if (
                   e.key === "Enter" &&
                   (e.ctrlKey || e.metaKey) &&
-                  actorId !== null &&
-                  !pending &&
-                  !busy &&
-                  save.turns.length &&
+                  canSubmit &&
                   draft.trim()
                 ) {
                   e.preventDefault();
@@ -473,7 +460,7 @@ export function Game({
             <Button
               aria-label="Отправить действие"
               size="icon"
-              disabled={save.state.actor_capabilities?.can_act===false || actorId===null || busy || pending || !save.turns.length || !draft.trim()}
+              disabled={!canSubmit || !draft.trim()}
               onClick={() => turn("turn")}
             >
               <Send size={19} />
@@ -482,13 +469,7 @@ export function Game({
           <div className="composer-footer">
             <span>Твоё действие всегда важнее предложенных вариантов.</span>
             {away&&<button
-              onClick={() => {
-                pinned.current = true;setAway(false);
-                scroll.current?.scrollTo({
-                  top: scroll.current.scrollHeight,
-                  behavior: reduced ? "auto" : "smooth",
-                });
-              }}
+              onClick={jumpToLatest}
             >
               <ArrowDown size={13} />К последней сцене
             </button>}

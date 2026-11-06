@@ -60,6 +60,8 @@ def create_app(db_path=None, recover=True):
     register_portraits(app,repo)
     from backend.api.remote import install as install_remote
     install_remote(app,repo)
+    from backend.api.npc_review import install as install_npc_review
+    install_npc_review(app, repo, credentials)
     app.state.repository = repo
     app.state.preparation = preparation
 
@@ -81,6 +83,13 @@ def create_app(db_path=None, recover=True):
     @app.exception_handler(RequestValidationError)
     async def validation_error(request, exc):
         # Pydantic's default response echoes input, which may include API keys.
+        # Preflight needs field-level feedback before any workspace is created.
+        # Return only validator messages/paths, never input, ctx or the request body.
+        if request.url.path == '/api/world-creation/validate':
+            return JSONResponse({'detail': [
+                {'loc': list(e['loc']), 'msg': e['msg'], 'type': e['type']}
+                for e in exc.errors()
+            ]}, status_code=422)
         return JSONResponse({'detail': 'Некорректный запрос', 'fields': [list(e['loc']) for e in exc.errors()]}, status_code=422)
 
     @app.get('/api/health')
@@ -147,7 +156,28 @@ def create_app(db_path=None, recover=True):
             value['live'] = engine.live(jid)
         value['repairs'] = json.loads(value.get('repair_diagnostics_json') or '[]')
         value['warnings'] = json.loads(value.get('warnings_json','[]'))
-        return repo.public_job(value)
+        result = repo.public_job(value)
+        route = result.get('presentation', {})
+        if route.get('surface') in ('phone', 'call') and value.get('save_id'):
+            owner = repo.get_snapshot(value['save_id'])['world_state']['camera']['controlled_actor_id']
+            if route.get('actor_id') != owner:
+                result = {**result, 'narrative': '', 'user_text': '', 'error': '', 'warnings': [],
+                          'presentation': {'surface': route['surface'], 'actor_id': None, 'call_id': None}}
+        return result
+
+    @app.get('/api/saves/{sid}/story-secret-spoilers')
+    def story_secret_spoilers(sid: int, revision: int, character_id: str | None = None):
+        # Same explicit-author trust boundary as author-state, minimal scope.
+        return JSONResponse(repo.story_secret_spoilers(sid, revision, character_id),
+                            headers={'Cache-Control': 'no-store'})
+
+    @app.get('/api/saves/{sid}/author-state')
+    def author_state(sid: int):
+        # Author view, NOT an authorization boundary: like world/draft/document
+        # APIs this belongs to the trusted single-user server operator. Never
+        # embed it in gameplay responses. See docs/story-secrets.md.
+        snapshot = repo.get_snapshot(sid)
+        return {'snapshot': snapshot}
 
     @app.get('/api/saves/{sid}')
     def save(sid: int):
@@ -155,8 +185,24 @@ def create_app(db_path=None, recover=True):
         value['scene_meta'] = scene_metadata(value['state'])
         value['turns'] = [{**t, 'choices': json.loads(t['choices_json']), 'changes': json.loads(t['changes_json']),
                            'timing': json.loads(t['timing_json']) if t['timing_json'] else None} for t in repo.list_turns(sid)]
+        owner = value['state'].get('controlled_actor_id')
+        projected=[]
         for t in value['turns']:
-            t['variants'] = repo.variants(t['node_id'])
+            route=t['presentation']
+            if route['surface']=='physical' or route.get('actor_id')==owner:
+                projected.append(t)
+            elif route.get('physical_text') and (visible_physical := [e['physical_text'] for e in route.get('physical_events',[]) if owner in e.get('witnesses',[])]):
+                projected.append({**t,'user_text':'','assistant_text':'\n\n'.join(visible_physical),
+                    'choices':[],'choices_json':'[]','changes':{},'changes_json':'{}',
+                    'timing':None,'timing_json':None,'presentation':{'surface':'physical'},'read_only_projection':True})
+        value['turns']=projected
+        from backend.runtime_v3.surfaces import visible_changes
+        canonical=repo.get_snapshot(sid).get('world_state')
+        value['physical_choice_source']=repo.physical_choice_source(sid,value['turns'],canonical) if canonical else None
+        for t in value['turns']:
+            t['changes']=visible_changes(t['changes'],canonical,owner) if canonical else t['changes']
+            t['changes_json']=json.dumps(t['changes'],ensure_ascii=False)
+            t['variants'] = [] if t.get('read_only_projection') else repo.variants(t['node_id'])
         latest = repo.latest_job(sid)
         value['job'] = job(latest['id']) if latest else None
         return value
@@ -184,6 +230,8 @@ def create_app(db_path=None, recover=True):
     @app.post('/api/saves/{sid}/turns')
     def turn(sid: int, body: Turn):
         settings = body.config.model_dump()
+        if body.interaction_channel is not None:
+            settings['interaction_channel'] = body.interaction_channel
         if body.time_skip:
             if body.kind != 'turn': raise ValueError('Time Skip допустим только для нового хода.')
             settings['time_skip'] = body.time_skip.model_dump()
@@ -195,6 +243,8 @@ def create_app(db_path=None, recover=True):
 
     from backend.api.long_term import install as install_long_term
     install_long_term(app, repo, credentials, job)
+    from backend.api.remote import install_jobs as install_phone_jobs
+    install_phone_jobs(app, repo, credentials, job)
 
     @app.post('/api/saves/{sid}/rollback')
     def rollback(sid: int, body: Revision):
@@ -341,19 +391,37 @@ def create_app(db_path=None, recover=True):
             start_minute=start_minute,end_minute=end_minute,start_date=start_date,end_date=end_date,
             limit=limit,offset=offset)
 
+    @app.get('/api/saves/{sid}/genealogy-roots')
+    def genealogy_roots(sid: int):
+        from backend.runtime_v3.kinship import genealogy_roots
+        return genealogy_roots(repo.get_snapshot(sid))
+
     @app.get('/api/saves/{sid}/calendar')
-    def calendar_projection(sid: int, start_date: str | None = None, end_date: str | None = None, minute: int | None = None):
+    def calendar_projection(sid: int, start_date: str | None = None, end_date: str | None = None, minute: int | None = None, display_language: str = 'ru_RU'):
         from backend.runtime_v3.calendar import calendar_range, current_time, calendar_label
         snapshot = repo.get_snapshot(sid)
         state = snapshot['world_state']
         if (start_date is None) != (end_date is None):
             raise ValueError('Нужны обе границы диапазона календаря.')
         if start_date is not None:
-            return calendar_range(state, start_date, end_date)
+            from backend.runtime_v3.player_calendar import player_calendar
+            from backend.runtime_v3.repository import read_history
+            with repo.connect() as db: history,_=read_history(db,snapshot.get('history_head'))
+            return player_calendar(state, start_date, end_date, {c['id']:c['name'] for c in snapshot.get('character_cards',[])},history,display_language=display_language)
         now = state['meta']['world_time']
         if minute is not None and not max(0,now-10080) <= minute <= now+10080:
             raise ValueError('Предпросмотр времени ограничен семью сутками.')
-        return dict(current=current_time(state,minute), label=calendar_label(state,minute))
+        current=current_time(state,minute)
+        regional=[];notices=[]
+        profile=(state['meta'].get('calendar') or {}).get('profile') or {}
+        if current['date'] and profile.get('regional') and profile.get('system','gregorian')=='gregorian':
+            from backend.services.calendar_presets import occurrences,CoverageError
+            from datetime import date,timedelta
+            try:
+                end=min(date.max,date.fromisoformat(current['date'])+timedelta(days=min(30,(date.max-date.fromisoformat(current['date'])).days)))
+                regional=occurrences(profile['regional'],current['date'],end.isoformat(),display_language=display_language)
+            except CoverageError as exc:notices.append(str(exc))
+        return dict(current=current, label=calendar_label(state,minute),regional=regional,notices=notices)
 
     @app.get('/api/saves/{sid}/scene-records/{record_id}')
     def scene_record(sid: int, record_id: str):
@@ -400,7 +468,19 @@ def create_app(db_path=None, recover=True):
 
     @app.get('/api/saves/{sid}/accounting')
     def accounting(sid: int):
-        return repo.accounting(sid)
+        value = repo.accounting(sid)
+        if repo.uses_private_transport(sid):
+            def public_request(row):
+                result = {k:v for k,v in row.items() if k not in ('messages','response_text','diagnostics')}
+                result.update(messages=[], response_text=None, diagnostics={'estimated_tokens':row.get('diagnostics',{}).get('estimated_tokens',0), 'parts':[]})
+                return result
+            value['requests'] = [public_request(r) for r in value['requests']]
+            for turn in value['turns']:
+                turn['requests'] = [public_request(r) for r in turn['requests']]
+                turn['repairs'] = []
+                turn['warnings'] = []
+                turn['derivations'] = []
+        return value
 
     @app.post('/api/saves/{sid}/sessions')
     def new_session(sid: int):
@@ -420,7 +500,11 @@ def create_app(db_path=None, recover=True):
     def archive(sid: int):
         repo.get_save(sid)
         with repo.connect() as db:
-            return [dict(r) for r in db.execute('SELECT * FROM archived_turns WHERE save_id=? ORDER BY id', (sid,))]
+            rows = [dict(r) for r in db.execute('SELECT * FROM archived_turns WHERE save_id=? ORDER BY id', (sid,))]
+        if repo.uses_private_transport(sid):
+            rows = [{**{k:v for k,v in row.items() if k in ('id','save_id','created_at','reason')},
+                     'payload':json.dumps({k:v for k,v in json.loads(row['payload']).items() if k in ('sequence','user_text','assistant_text')},ensure_ascii=False)} for row in rows]
+        return rows
 
     @app.get('/api/settings/{profile}')
     def settings(profile: str):
@@ -478,12 +562,12 @@ def create_app(db_path=None, recover=True):
     from backend.api.drafts import install
     install(app,repo,preparation,credentials,job)
 
-    from backend.tabletop.api import install as install_tabletop
-    install_tabletop(app, repo, credentials)
-
     dist = ROOT / 'frontend' / 'dist'
     if (dist / 'assets').is_dir():
         app.mount('/assets', StaticFiles(directory=dist / 'assets'), name='assets')
+
+    if (dist / 'fonts').is_dir():
+        app.mount('/fonts', StaticFiles(directory=dist / 'fonts'), name='fonts')
 
     @app.get('/sw.js', include_in_schema=False)
     def service_worker():

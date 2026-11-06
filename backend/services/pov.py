@@ -22,7 +22,8 @@ def visible(turn,actor,main):
 def actor_view(turn,actor,main):
     """Other viewpoints expose only explicitly attributed knowledge, not private prose."""
     if turn.get('kind')!='background' and actor==(turn.get('pov_actor_id') or main):
-        return turn
+        from backend.runtime_v3.surfaces import reconciled_view
+        return reconciled_view(turn)
     changes=json.loads(turn.get('changes_json') or '{}')
     facts=[f['text'] for f in changes.get('facts',[]) if actor in f.get('known_by',[])]
     delta=changes.get('world_delta',{})

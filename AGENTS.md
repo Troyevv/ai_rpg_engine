@@ -6,10 +6,18 @@
 - Follow the GitHub issue/PR acceptance criteria. If they conflict with these instructions, explain the conflict rather than silently overriding either.
 - Keep changes focused; do not opportunistically rewrite unrelated modules.
 
+## Incidental defects discovered during a task
+- Stay alert for defects, architectural violations, and regression risks discovered while implementing the assigned task, including in adjacent services and modules.
+- Fix defects directly related to the requested behavior or necessary for a correct implementation within the same PR. Small, obvious defects in code already being changed may also be fixed when the change is localized, low-risk, and does not expand the architectural scope.
+- For unrelated P0/P1 defects threatening Runtime integrity, persistence, Knowledge, security, or user data, report the finding and its impact promptly. Do not expand the PR to fix them without explicit approval unless they directly block the assigned task.
+- Do not independently fix unrelated defects, perform opportunistic refactors, rewrite modules, or change public contracts. Record out-of-scope findings in the final report with location, evidence, severity, impact, and recommended remediation.
+- Distinguish confirmed defects from hypotheses. Do not weaken tests or validation to hide discovered problems.
+- Keep the final report's out-of-scope findings separate from changes actually implemented.
+
 ## Architecture
 - The application uses a FastAPI backend, SQLite persistence, and a React + TypeScript frontend built with Vite.
 - Keep domain logic out of HTTP handlers and UI components. Preserve existing service, persistence, provider, and runtime boundaries; inspect actual module layout before choosing files.
-- Narrative and Tabletop are separate game runtimes sharing infrastructure. Never apply Narrative world-state assumptions to Tabletop mechanics or vice versa.
+- Narrative is the only playable runtime. Keep world generation, literary Extraction and canonical persistence in their existing owners.
 - Prefer existing abstractions and established dependencies to new frameworks, parallel implementations, or speculative generalization.
 - Do not implement future modes or features unless requested by the task.
 
@@ -18,15 +26,10 @@
 - Preserve separation of POV (camera/perspective) and Controlled Actor (player agency). Observing an NPC or using “World without protagonist” must not silently transfer control.
 - Do not let LLM-generated prose or extraction assign the controlled actor goals, intentions, Emotion, commitments, or decisions without evidence of explicit player input. Directed Relationship feelings may evolve autonomously only from accepted canonical interaction evidence with provenance and bounded changes (#107); explicit player overrides take priority. Narrative prose alone never proves feelings.
 - Respect character-specific knowledge and secrets. Do not leak omniscient information into a character's context.
+- DeepSeek authors NPC actions and narrative outcomes; Extraction alone interprets literary meaning. Runtime validates structure, canonical dependencies, agency and Knowledge, never exact prose anchors or Director permits. `final_scene.present_character_ids` owns physical membership; `observed_character_ids` is distinct visibility without mandatory boundary geography.
 - Validate extracted WorldDelta before applying it. Do not silently swallow unknown or dangerous semantic errors. Keep diagnostics for rejected or repaired changes.
 - Preserve turn/variant lineage, before/after snapshots, rollback behavior, and atomic persistence. Regeneration must use the recorded original context, not silently reconstructed later context.
 - Keep existing saves compatible. Do not rewrite historical snapshots as a migration shortcut.
-
-## Tabletop invariants
-- The server-side rules and dice engines, not the LLM, decide checks, damage, resources, inventory, equipment, initiative, conditions, and combat outcomes.
-- The LLM may interpret intent, write dialogue, and narrate validated outcomes; it must not fabricate authoritative mechanical results.
-- Keep game rules deterministic and testable. Prefer structured content and validated content packs to unconstrained LLM generation unless a task explicitly changes this design.
-- Preserve existing content formats and saved campaigns or supply an explicit migration path.
 
 ## LLM integration
 - Do not add LLM calls where deterministic code suffices. Avoid redundant retries, unnecessary context, and token-expensive workflows.
@@ -52,3 +55,12 @@
 - Never claim tests passed if they were not run. Report exact commands, results, and blockers.
 - In the final report, summarize changed files, behavioral impact, compatibility/migration implications, tests, and remaining risks.
 - Do not create unrelated PRs, merge branches, or modify issue scope without explicit instruction.
+
+## UI/UX testing and artifact policy
+- Verify UI/UX changes in a real browser, not solely through builds or unit tests. Check a minimal representative set of relevant viewports, skins, and interaction states.
+- Screenshots may be captured temporarily for internal visual comparison, but do not commit them by default. Keep temporary screenshots, logs, videos, and performance traces outside the repository or in ignored paths.
+- Do not generate or retain video recordings unless explicitly requested or needed to diagnose a specific animation, streaming, or interaction defect.
+- Avoid exhaustive combinations of screenshot fixtures and duplicate QA artifacts. Expand coverage only when a specific risk or failure justifies it.
+- Commit only necessary source changes, focused automated tests, and concise documentation. Summarize browser checks and outcomes in the PR description rather than attaching bulk evidence.
+- If an issue explicitly requires visual evidence, provide the smallest set needed for acceptance. If its artifact requirements conflict with this policy, follow the issue and call out the extra cost or propose reducing the scope before generating bulk artifacts.
+- Prioritize implementation quality and functional regression coverage over the volume of QA documentation. Do not skip necessary testing merely to reduce artifact output.

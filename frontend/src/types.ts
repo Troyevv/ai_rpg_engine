@@ -1,3 +1,5 @@
+export type StorySecret={id:string;status:'hidden'|'known'|'spoiler';category?:'own'|'known'|'biography'|'related'|'world';knowledge_status?:string;text?:string;fact_id?:string;source?:string;reveal_id?:string;slot_id?:string;audience?:{known:string[];suspected:string[]}};
+export type StoryNotice={id:string;kind:'thread_new'|'secret_new'|'secret_revealed';text:string;turn_id:number;slot_id?:string;character_ids?:string[];thread_id?:string;available?:boolean};
 import type {RuntimeNotice} from './RuntimeNotifications';
 export type Provider = "local" | "deepseek" | "compatible";
 export type Section =
@@ -31,9 +33,11 @@ export interface Preferences {
   link_names: boolean;
 }
 export interface Character {
+  dossier?: {sex:string; restrictions:string[]; conditions:{id:string;description:string;status:string;duration:string;since:number|null;until:number|null;restrictions:string[];evidence:string}[]};
   appearance_history?:{before?:string|null;after?:string|null;minute:number}[];
   portrait?:import("./Portrait").PortraitRef|null;
   silhouette?:string;
+  procedural_portrait?:import("./workshop/proceduralPortrait").ProceduralPortrait|null;
   id: string;
   name: string;
   aliases?: string[];
@@ -48,16 +52,20 @@ export interface Relation {
   change?: { direction: "up" | "down"; reason: string; turn?: number };
 }
 export interface Scene {
+  weather?: import("./SceneClock").Weather|null;
   time: string;
   location: string;
   present_ids: string[];
+  observed_ids?: string[];
 }
 export interface SocialRelation {
   id:string;kind:string;source_id:string;target_id:string;status:'active'|'closed';
   certainty:'known'|'suspected';outcome:string;since?:number|null;since_date?:string|null;until?:number|null;until_date?:string|null;
 }
+/** Canonical dossier directory; not an actor Knowledge projection. */
+export type DossierPersonalRelation = Omit<SocialRelation, 'certainty'>;
 export interface Genealogy {
-  nodes:{id:string;name:string;life_status:string;portrait?:import("./Portrait").PortraitRef|null;silhouette?:string}[];
+  nodes:{id:string;name:string;life_status:string;birth_date?:string|null;portrait?:import("./Portrait").PortraitRef|null;silhouette?:string;procedural_portrait?:import("./workshop/proceduralPortrait").ProceduralPortrait|null}[];
   edges:SocialRelation[];
   kinship:{source_id:string;target_id:string;kind:string;lineage:string;generations?:number}[];
   truncated:boolean;
@@ -68,20 +76,30 @@ export interface ResidenceRoleView {
   since:number|null;until:number|null;since_date:string|null;until_date:string|null;
 }
 export interface State {
+  story_secrets?: { revealed: WorldFact[]; personal: Record<string, StorySecret[]>; world: StorySecret[] };
+  npc_reviews?: import('./NpcReview').NpcReviews;
+  narrative_policy?: {genre?: import('./GenreSettings').GenreConfig|null};
+  campaign?: {title?:string;setting?:string;era?:string;genre?:string;description?:string;public_description?:string};
+  world_summary?:string;
+  summary?:string;
+  communication_profile?: import('./CommunicationSettings').CommunicationProfile;
   phone?: import('./Phone').PhoneState|null;
   residence_roles?:{residences:ResidenceRoleView[];roles:ResidenceRoleView[]};
   life_state?:{life_status:string;conditions:{id:string;description:string;status:string;duration:string}[];names:{previous:string;current:string;date:string|null;minute:number}[]}|null;
   genealogy?:Genealogy;
+  protagonist_periods?:{actor_id:string;since:number;until:number|null}[];
   objective_relations?:SocialRelation[];
+  dossier_personal_relations?:DossierPersonalRelation[];
   actor_capabilities?:{can_act:boolean;can_speak:boolean;can_move:boolean;conscious:boolean;can_perceive:boolean}|null;
   protagonist_required?:boolean;
   protagonist_id?: string;
   controlled_actor_id?: string|null;
-  camera?: {scene_id:string;mode:'actor'|'observer';scope?:'world'|'scene'};
+  camera?: {scene_id:string;mode:'actor'|'observer';scope?:'world'|'scene';subject_id?:string|null;pov_actor_id?:string|null};
   notifications?:RuntimeNotice[];
+  notification_history?:StoryNotice[];
   last_long_term_advance?: {actual_target:number;requested_target:number;llm_calls:number;max_llm_calls:number;interruption:{kind:string}|null;decisions:{id:string;context:string;kind:string;domains?:string[]}[];accepted:{summaries:string[]}[];unresolved:{id:string;reason:string}[]}|null;
   last_time_skip?:{requested_duration:number;elapsed_minutes:number;interrupted:boolean;background_candidates:number;simulated_candidates?:number;skipped_candidates?:number;merged_candidates?:number;living_world_llm_calls?:number};
-  world?: {version:number;characters:Record<string,{life_status?:string;location:string|null;minute:number|null;scene_id:string|null;situation?:string;birth_date?:string|null;age?:number|null;physical_state?:string;short_goal?:string;goals?:string[];intentions?:string[];emotion?:string;emotion_source_sequence?:number|null;value_history?:{id:string;before?:string|null;text:string;status:string;minute:number}[];lifecycle?:Record<string,{id:string;text:string;status:string;review_required?:string[]}[]>;obligations?:string[]}>;scenes:Record<string,{id:string;participants:string[];location:string;start_minute:number|null;end_minute:number|null;status:string}>;facts?:Record<string,WorldFact>;knowledge?:Record<string,Knowledge>;threads?:Record<string,Thread>;events?:Record<string,WorldEvent>;scheduled_events?:Record<string,ScheduledCommitment>;relationships?:Record<string,WorldRelation>};
+  world?: {objective_relations?:Record<string,SocialRelation & {fact_id?:string|null}>;version:number;characters:Record<string,{life_status?:string;location:string|null;minute:number|null;scene_id:string|null;situation?:string;birth_date?:string|null;age?:number|null;physical_state?:string;short_goal?:string;goals?:string[];intentions?:string[];emotion?:string;emotion_source_sequence?:number|null;value_history?:{id:string;before?:string|null;text:string;status:string;minute:number}[];lifecycle?:Record<string,{id:string;text:string;status:string;review_required?:string[]}[]>;obligations?:string[]}>;scenes:Record<string,{id:string;participants:string[];location:string;start_minute:number|null;end_minute:number|null;status:string}>;facts?:Record<string,WorldFact>;knowledge?:Record<string,Knowledge>;threads?:Record<string,Thread>;events?:Record<string,WorldEvent>;scheduled_events?:Record<string,ScheduledCommitment>;relationships?:Record<string,WorldRelation>};
   world_clock?: {last_event_time:string;minute?:number;calendar?:import("./lib/worldTime").WorldCalendar;projection?:{date:string|null;time:string;day:number;day_period:string};nearby?:{id:string;date:string;kind:string;name:string|null;character_ids:string[]}[]};
   memory?: {id: string; summary: string; through_sequence: number; per_actor?:Record<string,{summary:string;through_sequence:number}>};
   scene: string;
@@ -89,7 +107,7 @@ export interface State {
   sections: Record<string, string>;
   characters: Character[];
   relationships: Relation[];
-  locations: { name: string; text: string }[];
+  locations: { id?:string; name: string; text: string; parent_id?:string|null }[];
   story_notes: string;
   facts?: { text: string; known_by: string[]; turn: number }[];
   plans?: { text: string; status: string }[];
@@ -121,7 +139,11 @@ export interface Choice {
   action: string;
   speech: string;
 }
+export interface PresentationRoute {physical_reconciliation?:boolean;surface:"physical"|"phone"|"call";actor_id?:string|null;call_id?:string|null;conversation_id?:string|null;physical_text?:string;physical_events?:{id:string;source_record_id:string;turn_id:number;order:number;minute:number;physical_text:string}[];call_text?:string}
 export interface Turn {
+  read_only_projection?: boolean;
+  presentation?: PresentationRoute;
+  changes?: {communication?: {rejected?: string[]}};
   pov_actor_id?: string|null;
   audience_json?: string;
   node_id: string;
@@ -137,8 +159,15 @@ export interface Turn {
   timing?: Record<string,number>|null;
 }
 export interface Job {
+  empty_retry_token?: string | null;
+  effective_config?: {provider:string;model:string;thinking:string;context_length:number;max_tokens:number} | null;
+  pinned_config?: {provider:string;model:string;thinking:string;context_length:number;max_tokens:number};
+  response_diagnostic?: {code:string;message:string;http_status?:number} | null;
+  presentation?: PresentationRoute;
+  attempt_epoch?: number;
+  resumable?: boolean;
   replaces_id?:number|null;
-  phase?: "scenario" | "world" | "retrying" | "validating" | "saving" | "editing" | "";
+  phase?: "scenario" | "world" | "retrying" | "validating" | "saving" | "editing" | "preview" | "proposing" | "developing" | "reviewing" | "improving" | "continuing" | "";
   progress_chars?: number;
   id: string;
   status: string;
@@ -152,6 +181,7 @@ export interface Job {
   warnings?: {section: string; reason: string; rejected: unknown}[];
 }
 export interface Save extends SaveItem {
+  physical_choice_source?: {turn_id:number;variant_id:string}|null;
   world_id: number;
   state: State;
   revision: number;
@@ -199,9 +229,9 @@ export const defaults: Preferences = {
 export const active = (job: Job | null | undefined) =>
   !!job && ["generating", "extracting", "validating"].includes(job.status);
 
-export interface WorldFact {id:string;text:string;secret:boolean;character_ids:string[];evidence?:string[]}
+export interface WorldFact {story_secret?:boolean;secret_subject_ids?:string[];id:string;text:string;secret:boolean;character_ids:string[];evidence?:string[]}
 export interface Knowledge {actor_id:string;fact_id:string;status:string;source_event_id?:string|null;evidence?:string;revision?:number;replaced_by?:string|null}
-export interface Thread {id:string;description:string;state:string;status:string;character_ids:string[];relevance:number;last_event_id?:string|null}
+export interface Thread {id:string;description:string;state:string;status:string;character_ids:string[];relevance:number;last_event_id?:string|null;source_event_id?:string|null}
 export interface WorldEvent {id:string;text:string;participants:string[];witnesses:string[];minute:number|null;source_sequence:number;player_observed:boolean;fact_ids:string[]}
 export interface WorldRelation {source_id:string;target_id:string;context:string;dimensions:Record<string,number|{direction:string;reason:string}>}
 
@@ -210,6 +240,6 @@ export interface ScheduledCommitment {
   status:'pending'|'resolved'|'cancelled'; outcome:string;
   context_category:string; interval_state:string|null; condition:string;
   start_label:string|null; end_label:string|null;
-  temporal_projection:{precision:string; relevance:string};
+  temporal_projection:{precision:string; relevance:string; start_minute?:number|null; end_minute?:number|null};
   evidence:string; depends_on:string[];
 }

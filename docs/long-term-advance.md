@@ -72,7 +72,6 @@ to validate their resolver contracts.
 | No global Knowledge broadcast / per-fact model loop | Group pipeline and 120-NPC hard-cap regression |
 | Save/reload/rollback/branch/regenerate | Real job/variant regression on extended #78 world; replay after a changed number of Extraction calls |
 | Ordinary Narrative and Time Skip | Existing full Python suite and ordinary follow-up smoke |
-| Tabletop isolated | Dedicated Narrative job guard; existing Tabletop suite |
 | Desktop/mobile | `frontend/e2e/long-term.spec.ts` in both configured projects |
 
 Browser execution and complete final CI are required before merge. Deterministic

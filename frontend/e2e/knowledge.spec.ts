@@ -1,5 +1,5 @@
 import {test,expect} from '@playwright/test';
-import {nav} from './navigation';
+import {nav,pickCharacter} from './navigation';
 
 test('grounded correction shows current and old beliefs after reload without gossip',async({page,request})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
@@ -9,9 +9,10 @@ test('grounded correction shows current and old beliefs after reload without gos
  await page.goto('/');
  for(let n=0;n<2;n++){
   await nav(page,'Мир');
-  await page.locator('.panel-tabs').getByRole('button',{name:'Персонажи',exact:true}).click();
-  await page.getByLabel('Персонаж',{exact:true}).selectOption('qa_kirill');
+  await nav(page,'Персонажи');
+  await pickCharacter(page,'qa_kirill');
   const panel=page.locator('.character-profile');
+  await panel.getByRole('tab',{name:'История',exact:true}).click();
   await panel.locator('summary').filter({hasText:/^Знания и подозрения/}).click();
   await panel.getByText('Прежние убеждения · 1',{exact:true}).click();
   const retired=panel.locator('details').filter({has:page.locator('summary').getByText('Исправлено',{exact:true})}).last();
@@ -22,7 +23,10 @@ test('grounded correction shows current and old beliefs after reload without gos
   const saved=await(await request.get(`/api/saves/${selection.save}`)).json();
   expect(saved.state.world.knowledge['qa_kirill:qa_oleg_workshop'].status).toBe('superseded');
   expect(saved.state.world.knowledge['qa_kirill:qa_oleg_academy'].status).toBe('known');
-  expect(saved.state.world.knowledge['qa_vera:qa_oleg_workshop'].status).toBe('known');
+  expect(saved.state.world.knowledge['qa_vera:qa_oleg_workshop']).toBeUndefined();
+  const author=await(await request.get(`/api/saves/${selection.save}/author-state`)).json();
+  expect(author.snapshot.world_state.knowledge['qa_vera:qa_oleg_workshop'].status).toBe('known');
+  expect(author.snapshot.world_state.knowledge['qa_vera:qa_oleg_academy']).toBeUndefined();
   expect(saved.state.world.knowledge['qa_vera:qa_oleg_academy']).toBeUndefined();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width);
   await page.getByRole('button',{name:'Закрыть',exact:true}).click();

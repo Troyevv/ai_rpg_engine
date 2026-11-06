@@ -1,0 +1,504 @@
+{
+  "schema_version": 1,
+  "sections": {
+    "scene": "### Где сейчас ГГ:\nПонедельник, 18:20. Кухня. Все собрались.",
+    "tone": "Современная драмеди.",
+    "characters": "👤 Персонаж 0 (ГГ)\n\n· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.\n\n---\n👤 Персонаж 1\n\n· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.\n\n---\n👤 Персонаж 2\n\n· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.\n\n---\n👤 Персонаж 3\n\n· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.\n\n---\n👤 Персонаж 4\n\n· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.\n\n---\n👤 Персонаж 5\n\n· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.\n\n---\n👤 Персонаж 6\n\n· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.\n\n---\n👤 Персонаж 7\n\n· Статус: Живёт в городе.\n· Внешность: Рыжие волосы.\n· Суть: Подробный характер.\nВторая строка характера.\n· Сейчас: На кухне.\n· Отношение к Персонаж 1: Знакомы с детства.\n· Чего хочет: Приготовить ужин.",
+    "knowledge": "## 🟢 ОБЩЕИЗВЕСТНО\nВсе живут вместе.\n## 🔴 ТАЙНЫ\nПерсонаж 1 планирует переезд.",
+    "locations": "## Город\nНебольшой город.\n## Кухня\nБольшой стол.",
+    "rules": "Переезд ещё не решён."
+  },
+  "characters": [
+    {
+      "id": "a",
+      "name": "Анна",
+      "fields": {
+        "Возраст": "36",
+        "Роль": "",
+        "Статус": "",
+        "Внешность": "",
+        "Характер": "",
+        "Стиль общения": "",
+        "Привычки": "",
+        "Сильные стороны": "",
+        "Слабости": "",
+        "Страхи и уязвимости": "",
+        "Биография": "Синтетическая биография взрослого персонажа.",
+        "Чего хочет": "",
+        "Сейчас": "Дома",
+        "Намерения": ""
+      },
+      "aliases": [],
+      "is_player": true
+    },
+    {
+      "id": "b",
+      "name": "Борис",
+      "fields": {
+        "Возраст": "36",
+        "Роль": "",
+        "Статус": "",
+        "Внешность": "",
+        "Характер": "",
+        "Стиль общения": "",
+        "Привычки": "",
+        "Сильные стороны": "",
+        "Слабости": "",
+        "Страхи и уязвимости": "",
+        "Биография": "Синтетическая биография взрослого персонажа.",
+        "Чего хочет": "",
+        "Сейчас": "Дома",
+        "Намерения": ""
+      },
+      "aliases": [],
+      "is_player": false
+    },
+    {
+      "id": "c",
+      "name": "Вера",
+      "fields": {
+        "Возраст": "36",
+        "Роль": "",
+        "Статус": "",
+        "Внешность": "",
+        "Характер": "",
+        "Стиль общения": "",
+        "Привычки": "",
+        "Сильные стороны": "",
+        "Слабости": "",
+        "Страхи и уязвимости": "",
+        "Биография": "Синтетическая биография взрослого персонажа.",
+        "Чего хочет": "",
+        "Сейчас": "Дома",
+        "Намерения": ""
+      },
+      "aliases": [],
+      "is_player": false
+    }
+  ],
+  "relationships": [],
+  "locations": [
+    {
+      "id": "home",
+      "name": "Дом",
+      "description": "",
+      "parent_id": null,
+      "kind": "unknown",
+      "aliases": [],
+      "text": "Синтетический семейный дом."
+    }
+  ],
+  "knowledge": [
+    {
+      "name": "🟢 ОБЩЕИЗВЕСТНО",
+      "text": "Все живут вместе."
+    },
+    {
+      "name": "🔴 ТАЙНЫ",
+      "text": "Персонаж 1 планирует переезд."
+    }
+  ],
+  "scene": "Два человека обсуждают выбранное имя.",
+  "story_notes": "Переезд ещё не решён.",
+  "world": {
+    "characters": {
+      "a": {
+        "id": "a",
+        "location": "home",
+        "situation": "Дома",
+        "goals": [],
+        "intentions": [],
+        "obligations": [],
+        "life_status": "alive",
+        "birth_date": "1990-01-01",
+        "biological_sex": null,
+        "physical_state": "",
+        "capabilities": {
+          "conscious": null,
+          "can_perceive": null,
+          "can_act": null,
+          "can_speak": null,
+          "can_move": null
+        },
+        "developmental_stage": "adult",
+        "name_history": [],
+        "appearance": {
+          "items": {},
+          "legacy_text": "",
+          "applied": []
+        },
+        "personality": {
+          "items": {},
+          "evidence": {},
+          "applied": [],
+          "seen_sources": []
+        },
+        "values": {},
+        "reproductive_capability": "can_become_pregnant",
+        "identity_components": {
+          "family_name": "Общее"
+        },
+        "life_fact_id": null,
+        "parentage_complete_fact_id": null,
+        "short_goal": ""
+      },
+      "b": {
+        "id": "b",
+        "location": "home",
+        "situation": "Дома",
+        "goals": [],
+        "intentions": [],
+        "obligations": [],
+        "life_status": "alive",
+        "birth_date": "1990-01-01",
+        "biological_sex": null,
+        "physical_state": "",
+        "capabilities": {
+          "conscious": null,
+          "can_perceive": null,
+          "can_act": null,
+          "can_speak": null,
+          "can_move": null
+        },
+        "developmental_stage": "adult",
+        "name_history": [],
+        "appearance": {
+          "items": {},
+          "legacy_text": "",
+          "applied": []
+        },
+        "personality": {
+          "items": {},
+          "evidence": {},
+          "applied": [],
+          "seen_sources": []
+        },
+        "values": {},
+        "reproductive_capability": "can_impregnate",
+        "identity_components": {
+          "family_name": "Общее"
+        },
+        "life_fact_id": null,
+        "parentage_complete_fact_id": null,
+        "short_goal": ""
+      },
+      "c": {
+        "id": "c",
+        "location": "home",
+        "situation": "Дома",
+        "goals": [],
+        "intentions": [],
+        "obligations": [],
+        "life_status": "alive",
+        "birth_date": "1990-01-01",
+        "biological_sex": null,
+        "physical_state": "",
+        "capabilities": {
+          "conscious": null,
+          "can_perceive": null,
+          "can_act": null,
+          "can_speak": null,
+          "can_move": null
+        },
+        "developmental_stage": "adult",
+        "name_history": [],
+        "appearance": {
+          "items": {},
+          "legacy_text": "",
+          "applied": []
+        },
+        "personality": {
+          "items": {},
+          "evidence": {},
+          "applied": [],
+          "seen_sources": []
+        },
+        "values": {},
+        "reproductive_capability": "can_impregnate",
+        "identity_components": {
+          "family_name": "Общее"
+        },
+        "life_fact_id": null,
+        "parentage_complete_fact_id": null,
+        "short_goal": ""
+      }
+    },
+    "facts": {
+      "fact_3c8406748095e4019190": {
+        "id": "fact_3c8406748095e4019190",
+        "text": "pregnancy:pregnancy_486eeacd23ed16a140c2",
+        "visibility": "secret",
+        "character_ids": [
+          "a"
+        ],
+        "claim": {
+          "subject_id": "a",
+          "predicate": "pregnancy",
+          "value": "pregnancy_486eeacd23ed16a140c2",
+          "scope": "fact_3c8406748095e4019190"
+        },
+        "secret": true,
+        "evidence": []
+      },
+      "fact_8248a7a9dbe3e4304d4b": {
+        "id": "fact_8248a7a9dbe3e4304d4b",
+        "text": "child_count:1",
+        "visibility": "secret",
+        "character_ids": [
+          "a"
+        ],
+        "claim": {
+          "subject_id": "a",
+          "predicate": "child_count",
+          "value": "1",
+          "scope": "fact_8248a7a9dbe3e4304d4b"
+        },
+        "secret": true,
+        "evidence": []
+      },
+      "fact_6a05018756a772d10733": {
+        "id": "fact_6a05018756a772d10733",
+        "text": "child_sex:male",
+        "visibility": "secret",
+        "character_ids": [
+          "a"
+        ],
+        "claim": {
+          "subject_id": "a",
+          "predicate": "child_sex",
+          "value": "male",
+          "scope": "fact_6a05018756a772d10733"
+        },
+        "secret": true,
+        "evidence": []
+      },
+      "fact_c630e8c2b6fa2798debd": {
+        "id": "fact_c630e8c2b6fa2798debd",
+        "text": "Мы договорились об имени.",
+        "visibility": "secret",
+        "character_ids": [
+          "a",
+          "b"
+        ],
+        "claim": {
+          "subject_id": "a",
+          "predicate": "naming",
+          "value": "name_676b8bb84ce7267dd520",
+          "scope": "fact_c630e8c2b6fa2798debd"
+        },
+        "secret": true,
+        "evidence": []
+      }
+    },
+    "knowledge": {
+      "a:fact_c630e8c2b6fa2798debd": {
+        "actor_id": "a",
+        "fact_id": "fact_c630e8c2b6fa2798debd",
+        "status": "known",
+        "revision": 1,
+        "source_event_id": "event_ca6133d8a5016c6fca24",
+        "evidence": "Мы договорились об имени.",
+        "source_turn": 2,
+        "replaced_by": null
+      },
+      "b:fact_c630e8c2b6fa2798debd": {
+        "actor_id": "b",
+        "fact_id": "fact_c630e8c2b6fa2798debd",
+        "status": "known",
+        "revision": 1,
+        "source_event_id": "event_ca6133d8a5016c6fca24",
+        "evidence": "Мы договорились об имени.",
+        "source_turn": 2,
+        "replaced_by": null
+      }
+    },
+    "relationships": {},
+    "threads": {},
+    "scenes": {
+      "start": {
+        "id": "start",
+        "location": "home",
+        "participants": [
+          "a",
+          "b"
+        ],
+        "text": "Два человека обсуждают выбранное имя.",
+        "start_minute": 0,
+        "end_minute": 0,
+        "status": "active",
+        "event_ids": []
+      }
+    },
+    "events": {
+      "event_32fc7c8f5301812ccec8": {
+        "id": "event_32fc7c8f5301812ccec8",
+        "text": "Оба взрослых участника подтвердили согласие; событие произошло.",
+        "participants": [
+          "a",
+          "b"
+        ],
+        "witnesses": [
+          "a",
+          "b"
+        ],
+        "fact_ids": [],
+        "player_observed": true,
+        "source_sequence": 0,
+        "minute": 0
+      },
+      "event_ca6133d8a5016c6fca24": {
+        "id": "event_ca6133d8a5016c6fca24",
+        "text": "Мы договорились об имени.",
+        "participants": [
+          "a",
+          "b"
+        ],
+        "witnesses": [
+          "a",
+          "b"
+        ],
+        "fact_ids": [
+          "fact_c630e8c2b6fa2798debd"
+        ],
+        "player_observed": true,
+        "source_sequence": 1,
+        "minute": 0
+      }
+    },
+    "scheduled_events": {},
+    "scene_records": {},
+    "version": 2,
+    "objective_relations": {},
+    "conditions": {},
+    "organizations": {},
+    "residences": {},
+    "roles": {},
+    "possessions": {},
+    "contacts": {},
+    "pregnancies": {
+      "pregnancy_486eeacd23ed16a140c2": {
+        "id": "pregnancy_486eeacd23ed16a140c2",
+        "event_id": "intercourse_a2769235cc4a64e4b208",
+        "gestational_actor_id": "a",
+        "parent_ids": [
+          "a",
+          "b"
+        ],
+        "status": "active",
+        "earliest_minute": 0,
+        "latest_minute": 0,
+        "conception_minute": null,
+        "due_minute": 1440,
+        "children": [
+          {
+            "id": "character_ac879f2b00aea38c2b0b",
+            "sex": "male"
+          }
+        ],
+        "birth_event_id": null,
+        "birth_minute": null,
+        "fact_id": "fact_3c8406748095e4019190",
+        "count_fact_id": "fact_8248a7a9dbe3e4304d4b",
+        "sex_fact_ids": {
+          "character_ac879f2b00aea38c2b0b": "fact_6a05018756a772d10733"
+        }
+      }
+    },
+    "reproductive_events": {
+      "intercourse_a2769235cc4a64e4b208": {
+        "id": "intercourse_a2769235cc4a64e4b208",
+        "participants": [
+          "a",
+          "b"
+        ],
+        "gestational_actor_id": "a",
+        "impregnating_actor_id": "b",
+        "protection": "unprotected",
+        "source_event_id": "event_32fc7c8f5301812ccec8",
+        "evidence": "Оба взрослых участника подтвердили согласие; событие произошло.",
+        "turn_id": 1,
+        "earliest_minute": 0,
+        "latest_minute": 0,
+        "exact_minute": null,
+        "conceived": true,
+        "pregnancy_id": "pregnancy_486eeacd23ed16a140c2",
+        "closed": false,
+        "policy": {
+          "protected": 0.0,
+          "unprotected": 1.0,
+          "unknown": 0.0,
+          "child_weights": [
+            1.0
+          ],
+          "gestation_days": 1,
+          "adult_age": 18,
+          "shared_family_name": true
+        }
+      }
+    },
+    "naming_decisions": {
+      "name_676b8bb84ce7267dd520": {
+        "id": "name_676b8bb84ce7267dd520",
+        "pregnancy_id": "pregnancy_486eeacd23ed16a140c2",
+        "child_id": "character_ac879f2b00aea38c2b0b",
+        "components": {
+          "given_name": "Мира"
+        },
+        "display_name": null,
+        "status": "agreed",
+        "decision_actor_ids": [
+          "a",
+          "b"
+        ],
+        "delegated_to": null,
+        "established": true,
+        "source_event_id": "event_ca6133d8a5016c6fca24",
+        "evidence": "Мы договорились об имени.",
+        "fact_id": "fact_c630e8c2b6fa2798debd",
+        "replaces": null
+      }
+    }
+  },
+  "protagonist_id": "a",
+  "controlled_actor_id": "a",
+  "camera": {
+    "scene_id": "start",
+    "mode": "actor"
+  },
+  "world_clock": {
+    "minute": 0,
+    "calendar": {
+      "start_minute": 0,
+      "start_weekday": 3,
+      "start_date": "2026-01-01",
+      "profile": {
+        "id": "gregorian",
+        "system": "gregorian",
+        "month_lengths": [],
+        "month_names": [],
+        "weekday_names": [],
+        "observances": [],
+        "seasons": []
+      }
+    },
+    "last_event_time": "День 1 · 2026-01-01 · Чт · 00:00"
+  },
+  "campaign": {
+    "title": "Синтетическая семейная история",
+    "setting": "",
+    "era": "",
+    "genre": "",
+    "tone": "Современная драмеди.",
+    "description": "",
+    "rules": "Переезд ещё не решён."
+  },
+  "scene_meta": {
+    "time": "День 1 · 2026-01-01 · Чт · 00:00",
+    "location": "home",
+    "present_ids": [
+      "a",
+      "b"
+    ]
+  },
+  "draft_contract": 4
+}

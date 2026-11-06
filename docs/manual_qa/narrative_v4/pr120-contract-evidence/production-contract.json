@@ -1,0 +1,51 @@
+{
+  "messages": [
+    {
+      "role": "system",
+      "content": "Select at most ONE optional grounded autonomous remote action. Return a JSON object with required outer action: an operation object or null. No prose. Example (substitute only listed IDs): {\"action\":{\"actor_id\":\"npc_1\",\"action\":\"answer\",\"event_id\":\"call_1\",\"basis_ids\":[\"call_1\"]}}. No action example: {\"action\":null}. Outer action is the decision; inner action is the operation. Do not control the external actor. Do not invent knowledge. Use listed basis IDs and paths only. Message content is authored testimony in the active game language. Answer or decline only a listed actual pending incoming call; no forced answer. An endpoint may remain unavailable (action:null). Only a meaningful reached individual may identify: speaker_name, existing_character_id only from the exact-address existing_ids list. Do not invent a biography or turn an organization into a person; identify an individual operator. Schema: {\"$defs\": {\"DecisionProposal\": {\"additionalProperties\": false, \"properties\": {\"actor_id\": {\"title\": \"Actor Id\", \"type\": \"string\"}, \"action\": {\"enum\": [\"send\", \"call\", \"answer\", \"decline\", \"read\", \"end\", \"identify\"], \"title\": \"Action\", \"type\": \"string\"}, \"contact_id\": {\"anyOf\": [{\"type\": \"string\"}, {\"type\": \"null\"}], \"default\": null, \"title\": \"Contact Id\"}, \"conversation_id\": {\"anyOf\": [{\"type\": \"string\"}, {\"type\": \"null\"}], \"default\": null, \"title\": \"Conversation Id\"}, \"event_id\": {\"anyOf\": [{\"type\": \"string\"}, {\"type\": \"null\"}], \"default\": null, \"title\": \"Event Id\"}, \"content\": {\"default\": \"\", \"maxLength\": 4000, \"title\": \"Content\", \"type\": \"string\"}, \"basis_ids\": {\"items\": {\"type\": \"string\"}, \"maxItems\": 8, \"minItems\": 1, \"title\": \"Basis Ids\", \"type\": \"array\"}, \"knowledge_ids\": {\"items\": {\"type\": \"string\"}, \"maxItems\": 8, \"title\": \"Knowledge Ids\", \"type\": \"array\"}, \"speaker_name\": {\"default\": \"\", \"maxLength\": 160, \"title\": \"Speaker Name\", \"type\": \"string\"}, \"existing_character_id\": {\"anyOf\": [{\"type\": \"string\"}, {\"type\": \"null\"}], \"default\": null, \"title\": \"Existing Character Id\"}}, \"required\": [\"actor_id\", \"action\", \"basis_ids\"], \"title\": \"DecisionProposal\", \"type\": \"object\"}}, \"additionalProperties\": false, \"properties\": {\"action\": {\"anyOf\": [{\"$ref\": \"#/$defs/DecisionProposal\"}, {\"type\": \"null\"}]}}, \"required\": [\"action\"], \"title\": \"RemoteDecision\", \"type\": \"object\"}"
+    },
+    {
+      "role": "user",
+      "content": "{\"options\": [{\"actor_id\": \"b\", \"basis_ids\": [\"remote_3eb22b5b5576c5363b77\"], \"event_id\": \"remote_3eb22b5b5576c5363b77\", \"actions\": [\"answer\", \"decline\"]}], \"actors\": [{\"id\": \"b\", \"name\": \"b\", \"situation\": \"\", \"intentions\": [], \"personality\": [], \"knowledge\": [], \"pending\": [{\"id\": \"remote_3eb22b5b5576c5363b77\", \"channel\": \"VOICE_CALL\", \"status\": \"ringing\", \"content\": null}]}], \"world_time\": 0, \"language\": \"ru\"}"
+    }
+  ],
+  "raw": "{\"action\": {\"actor_id\": \"b\", \"action\": \"answer\", \"basis_ids\": [\"remote_3eb22b5b5576c5363b77\"], \"event_id\": \"remote_3eb22b5b5576c5363b77\"}}",
+  "validated": {
+    "actor_id": "b",
+    "action": "answer",
+    "contact_id": null,
+    "conversation_id": null,
+    "event_id": "remote_3eb22b5b5576c5363b77",
+    "content": "",
+    "basis_ids": [
+      "remote_3eb22b5b5576c5363b77"
+    ],
+    "knowledge_ids": [],
+    "speaker_name": "",
+    "existing_character_id": null
+  },
+  "parser": {
+    "contract": "remote-decision/1",
+    "normalized_flat": false
+  },
+  "legacy_raw": "{\"actor_id\": \"b\", \"action\": \"answer\", \"basis_ids\": [\"remote_3eb22b5b5576c5363b77\"], \"event_id\": \"remote_3eb22b5b5576c5363b77\"}",
+  "legacy_validated": {
+    "actor_id": "b",
+    "action": "answer",
+    "contact_id": null,
+    "conversation_id": null,
+    "event_id": "remote_3eb22b5b5576c5363b77",
+    "content": "",
+    "basis_ids": [
+      "remote_3eb22b5b5576c5363b77"
+    ],
+    "knowledge_ids": [],
+    "speaker_name": "",
+    "existing_character_id": null
+  },
+  "legacy_parser": {
+    "contract": "remote-decision/1",
+    "normalized_flat": true
+  },
+  "canonical_status": "answered"
+}

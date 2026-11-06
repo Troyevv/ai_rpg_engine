@@ -1,4 +1,6 @@
+from backend.runtime_v3.player_calendar import visible_calendar_state
 """Disposable read projections. None of these scene IDs may enter WorldStateV3."""
+from backend.runtime_v3.birth_identity import is_game_birth
 from copy import deepcopy
 from backend.runtime_v3.models import identity
 from backend.runtime_v3.calendar import calendar_label, current_time, nearby_calendar, age_on, profile_of, commitment_view
@@ -30,7 +32,9 @@ def ui_view(snapshot, history=None):
         if len(rows)>=24 or not visible_appearance(state,cid,dict(source_event_id=True,fact_id=change.get('fact_id')),camera['controlled_actor_id']): continue
         old=change.get('before') or {};new=change.get('after') or {}
         rows.append(dict(before=old.get('text') if visible_appearance(state,cid,old,camera['controlled_actor_id']) else None,after=new.get('text'),minute=change['minute']))
+    from backend.runtime_v3.dossier import details as dossier_details, personal_relations
     for card in cards:
+        card['dossier'] = dossier_details(state, card['id'])
         card['appearance_history']=appearance_history[card['id']]
     for card in cards: card['is_player'] = card['id'] == state['meta']['current_protagonist_id']
     names={c['id']:c['name'] for c in cards}
@@ -39,7 +43,7 @@ def ui_view(snapshot, history=None):
     scenes={}
     groups={}
     for cid,c in state['characters'].items():
-        if c['location_id'] is not None and c.get('life_status') != 'dead':groups.setdefault(c['location_id'],[]).append(cid)
+        if cid in names and c['location_id'] is not None and c.get('life_status') != 'dead':groups.setdefault(c['location_id'],[]).append(cid)
     for lid,present in groups.items():
         sid='view:'+lid
         scenes[sid]=dict(id=sid,location=place(lid),participants=sorted(present),start_minute=now,end_minute=now,
@@ -61,12 +65,20 @@ def ui_view(snapshot, history=None):
         if differences and any(differences):
             value=max(differences,key=abs)
             world['relationships'][key]['change']=dict(direction='mixed' if any(v>0 for v in differences) and any(v<0 for v in differences) else 'up' if value>0 else 'down',reason=after.get('context',''))
+    from backend.runtime_v3.remote import authored_record_visible
     for cid,c in state['characters'].items():
+        c = dict(c, **{f:[r for r in c[f] if authored_record_visible(state,r,camera['controlled_actor_id'])] for f in ('goals','intentions','obligations')})
         world['characters'][cid]=dict(c,age=age_on(c.get('birth_date'),current_time(state)['date'],profile_of(state)),goals=active_texts(c['goals']),intentions=active_texts(c['intentions']),obligations=active_texts(c['obligations']),lifecycle={k:c[k] for k in ('goals','intentions','obligations')},location=place(c['location_id']) if c['location_id'] else None,
             scene_id=sid if cid in camera['present_character_ids'] else 'view:'+c['location_id'] if c['location_id'] else None,
             minute=now,last_event_id=None,short_goal='\n'.join(active_texts(c['goals'])))
-    for fid,f in state['facts'].items():world['facts'][fid]=dict(f,secret=f['visibility']=='secret',evidence=[])
-    for eid,e in state['scheduled_events'].items():
+    from backend.runtime_v3.remote_models import HISTORICAL_CHANNELS
+    private_facts = {identity('communicated_text', e['id']) for e in state['remote_events'].values()
+                     if e['channel'] in HISTORICAL_CHANNELS and camera['controlled_actor_id'] != e['sender_id'] and camera['controlled_actor_id'] not in e['read_by']}
+    for fid,f in state['facts'].items():
+        if fid not in private_facts: world['facts'][fid]=dict(f,secret=f['visibility']=='secret',evidence=[])
+    world['knowledge']={k:v for k,v in world['knowledge'].items() if v['fact_id'] not in private_facts}
+    from backend.runtime_v3.remote import visible_commitments
+    for eid,e in visible_commitments(state,camera['controlled_actor_id'],history).items():
         view = commitment_view(state, e)
         window = view['temporal_projection']
         # Presentation labels are disposable and reuse the canonical calendar.
@@ -78,11 +90,13 @@ def ui_view(snapshot, history=None):
         # Phone payloads use the actor-owned projection below. Raw audit rows
         # may contain unread text or another character's private read receipt.
         if e.get('remote_interaction_id'): continue
+        if e.get('interaction_channel')=='call' and camera['controlled_actor_id'] not in e.get('witnesses',[]): continue
         if any(not isinstance(e.get(k,[]),list) or any(not isinstance(v,str) for v in e.get(k,[])) for k in ('participants','witnesses')):continue
         world['events'][e['id']]=dict(e,participants=e.get('participants',[]),witnesses=e.get('witnesses',[]),
             calendar_date=current_time(state,e['minute'])['date'] if type(e.get('minute')) is int else e.get('calendar_date'),
             minute=e.get('minute') if type(e.get('minute')) is int else None,recorded_minute=e.get('recorded_minute') if type(e.get('recorded_minute')) is int else -1,source_sequence=e.get('source_sequence',e['turn_id']-1 if type(e.get('turn_id')) is int else None),player_observed=e.get('player_observed',False))
     for i,t in enumerate(history.get('turns',[])):
+        if isinstance(t,dict) and t.get('interaction_channel') in ('phone','call'): continue
         if not isinstance(t,dict) or not isinstance(t.get('narrative'),str):continue
         if not isinstance(t.get('camera',{}),dict):continue
         if 'world_time' in t and type(t['world_time']) is not int:continue
@@ -97,15 +111,17 @@ def ui_view(snapshot, history=None):
         c=state['characters'][card['id']]
         age = age_on(c.get('birth_date'),current_time(state)['date'],profile_of(state))
         if age is not None: card['fields']['Возраст'] = str(age)
-        card['fields'].update({'Сейчас':c['situation'],'Чего хочет':'\n'.join(active_texts(c['goals'])),'Намерения':'\n'.join(active_texts(c['intentions']))})
-    metadata=dict(time=label(now),location=place(camera['location_id']),present_ids=list(camera['present_character_ids']))
+        card['fields'].update({'Сейчас':c['situation'],'Чего хочет':'\n'.join(active_texts(c['goals'])),'Намерения':'\n'.join(world['characters'][card['id']]['intentions'])})
+    from backend.runtime_v3.weather import weather_at
+    calendar_state=visible_calendar_state(state,history)
+    metadata=dict(observed_ids=[cid for cid in camera.get('observed_character_ids', []) if cid in names],weather=weather_at(state),time=label(now),location=place(camera['location_id']),present_ids=list(camera['present_character_ids']))
     campaign=deepcopy(snapshot.get('campaign',{}))
     result=dict(campaign,characters=cards,world=world,controlled_actor_id=camera['controlled_actor_id'],
-        narrative_policy={k:deepcopy(state['meta'][k]) for k in ('narrative_pacing','narrative_risk','outcome_preference')},
+        narrative_policy={k:deepcopy(state['meta'][k]) for k in ('narrative_pacing','narrative_risk','outcome_preference','genre')},
         protagonist_required=state['meta']['protagonist_required'], protagonist_periods=state['meta']['protagonist_periods'],
         protagonist_id=state['meta']['current_protagonist_id'] or campaign.get('protagonist_id') or next((c['id'] for c in cards if c.get('is_player')),None),
         camera=dict(scene_id=sid,mode=camera['mode'],scope='scene',subject_id=camera.get('subject_id'),pov_actor_id=camera.get('pov_actor_id')),scene=camera['situation'],scene_meta=metadata,
-        world_clock=dict(minute=now,last_event_time=label(now),calendar=state['meta'].get('calendar'),projection=current_time(state),nearby=nearby_calendar(state,set(camera['present_character_ids']))),memory=deepcopy(snapshot.get('memory',{})),
+        world_clock=dict(minute=now,last_event_time=label(now),calendar=calendar_state['meta'].get('calendar'),projection=current_time(state),nearby=nearby_calendar(calendar_state,None)),memory=deepcopy(snapshot.get('memory',{})),
         sections=dict(campaign.get('sections',{}),scene=camera['situation']),
         relationships=[dict(r,text=r['context'],target_name=names.get(r['target_id'],'')) for r in world['relationships'].values()],
         facts=[dict(f,known_by=[k['actor_id'] for k in state['knowledge'].values() if k['fact_id']==f['id'] and k['status']=='known']) for f in state['facts'].values()],
@@ -116,12 +132,12 @@ def ui_view(snapshot, history=None):
     minutes = {now}
     for rows in (world['events'].values(), world['scene_records'].values()):
         minutes.update(r['minute'] for r in rows if type(r.get('minute')) is int)
-    result['world_clock']['calendar'] = dict(state['meta'].get('calendar') or {},
+    result['world_clock']['calendar'] = dict(calendar_state['meta'].get('calendar') or {},
         labels={str(m): label(m) for m in minutes})
     from backend.runtime_v3.kinship import genealogy, visible_relations
     from backend.runtime_v3.life import capabilities
     for cid, actor in world['characters'].items():
-        for field in ('life_fact_id','name_history','parentage_complete_fact_id','personality','values','appearance','portraits'):
+        for field in ('life_fact_id','name_history','parentage_complete_fact_id','personality','values','appearance','portraits','procedural_portrait','portrait_mode'):
             actor.pop(field,None)
     from backend.runtime_v3.personality import visible_item
     # One bounded-per-actor projection pass, not NPC-count × History scans.
@@ -141,12 +157,13 @@ def ui_view(snapshot, history=None):
         if rows: world['characters'][cid]['value_history']=rows
     result['life_state'] = ({'life_status':state['characters'][camera['controlled_actor_id']]['life_status'],
         'conditions':[dict(id=c['id'],description=c['description'],status=c['status'],duration=c['duration'])
-                      for c in state['conditions'].values() if c['actor_id']==camera['controlled_actor_id']],
+                      for c in dossier_details(state,camera['controlled_actor_id'])['conditions']],
         'names':[dict(previous=n['previous'],current=n['current'],date=n['date'],minute=n['minute'])
                  for n in state['characters'][camera['controlled_actor_id']]['name_history']]}
         if camera['controlled_actor_id'] else None)
     result['genealogy'] = genealogy(dict(snapshot,world_state=state))
     result['objective_relations'] = visible_relations(state,camera['controlled_actor_id'])
+    result['dossier_personal_relations'] = personal_relations(state)
     result['actor_capabilities'] = capabilities(state,camera['controlled_actor_id']) if camera['controlled_actor_id'] else None
     from backend.runtime_v3.residence import visible_social_state
     result['residence_roles'] = visible_social_state(state,camera['controlled_actor_id'])
@@ -155,13 +172,28 @@ def ui_view(snapshot, history=None):
     if reproductive: result['reproduction']=reproductive
     hidden={cid for cid in state['characters'] if not known_birth(state,cid,observer)}
     for cid in hidden: world['characters'].pop(cid,None)
+    # A hidden birth must not reappear via a cheap ID/name fallback elsewhere.
+    def exposed(row):
+        refs=set(row.get('character_ids',[]))|set(row.get('participants',[]))|set(row.get('witnesses',[]))
+        refs.update(row.get(k) for k in ('actor_id','source_id','target_id'))
+        return not refs & hidden
+    for section in ('relationships','threads','scheduled_events','events','scene_records','facts','knowledge'):
+        world[section]={k:v for k,v in world[section].items() if exposed(v)}
+    for section in ('relationships','plans','events','facts'):
+        result[section]=[row for row in result[section] if exposed(row)]
+    metadata['present_ids']=[cid for cid in metadata['present_ids'] if cid not in hidden]
+
     for actor in world['characters'].values():
-        if state['characters'][actor['id']].get('birth_provenance'):
+        if is_game_birth(state,actor['id']):
             actor['display_name']=names.get(actor['id'])
-        for key in ('birth_provenance','biological_sex','identity_components','reproductive_capability'):
+        for key in ('birth_provenance','birth_date_provenance','biological_sex','identity_components','reproductive_capability'):
             actor.pop(key,None)
     protected=private_fact_ids(state)
-    protected |= {identity('communicated_text',e['id']) for e in state.get('remote_events',{}).values() if e['channel']=='TEXT_MESSAGE' and observer != e['sender_id']}
+    # The dossier's condition gate must also apply to its existing Knowledge
+    # subview, otherwise a hidden condition resurfaces through fact text/counts.
+    # This deliberately does not change the public family directory.
+    protected |= {c['fact_id'] for c in state.get('conditions',{}).values() if c.get('fact_id')}
+    protected |= {identity('communicated_text',e['id']) for e in state.get('remote_events',{}).values() if e['channel']!='VOICE_CALL' and observer != e['sender_id']}
     hidden_facts={fid for fid in protected if state['knowledge'].get(str(observer)+':'+fid,{}).get('status')!='known'}
     world['facts']={k:v for k,v in world['facts'].items() if k not in hidden_facts}
     result['facts']=[f for f in result['facts'] if f['id'] not in hidden_facts]
@@ -181,6 +213,7 @@ def ui_view(snapshot, history=None):
             elif predicate=='child_count': f['text']='Количество детей: '+claim['value']
             elif predicate=='child_sex': f['text']='Пол ребёнка: '+{'female':'женский','male':'мужской'}.get(claim['value'],claim['value'])
     from backend.runtime_v3.remote import projection as phone_projection
+    result['communication_profile'] = deepcopy(state['meta']['communication'])
     result['phone'] = phone_projection(dict(snapshot,world_state=state))
     result['runtime_version']=3
     report = snapshot.get('last_long_term_advance')
@@ -188,4 +221,20 @@ def ui_view(snapshot, history=None):
     result['last_time_skip']=deepcopy(snapshot.get('last_time_skip'))
     from backend.runtime_v3.notifications import notifications
     result['notifications']=notifications(state, history)
+    from backend.runtime_v3.secrets import secure_game_view
+    secure_game_view(result, state)
+    from backend.runtime_v3.notifications import story_notifications, visible_threads
+    story_records = history.get('_story_receipts', history.get('state_changes', []))
+    world['threads'] = visible_threads(state, story_records)
+    result['notification_history'] = story_notifications(state, story_records,
+        secrets=result['story_secrets'], threads=world['threads'])
+    reveals = {n['slot_id']:n['id'] for n in result['notification_history'] if n.get('slot_id')}
+    for rows in [result['story_secrets']['world'], *result['story_secrets']['personal'].values()]:
+        for row in rows:
+            if row['status'] == 'known':
+                if row['id'] in reveals: row['reveal_id'] = reveals[row['id']]
+    result['plans'] = [dict(t, text=t['state'] or t['description'],
+        status='done' if t['status']=='resolved' else 'open') for t in world['threads'].values()]
+    from backend.services.npc_review import review_projection
+    result['npc_reviews'] = review_projection(snapshot)
     return result

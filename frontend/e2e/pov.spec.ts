@@ -1,3 +1,4 @@
+import {creationMethod} from './idea-navigation';
 import {nav,actor} from "./navigation";
 import {test,expect} from '@playwright/test';
 test('POV, backstage and prompt versions',async({page,request})=>{
@@ -16,7 +17,10 @@ test('POV, backstage and prompt versions',async({page,request})=>{
  let save=await (await request.get(`/api/saves/${selected.save}`)).json();
  expect(save.state.controlled_actor_id).toBeNull();
  expect(save.state.camera.mode).toBe('observer');
- expect(save.state.facts.at(-1).known_by).toEqual(['character_3','character_4']);
+ expect(save.state.facts.every((f:{known_by:string[]})=>f.known_by.length===0)).toBe(true);
+ expect(save.state.world.knowledge).toEqual({});
+ const authored=await (await request.get(`/api/saves/${selected.save}/author-state`)).json();
+ expect(Object.values(authored.snapshot.world_state.knowledge).filter((k:any)=>['character_3','character_4'].includes(k.actor_id)&&k.status==='known').length).toBeGreaterThanOrEqual(2);
  await page.locator('.background-exit').getByRole('button',{name:'Вернуться к Персонаж 0'}).click();
  await expect(page.locator('.turn')).toHaveCount(2);
  await expect.poll(async()=>(await(await request.get(`/api/saves/${selected.save}`)).json()).state.controlled_actor_id).toBe('character_1');
@@ -54,9 +58,14 @@ test('scenario and summary deletion keeps restorable versions and saves',async({
  await page.addInitScript(id=>localStorage.setItem('workspace',id),w.id);
  await page.goto('/');
  await nav(page,'Создать');
-  await page.getByRole('button',{name:'Со Сценаристом',exact:true}).click();
- page.once('dialog',d=>d.accept());
+  await creationMethod(page,'Со Сценаристом');
+ await page.getByLabel('Подготовка',{exact:true}).selectOption(w.id);
+ const summaryBefore=await(await request.get(`/api/documents/summary/${w.id}`)).json();
  await page.getByRole('button',{name:'Удалить выжимку',exact:true}).click();
+ await page.getByRole('dialog').getByRole('button',{name:'Отмена',exact:true}).click();
+ expect((await(await request.get(`/api/documents/summary/${w.id}`)).json()).active_id).toBe(summaryBefore.active_id);
+ await page.getByRole('button',{name:'Удалить выжимку',exact:true}).click();
+ await page.getByRole('dialog').getByRole('button',{name:'Удалить выжимку',exact:true}).click();
  await expect(page.getByRole('button',{name:'Удалить выжимку',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'Версии выжимки'}).click();
  const dialog=page.getByRole('dialog');
@@ -69,11 +78,23 @@ test('scenario and summary deletion keeps restorable versions and saves',async({
  await expect(dialog.locator('select option')).toHaveCount(h.versions.length+1);
  await dialog.getByRole('button',{name:'Закрыть',exact:true}).click();
  await expect(page.getByRole('button',{name:'Удалить выжимку',exact:true})).toBeVisible();
+ // Hold the successful deletion response while the user opens the global
+ // trash. Switching the selected workspace must not discard that UI state.
+ let releaseDelete!:()=>void,deleted!:()=>void;
+ const release=new Promise<void>(resolve=>{releaseDelete=resolve});
+ const committed=new Promise<void>(resolve=>{deleted=resolve});
+ await page.route(`**/api/workspaces/${w.id}`,async route=>{
+   if(route.request().method()!=='DELETE'){await route.continue();return}
+   const response=await route.fetch();deleted();await release;await route.fulfill({response});
+ });
  page.once('dialog',d=>d.accept());
- await page.getByRole('button',{name:'Удалить сценарий',exact:true}).click();
+ await page.getByRole('button',{name:'Удалить сценарий',exact:true}).click();await committed;
  await page.getByText('Удалённые сценарии',{exact:true}).click();
  await page.getByRole('button',{name:'Обновить корзину'}).click();
- await page.getByRole('button',{name:'Восстановить',exact:true}).filter({visible:true}).last().click();
+ releaseDelete();await expect(page.getByLabel('Подготовка',{exact:true})).toHaveValue('');
+ const trash=page.locator('.preparation details').filter({has:page.locator('summary',{hasText:'Удалённые сценарии'})});
+ await expect(trash).toHaveAttribute('open','');
+ await trash.locator('div').filter({hasText:'Удаление и версии'}).getByRole('button',{name:'Восстановить',exact:true}).click();
  await expect(page.getByRole('button',{name:'Удалить выжимку',exact:true})).toBeVisible();
  expect((await (await request.get(`/api/saves/${selected.save}`)).json()).world_id).toBe(selected.world);
 });

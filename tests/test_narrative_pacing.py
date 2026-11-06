@@ -24,7 +24,7 @@ def setup(pacing='moderate', risk='realistic'):
 
 
 def raw(s, **sections):
-    return dict(final_scene=dict(location_id='home',present_character_ids=['a','b'],elapsed_minutes=1),**sections)
+    return dict(final_scene=dict(location_id='home',present_character_ids=list(s.get('world_state',s)['camera']['present_character_ids']),elapsed_minutes=1),**sections)
 
 
 @pytest.mark.parametrize('preset',['calm','moderate','dynamic','intense','custom'])
@@ -130,7 +130,8 @@ def test_candidate_acceptance_has_provenance_and_does_not_choose_external_respon
     assert out.state['meta']['pacing_recent'][0]['source_id']==candidate
     assert len(out.state['threads'])==len(s['threads'])
     payload['narrative_developments']*=7
-    with pytest.raises(StructuralDeltaError):StateResolver(s,quote,'',pacing_decision=decision).resolve(payload)
+    repeated=StateResolver(s,quote,'',pacing_decision=decision).resolve(payload)
+    assert len(repeated.history['events'])==1 and repeated.warnings
 
 
 @pytest.mark.parametrize('preference',['natural','prefer_happy','guaranteed_happy_path'])
@@ -140,7 +141,7 @@ def test_outcome_scope_and_concrete_path(preference):
     quote='Есть возможность подготовить выставку вместе.'
     change=dict(id='work',state=quote,evidence=quote)
     if preference=='guaranteed_happy_path':
-        with pytest.raises(StructuralDeltaError):StateResolver(s,quote,'').resolve(raw(s,thread_changes=[change]))
+        assert StateResolver(s,quote,'').resolve(raw(s,thread_changes=[change])).state['threads']['work']['state']==quote
         change['favorable_path']=dict(opportunity='Можно договориться о помощи',next_step='Обсудить условия',basis_ids=['work'])
     out=StateResolver(s,quote,'').resolve(raw(s,thread_changes=[change]))
     assert out.state['characters']==s['characters']
@@ -246,8 +247,14 @@ def test_calm_long_interval_bounded_opportunity_and_no_mandatory_disaster():
 
 def test_guaranteed_path_does_not_grant_secret_knowledge():
     s,_=setup();s['meta']['outcome_preference']='guaranteed_happy_path';s['knowledge']['a:secret']['status']='unknown';quote='Есть возможность помочь.'
-    with pytest.raises(StructuralDeltaError):StateResolver(s,quote,'').resolve(raw(s,thread_changes=[dict(
+    out=StateResolver(s,quote,'').resolve(raw(s,thread_changes=[dict(
         id='work',state=quote,evidence=quote,favorable_path=dict(opportunity=quote,next_step='Обсудить',basis_ids=['work','secret']))]))
+    assert out.state['knowledge']==s['knowledge']
+    assert out.state['knowledge']['a:secret']['status']=='unknown'
+    assert out.state['threads']['work']['favorable_path'] is None
+    assert out.state['threads']['work']['state']==quote
+    assert any(w['code']=='favorable_path_unknown_basis' for w in out.warnings)
+
 
 
 def test_legacy_recorded_prompt_never_grants_new_candidate_permissions():

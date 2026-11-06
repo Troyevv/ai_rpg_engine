@@ -1,17 +1,61 @@
 import {expect,type Page} from '@playwright/test';
 export async function nav(page:Page,name:string){
+ if(await page.locator('.ww-shell').isVisible()){
+  if(name==='Создать')return;
+  if(name==='Настройки'||name==='Игра'){
+   if((page.viewportSize()?.width||1440)<=760)await page.getByRole('button',{name:'Разделы мастерской',exact:true}).click();
+   await page.getByRole('button',{name:name==='Настройки'?'Модели и настройки':'Вернуться к игре',exact:true}).click();return;
+  }
+ }
+
  const button=page.getByRole('button',{name,exact:true}).last();
- if((page.viewportSize()?.width||1440)<768){await expect(page.getByRole('dialog')).toHaveCount(0);await page.getByRole('button',{name:'Меню игры'}).click()}
+ if((page.viewportSize()?.width||1440)<768){
+  await expect(page.getByRole('dialog')).toHaveCount(0);await page.getByRole('button',{name:'Меню игры'}).click();
+  if(name==='Создать')name='Создать мир';
+  if(name==='Игра'){await page.locator('.mobile-menu-resume').click();return}
+  if(name==='Режим чтения'||name==='Выйти из чтения'){
+   await page.getByRole('switch',{name:'Режим чтения'}).click();
+   await page.getByRole('button',{name:'Закрыть',exact:true}).click();return;
+  }
+ }
  await page.getByRole('button',{name,exact:true}).last().click();
 }
 export async function actor(page:Page,id:string,name:string){
+ const mobile=!await page.getByLabel('Управляемый персонаж').isVisible();
+ if(mobile)await expect(page.getByRole('dialog')).toHaveCount(0);
  const committed=page.waitForResponse(r=>r.url().endsWith('/protagonist')&&r.request().method()==='POST');
- if(await page.getByLabel('Управляемый персонаж').isVisible())await page.getByLabel('Управляемый персонаж').selectOption(id);
+ if(!mobile)await page.getByLabel('Управляемый персонаж').selectOption(id);
  else {await page.locator('.mobile-pov button').first().click();await page.getByRole('dialog').getByRole('button',{name,exact:true}).click()}
- expect((await committed).ok()).toBe(true);
- await expect(page.getByRole('button',{name:'Сменить главного героя',exact:true})).toBeEnabled();
+ const response=await committed;
+ expect(response.ok(),await response.text()).toBe(true);
+ const after=await response.json();
+ expect(after.state.controlled_actor_id).toBe(id);
+ if(await page.getByLabel('Управляемый персонаж').isVisible())await expect(page.getByLabel('Управляемый персонаж')).toHaveValue(id);
+ else await expect(page.locator('.mobile-pov button').first()).toHaveText(after.state.characters.find((c:{id:string})=>c.id===id).name.replace(' (ГГ)','')+' ▾');
+ await expect(page.getByLabel('Управляемый персонаж').or(page.locator('.mobile-pov button').first())).toBeEnabled();
+ // API commit can precede Radix's CSS exit/unmount. A following actor switch
+ // must open a fresh sheet, not interact with the previous closing surface.
+ if(mobile)await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 export async function diagnostics(page:Page){
  if(await page.locator('.mobile-story-tools').isVisible() && await page.locator('.mobile-story-tools').getAttribute('open')===null)await page.locator('.mobile-story-tools summary').click();
  await page.getByRole('button',{name:'Диагностика',exact:true}).click();
+}
+export async function gameAction(page:Page,name:string){
+ const menu=page.getByRole('dialog').filter({has:page.getByRole('heading',{name:'Текущая игра',exact:true})});
+ if(!await menu.isVisible())await page.locator('.current-game-entry button').click();
+ const section=name==='Политика истории'?'Настройки':name==='Сменить главного героя'?'Персонажи':'Время';
+ await menu.getByRole('tablist',{name:'Разделы текущей игры'}).getByRole('tab',{name:section,exact:true}).click();
+ await menu.getByRole('button',{name,exact:true}).click();
+}
+
+export async function pickCharacter(page:Page,id:string){
+ await page.getByRole('combobox',{name:'Персонаж',exact:true}).click();
+ await page.getByLabel('Найти персонажа').fill('');
+ await page.locator(`[role="option"][data-character-id="${id}"]`).click();
+}
+export async function searchCharacter(page:Page,query:string){
+ await page.getByRole('combobox',{name:'Персонаж',exact:true}).click();
+ await page.getByLabel('Найти персонажа').fill(query);
+ await page.getByLabel('Найти персонажа').press('Enter');
 }

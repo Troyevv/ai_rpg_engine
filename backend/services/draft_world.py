@@ -1,5 +1,6 @@
 """Pre-game operations on the existing runtime aggregate, never a second world model."""
 from copy import deepcopy
+from backend.services.draft_player_view import BINDINGS, binding_errors, player_view
 import base64
 import hashlib
 import json
@@ -16,13 +17,28 @@ FIELDS={
  'actor':{'location','situation','goals','intentions','emotion','obligations'},
  'relationship':{'source_id','target_id','context','dimensions','visible_to_ids'},
  'location':{'name','text'},
- 'fact':{'text','secret','owner_id','character_ids','evidence'},
+ 'fact':{'text','secret','story_secret','secret_keeper_ids','secret_biography_ids','secret_subject_ids','secret_existence','owner_id','character_ids','evidence'},
  'knowledge':{'actor_id','fact_id','status','source_event_id'},
  'thread':{'description','state','public_state','status','character_ids','relevance','visible_to_ids'},
  'scene':{'location','participants','text','start_minute','end_minute','status'},
  'event':{'text','participants','witnesses','minute','fact_ids','player_observed'},
  'start':{'protagonist_id','controlled_actor_id','scene_id','minute'},
 }
+
+# Extend the existing editor vocabulary with the Runtime's own record fields.
+from backend.services.draft_initial import EXTENSIONS, ACTOR_FIELDS, MOTIVATION_FIELDS, motivation_records, normalize_motivations, DraftErrors
+from backend.runtime_v3.lifecycle import active_texts
+for _section,_model in EXTENSIONS.items():
+    GROUPS[_section]=_section
+    FIELDS[_section]=set(_model.model_fields)-{'id'}
+FIELDS['actor'].update(ACTOR_FIELDS)
+FIELDS['location'].update({'parent_id','kind','aliases'})
+FIELDS['fact'].add('claim')
+FIELDS['knowledge'].update({'evidence','replaced_by','source_turn','revision'})
+FIELDS['clock']={'minute','calendar'}
+from backend.runtime_v3.models import ScheduledEvent, Knowledge, Character
+GROUPS['scheduled_events']='scheduled_events'
+FIELDS['scheduled_events']=set(ScheduledEvent.model_fields)-{'id','time_semantics'}
 
 
 def prepare(original):
@@ -49,7 +65,8 @@ def prepare(original):
         if key in original and not isinstance(original[key],dict):raise ValueError(f'{key}: нужен объект.')
     clock=original.get('world_clock',{}).get('minute')
     if clock is not None and (type(clock) is not int or clock<0):raise ValueError('Игровое время должно быть неотрицательным целым числом.')
-    state=normalize(original)
+    from backend.services.draft_relations import merge
+    state=merge(normalize_motivations(normalize(original)))
     from backend.services.timeline import current_time
     minute=current_time(state)
     state.setdefault('world_clock',{'minute':minute,'last_event_time':label(minute)})
@@ -61,10 +78,6 @@ def prepare(original):
         if not isinstance(state['world'].get(kind),dict):raise ValueError(f'Некорректный раздел {kind}.')
     if not isinstance(state['campaign'],dict) or any(not isinstance(v,str) for v in state['campaign'].values()):
         raise ValueError('Поля кампании должны быть текстом.')
-    for c in state['world']['characters'].values():
-        for field in ('goals','intentions','obligations'):
-            if not isinstance(c.get(field,[]),list) or any(not isinstance(v,str) for v in c.get(field,[])):
-                raise ValueError(f'{field}: нужен список строк.')
     for kind in KINDS:
         for key,item in state['world'][kind].items():
             if kind not in ('relationships','knowledge'):item.setdefault('id',key)
@@ -72,32 +85,50 @@ def prepare(original):
                 if field.endswith('_id') and value is not None and not isinstance(value,str):raise ValueError(f'{kind}/{key}/{field}: нужна строковая ссылка.')
                 if field in ('participants','witnesses','fact_ids','character_ids','event_ids') and (not isinstance(value,list) or any(not isinstance(x,str) for x in value)):
                     raise ValueError(f'{kind}/{key}/{field}: нужен список ссылок.')
+    # Consume one-shot visual instructions on every intake path, including an
+    # imported provider response. Creative hints must never become card prose.
+    if any('portrait_traits' in card for card in state['characters']):
+        from backend.services.draft_portraits import consume_authored_traits
+        consume_authored_traits(state)
     return sync(state)
 
 
 def sync(state):
     """Update compatibility projections from canonical data; no parsing or LLM."""
+    normalize_motivations(state)
     world=state['world'];campaign=state.get('campaign',{})
+    from backend.runtime_v3.secrets import initialize_authored_secrets
+    initialize_authored_secrets(world)
     state.setdefault('sections',{})['tone']=campaign.get('tone','')
     state['story_notes']=campaign.get('rules','')
     for c in state['characters']:
         c['is_player']=c['id']==state.get('protagonist_id')
         a=world['characters'].get(c['id'],{})
-        if 'goals' in a:a['short_goal']='\n\n'.join(a['goals'])
+        if 'goals' in a:a['short_goal']='\n\n'.join(active_texts(a['goals']))
         for key,field in [('short_goal','Чего хочет'),('situation','Сейчас')]:
             if key in a:c['fields'][field]=a[key]
-        if 'intentions' in a:c['fields']['Намерения']='\n\n'.join(a['intentions'])
+        if 'intentions' in a:c['fields']['Намерения']='\n\n'.join(active_texts(a['intentions']))
     state['relationships']=[dict(source_id=r.get('source_id',''),target_id=r.get('target_id',''),text=r.get('context','')) for r in world['relationships'].values()]
     scene=world['scenes'].get(state.get('camera',{}).get('scene_id'))
     if scene:
         state['scene']=scene.get('text','')
         minute=state.get('world_clock',{}).get('minute')
-        state['scene_meta']={'time':label(minute) if type(minute) is int else '', 'location':scene.get('location',''), 'present_ids':scene.get('participants',[])}
+        time_label=label(minute) if type(minute) is int else ''
+        if type(minute) is int and state.get('world_clock',{}).get('calendar'):
+            from backend.runtime_v3.calendar import calendar_label
+            from backend.runtime_v3.models import Calendar
+            try:
+                calendar=Calendar.model_validate(state['world_clock']['calendar']).model_dump()
+                time_label=calendar_label({'meta':{'world_time':minute,'calendar':calendar}})
+            except (ValueError,TypeError):
+                pass  # Invalid input remains intact for path-specific validation.
+        state['world_clock']['last_event_time']=time_label
+        state['scene_meta']={'time':time_label, 'location':scene.get('location',''), 'present_ids':scene.get('participants',[])}
     return state
 
 
-def validate(state):
-    errors=[];warnings=[];world=state['world']
+def validate(state, *, canonical=True):
+    errors=binding_errors(state);warnings=[];world=state['world']
     cards=state['characters'];ids={c['id'] for c in cards}
     def require(ok,message):
         if not ok:errors.append(message)
@@ -144,8 +175,12 @@ def validate(state):
     require(all(re.fullmatch(r'[\w-]{1,100}',cid) for cid in ids),'Некорректный Character ID.')
     require(len({c['name'].strip().casefold() for c in cards})==len(cards),'Повтор имени: проверь identities персонажей.')
     require(bool(cards) and all(c['name'].strip() for c in cards),'Нужны персонажи с именами.')
-    require(state.get('protagonist_id') in ids,'Не выбран protagonist.')
-    require(state.get('controlled_actor_id') in ids,'Не выбран controlled actor для старта.')
+    require('protagonist_id' in state and (state['protagonist_id'] is None or state['protagonist_id'] in ids),'Неизвестный protagonist.')
+    camera=state.get('camera',{})
+    require(camera.get('mode','actor') in ('actor','observer'),'Неизвестный режим камеры.')
+    require(state.get('controlled_actor_id') in ids or ('controlled_actor_id' in state and state['controlled_actor_id'] is None and camera.get('mode')=='observer'),'Не выбран controlled actor для старта.')
+    for field in ('pov_actor_id','subject_id'):
+        require(camera.get(field) is None or isinstance(camera[field],str) and camera[field] in ids,'Неизвестный персонаж камеры: '+field)
     require(set(world['characters'])==ids,'Character cards и character state не совпадают.')
     minute=state.get('world_clock',{}).get('minute')
     require(type(minute) is int and minute>=0,'Нужно игровое время (минута от начала недели).')
@@ -165,10 +200,21 @@ def validate(state):
     for fid,f in world['facts'].items():
         require(isinstance(f.get('text'),str) and bool(f['text'].strip()),f'Факт {fid}: нужен текст.')
         refs(f.get('character_ids',[]),ids,f'fact {fid}')
+        refs(f.get('secret_subject_ids',[]),ids,f'secret subjects {fid}')
+        refs(f.get('secret_keeper_ids',[]),ids,f'secret keepers {fid}')
+        refs(f.get('secret_biography_ids',[]),ids,f'secret biography {fid}')
+        biography=f.get('secret_biography_ids',[])
+        if isinstance(biography,list) and all(isinstance(cid,str) for cid in biography):
+            require(len(set(biography)) == len(biography), 'Повторный субъект биографической тайны.')
+        require(not f.get('secret_biography_ids') or f.get('story_secret'), 'Биографическая классификация допустима только для сюжетной тайны.')
+        require(not f.get('secret_keeper_ids') or f.get('story_secret'), 'Хранители допустимы только для сюжетной тайны.')
+        require(type(f.get('story_secret',False)) is bool, 'Неверный признак сюжетной тайны.')
+        require(f.get('secret_existence','hidden') in ('hidden','discoverable'), 'Неверная видимость существования тайны.')
+        require(not f.get('secret_subject_ids') or f.get('story_secret'), 'Субъекты допустимы только для сюжетной тайны.')
         if f.get('owner_id') is not None:require(isinstance(f['owner_id'],str) and f['owner_id'] in ids,f'Факт {fid}: неизвестный владелец тайны.')
     for kid,k in world['knowledge'].items():
         require(k.get('actor_id') in ids and k.get('fact_id') in world['facts'],f'Знание {kid}: ссылка не существует.')
-        require(k.get('status') in ('known','suspected','unknown'),f'Знание {kid}: некорректный статус.')
+        require(k.get('status') in ('known','suspected','unknown','outdated','refuted','superseded'),f'Знание {kid}: некорректный статус.')
         require(not k.get('source_event_id') or k['source_event_id'] in world['events'],f'Знание {kid}: неизвестный источник.')
     for sid,s in world['scenes'].items():
         refs(s.get('participants',[]),ids,f'scene {sid}')
@@ -186,8 +232,9 @@ def validate(state):
         refs(e.get('fact_ids',[]),set(world['facts']),f'event facts {eid}')
     for cid,c in world['characters'].items():
         require(not c.get('scene_id') or c['scene_id'] in world['scenes'],f'Персонаж {cid}: неизвестная сцена.')
-        for field in ('goals','intentions','obligations'):
-            require(isinstance(c.get(field,[]),list) and all(isinstance(x,str) for x in c.get(field,[])),f'{cid}/{field}: нужен список строк.')
+        for field in MOTIVATION_FIELDS:
+            try:motivation_records(c.get(field,[]),cid,field)
+            except DraftErrors as exc:errors.extend(e['path']+': '+e['message'] for e in exc.errors)
     for rid,r in world['relationships'].items():
         require(isinstance(r.get('dimensions',{}),dict) and all(isinstance(v,(int,float)) and not isinstance(v,bool) and -100<=v<=100 for v in r.get('dimensions',{}).values()),f'Отношение {rid}: показатели должны быть числами от -100 до 100.')
     for tid,t in world['threads'].items():
@@ -196,7 +243,7 @@ def validate(state):
         require(not t.get('last_event_id') or t['last_event_id'] in world['events'],f'Линия {tid}: неизвестное последнее событие.')
     for eid,e in world['scheduled_events'].items():
         refs(e.get('participants',[]),ids,f'scheduled {eid}')
-        from backend.runtime_v3.models import ScheduledEvent
+        from backend.runtime_v3.models import ScheduledEvent, Knowledge, Character
         try:
             scheduled = ScheduledEvent.model_validate({k:v for k,v in dict(e,character_ids=e.get('participants',[])).items() if k in ScheduledEvent.model_fields})
             refs(scheduled.depends_on,set(world['scheduled_events']),f'scheduled dependencies {eid}')
@@ -204,7 +251,7 @@ def validate(state):
         except ValueError:
             require(False,f'Отложенное событие {eid}: некорректные поля договорённости.')
 
-        require(type(e.get('due_minute')) is int and e['due_minute']>=0,f'Отложенное событие {eid}: нужен срок.')
+        require(e.get('due_minute') is None or type(e.get('due_minute')) is int and e['due_minute']>=0,f'Отложенное событие {eid}: нужен срок.')
         require(e.get('status') in ('pending','resolved','cancelled'),f'Отложенное событие {eid}: некорректный статус.')
         require(isinstance(e.get('description'),str),f'Отложенное событие {eid}: нужно описание.')
         require(not e.get('resolved_event_id') or e['resolved_event_id'] in world['events'],f'Отложенное событие {eid}: неизвестное событие завершения.')
@@ -226,13 +273,18 @@ def validate(state):
         require(c.get('minute') is None or type(c['minute']) is int and c['minute']>=0,f'Персонаж {cid}: некорректное время.')
         require(not c.get('last_event_id') or c['last_event_id'] in world['events'],f'Персонаж {cid}: неизвестное последнее событие.')
     start=world['scenes'].get(state.get('camera',{}).get('scene_id'),{})
-    require(state.get('controlled_actor_id') in start.get('participants',[]),'Управляемый персонаж должен присутствовать в стартовой сцене.')
+    require(state.get('controlled_actor_id') is None or state['controlled_actor_id'] in start.get('participants',[]),'Управляемый персонаж должен присутствовать в стартовой сцене.')
     require(type(start.get('end_minute')) is int and type(minute) is int and start['end_minute']<=minute,'Стартовая сцена находится позже часов мира.')
     if not isinstance(start.get('text'),str) or not start['text'].strip():warnings.append('Стартовая ситуация пока не описана.')
     for c in cards:
         age=re.search(r'\b(\d{1,3})\s*(?:лет|год)',c['fields'].get('Возраст','')+' '+c['fields'].get('Статус',''))
         if age and int(age[1])<18 and re.search(r'врач|университет|женат|замуж',json.dumps(c,ensure_ascii=False),re.I):
             warnings.append(f"{c['id']}: возраст может противоречить профессии или биографии. Проверь связанные факты и события.")
+    if canonical and state.get('draft_contract')==4 and not errors:
+        try:
+            from backend.services.draft_initial import canonical_check
+            canonical_check(state)
+        except (ValueError,TypeError,KeyError) as exc: errors.append(str(exc))
     return {'errors':errors,'warnings':warnings}
 
 
@@ -258,8 +310,7 @@ def review_initial(state,source=''):
             warnings.append(f"{card['name']}: мало информации о личности важного персонажа.")
         if cid!=actor and not (character.get('goals') or character.get('intentions')):
             warnings.append(f"{card['name']}: не задана цель или намерение для самостоятельных действий.")
-        if cid not in secrets:
-            warnings.append(f"{card['name']}: не задана личная тайна с указанием того, кто о ней знает.")
+
     for r in world['relationships'].values():
         if r.get('source_id') in ids and r.get('target_id') in ids and len(r.get('context','').strip())<25:
             warnings.append('Связь между персонажами описана слишком кратко: добавь мотив и динамику.')
@@ -279,10 +330,10 @@ def secret_holders(state):
     known={(k.get('actor_id'),k.get('fact_id')) for k in world['knowledge'].values() if k.get('status')=='known'}
     owners=set()
     for fid,fact in world['facts'].items():
-        if not fact.get('secret'):continue
-        linked=fact.get('character_ids',[])
-        owner=fact.get('owner_id') or (linked[0] if len(linked)==1 else None)
-        if owner and (owner,fid) in known:owners.add(owner)
+        from backend.runtime_v3.secrets import legacy_secret_metadata
+        meta=legacy_secret_metadata(fact, world['characters'])
+        for owner in meta['secret_subject_ids']:
+            if (owner,fid) in known: owners.add(owner)
     return owners
 
 
@@ -329,6 +380,7 @@ def repair_scene_interval(state):
 
 def entity(state,kind,eid):
     if kind=='campaign':return state['campaign']
+    if kind=='clock':return state['world_clock']
     if kind=='start':return {'protagonist_id':state.get('protagonist_id'),'controlled_actor_id':state.get('controlled_actor_id'),
         'scene_id':state.get('camera',{}).get('scene_id'),'minute':state['world_clock'].get('minute')}
     if kind in ('character','location'):
@@ -339,46 +391,100 @@ def entity(state,kind,eid):
     return value
 
 
-def patch(state,kind,eid,field,value):
-    state=deepcopy(state);target=entity(state,kind,eid)
+def patch(state,kind,eid,field,value,*,synchronize=True):
+    state=deepcopy(state);old_minute=state.get('world_clock',{}).get('minute');target=entity(state,kind,eid)
     if kind not in FIELDS:raise ValueError('Неизвестная сущность.')
     if kind=='character' and field.startswith('fields.'):
         key=field[7:]
-        if not key or '.' in key or len(key)>100 or not isinstance(value,str):raise ValueError('Некорректное поле карточки.')
+        if not key or '.' in key or len(key)>100:raise ValueError('Некорректное поле карточки.')
+        if not isinstance(value,str):raise ValueError(f'Поле «{key}» должно быть текстом. Получено значение другого типа; прежнее значение сохранено.')
         target['fields'][key]=value
     elif field in FIELDS[kind]:
-        list_fields={'goals','intentions','obligations','aliases','character_ids','participants','witnesses','fact_ids','evidence'}
-        if field in list_fields and (not isinstance(value,list) or any(not isinstance(x,str) for x in value)):
+        if kind=='actor' and field in MOTIVATION_FIELDS:value=motivation_records(value,eid,field)
+        model=EXTENSIONS.get(kind) or (ScheduledEvent if kind=='scheduled_events' else Knowledge if kind=='knowledge' else Character if kind=='actor' and field in ACTOR_FIELDS else None)
+        if model:
+            # Validate the actual Runtime field contract (including nullable periods
+            # and string evidence), not legacy string-list assumptions.
+            model.model_validate({k:v for k,v in dict(target,**{field:value}).items() if k in model.model_fields})
+        list_fields={'secret_keeper_ids','secret_biography_ids','secret_subject_ids','aliases','character_ids','participants','witnesses','fact_ids','evidence'}
+        if not model and field in list_fields and (not isinstance(value,list) or any(not isinstance(x,str) for x in value)):
             raise ValueError('Нужен список строк.')
         if field in ('minute','start_minute','end_minute') and (type(value) is not int or value<0):raise ValueError('Нужно неотрицательное целое время.')
-        if field in ('secret','player_observed') and type(value) is not bool:raise ValueError('Нужно логическое значение.')
+        if field in ('secret','story_secret','player_observed') and type(value) is not bool:raise ValueError('Нужно логическое значение.')
         if field=='dimensions' and (not isinstance(value,dict) or any(type(x) not in (int,float) or not -100<=x<=100 for x in value.values())):raise ValueError('Показатели должны быть числами от -100 до 100.')
         old=target.get(field)
-        if old is not None and type(value) is not type(old):raise ValueError('Тип поля менять нельзя.')
-        if len(json.dumps(value,ensure_ascii=False))>30000:raise ValueError('Поле слишком длинное.')
+        if not model and old is not None and type(value) is not type(old):raise ValueError('Тип поля менять нельзя.')
+        # Creative text is not clipped or arbitrarily length-limited here.
         target[field]=value
     else:raise ValueError('Поле недоступно для изменения.')
+    if kind=='location' and field=='parent_id':
+        parents={loc['id']:loc.get('parent_id') for loc in state['locations']}
+        seen={eid};current=value
+        while current:
+            if current in seen:raise ValueError('Локация не может быть собственным предком.')
+            if current not in parents:raise ValueError('Родительская локация не найдена.')
+            seen.add(current);current=parents[current]
     if kind=='start':
         state.update(protagonist_id=target['protagonist_id'],controlled_actor_id=target['controlled_actor_id'])
-        state['camera']={'scene_id':target['scene_id'],'mode':'actor'}
-        state['world_clock']={'minute':target['minute'],'last_event_time':label(target['minute'])}
-    return sync(state)
+        state['camera']={**state.get('camera',{}),'scene_id':target['scene_id']}
+        state['world_clock']={**state.get('world_clock',{}),'minute':target['minute'],'last_event_time':label(target['minute'])}
+    from backend.services.draft_calendar import manual_edit
+    path='/world_clock' if kind in ('start','clock') else '/world/characters/'+eid+'/birth_date' if kind=='actor' and field=='birth_date' else ''
+    if not path:
+        from backend.services.draft_initial import escape
+        if kind in ('character','location'):
+            root='characters' if kind=='character' else 'locations'
+            index=next(i for i,r in enumerate(state[root]) if r['id']==eid)
+            path=f'/{root}/{index}/'+('/'.join(escape(part) for part in field.split('.')))
+        elif kind=='campaign':path='/campaign/'+escape(field)
+        elif kind=='actor':path='/world/characters/'+escape(eid)+'/'+escape(field)
+        elif GROUPS.get(kind,kind) in state['world']:path='/world/'+GROUPS.get(kind,kind)+'/'+escape(eid)+'/'+escape(field)
+    state=manual_edit(state,path,old_minute)
+    return sync(state) if synchronize else state
 
 
-def dependencies(state,kind,eid):
+def dependencies(state,kind,eid, *, original=None):
     result=[]
+    location_names=set()
     if kind=='location':
-        name=entity(state,kind,eid)['name']
-        for group in ('characters','scenes'):
-            result += [{'kind':group,'id':key} for key,item in state['world'][group].items() if item.get('location')==name]
+        place=entity(original if original is not None else state,kind,eid)
+        location_names={n.strip().casefold() for n in [place['name'],*place.get('aliases',[])]}
+    reference_fields={
+        'character':{'source_id','target_id','actor_id','owner_id','holder_id','character_id',
+            'controlled_actor_id','protagonist_id','participants','witnesses','character_ids',
+            'visible_to_ids','secret_keeper_ids','secret_biography_ids','secret_subject_ids','present_ids','present_character_ids',
+            'observed_character_ids','discovered_by','stakes_for'},
+        'location':{'location_id','location_ids'},
+        'fact':{'fact_id','fact_ids','life_fact_id','closure_fact_id','parentage_complete_fact_id','replaced_by'},
+        'event':{'source_event_id','last_event_id','resolved_event_id','event_ids'},
+        'scene':{'scene_id'}, 'scheduled_events':{'depends_on'},
+        'organizations':{'organization_id','parent_id'},
+    }.get(kind,set())
+    def references(item, *, nested=False):
+        if not isinstance(item,dict):return False
+        for field,value in item.items():
+            if kind=='location' and field=='location' and isinstance(value,str):
+                if value==eid or value.strip().casefold() in location_names:return True
+            is_reference=field in reference_fields
+            if is_reference and (value==eid or isinstance(value,list) and eid in value):return True
+            # Recorded history is immutable to AI editing. Inspect structured
+            # references inside its snapshots; never interpret or remove prose.
+            if nested and (isinstance(value,dict) and references(value,nested=True) or
+                           isinstance(value,list) and any(references(v,nested=True) for v in value)):
+                return True
+        return False
     for group,items in state['world'].items():
         if not isinstance(items,dict):continue
         for key,item in items.items():
             if group==GROUPS.get(kind) and key==eid:continue
-            if isinstance(item,dict) and any(v==eid or isinstance(v,list) and eid in v for k,v in item.items() if k.endswith('_id') or k.endswith('_ids') or k in ('participants','witnesses')):
+            if references(item,nested=group=='scene_records'):
                 result.append({'kind':group,'id':key})
     if kind=='character' and eid in (state.get('protagonist_id'),state.get('controlled_actor_id')):result.append({'kind':'start','id':eid})
     if kind=='scene' and eid==state.get('camera',{}).get('scene_id'):result.append({'kind':'camera','id':eid})
+    if kind=='fact':
+        for cid,fields in state.get(BINDINGS,{}).items():
+            if any(eid in refs for refs in fields.values()):
+                result.append({'kind':'character','id':cid})
     return result
 
 
@@ -388,14 +494,43 @@ def remove(state,kind,eid):
     if deps:raise ValueError('Сначала измени связанные записи: '+', '.join(f"{d['kind']}/{d['id']}" for d in deps))
     state=deepcopy(state)
     if kind in ('character','location'):
-        key='characters' if kind=='character' else 'locations';state[key]=[x for x in state[key] if x['id']!=eid]
-        if kind=='character':state['world']['characters'].pop(eid,None)
+        key='characters' if kind=='character' else 'locations'
+        removed_index=next(i for i,x in enumerate(state[key]) if x['id']==eid)
+        paths=state.get('authoring',{}).get('manual_paths',[])
+        remapped=[]
+        for path in paths:
+            parts=path.split('/')
+            if len(parts)>2 and parts[1]==key and parts[2].isdigit():
+                index=int(parts[2])
+                if index==removed_index:continue
+                if index>removed_index:parts[2]=str(index-1)
+            elif kind=='character' and path.startswith('/world/characters/'+eid+'/'):continue
+            remapped.append('/'.join(parts))
+        if paths:
+            state['authoring']['manual_paths']=remapped
+            if not remapped:state['authoring'].pop('manual_paths')
+            if not state['authoring']:state.pop('authoring')
+        state[key]=[x for x in state[key] if x['id']!=eid]
+        if kind=='character':
+            state['world']['characters'].pop(eid,None)
+            state.get(BINDINGS,{}).pop(eid,None)
     elif kind in GROUPS and kind!='actor':state['world'][GROUPS[kind]].pop(eid)
     else:raise ValueError('Эту сущность удалять нельзя.')
     return sync(state)
 
 
-def add(state,kind):
+def add(state,kind,values=None):
+    if values is not None and not isinstance(values,dict):raise ValueError('Нужны поля создаваемой записи.')
+    values=values or {}
+    required={'character':'name','location':'name','fact':'text','event':'text','thread':'description','scene':'text'}
+    if kind in required and (not isinstance(values.get(required[kind]),str) or not values[required[kind]].strip()):
+        raise ValueError('Заполните имя или описание записи перед созданием.')
+    if kind=='relationship':
+        ids={c['id'] for c in state['characters']}
+        source,target=values.get('source_id'),values.get('target_id')
+        if source not in ids or target not in ids or source==target:raise ValueError('Выберите двух разных персонажей.')
+        if any(r['source_id']==source and r['target_id']==target for r in state['world']['relationships'].values()):
+            raise ValueError('Это направленное отношение уже существует. Откройте его для изменения.')
     state=deepcopy(state);eid=kind+'_'+uuid.uuid4().hex[:16]
     actor=state.get('controlled_actor_id');minute=state['world_clock']['minute']
     if kind=='character':
@@ -404,65 +539,27 @@ def add(state,kind):
     elif kind=='location':state['locations'].append({'id':eid,'name':'Новое место','text':''})
     else:
         templates={
-          'relationship':{'source_id':actor,'target_id':next((c['id'] for c in state['characters'] if c['id']!=actor),actor),'context':'','dimensions':{}},
+          'relationship':{'source_id':values.get('source_id'),'target_id':values.get('target_id'),'context':'','dimensions':{}},
           'thread':{'id':eid,'description':'Новая линия','state':'','status':'active','character_ids':[],'relevance':0.5,'last_event_id':None},
-          'fact':{'id':eid,'text':'Новый факт','secret':False,'character_ids':[],'evidence':[]},
+          'fact':{'id':eid,'text':'Новый факт','secret':False,'story_secret':False,'secret_subject_ids':[],'secret_existence':'hidden','character_ids':[],'evidence':[]},
           'knowledge':{'actor_id':actor,'fact_id':next(iter(state['world']['facts']),''),'status':'unknown','source_event_id':None},
           'scene':{'id':eid,'participants':[],'location':'Не указано','text':'','start_minute':minute,'end_minute':minute,'status':'active','event_ids':[]},
           'event':{'id':eid,'text':'Новое событие','participants':[],'witnesses':[],'minute':minute,'fact_ids':[],'source_sequence':0,'player_observed':False,'scene_id':None}}
         if kind not in templates:raise ValueError('Тип не поддерживается.')
         state['world'][GROUPS[kind]][eid]=templates[kind]
-    return sync(state),eid
+    if kind=='relationship':
+        state=sync(state)
+        eid=next(key for key,r in state['world']['relationships'].items() if r['source_id']==values['source_id'] and r['target_id']==values['target_id'])
+    for field,value in values.items():
+        state=patch(state,kind,eid,field,value)
+    state=sync(state)
+    # Synchronization canonicalizes directed pairs to their Runtime identifier.
+    if kind=='relationship':
+        eid=next(key for key,r in state['world']['relationships'].items() if r['source_id']==values['source_id'] and r['target_id']==values['target_id'])
+    return state,eid
 
 
-def player_view(state):
-    """Server-side actor knowledge projection; hidden entries never reach the browser."""
-    actor=state['controlled_actor_id'];world=state['world'];meta=state.get('scene_meta',{})
-    known={k['fact_id'] for k in world['knowledge'].values() if k['actor_id']==actor and k['status']=='known'}
-    def visible(item):return not item.get('director_only') and (not item.get('secret') or actor in item.get('visible_to_ids',[]))
-    public=deepcopy({k:state[k] for k in ('campaign','characters','world','locations','protagonist_id','controlled_actor_id','camera','world_clock') if k in state})
-    public['sections']={};public['story_notes']='';public.pop('memory',None);public.pop('knowledge',None)
-    public.pop('facts',None);public.pop('events',None);public.pop('plans',None)
-    public['campaign']['description']=public['campaign'].get('public_description','')
-    public['campaign']['rules']=''
-    public['world']={**{kind:{} for kind in KINDS},'version':2}
-    scene=world['scenes'].get(state.get('camera',{}).get('scene_id'),{})
-    public['scene']=scene.get('text','');public['scene_meta']={**meta,'present_ids':scene.get('participants',[])}
-    public['characters']=[c for c in public['characters'] if not c.get('hidden') or c['id']==actor or c['id'] in scene.get('participants',[]) or actor in c.get('visible_to_ids',[])]
-    visible_ids={c['id'] for c in public['characters']}
-    for c in public['characters']:
-        c.pop('text',None)
-        c.pop('hidden',None);c.pop('visible_to_ids',None)
-        c['fields']={k:v for k,v in c['fields'].items() if k in ('Внешность','Роль','Возраст') or c['id']==actor and k not in ('Секрет','Скрытые мотивы')}
-        if c['id']==actor:public['world']['characters'][actor]=deepcopy(world['characters'][actor])
-    public['world']['facts']={key:deepcopy(f) for key,f in world['facts'].items() if (key in known or not f.get('secret')) and not f.get('director_only') and set(f.get('character_ids',[]))<=visible_ids}
-    # Knowledge records with "unknown" must not expose the existence of their facts.
-    public['world']['knowledge']={key:deepcopy(k) for key,k in world['knowledge'].items() if k['actor_id']==actor and k['fact_id'] in public['world']['facts'] and k['status'] in ('known','suspected')}
-    public['world']['relationships']={key:deepcopy(r) for key,r in world['relationships'].items() if not r.get('director_only') and (r.get('source_id')==actor or actor in r.get('visible_to_ids',[])) and r.get('source_id') in visible_ids and r.get('target_id') in visible_ids}
-    public['relationships']=[dict(source_id=r.get('source_id',''),target_id=r.get('target_id',''),text=r.get('context','')) for r in public['world']['relationships'].values()]
-    public['world']['threads']={key:deepcopy(t) for key,t in world['threads'].items() if actor in t.get('visible_to_ids',[]) and not t.get('director_only') and set(t.get('character_ids',[]))<=visible_ids}
-    for thread in public['world']['threads'].values():
-        thread['state']=thread.get('public_state','')
-        thread.pop('last_event_id',None)
-        thread.pop('relevance',None)
-    public['world']['events']={key:deepcopy(e) for key,e in world['events'].items() if (actor in e.get('participants',[]) or actor in e.get('witnesses',[]) or e.get('player_observed')) and not e.get('director_only')}
-    if scene:
-        public['world']['scenes'][state['camera']['scene_id']]=deepcopy(scene)
-        # An event might reference a hidden fact; remove its links, not its visible text.
-        public['world']['scenes'][state['camera']['scene_id']]['event_ids']=[key for key in scene.get('event_ids',[]) if key in public['world']['events']]
-    for event in public['world']['events'].values():event['fact_ids']=[key for key in event.get('fact_ids',[]) if key in public['world']['facts']]
-    for fact in public['world']['facts'].values():fact['evidence']=[]
-    # Explicitly hidden places remain author-only; generator instructions forbid secrets in public place descriptions.
-    public['locations']=[loc for loc in public['locations'] if visible(loc)]
-    for group in ('facts','relationships','threads','events','scenes'):
-        for item in public['world'][group].values():
-            for marker in ('director_only','visible_to_ids','secret_intentions','private_notes'):item.pop(marker,None)
-    for loc in public['locations']:
-        for marker in ('director_only','visible_to_ids'):loc.pop(marker,None)
-    return public
-
-
-def export_markdown(state):
+def export_markdown(state, *, readable_text=False):
     """Readable projection plus a versioned, integrity-checked round-trip payload."""
     names={c['id']:c['name'] for c in state['characters']}
     def person(cid):return names.get(cid,cid or 'Неизвестно')
@@ -477,7 +574,7 @@ def export_markdown(state):
         actor=state['world']['characters'][c['id']]
         for key,title in [('location','Место'),('emotion','Эмоциональное состояние'),('goals','Цели'),('intentions','Намерения'),('obligations','Обязательства')]:
             value=actor.get(key)
-            if value:lines += ['### '+title,'\n'.join('- '+v for v in value) if isinstance(value,list) else str(value)]
+            if value:lines += ['### '+title,'\n'.join('- '+(v if isinstance(v,str) else v['text']+' ['+v.get('status','active')+']') for v in value) if isinstance(value,list) else str(value)]
     lines+=['## Направленные отношения']
     for r in state['world']['relationships'].values():
         lines += ['### '+person(r['source_id'])+' → '+person(r['target_id']),r.get('context','')]
@@ -486,7 +583,7 @@ def export_markdown(state):
     for fid,f in state['world']['facts'].items():
         lines += ['### '+('Тайна: ' if f.get('secret') else '')+f['text']]
         for k in state['world']['knowledge'].values():
-            if k['fact_id']==fid:lines += ['- '+person(k['actor_id'])+': '+{'known':'знает','suspected':'подозревает','unknown':'не знает'}[k['status']]]
+            if k['fact_id']==fid:lines += ['- '+person(k['actor_id'])+': '+{'known':'знает','suspected':'подозревает','unknown':'не знает','outdated':'устарело','refuted':'опровергнуто','superseded':'заменено'}[k['status']]]
         if f.get('evidence'):lines += ['Основания: '+'; '.join(f['evidence'])]
     for kind,title in [('threads','Сюжетные линии'),('scenes','Сцены'),('events','События'),('scheduled_events','Отложенные события')]:
         lines+=['## '+title]
@@ -501,6 +598,10 @@ def export_markdown(state):
                 if type(item.get(field)) is int:lines += [label(item[field])]
     for loc in state['locations']:lines+=['## '+loc['name'],loc['text']]
     body='\n\n'.join(lines)+'\n'
+    if readable_text:
+        # This intentionally omits the reversible author payload. Keep the legacy
+        # MD/TXT importer format untouched for users moving worlds and portraits.
+        return re.sub(r'^#{1,3} ', '', body, flags=re.MULTILINE)
     payload=base64.b64encode(json.dumps(state,ensure_ascii=False).encode()).decode()
     return body+f'\n<!-- AI_RPG_STATE_V2 {hashlib.sha256(body.encode()).hexdigest()} {payload} -->\n'
 

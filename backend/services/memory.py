@@ -12,6 +12,9 @@ def compact(storage, job, state, history, config, generate, cancelled):
     if state.get('schema_version')==3:
         from backend.runtime_v3.selectors import ui_view
         projection=ui_view(state)
+        # ui_view is a player response, not a persistence/compaction source.
+        # Preserve objective and all actor scopes even on a no-op or cancellation.
+        projection['memory']=deepcopy(state.get('memory',{}))
         projection['memory_maintenance']=deepcopy(state.get('memory_maintenance',{}))
         compacted=compact(storage,job,projection,history,config,generate,cancelled)
         result=deepcopy(state)
@@ -51,7 +54,8 @@ def _compact(storage, job, state, history, config, generate, cancelled):
     summarize=Compactor(prompt,config,generate,cancelled).summarize
     while candidates:
         chunk=candidates[:batch]
-        summary=summarize(memory.get('summary',''),chunk,'Объективная память ведущего')
+        from backend.runtime_v3.surfaces import reconciled_view
+        summary=summarize(memory.get('summary',''),[reconciled_view(t) for t in chunk],'Объективная память ведущего')
         if cancelled.is_set():
             return state
         per_actor=deepcopy(memory.get('per_actor',{}))

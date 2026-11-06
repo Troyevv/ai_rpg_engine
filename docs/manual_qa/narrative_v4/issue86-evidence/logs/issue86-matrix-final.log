@@ -1,0 +1,16 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> ai-rpg-frontend@2.0.0 test:e2e
+> playwright test e2e/inspector86.spec.ts --grep seven sections --project=desktop
+
+
+Running 4 tests using 1 worker
+
+(node:58) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [desktop] › e2e/inspector86.spec.ts:15:3 › seven sections, skins, widths 1440 (9.7s)
+  ✓  2 [desktop] › e2e/inspector86.spec.ts:15:3 › seven sections, skins, widths 768 (8.2s)
+  ✓  3 [desktop] › e2e/inspector86.spec.ts:15:3 › seven sections, skins, widths 393 (19.0s)
+  ✓  4 [desktop] › e2e/inspector86.spec.ts:15:3 › seven sections, skins, widths 360 (18.7s)
+
+  4 passed (58.3s)

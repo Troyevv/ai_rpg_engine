@@ -1,21 +1,20 @@
 """Semantic work stays in the existing extraction call; code verifies provenance."""
 EXTRACTION_CONTRACT = '''
-CURRENT RUNTIME V3 contract overrides saved instructions. Return RawTurnResult only
-for THIS player_input and completed_narrative; never continue the story. Copy existing
-IDs. Evidence is a verbatim current quote. Output prose in the active game language.
-Final_scene is the ACTUAL END, not a copy of the initial camera. New concrete location:
-create locations[] with canonical ID/name/evidence and use that ID in final_scene.
-Choose the final stop, not intermediate travel. Reuse known places/aliases (Гвоздь,
-кофейня Гвоздь, кафе Гвоздь); mention/plan alone never moves the camera.
-Present_character_ids: only physically present at the end; remove departures, include
-arrivals who stayed. Messages/memories are not presence. Supply departed actors'
-movements only when their destination is established. A redundant movement for a
-final_scene participant must end at final_scene.location_id. Situation is current
-objective state, not emotion; situation_evidence grounds it. Update affected NPC
-situations via evidenced character_changes. Promote only significant recurring NPCs
-with full card/evidence, not incidental passers-by; a promoted present NPC uses the
-same ID in final_scene. Mention does not mean arrival. No scene_id/last_event_id/
-from_location/StatePatch. Elapsed_minutes is actual narrated duration, no arbitrary skip.
+CURRENT RUNTIME narrative-authority-v1 overrides saved instructions. Extract RawTurnResult
+from player_input/completed_narrative only, never continue. Capture ALL significant completed
+outcomes/dependencies with canonical IDs; distinguish facts, rumors, plans, attempts,
+hypotheses and negation. Quiet scenes need no events. Evidence is provenance, not literal-name
+proof; player_evidence stays exact. final_scene owns END physical membership; movements,
+arrival claims/quotes and boundary geography are optional. observed_character_ids are visible
+OUTSIDE, disjoint from present, granting no Knowledge. Calls/messages/memories/mentions aren't
+presence. Reuse IDs/aliases; create established places/significant NPCs and dependencies.
+Promotions: full 11 CARD_FIELDS + character attributes; unknown=null/unknown/omitted; never
+infer sex/dates or provenance. Movements preserve meaningful routes; endpoints agree with scene.
+No invented routes/destinations. EXTERNAL voluntary movement needs explicit_choice + exact
+player_evidence; involuntary needs involuntary + source_event_id of external cause.
+POV != control. Situation is objective, not emotion; update affected NPC situations.
+No scene_id/last_event_id/StatePatch. Ordinary turns require elapsed_minutes >= 0;
+Time Skip/background clocks belong to Runtime.
 Lifecycle semantics belong to Extraction, not a verb dictionary: completed result ->
 completed; failure -> failed; lost context -> expired; explicit cancellation -> cancelled;
 replacement -> superseded. Use *_updates, stable IDs and current evidence. A joke may
@@ -36,18 +35,10 @@ Never mirror directions or invent consent/actions. Respect negations; questions 
 Remote_interactions: only ongoing END-of-turn message/phone/radio exchanges with actor_id,
 channel, evidence. Reconfirm each turn; rereading old messages is not active contact.
 Omit ended contact; physically arriving actors belong in present instead.
-Knowledge requires THIS response's accepted Event: actor in witnesses, fact in fact_ids,
-medium observation/conversation/message/testimony/discovery. No GM-card acquisition.
-Facts immutable; changed assertions need new IDs. claim={subject_id,predicate,value,scope:""}
-identifies an EXCLUSIVE slot; reuse IDs. Scope separates parallel roles/periods; omit uncertain slots.
-known is belief, not truth. knowledge_gained: known/suspected/unknown/outdated/refuted/superseded,
-expected_revision, supersedes:[old IDs]. New known retires conflicting known in its slot.
-Explicit supersedes needs both facts in Event.fact_ids. Retire existing beliefs only;
-revival requires expected_revision. Same-slot changes need distinct Event.order.
-Completed-narrative evidence only; no intentions, time decay, gossip or truth refresh.
-Message Event author_id is its established author in
-participants; recipient/reader is witness. Do not guess authors from scene presence.
-Unknown minute/order may be omitted; no microscopic chronology.
+Knowledge requires THIS accepted informational Event: actor in witnesses, fact in fact_ids; no GM-card acquisition. Only actual perception/reading, never delivery, time or intention. Message author_id: established participant, not inferred.
+Facts immutable; reuse IDs, new assertions need new IDs. claim={subject_id,predicate,value,scope:""} identifies an exclusive slot; scope separates roles/periods; omit uncertain slots. known is belief, not truth. knowledge_gained statuses: known/suspected/unknown/outdated/refuted/superseded. expected_revision required for revival; supersedes needs old AND new facts in Event.fact_ids. New known retires conflicting known in its slot. Retire existing beliefs only. Same-slot changes need distinct Event.order.
+story_secret=plot, not privacy/routine. secret_subject_ids=related people; secret_keeper_ids=conscious owners; secret_biography_ids=biographical subjects, not others' feelings/plans. None grants Knowledge. secret_existence:hidden(default)|discoverable(anonymous slot). Reuse IDs; rumors=suspected. secret_disclosures binds written source_event_id/artifact_id + fact_id, assertion confirmed|rumor. Only actual reading grants Knowledge; quotes/delivery aren't confirmation.
+Unknown Event minute/order may be omitted; final_scene elapsed_minutes is explicit on ordinary turns.
 '''
 
 NARRATIVE_CONTRACT = '''
@@ -62,7 +53,6 @@ Knowledge ссылается на fact_id; старое known может рас�
 Отсутствие Knowledge не разрешает персонажу знать GM-only факт; unknown/suspected сохраняют смысл.
 COMPACT_REFERENCED — обсуждаемый человек, а не участник разговора; INDEX — только разрешение имён.
 Не назначай controlled_actor действия, слова, решения и эмоции. Situation — объективная ситуация.
-При написании диалогов используй «Стиль общения» каждого персонажа: лексику, длину фраз, юмор и реакцию на конфликт. Сохраняй характер и подтекст последних сцен.
 Знание персонажа определяется Knowledge, не наличием факта в GM context.
 Не превращай засыпание в произвольный скачок времени.
 Варианты следующего действия создаёт Extraction; не разыгрывай их как уже выбранные.
@@ -86,7 +76,7 @@ Use current player_input and the observable END of completed_narrative/final_sce
 avoid repeating just-completed actions or addressing departed actors. Prior scene is
 orientation, not the final scene. Respect time_skip_target and final capability changes.
 
-Aim for SIX materially different decisions when the scene allows: most characteristic;
+When useful, offer materially different decisions: most characteristic;
 another characteristic approach; pragmatic/neutral; emotionally/socially expressive if
 appropriate; atypical or riskier but plausible; redirect/refuse/wait or another distinct
 direction. These are flexible aids, not mandatory slots. Do not manufacture absurd filler
@@ -253,7 +243,7 @@ Residence/role/organization changes need established completed evidence, not pla
 Physical location != home/base != role. Travel/visits, marriage, roles and hierarchy never
 imply relocation/presence/Knowledge. Keep unknowns unknown; reuse known IDs/aliases.
 locations creates; location_changes updates parent/kind/aliases. New scene entrants need
-movement or situation_evidence, never residence/workplace inference. Geography is generic;
+final_scene membership or explicit movements, never residence/workplace inference. Geography is generic;
 no nationality/culture/calendar inference. Organization name variants reuse canonical IDs.
 New residence/role IDs coexist. Only explicit replaces=[old IDs] closes named phases;
 otherwise close the existing ID via status=closed. Preserve old employer/institution/program;
@@ -401,8 +391,8 @@ capabilities, including children's abilities, without inventing adult activities
 
 
 PACING_CONTRACT = """
-Runtime narrative_policy is permission, never an event quota. Optional developments use only selected candidates,
-respect quiet/pressure/escalation/budgets and supplied world/Knowledge; ordinary scenes remain valid in every preset.
+Runtime narrative_policy guides future generation, never an event quota. Candidates are suggestions;
+respect supplied world/Knowledge and explicit user risk exclusions; ordinary scenes remain valid in every preset.
 Candidates create no facts, Threads, penalties or decisions. EXTERNAL responses require user choice; NPC status grants no immunity.
 Risk independently limits ALL autonomous consequences (including prose/facts); illness/injury/death need canonical Condition/Life State.
 Outcome preference applies only to protagonist-linked stakes. prefer_happy biases constructive resolutions;
@@ -412,11 +402,13 @@ leak secrets or override explicit negative choices. Unrelated NPC threads are un
 """
 NARRATIVE_CONTRACT += PACING_CONTRACT
 EXTRACTION_CONTRACT += """
-Honor narrative_policy. Accepted candidates need narrative_developments/source_event_id. All harm needs consequences,
-causal preexisting basis_ids and matching Condition/Life changes. New severe harm requires selected candidate_id;
-active Conditions may ground progression. Closures classify consequence_outcome=loss/constructive (e.g. graduation). Explicit user harm needs explicit_choice + player_evidence on claim/change.
-Guaranteed connected threads need achievable favorable_path; autonomous closure needs resolution=favorable.
-Never force EXTERNAL choices/romance, retcon, or auto-correct user-chosen negative outcomes. Empty omitted context fields use defaults.
+Extract actual outcomes with their canonical Condition/Life/role/residence changes.
+Director candidates, narrative_developments and consequences are optional attribution,
+never permission for an established event. Missing annotation never means NO CHANGE.
+Preserve explicit user prohibitions and report structural conflicts; do not remove an
+established consequence to satisfy a preference. Never invent EXTERNAL decisions.
+Empty omitted optional sections mean no change only when no such outcome occurred.
+
 """
 
 # Same calendar constraints in a compact Extraction wire form; no state omitted.
@@ -431,8 +423,7 @@ explicit deadlines; Runtime anchors relative dates. Prose/choices use the active
 """
 
 NARRATIVE_CONTRACT += """
-SCENE AGENCY: Director.scene_agency grants optional initiative to its actors, up to
-budget meaningful beats. Do not wait for EXTERNAL to make every first move. Start,
+SCENE AGENCY: Director.scene_agency supplies optional suggestions, never permits or quotas. Do not wait for EXTERNAL to make every first move. Start,
 continue, redirect or end conversations; ask/offer help, share news, invite, refuse,
 apologize, set boundaries, leave or act in one's interests when grounded. Silence is
 also valid. No initiative quota, turn timer, uniform assertiveness or manufactured drama.
@@ -453,10 +444,10 @@ Only available scene/established remote channels; referenced authors do not beco
 Keep existing literary style and active game language. Do not narrate runtime labels.
 """
 EXTRACTION_CONTRACT += """
-scene_actions: permitted NPC initiative; source_event_id=THIS Event, attempt != outcome.
+scene_actions: optional annotation of NPC initiative; source_event_id=THIS Event, attempt != outcome.
 adult=true for romance. Interruptible EXTERNAL response=open unless player_supplied with
 CURRENT player_evidence. response_event_id=only the answered pending_response_ids Event.
-Silence != consent; involuntary needs consequences.
+Silence != consent; involuntary outcomes need their canonical consequences.
 knowledge_ids=actor:fact, own beliefs only; suspected requires inquiry. Offers != agreement/reciprocity.
 """
 
@@ -503,3 +494,71 @@ player_evidence only for completed interactions explicitly supplied by EXTERNAL 
 Never fabricate EXTERNAL actions, speech, consent or decisions. No reliable evidence:
 omit change. Preserve directed independence and inertia.
 """
+
+
+REMOTE_NARRATIVE_CONTRACT = """
+NPC PHONE INITIATIVE: DeepSeek may decide that an NPC sends a message or calls during
+an ordinary scene, using their own Knowledge and established communication channels.
+No Director candidate/permit or separate NPC agent is required. Respect communication_capabilities;
+without the channel do not narrate an actual phone delivery. Write the actual message text
+when established; prose remains intact. Delivery/ringing does not imply EXTERNAL reading,
+answering, declining or replying. Leave those choices to phone controls. A remote sender
+stays at their physical location. Existing/staged events are not sent again.
+"""
+
+REMOTE_EXTRACTION_CONTRACT = """
+remote_events: new occurred NPC TEXT_MESSAGE/VOICE_CALL, chronological order; canonical
+sender_id/recipient_ids, exact message content copied from completed_narrative, never composed.
+No Director permit. Intentions, negations, offers, dreams, rumours and past quotations are
+NOT new deliveries. Actual delivery without text: include empty content for targeted repair.
+Use sender-owned contact_id OR conversation_id with exact members. Without either ID,
+one living canonical recipient is directly reachable on an enabled channel; no contact,
+number, device or acquaintance is required. established_contact={label,address} only for an explicitly newly
+established sender-owned address to one recipient. Never invent addresses/identities/membership.
+minute=absolute canonical time within this turn; preserve equal-time order. Omit only if
+unspecified (diagnosed end-of-turn fallback). No second elapsed. TEXT_MESSAGE=delivered,
+never read; VOICE_CALL=ringing, ended if NPC caller hung up (ended_at), missed only after
+canonical timeout. No EXTERNAL read/answer/decline/ignore/reply inferred from prose.
+existing_event_id references a staged/earlier event without resending; otherwise omit continuations.
+Active-call hangup uses call_lifecycle_changes. Optional source_event_id links this extraction's
+Event. Delivery grants no recipient Knowledge, public Facts or physical presence. Preserve prose.
+"""
+
+HISTORICAL_EXTRACTION_CONTRACT = """
+Historical LETTER/COURIER_LETTER/TELEGRAM: full content is an explicit authored Markdown letter fence.
+Reference artifact_id (letter-1, letter-2, ... in source order), sender/recipient/channel; omit content.
+Runtime copies the whole block. Never compose missing text or bind an incomplete summary as a letter.
+Reader visibility gives no character Knowledge. Runtime owns sent_at/due/delivery.
+NPC read: existing_event_id plus reader_id, only after delivery. EXTERNAL reads remain explicit UI commands.
+"""
+
+
+# One shared prose policy, including custom prompts and background/LTA narration.
+# Extraction does not consume it; recorded regeneration stays verbatim.
+NARRATIVE_STYLE_CONTRACT = """
+NARRATIVE STYLE CONTRACT:
+Write vivid, restrained prose in the active game language and established narrative
+person/tense. Authored world style/rules may refine this default; GenrePolicy changes
+emphasis, not these fundamentals or canon, Knowledge, POV, agency and Continuity.
+Choose meaningful sound, light, smell, temperature, texture or spatial details only
+when perceptible to POV and consistent with current surroundings; no sensory checklist.
+Show NPC posture, movement, breath, touch, facial expression and interaction with objects
+when natural. Use known canonical appearance/current clothing selectively, not repeated
+portraits. Missing appearance stays unspecified: never invent permanent identifying traits.
+Remote/absent or invisible NPCs have no visible gestures or surroundings; use only what
+the established channel conveys. GM profiles guide performance, not omniscient disclosure.
+Dialogue follows each NPC's current «Стиль общения», vocabulary, habits and relationship
+history: subtext, pauses, interruptions, humor and uneven sentence lengths where apt.
+Silence is valid. Avoid identical voices, exposition speeches and formulaic replies.
+Show character through behavior and dialogue, not narrator diagnoses, attachment/trauma
+explanations or lessons in emotional mechanisms. Psychological topics in dialogue and
+character arcs remain welcome; do not expose hidden feelings or motives as POV knowledge.
+Vary rhythm and gestures against recent prose: no habitual staccato, repeated mannerisms,
+stock metaphors or metaphor on every line. Quiet scenes may breathe; urgent action can
+be concise. No mandatory detail/dialogue quotas, purple prose or manufactured conflict.
+Style never supplies EXTERNAL actions, speech, thoughts, feelings, consent or sensory
+experiences absent player input; involuntary consequences remain under CONTROL_CONTRACT.
+DeepSeek authors the scene within supplied constraints; output only literary prose,
+without runtime labels, status reports, JSON or choice lists.
+"""
+NARRATIVE_CONTRACT += NARRATIVE_STYLE_CONTRACT

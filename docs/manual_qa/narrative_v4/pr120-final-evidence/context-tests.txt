@@ -1,0 +1,27 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+Running 12 tests using 1 worker
+
+(node:33) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [desktop] › e2e/completion-matrix.spec.ts:8:1 › T04-T08 calendar agenda, empty dates, private observance and two skins (3.1s)
+  ✓   2 [desktop] › e2e/completion-matrix.spec.ts:30:1 › T06 custom calendar has two months, five weekdays and a real year boundary (1.0s)
+[WebServer] Semantic retrieval unavailable (ModuleNotFoundError); structural fallback
+  ✓   3 [desktop] › e2e/completion-matrix.spec.ts:42:1 › T10-T13 separate family, known empty family, secrecy and accessible graph (2.4s)
+  ✓   4 [desktop] › e2e/completion-matrix.spec.ts:57:1 › T12 dense family is bounded and can be recentered from accessible list (3.6s)
+  ✓   5 [desktop] › e2e/completion-matrix.spec.ts:68:1 › T03 T11 contextual date and empty character card open the shared workspace (2.2s)
+(node:217) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   6 [desktop] › e2e/runtime-handoff.spec.ts:6:1 › original export identities and rejected opening recover through real API then turn reload turn (6.3s)
+(node:304) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   7 [mobile] › e2e/completion-matrix.spec.ts:8:1 › T04-T08 calendar agenda, empty dates, private observance and two skins (3.7s)
+  ✓   8 [mobile] › e2e/completion-matrix.spec.ts:30:1 › T06 custom calendar has two months, five weekdays and a real year boundary (1.4s)
+  ✓   9 [mobile] › e2e/completion-matrix.spec.ts:42:1 › T10-T13 separate family, known empty family, secrecy and accessible graph (3.6s)
+  ✓  10 [mobile] › e2e/completion-matrix.spec.ts:57:1 › T12 dense family is bounded and can be recentered from accessible list (4.1s)
+  ✓  11 [mobile] › e2e/completion-matrix.spec.ts:68:1 › T03 T11 contextual date and empty character card open the shared workspace (2.8s)
+(node:475) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  12 [mobile] › e2e/runtime-handoff.spec.ts:6:1 › original export identities and rejected opening recover through real API then turn reload turn (7.3s)
+
+  12 passed (45.8s)

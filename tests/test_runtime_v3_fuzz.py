@@ -4,6 +4,7 @@ import random
 import pytest
 from backend.runtime_v3.resolver import StateResolver
 from backend.runtime_v3.raw import extraction_schema
+from backend.services.world_delta_errors import StructuralDeltaError
 from backend.services.relation_dimensions import RELATION_DIMENSIONS
 from test_runtime_v3_domain import initial,payload,QUOTE
 
@@ -20,7 +21,14 @@ def test_optional_mutations(seed):
     for key in ('events','knowledge_gained','character_changes','relationship_changes'):
         p[key].append(rng.choice([None,[],3,'bad']))
         rng.shuffle(p[key])
-    result=StateResolver(initial(),QUOTE,'Я подхожу к окну. Я доверяю ей.').resolve(p)
+    before=initial(); untouched=deepcopy(before)
+    resolver=StateResolver(before,QUOTE,'Я подхожу к окну. Я доверяю ей.')
+    if any(not isinstance(row,dict) and row not in (None,[],{}) for key in ('events','knowledge_gained','character_changes','relationship_changes') for row in p[key]):
+        with pytest.raises(StructuralDeltaError) as exc: resolver.resolve(p)
+        assert exc.value.code == 'raw_record_invalid' and exc.value.repairable
+        assert before == untouched
+        return
+    result=resolver.resolve(p)
     assert result.state['knowledge']['a:f']['status']=='known'
     assert result.state['characters']['a']['situation']=='У двери'
     assert result.state['relationships']['a:b']['dimensions']=={'trust':10}

@@ -17,6 +17,8 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
     def __init__(self, path=None):
         self.path = Path(path or os.environ.get('RPG_DB_PATH', DEFAULT_DB))
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        from backend.repositories.retired_schema import remove_retired_tables
+        remove_retired_tables(self)
         with self.connect() as db:
             db.executescript('''
                 CREATE TABLE IF NOT EXISTS worlds (
@@ -123,18 +125,35 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             from backend.runtime_v3.repository import read_history
             snapshot=json.loads(result.pop('state_json'))
             from backend.runtime_v3.models import assert_world_state_v3_invariants
+            from backend.runtime_v3.repository import restore_biographical_secrets
+            restore_biographical_secrets(db, snapshot)
             snapshot['world_state'] = assert_world_state_v3_invariants(snapshot['world_state'])
             from backend.runtime_v3.appearance import initialize_profiles as initialize_appearance
             initialize_appearance(snapshot)
             history,warnings=read_history(db,snapshot.get('history_head'))
+            from backend.runtime_v3.notifications import read_story_receipts
+            history['_story_receipts'] = read_story_receipts(db, snapshot.get('history_head'))
             result['state']=ui_view(snapshot,history)
             result['history_warnings']=warnings
             return result
 
     def list_turns(self, save_id):
         with self.connect() as db:
-            return [dict(row) for row in db.execute(
-                'SELECT id,sequence,user_text,assistant_text,kind,choices_json,changes_json,node_id,active_variant_id,memory_archived,pov_actor_id,audience_json,timing_json FROM turns WHERE save_id=? ORDER BY sequence', (save_id,))]
+            rows = [dict(row) for row in db.execute(
+                'SELECT id,sequence,user_text,assistant_text,kind,choices_json,changes_json,node_id,active_variant_id,memory_archived,pov_actor_id,audience_json,timing_json,CASE WHEN json_extract(changes_json,\'$.presentation.surface\') IS NOT NULL THEN \'{}\' ELSE before_json END AS before_json FROM turns WHERE save_id=? ORDER BY sequence', (save_id,))]
+            from backend.runtime_v3.surfaces import route
+            for row in rows:
+                before = json.loads(row.pop('before_json'))
+                row['presentation'] = json.loads(row['changes_json']).get('presentation') or route(before, row['kind'])
+            return rows
+
+    def physical_choice_source(self, save_id, turns, state):
+        from backend.runtime_v3.surfaces import physical_choice_source
+        with self.connect() as db:
+            def after_for(tid):
+                row=db.execute('SELECT after_json FROM turns WHERE save_id=? AND id=?',(save_id,tid)).fetchone()
+                return json.loads(row[0]) if row else {}
+            return physical_choice_source(turns,state,after_for)
 
     def update_scene_meta(self, save_id, metadata, expected_revision=None):
         with self.connect() as db:
@@ -169,9 +188,22 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
             if not row:raise ValueError('Прохождение не найдено.')
             snapshot=json.loads(row[0])
             from backend.runtime_v3.models import assert_world_state_v3_invariants
+            from backend.runtime_v3.repository import restore_biographical_secrets
+            restore_biographical_secrets(db, snapshot)
             snapshot['world_state'] = assert_world_state_v3_invariants(snapshot['world_state'])
             from backend.runtime_v3.appearance import initialize_profiles as initialize_appearance
             initialize_appearance(snapshot)
             from backend.runtime_v3.protagonist import initialize
             initialize(snapshot)
             return snapshot
+
+    def story_secret_spoilers(self, save_id, revision, character_id=None):
+        from backend.runtime_v3.repository import migrate_snapshot
+        from backend.runtime_v3.secrets import spoiler_projection
+        with self.connect() as db:
+            row = db.execute('SELECT state_json,revision FROM saves WHERE id=?', (save_id,)).fetchone()
+            if row is None: raise ValueError('Прохождение не найдено.')
+            if row['revision'] != revision: raise ValueError('Сохранение изменилось. Обновите раздел.')
+            snapshot, _ = migrate_snapshot(db, json.loads(row['state_json']))
+            return dict(revision=revision, character_id=character_id,
+                        rows=spoiler_projection(snapshot, character_id))

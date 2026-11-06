@@ -1,0 +1,5542 @@
+{
+  "baseline": "c64505465737b6ed9db8f014a00c5248f2825884",
+  "interpretation": "Source inventory, including local warning/rejection helpers. Dispositions and invariant/recovery/test mappings by owner are in issue136.md; this is not a test result.",
+  "sites": [
+    {
+      "source": "backend/repositories/runtime.py",
+      "line": 204,
+      "function": "_rollback_after",
+      "operation": "ValueError",
+      "expression": "ValueError('Подтверди откат последующих ходов: их состояние зависит от прежнего ответа.')",
+      "policy_owner": "runtime"
+    },
+    {
+      "source": "backend/repositories/runtime.py",
+      "line": 333,
+      "function": "configure_weather",
+      "operation": "ValueError",
+      "expression": "ValueError('Климат уже установлен. Его история сохраняется.')",
+      "policy_owner": "runtime"
+    },
+    {
+      "source": "backend/repositories/runtime.py",
+      "line": 335,
+      "function": "configure_weather",
+      "operation": "ValueError",
+      "expression": "ValueError('Регион погоды отсутствует в мире.')",
+      "policy_owner": "runtime"
+    },
+    {
+      "source": "backend/repositories/runtime.py",
+      "line": 381,
+      "function": "_remote_action",
+      "operation": "ValueError",
+      "expression": "ValueError('Прохождение не найдено.')",
+      "policy_owner": "runtime"
+    },
+    {
+      "source": "backend/repositories/runtime.py",
+      "line": 384,
+      "function": "_remote_action",
+      "operation": "ValueError",
+      "expression": "ValueError('Телефон доступен только в Narrative.')",
+      "policy_owner": "runtime"
+    },
+    {
+      "source": "backend/repositories/runtime.py",
+      "line": 396,
+      "function": "_remote_action",
+      "operation": "ValueError",
+      "expression": "ValueError('Сейв изменился. Обнови телефон.')",
+      "policy_owner": "runtime"
+    },
+    {
+      "source": "backend/repositories/runtime.py",
+      "line": 186,
+      "function": "select_variant",
+      "operation": "ValueError",
+      "expression": "ValueError('Сейв изменился. Обнови страницу.')",
+      "policy_owner": "runtime"
+    },
+    {
+      "source": "backend/repositories/runtime.py",
+      "line": 190,
+      "function": "select_variant",
+      "operation": "ValueError",
+      "expression": "ValueError('Вариант не принадлежит этому ходу.')",
+      "policy_owner": "runtime"
+    },
+    {
+      "source": "backend/repositories/runtime.py",
+      "line": 222,
+      "function": "switch_actor",
+      "operation": "ValueError",
+      "expression": "ValueError('Сейв изменился. Обнови страницу.')",
+      "policy_owner": "runtime"
+    },
+    {
+      "source": "backend/repositories/runtime.py",
+      "line": 240,
+      "function": "update_motivation",
+      "operation": "ValueError",
+      "expression": "ValueError('Сейв изменился. Обнови карточку и повтори изменение.')",
+      "policy_owner": "runtime"
+    },
+    {
+      "source": "backend/repositories/runtime.py",
+      "line": 264,
+      "function": "update_relationship",
+      "operation": "ValueError",
+      "expression": "ValueError('Сейв изменился. Обнови карточку и повтори изменение.')",
+      "policy_owner": "runtime"
+    },
+    {
+      "source": "backend/repositories/runtime.py",
+      "line": 288,
+      "function": "transition_protagonist",
+      "operation": "ValueError",
+      "expression": "ValueError('Прохождение не найдено.')",
+      "policy_owner": "runtime"
+    },
+    {
+      "source": "backend/repositories/runtime.py",
+      "line": 300,
+      "function": "transition_protagonist",
+      "operation": "ValueError",
+      "expression": "ValueError('Сейв изменился. Обнови страницу и проверь черновик перед подтверждением.')",
+      "policy_owner": "runtime"
+    },
+    {
+      "source": "backend/repositories/runtime.py",
+      "line": 347,
+      "function": "_update_game_policy",
+      "operation": "ValueError",
+      "expression": "ValueError('Прохождение не найдено.')",
+      "policy_owner": "runtime"
+    },
+    {
+      "source": "backend/repositories/runtime.py",
+      "line": 348,
+      "function": "_update_game_policy",
+      "operation": "ValueError",
+      "expression": "ValueError('Сейв изменился. Обнови страницу.')",
+      "policy_owner": "runtime"
+    },
+    {
+      "source": "backend/repositories/runtime.py",
+      "line": 351,
+      "function": "_update_game_policy",
+      "operation": "ValueError",
+      "expression": "ValueError('Настройки доступны только в Narrative.')",
+      "policy_owner": "runtime"
+    },
+    {
+      "source": "backend/repositories/runtime.py",
+      "line": 393,
+      "function": "_remote_action",
+      "operation": "ValueError",
+      "expression": "ValueError('ID операции уже использован с другими данными.')",
+      "policy_owner": "runtime"
+    },
+    {
+      "source": "backend/repositories/runtime.py",
+      "line": 298,
+      "function": "transition_protagonist",
+      "operation": "ValueError",
+      "expression": "ValueError('ID операции уже использован с другими данными.')",
+      "policy_owner": "runtime"
+    },
+    {
+      "source": "backend/repositories/runtime.py",
+      "line": 303,
+      "function": "transition_protagonist",
+      "operation": "ValueError",
+      "expression": "ValueError('Создание доступно только вместе с постоянной сменой ГГ.')",
+      "policy_owner": "runtime"
+    },
+    {
+      "source": "backend/runtime_v3/appearance.py",
+      "line": 126,
+      "function": "apply_appearance",
+      "operation": "ValueError",
+      "expression": "ValueError('Нет принятого события персонажа.')",
+      "policy_owner": "appearance"
+    },
+    {
+      "source": "backend/runtime_v3/appearance.py",
+      "line": 127,
+      "function": "apply_appearance",
+      "operation": "ValueError",
+      "expression": "ValueError('Нет факта внешности в событии.')",
+      "policy_owner": "appearance"
+    },
+    {
+      "source": "backend/runtime_v3/appearance.py",
+      "line": 129,
+      "function": "apply_appearance",
+      "operation": "ValueError",
+      "expression": "ValueError('Факт относится к другому персонажу.')",
+      "policy_owner": "appearance"
+    },
+    {
+      "source": "backend/runtime_v3/appearance.py",
+      "line": 130,
+      "function": "apply_appearance",
+      "operation": "ValueError",
+      "expression": "ValueError('Нужен совершившийся результат в повествовании.')",
+      "policy_owner": "appearance"
+    },
+    {
+      "source": "backend/runtime_v3/appearance.py",
+      "line": 131,
+      "function": "apply_appearance",
+      "operation": "ValueError",
+      "expression": "ValueError('Несогласованная категория внешности.')",
+      "policy_owner": "appearance"
+    },
+    {
+      "source": "backend/runtime_v3/appearance.py",
+      "line": 133,
+      "function": "apply_appearance",
+      "operation": "ValueError",
+      "expression": "ValueError('Косметическое изменение требует добровольного действия.')",
+      "policy_owner": "appearance"
+    },
+    {
+      "source": "backend/runtime_v3/appearance.py",
+      "line": 143,
+      "function": "apply_appearance",
+      "operation": "ValueError",
+      "expression": "ValueError('Устаревшая версия внешности.')",
+      "policy_owner": "appearance"
+    },
+    {
+      "source": "backend/runtime_v3/appearance.py",
+      "line": 144,
+      "function": "apply_appearance",
+      "operation": "ValueError",
+      "expression": "ValueError('Некорректная операция внешности.')",
+      "policy_owner": "appearance"
+    },
+    {
+      "source": "backend/runtime_v3/appearance.py",
+      "line": 146,
+      "function": "apply_appearance",
+      "operation": "ValueError",
+      "expression": "ValueError('Признак уже имеет canonical ID.')",
+      "policy_owner": "appearance"
+    },
+    {
+      "source": "backend/runtime_v3/appearance.py",
+      "line": 147,
+      "function": "apply_appearance",
+      "operation": "ValueError",
+      "expression": "ValueError('Нельзя менять тип признака.')",
+      "policy_owner": "appearance"
+    },
+    {
+      "source": "backend/runtime_v3/appearance.py",
+      "line": 148,
+      "function": "apply_appearance",
+      "operation": "ValueError",
+      "expression": "ValueError('Устойчивая черта уже установлена.')",
+      "policy_owner": "appearance"
+    },
+    {
+      "source": "backend/runtime_v3/appearance.py",
+      "line": 162,
+      "function": "apply_appearance",
+      "operation": "ValueError",
+      "expression": "ValueError('Превышен лимит профиля.')",
+      "policy_owner": "appearance"
+    },
+    {
+      "source": "backend/runtime_v3/appearance.py",
+      "line": 170,
+      "function": "apply_appearance",
+      "operation": "warn",
+      "expression": "r.warn('appearance_deltas',i,str(exc),code='appearance_rejected')",
+      "policy_owner": "appearance"
+    },
+    {
+      "source": "backend/runtime_v3/appearance.py",
+      "line": 137,
+      "function": "apply_appearance",
+      "operation": "ValueError",
+      "expression": "ValueError('Нет явного выбора EXTERNAL actor.')",
+      "policy_owner": "appearance"
+    },
+    {
+      "source": "backend/runtime_v3/appearance.py",
+      "line": 152,
+      "function": "apply_appearance",
+      "operation": "ValueError",
+      "expression": "ValueError('Функциональное последствие принадлежит #38; нужна действующая ссылка.')",
+      "policy_owner": "appearance"
+    },
+    {
+      "source": "backend/runtime_v3/appearance.py",
+      "line": 153,
+      "function": "apply_appearance",
+      "operation": "ValueError",
+      "expression": "ValueError('Ссылка #38 допустима только для проекции состояния.')",
+      "policy_owner": "appearance"
+    },
+    {
+      "source": "backend/runtime_v3/appearance.py",
+      "line": 155,
+      "function": "apply_appearance",
+      "operation": "ValueError",
+      "expression": "ValueError('Удаление не задаёт новый признак.')",
+      "policy_owner": "appearance"
+    },
+    {
+      "source": "backend/runtime_v3/appearance.py",
+      "line": 158,
+      "function": "apply_appearance",
+      "operation": "ValueError",
+      "expression": "ValueError('Пустое описание.')",
+      "policy_owner": "appearance"
+    },
+    {
+      "source": "backend/runtime_v3/appearance.py",
+      "line": 65,
+      "function": "salvage_profiles",
+      "operation": "ValueError",
+      "expression": "ValueError('duplicate portrait')",
+      "policy_owner": "appearance"
+    },
+    {
+      "source": "backend/runtime_v3/calendar.py",
+      "line": 58,
+      "function": "from_ordinal",
+      "operation": "ValueError",
+      "expression": "ValueError('Дата вне диапазона календаря.')",
+      "policy_owner": "calendar"
+    },
+    {
+      "source": "backend/runtime_v3/calendar.py",
+      "line": 29,
+      "function": "date_parts",
+      "operation": "ValueError",
+      "expression": "ValueError('Дата должна иметь формат YYYY-MM-DD.')",
+      "policy_owner": "calendar"
+    },
+    {
+      "source": "backend/runtime_v3/calendar.py",
+      "line": 54,
+      "function": "from_ordinal",
+      "operation": "ValueError",
+      "expression": "ValueError('Дата вне диапазона календаря.')",
+      "policy_owner": "calendar"
+    },
+    {
+      "source": "backend/runtime_v3/calendar.py",
+      "line": 121,
+      "function": "calendar_range",
+      "operation": "ValueError",
+      "expression": "ValueError(f'Диапазон календаря: от 1 до {MAX_RANGE_DAYS} дней.')",
+      "policy_owner": "calendar"
+    },
+    {
+      "source": "backend/runtime_v3/calendar.py",
+      "line": 260,
+      "function": "scheduled_range",
+      "operation": "ValueError",
+      "expression": "ValueError('Диапазон календаря слишком велик.')",
+      "policy_owner": "calendar"
+    },
+    {
+      "source": "backend/runtime_v3/calendar.py",
+      "line": 35,
+      "function": "date_parts",
+      "operation": "ValueError",
+      "expression": "ValueError('Дата отсутствует в выбранном календаре.')",
+      "policy_owner": "calendar"
+    },
+    {
+      "source": "backend/runtime_v3/call_continuity.py",
+      "line": 18,
+      "function": "sources",
+      "operation": "fatal",
+      "expression": "fatal('История активного звонка превышает бюджет доказательств.', 'call_evidence_budget')",
+      "policy_owner": "call_continuity"
+    },
+    {
+      "source": "backend/runtime_v3/call_continuity.py",
+      "line": 68,
+      "function": "apply_lifecycle",
+      "operation": "fatal",
+      "expression": "fatal('Несколько отбоев одного хода.', 'call_end_duplicate',repairable=True)",
+      "policy_owner": "call_continuity"
+    },
+    {
+      "source": "backend/runtime_v3/call_continuity.py",
+      "line": 133,
+      "function": "prepare_scene",
+      "operation": "warn",
+      "expression": "resolver.warn('final_scene',0,'Некорректное необязательное описание заменено предыдущим.',code='call_situation_retained')",
+      "policy_owner": "call_continuity"
+    },
+    {
+      "source": "backend/runtime_v3/call_continuity.py",
+      "line": 138,
+      "function": "prepare_scene",
+      "operation": "warn",
+      "expression": "resolver.warn('final_scene',0,'Неподтверждённое перемещение камеры не применено.',code='call_scene_hint_dropped')",
+      "policy_owner": "call_continuity"
+    },
+    {
+      "source": "backend/runtime_v3/call_continuity.py",
+      "line": 227,
+      "function": "project_physical",
+      "operation": "warn",
+      "expression": "resolver.warn('choices',0,'Физические подсказки отсутствуют; доступен свободный ввод, следующий обычный ход использует текущий мир.',code='physical_choices_unavailable')",
+      "policy_owner": "call_continuity"
+    },
+    {
+      "source": "backend/runtime_v3/call_continuity.py",
+      "line": 75,
+      "function": "apply_lifecycle",
+      "operation": "fatal",
+      "expression": "fatal('Не подтверждён фактический отбой звонка.', 'call_end_unsupported',repairable=True)",
+      "policy_owner": "call_continuity"
+    },
+    {
+      "source": "backend/runtime_v3/call_continuity.py",
+      "line": 79,
+      "function": "apply_lifecycle",
+      "operation": "fatal",
+      "expression": "fatal('Нет команды игрока на отбой.', 'call_end_agency',repairable=True)",
+      "policy_owner": "call_continuity"
+    },
+    {
+      "source": "backend/runtime_v3/call_continuity.py",
+      "line": 182,
+      "function": "project_physical",
+      "operation": "warn",
+      "expression": "resolver.warn('physical_projections',index,'Необязательная проекция отброшена; используется принятый Event, если он есть.',code='physical_projection_dropped')",
+      "policy_owner": "call_continuity"
+    },
+    {
+      "source": "backend/runtime_v3/call_continuity.py",
+      "line": 191,
+      "function": "project_physical",
+      "operation": "warn",
+      "expression": "resolver.warn('physical_projections',0,'Использован текст принятого Event.',entity=event['id'],code='physical_projection_fallback')",
+      "policy_owner": "call_continuity"
+    },
+    {
+      "source": "backend/runtime_v3/call_continuity.py",
+      "line": 211,
+      "function": "project_physical",
+      "operation": "warn",
+      "expression": "resolver.warn('final_scene',0,'Описание ситуации не подтверждает физический переход; сохранена предыдущая сцена.',code='call_situation_retained')",
+      "policy_owner": "call_continuity"
+    },
+    {
+      "source": "backend/runtime_v3/call_continuity.py",
+      "line": 221,
+      "function": "project_physical",
+      "operation": "warn",
+      "expression": "resolver.warn('events',order,'Необязательное время Event заменено временем текущего commit.',entity=event['id'],code='physical_event_time_repaired')",
+      "policy_owner": "call_continuity"
+    },
+    {
+      "source": "backend/runtime_v3/call_continuity.py",
+      "line": 107,
+      "function": "validate_repair",
+      "operation": "fatal",
+      "expression": "fatal('Исправление удалило подтверждённое последствие телефонного хода.',\n                    'call_repair_omission',repairable=False,section=section)",
+      "policy_owner": "call_continuity"
+    },
+    {
+      "source": "backend/runtime_v3/call_continuity.py",
+      "line": 148,
+      "function": "prepare_scene",
+      "operation": "warn",
+      "expression": "resolver.warn('final_scene',0,'Неподтверждённый участник не добавлен в физическую сцену.',entity=cid,code='call_scene_hint_dropped')",
+      "policy_owner": "call_continuity"
+    },
+    {
+      "source": "backend/runtime_v3/camera.py",
+      "line": 20,
+      "function": "observe",
+      "operation": "ValueError",
+      "expression": "ValueError('Для камеры мира выбери NPC.')",
+      "policy_owner": "camera"
+    },
+    {
+      "source": "backend/runtime_v3/camera.py",
+      "line": 31,
+      "function": "observe",
+      "operation": "ValueError",
+      "expression": "ValueError('Нет доступного персонажа для наблюдения.')",
+      "policy_owner": "camera"
+    },
+    {
+      "source": "backend/runtime_v3/camera.py",
+      "line": 35,
+      "function": "observe",
+      "operation": "ValueError",
+      "expression": "ValueError('Основной ГГ присутствует в этой сцене.')",
+      "policy_owner": "camera"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 51,
+      "function": "reject",
+      "operation": "warn",
+      "expression": "resolver.warn('scheduled_event_changes', index, reason, entity=eid, code=code)",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 53,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Нужны canonical ID и подтверждённая семантика изменения.')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 65,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Источник не входит в принятый semantic context.', 'commitment_remote_source')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 67,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Сообщения не прочитаны участниками договорённости.', 'commitment_remote_unperceived')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 69,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Каждому участнику нужна собственная подтверждающая реплика.', 'commitment_missing_assent')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 75,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Старое сообщение не является новым решением.', 'commitment_remote_replay')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 77,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Нужны новые доказательства изменения плана.', 'commitment_remote_replay')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 79,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Завершённый план нельзя повторно активировать.', 'commitment_terminal')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 81,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Изменение ссылается на неизвестный план.')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 90,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Новому плану/переносу нужна структурная temporal привязка, не LLM minute.')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 121,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Статус противоречит подтверждённому исходу.')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 128,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Нужны уникальные участники.')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 130,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Фоновая симуляция не меняет план protected actor.', 'background_commitment_protected')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 133,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Участник умер; план не может стать выполненным или активным.')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 135,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Неизвестное место плана.')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 166,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Нужна разрешимая календарная привязка.')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 168,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Конец интервала должен быть не раньше начала.')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 170,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Прошедшее обсуждение не создаёт будущий план.')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 181,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Для интервала используй started/ended.')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 205,
+      "function": "apply_commitments",
+      "operation": "warn",
+      "expression": "resolver.warn('scheduled_event_changes', index, 'Неизвестная или циклическая зависимость.',\n                          entity=eid, code='commitment_dependency_invalid')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 62,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Голосовая договорённость требует подтверждённых proposal/assent источников.', 'commitment_call_evidence')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 73,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Переносу нужно новое согласие участников.', 'commitment_missing_assent')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 87,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Для изменения существующего плана нужен rescheduled.')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 138,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Изменение исхода не переписывает идентичность и сроки плана.')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 161,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Решение controlled actor требует явного источника: '+failure, 'controlled_actor_unsupported')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 173,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Начало/конец требуют личного интервала и допустимого перехода.')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 192,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Повтор существующего плана: используй его canonical ID.', 'commitment_duplicate')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 110,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Относительное время сообщения требует его canonical ID.', 'commitment_remote_time')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 115,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Голосовое время требует исходное предложение.', 'commitment_call_time')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 176,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Будущий интервал ещё не начался.')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 178,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Интервал уже начат.')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/commitments.py",
+      "line": 101,
+      "function": "apply_commitments",
+      "operation": "reject",
+      "expression": "reject('Участник не присутствовал в разговоре.', 'commitment_missing_assent')",
+      "policy_owner": "commitments"
+    },
+    {
+      "source": "backend/runtime_v3/communication.py",
+      "line": 30,
+      "function": "validate",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Связь доступна только в Narrative.\")",
+      "policy_owner": "communication"
+    },
+    {
+      "source": "backend/runtime_v3/communication.py",
+      "line": 32,
+      "function": "validate",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Владелец телефона уже изменился или не может действовать.\")",
+      "policy_owner": "communication"
+    },
+    {
+      "source": "backend/runtime_v3/communication.py",
+      "line": 34,
+      "function": "validate",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Исходное действие связи недоступно в этой ветке.\")",
+      "policy_owner": "communication"
+    },
+    {
+      "source": "backend/runtime_v3/communication.py",
+      "line": 36,
+      "function": "validate",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Этот вызов уже обработан.\")",
+      "policy_owner": "communication"
+    },
+    {
+      "source": "backend/runtime_v3/communication.py",
+      "line": 38,
+      "function": "validate",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Нет доступа к переписке.\")",
+      "policy_owner": "communication"
+    },
+    {
+      "source": "backend/runtime_v3/communication.py",
+      "line": 99,
+      "function": "run",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Ответ модели не прошёл проверку связи. Подробности доступны в диагностике.\")",
+      "policy_owner": "communication"
+    },
+    {
+      "source": "backend/runtime_v3/context.py",
+      "line": 756,
+      "function": "build_context",
+      "operation": "ValueError",
+      "expression": "ValueError(f'Контекст v3 не помещается в выбранную модель ({estimate(messages)} / {hard_context_limit}). Увеличь контекст или уменьши лимит ответа. Критические данные сцены и последние narrative сохранены.')",
+      "policy_owner": "context"
+    },
+    {
+      "source": "backend/runtime_v3/continuity.py",
+      "line": 44,
+      "function": "reject",
+      "operation": "fatal",
+      "expression": "fatal('Нарушена непрерывность повествования.', code, repairable=False)",
+      "policy_owner": "continuity"
+    },
+    {
+      "source": "backend/runtime_v3/continuity.py",
+      "line": 173,
+      "function": "validate_temporal_boundaries",
+      "operation": "fatal",
+      "expression": "fatal('Обычный ход пересекает временную границу договорённости.',\n              'ordinary_temporal_boundary', repairable=False)",
+      "policy_owner": "continuity"
+    },
+    {
+      "source": "backend/runtime_v3/continuity.py",
+      "line": 178,
+      "function": "validate_temporal_boundaries",
+      "operation": "fatal",
+      "expression": "fatal('Обычный ход пропускает неразрешённую возможность ответа.',\n              'ordinary_response_boundary', repairable=False)",
+      "policy_owner": "continuity"
+    },
+    {
+      "source": "backend/runtime_v3/continuity.py",
+      "line": 189,
+      "function": "validate_compression",
+      "operation": "reject",
+      "expression": "reject('compression_boundary')",
+      "policy_owner": "continuity"
+    },
+    {
+      "source": "backend/runtime_v3/continuity.py",
+      "line": 208,
+      "function": "apply",
+      "operation": "reject",
+      "expression": "reject('continuity_budget')",
+      "policy_owner": "continuity"
+    },
+    {
+      "source": "backend/runtime_v3/continuity.py",
+      "line": 185,
+      "function": "validate_compression",
+      "operation": "reject",
+      "expression": "reject('compression_invalid')",
+      "policy_owner": "continuity"
+    },
+    {
+      "source": "backend/runtime_v3/continuity.py",
+      "line": 194,
+      "function": "validate_compression",
+      "operation": "reject",
+      "expression": "reject('compression_response_required')",
+      "policy_owner": "continuity"
+    },
+    {
+      "source": "backend/runtime_v3/continuity.py",
+      "line": 215,
+      "function": "apply",
+      "operation": "reject",
+      "expression": "reject('scene_transition_evidence')",
+      "policy_owner": "continuity"
+    },
+    {
+      "source": "backend/runtime_v3/continuity.py",
+      "line": 250,
+      "function": "apply",
+      "operation": "reject",
+      "expression": "reject('continuity_beat_evidence')",
+      "policy_owner": "continuity"
+    },
+    {
+      "source": "backend/runtime_v3/continuity.py",
+      "line": 251,
+      "function": "apply",
+      "operation": "reject",
+      "expression": "reject('continuity_basis_invalid')",
+      "policy_owner": "continuity"
+    },
+    {
+      "source": "backend/runtime_v3/continuity.py",
+      "line": 264,
+      "function": "apply",
+      "operation": "reject",
+      "expression": "reject('continuity_repeated_beat')",
+      "policy_owner": "continuity"
+    },
+    {
+      "source": "backend/runtime_v3/continuity.py",
+      "line": 212,
+      "function": "apply",
+      "operation": "reject",
+      "expression": "reject('scene_transition_invalid')",
+      "policy_owner": "continuity"
+    },
+    {
+      "source": "backend/runtime_v3/continuity.py",
+      "line": 218,
+      "function": "apply",
+      "operation": "reject",
+      "expression": "reject('scene_transition_thread')",
+      "policy_owner": "continuity"
+    },
+    {
+      "source": "backend/runtime_v3/continuity.py",
+      "line": 240,
+      "function": "apply",
+      "operation": "reject",
+      "expression": "reject('thread_reopen_requires_event')",
+      "policy_owner": "continuity"
+    },
+    {
+      "source": "backend/runtime_v3/continuity.py",
+      "line": 247,
+      "function": "apply",
+      "operation": "reject",
+      "expression": "reject('continuity_beat_invalid')",
+      "policy_owner": "continuity"
+    },
+    {
+      "source": "backend/runtime_v3/continuity.py",
+      "line": 255,
+      "function": "apply",
+      "operation": "reject",
+      "expression": "reject('continuity_external_decision')",
+      "policy_owner": "continuity"
+    },
+    {
+      "source": "backend/runtime_v3/continuity.py",
+      "line": 259,
+      "function": "apply",
+      "operation": "reject",
+      "expression": "reject('continuity_unknown_fact')",
+      "policy_owner": "continuity"
+    },
+    {
+      "source": "backend/runtime_v3/continuity.py",
+      "line": 282,
+      "function": "filter_choices",
+      "operation": "warn",
+      "expression": "resolver.warn('choices', 0, 'Неизвестное основание варианта.', code='choice_basis_invalid')",
+      "policy_owner": "continuity"
+    },
+    {
+      "source": "backend/runtime_v3/continuity.py",
+      "line": 284,
+      "function": "filter_choices",
+      "operation": "warn",
+      "expression": "resolver.warn('choices', 0, 'Некорректный смысл варианта.', code='choice_kind_invalid')",
+      "policy_owner": "continuity"
+    },
+    {
+      "source": "backend/runtime_v3/history.py",
+      "line": 8,
+      "function": "warning",
+      "operation": "append",
+      "expression": "warnings.append(dict(section=section,index=index,code=code,reason=reason))",
+      "policy_owner": "history"
+    },
+    {
+      "source": "backend/runtime_v3/initiative.py",
+      "line": 84,
+      "function": "reject",
+      "operation": "fatal",
+      "expression": "fatal('Некорректная инициатива персонажа.', code, repairable=False, section='scene_actions')",
+      "policy_owner": "initiative"
+    },
+    {
+      "source": "backend/runtime_v3/initiative.py",
+      "line": 86,
+      "function": "validate_actions",
+      "operation": "reject",
+      "expression": "reject('initiative_budget_exceeded')",
+      "policy_owner": "initiative"
+    },
+    {
+      "source": "backend/runtime_v3/initiative.py",
+      "line": 89,
+      "function": "validate_actions",
+      "operation": "reject",
+      "expression": "reject('initiative_control_mismatch')",
+      "policy_owner": "initiative"
+    },
+    {
+      "source": "backend/runtime_v3/initiative.py",
+      "line": 98,
+      "function": "validate_actions",
+      "operation": "reject",
+      "expression": "reject('initiative_actor_ineligible')",
+      "policy_owner": "initiative"
+    },
+    {
+      "source": "backend/runtime_v3/initiative.py",
+      "line": 101,
+      "function": "validate_actions",
+      "operation": "reject",
+      "expression": "reject('initiative_event_invalid')",
+      "policy_owner": "initiative"
+    },
+    {
+      "source": "backend/runtime_v3/initiative.py",
+      "line": 105,
+      "function": "validate_actions",
+      "operation": "reject",
+      "expression": "reject('initiative_duplicate')",
+      "policy_owner": "initiative"
+    },
+    {
+      "source": "backend/runtime_v3/initiative.py",
+      "line": 108,
+      "function": "validate_actions",
+      "operation": "reject",
+      "expression": "reject('initiative_evidence_invalid')",
+      "policy_owner": "initiative"
+    },
+    {
+      "source": "backend/runtime_v3/initiative.py",
+      "line": 111,
+      "function": "validate_actions",
+      "operation": "reject",
+      "expression": "reject('initiative_capability_invalid')",
+      "policy_owner": "initiative"
+    },
+    {
+      "source": "backend/runtime_v3/initiative.py",
+      "line": 113,
+      "function": "validate_actions",
+      "operation": "reject",
+      "expression": "reject('initiative_channel_invalid')",
+      "policy_owner": "initiative"
+    },
+    {
+      "source": "backend/runtime_v3/initiative.py",
+      "line": 115,
+      "function": "validate_actions",
+      "operation": "reject",
+      "expression": "reject('initiative_target_absent')",
+      "policy_owner": "initiative"
+    },
+    {
+      "source": "backend/runtime_v3/initiative.py",
+      "line": 117,
+      "function": "validate_actions",
+      "operation": "reject",
+      "expression": "reject('initiative_adult_context_required')",
+      "policy_owner": "initiative"
+    },
+    {
+      "source": "backend/runtime_v3/initiative.py",
+      "line": 95,
+      "function": "validate_actions",
+      "operation": "reject",
+      "expression": "reject('initiative_claim_invalid')",
+      "policy_owner": "initiative"
+    },
+    {
+      "source": "backend/runtime_v3/initiative.py",
+      "line": 120,
+      "function": "validate_actions",
+      "operation": "reject",
+      "expression": "reject('initiative_response_required')",
+      "policy_owner": "initiative"
+    },
+    {
+      "source": "backend/runtime_v3/initiative.py",
+      "line": 122,
+      "function": "validate_actions",
+      "operation": "reject",
+      "expression": "reject('initiative_player_evidence_required')",
+      "policy_owner": "initiative"
+    },
+    {
+      "source": "backend/runtime_v3/initiative.py",
+      "line": 129,
+      "function": "validate_actions",
+      "operation": "reject",
+      "expression": "reject('initiative_response_target_invalid')",
+      "policy_owner": "initiative"
+    },
+    {
+      "source": "backend/runtime_v3/initiative.py",
+      "line": 133,
+      "function": "validate_actions",
+      "operation": "reject",
+      "expression": "reject('initiative_response_reference_invalid')",
+      "policy_owner": "initiative"
+    },
+    {
+      "source": "backend/runtime_v3/initiative.py",
+      "line": 139,
+      "function": "validate_actions",
+      "operation": "reject",
+      "expression": "reject('initiative_knowledge_invalid')",
+      "policy_owner": "initiative"
+    },
+    {
+      "source": "backend/runtime_v3/initiative.py",
+      "line": 127,
+      "function": "validate_actions",
+      "operation": "reject",
+      "expression": "reject('initiative_consequence_required')",
+      "policy_owner": "initiative"
+    },
+    {
+      "source": "backend/runtime_v3/kinship.py",
+      "line": 51,
+      "function": "genealogy",
+      "operation": "ValueError",
+      "expression": "ValueError('Глубина родословной: 0–8, число персонажей: 1–200.')",
+      "policy_owner": "kinship"
+    },
+    {
+      "source": "backend/runtime_v3/knowledge.py",
+      "line": 24,
+      "function": "acquire_communication",
+      "operation": "ValueError",
+      "expression": "ValueError('Communication was not perceived.')",
+      "policy_owner": "knowledge"
+    },
+    {
+      "source": "backend/runtime_v3/knowledge.py",
+      "line": 28,
+      "function": "acquire_communication",
+      "operation": "ValueError",
+      "expression": "ValueError('Communication provenance mismatch.')",
+      "policy_owner": "knowledge"
+    },
+    {
+      "source": "backend/runtime_v3/knowledge.py",
+      "line": 134,
+      "function": "apply_knowledge",
+      "operation": "warn",
+      "expression": "r.warn('knowledge_gained', i, 'Противоречивые изменения требуют порядка событий.', code='knowledge_order_ambiguous')",
+      "policy_owner": "knowledge"
+    },
+    {
+      "source": "backend/runtime_v3/knowledge.py",
+      "line": 74,
+      "function": "reject",
+      "operation": "warn",
+      "expression": "r.warn('knowledge_gained', i, reason, code=code)",
+      "policy_owner": "knowledge"
+    },
+    {
+      "source": "backend/runtime_v3/knowledge.py",
+      "line": 84,
+      "function": "apply_knowledge",
+      "operation": "reject",
+      "expression": "reject('Нет подтверждённого восприятия в завершённом повествовании.')",
+      "policy_owner": "knowledge"
+    },
+    {
+      "source": "backend/runtime_v3/knowledge.py",
+      "line": 86,
+      "function": "apply_knowledge",
+      "operation": "reject",
+      "expression": "reject('Фоновое событие не меняет знания участников основной сцены.')",
+      "policy_owner": "knowledge"
+    },
+    {
+      "source": "backend/runtime_v3/knowledge.py",
+      "line": 89,
+      "function": "apply_knowledge",
+      "operation": "reject",
+      "expression": "reject('Персонаж не способен воспринять источник.')",
+      "policy_owner": "knowledge"
+    },
+    {
+      "source": "backend/runtime_v3/knowledge.py",
+      "line": 93,
+      "function": "apply_knowledge",
+      "operation": "reject",
+      "expression": "reject('Устаревшая ревизия знания.', 'knowledge_revision_conflict')",
+      "policy_owner": "knowledge"
+    },
+    {
+      "source": "backend/runtime_v3/knowledge.py",
+      "line": 96,
+      "function": "apply_knowledge",
+      "operation": "reject",
+      "expression": "reject('Некорректный статус знания.')",
+      "policy_owner": "knowledge"
+    },
+    {
+      "source": "backend/runtime_v3/knowledge.py",
+      "line": 98,
+      "function": "apply_knowledge",
+      "operation": "reject",
+      "expression": "reject('Повторное установление убеждения требует его ревизии.', 'knowledge_revision_conflict')",
+      "policy_owner": "knowledge"
+    },
+    {
+      "source": "backend/runtime_v3/knowledge.py",
+      "line": 104,
+      "function": "apply_knowledge",
+      "operation": "reject",
+      "expression": "reject('Исправление требует прежних fact_id в том же событии.')",
+      "policy_owner": "knowledge"
+    },
+    {
+      "source": "backend/runtime_v3/knowledge.py",
+      "line": 155,
+      "function": "apply_knowledge",
+      "operation": "warn",
+      "expression": "r.warn('knowledge_gained', i, 'Нет прежнего убеждения для опровержения.', code='knowledge_path_invalid')",
+      "policy_owner": "knowledge"
+    },
+    {
+      "source": "backend/runtime_v3/knowledge.py",
+      "line": 157,
+      "function": "apply_knowledge",
+      "operation": "warn",
+      "expression": "r.warn('knowledge_gained', i, 'Нет исправляемого убеждения у персонажа.', code='knowledge_path_invalid')",
+      "policy_owner": "knowledge"
+    },
+    {
+      "source": "backend/runtime_v3/knowledge.py",
+      "line": 160,
+      "function": "apply_knowledge",
+      "operation": "warn",
+      "expression": "r.warn('knowledge_gained', i, 'Ревизия изменилась в ходе.', code='knowledge_revision_conflict')",
+      "policy_owner": "knowledge"
+    },
+    {
+      "source": "backend/runtime_v3/knowledge.py",
+      "line": 162,
+      "function": "apply_knowledge",
+      "operation": "warn",
+      "expression": "r.warn('knowledge_gained', i, 'Повторное установление требует ревизии.', code='knowledge_revision_conflict')",
+      "policy_owner": "knowledge"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 95,
+      "function": "validate_life_state",
+      "operation": "ValueError",
+      "expression": "ValueError('dead actor in ordinary scene')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 97,
+      "function": "validate_life_state",
+      "operation": "ValueError",
+      "expression": "ValueError('dead remote actor')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 48,
+      "function": "reference",
+      "operation": "ValueError",
+      "expression": "ValueError('life/social fact must reference all affected identities')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 53,
+      "function": "validate_life_state",
+      "operation": "ValueError",
+      "expression": "ValueError('invalid objective relation endpoints/identity')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 55,
+      "function": "validate_life_state",
+      "operation": "ValueError",
+      "expression": "ValueError('symmetric relation endpoints must be canonical sorted IDs')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 65,
+      "function": "validate_life_state",
+      "operation": "ValueError",
+      "expression": "ValueError('relation closes before it starts')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 75,
+      "function": "validate_life_state",
+      "operation": "ValueError",
+      "expression": "ValueError('cyclic parentage')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 78,
+      "function": "validate_life_state",
+      "operation": "ValueError",
+      "expression": "ValueError('invalid condition identity/actor')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 80,
+      "function": "validate_life_state",
+      "operation": "ValueError",
+      "expression": "ValueError('conditions restrict capabilities; cannot grant them')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 82,
+      "function": "validate_life_state",
+      "operation": "ValueError",
+      "expression": "ValueError('invalid condition chronology')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 93,
+      "function": "validate_life_state",
+      "operation": "ValueError",
+      "expression": "ValueError('current name differs from identity chronology')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 130,
+      "function": "_records",
+      "operation": "warn",
+      "expression": "resolver.warn(section,i,'Нужны уникальный ID и подтверждённое основание.',code='life_transition_invalid')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 58,
+      "function": "validate_life_state",
+      "operation": "ValueError",
+      "expression": "ValueError('active relation has a closure')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 60,
+      "function": "validate_life_state",
+      "operation": "ValueError",
+      "expression": "ValueError('duplicate active relation phase')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 63,
+      "function": "validate_life_state",
+      "operation": "ValueError",
+      "expression": "ValueError('dead actor cannot have an active partnership')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 69,
+      "function": "validate_life_state",
+      "operation": "ValueError",
+      "expression": "ValueError('parent cannot be born at or after child birth')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 90,
+      "function": "validate_life_state",
+      "operation": "ValueError",
+      "expression": "ValueError('inconsistent identity chronology')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 285,
+      "function": "salvage_life_data",
+      "operation": "ValueError",
+      "expression": "ValueError('Malformed condition section requires explicit repair; capability safety cannot be established')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 148,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('only established/completed truth, not intent or proposal')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 251,
+      "function": "apply_life",
+      "operation": "warn",
+      "expression": "resolver.warn(section,index,str(exc),entity=key,code='life_transition_invalid')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 150,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('unknown actor')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 151,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('protected background actor')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 174,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('birth identity changes require the structured naming lifecycle')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 176,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('identity choice needs player evidence')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 293,
+      "function": "salvage_life_data",
+      "operation": "ValueError",
+      "expression": "ValueError('Malformed condition requires explicit repair; capability safety cannot be established')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 155,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('Autonomous protagonist death is disabled by risk policy')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 168,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('developmental stage contradicts established birth date')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 171,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('death cannot be undone by ordinary extraction; use rollback')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 179,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('empty name')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 180,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('name choice needs player evidence')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 182,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('missing original name')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 204,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('unknown condition actor')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 205,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('protected background actor')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 206,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('terminal condition: new phase needs new ID')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 207,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('new condition must begin active')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 213,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('condition identity cannot change')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 220,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('closed phase is immutable; use new ID')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 230,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('relation identity cannot be rewritten')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 235,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('unknown relation actor')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 236,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('protected background relation')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 238,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('voluntary relation needs explicit player choice')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 232,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('cannot close unknown relation')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/life.py",
+      "line": 242,
+      "function": "apply_life",
+      "operation": "ValueError",
+      "expression": "ValueError('closure needs NPC decision or player choice')",
+      "policy_owner": "life"
+    },
+    {
+      "source": "backend/runtime_v3/lifecycle.py",
+      "line": 71,
+      "function": "apply_changes",
+      "operation": "warn",
+      "expression": "resolver.warn('character_changes',index,'Ожидался список lifecycle.',field,cid)",
+      "policy_owner": "lifecycle"
+    },
+    {
+      "source": "backend/runtime_v3/lifecycle.py",
+      "line": 73,
+      "function": "apply_changes",
+      "operation": "warn",
+      "expression": "resolver.warn('character_changes',index,'Лимит 24 lifecycle updates.',field,cid,code='motivation_budget')",
+      "policy_owner": "lifecycle"
+    },
+    {
+      "source": "backend/runtime_v3/lifecycle.py",
+      "line": 77,
+      "function": "apply_changes",
+      "operation": "warn",
+      "expression": "resolver.warn('character_changes',index,'Общий лимит 24 lifecycle updates.',field,cid,code='motivation_budget')",
+      "policy_owner": "lifecycle"
+    },
+    {
+      "source": "backend/runtime_v3/lifecycle.py",
+      "line": 80,
+      "function": "reject",
+      "operation": "warn",
+      "expression": "resolver.warn('character_changes',index,reason,field,cid,code=code)",
+      "policy_owner": "lifecycle"
+    },
+    {
+      "source": "backend/runtime_v3/lifecycle.py",
+      "line": 82,
+      "function": "apply_changes",
+      "operation": "reject",
+      "expression": "reject('Нет evidence lifecycle.')",
+      "policy_owner": "lifecycle"
+    },
+    {
+      "source": "backend/runtime_v3/lifecycle.py",
+      "line": 84,
+      "function": "apply_changes",
+      "operation": "reject",
+      "expression": "reject('Фоновая симуляция не меняет мотивацию EXTERNAL.', 'motivation_agency')",
+      "policy_owner": "lifecycle"
+    },
+    {
+      "source": "backend/runtime_v3/lifecycle.py",
+      "line": 88,
+      "function": "apply_changes",
+      "operation": "reject",
+      "expression": "reject('Неизвестный статус.')",
+      "policy_owner": "lifecycle"
+    },
+    {
+      "source": "backend/runtime_v3/lifecycle.py",
+      "line": 94,
+      "function": "apply_changes",
+      "operation": "reject",
+      "expression": "reject('Устаревшая версия мотивации.', 'motivation_conflict')",
+      "policy_owner": "lifecycle"
+    },
+    {
+      "source": "backend/runtime_v3/lifecycle.py",
+      "line": 104,
+      "function": "apply_changes",
+      "operation": "reject",
+      "expression": "reject('Старая реплика не подтверждает новое состояние намерения.', 'motivation_remote_replay')",
+      "policy_owner": "lifecycle"
+    },
+    {
+      "source": "backend/runtime_v3/lifecycle.py",
+      "line": 107,
+      "function": "apply_changes",
+      "operation": "reject",
+      "expression": "reject('Ввод с планом действия не доказывает его выполнение.', 'motivation_completion_source')",
+      "policy_owner": "lifecycle"
+    },
+    {
+      "source": "backend/runtime_v3/lifecycle.py",
+      "line": 112,
+      "function": "apply_changes",
+      "operation": "reject",
+      "expression": "reject('Отказ/замена EXTERNAL требует явного решения игрока.', 'motivation_agency')",
+      "policy_owner": "lifecycle"
+    },
+    {
+      "source": "backend/runtime_v3/lifecycle.py",
+      "line": 117,
+      "function": "apply_changes",
+      "operation": "reject",
+      "expression": "reject('Некорректные semantic dependencies.')",
+      "policy_owner": "lifecycle"
+    },
+    {
+      "source": "backend/runtime_v3/lifecycle.py",
+      "line": 91,
+      "function": "apply_changes",
+      "operation": "reject",
+      "expression": "reject('Закрытая запись не переоткрывается.', 'motivation_terminal')",
+      "policy_owner": "lifecycle"
+    },
+    {
+      "source": "backend/runtime_v3/lifecycle.py",
+      "line": 102,
+      "function": "apply_changes",
+      "operation": "reject",
+      "expression": "reject('Источник не является принятым событием персонажа.')",
+      "policy_owner": "lifecycle"
+    },
+    {
+      "source": "backend/runtime_v3/lifecycle.py",
+      "line": 120,
+      "function": "apply_changes",
+      "operation": "reject",
+      "expression": "reject('Текст существующей записи нельзя переписать; используй superseded и новую запись.')",
+      "policy_owner": "lifecycle"
+    },
+    {
+      "source": "backend/runtime_v3/lifecycle.py",
+      "line": 122,
+      "function": "apply_changes",
+      "operation": "reject",
+      "expression": "reject('Возобновление требует semantic assertion unblocked.')",
+      "policy_owner": "lifecycle"
+    },
+    {
+      "source": "backend/runtime_v3/lifecycle.py",
+      "line": 124,
+      "function": "apply_changes",
+      "operation": "reject",
+      "expression": "reject('Переоценка требует явного semantic assertion still_active/unblocked.')",
+      "policy_owner": "lifecycle"
+    },
+    {
+      "source": "backend/runtime_v3/lifecycle.py",
+      "line": 139,
+      "function": "apply_changes",
+      "operation": "reject",
+      "expression": "reject('Неизвестный motivation ID.')",
+      "policy_owner": "lifecycle"
+    },
+    {
+      "source": "backend/runtime_v3/lifecycle.py",
+      "line": 142,
+      "function": "apply_changes",
+      "operation": "reject",
+      "expression": "reject('Новая запись требует непустой текст и active.')",
+      "policy_owner": "lifecycle"
+    },
+    {
+      "source": "backend/runtime_v3/lifecycle.py",
+      "line": 144,
+      "function": "apply_changes",
+      "operation": "reject",
+      "expression": "reject('Новая мотивация не задана игроком.', 'motivation_agency')",
+      "policy_owner": "lifecycle"
+    },
+    {
+      "source": "backend/runtime_v3/lifecycle.py",
+      "line": 220,
+      "function": "salvage_metadata",
+      "operation": "ValueError",
+      "expression": "ValueError('dependencies')",
+      "policy_owner": "lifecycle"
+    },
+    {
+      "source": "backend/runtime_v3/long_term.py",
+      "line": 334,
+      "function": "advance_clock",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Длительный переход не может вернуть время назад.\")",
+      "policy_owner": "long_term"
+    },
+    {
+      "source": "backend/runtime_v3/long_term.py",
+      "line": 544,
+      "function": "run",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Пустой результат длительного перехода.\")",
+      "policy_owner": "long_term"
+    },
+    {
+      "source": "backend/runtime_v3/long_term.py",
+      "line": 571,
+      "function": "run",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Время группы задаётся Runtime, а не Extraction.\")",
+      "policy_owner": "long_term"
+    },
+    {
+      "source": "backend/runtime_v3/long_term.py",
+      "line": 579,
+      "function": "run",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Лимит событий группы превышен.\")",
+      "policy_owner": "long_term"
+    },
+    {
+      "source": "backend/runtime_v3/long_term.py",
+      "line": 633,
+      "function": "run",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Исход изменяет установленную временную границу.\")",
+      "policy_owner": "long_term"
+    },
+    {
+      "source": "backend/runtime_v3/long_term.py",
+      "line": 639,
+      "function": "run",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Фоновый исход изменяет управляемого персонажа.\")",
+      "policy_owner": "long_term"
+    },
+    {
+      "source": "backend/runtime_v3/long_term.py",
+      "line": 654,
+      "function": "run",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Нет принятого события, подтверждающего исход.\")",
+      "policy_owner": "long_term"
+    },
+    {
+      "source": "backend/runtime_v3/long_term.py",
+      "line": 588,
+      "function": "run",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Повреждены участники события.\")",
+      "policy_owner": "long_term"
+    },
+    {
+      "source": "backend/runtime_v3/long_term.py",
+      "line": 593,
+      "function": "run",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Лимит участников события превышен.\")",
+      "policy_owner": "long_term"
+    },
+    {
+      "source": "backend/runtime_v3/long_term.py",
+      "line": 597,
+      "function": "run",
+      "operation": "ValueError",
+      "expression": "ValueError(\n                        \"Фоновое событие использует управляемого персонажа.\"\n                    )",
+      "policy_owner": "long_term"
+    },
+    {
+      "source": "backend/runtime_v3/long_term.py",
+      "line": 601,
+      "function": "run",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Событие не связано с выбранной причиной.\")",
+      "policy_owner": "long_term"
+    },
+    {
+      "source": "backend/runtime_v3/long_term.py",
+      "line": 603,
+      "function": "run",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Событие выходит за выбранную временную границу.\")",
+      "policy_owner": "long_term"
+    },
+    {
+      "source": "backend/runtime_v3/long_term.py",
+      "line": 611,
+      "function": "run",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Событие не указывает выбранную причину исхода.\")",
+      "policy_owner": "long_term"
+    },
+    {
+      "source": "backend/runtime_v3/long_term.py",
+      "line": 650,
+      "function": "run",
+      "operation": "ValueError",
+      "expression": "ValueError(\n                        \"Создание персонажа не подтверждено принятой ролью или связью.\"\n                    )",
+      "policy_owner": "long_term"
+    },
+    {
+      "source": "backend/runtime_v3/long_term_calendar.py",
+      "line": 18,
+      "function": "target_minute",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Выбери интервал от 1 до 200 единиц.\")",
+      "policy_owner": "long_term_calendar"
+    },
+    {
+      "source": "backend/runtime_v3/long_term_calendar.py",
+      "line": 50,
+      "function": "target_minute",
+      "operation": "ValueError",
+      "expression": "ValueError(\"До 7 суток используй обычный пропуск времени.\")",
+      "policy_owner": "long_term_calendar"
+    },
+    {
+      "source": "backend/runtime_v3/long_term_calendar.py",
+      "line": 52,
+      "function": "target_minute",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Интервал выходит за диапазон календаря.\")",
+      "policy_owner": "long_term_calendar"
+    },
+    {
+      "source": "backend/runtime_v3/long_term_calendar.py",
+      "line": 48,
+      "function": "target_minute",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Неизвестная единица длительного перехода.\")",
+      "policy_owner": "long_term_calendar"
+    },
+    {
+      "source": "backend/runtime_v3/long_term_calendar.py",
+      "line": 25,
+      "function": "target_minute",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Для месяцев и лет нужна установленная дата календаря.\")",
+      "policy_owner": "long_term_calendar"
+    },
+    {
+      "source": "backend/runtime_v3/long_term_promotions.py",
+      "line": 14,
+      "function": "prepare",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Не более двух новых личностей на группу исходов.\")",
+      "policy_owner": "long_term_promotions"
+    },
+    {
+      "source": "backend/runtime_v3/long_term_promotions.py",
+      "line": 33,
+      "function": "prepare",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Повреждена предлагаемая личность.\")",
+      "policy_owner": "long_term_promotions"
+    },
+    {
+      "source": "backend/runtime_v3/long_term_promotions.py",
+      "line": 37,
+      "function": "prepare",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Не указана личность нового персонажа.\")",
+      "policy_owner": "long_term_promotions"
+    },
+    {
+      "source": "backend/runtime_v3/long_term_promotions.py",
+      "line": 40,
+      "function": "prepare",
+      "operation": "ValueError",
+      "expression": "ValueError(\n                \"Promotion не может заменить существующий canonical ID новой личностью или переименовать его.\"\n            )",
+      "policy_owner": "long_term_promotions"
+    },
+    {
+      "source": "backend/runtime_v3/long_term_promotions.py",
+      "line": 44,
+      "function": "prepare",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Неоднозначная существующая личность.\")",
+      "policy_owner": "long_term_promotions"
+    },
+    {
+      "source": "backend/runtime_v3/long_term_promotions.py",
+      "line": 73,
+      "function": "prepare",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Новый персонаж не нужен принятой роли или связи.\")",
+      "policy_owner": "long_term_promotions"
+    },
+    {
+      "source": "backend/runtime_v3/long_term_promotions.py",
+      "line": 47,
+      "function": "prepare",
+      "operation": "ValueError",
+      "expression": "ValueError(\n                    \"Возможный дубликат: используй существующий canonical ID, не объединяй личности по имени.\"\n                )",
+      "policy_owner": "long_term_promotions"
+    },
+    {
+      "source": "backend/runtime_v3/manual.py",
+      "line": 10,
+      "function": "edit_motivation",
+      "operation": "ValueError",
+      "expression": "ValueError('Можно редактировать только управляемого персонажа.')",
+      "policy_owner": "manual"
+    },
+    {
+      "source": "backend/runtime_v3/manual.py",
+      "line": 11,
+      "function": "edit_motivation",
+      "operation": "ValueError",
+      "expression": "ValueError('Мёртвый персонаж не получает новые цели.')",
+      "policy_owner": "manual"
+    },
+    {
+      "source": "backend/runtime_v3/manual.py",
+      "line": 23,
+      "function": "edit_relationship",
+      "operation": "ValueError",
+      "expression": "ValueError('Редактировать можно только отношения управляемого персонажа.')",
+      "policy_owner": "manual"
+    },
+    {
+      "source": "backend/runtime_v3/manual.py",
+      "line": 24,
+      "function": "edit_relationship",
+      "operation": "ValueError",
+      "expression": "ValueError('Мёртвый персонаж не меняет чувства.')",
+      "policy_owner": "manual"
+    },
+    {
+      "source": "backend/runtime_v3/manual.py",
+      "line": 25,
+      "function": "edit_relationship",
+      "operation": "ValueError",
+      "expression": "ValueError('Выбери другого существующего персонажа.')",
+      "policy_owner": "manual"
+    },
+    {
+      "source": "backend/runtime_v3/manual.py",
+      "line": 14,
+      "function": "edit_motivation",
+      "operation": "ValueError",
+      "expression": "ValueError('Недопустимый размер цели или намерений.')",
+      "policy_owner": "manual"
+    },
+    {
+      "source": "backend/runtime_v3/manual.py",
+      "line": 28,
+      "function": "edit_relationship",
+      "operation": "ValueError",
+      "expression": "ValueError('Отношение уже удалено.')",
+      "policy_owner": "manual"
+    },
+    {
+      "source": "backend/runtime_v3/manual.py",
+      "line": 31,
+      "function": "edit_relationship",
+      "operation": "ValueError",
+      "expression": "ValueError('Опиши отношение персонажа.')",
+      "policy_owner": "manual"
+    },
+    {
+      "source": "backend/runtime_v3/migration.py",
+      "line": 47,
+      "function": "migrate_v2",
+      "operation": "fatal",
+      "expression": "fatal('невозможно мигрировать неполное сохранение', 'migration_invalid')",
+      "policy_owner": "migration"
+    },
+    {
+      "source": "backend/runtime_v3/migration.py",
+      "line": 107,
+      "function": "migrate_v2",
+      "operation": "fatal",
+      "expression": "fatal('неизвестный controlled actor при миграции', 'migration_invalid')",
+      "policy_owner": "migration"
+    },
+    {
+      "source": "backend/runtime_v3/migration.py",
+      "line": 66,
+      "function": "location",
+      "operation": "fatal",
+      "expression": "fatal('неоднозначное место при миграции: нужен canonical ID', 'migration_invalid')",
+      "policy_owner": "migration"
+    },
+    {
+      "source": "backend/runtime_v3/milestones.py",
+      "line": 200,
+      "function": "query",
+      "operation": "ValueError",
+      "expression": "ValueError('Недопустимый размер страницы milestones.')",
+      "policy_owner": "milestones"
+    },
+    {
+      "source": "backend/runtime_v3/milestones.py",
+      "line": 202,
+      "function": "query",
+      "operation": "ValueError",
+      "expression": "ValueError('Начало диапазона позже конца.')",
+      "policy_owner": "milestones"
+    },
+    {
+      "source": "backend/runtime_v3/milestones.py",
+      "line": 46,
+      "function": "transition_provenance",
+      "operation": "warn",
+      "expression": "resolver.warn('provenance', None, 'Неизвестное или несвязанное событие-источник.',\n                          code='causal_reference_invalid')",
+      "policy_owner": "milestones"
+    },
+    {
+      "source": "backend/runtime_v3/milestones.py",
+      "line": 56,
+      "function": "transition_provenance",
+      "operation": "warn",
+      "expression": "resolver.warn('provenance', None, 'Неизвестный или несвязанный процесс-источник.',\n                          code='causal_reference_invalid')",
+      "policy_owner": "milestones"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 641,
+      "function": "fatal",
+      "operation": "StructuralDeltaError",
+      "expression": "StructuralDeltaError('Runtime v3: ' + message, code=code, repairable=repairable, **path)",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 667,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('неизвестный главный герой')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 674,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('несогласованные периоды главного героя')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 689,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('неизвестное место камеры')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 692,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('неизвестные или повторные участники камеры')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 694,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('неизвестный controlled actor')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 696,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('controlled actor отсутствует в камере')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 699,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('повторный участник удалённого взаимодействия')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 748,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('время или номер хода движется назад')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 81,
+      "function": "valid_profile",
+      "operation": "ValueError",
+      "expression": "ValueError('custom calendar requires month lengths in 1..99')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 83,
+      "function": "valid_profile",
+      "operation": "ValueError",
+      "expression": "ValueError('Gregorian month lengths are defined by datetime')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 85,
+      "function": "valid_profile",
+      "operation": "ValueError",
+      "expression": "ValueError('month_names must match months')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 87,
+      "function": "valid_profile",
+      "operation": "ValueError",
+      "expression": "ValueError('Gregorian calendar has seven weekdays')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 89,
+      "function": "valid_profile",
+      "operation": "ValueError",
+      "expression": "ValueError('duplicate observance ID')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 105,
+      "function": "valid_anchor",
+      "operation": "ValueError",
+      "expression": "ValueError('start_weekday outside profile week')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 125,
+      "function": "one_temporal_basis",
+      "operation": "ValueError",
+      "expression": "ValueError('temporal value requires exactly one date, weekday, day_offset or minute_offset')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 127,
+      "function": "one_temporal_basis",
+      "operation": "ValueError",
+      "expression": "ValueError('minute_offset already defines an exact relative instant')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 129,
+      "function": "one_temporal_basis",
+      "operation": "ValueError",
+      "expression": "ValueError('choose exact time or an imprecise period')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 315,
+      "function": "valid_weights",
+      "operation": "ValueError",
+      "expression": "ValueError('invalid child count weights')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 391,
+      "function": "valid_visual_feature",
+      "operation": "ValueError",
+      "expression": "ValueError('appearance category/kind mismatch')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 427,
+      "function": "valid_period",
+      "operation": "ValueError",
+      "expression": "ValueError('invalid portrait period')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 663,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal(str(exc), 'current_state_schema_invalid')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 671,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('некорректный период управления')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 677,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('неизвестный персонаж камеры/POV')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 702,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('некорректный участник удалённого взаимодействия')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 705,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('неизвестное место персонажа', entity=cid)",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 707,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('позиция участника не совпадает с камерой', entity=cid)",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 711,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('повреждена ссылка текущего Knowledge', entity=key)",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 713,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('повреждена ссылка исправления Knowledge', entity=key)",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 723,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('повреждена ссылка отношения', entity=key)",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 725,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('повреждено измерение отношений', entity=key)",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 732,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('неизвестный участник последствий линии', section='threads', entity=item['id'])",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 735,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('неизвестное место scheduled event', section='scheduled_events', entity=item['id'])",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 738,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal(str(exc), 'life_state_invalid')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 741,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal(str(exc), 'residence_state_invalid')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 744,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal(str(exc), 'reproduction_state_invalid')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 780,
+      "function": "apply",
+      "operation": "fatal",
+      "expression": "fatal('patch создан для другого состояния', 'stale_patch')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 393,
+      "function": "valid_visual_feature",
+      "operation": "ValueError",
+      "expression": "ValueError('condition visual must reference #38, without a copied description')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 394,
+      "function": "valid_visual_feature",
+      "operation": "ValueError",
+      "expression": "ValueError('cosmetic trait must have text, not a condition link')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 681,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('конфликт canonical ID', section=section, entity=key)",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 686,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('повторный motivation ID', section=field, entity=cid)",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 719,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('противоречащие текущие Knowledge одного слота', entity=key)",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 729,
+      "function": "assert_world_state_v3_invariants",
+      "operation": "fatal",
+      "expression": "fatal('неизвестный связанный персонаж', section=section, entity=key)",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 784,
+      "function": "apply",
+      "operation": "fatal",
+      "expression": "fatal('неизвестная секция patch')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/models.py",
+      "line": 818,
+      "function": "salvage_calendar_data",
+      "operation": "ValueError",
+      "expression": "ValueError('duplicate calendar entry')",
+      "policy_owner": "models"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 176,
+      "function": "reject",
+      "operation": "fatal",
+      "expression": "fatal('Предложенные последствия не соответствуют политике истории.',code,repairable=False,**details)",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 190,
+      "function": "validate_risk",
+      "operation": "reject",
+      "expression": "reject('risk_budget_exceeded')",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 290,
+      "function": "validate_developments",
+      "operation": "reject",
+      "expression": "reject('pacing_context_missing')",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 291,
+      "function": "validate_developments",
+      "operation": "reject",
+      "expression": "reject('pacing_budget_exceeded')",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 318,
+      "function": "validate_threads",
+      "operation": "reject",
+      "expression": "reject('pacing_budget_exceeded')",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 319,
+      "function": "validate_threads",
+      "operation": "reject",
+      "expression": "reject('pacing_thread_cap')",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 196,
+      "function": "validate_risk",
+      "operation": "reject",
+      "expression": "reject('risk_evidence_invalid')",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 197,
+      "function": "validate_risk",
+      "operation": "reject",
+      "expression": "reject('risk_grounding_missing')",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 299,
+      "function": "validate_developments",
+      "operation": "reject",
+      "expression": "reject('pacing_escalation_limit')",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 302,
+      "function": "validate_developments",
+      "operation": "reject",
+      "expression": "reject('pacing_candidate_invalid')",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 303,
+      "function": "validate_developments",
+      "operation": "reject",
+      "expression": "reject('pacing_grounding_missing')",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 329,
+      "function": "validate_threads",
+      "operation": "reject",
+      "expression": "reject('favorable_path_required',entity=thread['id'])",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 331,
+      "function": "validate_threads",
+      "operation": "reject",
+      "expression": "reject('favorable_path_ungrounded')",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 363,
+      "function": "validate_resolved_consequences",
+      "operation": "reject",
+      "expression": "reject('risk_event_not_accepted')",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 379,
+      "function": "validate_resolved_consequences",
+      "operation": "reject",
+      "expression": "reject('risk_canonical_consequence_missing',consequence=kind,entity=actor)",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 193,
+      "function": "validate_risk",
+      "operation": "reject",
+      "expression": "reject('risk_claim_invalid')",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 202,
+      "function": "validate_risk",
+      "operation": "reject",
+      "expression": "reject('risk_severity_mismatch')",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 203,
+      "function": "validate_risk",
+      "operation": "reject",
+      "expression": "reject('risk_death_denied',entity=cid)",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 204,
+      "function": "validate_risk",
+      "operation": "reject",
+      "expression": "reject('risk_denied',consequence=claim['kind'],entity=cid)",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 214,
+      "function": "validate_risk",
+      "operation": "reject",
+      "expression": "reject('risk_pacing_required',entity=cid)",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 284,
+      "function": "validate_developments",
+      "operation": "reject",
+      "expression": "reject('pacing_candidate_reused')",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 298,
+      "function": "validate_developments",
+      "operation": "reject",
+      "expression": "reject('pacing_claim_invalid')",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 327,
+      "function": "validate_threads",
+      "operation": "reject",
+      "expression": "reject('favorable_resolution_required')",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 334,
+      "function": "validate_threads",
+      "operation": "reject",
+      "expression": "reject('favorable_path_unknown_basis')",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 355,
+      "function": "validate_resolved_consequences",
+      "operation": "reject",
+      "expression": "reject('risk_denied',consequence=category,entity=key)",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 254,
+      "function": "validate_risk",
+      "operation": "reject",
+      "expression": "reject('risk_denied',consequence=key,entity=cid)",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 228,
+      "function": "validate_risk",
+      "operation": "reject",
+      "expression": "reject('risk_death_denied',entity=cid)",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 229,
+      "function": "validate_risk",
+      "operation": "reject",
+      "expression": "reject('risk_classification_required',entity=cid)",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 231,
+      "function": "validate_risk",
+      "operation": "reject",
+      "expression": "reject('risk_classification_required',entity=cid)",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 236,
+      "function": "validate_risk",
+      "operation": "reject",
+      "expression": "reject('risk_classification_required',entity=cid)",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 241,
+      "function": "validate_risk",
+      "operation": "reject",
+      "expression": "reject('risk_classification_required',entity=cid)",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 243,
+      "function": "validate_risk",
+      "operation": "reject",
+      "expression": "reject('risk_severity_mismatch')",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/pacing.py",
+      "line": 245,
+      "function": "validate_risk",
+      "operation": "reject",
+      "expression": "reject('risk_severity_mismatch')",
+      "policy_owner": "pacing"
+    },
+    {
+      "source": "backend/runtime_v3/personality.py",
+      "line": 232,
+      "function": "apply_personality",
+      "operation": "warn",
+      "expression": "resolver.warn('personality_deltas', i, 'Неизвестная ссылка на canonical опыт.', code='personality_source_invalid')",
+      "policy_owner": "personality"
+    },
+    {
+      "source": "backend/runtime_v3/personality.py",
+      "line": 264,
+      "function": "history_query",
+      "operation": "ValueError",
+      "expression": "ValueError('Недопустимый запрос истории развития.')",
+      "policy_owner": "personality"
+    },
+    {
+      "source": "backend/runtime_v3/personality.py",
+      "line": 137,
+      "function": "apply_personality",
+      "operation": "warn",
+      "expression": "resolver.warn('development_evidence', i, 'Источник опыта не является принятым событием персонажа.', code='development_source_invalid')",
+      "policy_owner": "personality"
+    },
+    {
+      "source": "backend/runtime_v3/personality.py",
+      "line": 141,
+      "function": "apply_personality",
+      "operation": "warn",
+      "expression": "resolver.warn('development_evidence', i, 'Нет завершённого добровольного действия EXTERNAL actor из player_input.', code='development_agency_invalid')",
+      "policy_owner": "personality"
+    },
+    {
+      "source": "backend/runtime_v3/personality.py",
+      "line": 166,
+      "function": "apply_personality",
+      "operation": "warn",
+      "expression": "resolver.warn('personality_deltas', i, 'Нет canonical профиля персонажа.', code='personality_actor_invalid')",
+      "policy_owner": "personality"
+    },
+    {
+      "source": "backend/runtime_v3/personality.py",
+      "line": 186,
+      "function": "apply_personality",
+      "operation": "warn",
+      "expression": "resolver.warn('personality_deltas', i, 'Один обычный эпизод/эмоция или течение времени недостаточны.', code='personality_evidence_insufficient')",
+      "policy_owner": "personality"
+    },
+    {
+      "source": "backend/runtime_v3/personality.py",
+      "line": 188,
+      "function": "apply_personality",
+      "operation": "warn",
+      "expression": "resolver.warn('personality_deltas', i, 'Для младенца допустим только наблюдаемый темперамент.', code='personality_development_invalid')",
+      "policy_owner": "personality"
+    },
+    {
+      "source": "backend/runtime_v3/personality.py",
+      "line": 196,
+      "function": "apply_personality",
+      "operation": "ValueError",
+      "expression": "ValueError('Частично применённая дельта.')",
+      "policy_owner": "personality"
+    },
+    {
+      "source": "backend/runtime_v3/personality.py",
+      "line": 198,
+      "function": "apply_personality",
+      "operation": "ValueError",
+      "expression": "ValueError('Повторная операция одного поля.')",
+      "policy_owner": "personality"
+    },
+    {
+      "source": "backend/runtime_v3/personality.py",
+      "line": 221,
+      "function": "apply_personality",
+      "operation": "ValueError",
+      "expression": "ValueError('Профиль превышает ограничение в 48 характеристик.')",
+      "policy_owner": "personality"
+    },
+    {
+      "source": "backend/runtime_v3/personality.py",
+      "line": 223,
+      "function": "apply_personality",
+      "operation": "warn",
+      "expression": "resolver.warn('personality_deltas', i, str(exc), code='personality_conflict')",
+      "policy_owner": "personality"
+    },
+    {
+      "source": "backend/runtime_v3/personality.py",
+      "line": 202,
+      "function": "apply_personality",
+      "operation": "ValueError",
+      "expression": "ValueError('Конфликтующие дельты одного хода.')",
+      "policy_owner": "personality"
+    },
+    {
+      "source": "backend/runtime_v3/personality.py",
+      "line": 204,
+      "function": "apply_personality",
+      "operation": "ValueError",
+      "expression": "ValueError('Устаревшее ожидаемое значение профиля.')",
+      "policy_owner": "personality"
+    },
+    {
+      "source": "backend/runtime_v3/personality.py",
+      "line": 206,
+      "function": "apply_personality",
+      "operation": "ValueError",
+      "expression": "ValueError('Черта уже установлена.')",
+      "policy_owner": "personality"
+    },
+    {
+      "source": "backend/runtime_v3/personality.py",
+      "line": 208,
+      "function": "apply_personality",
+      "operation": "ValueError",
+      "expression": "ValueError('Изменяемая черта отсутствует или принадлежит другому полю.')",
+      "policy_owner": "personality"
+    },
+    {
+      "source": "backend/runtime_v3/personality.py",
+      "line": 210,
+      "function": "apply_personality",
+      "operation": "ValueError",
+      "expression": "ValueError('Удаление не должно задавать новый текст.')",
+      "policy_owner": "personality"
+    },
+    {
+      "source": "backend/runtime_v3/personality.py",
+      "line": 213,
+      "function": "apply_personality",
+      "operation": "ValueError",
+      "expression": "ValueError('Пустая черта.')",
+      "policy_owner": "personality"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 38,
+      "function": "validate_record",
+      "operation": "ValueError",
+      "expression": "ValueError('Неизвестное место вещи.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 40,
+      "function": "validate_record",
+      "operation": "ValueError",
+      "expression": "ValueError('У потерянной/уничтоженной вещи нет установленного держателя.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 42,
+      "function": "validate_record",
+      "operation": "ValueError",
+      "expression": "ValueError('Нет факта provenance вещи.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 62,
+      "function": "_transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Пустое изменение вещи.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 67,
+      "function": "_transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Нужно использовать существующий canonical ID вещи.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 69,
+      "function": "_transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Переименование идентичности не является переходом владения.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 70,
+      "function": "_transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Уничтоженную вещь нельзя восстановить сменой владельца/места.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 71,
+      "function": "_transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Изменение требует совершившегося действия/последствия.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 75,
+      "function": "_transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Продажа/подарок требуют добровольного решения владельца.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 82,
+      "function": "_transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Передача собственности требует явного держателя и места, допустим null.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 84,
+      "function": "_transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Смена держателя требует места или явного null; не переносить старое место.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 102,
+      "function": "_transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Возврат требует передачи установленному владельцу без смены собственности.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 104,
+      "function": "_transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Перемещение меняет только место.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 105,
+      "function": "_transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Нет изменения состояния вещи.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 36,
+      "function": "validate_record",
+      "operation": "ValueError",
+      "expression": "ValueError('Неизвестный персонаж вещи.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 65,
+      "function": "_transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Новая вещь требует отдельной подтверждённой идентичности.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 78,
+      "function": "_transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Приобретение/продажа/подарок требуют нового владельца.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 80,
+      "function": "_transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Потеря, возврат держателю и перемещение не меняют собственность.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 87,
+      "function": "_transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Потеря должна прекратить физическое обладание.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 88,
+      "function": "_transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Место после потери должно быть установлено явно или неизвестно.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 52,
+      "function": "salvage_possessions",
+      "operation": "ValueError",
+      "expression": "ValueError('Конфликт ID вещи.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 91,
+      "function": "_transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Уничтожение прекращает физическое обладание.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 128,
+      "function": "apply_possessions",
+      "operation": "ValueError",
+      "expression": "ValueError('Несколько переходов одной вещи требуют порядка событий.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 131,
+      "function": "apply_possessions",
+      "operation": "ValueError",
+      "expression": "ValueError('Нет принятого Event/Fact вещи.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 133,
+      "function": "apply_possessions",
+      "operation": "ValueError",
+      "expression": "ValueError('Требуется совершившийся исход в повествовании.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 139,
+      "function": "apply_possessions",
+      "operation": "ValueError",
+      "expression": "ValueError('Устаревшая ревизия вещи.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 143,
+      "function": "apply_possessions",
+      "operation": "ValueError",
+      "expression": "ValueError('Совпадающая значимая вещь уже существует; используй её ID или уточни идентичность.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 147,
+      "function": "apply_possessions",
+      "operation": "ValueError",
+      "expression": "ValueError('Событие не связано с владельцем/держателем.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 150,
+      "function": "apply_possessions",
+      "operation": "ValueError",
+      "expression": "ValueError('Факт не связан с владельцем/держателем.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 152,
+      "function": "apply_possessions",
+      "operation": "ValueError",
+      "expression": "ValueError('Established допустим только для введения вещи.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 189,
+      "function": "apply_possessions",
+      "operation": "warn",
+      "expression": "r.warn('possession_deltas', i, str(exc), code='possession_rejected')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 94,
+      "function": "_transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Найти можно потерянную вещь; результат должен быть available.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 96,
+      "function": "_transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Обнаружение требует подтверждённого держателя или места.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 98,
+      "function": "_transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Сначала требуется подтверждённое обнаружение потерянной вещи.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 156,
+      "function": "apply_possessions",
+      "operation": "ValueError",
+      "expression": "ValueError('Нет дееспособного участника добровольного действия.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 177,
+      "function": "apply_possessions",
+      "operation": "ValueError",
+      "expression": "ValueError('Недобровольное изменение требует принятого последствия, не слуха/плана.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 100,
+      "function": "_transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Для потери/уничтожения нужна соответствующая операция.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 175,
+      "function": "apply_possessions",
+      "operation": "ValueError",
+      "expression": "ValueError('Добровольное распоряжение EXTERNAL требует явного действия пользователя.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/possessions.py",
+      "line": 162,
+      "function": "apply_possessions",
+      "operation": "ValueError",
+      "expression": "ValueError('Передачу собственности решает владелец.')",
+      "policy_owner": "possessions"
+    },
+    {
+      "source": "backend/runtime_v3/protagonist.py",
+      "line": 49,
+      "function": "transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Неизвестная операция управления.')",
+      "policy_owner": "protagonist"
+    },
+    {
+      "source": "backend/runtime_v3/protagonist.py",
+      "line": 51,
+      "function": "transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Выбери существующего персонажа.')",
+      "policy_owner": "protagonist"
+    },
+    {
+      "source": "backend/runtime_v3/protagonist.py",
+      "line": 53,
+      "function": "transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Умершим персонажем нельзя управлять или выбрать его новым ГГ.')",
+      "policy_owner": "protagonist"
+    },
+    {
+      "source": "backend/runtime_v3/protagonist.py",
+      "line": 55,
+      "function": "transition",
+      "operation": "ValueError",
+      "expression": "ValueError('После смерти главного героя выбери нового главного героя.')",
+      "policy_owner": "protagonist"
+    },
+    {
+      "source": "backend/runtime_v3/protagonist.py",
+      "line": 57,
+      "function": "transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Персонаж сейчас не способен действовать. Доступно наблюдение.')",
+      "policy_owner": "protagonist"
+    },
+    {
+      "source": "backend/runtime_v3/protagonist.py",
+      "line": 59,
+      "function": "transition",
+      "operation": "ValueError",
+      "expression": "ValueError('Неизвестный персонаж POV.')",
+      "policy_owner": "protagonist"
+    },
+    {
+      "source": "backend/runtime_v3/raw.py",
+      "line": 34,
+      "function": "parse",
+      "operation": "fatal",
+      "expression": "fatal('ожидается объект RawTurnResult с final_scene', 'raw_root_invalid', repairable=True)",
+      "policy_owner": "raw"
+    },
+    {
+      "source": "backend/runtime_v3/raw.py",
+      "line": 41,
+      "function": "parse",
+      "operation": "append",
+      "expression": "warnings.append(dict(section=section, code='optional_section_invalid', action='drop_section', reason='ожидался список'))",
+      "policy_owner": "raw"
+    },
+    {
+      "source": "backend/runtime_v3/raw.py",
+      "line": 44,
+      "function": "parse",
+      "operation": "append",
+      "expression": "warnings.append(dict(section=section,code='knowledge_budget',action='truncate',reason='Превышен лимит 64 изменений знаний.'))",
+      "policy_owner": "raw"
+    },
+    {
+      "source": "backend/runtime_v3/raw.py",
+      "line": 47,
+      "function": "parse",
+      "operation": "append",
+      "expression": "warnings.append(dict(section=section,code='development_budget',action='truncate',reason='Превышен лимит 24 записей.'))",
+      "policy_owner": "raw"
+    },
+    {
+      "source": "backend/runtime_v3/raw.py",
+      "line": 32,
+      "function": "parse",
+      "operation": "fatal",
+      "expression": "fatal('некорректный JSON extraction', 'raw_root_invalid', repairable=True)",
+      "policy_owner": "raw"
+    },
+    {
+      "source": "backend/runtime_v3/raw.py",
+      "line": 40,
+      "function": "parse",
+      "operation": "fatal",
+      "expression": "fatal('некорректная секция политики истории', 'narrative_policy_section_invalid', repairable=False, section=section)",
+      "policy_owner": "raw"
+    },
+    {
+      "source": "backend/runtime_v3/relationships.py",
+      "line": 51,
+      "function": "apply_relationships",
+      "operation": "warn",
+      "expression": "resolver.warn(section, i, 'Ожидался объект.')",
+      "policy_owner": "relationships"
+    },
+    {
+      "source": "backend/runtime_v3/relationships.py",
+      "line": 55,
+      "function": "reject",
+      "operation": "warn",
+      "expression": "resolver.warn(section, i, reason, entity=key, code=code)",
+      "policy_owner": "relationships"
+    },
+    {
+      "source": "backend/runtime_v3/relationships.py",
+      "line": 58,
+      "function": "apply_relationships",
+      "operation": "reject",
+      "expression": "reject('relationship_endpoint_invalid', 'Неизвестное или совпадающее направление отношений.')",
+      "policy_owner": "relationships"
+    },
+    {
+      "source": "backend/runtime_v3/relationships.py",
+      "line": 60,
+      "function": "apply_relationships",
+      "operation": "reject",
+      "expression": "reject('relationship_duplicate', 'Повторное направление отношений.')",
+      "policy_owner": "relationships"
+    },
+    {
+      "source": "backend/runtime_v3/relationships.py",
+      "line": 63,
+      "function": "apply_relationships",
+      "operation": "reject",
+      "expression": "reject('relationship_source_dead', 'Мёртвый персонаж не меняет чувства.')",
+      "policy_owner": "relationships"
+    },
+    {
+      "source": "backend/runtime_v3/relationships.py",
+      "line": 84,
+      "function": "apply_relationships",
+      "operation": "reject",
+      "expression": "reject('relationship_dimension_invalid', 'Некорректные измерения отношений.')",
+      "policy_owner": "relationships"
+    },
+    {
+      "source": "backend/runtime_v3/relationships.py",
+      "line": 100,
+      "function": "apply_relationships",
+      "operation": "reject",
+      "expression": "reject('relationship_step_exceeded', 'Автономное изменение превышает допустимый постепенный сдвиг.')",
+      "policy_owner": "relationships"
+    },
+    {
+      "source": "backend/runtime_v3/relationships.py",
+      "line": 74,
+      "function": "apply_relationships",
+      "operation": "reject",
+      "expression": "reject('relationship_evidence_required', 'Чувствам нужен явный ввод игрока или принятые канонические взаимодействия.')",
+      "policy_owner": "relationships"
+    },
+    {
+      "source": "backend/runtime_v3/relationships.py",
+      "line": 79,
+      "function": "apply_relationships",
+      "operation": "reject",
+      "expression": "reject('relationship_source_invalid', 'Основание отсутствует, уже использовано, предшествует правке или не является взаимодействием.')",
+      "policy_owner": "relationships"
+    },
+    {
+      "source": "backend/runtime_v3/relationships.py",
+      "line": 89,
+      "function": "apply_relationships",
+      "operation": "warn",
+      "expression": "resolver.warn(section, i, 'Некорректное измерение отношений.', 'dimensions.'+str(dim), key, 'relationship_dimension_invalid')",
+      "policy_owner": "relationships"
+    },
+    {
+      "source": "backend/runtime_v3/relationships.py",
+      "line": 103,
+      "function": "apply_relationships",
+      "operation": "reject",
+      "expression": "reject('relationship_context_invalid', 'Некорректный контекст отношений.')",
+      "policy_owner": "relationships"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 145,
+      "function": "_read",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Сообщение недоступно этому персонажу.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 178,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Недоступное управление персонажем.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 181,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Персонаж сейчас не может пользоваться связью.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 185,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Связь недоступна в этом сеттинге.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 192,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Это не контакт управляемого персонажа.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 204,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Нет доступа к переписке.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 505,
+      "function": "resolve_identity",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Нет подтверждения личности для этого адреса.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 58,
+      "function": "validate_state",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Некорректная ссылка контакта.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 60,
+      "function": "validate_state",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Сервисный адрес не является персонажем.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 63,
+      "function": "validate_state",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Некорректные участники переписки.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 66,
+      "function": "validate_state",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Повторный участник группы.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 82,
+      "function": "validate_state",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Некорректное событие связи.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 87,
+      "function": "validate_state",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Переписка события не существует.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 89,
+      "function": "validate_state",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Контакт события не существует.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 94,
+      "function": "validate_state",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Повторные получатели события.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 100,
+      "function": "validate_state",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Некорректное состояние звонка.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 102,
+      "function": "validate_state",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Чтение требует доставки конкретному получателю.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 104,
+      "function": "validate_state",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Некорректное состояние сообщения.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 207,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Личность должна быть явно подтверждена.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 508,
+      "function": "resolve_identity",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Конфликт личности контакта.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 512,
+      "function": "resolve_identity",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Нужно подтверждённое имя нового человека.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 522,
+      "function": "resolve_identity",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Персонаж не найден.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 74,
+      "function": "validate_state",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Некорректный период участия.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 107,
+      "function": "validate_state",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Одновременные звонки не поддерживаются.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 228,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Контакт не найден.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 265,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Группа требует явно доступных участников из контактов.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 286,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Группа не найдена.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 330,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Этот канал связи недоступен.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 332,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Персонаж не может говорить.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 334,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Сообщение пустое.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 336,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Контакт недоступен или заблокирован.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 373,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Участник уже занят звонком.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 405,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Повторная операция должна быть проверена по History.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 304,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Нельзя добавить участника.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 315,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Участник уже вышел.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 343,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Экстренный номер не настроен для сеттинга.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 346,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Экстренный номер не настроен для региона.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 369,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Канал заблокирован получателем.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 436,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Персонаж не может прочитать сообщение.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 350,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Групповые звонки не поддерживаются.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 357,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Выбери контакт, переписку или настроенную службу.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 457,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Нет активного разговора.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 466,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Звонок недоступен.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 470,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Нет входящего звонка.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 472,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Персонаж не может говорить.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 483,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Неизвестное действие связи.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote.py",
+      "line": 480,
+      "function": "apply",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Звонок уже закончен.\")",
+      "policy_owner": "remote"
+    },
+    {
+      "source": "backend/runtime_v3/remote_decision.py",
+      "line": 21,
+      "function": "unique",
+      "operation": "ValueError",
+      "expression": "ValueError(f'Повторяющееся поле решения: {key}')",
+      "policy_owner": "remote_decision"
+    },
+    {
+      "source": "backend/runtime_v3/remote_initiative.py",
+      "line": 255,
+      "function": "accept",
+      "operation": "ValueError",
+      "expression": "ValueError(\"remote_ineligible\")",
+      "policy_owner": "remote_initiative"
+    },
+    {
+      "source": "backend/runtime_v3/remote_initiative.py",
+      "line": 325,
+      "function": "_identify_endpoint",
+      "operation": "ValueError",
+      "expression": "ValueError(\"remote_endpoint_unavailable\")",
+      "policy_owner": "remote_initiative"
+    },
+    {
+      "source": "backend/runtime_v3/remote_initiative.py",
+      "line": 327,
+      "function": "_identify_endpoint",
+      "operation": "ValueError",
+      "expression": "ValueError(\"remote_endpoint_unavailable\")",
+      "policy_owner": "remote_initiative"
+    },
+    {
+      "source": "backend/runtime_v3/remote_initiative.py",
+      "line": 332,
+      "function": "_identify_endpoint",
+      "operation": "ValueError",
+      "expression": "ValueError(\"remote_endpoint_blocked\")",
+      "policy_owner": "remote_initiative"
+    },
+    {
+      "source": "backend/runtime_v3/remote_initiative.py",
+      "line": 258,
+      "function": "accept",
+      "operation": "ValueError",
+      "expression": "ValueError(\"remote_identity_evidence\")",
+      "policy_owner": "remote_initiative"
+    },
+    {
+      "source": "backend/runtime_v3/remote_initiative.py",
+      "line": 264,
+      "function": "accept",
+      "operation": "ValueError",
+      "expression": "ValueError(\"remote_identity_not_address_grounded\")",
+      "policy_owner": "remote_initiative"
+    },
+    {
+      "source": "backend/runtime_v3/remote_initiative.py",
+      "line": 272,
+      "function": "accept",
+      "operation": "ValueError",
+      "expression": "ValueError(\"remote_unreachable\")",
+      "policy_owner": "remote_initiative"
+    },
+    {
+      "source": "backend/runtime_v3/remote_initiative.py",
+      "line": 274,
+      "function": "accept",
+      "operation": "ValueError",
+      "expression": "ValueError(\"remote_event_mismatch\")",
+      "policy_owner": "remote_initiative"
+    },
+    {
+      "source": "backend/runtime_v3/remote_initiative.py",
+      "line": 279,
+      "function": "accept",
+      "operation": "ValueError",
+      "expression": "ValueError(\"remote_knowledge\")",
+      "policy_owner": "remote_initiative"
+    },
+    {
+      "source": "backend/runtime_v3/remote_semantics.py",
+      "line": 35,
+      "function": "evidence_slice",
+      "operation": "ValueError",
+      "expression": "ValueError('Контекст договорённости слишком велик; исходные сообщения сохранены.')",
+      "policy_owner": "remote_semantics"
+    },
+    {
+      "source": "backend/runtime_v3/remote_semantics.py",
+      "line": 101,
+      "function": "resolve",
+      "operation": "ValueError",
+      "expression": "ValueError('Телефонное извлечение пытается изменить физическую сцену или неподдерживаемый раздел.')",
+      "policy_owner": "remote_semantics"
+    },
+    {
+      "source": "backend/runtime_v3/remote_semantics.py",
+      "line": 122,
+      "function": "resolve",
+      "operation": "append",
+      "expression": "optional_warnings.append(dict(section='characters',index=index,code='remote_optional_record_invalid',action='drop_record'))",
+      "policy_owner": "remote_semantics"
+    },
+    {
+      "source": "backend/runtime_v3/remote_semantics.py",
+      "line": 127,
+      "function": "resolve",
+      "operation": "append",
+      "expression": "optional_warnings.append(dict(section='characters',index=index,code='remote_intention_source',action='drop_record'))",
+      "policy_owner": "remote_semantics"
+    },
+    {
+      "source": "backend/runtime_v3/remote_semantics.py",
+      "line": 131,
+      "function": "resolve",
+      "operation": "append",
+      "expression": "optional_warnings.append(dict(section='characters',index=index,code='remote_intention_source',action='drop_record'))",
+      "policy_owner": "remote_semantics"
+    },
+    {
+      "source": "backend/runtime_v3/remote_semantics.py",
+      "line": 133,
+      "function": "resolve",
+      "operation": "append",
+      "expression": "optional_warnings.append(dict(section='characters',index=index,code='remote_intention_wording',action='drop_record'))",
+      "policy_owner": "remote_semantics"
+    },
+    {
+      "source": "backend/runtime_v3/repository.py",
+      "line": 37,
+      "function": "read_history",
+      "operation": "append",
+      "expression": "warnings.append(dict(section='history',code='history_cycle',reason='цикл исторических ссылок'))",
+      "policy_owner": "repository"
+    },
+    {
+      "source": "backend/runtime_v3/repository.py",
+      "line": 41,
+      "function": "read_history",
+      "operation": "append",
+      "expression": "warnings.append(dict(section='history',entity=head,code='history_missing',reason='исторический пакет отсутствует'))",
+      "policy_owner": "repository"
+    },
+    {
+      "source": "backend/runtime_v3/repository.py",
+      "line": 48,
+      "function": "read_history",
+      "operation": "append",
+      "expression": "warnings.append(dict(section='history',entity=head,code='history_invalid',reason='повреждён исторический пакет'))",
+      "policy_owner": "repository"
+    },
+    {
+      "source": "backend/runtime_v3/repository.py",
+      "line": 56,
+      "function": "read_history",
+      "operation": "append",
+      "expression": "warnings.append(dict(section=section,code='history_invalid',reason='повреждён исторический список'))",
+      "policy_owner": "repository"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 70,
+      "function": "source",
+      "operation": "ValueError",
+      "expression": "ValueError('current completed narrative event required')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 99,
+      "function": "intercourse",
+      "operation": "ValueError",
+      "expression": "ValueError('invalid participants')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 100,
+      "function": "intercourse",
+      "operation": "ValueError",
+      "expression": "ValueError('event participants do not match')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 109,
+      "function": "intercourse",
+      "operation": "ValueError",
+      "expression": "ValueError('unknown encounter')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 112,
+      "function": "intercourse",
+      "operation": "ValueError",
+      "expression": "ValueError('continuous encounter already processed; close it before a new encounter')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 119,
+      "function": "intercourse",
+      "operation": "ValueError",
+      "expression": "ValueError('consent required from each participant')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 121,
+      "function": "intercourse",
+      "operation": "ValueError",
+      "expression": "ValueError('EXTERNAL consent requires explicit current player choice')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 123,
+      "function": "intercourse",
+      "operation": "ValueError",
+      "expression": "ValueError('reproductive capability impossible or unknown')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 125,
+      "function": "intercourse",
+      "operation": "ValueError",
+      "expression": "ValueError('active pregnancy already exists')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 126,
+      "function": "intercourse",
+      "operation": "ValueError",
+      "expression": "ValueError('unknown established parent')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 131,
+      "function": "intercourse",
+      "operation": "ValueError",
+      "expression": "ValueError('event minute outside accepted interval')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 160,
+      "function": "naming",
+      "operation": "ValueError",
+      "expression": "ValueError('ambiguous or unknown child target')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 162,
+      "function": "naming",
+      "operation": "ValueError",
+      "expression": "ValueError('unestablished decision maker')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 163,
+      "function": "naming",
+      "operation": "ValueError",
+      "expression": "ValueError('all established decision makers must agree or delegate')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 167,
+      "function": "naming",
+      "operation": "ValueError",
+      "expression": "ValueError('delegate must be an autonomous decision maker')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 172,
+      "function": "naming",
+      "operation": "ValueError",
+      "expression": "ValueError('decision makers absent from event')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 176,
+      "function": "naming",
+      "operation": "ValueError",
+      "expression": "ValueError('explicit identity components required')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 184,
+      "function": "naming",
+      "operation": "ValueError",
+      "expression": "ValueError('replacement target invalid')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 185,
+      "function": "naming",
+      "operation": "ValueError",
+      "expression": "ValueError('cancellation needs target')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 187,
+      "function": "naming",
+      "operation": "ValueError",
+      "expression": "ValueError('existing agreed decision must be explicitly replaced')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 226,
+      "function": "birth",
+      "operation": "ValueError",
+      "expression": "ValueError('unknown pregnancy')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 229,
+      "function": "birth",
+      "operation": "ValueError",
+      "expression": "ValueError('birth event must establish gestational participant')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 230,
+      "function": "birth",
+      "operation": "ValueError",
+      "expression": "ValueError('birth outcome needs a living gestational participant')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 232,
+      "function": "birth",
+      "operation": "ValueError",
+      "expression": "ValueError('birth minute outside accepted interval')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 233,
+      "function": "birth",
+      "operation": "ValueError",
+      "expression": "ValueError('pregnancy is not due under configured game policy')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 234,
+      "function": "birth",
+      "operation": "ValueError",
+      "expression": "ValueError('unknown birth location')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 235,
+      "function": "birth",
+      "operation": "ValueError",
+      "expression": "ValueError('birth appearance must be explicitly quoted')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 236,
+      "function": "birth",
+      "operation": "ValueError",
+      "expression": "ValueError('unknown appearance target')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 238,
+      "function": "birth",
+      "operation": "ValueError",
+      "expression": "ValueError('unestablished disclosed parent')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 105,
+      "function": "intercourse",
+      "operation": "ValueError",
+      "expression": "ValueError('canonical encounter identity conflict')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 118,
+      "function": "intercourse",
+      "operation": "ValueError",
+      "expression": "ValueError('adult eligibility not established')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 174,
+      "function": "naming",
+      "operation": "ValueError",
+      "expression": "ValueError('EXTERNAL agreement/delegation requires player choice')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 180,
+      "function": "naming",
+      "operation": "ValueError",
+      "expression": "ValueError('name decision identity conflict; use replaces')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 241,
+      "function": "birth",
+      "operation": "ValueError",
+      "expression": "ValueError('child identity collision')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 353,
+      "function": "validate_reproduction",
+      "operation": "ValueError",
+      "expression": "ValueError('birth provenance points to a missing or incompatible pregnancy/child')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 357,
+      "function": "validate_reproduction",
+      "operation": "ValueError",
+      "expression": "ValueError('invalid reproductive event identity')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 359,
+      "function": "validate_reproduction",
+      "operation": "ValueError",
+      "expression": "ValueError('invalid reproductive participants/time')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 361,
+      "function": "validate_reproduction",
+      "operation": "ValueError",
+      "expression": "ValueError('orphan conception outcome')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 365,
+      "function": "validate_reproduction",
+      "operation": "ValueError",
+      "expression": "ValueError('invalid pregnancy provenance')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 366,
+      "function": "validate_reproduction",
+      "operation": "ValueError",
+      "expression": "ValueError('invalid parents')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 367,
+      "function": "validate_reproduction",
+      "operation": "ValueError",
+      "expression": "ValueError('invalid pregnancy timing')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 382,
+      "function": "validate_reproduction",
+      "operation": "ValueError",
+      "expression": "ValueError('missing pregnancy assertions')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 386,
+      "function": "validate_reproduction",
+      "operation": "ValueError",
+      "expression": "ValueError('invalid naming target')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 387,
+      "function": "validate_reproduction",
+      "operation": "ValueError",
+      "expression": "ValueError('invalid naming decision maker')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 388,
+      "function": "validate_reproduction",
+      "operation": "ValueError",
+      "expression": "ValueError('orphan naming replacement')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 94,
+      "function": "accepted_rows",
+      "operation": "warn",
+      "expression": "resolver.warn(section,i,str(exc),code='reproduction_claim_invalid')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 369,
+      "function": "validate_reproduction",
+      "operation": "ValueError",
+      "expression": "ValueError('duplicate active pregnancy')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 373,
+      "function": "validate_reproduction",
+      "operation": "ValueError",
+      "expression": "ValueError('duplicate child slot')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 378,
+      "function": "validate_reproduction",
+      "operation": "ValueError",
+      "expression": "ValueError('birth identity/outcome mismatch')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/reproduction.py",
+      "line": 379,
+      "function": "validate_reproduction",
+      "operation": "ValueError",
+      "expression": "ValueError('unborn child already exists')",
+      "policy_owner": "reproduction"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 174,
+      "function": "_agency",
+      "operation": "ValueError",
+      "expression": "ValueError('controlled voluntary transition requires explicit player choice; external outcome requires its decision actor')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 169,
+      "function": "_agency",
+      "operation": "ValueError",
+      "expression": "ValueError('protected background actor')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 18,
+      "function": "validate_hierarchy",
+      "operation": "ValueError",
+      "expression": "ValueError('invalid location identity/parent reference')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 23,
+      "function": "validate_hierarchy",
+      "operation": "ValueError",
+      "expression": "ValueError('cyclic location hierarchy')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 32,
+      "function": "fact",
+      "operation": "ValueError",
+      "expression": "ValueError('unknown or unrelated residence/role fact')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 108,
+      "function": "apply_locations",
+      "operation": "warn",
+      "expression": "resolver.warn('locations',i,'Нужны ID и имя нового места.',entity=key)",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 137,
+      "function": "apply_locations",
+      "operation": "warn",
+      "expression": "resolver.warn('locations',i,'Некорректная иерархия места.',entity=key,code='location_hierarchy_invalid')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 36,
+      "function": "validate_residence_state",
+      "operation": "ValueError",
+      "expression": "ValueError('invalid residence/role/organization identity')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 39,
+      "function": "validate_residence_state",
+      "operation": "ValueError",
+      "expression": "ValueError('unknown residence/role actor')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 41,
+      "function": "validate_residence_state",
+      "operation": "ValueError",
+      "expression": "ValueError('open phase cannot contain closure')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 43,
+      "function": "validate_residence_state",
+      "operation": "ValueError",
+      "expression": "ValueError('phase closes before it starts')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 48,
+      "function": "validate_residence_state",
+      "operation": "ValueError",
+      "expression": "ValueError('phase calendar chronology reversed')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 114,
+      "function": "apply_locations",
+      "operation": "fatal",
+      "expression": "fatal('конфликт canonical location ID', 'canonical_id_conflict', repairable=True)",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 121,
+      "function": "apply_locations",
+      "operation": "warn",
+      "expression": "resolver.warn('locations', i, 'Использован известный canonical ID места.', entity=key, code='location_identity_reused')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 122,
+      "function": "apply_locations",
+      "operation": "warn",
+      "expression": "resolver.warn('locations', i, 'Неоднозначное имя места: укажи canonical ID.', entity=key)",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 145,
+      "function": "apply_locations",
+      "operation": "ValueError",
+      "expression": "ValueError('established known location required')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 146,
+      "function": "apply_locations",
+      "operation": "ValueError",
+      "expression": "ValueError('arbitrary location rewrite forbidden')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 155,
+      "function": "apply_locations",
+      "operation": "warn",
+      "expression": "resolver.warn('location_changes',i,str(exc),entity=key,code='location_hierarchy_invalid')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 51,
+      "function": "validate_residence_state",
+      "operation": "ValueError",
+      "expression": "ValueError('unknown residence location')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 73,
+      "function": "validate_residence_state",
+      "operation": "ValueError",
+      "expression": "ValueError('duplicate active phase')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 183,
+      "function": "apply_residence",
+      "operation": "ValueError",
+      "expression": "ValueError('completed/established evidence required')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 185,
+      "function": "apply_residence",
+      "operation": "ValueError",
+      "expression": "ValueError('closed phase is immutable; use new ID')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 193,
+      "function": "apply_residence",
+      "operation": "ValueError",
+      "expression": "ValueError('arbitrary state or chronology rewrite forbidden')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 257,
+      "function": "apply_residence",
+      "operation": "warn",
+      "expression": "resolver.warn(section,i,str(exc),entity=key,code='residence_transition_invalid')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 55,
+      "function": "validate_residence_state",
+      "operation": "ValueError",
+      "expression": "ValueError('unknown organization')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 57,
+      "function": "validate_residence_state",
+      "operation": "ValueError",
+      "expression": "ValueError('active affiliation at closed organization')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 61,
+      "function": "validate_residence_state",
+      "operation": "ValueError",
+      "expression": "ValueError('duplicate organization name/alias requires canonical identity')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 63,
+      "function": "validate_residence_state",
+      "operation": "ValueError",
+      "expression": "ValueError('unknown organization location')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 70,
+      "function": "validate_residence_state",
+      "operation": "ValueError",
+      "expression": "ValueError('organization name differs from history')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 192,
+      "function": "apply_residence",
+      "operation": "ValueError",
+      "expression": "ValueError('invalid role significance')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 226,
+      "function": "apply_residence",
+      "operation": "ValueError",
+      "expression": "ValueError('unknown actor')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 243,
+      "function": "apply_residence",
+      "operation": "ValueError",
+      "expression": "ValueError('invalid replacement IDs')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 244,
+      "function": "apply_residence",
+      "operation": "ValueError",
+      "expression": "ValueError('only new phase can replace old phases')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 68,
+      "function": "validate_residence_state",
+      "operation": "ValueError",
+      "expression": "ValueError('invalid organization name history')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 198,
+      "function": "apply_residence",
+      "operation": "ValueError",
+      "expression": "ValueError('known organization identity/alias: use its stable ID')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 211,
+      "function": "apply_residence",
+      "operation": "ValueError",
+      "expression": "ValueError('cannot close unknown organization')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 214,
+      "function": "apply_residence",
+      "operation": "ValueError",
+      "expression": "ValueError('protected affiliation needs foreground outcome')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 232,
+      "function": "apply_residence",
+      "operation": "ValueError",
+      "expression": "ValueError('phase identity/context cannot change; close old and create new phase')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 233,
+      "function": "apply_residence",
+      "operation": "ValueError",
+      "expression": "ValueError('existing phase requires explicit closure')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 236,
+      "function": "apply_residence",
+      "operation": "ValueError",
+      "expression": "ValueError('new phase must begin active')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 237,
+      "function": "apply_residence",
+      "operation": "ValueError",
+      "expression": "ValueError('cannot start phase for dead actor')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 238,
+      "function": "apply_residence",
+      "operation": "ValueError",
+      "expression": "ValueError('new phase cannot include closure')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/residence.py",
+      "line": 247,
+      "function": "apply_residence",
+      "operation": "ValueError",
+      "expression": "ValueError('replacement must identify active phase of same actor')",
+      "policy_owner": "residence"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 70,
+      "function": "warn",
+      "operation": "append",
+      "expression": "self.warnings.append(value)",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 145,
+      "function": "resolve",
+      "operation": "extend",
+      "expression": "self.warnings.extend(raw.warnings)",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 35,
+      "function": "__init__",
+      "operation": "ValueError",
+      "expression": "ValueError(\"Неизвестный режим StateResolver.\")",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 133,
+      "function": "actor",
+      "operation": "fatal",
+      "expression": "fatal('неизвестный обязательный character_id', 'unknown_character', repairable=True, section=section,index=index)",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 168,
+      "function": "resolve",
+      "operation": "fatal",
+      "expression": "fatal('неизвестное конечное место камеры', 'camera_location_invalid', repairable=True)",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 170,
+      "function": "resolve",
+      "operation": "fatal",
+      "expression": "fatal('повреждены участники final_scene', 'camera_invalid', repairable=True)",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 172,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('final_scene',0,'Runtime adds children only after accepted birth.',code='birth_presence_deferred')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 177,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('final_scene',0,'Мёртвый персонаж не участвует в текущей сцене.',entity=cid)",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 186,
+      "function": "resolve",
+      "operation": "fatal",
+      "expression": "fatal('controlled actor отсутствует в final_scene', 'camera_actor_missing', repairable=True)",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 189,
+      "function": "resolve",
+      "operation": "fatal",
+      "expression": "fatal('некорректная длительность хода', 'invalid_time', repairable=True)",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 193,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('final_scene', 0, 'Длительность фоновой симуляции проигнорирована: время задано Runtime.',\n                      'elapsed_minutes', code='background_elapsed_ignored')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 201,
+      "function": "resolve",
+      "operation": "fatal",
+      "expression": "fatal('некорректное описание камеры', 'camera_invalid', repairable=True)",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 206,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('final_scene', 0, 'remote_interactions должен быть списком')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 84,
+      "function": "records",
+      "operation": "warn",
+      "expression": "self.warn(section,i,'ожидался объект')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 140,
+      "function": "typed",
+      "operation": "warn",
+      "expression": "self.warn(section,index,'некорректная необязательная запись', code='optional_schema_invalid')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 154,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('promotions',i,'Reserved birth identity is created only by Runtime.',code='birth_identity_reserved')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 158,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('promotions',i,'значимая роль требует полную карточку')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 160,
+      "function": "resolve",
+      "operation": "fatal",
+      "expression": "fatal('конфликт canonical character ID', 'canonical_id_conflict', repairable=True)",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 209,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('final_scene', index, 'нет evidence удалённого взаимодействия')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 212,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('final_scene', index, 'некорректный remote actor')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 214,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('final_scene',index,'Участник недоступен для взаимодействия.')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 232,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('movements',i,'Персонаж не может самостоятельно перемещаться.',entity=cid)",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 235,
+      "function": "resolve",
+      "operation": "fatal",
+      "expression": "fatal('неизвестное конечное место перемещения','movement_endpoint_invalid',repairable=True,index=i)",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 238,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('movements',i,'некорректный необязательный order',field='order')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 300,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('events',i,'отсутствует ID или текст')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 303,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('events',i,'повреждены ссылки Event')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 305,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('events',i,'неизвестная ссылка необязательного Event')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 307,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('events',i,'ссылки на отсутствующие факты отброшены','fact_ids',eid,'event_fact_reference_dropped')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 310,
+      "function": "resolve",
+      "operation": "fatal",
+      "expression": "fatal('неоднозначный ID Event этого хода','canonical_id_conflict',repairable=True)",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 313,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('events',i,'неизвестный канал Event')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 316,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('events',i,'Свидетели или участники недоступны в этом канале.',code='remote_channel_boundary')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 359,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('character_changes',i,'Мёртвый персонаж не получает обычные изменения состояния.',entity=cid)",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 420,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('thread_changes', i, 'отсутствует ID')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 438,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('scheduled_event_changes',i,'Pregnancy schedule is Runtime-owned.',code='reproduction_schedule_owned')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 86,
+      "function": "records",
+      "operation": "warn",
+      "expression": "self.warn(section,i,'нет подтверждённого источника', code='evidence_unsupported')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 243,
+      "function": "resolve",
+      "operation": "fatal",
+      "expression": "fatal('неоднозначное перемещение','movement_ambiguous',repairable=True,entity=cid)",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 247,
+      "function": "resolve",
+      "operation": "fatal",
+      "expression": "fatal('конечное перемещение участника противоречит final_scene',\n                          'scene_movement_conflict', repairable=True, entity=cid,\n                          scene_location_id=lid, movement_location_id=route[-1][1])",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 264,
+      "function": "resolve",
+      "operation": "fatal",
+      "expression": "fatal('Повествование сохранено, но приход участника не подтверждён. Повтори обработку состояния.',\n                          'scene_arrival_unsupported', repairable=True, entity=cid,\n                          from_location_id=origin,to_location_id=lid,\n                          previous_present=self.before['camera']['present_character_ids'], final_present=present,\n                          movements=candidates, evidence_requirement='completed_arrival + actor_evidence + destination_evidence + matching origin',\n                          before_hash=sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest(),\n                          contract_version='physical-arrival-v1')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 294,
+      "function": "resolve",
+      "operation": "fatal",
+      "expression": "fatal('конфликт canonical fact ID','canonical_id_conflict',repairable=True,entity=entry['id'])",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 330,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('events', i, 'неподтверждённый автор сообщения', 'author_id')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 357,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('character_changes',i,'Личность изменяется только частичной evidence-bound дельтой.',protected,cid,'personality_full_replace_rejected')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 388,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('character_changes',i,'неправильный тип поля',key,cid)",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 504,
+      "function": "resolve",
+      "operation": "fatal",
+      "expression": "fatal('Звонок не переносит собеседника в физическую сцену.', 'remote_false_colocation')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 287,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('facts', i, 'Некорректная идентичность утверждения.', field='claim', code='optional_schema_invalid')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 366,
+      "function": "resolve",
+      "operation": "ValueError",
+      "expression": "ValueError('birth date must be explicitly stated in evidence')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 368,
+      "function": "resolve",
+      "operation": "ValueError",
+      "expression": "ValueError('birth date is in the future')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 369,
+      "function": "resolve",
+      "operation": "ValueError",
+      "expression": "ValueError('cannot overwrite an established birthday')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 377,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('character_changes',i,'дата рождения не подтверждена или некорректна','birth_date',cid)",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 381,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('character_changes',i,'Infant motivation requires later development.',entity=cid,code='infant_motivation_invalid')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 391,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('character_changes',i,'Фон не меняет EXTERNAL мотивацию.',key,cid,'controlled_actor_unsupported')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 397,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('character_changes',i,'состояние controlled actor не задано игроком',key,cid,'controlled_actor_unsupported')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 399,
+      "function": "resolve",
+      "operation": "warn",
+      "expression": "self.warn('character_changes',i,'нет подтверждённого источника',key,cid,'evidence_unsupported')",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/resolver.py",
+      "line": 92,
+      "function": "records",
+      "operation": "fatal",
+      "expression": "fatal('повторный canonical ID записи','canonical_id_conflict',repairable=True,section=section,index=i)",
+      "policy_owner": "resolver"
+    },
+    {
+      "source": "backend/runtime_v3/semantic.py",
+      "line": 110,
+      "function": "search",
+      "operation": "ValueError",
+      "expression": "ValueError('invalid document embeddings')",
+      "policy_owner": "semantic"
+    },
+    {
+      "source": "backend/runtime_v3/semantic.py",
+      "line": 120,
+      "function": "search",
+      "operation": "ValueError",
+      "expression": "ValueError('invalid query embedding')",
+      "policy_owner": "semantic"
+    },
+    {
+      "source": "backend/runtime_v3/simulation.py",
+      "line": 74,
+      "function": "simulate",
+      "operation": "extend",
+      "expression": "warnings.extend(dict(w,stage='background_simulation') for w in resolved.warnings)",
+      "policy_owner": "simulation"
+    },
+    {
+      "source": "backend/runtime_v3/simulation.py",
+      "line": 35,
+      "function": "simulate",
+      "operation": "ValueError",
+      "expression": "ValueError('Фоновая симуляция вернула пустой текст.')",
+      "policy_owner": "simulation"
+    },
+    {
+      "source": "backend/runtime_v3/simulation.py",
+      "line": 46,
+      "function": "simulate",
+      "operation": "fatal",
+      "expression": "fatal('background не должен продвигать часы','background_time_invalid',repairable=True)",
+      "policy_owner": "simulation"
+    },
+    {
+      "source": "backend/runtime_v3/simulation.py",
+      "line": 49,
+      "function": "simulate",
+      "operation": "fatal",
+      "expression": "fatal('background меняет управляемого персонажа','background_agency_invalid',repairable=True)",
+      "policy_owner": "simulation"
+    },
+    {
+      "source": "backend/runtime_v3/time_skip.py",
+      "line": 18,
+      "function": "__post_init__",
+      "operation": "ValueError",
+      "expression": "ValueError('Пропуск времени: выбери длительность от 1 минуты до 7 суток.')",
+      "policy_owner": "time_skip"
+    },
+    {
+      "source": "backend/runtime_v3/time_skip.py",
+      "line": 19,
+      "function": "__post_init__",
+      "operation": "ValueError",
+      "expression": "ValueError('Неизвестный источник Time Skip.')",
+      "policy_owner": "time_skip"
+    },
+    {
+      "source": "backend/runtime_v3/time_skip.py",
+      "line": 45,
+      "function": "parse_skip",
+      "operation": "ValueError",
+      "expression": "ValueError('Неверное время Time Skip.')",
+      "policy_owner": "time_skip"
+    },
+    {
+      "source": "backend/runtime_v3/values.py",
+      "line": 89,
+      "function": "reject",
+      "operation": "warn",
+      "expression": "resolver.warn('value_deltas',index,reason,entity=cid,code=code)",
+      "policy_owner": "values"
+    },
+    {
+      "source": "backend/runtime_v3/values.py",
+      "line": 91,
+      "function": "apply_values",
+      "operation": "reject",
+      "expression": "reject('Персонаж не может иметь новые установленные принципы.')",
+      "policy_owner": "values"
+    },
+    {
+      "source": "backend/runtime_v3/values.py",
+      "line": 94,
+      "function": "apply_values",
+      "operation": "reject",
+      "expression": "reject('Фон не меняет ценности EXTERNAL.','value_agency')",
+      "policy_owner": "values"
+    },
+    {
+      "source": "backend/runtime_v3/values.py",
+      "line": 98,
+      "function": "apply_values",
+      "operation": "reject",
+      "expression": "reject('Устаревшая или конфликтующая дельта.','value_conflict')",
+      "policy_owner": "values"
+    },
+    {
+      "source": "backend/runtime_v3/values.py",
+      "line": 100,
+      "function": "apply_values",
+      "operation": "reject",
+      "expression": "reject('Establish требует новый ID, refine/retire — существующий.')",
+      "policy_owner": "values"
+    },
+    {
+      "source": "backend/runtime_v3/values.py",
+      "line": 102,
+      "function": "apply_values",
+      "operation": "reject",
+      "expression": "reject('Неправильный текст операции.')",
+      "policy_owner": "values"
+    },
+    {
+      "source": "backend/runtime_v3/values.py",
+      "line": 131,
+      "function": "apply_values",
+      "operation": "reject",
+      "expression": "reject('Повторное использование того же основания.','value_replay')",
+      "policy_owner": "values"
+    },
+    {
+      "source": "backend/runtime_v3/values.py",
+      "line": 133,
+      "function": "apply_values",
+      "operation": "reject",
+      "expression": "reject('Лимит 48 ценностей.')",
+      "policy_owner": "values"
+    },
+    {
+      "source": "backend/runtime_v3/values.py",
+      "line": 109,
+      "function": "apply_values",
+      "operation": "reject",
+      "expression": "reject('Нет принятого явного заявления о долговременной ценности.','value_agency')",
+      "policy_owner": "values"
+    },
+    {
+      "source": "backend/runtime_v3/values.py",
+      "line": 128,
+      "function": "apply_values",
+      "operation": "reject",
+      "expression": "reject('Недостаточно независимого опыта/добровольных выборов.','value_evidence_insufficient')",
+      "policy_owner": "values"
+    },
+    {
+      "source": "backend/runtime_v3/values.py",
+      "line": 44,
+      "function": "salvage_values",
+      "operation": "ValueError",
+      "expression": "ValueError('value identity mismatch')",
+      "policy_owner": "values"
+    },
+    {
+      "source": "engine.py",
+      "line": 45,
+      "function": "check_config",
+      "operation": "ValueError",
+      "expression": "ValueError('Неизвестный провайдер модели.')",
+      "policy_owner": "engine"
+    },
+    {
+      "source": "engine.py",
+      "line": 47,
+      "function": "check_config",
+      "operation": "ValueError",
+      "expression": "ValueError('Выбери модель ведущего в левой панели.')",
+      "policy_owner": "engine"
+    },
+    {
+      "source": "engine.py",
+      "line": 73,
+      "function": "retry",
+      "operation": "ValueError",
+      "expression": "ValueError('Предыдущий запрос ещё останавливается. Подожди немного.')",
+      "policy_owner": "engine"
+    },
+    {
+      "source": "engine.py",
+      "line": 50,
+      "function": "check_config",
+      "operation": "ValueError",
+      "expression": "ValueError('Некорректные параметры модели.')",
+      "policy_owner": "engine"
+    },
+    {
+      "source": "engine.py",
+      "line": 346,
+      "function": "run_job",
+      "operation": "commit_job",
+      "expression": "storage.commit_job(job_id, state, choices, changes, timing=timings, history_batch=history_batch)",
+      "policy_owner": "engine"
+    },
+    {
+      "source": "engine.py",
+      "line": 135,
+      "function": "run_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Выбранная модель не загружена. Загрузи её в настройках игры.')",
+      "policy_owner": "engine"
+    },
+    {
+      "source": "engine.py",
+      "line": 220,
+      "function": "run_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Модель вернула пустую сцену.')",
+      "policy_owner": "engine"
+    },
+    {
+      "source": "engine.py",
+      "line": 197,
+      "function": "run_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Сохранённый контекст не помещается в выбранную модель. Увеличь контекст или уменьши лимит ответа.')",
+      "policy_owner": "engine"
+    },
+    {
+      "source": "engine.py",
+      "line": 271,
+      "function": "run_job",
+      "operation": "fatal",
+      "expression": "fatal('Исправление отменило принятый физический Event.', 'call_repair_omission',repairable=False)",
+      "policy_owner": "engine"
+    },
+    {
+      "source": "engine.py",
+      "line": 276,
+      "function": "run_job",
+      "operation": "fatal",
+      "expression": "fatal('Голосовая договорённость не прошла проверку.', 'call_commitment_rejected',repairable=True,diagnostics=rejected)",
+      "policy_owner": "engine"
+    },
+    {
+      "source": "engine.py",
+      "line": 285,
+      "function": "run_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Семантическая проверка входящей связи: '+json.dumps(rejected,ensure_ascii=False))",
+      "policy_owner": "engine"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 54,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Неизвестный тип хода.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 201,
+      "function": "_assert_idle",
+      "operation": "ValueError",
+      "expression": "ValueError('Для этого прохождения уже выполняется ход.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 205,
+      "function": "job_progress",
+      "operation": "ValueError",
+      "expression": "ValueError('Некорректный статус.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 49,
+      "function": "get_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Черновик не найден.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 59,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Прохождение не найдено.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 106,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Сейв уже изменился. Обнови страницу перед следующим действием.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 109,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Игра уже начата.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 111,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Сначала начни игру.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 114,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Текст сцены уже сохранён, состояние ещё не применено. Повтори обработку состояния.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 149,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Длительный переход доступен только в Narrative.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 156,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Главный герой умер. Выбери нового главного героя, чтобы продолжить.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 158,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('В старом сохранении нет персонажей. Сначала подготовь мир для игры.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 167,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Камера наблюдает мир. Выбери персонажа для управления или продолжи наблюдение.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 217,
+      "function": "retry_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Нет завершённого текста для повторной обработки.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 221,
+      "function": "retry_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Сейв изменился. Этот черновик устарел.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 233,
+      "function": "commit_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Ход остановлен или уже сохранён.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 236,
+      "function": "commit_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Состояние сейва изменилось во время генерации.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 290,
+      "function": "rollback_last",
+      "operation": "ValueError",
+      "expression": "ValueError('Сейв изменился. Обнови страницу перед откатом.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 293,
+      "function": "rollback_last",
+      "operation": "ValueError",
+      "expression": "ValueError('Нет ходов для отката.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 81,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Владелец телефона изменился.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 121,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Выбери участника последней закулисной сцены.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 144,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('У старого хода нет снимка исходного контекста. Точная перегенерация недоступна.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 171,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Персонаж сейчас не может действовать. Продолжи наблюдение или течение времени.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 178,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Напиши действие.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 185,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Нет соединённого звонка для телефонной реплики.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 240,
+      "function": "commit_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Исходный ход уже изменён.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 67,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Продолжение доступно для отправки сообщения или вызова.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 70,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Предыдущее действие ещё не обработано. Повтори его обработку.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 91,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('ID продолжения уже использован с другими данными.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 99,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('ID продолжения уже использован с другими данными.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 102,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Исходный запрос уже обработан в другой ветке. Для нового ожидания используй явное продолжение связи.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 130,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Исходный ход не найден.')",
+      "policy_owner": "engine_storage"
+    },
+    {
+      "source": "engine_storage.py",
+      "line": 134,
+      "function": "begin_job",
+      "operation": "ValueError",
+      "expression": "ValueError('Подтверди откат последующих ходов.')",
+      "policy_owner": "engine_storage"
+    }
+  ]
+}

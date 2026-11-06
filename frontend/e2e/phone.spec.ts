@@ -1,3 +1,4 @@
+import {gameAction} from './navigation';
 import { test, expect } from "@playwright/test";
 
 test("phone controls, freeform text, reload and physical scene", async ({
@@ -19,35 +20,24 @@ test("phone controls, freeform text, reload and physical scene", async ({
     page.locator(".choices button").filter({ hasText: "Посмотреть в окно" }),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Открыть звонок", exact: true })
+    .getByRole("button", { name: /^Телефон/ })
     .click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByRole("region", {name:"Телефон персонажа"});
   await expect(dialog.getByText("Входящий", { exact: false })).toBeVisible();
   await dialog.getByRole("button", { name: "Ответить", exact: true }).click();
-  await expect(
-    dialog.getByRole("button", { name: "Завершить звонок", exact: true }),
-  ).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(
-    page.locator(".choices button").filter({ hasText: "Посмотреть в окно" }),
-  ).toHaveCount(0);
-  await page.getByLabel("Адресация действий").selectOption("physical");
-  await expect(
-    page.locator(".choices button").filter({ hasText: "Посмотреть в окно" }),
-  ).toBeVisible();
-  await page.getByLabel("Адресация действий").selectOption("call");
+  const call=page.getByRole('dialog',{name:'Сцена звонка'});
+  await expect(call).toBeVisible();
+  await call.getByLabel('Свернуть звонок').click();
+  await expect(page.locator('.choices button').filter({hasText:'Посмотреть в окно'})).toBeVisible();
   await page.reload();
-  await page
-    .getByRole("button", { name: "Открыть звонок", exact: true })
-    .click();
-  await dialog
-    .getByRole("button", { name: "Завершить звонок", exact: true })
-    .click();
-  await expect(
-    dialog.getByRole("button", { name: "Завершить звонок", exact: true }),
-  ).toHaveCount(0);
+  await expect(page.getByRole('button',{name:/Вернуться к звонку/})).toBeVisible();
+  await page.getByRole('button',{name:/Вернуться к звонку/}).click();
+  await call.getByRole('button',{name:'Завершить звонок',exact:true}).click();
+  await expect(call).toHaveCount(0);
+  await page.getByRole('button',{name:/^Телефон/}).click();
   const after = await (await request.get(`/api/saves/${selected.save}`)).json();
   expect(after.state.scene).toEqual(before.state.scene);
+  await dialog.getByRole("button", { name: "Вера работа", exact: true }).click();
   await dialog
     .getByRole("button", { name: "Написать", exact: true })
     .first()
@@ -87,18 +77,17 @@ test("decline and configured in-game emergency log", async ({
   );
   await page.goto("/");
   await page
-    .getByRole("button", { name: "Открыть звонок", exact: true })
+    .getByRole("button", { name: /^Телефон/ })
     .click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByRole("region", {name:"Телефон персонажа"});
   await dialog.getByRole("button", { name: "Отклонить", exact: true }).click();
   await dialog.getByRole("button", { name: "Звонки", exact: true }).click();
   await expect(dialog.getByText(/Входящий · Отклонён/)).toBeVisible();
+  await dialog.getByRole("button", {name:"Контакты",exact:true}).click();
   await dialog
     .getByRole("button", { name: "Позвонить: Скорая помощь", exact: true })
     .click();
-  await expect(
-    dialog.getByRole("button", { name: "Завершить звонок", exact: true }),
-  ).toBeVisible();
+  await expect(dialog.getByText(/Исходящий · Пропущен/)).toBeVisible();
   await expect(dialog.locator('a[href^="tel:"]')).toHaveCount(0);
 });
 
@@ -113,9 +102,9 @@ test("group membership and protagonist-owned contacts", async ({
   );
   await page.goto("/");
   await page
-    .getByRole("button", { name: "Открыть звонок", exact: true })
+    .getByRole("button", { name: /^Телефон/ })
     .click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByRole("region", {name:"Телефон персонажа"});
   await dialog
     .getByRole("button", { name: "Игнорировать", exact: true })
     .click();
@@ -141,6 +130,17 @@ test("group membership and protagonist-owned contacts", async ({
   await expect(
     dialog.getByText("Только участникам группы.", { exact: true }),
   ).toBeVisible();
+  // The outgoing command is durable before its communication job completes.
+  // Require the job's canonical commit, not just the player's visible bubble.
+  const view=async()=>await(await request.get(`/api/saves/${selected.save}`)).json();
+  await expect.poll(async()=>(await view()).job?.status).toBe('saved');
+  const completed=await view();
+  expect(completed.job.kind).toBe('communication');
+  expect(completed.state.phone.events.filter((e:{content:string})=>e.content==='Только участникам группы.')).toHaveLength(1);
+  await expect(dialog.locator('.phone-heading')).toHaveAttribute('aria-busy','false');
+  await expect(dialog.getByRole('alert')).toHaveCount(0);
+  await dialog.getByRole("button",{name:"Управление участниками"}).click();
+  await expect(dialog.getByRole('button',{name:'Удалить: Вера работа',exact:true})).toBeEnabled();
   await dialog
     .getByRole("button", { name: "Удалить: Вера работа", exact: true })
     .click();
@@ -153,14 +153,12 @@ test("group membership and protagonist-owned contacts", async ({
   await expect(
     dialog.getByRole("button", { name: "Удалить: Вера работа", exact: true }),
   ).toBeVisible();
-  await page.keyboard.press("Escape");
-  await page
-    .getByRole("button", { name: "Сменить главного героя", exact: true })
-    .click();
-  await dialog.getByLabel("Новый главный герой").selectOption("qa_vera");
-  await dialog.getByRole("button", { name: "Проверить и посмотреть" }).click();
-  await dialog.getByRole("button", { name: "Подтвердить смену" }).click();
-  await expect(dialog).toBeHidden();
+  await dialog.getByRole("button",{name:"Свернуть телефон"}).click();
+  await gameAction(page,'Сменить главного героя');
+  await page.getByRole("dialog").getByLabel("Новый главный герой").selectOption("qa_vera");
+  await page.getByRole("dialog").getByRole("button", { name: "Проверить и посмотреть" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Подтвердить смену" }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
   await page.getByRole("button", { name: /^Телефон/ }).click();
   await expect(dialog.getByText("Кирилл", { exact: true })).toBeVisible();
   await expect(dialog.getByText("Мастерская", { exact: true })).toHaveCount(0);
@@ -188,11 +186,11 @@ test("unread text and shared portrait projection", async ({
     page.getByText("Прочти, когда будет удобно.", { exact: true }),
   ).toHaveCount(0);
   await page.getByRole("button", { name: /^Телефон/ }).click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByRole("region", {name:"Телефон персонажа"});
   const contact = dialog
     .locator("article.phone-row")
     .filter({ hasText: "Вера работа" });
-  await expect(contact.locator("svg[data-silhouette]")).toBeVisible();
+  await expect(contact.locator("img.procedural-portrait")).toBeVisible();
   await page.screenshot({
     path: test.info().outputPath("phone-unread.png"),
     animations: "disabled",
@@ -227,6 +225,7 @@ test("unread text and shared portrait projection", async ({
   await expect(
     dialog.getByLabel("Текущий звонок").locator("img"),
   ).toHaveAttribute("src", portrait!);
+  await contact.getByRole("button", { name: "Вера работа", exact: true }).click();
   await contact.getByRole("button", { name: "Написать", exact: true }).click();
   await expect(
     dialog.getByText("Прочти, когда будет удобно.", { exact: true }),

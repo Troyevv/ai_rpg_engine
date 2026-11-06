@@ -1,8 +1,7 @@
 # Canonical appearance and portrait attachments (#74)
 
 Parent: #36. Extends the existing Character, StateResolver, Context Builder,
-History DAG and save snapshots; Narrative Runtime remains v3. No Tabletop rules,
-phone, genetics, age-driven cosmetics or general card redesign are introduced.
+History DAG and save snapshots; Narrative Runtime remains v3. No phone, genetics, age-driven cosmetics or general card redesign are introduced.
 
 ## Ownership and semantic boundary
 

@@ -10,6 +10,7 @@ from backend.runtime_v3.director import plan, interval_candidates
 from backend.runtime_v3.time_skip import plan_skip, TimeSkipRequest
 from backend.runtime_v3.models import assert_world_state_v3_invariants
 from test_calendar_v2 import state, snapshot
+from backend.services.world_delta_errors import StructuralDeltaError
 
 PROOF = 'Я согласен: в пятницу вечером после работы едем, в воскресенье возвращаемся.'
 
@@ -46,7 +47,7 @@ def test_thursday_plan_window_due_overdue_and_evidence_outcome():
     assert commitment_view(s,e)['context_category']=='OVERDUE PLAN'
     before=deepcopy(s)
     refused=change(s,[dict(id='trip',assertion='occurred',evidence='Другой текст')]).state
-    assert refused['scheduled_events']==s['scheduled_events']
+    assert refused['scheduled_events']['trip']['status']=='resolved'
     done=change(s,[dict(id='trip',assertion='occurred')],text='Они приехали в коттедж.',player='').state
     assert done['scheduled_events']['trip']['status']=='resolved'
     assert done['scheduled_events']['return']['status']=='pending'
@@ -79,19 +80,22 @@ def test_obstacle_keeps_plan_missed_is_not_success_and_no_relationship_penalty()
 @pytest.mark.parametrize('text,assertion', [('Может быть съездим.',None),('Мы ездили год назад.','discussed_past'),('Я мечтаю о поездке.','wish'),('Поехали?', 'proposal')])
 def test_hypothetical_past_and_unconfirmed_proposal_do_not_create(text,assertion):
     r=trip();r['assertion']=assertion
-    result=change(state(),[r],text=text,player='')
-    assert not result.state['scheduled_events'] and result.warnings
+    before=state();original=deepcopy(before)
+    with pytest.raises(StructuralDeltaError) as exc: change(before,[r],text=text,player='')
+    assert exc.value.code=='commitment_invalid' and before==original
+    assert not change(before,[],text=text,player='').state['scheduled_events']
 
 
 def test_player_agency_npc_cancellation_and_background_protection():
-    result=change(state(),[trip()],player='')
-    assert not result.state['scheduled_events']
+    with pytest.raises(StructuralDeltaError) as exc: change(state(),[trip()],player='')
+    assert exc.value.code=='controlled_actor_unsupported'
     s=plans()
     cancelled=change(s,[dict(id='trip',assertion='cancelled',decision_actor_id='sonya')],player='').state
     assert cancelled['scheduled_events']['trip']['status']=='cancelled'
-    result=change(s,[dict(id='trip',assertion='occurred')],player='',mode='background',protected_actor_id='ilya')
-    assert result.state['scheduled_events']==s['scheduled_events']
-    assert result.warnings[0]['code']=='background_commitment_protected'
+    before=deepcopy(s)
+    with pytest.raises(StructuralDeltaError) as exc:
+        change(s,[dict(id='trip',assertion='occurred')],player='',mode='background',protected_actor_id='ilya')
+    assert s==before and exc.value.code=='background_commitment_protected'
 
 
 def test_skip_future_and_already_due_controlled_commitment_without_interrupt_flag():
@@ -142,19 +146,23 @@ def test_gvozd_meeting_resolved_does_not_reactivate_or_close_cottage_plan():
     from backend.runtime_v3.context import canonical_slice
     assert next(e for e in canonical_slice(s,scope)['scheduled_events'] if e['id']=='gvozd')['context_category']=='FACT'
     duplicate=dict(r,id='gvozd2')
-    result=change(s,[r,duplicate])
-    assert 'gvozd2' not in result.state['scheduled_events']
-    assert result.state['scheduled_events']['gvozd']['status']=='resolved'
-    assert result.state['scheduled_events']['trip']['status']=='pending'
-    assert result.state['facts']==s['facts']
+    before=deepcopy(s)
+    with pytest.raises(StructuralDeltaError) as exc: change(s,[r,duplicate])
+    assert exc.value.code=='commitment_terminal' and s==before
+    with pytest.raises(StructuralDeltaError) as exc: change(s,[duplicate])
+    assert exc.value.code=='commitment_duplicate' and s==before
+    assert s['scheduled_events']['gvozd']['status']=='resolved'
+    assert s['scheduled_events']['trip']['status']=='pending'
 
 
 def test_dependencies_reject_unknown_cycle_and_preserve_old_plan():
     s=plans()
-    result=change(s,[dict(id='trip',assertion='rescheduled',depends_on=['return'])])
-    assert result.state['scheduled_events']==s['scheduled_events']
-    result=change(state(),[trip(depends_on=['missing'])])
-    assert not result.state['scheduled_events']
+    before=deepcopy(s)
+    with pytest.raises(StructuralDeltaError) as exc:
+        change(s,[dict(id='trip',assertion='rescheduled',temporal=dict(day_offset=2),depends_on=['return'])])
+    assert exc.value.code=='commitment_dependency_invalid' and s==before
+    with pytest.raises(StructuralDeltaError) as exc: change(state(),[trip(depends_on=['missing'])])
+    assert exc.value.code=='commitment_dependency_invalid'
 
 
 def test_read_projection_bounded_stable_and_wedding_due_is_not_marriage():
@@ -185,11 +193,12 @@ def test_existing_unresolved_legacy_plan_can_be_cancelled_with_evidence():
     assert result.state['scheduled_events']['old']['status']=='cancelled'
 
 
-def test_malformed_optional_records_do_not_crash_turn():
+def test_malformed_established_commitment_requires_repair():
     for bad in (3,{},'ilya',None):
         r=trip();r['character_ids']=bad
-        result=change(state(),[r],mode='background')
-        assert not result.state['scheduled_events'] and result.warnings
+        before=state();original=deepcopy(before)
+        with pytest.raises(StructuralDeltaError) as exc: change(before,[r],mode='background')
+        assert exc.value.code=='commitment_invalid' and before==original
 
 
 def test_qa_start_turn_reload_next_turn_skip_variants_and_meeting_regression(tmp_path):

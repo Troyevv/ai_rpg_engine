@@ -25,7 +25,7 @@ class ServiceClaim(StrictModel):
     consent_actor_ids: list[str] = Field(max_length=2)
     parent_ids: list[str] = Field(default_factory=list, max_length=8)
     assertion: Literal['completed_consensual_adult_event']
-    evidence: str = Field(min_length=1)
+    evidence: str = ""
     player_evidence: str = ''
     player_assertion: Literal['explicit_choice'] | None = None
 
@@ -38,7 +38,7 @@ class BirthClaim(StrictModel):
     disclosed_parent_ids: list[str] = Field(default_factory=list, max_length=8)
     # Explicit prose facts live on the existing card, not a child Appearance model.
     appearance: dict[str, str] = Field(default_factory=dict)
-    evidence: str = Field(min_length=1)
+    evidence: str = ""
 
 
 class NameClaim(StrictModel):
@@ -52,7 +52,7 @@ class NameClaim(StrictModel):
     delegated_to: str | None = None
     replaces: str | None = None
     source_event_id: str
-    evidence: str = Field(min_length=1)
+    evidence: str = ""
     player_evidence: str = ''
     player_assertion: Literal['explicit_choice'] | None = None
 
@@ -64,9 +64,7 @@ def unit(seed, purpose):
 def source(resolver, claim, events):
     from backend.runtime_v3.resolver import normalized
     event = events.get(claim['source_event_id'])
-    if (not event or not resolver.supported(claim) or
-            not normalized(claim['evidence']) or normalized(claim['evidence']) not in normalized(resolver.narrative) or
-            normalized(event['evidence']) not in normalized(resolver.narrative)):
+    if not event or not resolver.supported(claim):
         raise ValueError('current completed narrative event required')
     return event
 
@@ -241,7 +239,7 @@ def birth(r,c,event):
         if cid in s['characters']: raise ValueError('child identity collision')
         temper={key:('low','moderate','high')[min(2,int(unit(cid,key)*3))] for key in ('activity','adaptability','sensitivity','intensity','sociability')}
         item=PersonalityItem(field='temperament',text=json.dumps(temper,sort_keys=True),source_ids=[event['id']]).model_dump()
-        actor=Character(id=cid,location_id=c['location_id'],birth_date=date,life_status='alive',
+        actor=Character(id=cid,location_id=c['location_id'],birth_date=date,birth_date_provenance=dict(source='birth_event',event_id=event['id']),life_status='alive',
             biological_sex=ch['sex'],developmental_stage='infant',personality=PersonalityProfile(items={'early_temperament':item}),values={},
             birth_provenance=dict(pregnancy_id=p['id'],event_id=event['id'],minute=now)).model_dump()
         s['characters'][cid]=actor
@@ -339,13 +337,18 @@ def appearance_adapter(snapshot, child_id):
     """
     actor=snapshot['world_state']['characters'][child_id]
     card=next((c for c in snapshot['character_cards'] if c['id']==child_id),{})
+    from backend.runtime_v3.birth_identity import game_metadata,dob_metadata
     return deepcopy(dict(character_id=child_id,appearance_text=card.get('fields',{}).get('Внешность'),
-        birth_provenance=actor.get('birth_provenance',{})))
+        birth_provenance=game_metadata(actor),birth_date_provenance=dob_metadata(actor)))
 
 
 def validate_reproduction(state):
     """Persisted cross-entity integrity; never erase a corrupt process and reroll."""
     actors=state['characters'];pregnancies=state['pregnancies'];events=state['reproductive_events']
+    for cid,actor in actors.items():
+        pid=actor.get('birth_provenance',{}).get('pregnancy_id')
+        if pid is not None and (pid not in pregnancies or pregnancies[pid]['status']!='born' or cid not in {c['id'] for c in pregnancies[pid]['children']}):
+            raise ValueError('birth provenance points to a missing or incompatible pregnancy/child')
     active=set();children=set()
     for eid,e in events.items():
         if eid!=e['id'] or set(e['participants'])!={e['gestational_actor_id'],e['impregnating_actor_id']} or len(e['participants'])!=2:
@@ -384,8 +387,9 @@ def validate_reproduction(state):
 
 
 def known_birth(state, cid, observer):
+    from backend.runtime_v3.birth_identity import is_game_birth
     actor=state['characters'][cid]
-    return (not actor.get('birth_provenance') or cid==observer or
+    return (not is_game_birth(state,cid) or cid==observer or
         state['knowledge'].get(str(observer)+':'+str(actor.get('life_fact_id')),{}).get('status')=='known')
 
 

@@ -108,7 +108,7 @@ typed History before/after transitions only. Malformed sources are skipped with
 logging; legacy prose is never sent to an LLM or reinterpreted. Original History
 and saved snapshots remain byte-for-byte unchanged. Existing schema_version=3
 and unknown defaults remain valid. Ordinary turns with no milestones keep working.
-Missing ancestry is still reported by the existing History audit. Tabletop is unchanged.
+Missing ancestry is still reported by the existing History audit.
 
-Tests: `tests/test_milestones.py` plus existing Runtime/legacy/Time Skip/Tabletop
+Tests: `tests/test_milestones.py` plus existing Runtime/legacy/Time Skip
 regressions. Manual checkpoint: [milestones](manual_qa/narrative_v4/milestones.md).

@@ -1,3 +1,4 @@
+import {creationMethod} from './idea-navigation';
 import {nav} from "./navigation";
 import { test, expect } from "@playwright/test";
 
@@ -13,7 +14,7 @@ test("scenario → summary → world → save → start → action → regenerat
   await page.getByLabel("API-ключ DeepSeek").fill("fixture-key");
   await page.getByRole("button", { name: "Сохранить настройки" }).click();
   await nav(page,'Создать');
-  await page.getByRole('button',{name:'Со Сценаристом',exact:true}).click();
+  await creationMethod(page,'Со Сценаристом');
   await page.getByLabel("Название сценария").fill("Вечер в общем доме");
   await page
     .getByRole("button", { name: "Новый сценарий", exact: true })
@@ -47,11 +48,13 @@ test("scenario → summary → world → save → start → action → regenerat
   await page.getByRole("button", { name: "Начать игру", exact: true }).click();
   await expect(page.locator(".choices button")).toHaveCount(6);
   await expect(page.locator(".turn")).toHaveCount(1);
-  await page.locator(".story .npc-link").first().click();
-  await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(
-    page.getByText("Карточка ведущего", { exact: false }),
-  ).toBeVisible();
+  const characterLink = page.locator(".story .npc-link").first();
+  const characterName = (await characterLink.innerText()).trim();
+  await characterLink.click();
+  await expect(page.locator(".inspector-workspace")).toBeVisible();
+  await expect(page.locator(".character-profile")).toBeVisible();
+  await expect(page.locator(".character-header")).toContainText(characterName);
+  await expect(page.getByRole("tab", { name: "Обзор", exact: true })).toHaveAttribute("aria-selected", "true");
   await page.getByRole("button", { name: "Закрыть", exact: true }).click();
   await page
     .getByLabel("Своё действие или реплика")
@@ -99,10 +102,10 @@ test("streaming survives disconnect; stop keeps a draft and cannot save it as a 
   const w = await (
     await request.post("/api/workspaces", { data: { name: "Остановка" } })
   ).json();
-  await page.addInitScript((id) => localStorage.setItem("workspace", id), w.id);
+  await page.addInitScript((id) => {localStorage.setItem("workspace", id);localStorage.setItem("draftWorkspace",id)}, w.id);
   await page.goto("/");
   await nav(page,'Создать');
-  await page.getByRole('button',{name:'Со Сценаристом',exact:true}).click();
+  await creationMethod(page,'Со Сценаристом');
   await page.getByLabel("Идея или правки сценария").fill("Друзья");
   await page
     .getByRole("button", { name: "Написать сценарий", exact: true })
@@ -117,7 +120,7 @@ test("streaming survives disconnect; stop keeps a draft and cannot save it as a 
   ).toBeVisible();
   await page.reload();
   await nav(page,'Создать');
-  await page.getByRole('button',{name:'Со Сценаристом',exact:true}).click();
+  await page.getByRole('button',{name:'Вернуться к Сценаристу',exact:true}).click();
   await page
     .getByRole("button", { name: "Остановить генерацию", exact: true })
     .click();

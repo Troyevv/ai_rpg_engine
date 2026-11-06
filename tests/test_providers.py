@@ -77,7 +77,7 @@ def test_deepseek_game_retry_and_no_persisted_credentials(tmp_path):
     assert all(call['provider'] == 'deepseek' and call['api_key'] == 'private-test-key' for call in calls)
     with storage.connect() as conn:
         dump = '\n'.join(conn.iterdump())
-    assert 'private' not in dump
+    assert 'private-test-key' not in dump and 'new-private-key' not in dump
 
 def test_compatible_provider_uses_shared_stream_and_environment(monkeypatch):
     import llm

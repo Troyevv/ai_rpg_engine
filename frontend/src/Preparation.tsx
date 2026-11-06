@@ -1,6 +1,6 @@
 import {Versions} from "./Versions";
 import {Diagnostics} from "./Diagnostics";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Download, Send, Plus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { api, download } from "./api";
@@ -24,32 +24,49 @@ import {
   DialogTitle,
   DialogDescription,
 } from "./components/ui/dialog";
-export function Preparation({
+type RemovedScenario={id:string;name:string;revision:number};
+type ScenarioTrashState={removed:RemovedScenario[];setRemoved:(items:RemovedScenario[])=>void;trashOpen:boolean;setTrashOpen:(open:boolean)=>void};
+type PreparationProps={prefs:Preferences;apiKey:string;onWorld:(id:number)=>void;onDraft?:(id:string)=>void;worldSettings?:ReactNode;initialWorkspaceId?:string;onWorkspaceChange?:(id:string)=>void};
+export function Preparation(props:PreparationProps){
+ const [removed,setRemoved]=useState<RemovedScenario[]>([]);
+ const [trashOpen,setTrashOpen]=useState(false);
+ const [selected,setSelected]=useState(props.initialWorkspaceId??localStorage.getItem("workspace")??"");
+ useEffect(()=>{if(props.initialWorkspaceId!==undefined)setSelected(props.initialWorkspaceId)},[props.initialWorkspaceId]);
+ return <PreparationWorkspace key={selected} {...props} removed={removed} setRemoved={setRemoved} trashOpen={trashOpen} setTrashOpen={setTrashOpen} selected={selected} onSelect={id=>{setSelected(id);props.onWorkspaceChange?.(id)}}/>;
+}
+function PreparationWorkspace({
   prefs,
   apiKey,
   onWorld,
   onDraft,
+  worldSettings,selected,onSelect,removed,setRemoved,trashOpen,setTrashOpen,
 }: {
+  selected:string;onSelect:(id:string)=>void;
   prefs: Preferences;
   apiKey: string;
   onWorld: (id: number) => void;
   onDraft?: (id: string) => void;
-}) {
+  worldSettings?: ReactNode;
+}&ScenarioTrashState) {
   const [list, setList] = useState<{ id: string; name: string }[]>([]);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
-  const [id, setId] = useState(localStorage.getItem("workspace") || "");
-  const [text, setText] = useState("");
+  const id=selected,setId=onSelect;
+  const inputKey="preparation-input:"+id;
+  const [text, setText] = useState(()=>sessionStorage.getItem(inputKey)||"");
+  const [deleteSummary,setDeleteSummary]=useState(false);
+  const alive=useRef(true),guard=useRef(false);
+  useEffect(()=>{alive.current=true;return()=>{alive.current=false}},[]);
+  const updateText=(value:string)=>{sessionStorage.setItem(inputKey,value);setText(value)};
   const [name, setName] = useState("Новая история");
   const [saveName, setSaveName] = useState("");
   const [versionKind,setVersionKind] = useState<"idea"|"summary"|null>(null);
-  const [removed,setRemoved] = useState<{id:string;name:string;revision:number}[]>([]);
   const [diagnostics,setDiagnostics] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const refresh = () => {
     if (id)
       api<Workspace>(`/workspaces/${id}`)
-        .then(setWorkspace)
+        .then(w=>{if(alive.current)setWorkspace(w)})
         .catch((e) => toast.error(e.message));
   };
   useEffect(() => {
@@ -59,24 +76,25 @@ export function Preparation({
   }, []);
   useEffect(() => {
     setWorkspace(null);
+    if (!id) localStorage.removeItem("workspace");
     if (id) {
       localStorage.setItem("workspace", id);
       const c = new AbortController();
       api<Workspace>(`/workspaces/${id}`, undefined, "GET", c.signal)
-        .then(setWorkspace)
+        .then(w=>{if(alive.current)setWorkspace(w)})
         .catch(() => {});
       return () => c.abort();
     }
   }, [id]);
   const { job, reconnecting } = useJob(workspace?.job, refresh);
   const run = async (fn: () => Promise<void>) => {
-    setBusy(true);
+    if(guard.current)return;guard.current=true;setBusy(true);
     try {
       await fn();
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
-      setBusy(false);
+      guard.current=false;if(alive.current)setBusy(false);
     }
   };
   const generate = (kind: "idea" | "summary") =>
@@ -89,8 +107,8 @@ export function Preparation({
         config: prefs[kind],
         api_key: apiKey,
       });
-      setWorkspace((w) => (w ? { ...w, job: j } : w));
-      if (kind === "idea") setText("");
+      if(alive.current)setWorkspace((w) => (w ? { ...w, job: j } : w));
+      if (kind === "idea"&&sessionStorage.getItem(inputKey)===text) {sessionStorage.removeItem(inputKey);if(alive.current)setText("")}
     });
   return (
     <main className="preparation">
@@ -127,8 +145,7 @@ export function Preparation({
           onClick={() =>
             run(async () => {
               const w = await api<Workspace>("/workspaces", { name });
-              setList((items) => [{ id: w.id, name: w.name }, ...items]);
-              setId(w.id);
+              if(alive.current){setList((items) => [{ id: w.id, name: w.name }, ...items]);setId(w.id)}
             })
           }
         >
@@ -137,7 +154,8 @@ export function Preparation({
         </Button>
       </div>
       {workspace&&<Versions kind={versionKind||"summary"} owner={workspace.id} open={!!versionKind} close={()=>setVersionKind(null)} changed={refresh}/>}
-      <details><summary>Удалённые сценарии</summary><Button variant="ghost" onClick={()=>void api<typeof removed>("/workspaces?deleted=true").then(setRemoved).catch(e=>toast.error(e.message))}>Обновить корзину</Button>{removed.map(w=><div key={w.id}>{w.name}<Button size="sm" onClick={()=>void run(async()=>{await api(`/workspaces/${w.id}/restore`,{revision:w.revision});setList(await api("/workspaces"));setRemoved(await api("/workspaces?deleted=true"));setId(w.id)})}>Восстановить</Button></div>)}</details>
+      <details open={trashOpen} onToggle={e=>setTrashOpen(e.currentTarget.open)}><summary>Удалённые сценарии</summary><Button variant="ghost" onClick={()=>void api<typeof removed>("/workspaces?deleted=true").then(setRemoved).catch(e=>toast.error(e.message))}>Обновить корзину</Button>{removed.map(w=><div key={w.id}>{w.name}<Button size="sm" onClick={()=>void run(async()=>{await api(`/workspaces/${w.id}/restore`,{revision:w.revision});const items=await api<{id:string;name:string}[]>("/workspaces");setRemoved(await api("/workspaces?deleted=true"));if(alive.current){setList(items);setId(w.id)}})}>Восстановить</Button></div>)}</details>
+      {worldSettings}
       {workspace && onDraft && <Button disabled={busy || active(job) || !workspace.idea} onClick={()=>onDraft(workspace.id)}>Продолжить в редакторе мира</Button>}
       {workspace ? (
         <>
@@ -195,7 +213,7 @@ export function Preparation({
                 aria-label="Идея или правки сценария"
                 placeholder="Современный город, компания друзей, юмор и немного романтики…"
                 value={text}
-                onChange={(e) => setText(e.target.value)}
+                onChange={(e) => updateText(e.target.value)}
               />
               <Button
                 disabled={busy || active(job) || !text.trim()}
@@ -209,7 +227,7 @@ export function Preparation({
               <p className="eyebrow">02 · Генератор выжимки</p>
               <h2>Основа мира</h2>
               <Button variant="ghost" size="sm" onClick={()=>setVersionKind("summary")}>Версии выжимки</Button>
-              {workspace.summary&&<Button variant="ghost" size="sm" disabled={busy||active(job)} onClick={()=>{if(window.confirm("Удалить текущую выжимку? Её версии и сохранённые миры останутся."))void run(async()=>{const h=await api<{active_id:number}>(`/documents/summary/${id}`);await api(`/documents/summary/${id}`,{content:"",expected_head:h.active_id});refresh()})}}>Удалить выжимку</Button>}
+              {workspace.summary&&<Button variant="ghost" size="sm" disabled={busy||active(job)} onClick={()=>setDeleteSummary(true)}>Удалить выжимку</Button>}
               {workspace.summary ? (
                 <details open>
                   <summary>
@@ -277,7 +295,7 @@ export function Preparation({
               )}
             </section>
           </div>
-          <Button variant="ghost" disabled={busy||active(job)} onClick={()=>{if(window.confirm("Удалить сценарий вместе с рабочей выжимкой? Сохранённые миры и история версий останутся."))void run(async()=>{await api(`/workspaces/${id}`,{revision:workspace.revision},"DELETE");setId("");setWorkspace(null);setList(await api("/workspaces"))})}}>Удалить сценарий</Button>
+          <Button variant="ghost" disabled={busy||active(job)} onClick={()=>{if(window.confirm("Удалить сценарий вместе с рабочей выжимкой? Сохранённые миры и история версий останутся."))void run(async()=>{await api(`/workspaces/${id}`,{revision:workspace.revision},"DELETE");if(alive.current){setId("");setWorkspace(null)}})}}>Удалить сценарий</Button>
           <Button
             className="reset-button"
             variant="ghost"
@@ -337,6 +355,7 @@ export function Preparation({
           </Button>
         </DialogContent>
       </Dialog>
+      <Dialog open={deleteSummary} onOpenChange={setDeleteSummary}><DialogContent><DialogTitle>Удалить текущую выжимку?</DialogTitle><DialogDescription>Её версии и сохранённые миры останутся.</DialogDescription><Button variant="ghost" onClick={()=>setDeleteSummary(false)}>Отмена</Button><Button disabled={busy} onClick={()=>void run(async()=>{const h=await api<{active_id:number}>(`/documents/summary/${id}`);await api(`/documents/summary/${id}`,{content:"",expected_head:h.active_id});if(alive.current){setDeleteSummary(false);refresh()}})}>Удалить выжимку</Button></DialogContent></Dialog>
     </main>
   );
 }

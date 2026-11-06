@@ -1,0 +1,23 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+Running 12 tests using 1 worker
+
+(node:34) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] Semantic retrieval unavailable (ModuleNotFoundError); structural fallback
+  ✓   1 [desktop] › frontend/e2e/phone-completion.spec.ts:16:1 › T15 T18 outgoing call and automatic read reply through real jobs (6.0s)
+  ✓   2 [desktop] › frontend/e2e/phone-completion.spec.ts:61:2 › T16 decline completes without a manual turn (2.3s)
+  ✓   3 [desktop] › frontend/e2e/phone-completion.spec.ts:61:2 › T16 silent completes without a manual turn (2.3s)
+  ✓   4 [desktop] › frontend/e2e/phone-completion.spec.ts:71:1 › T19 read without reply stops and explicit wait is bounded (2.9s)
+  ✓   5 [desktop] › frontend/e2e/phone-completion.spec.ts:87:1 › T22 provider failure retains send, retry/reload does not resend (4.0s)
+  ✓   6 [desktop] › frontend/e2e/phone-completion.spec.ts:105:1 › T14 T17 T25 incoming call preserves physical turn and phone draft in two skins (6.5s)
+(node:295) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   7 [mobile] › frontend/e2e/phone-completion.spec.ts:16:1 › T15 T18 outgoing call and automatic read reply through real jobs (6.4s)
+  ✓   8 [mobile] › frontend/e2e/phone-completion.spec.ts:61:2 › T16 decline completes without a manual turn (2.6s)
+  ✓   9 [mobile] › frontend/e2e/phone-completion.spec.ts:61:2 › T16 silent completes without a manual turn (2.4s)
+  ✓  10 [mobile] › frontend/e2e/phone-completion.spec.ts:71:1 › T19 read without reply stops and explicit wait is bounded (2.9s)
+  ✓  11 [mobile] › frontend/e2e/phone-completion.spec.ts:87:1 › T22 provider failure retains send, retry/reload does not resend (4.3s)
+  ✓  12 [mobile] › frontend/e2e/phone-completion.spec.ts:105:1 › T14 T17 T25 incoming call preserves physical turn and phone draft in two skins (6.7s)
+
+  12 passed (52.4s)

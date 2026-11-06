@@ -1,3 +1,4 @@
+import {gameAction} from './navigation';
 import { test, expect } from "@playwright/test";
 test("permanent transition and manual creation preview cancel commit", async ({
   page,
@@ -11,10 +12,8 @@ test("permanent transition and manual creation preview cancel commit", async ({
     selected,
   );
   await page.goto("/");
-  await page
-    .getByRole("button", { name: "Сменить главного героя", exact: true })
-    .click();
-  const dialog = page.getByRole("dialog");
+  await gameAction(page,'Сменить главного героя');
+  const dialog = page.getByRole("dialog").last();
   await dialog.getByLabel("Новый главный герой").selectOption("qa_asya");
   await dialog.getByRole("button", { name: "Проверить и посмотреть" }).click();
   await expect(dialog.getByText("Готово к подтверждению")).toBeVisible();
@@ -24,18 +23,14 @@ test("permanent transition and manual creation preview cancel commit", async ({
   expect(save.state.protagonist_id).toBe("qa_asya");
   expect(save.state.controlled_actor_id).toBe("qa_asya");
   const count = save.state.characters.length;
-  await page
-    .getByRole("button", { name: "Сменить главного героя", exact: true })
-    .click();
+  await gameAction(page,'Сменить главного героя');
   await dialog
     .getByRole("button", { name: "Создать нового", exact: true })
     .click();
   await dialog.getByRole("button", { name: "Отмена", exact: true }).click();
   save = await (await request.get(`/api/saves/${selected.save}`)).json();
   expect(save.state.characters).toHaveLength(count);
-  await page
-    .getByRole("button", { name: "Сменить главного героя", exact: true })
-    .click();
+  await gameAction(page,'Сменить главного героя');
   await dialog
     .getByRole("button", { name: "Создать нового", exact: true })
     .click();
@@ -59,7 +54,7 @@ test("permanent transition and manual creation preview cancel commit", async ({
   ).toBe("Новая героиня");
   await page.reload();
   await expect(
-    page.getByRole("button", { name: "Сменить главного героя", exact: true }),
+    page.locator(".current-game-entry button"),
   ).toBeVisible();
   expect(
     await page.evaluate(
@@ -79,10 +74,8 @@ test("generated full draft remains editable and one field regeneration preserves
     selected,
   );
   await page.goto("/");
-  await page
-    .getByRole("button", { name: "Сменить главного героя", exact: true })
-    .click();
-  const dialog = page.getByRole("dialog");
+  await gameAction(page,'Сменить главного героя');
+  const dialog = page.getByRole("dialog").last();
   await dialog
     .getByRole("button", { name: "Создать нового", exact: true })
     .click();
@@ -140,15 +133,15 @@ test('control commit keeps actions locked until the refreshed revision arrives',
   if(await page.getByLabel('Управляемый персонаж').isVisible())await page.getByLabel('Управляемый персонаж').selectOption('character_2');
   else{
     await page.locator('.mobile-pov button').first().click();
-    await page.getByRole('dialog').getByRole('button',{name:before.state.characters.find((c:any)=>c.id==='character_2').name,exact:true}).click();
+    await page.getByRole('dialog').last().getByRole('button',{name:before.state.characters.find((c:any)=>c.id==='character_2').name,exact:true}).click();
   }
   try{
     expect((await committed).ok()).toBe(true);
     await refreshing;
-    await expect(page.getByRole('button',{name:'Сменить главного героя',exact:true})).toBeDisabled();
+    await expect(page.getByRole('button',{name:'Мир без ГГ',exact:true})).toBeDisabled();
     await expect(page.getByRole('button',{name:'Мир без ГГ',exact:true})).toBeDisabled();
   }finally{release();}
-  await expect(page.getByRole('button',{name:'Сменить главного героя',exact:true})).toBeEnabled();
+  await expect(page.getByRole('button',{name:'Мир без ГГ',exact:true})).toBeEnabled();
   const after=await(await request.get(`/api/saves/${selected.save}`)).json();
   expect(after.state.controlled_actor_id).toBe('character_2');
   expect(after.state.protagonist_id).toBe(before.state.protagonist_id);

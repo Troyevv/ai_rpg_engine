@@ -5,6 +5,40 @@
   flex-direction: column;
 }
 
+.narrative-toolbar {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 16px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.narrative-toolbar .current-game-entry > button {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.narrative-toolbar > .story-journal-trigger > svg,
+.narrative-toolbar .current-game-entry > button > svg {
+  flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  .narrative-toolbar {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: stretch;
+    padding: 4px 12px;
+  }
+  .narrative-toolbar .current-game-entry > button,
+  .narrative-toolbar > .story-journal-trigger {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 .scene-bar {
   display: flex;
   align-items: center;
@@ -443,3 +477,12 @@
 .protagonist-field{margin:.6rem 0;padding:.4rem;min-width:0}
 .protagonist-paths,.protagonist-actions{display:flex;gap:.6rem;flex-wrap:wrap}
 .protagonist-actions{position:sticky;bottom:0;background:var(--background);padding:.8rem 0}
+
+/* #72: the same article owns the preview and committed narrative. */
+.pending-turn { margin:0 0 40px; }
+.story-scroll { overflow-anchor:none; scroll-behavior:auto; }
+@media(max-width:767px) { .pending-turn { margin-bottom:18px; } }
+@media(prefers-reduced-motion:reduce) {
+  .story .spin { animation:none; }
+  .story .choices, .story .choices button { transition:none; animation:none; }
+}

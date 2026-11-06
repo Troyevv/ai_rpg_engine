@@ -4,7 +4,9 @@ from canonical_fixture import canonical
 import json
 import re
 import os
-os.environ["TABLETOP_DEBUG"] = "1"
+# Browser transport fixtures use deterministic structural retrieval, not an optional
+# local embedding-model installation. Embedding behavior has dedicated unit tests.
+os.environ["RPG_SEMANTIC_ENABLED"] = "0"
 from pathlib import Path
 import sys
 import tempfile
@@ -14,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import engine
 import llm
+provider_chat_stream = llm.chat_stream
 import backend.services.preparation as preparation
 from backend.api.app import create_app
 from test_worlds import summary
@@ -41,19 +44,260 @@ def runtime_v3_request(messages):
     return any('RawTurnResult v3' in message['content'] for message in messages)
 
 
+idea190_provider=None
+editor173_control=None
+creative172_control=None
+review170_control=None
+review_protocol_attempts={}
+fragment_attempts={}
+handoff_provider=None
+phone_mode="silent"
+group_semantic_fail_once=False
+letter130_provider=None
+npc_review_start_payload=None
+story168_payload=None
+story168_gate=None
+
 def stream(**kwargs):
+    global phone_mode, group_semantic_fail_once, npc_review_start_payload, story168_payload
+    if idea190_provider is not None and idea190_provider.matches(kwargs):
+        yield from idea190_provider.stream(kwargs);return
+    if story168_payload is not None:
+        from story_notifications_fixture import TEXT
+        if kwargs.get('response_format'):
+            if story168_gate is not None and not story168_gate.wait(30): raise RuntimeError('Story168 gate timed out')
+            yield json.dumps(story168_payload,ensure_ascii=False)
+            story168_payload=None
+        else:
+            yield TEXT
+        return
+    if npc_review_start_payload is not None:
+        if kwargs.get('response_format') and runtime_v3_request(kwargs['messages']):
+            yield json.dumps(npc_review_start_payload,ensure_ascii=False)
+            npc_review_start_payload=None
+            return
+        if not kwargs.get('response_format'):
+            yield 'Лада пришла и рассказала об открытой мастерской. Она обещала показать её герою. Следом вошёл Александр Константинович Волконский.'
+            return
+    if phone_mode in ('group152', 'digital_style'):
+        if group_semantic_fail_once and kwargs['messages'][0]['content'].startswith('Remote semantic extraction/'):
+            group_semantic_fail_once=False
+            raise RuntimeError('Deterministic group Extraction outage')
+        if phone_mode == 'digital_style':
+            from digital_style_provider import response
+        else:
+            from group152_provider import response
+        yield response(kwargs['messages'], bool(kwargs.get('response_format')))
+        return
+    if phone_mode == 'letter130':
+        from unittest.mock import MagicMock, patch
+        client = MagicMock()
+        client.chat.completions.create.side_effect = letter130_provider.create
+        with patch('llm.OpenAI', return_value=client):
+            yield from provider_chat_stream(**kwargs)
+        if kwargs.get('response_format'):
+            letter130_provider.artifacts=[]
+            letter130_provider.rows=[]
+        return
+    if kwargs['messages'][0]['content'].startswith('Адресная коррекция творческого предложения'):
+        payload=json.loads(kwargs['messages'][1]['content'])
+        kwargs['on_usage']({'prompt_tokens':100,'completion_tokens':20})
+        kwargs['on_finish']('stop')
+        if payload['proposal']['changes'][-1].get('path')=='/sections/relationships':
+            yield json.dumps(dict(proposal_hash=payload['proposal_hash'],patches=[],drop_indices=[15]))
+        else:
+            yield json.dumps(dict(proposal_hash=payload['proposal_hash'],patches=[dict(path='/changes/3/value/actor_id',value='craftswoman')],drop_indices=[]))
+        return
+    from backend.services.draft_editor import MARKER as EDITOR_MARKER
+    if kwargs['messages'][0]['content'].startswith(EDITOR_MARKER):
+        editor173_control['calls']+=1
+        if not editor173_control['gate'].wait(45):raise RuntimeError('Editor gate timed out')
+        kwargs['on_usage']({'prompt_tokens':100,'completion_tokens':40})
+        kwargs['on_finish']('stop')
+        if editor173_control.get('fail') and editor173_control['calls']==1:
+            yield '';return
+        from test_draft_creative import additions,change
+        payload=json.loads(kwargs['messages'][1]['content'])
+        state=payload['candidate'];instruction=json.loads(payload['author_context'])['current_instruction']
+        if instruction in ('Создай сестру Ильи','Создай сестру Ильи — Олю'):
+            filename='ilya_sister_olya.json' if instruction.endswith('Олю') else 'ilya_sister.json'
+            fixture=json.loads((Path(__file__).parent/'fixtures/draft_editor'/filename).read_text())
+            proposal=json.loads(fixture['reply']);proposal['candidate_hash']=payload['candidate_hash']
+            yield json.dumps(proposal,ensure_ascii=False);return
+        if instruction=='WORKSHOP188 пакет':
+            changes=[change('/campaign/description','Новая редакция мира для следующего прохождения.','replace')]
+        elif instruction=='DELETE184_LOCATION':
+            changes=[change('/locations/1',state['locations'][1],'remove')]
+        elif instruction=='DELETE184_HISTORY':
+            index=next(i for i,c in enumerate(state['characters']) if c['id']=='archive184')
+            changes=[change('/characters/'+str(index),state['characters'][index],'remove'),
+                     change('/world/characters/archive184',state['world']['characters']['archive184'],'remove')]
+        else:
+            changes=additions(state)
+            changes.append(change('/world/organizations/apex/name','Новая история организации','replace'))
+        yield json.dumps(dict(candidate_hash=payload['candidate_hash'],rationale='Меняется только описание мира; начатая игра сохранена.' if instruction=='WORKSHOP188 пакет' else 'Вера возвращается в город. Её прошлое связано с мастерской и друзьями.',changes=changes),ensure_ascii=False)
+        return
+    if kwargs['messages'][0]['content'].startswith('Ты создаёшь полноценный живой RPG-мир') and 'EDITOR173' in kwargs['messages'][1]['content']:
+        from test_initial_draft_v4 import rich
+        yield json.dumps(rich(),ensure_ascii=False);return
+    from draft_provider_fixture import CREATIVE_MARKER, creative_noop
+    if kwargs["messages"][0]["content"].startswith(CREATIVE_MARKER):
+        if creative172_control and 'CREATIVE172' in kwargs['messages'][1]['content']:
+            creative172_control['calls']+=1
+            if not creative172_control['gate'].wait(30):raise RuntimeError('Creative gate timed out')
+            if creative172_control.get('http_error') and creative172_control['calls']==1:
+                # Exercise real SDK error conversion before any stream/usage.
+                from test_draft_creative_http import CreativeHTTP
+                from unittest.mock import patch
+                http=CreativeHTTP(('opaque refusal','messages'))
+                with patch('llm.OpenAI',side_effect=http.client):
+                    yield from provider_chat_stream(**kwargs)
+                return
+            kwargs['on_usage']({'prompt_tokens':100,'completion_tokens':20})
+            kwargs['on_finish']('stop')
+            if creative172_control['fail'] and creative172_control['calls']==1:
+                yield '';return
+            from test_draft_creative import additions
+            payload=json.loads(kwargs['messages'][1]['content'])
+            changes=additions(payload['candidate'])
+            if creative172_control.get('invalid'):changes[3]['value']['actor_id']='missing'
+            yield json.dumps(dict(candidate_hash=payload['candidate_hash'],rationale='Восстановление мастерской связывает персонажей.',changes=changes),ensure_ascii=False)
+            return
+        yield creative_noop(kwargs["messages"]);return
+    if creative172_control and kwargs['messages'][0]['content'].startswith('Ты создаёшь полноценный живой RPG-мир') and 'CREATIVE172' in kwargs['messages'][1]['content']:
+        from test_initial_draft_v4 import rich
+        yield json.dumps(rich(),ensure_ascii=False);return
+    from backend.services.draft_completeness import MARKER
+    if kwargs['messages'][0]['content'].startswith(MARKER):
+        request=json.loads(kwargs['messages'][1]['content'])
+        source=request.get('author_context','')
+        if review170_control and review170_control['source'] in source:
+            assert kwargs['thinking']=='off'
+            review170_control['calls']+=1
+            if not review170_control['gate'].wait(30):raise RuntimeError('Test review gate timed out')
+            failed=review170_control['fail'] and (not review170_control['transient'] or review170_control['calls']==1)
+            truncated=failed and not review170_control['transient']
+            kwargs['on_usage']({'prompt_tokens':24032,'completion_tokens':10,'completion_tokens_details':{'reasoning_tokens':10 if truncated else 0}})
+            kwargs['on_finish']('length' if truncated else 'stop')
+            yield '' if failed else '{"issues":[]}'
+            return
+        from draft_provider_fixture import protocol_review
+        controlled=protocol_review(request)
+        if controlled is not None:
+            yield controlled;return
+        yield '{"issues":[]}'
+        return
+    if kwargs['messages'][0]['content'].startswith('Remote semantic extraction/'):
+        if phone_mode=='semantic_error_once':
+            phone_mode='answer'
+            raise RuntimeError('Controlled semantic outage')
+        from phone_semantic_fixture import extract
+        data=json.loads(kwargs['messages'][1]['content']);value=extract(data)
+        if phone_mode=='agency_missing_once' and 'repair' not in data and value.get('scheduled_event_changes'):
+            value['scheduled_event_changes'][0].pop('player_assertion')
+        if phone_mode=='unknown_place' and value.get('scheduled_event_changes'):
+            value['scheduled_event_changes'][0]['location_id']='missing-place'
+        yield json.dumps(value,ensure_ascii=False);return
     full='\n'.join(m['content'] for m in kwargs['messages'])
+    if handoff_provider is not None and 'ilya_cabinet' in full:
+        from test_runtime_handoff import NARRATIVE as entry,provider_payload
+        if kwargs.get('response_format'):
+            handoff_provider['extractions']+=1
+            raw=provider_payload(kwargs)
+            raw['choices']=[dict(action='Ждать ответа',speech='')]
+            scenario=handoff_provider.get('scenario','retry')
+            raw['movements']=[]
+            if scenario=='doorway':
+                raw['final_scene'].update(present_character_ids=['ilya'],observed_character_ids=['viktoria_solovyova'])
+            if scenario in ('retry','semantic-retry') and handoff_provider['extractions']<=2:
+                raw['final_scene']['location_id']='unknown-room'
+                if scenario=='semantic-retry':raw['life_changes']=[dict(id='viktoria_solovyova',life_status='dead')]
+            if scenario=='optional-annotation':
+                raw['events']=[dict(id='greeting',text='Виктория приветствует Илью.',participants=['ilya','viktoria_solovyova'],witnesses=['ilya'],medium='conversation')]
+                raw['scene_actions']=[dict(actor_id='viktoria_solovyova',target_ids=['ilya'],source_event_id='greeting',phase='start',modality='speech',knowledge_ids=['missing'])]
+            yield json.dumps(raw,ensure_ascii=False)
+        else:
+            handoff_provider['narratives']+=1
+            if handoff_provider.get('scenario')=='doorway':entry='Виктория стоит в проёме, не заходя.'
+            elif handoff_provider.get('scenario') in ('entry','optional-annotation','semantic-retry'):entry='Виктория вошла внутрь и подошла к столу.'
+            yield entry if handoff_provider['narratives']==1 else 'Виктория Соловьёва отвечает: «Скоро закончу».'
+        return
+    if kwargs['messages'][0]['content'].startswith('Один необязательный пакет') and 'TEST_RELEASE_QUALITY' in full:
+        yield '{"patches":[],"preserved_unknown":null}';return
     observer='Тип хода: background' in full or 'Режим observer:' in full or 'mode=observer' in full
+    if kwargs['messages'][0]['content'].startswith('Group communication reaction/'):
+        # Same deterministic phone modes, new group wire contract. Do not fall
+        # through to Narrative JSON: a silent reaction is a completed job.
+        if phone_mode in ('silent','read_only','narrative138'):
+            yield '{"messages":[]}';return
+        from test_communication_cycle import decision
+        yield decision(kwargs['messages'])
+        return
     if kwargs['messages'][0]['content'].startswith('Select at most ONE optional grounded autonomous remote action.'):
-        yield '{"action":null}'
+        options=json.loads(kwargs['messages'][1]['content'])['options']
+        if phone_mode in ('silent','narrative138') or not options:
+            yield '{"action":null}';return
+        time.sleep(0.15)
+        o=options[0];action=o['actions'][0]
+        if phone_mode=='read_only' and action=='send':
+            yield '{"action":null}';return
+        if phone_mode=='error_once' and action=='send':
+            phone_mode='answer'
+            raise RuntimeError('Deterministic phone provider outage')
+        if phone_mode=='malformed_once':
+            phone_mode='answer'
+            yield '{"action":"answer"}';return
+        if phone_mode=='decline' and action=='answer':action='decline'
+        p=dict(actor_id=o['actor_id'],action=action,basis_ids=o['basis_ids'])
+        if 'event_id' in o:p['event_id']=o['event_id']
+        if action=='send':p.update(o['paths'][0],content='Да, договорились, в кафе «Липа».' if phone_mode=='new_place' else 'Да, договорились.' if phone_mode in ('meeting','unknown_place') else 'Привет. Ещё в офисе, разгребаю бумаги. А что, есть планы?' if phone_mode=='greeting' else 'Да, увидимся завтра. Напиши, когда освободишься.')
+        if action=='identify':p.update(speaker_name='Дежурный оператор')
+        yield json.dumps(dict(action=p),ensure_ascii=False)
         return
     current_message=next((m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only\n')),None)
     current_phone=json.loads(current_message.split('\n',1)[1]) if current_message else {}
+    if current_phone.get('communication') and phone_mode=='narrative138':
+        from narrative_phone138_fixture import response
+        task=json.loads(next(m['content'].split('\n',1)[1] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')))
+        value=response(current_phone,task,bool(kwargs.get('response_format')))
+        yield json.dumps(value,ensure_ascii=False) if isinstance(value,dict) else value
+        return
     if current_phone.get('communication'):
         camera=current_phone['camera']
+        voice=current_phone['communication'].get('focus')=='call'
+        # AI-editor fixtures reset the optional phone scenario between tests.
+        if (phone_mode or '').startswith('office'):
+            from call_continuity_fixture import response,BEFORE,AFTER
+            task=json.loads(next(m['content'].split('\n',1)[1] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')))
+            if voice:
+                value=response(current_phone,task['player_input'],'complete' if kwargs.get('response_format') else None)
+                if isinstance(value,dict) and phone_mode=='office-recovery':
+                    value.pop('physical_projections',None)
+                    value['choices']=[]
+                if isinstance(value,dict) and phone_mode=='office-rejected' and value.get('events'):
+                    value['events'][0]['participants']=['missing-actor']
+
+            else:
+                text=AFTER if 'Виктория' in camera.get('situation','') and 'ответ' in camera.get('situation','') else BEFORE
+                value=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),choices=[dict(action='Посмотреть на часы',speech='')]) if kwargs.get('response_format') else text
+                if phone_mode=='office-authority136':
+                    doorway=task['player_input'] in ('Подождать у двери.','Продолжить после звонка.')
+                    text='Виктория стоит в проёме, не заходя.' if doorway else 'Виктория вошла внутрь и отвечает Илье.'
+                    present=[cid for cid in camera['present_character_ids'] if cid!='qa_marina']
+                    if not doorway: present.append('qa_marina')
+                    value=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=present,
+                        observed_character_ids=['qa_marina'] if doorway else [],elapsed_minutes=0),
+                        events=[dict(id='dialogue',text=text,participants=[camera['controlled_actor_id'],'qa_marina'],witnesses=[camera['controlled_actor_id']],medium='conversation')]) if kwargs.get('response_format') else text
+            if isinstance(value,dict):yield json.dumps(value,ensure_ascii=False)
+            else:
+                for i in range(0,len(value),20):
+                    yield value[i:i+20];time.sleep(0.05)
+            return
+        text='Вера отвечает по телефону: «Да, слышу тебя. Давай встретимся завтра».' if voice else 'В комнате тихо. За окном шелестят листья.'
         if kwargs.get('response_format'):
-            yield json.dumps(dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),choices=[dict(action='Посмотреть в окно',speech='')]),ensure_ascii=False)
-        else: yield 'В комнате тихо. За окном шелестят листья.'
+            events=[dict(id='phone-dialogue',text=text,evidence=text,participants=current_phone['communication']['participants'],witnesses=current_phone['communication']['participants'],medium='conversation',interaction_channel='call')] if voice else []
+            yield json.dumps(dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),events=events,choices=[dict(action='Посмотреть в окно',speech='',interaction_channel='physical')]),ensure_ascii=False)
+        else: yield text
         return
     if 'qa_meeting' in full:
         current=json.loads(next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only\n')).split('\n',1)[1])
@@ -95,11 +339,50 @@ def stream(**kwargs):
             value['character']['location_id']=task['context']['locations'][0]['id']
             value['starting_scene']='У входа в дом.'
         value=json.dumps({'value':value},ensure_ascii=False)
+    elif 'TEST_CANDIDATE_RECOVERY' in full and 'patches' in kwargs['messages'][0]['content']:
+        value='{"patches":[]}'
     elif 'Каноническая JSON Schema WorldState' in full:
         from test_draft_world import fixture
-        value=json.dumps(fixture(),ensure_ascii=False)
+        candidate=fixture()
+        if 'TEST_CONTACT_FREE_WORLD' in full:
+            phone_mode='silent'
+            candidate['world'].pop('contacts',None)
+            candidate['world']['communication']={'text_message':True,'voice_call':True,'presentation':'phone'}
+        if 'TEST_MOTIVATION_OBJECTS' in full:
+            from test_draft_motivations import motivated
+            candidate,_=motivated()
+        for card in candidate['characters']:
+            for field,text in {'Характер':'Спокоен, внимателен к деталям.','Сильные стороны':'Помнит детали разговора.','Слабости':'Неохотно просит о помощи.','Биография':'Давно живёт в районе и знает соседей.','Внешность':'Короткие волосы, серая куртка.','Стиль общения':'Говорит короткими фразами, уточняет детали.','Привычки':'Записывает договорённости в блокнот.'}.items():
+                if card.get('fields',{}).get(field,'').strip().lower() in ('','неизвестно','не указано','—'):card['fields'][field]=text
+        if 'TEST_RELEASE_QUALITY' in full:candidate['characters'][1]['fields']['Внешность']='неизвестно'
+        if 'TEST_CANDIDATE_RECOVERY' in full:candidate['protagonist_id']='missing'
+        candidate['world'].pop('contacts',None)  # Model output omits legacy phonebook defaults.
+        value=json.dumps(candidate,ensure_ascii=False)
+        if 'TEST_FRAGMENT_RECOVERY' in full:
+            key=kwargs['messages'][1]['content'];count=fragment_attempts.get(key,0);fragment_attempts[key]=count+1
+            cut=value.index('"world":')+len('"world":')
+            if count<2:
+                from llm import OutputLimitReached
+                yield value[:cut] if count==0 else 'INVALID CONTINUATION'
+                if kwargs.get('on_finish'):kwargs['on_finish']('length')
+                raise OutputLimitReached()
+            value=value[cut:]
+        if 'TEST_JSON_CONTINUATION' in full:
+            cut=len(value)//2
+            if not any(m['role']=='assistant' for m in kwargs['messages']):
+                from llm import OutputLimitReached
+                yield value[:cut]
+                if kwargs.get('on_finish'):kwargs['on_finish']('length')
+                raise OutputLimitReached()
+            value=value[cut:]
     elif 'Ты редактор RPG' in full:
-        value=json.dumps({'value':'Обновлённая внешность'},ensure_ascii=False)
+        payload=json.loads(kwargs['messages'][-1]['content'])
+        if payload['instruction'].startswith('WORKSHOP188'):
+            assert payload['entity']['id']==payload['card']['id']=='maxim'
+            assert payload['current_value']==payload['card']['fields']['Внешность']
+            edited={'unexpected':'not a literary value'} if 'invalid' in payload['instruction'] else payload['current_value'].replace('тёмной стрижкой','светлой стрижкой')
+            value=json.dumps({'value':edited},ensure_ascii=False)
+        else:value=json.dumps({'value':'Обновлённая внешность'},ensure_ascii=False)
     elif kwargs.get('response_format') and runtime_v3_request(kwargs['messages']):
         block=next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only'))
         state=json.loads(block.split('\n',1)[1]);camera=state['camera']
@@ -107,7 +390,9 @@ def stream(**kwargs):
         task=json.loads(next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод')).split('\n',1)[1])
         present=camera['present_character_ids']
         location_id=camera['location_id'];locations=[]
-        if task['kind']=='start' or (observer and location_id is None):
+        # QA worlds have authored IDs/locations; generic character_1/2 belong
+        # only to the original small transport fixture.
+        if (task['kind']=='start' or (observer and location_id is None)) and 'qa_kirill' not in state['characters']:
             from backend.runtime_v3.models import identity
             place='Подвал' if observer else 'Кухня'
             location_id=identity('location',place.casefold())
@@ -145,56 +430,13 @@ def stream(**kwargs):
         value = NARRATIVE
     if kwargs.get('on_usage'):
         kwargs['on_usage']({'prompt_tokens':1000,'completion_tokens':100,'prompt_cache_hit_tokens':800})
-    for i in range(0, len(value), 60):
+    chunk_size=512 if 'Каноническая JSON Schema WorldState' in full else 60
+    for i in range(0, len(value), chunk_size):
         time.sleep(.025)
         if kwargs.get('cancel_event') and kwargs['cancel_event'].is_set():
             raise RuntimeError('Генерация остановлена.')
-        yield value[i:i+60]
+        yield value[i:i+chunk_size]
 
-
-def tabletop_stream(**kwargs):
-    from tabletop_fixture import definition
-    prompt=kwargs['messages'][0]['content']
-    if 'playable CampaignDefinition' in prompt:
-        campaign = definition()
-        campaign.ruleset_id = 'd20-fantasy-v1'
-        campaign.ruleset_version = 3
-        for actor in campaign.characters + campaign.creatures:
-            actor.build.feature_choices = ['defense_style']
-        idea = json.loads(kwargs['messages'][-1]['content'])['options']['idea']
-        if idea == 'gameplay acceptance':
-            from tabletop_gameplay_fixture import gameplay_definition
-            campaign = gameplay_definition()
-        if idea == 'invalid references':
-            campaign.characters[1].knowledge.append('missing_secret')
-            campaign.characters[1].relationships['missing_actor'] = 10
-        value=campaign.model_dump_json()
-    elif 'roleplay-портрет героя' in prompt:
-        requested = json.loads(kwargs['messages'][-1]['content'])['field']
-        portrait = {'name':'Александр','appearance':'Серый плащ','biography':'Бывший городской стражник.','personality':'Немногословный и упрямый.','ideals':'Защищать слабых.','bonds':'Старая стража.','flaws':'Не доверяет начальству.'}
-        value = json.dumps(portrait if requested == 'all' else {requested:portrait[requested]})
-    elif 'CampaignMutation JSON' in prompt:
-        value=json.dumps({'operations':[{'type':'CreateLocation','value':{'id':'observatory','name':'Обсерватория','region_id':'district'}},{'type':'ConnectLocations','first':'market','second':'observatory'}]})
-    elif kwargs.get('response_format'):
-        action = json.loads(kwargs['messages'][-1]['content']).get('action', '')
-        command = {'type': 'look'}
-        if action == 'Пробираюсь через затопленный тоннель':
-            command = {'type':'check','ability':'strength','skill':'athletics','difficulty':'MEDIUM','reason':'Сильное течение'}
-        elif action == 'Уточнить путь':
-            command = {'type':'request_choice','prompt':'Как обследуешь проход?', 'options':[
-                {'id':'look','label':'Осмотреть стены','command':{'type':'look'}},
-                {'id':'check','label':'Проверить течение','command':{'type':'check','ability':'strength','skill':'athletics'}},
-            ]}
-        checks={'Ищу следы':'investigation_check','Я от капитана':'deception_check','Карабкаюсь по стене':'climb_check','Изучаю руну':'arcana_check','Прокрадываюсь мимо стража':'stealth_check'}
-        if action in checks:command={'type':'check','check_id':checks[action]}
-        value=json.dumps(command)
-    else:
-        context=json.loads(kwargs['messages'][-1]['content'])['context']
-        value='\n'.join(e['text'] for e in context['events'] if 'roll' not in e)
-    if kwargs.get('on_usage'):kwargs['on_usage']({'prompt_tokens':100,'completion_tokens':50})
-    yield value
-
-llm.chat_stream = tabletop_stream
 
 engine.chat_stream = stream
 hold_next_preparation = False
@@ -216,12 +458,24 @@ def preparation_stream(**kwargs):
             hold=False
 
 preparation.chat_stream = preparation_stream
-engine.find_loaded_model = preparation.find_loaded_model = lambda _: {'config': {'context_length':32768}}
+
+# This scenario exercises persisted pre-v6 quality semantics explicitly.
+from backend.services import draft_generation
+_generation_run = draft_generation.run
+def generation_fixture(prep, jid, config, *args):
+    if 'TEST_RELEASE_QUALITY' in str(config.get('_draft_source', config.get('_draft_input', ''))):
+        journal = json.loads(prep.repo.preparation_job(jid).get('response_journal') or '{}')
+        journal.setdefault('generation_contract', {'version': 5})
+        prep.repo.save_response_journal(jid, journal)
+    return _generation_run(prep, jid, config, *args)
+draft_generation.run = generation_fixture
+
+engine.find_loaded_model = preparation.find_loaded_model = lambda model: {'config': {'context_length':131072 if model=='handoff-test' else 32768}}
 def authoring_stream(**kwargs):
-    if any('Ты редактор черновика Character' in m['content'] for m in kwargs['messages']):
-        yield from stream(**kwargs)
-    else:
-        yield from tabletop_stream(**kwargs)
+    if kwargs["messages"][0]["content"].startswith("Ты дополняешь предложенную карточку"):
+        yield json.dumps({"value":"Выросла у моря. Работала в мастерской, затем открыла своё дело."},ensure_ascii=False)
+        return
+    yield from stream(**kwargs)
 
 llm.chat_stream = authoring_stream
 llm.get_available_models = lambda: ['local-model']
@@ -233,18 +487,122 @@ llm.unload_all_models = lambda: 1
 if __name__ == '__main__':
     path = os.getenv('E2E_DB_PATH') or str(Path(tempfile.mkdtemp())/'e2e.sqlite3')
     app = create_app(path)
-    from backend.tabletop.dice import DiceEngine
-    from tabletop_fixture import Fixed
-    class BrowserDice(DiceEngine):
-        def roll(self,expression,**kwargs):
-            value=(4 if kwargs.get('purpose') in ('spell_damage','spell_healing','feature_healing') else ({'initiative':1,'attack':12,'damage':2}.get(kwargs.get('purpose'),10) if kwargs.get('actor')=='sentinel' else 8 if kwargs.get('purpose')=='damage' else 20))
-            if os.getenv("E2E_GAMEPLAY")=="1" and kwargs.get("purpose")=="check" and kwargs.get("modifier",0)>=3: value=1
-            class Bounded:
-                def randint(self,lo,hi):return min(hi,max(lo,value))
-            return DiceEngine(Bounded()).roll(expression,**kwargs)
-    dice=BrowserDice()
-    app.state.tabletop_runtime.dice=dice
-    app.state.tabletop_runtime.combat.dice=dice
+    # Approved prototype snapshot is test-only. No simulator is mounted in production.
+    import zipfile
+    from starlette.staticfiles import StaticFiles
+    from starlette.routing import Mount
+    reference_dir=Path(tempfile.mkdtemp(prefix='idea190-reference-'))
+    with zipfile.ZipFile(Path(__file__).parent/'fixtures/idea190-reference.zip') as archive:
+        archive.extractall(reference_dir)
+    import shutil
+    shutil.copyfile(Path(__file__).parents[1]/'frontend/src/assets/idea-folio.webp',reference_dir/'folio.webp')
+    app.router.routes.insert(0, Mount('/test/idea190/reference',app=StaticFiles(directory=reference_dir)))
+    workshop_reference_dir=Path(tempfile.mkdtemp(prefix='workshop175-reference-'))
+    with zipfile.ZipFile(Path(__file__).parent/'fixtures/workshop175-reference.zip') as archive:
+        import hashlib
+        reference=archive.read('world-workshop.html')
+        assert hashlib.sha256(reference).hexdigest()=='4122bcf37cbfd4c979e264e655896cc8d8783d51899a2aa9d170bd9f5c3e82e1'
+        (workshop_reference_dir/'world-workshop.html').write_bytes(reference)
+    app.router.routes.insert(0, Mount('/test/workshop175/reference',app=StaticFiles(directory=workshop_reference_dir)))
+    @app.post('/test/editor173')
+    def seed_editor173(body:dict):
+        global editor173_control,phone_mode,creative172_control
+        from threading import Event
+        phone_mode=None;creative172_control=None
+        editor173_control=dict(gate=Event(),calls=0,fail=body.get('fail',False))
+        return app.state.repository.create_workspace('AI-редактор')
+
+    @app.post('/test/editor173/release')
+    def release_editor173():
+        editor173_control['gate'].set()
+        return dict(calls=editor173_control['calls'])
+
+    @app.post('/test/creative185-rejected')
+    def seed_creative185_rejected():
+        from fastapi.testclient import TestClient
+        from creative185_fixture import seed_rejected
+        return seed_rejected(TestClient(app))
+
+    @app.post('/test/idea190')
+    def configure_idea190(body:dict):
+        global idea190_provider
+        from idea190_provider import IdeaProvider
+        idea190_provider=IdeaProvider(body.get('fail_review',False),body.get('custom_calendar',False),transport_stream=provider_chat_stream)
+        if body.get('release'):idea190_provider.gate.set()
+        if body.get('scenario'):
+            repo=app.state.repository
+            workspace=repo.create_workspace('Сценарий Валлора')
+            with repo.connect() as db:
+                db.execute('UPDATE preparation_workspaces SET idea=? WHERE id=?',('ATELIER190. Сохранённый сценарий о друзьях.',workspace['id']))
+            return workspace
+        return {'ready':True}
+
+    @app.post('/test/idea190/release')
+    def release_idea190():
+        idea190_provider.gate.set()
+        return {'world_calls':idea190_provider.world_calls,'review_calls':idea190_provider.review_calls}
+
+    @app.post('/test/creative172')
+    def seed_creative172(body:dict):
+        global creative172_control, phone_mode
+        from threading import Event
+        phone_mode=None
+        creative172_control=dict(gate=Event(),calls=0,fail=body.get('fail',False),invalid=body.get('invalid',False),http_error=body.get('http_error',False))
+        return app.state.repository.create_workspace('Творческое развитие')
+
+    @app.post('/test/creative172/saves/{sid}/canonical')
+    def creative172_canonical(sid:int):
+        # Test-only read from a reopened repository, never a production API.
+        # POST follows fixture routes; the production SPA owns GET fallbacks.
+        from backend.repositories.preparation import Repository
+        from backend.runtime_v3.repository import read_history
+        repo=Repository(app.state.repository.path)
+        snapshot=repo.get_snapshot(sid)
+        with repo.connect() as db:
+            history,warnings=read_history(db,snapshot.get('history_head'))
+        return dict(world_state=snapshot['world_state'],events=history['events'],warnings=warnings)
+
+    @app.post('/test/creative172/release')
+    def release_creative172():
+        creative172_control['gate'].set()
+        return dict(calls=creative172_control['calls'])
+
+    @app.post('/test/review170')
+    def seed_review170(body:dict):
+        global review170_control, phone_mode
+        phone_mode='silent'
+        from threading import Event
+        from review170_fixture import restore,exported
+        wid,jid=restore(app.state.repository)
+        review170_control=dict(source=exported()['author_input']['source_text'],gate=Event(),fail=body.get('fail',False),transient=body.get('transient',False),calls=0)
+        return dict(workspace=wid,job=jid)
+
+    @app.post('/test/review170/release')
+    def release_review170():
+        review170_control['gate'].set()
+        return dict(calls=review170_control['calls'])
+
+    @app.post('/test/runtime-handoff-provider')
+    def runtime_handoff_provider(enabled: bool=True, scenario: str="retry"):
+        global handoff_provider
+        previous=handoff_provider
+        handoff_provider={'narratives':0,'extractions':0,'scenario':scenario} if enabled else None
+        return previous or {}
+
+    @app.post('/test/calendar-policy-e5')
+    def calendar_policy_e5():
+        from test_calendar_start_policy import evidence
+        from test_api import REMOTE
+        j=evidence();s=j['candidate_snapshot'];repo=app.state.repository
+        w=repo.create_workspace('E5 calendar policy')
+        jid=repo.begin_preparation(w['id'],'draft_world',j['author_input']['text'],dict(REMOTE,_draft_task='world',_draft_input=j['author_input']['text']),0)
+        journal={k:v for k,v in j.items() if k not in ('requests','recovery','binding','candidate_snapshot','candidate_version','current_diagnostics','current_start_block_reason','author_input')}
+        journal.update(recovery_epoch=0,candidate_text=json.dumps(s,ensure_ascii=False))
+        repo.save_response_journal(jid,journal)
+        repo.save_draft_candidate(jid,s,[],review=j['recovery']['review'])
+        repo.preparation_progress(jid,'','stopped')
+        return {'id':w['id']}
+
     @app.post('/test/hold-preparation')
     def hold_preparation():
         global hold_next_preparation
@@ -285,19 +643,106 @@ if __name__ == '__main__':
         assert app.state.repository.get_job(job)['status']=='saved'
         return {'world':result['world'],'save':result['save']}
 
+    @app.post('/test/letter130-seed')
+    def letter130_seed():
+        global phone_mode, letter130_provider
+        phone_mode='letter130'
+        from test_historical_correspondence130 import HTTPProvider
+        from devtools.narrative_test_world import load_fixture
+        letter130_provider=HTTPProvider()
+        letter130_provider.delay=0.05
+        repo=app.state.repository
+        seed=load_fixture(repo,'phone')
+        with repo.connect() as db:
+            snap=json.loads(db.execute('SELECT state_json FROM saves WHERE id=?',(seed['save'],)).fetchone()[0])
+            snap['world_state']['meta']['communication'].update(letter=True,delivery_minutes={'letter':10})
+            db.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(snap),seed['save']))
+        return {'world':seed['world'],'save':seed['save']}
+
+    @app.post('/test/letter130-arm')
+    def letter130_arm(size: int = 0):
+        from test_historical_correspondence130 import artifact, extracted, long_letter
+        import threading
+        letter130_provider.finish_gate=threading.Event()
+        a=artifact('qa_vera','qa_kirill')
+        if size:
+            a['content']=long_letter(size)
+            letter130_provider.chunk_size=1000
+            letter130_provider.delay=0.01
+        letter130_provider.artifacts=[a]
+        letter130_provider.rows=[extracted(a)]
+        return {'ready':True, 'content':a['content']}
+
+    @app.post('/test/letter130-release')
+    def letter130_release():
+        letter130_provider.finish_gate.set()
+        return {'ready':True}
+
+    @app.post('/test/letter130-reset')
+    def letter130_reset():
+        global phone_mode, letter130_provider
+        if letter130_provider and letter130_provider.finish_gate:
+            letter130_provider.finish_gate.set()
+        phone_mode='silent'
+        letter130_provider=None
+        return {'ready':True}
+
+    @app.post('/test/group152-seed')
+    def group152_seed(fail_semantic: bool = False, digital_style: bool = False):
+        global phone_mode, group_semantic_fail_once
+        phone_mode='digital_style' if digital_style else 'group152'
+        group_semantic_fail_once=fail_semantic
+        from devtools.narrative_test_world import load_fixture
+        seed=load_fixture(app.state.repository,'phone')
+        return {'world':seed['world'],'save':seed['save']}
+
+    @app.post('/test/narrative-phone138-seed')
+    def narrative_phone138_seed():
+        global phone_mode
+        phone_mode='narrative138'
+        from devtools.narrative_test_world import load_fixture
+        seed=load_fixture(app.state.repository,'phone-office')
+        return {'world':seed['world'],'save':seed['save']}
+
     @app.post('/test/phone-seed')
-    def phone_seed(unread: bool = False):
+    def phone_seed(unread: bool = False, incoming: bool = True, decision: str = "silent", polish: bool = False, hidden: bool = False, strangers: bool = False, legacy_portraits: bool = False):
+        global phone_mode
+        phone_mode=decision
         from devtools.narrative_test_world import load_fixture
         from test_narrative_test_world import CONFIG
         from backend.runtime_v3.remote import apply
         from backend.runtime_v3.repository import append_history
-        result=load_fixture(app.state.repository,'phone')
+        result=load_fixture(app.state.repository,'phone-office' if decision.startswith('office') else 'ui-portrait-polish' if polish else 'phone')
         repo=app.state.repository;sid=result['save']
         job=repo.begin_job(sid,'','start',CONFIG)
         engine.run_job(repo.path,job,engine.Worker())
         assert repo.get_job(job)['status']=='saved', repo.get_job(job)['error']
         snap=repo.get_snapshot(sid)
-        snap,batch=apply(snap,dict(action='call',operation_id='qa-incoming-call',contact_id='phone-qa_vera-qa-kirill'),actor_id='qa_vera',autonomous=True)
+        from backend.runtime_v3.models import WorldHistoryV3
+        batch=WorldHistoryV3().to_dict()
+        if legacy_portraits:
+            # Explicit pre-175 save fixture: preserve coverage of the old fallback.
+            for actor in snap['world_state']['characters'].values():
+                actor.pop('procedural_portrait', None)
+                actor.pop('portrait_mode', None)
+        if strangers:
+            snap['world_state']['contacts'] = {}
+        if polish:
+            if hidden:
+                for contact in snap['world_state']['contacts'].values():
+                    if contact['owner_id']=='qa_kirill' and contact['character_id']=='qa_timur':
+                        contact['identity_visible']=False
+            for index, (author, extra) in enumerate([
+                ('qa_kirill', {'contact_id':'phone-qa_kirill-qa-vera'}),
+                ('qa_vera', {'contact_id':'phone-qa_vera-qa-kirill'}),
+                *[(a, {'conversation_id':'qa-group'}) for a in ('qa_kirill','qa_vera','qa_timur')],
+            ]):
+                snap, message_batch = apply(snap, dict(action='send', operation_id=f'polish-{index}',
+                    content=f'Сообщение {index + 1}: встречаемся у архива.', **extra), actor_id=author, autonomous=author!='qa_kirill')
+                for section, rows in message_batch.items():
+                    batch.setdefault(section, []).extend(rows)
+        if incoming:
+            snap,batch=apply(snap,dict(action='call',operation_id='qa-incoming-call',contact_id='phone-qa_vera-qa-kirill'),actor_id='qa_vera',autonomous=True)
         if unread:
             snap, message_batch = apply(snap, dict(action='send', operation_id='qa-incoming-message', contact_id='phone-qa_vera-qa-kirill', content='Прочти, когда будет удобно.'), actor_id='qa_vera', autonomous=True)
             for section, rows in message_batch.items():
@@ -306,6 +751,69 @@ if __name__ == '__main__':
             snap['history_head']=append_history(db,snap.get('history_head'),batch)
             db.execute('UPDATE saves SET state_json=?,revision=revision+1 WHERE id=?',(json.dumps(snap,ensure_ascii=False),sid))
         return {'world':result['world'],'save':sid}
+
+    @app.post('/test/dossier-authoring')
+    def dossier_authoring():
+        from devtools.narrative_test_world import build_fixture
+        return build_fixture('ui-canonical-personal')
+
+    @app.post('/test/secret183-candidate/{wid}')
+    def secret183_candidate(wid: str, semantic: bool = False):
+        from secret183_fixture import stage
+        stage(app.state.repository, wid, semantic)
+        return {'ok': True}
+
+    @app.post('/test/secret181-candidate/{wid}')
+    def secret181_candidate(wid: str):
+        from secret_handoff181_fixture import stage
+        stage(app.state.repository, wid, own=True)
+        return {'ready': True}
+
+    @app.post('/test/secret181-prepare/{sid}')
+    def secret181_prepare(sid: int, reveal: bool = True):
+        global story168_payload
+        from secret_handoff181_fixture import payload
+        story168_payload = payload(app.state.repository.get_snapshot(sid), reveal)
+        return {'ready': True}
+
+    @app.post('/test/story168-seed')
+    def story168_seed():
+        from story_notifications_fixture import seed
+        return seed(app.state.repository)
+
+    @app.post('/test/story168-prepare/{sid}')
+    def story168_prepare(sid: int, delayed: bool = False, reveal: bool = True, target_turn_id: int | None = None):
+        global story168_payload, story168_gate
+        from threading import Event
+        story168_gate = Event() if delayed else None
+        from story_notifications_fixture import payload
+        snap=app.state.repository.get_snapshot(sid)
+        if target_turn_id is not None:
+            with app.state.repository.connect() as db:
+                snap=json.loads(db.execute('SELECT before_json FROM turns WHERE id=? AND save_id=?',(target_turn_id,sid)).fetchone()[0])
+        story168_payload=payload(snap,reveal)
+        return {'ready': True}
+
+    @app.post('/test/story168-release')
+    def story168_release():
+        if story168_gate is not None: story168_gate.set()
+        return {'released': True}
+
+    @app.post('/test/story-secrets178-seed')
+    def story_secrets178_seed():
+        from story_secrets_fixture import seed
+        return seed(app.state.repository)
+
+    @app.post('/test/ui-completion-seed')
+    def ui_completion_seed(checkpoint: str = 'ui-calendar'):
+        from devtools.narrative_test_world import load_fixture
+        from test_narrative_test_world import ordinary_job
+        if checkpoint not in ('ui-calendar','ui-calendar-custom','ui-family','ui-family-dense','ui-public-directory','ui-dossier','ui-inspector','ui-personal'):
+            raise ValueError('Unknown UI checkpoint')
+        result=load_fixture(app.state.repository,checkpoint)
+        if checkpoint.startswith('ui-family') or checkpoint=='ui-public-directory':
+            ordinary_job(app.state.repository,result['save'],'start')
+        return {'world':result['world'],'save':result['save']}
 
     @app.post('/test/initiative-seed')
     def initiative_seed():
@@ -366,12 +874,22 @@ if __name__ == '__main__':
         return {'world':result['world'],'save':result['save']}
 
     @app.post('/test/family-seed')
-    def family_seed():
+    def family_seed(checkpoint: str = 'family', dead: bool = False):
         from devtools.narrative_test_world import load_fixture
         from test_narrative_test_world import ordinary_job
         repo=app.state.repository
-        result=load_fixture(repo,'family')
+        if checkpoint not in ('family','family-incapacitated'): raise ValueError('Unknown test checkpoint')
+        result=load_fixture(repo,checkpoint)
         ordinary_job(repo,result['save'],'start')
+        if dead:
+            snap=repo.get_snapshot(result['save']);state=snap['world_state'];cid=state['meta']['current_protagonist_id']
+            state['characters'][cid]['life_status']='dead';state['meta']['protagonist_required']=True
+            for rel in state['objective_relations'].values():
+                if rel['status']=='active' and cid in (rel['source_id'],rel['target_id']) and rel['kind'] in ('spouse','partner','engaged'):
+                    rel.update(status='closed',until=state['meta']['world_time'],outcome='widowed' if rel['kind']=='spouse' else 'ended')
+            state['camera']['controlled_actor_id']=None;state['camera']['mode']='observer'
+            state['camera']['present_character_ids']=[x for x in state['camera']['present_character_ids'] if x!=cid]
+            with repo.connect() as db:db.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(snap),result['save']))
         return {'world':result['world'],'save':result['save']}
 
     @app.post('/test/commitments-seed')
@@ -391,6 +909,34 @@ if __name__ == '__main__':
         result = load_fixture(repo, 'calendar-evening')
         ordinary_job(repo,result['save'],'start')
         return {'world':result['world'],'save':result['save']}
+
+    @app.post('/test/npc-review-seed')
+    def npc_review_seed(start_game:bool=True):
+        global npc_review_start_payload
+        from test_runtime_v3_engine import run
+        from test_npc_review import promoted
+        from test_engine import CONFIG
+        repo=app.state.repository
+        wid=repo.save_world('Новые лица',summary());sid=repo.create_save(wid,'Проверка NPC')
+        raw=promoted(repo.get_snapshot(sid))
+        raw['promotions'][0]['character']=dict(biological_sex='female',life_status='alive',developmental_stage='adult',physical_state='Устала после дороги')
+        raw['promotions'].append(dict(id='second_npc',name='Александр Константинович Волконский',fields={},character=dict(biological_sex='male'),evidence='Пришёл.'))
+        raw['final_scene']['present_character_ids'].append('second_npc')
+        if not start_game:
+            # The actual UI start command has no authored player feelings.
+            raw['relationship_changes'][0] = {k:v for k,v in raw['relationship_changes'][0].items()
+                if k not in ('dimensions','player_assertion','player_evidence')}
+            npc_review_start_payload=raw
+            return dict(world=wid,save=sid)
+        jid=repo.begin_job(sid,'Я доверяю Ладе.','start',CONFIG);run(repo,jid,raw)
+        if repo.get_job(jid)['status']!='saved':raise ValueError(repo.get_job(jid)['error'])
+        return dict(world=wid,save=sid)
+
+    @app.post('/test/npc-review-evolve/{sid}')
+    def npc_review_evolve(sid:int):
+        from test_npc_review_revision import evolve
+        evolve(app.state.repository,sid)
+        return app.state.repository.get_save(sid)
 
     @app.post('/test/seed')
     def seed():

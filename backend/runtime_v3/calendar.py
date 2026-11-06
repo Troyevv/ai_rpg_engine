@@ -77,7 +77,7 @@ def current_time(state, minute=None):
                   day_period=day_period(clock), season=None)
     if value:
         _, m, d = date_parts(value, profile)
-        seasons = sorted(profile.get('seasons', []), key=lambda s:(s['month'],s['day']))
+        seasons = sorted(profile.get('seasons', []) if profile.get('seasons_enabled',True) else [], key=lambda s:(s['month'],s['day']))
         if seasons:
             result['season'] = next((s['name'] for s in reversed(seasons) if (s['month'],s['day']) <= (m,d)), seasons[-1]['name'])
     result['summary'] = f"Day {result['day']} / {value or 'date unknown'} / {result['weekday_name']} / {result['time']} / {result['day_period']}"
@@ -114,7 +114,7 @@ def _dates(state, relevant_ids=None):
         yield dict(id='birthday:'+cid, name=None, month=m, day=d, kind='birthday', character_ids=[cid], since_year=y)
 
 
-def calendar_range(state, start_date, end_date, relevant_ids=None):
+def calendar_range(state, start_date, end_date, relevant_ids=None, *, display_language=None):
     profile = profile_of(state)
     start, end = ordinal(start_date, profile), ordinal(end_date, profile)
     if not 0 <= end-start < MAX_RANGE_DAYS:
@@ -139,7 +139,13 @@ def calendar_range(state, start_date, end_date, relevant_ids=None):
             if (rule['month'],rule['day']) == (m,d) and y >= rule.get('since_year',1):
                 events.append(dict(id=f"{rule['id']}:{value}", date=value, kind=rule['kind'],
                                    name=rule['name'], character_ids=rule.get('character_ids',[])))
-    return dict(current=current, start_date=start_date, end_date=end_date, days=days, events=events,
+    notices=[]
+    if profile.get('regional') and profile.get('system','gregorian')=='gregorian':
+        from backend.services.calendar_presets import occurrences, CoverageError
+        try:events.extend(occurrences(profile['regional'],start_date,end_date,display_language=display_language))
+        except CoverageError as exc:notices.append(str(exc))
+    events.sort(key=lambda e:(e['date'],e['id']))
+    return dict(notices=notices,current=current, start_date=start_date, end_date=end_date, days=days, events=events,
                 scheduled=scheduled_range(state, start_date, end_date, relevant_ids),
                 profile={k:profile.get(k) for k in ('id','system','month_names','weekday_names')})
 
@@ -166,7 +172,8 @@ def scheduled_time(state, event):
     if reference is None: reference = (state['meta'].get('calendar') or {}).get('start_minute',state['meta']['world_time'])
     temporal = dict(event.get('temporal') or {})
     due = event.get('due_minute')
-    if not temporal and (due is None or due == 0):
+    explicit=event.get('time_semantics')=='explicit'
+    if not temporal and not explicit and (due is None or due == 0):
         text = event.get('condition','').casefold()
         if re.search(r'\b(?:не|not|или|or|после|after|до|before)\b',text): text = ''
         weekdays = [i for i,pattern in enumerate(_WEEKDAY_PATTERN) if re.search(r'\b(?:'+pattern+r'\w*|'+WEEKDAYS[i]+r')\b',text)]
@@ -179,7 +186,7 @@ def scheduled_time(state, event):
             if re.search(r'\b(?:'+pattern+r')\b',text): temporal['day_period']=period
         clock = re.search(r'\b([01]?\d|2[0-3]):([0-5]\d)\b',text)
         if clock: temporal['time']=f'{int(clock[1]):02d}:{clock[2]}'
-    resolved = due if type(due) is int and due > 0 else None
+    resolved = due if type(due) is int and (due >= 0 if explicit else due > 0) else None
     if temporal:
         base = current_time(state, reference); offset = None
         if temporal.get('date') and base['date']:
@@ -195,6 +202,8 @@ def scheduled_time(state, event):
             minute = int(clock[:2])*60+int(clock[3:]) if clock else next((n for n,p in DAY_PERIODS if p==temporal.get('day_period')),0)
             resolved = reference//1440*1440 + offset*1440+minute
         else: resolved = None
+        if temporal.get('minute_offset') is not None:
+            resolved = reference + temporal['minute_offset']
     status = 'unresolved' if resolved is None else 'future' if resolved > state['meta']['world_time'] else 'due'
     return dict(status=status, due_minute=resolved)
 
@@ -211,7 +220,7 @@ def scheduled_window(state, event):
     """
     start = scheduled_due(state, event)
     temporal = event.get('temporal') or {}
-    precision = 'exact' if temporal.get('time') or not temporal and start is not None else 'period' if temporal.get('day_period') else 'day'
+    precision = 'exact' if temporal.get('minute_offset') is not None or temporal.get('time') or not temporal and start is not None else 'period' if temporal.get('day_period') else 'day'
     end = start
     if start is not None and precision != 'exact':
         if precision == 'day': end = start//1440*1440 + 1439

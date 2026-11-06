@@ -6,7 +6,8 @@ def scene_metadata(state):
         meta = state['scene_meta']
         known = {c['id'] for c in state['characters']}
         return {'time': str(meta.get('time', '')), 'location': str(meta.get('location', '')),
-                'present_ids': [cid for cid in meta.get('present_ids', []) if cid in known]}
+                'present_ids': [cid for cid in meta.get('present_ids', []) if cid in known],
+                **({'observed_ids':[cid for cid in meta['observed_ids'] if cid in known]} if meta.get('observed_ids') else {})}
     text = state.get('scene', '')
     values = {}
     for key, labels in [('time', 'Время'), ('location', 'Место|Локация'), ('nearby', 'Рядом|Присутствуют')]:

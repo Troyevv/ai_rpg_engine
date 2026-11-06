@@ -148,7 +148,7 @@ def test_cli_is_opt_in_and_returns_normal_api_readable_save(tmp_path):
     result = json.loads(loaded.stdout)
     with TestClient(create_app(path)) as client:
         save = client.get(f"/api/saves/{result['save']}")
-        assert save.status_code == 200
+        assert save.status_code == 200, save.text
         assert save.json()['state']['scene_meta']['present_ids'] == list(PRESENT)
         assert client.get(f"/api/workspaces/{result['workspace']}/draft?author=true").json()['validation']['errors'] == []
         assert client.post('/api/dev/narrative-test-world/reset').status_code in (404, 405)
@@ -178,3 +178,12 @@ def test_reset_reload_sequences_preserve_canonical_state_and_older_saves(operati
                 ordinary_job(repo, sid, 'turn' if repo.list_turns(sid) else 'start')
             for old_sid, snapshot in preserved.items():
                 assert repo.get_snapshot(old_sid) == snapshot
+
+
+def test_inspector_checkpoint_uses_supported_projection(tmp_path):
+    repo = Repository(str(tmp_path / 'inspector.db'))
+    result = load_fixture(repo, 'ui-inspector')
+    saved = repo.get_save(result['save'])
+    assert saved['state']['world']['threads']['qa_inspector_dormant']['status'] == 'dormant'
+    assert saved['state']['world']['threads']['qa_inspector_resolved']['status'] == 'resolved'
+    assert saved['state']['world']['relationships']['qa_vera:qa_kirill']['dimensions']['trust'] == -20

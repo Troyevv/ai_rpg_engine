@@ -4,9 +4,9 @@ Semantic assertions come from Extraction; source, agency, CAS, references and
 idempotency are checked here. This is not a natural-language meaning verifier.
 """
 from copy import deepcopy
-from typing import Literal
+from typing import Literal, get_args
 from pydantic import Field
-from backend.runtime_v3.models import StrictModel, AppearanceProfile, AppearanceFeature, identity
+from backend.runtime_v3.models import StrictModel, AppearanceProfile, AppearanceFeature, VisualField, identity
 
 KINDS = {'intrinsic': {'eye_color','natural_hair_color','skin','face'},
          'body': {'build','height'}, 'modification': {'scar','tattoo','piercing','cosmetic'},
@@ -26,7 +26,7 @@ class AppearanceDelta(StrictModel):
     condition_id: str | None = None
     assertion: Literal['established_visual_outcome']
     transition: Literal['voluntary','involuntary','established_trait']
-    evidence: str = Field(min_length=1, max_length=1000)
+    evidence: str = Field(default="", max_length=1000)
     player_evidence: str = ''
     player_assertion: Literal['explicit_choice'] | None = None
 
@@ -68,10 +68,22 @@ def salvage_profiles(state):
             actor['portraits']=valid
 
 
+VISUAL_FIELDS = get_args(VisualField)
+
+
+def visual_fields_disclosed(state, cid, observer, fields):
+    gates = state.get('meta', {}).get('visual_field_facts', {}).get(cid)
+    if not gates:
+        return True
+    return all(fid in state['facts'] and state['knowledge'].get(f'{observer}:{fid}', {}).get('status') == 'known'
+               for field in fields for fid in gates.get(field, ()))
+
+
 def visible(state, cid, item, observer):
+    if not visual_fields_disclosed(state, cid, observer, ('Внешность',)): return False
     if observer == cid: return True
     fid = item.get('fact_id')
-    return not item.get('source_event_id') or bool(fid and state['knowledge'].get(str(observer)+':'+fid,{}).get('status')=='known')
+    return (not fid and not item.get('source_event_id')) or bool(fid and state['knowledge'].get(str(observer)+':'+fid,{}).get('status')=='known')
 
 
 def current_items(state, cid, *, observer=None, omniscient=False):
@@ -90,11 +102,11 @@ def current_items(state, cid, *, observer=None, omniscient=False):
 
 def context_profile(state, cid, *, observer=None, omniscient=False, known_actor_ids=None):
     profile=state['characters'][cid].get('appearance')
-    if profile is None: return None
+    if profile is None or not omniscient and not visual_fields_disclosed(state, cid, observer, ('Внешность',)): return None
     budget=1600; items={}
     for key,item in current_items(state,cid,observer=observer,omniscient=omniscient).items():
         row={k:item[k] for k in ('category','kind','text','revision','condition_id')}
-        row['known_by']=(sorted(a for a in (known_actor_ids if known_actor_ids is not None else {cid,observer}) if a in state['characters'] and visible(state,cid,item,a)) if item.get('source_event_id') else 'initial_baseline')
+        row['known_by']=(sorted(a for a in (known_actor_ids if known_actor_ids is not None else {cid,observer}) if a in state['characters'] and visible(state,cid,item,a)) if item.get('source_event_id') or item.get('fact_id') else 'initial_baseline')
         if len(str(row))>budget: continue
         items[key]=row;budget-=len(str(row))
     legacy=profile.get('legacy_text','')[:min(600,budget)]
@@ -103,6 +115,14 @@ def context_profile(state, cid, *, observer=None, omniscient=False, known_actor_
 
 def project_card(card, state, observer=None, *, omniscient=False, bounded=False, known_actor_ids=None):
     cid=card['id']; result=deepcopy(card)
+    if not omniscient:
+        for field in ('Пол','Возраст'):
+            if not visual_fields_disclosed(state, cid, observer, (field,)):
+                result['fields'].pop(field, None)
+    if not omniscient and not visual_fields_disclosed(state, cid, observer, ('Внешность',)):
+        for key in ('Внешность', 'Исходное описание внешности'):
+            result['fields'].pop(key, None)
+        return result
     profile=context_profile(state,cid,observer=observer,omniscient=omniscient,known_actor_ids=known_actor_ids) if bounded else None
     if not bounded:
         canonical=state['characters'][cid].get('appearance') or {}
@@ -127,7 +147,6 @@ def apply_appearance(r, raw, events):
             if c['fact_id'] not in event['fact_ids']: raise ValueError('Нет факта внешности в событии.')
             fact=r.state['facts'][c['fact_id']]
             if cid not in fact['character_ids']: raise ValueError('Факт относится к другому персонажу.')
-            if normalized(c['evidence']) not in normalized(r.narrative): raise ValueError('Нужен совершившийся результат в повествовании.')
             if c['kind'] not in KINDS[c['category']]: raise ValueError('Несогласованная категория внешности.')
             if c['kind'] in ('tattoo','piercing','hairstyle','facial_hair','cosmetic') and c['transition']!='voluntary':
                 raise ValueError('Косметическое изменение требует добровольного действия.')

@@ -66,7 +66,7 @@ def test_roles_residence_and_routine_does_not_flood():
     r=run(r.state,'role_changes',[dict(id='job',status='closed',outcome='retired')])
     assert [m['category'] for m in derive(r.history)]==['role_ended']
     for destination in ('room','south','home'):
-        r=run(r.state,scene=dict(location_id=destination,present_character_ids=['a']))
+        r=run(r.state,scene=dict(location_id=destination,present_character_ids=['a']),player='Иду в '+destination,movement=dict(actor_id='a',to_location_id=destination,player_assertion='explicit_choice',player_evidence='Иду в '+destination))
         assert not derive(r.history)
     assert not derive(run(state(),'role_changes',[role(kind='other')]).history)
 
@@ -260,7 +260,8 @@ def test_significant_custom_roles_and_routine_suppression():
     assert [m['category'] for m in derive(r.history)]==['role_started']
     assert not derive(run(state(),'role_changes',[role(significance='routine')]).history)
     invalid=run(state(),'role_changes',[role(significance='made_up')])
-    assert invalid.warnings and not invalid.state['roles'] and not derive(invalid.history)
+    assert invalid.warnings and invalid.state['roles']['job']['status']=='active'
+    assert [m['category'] for m in derive(invalid.history)]==['role_started']
 
 
 def test_same_minute_distinct_transitions_and_summary_edits_use_source_identity():
@@ -306,7 +307,7 @@ def test_old_key_category_is_not_buried_by_repeated_career_changes():
     conn=db();s=state();r=relations(s,[marriage()]);s=r.state
     head=append_history(conn,None,r.history)
     for n in range(40):
-        r=run(s,'role_changes',[role(rid='job'+str(n))]);s=r.state
+        r=run(s,'role_changes',[role(rid='job'+str(n),title='Job '+str(n))]);s=r.state
         head=append_history(conn,head,r.history)
     scope=ContextScope('a',present_actor_ids={'a'})
     selected=select_context(s,scope,lambda **filters:query(conn,head,**filters))

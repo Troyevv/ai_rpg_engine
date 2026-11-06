@@ -37,10 +37,15 @@ physical or connected-call speech. Answer/decline/ignore/end are deterministic
 phone controls. Canonical elapsed time can expire ringing. No browser telephone
 scheme, external emergency endpoint or real telephony API is used.
 
-## Event-first orchestration
+## Narrative extraction and existing communication orchestration
 
-The existing #69 initiative permit exposes a bounded remote opportunity set.
-An actual pending interaction or established active intention/thread may permit one
+Issue #138 adds ordinary Narrative → Extraction → Remote commands inside the Resolver
+commit. DeepSeek can initiate an NPC message/call without a Director permit. The
+message text remains in prose; only explicit reading grants recipient Knowledge.
+See [the bridge contract and acceptance matrix](narrative-phone138.md).
+
+The existing #69 initiative planner exposes a bounded remote opportunity set.
+An actual pending interaction or established active intention/thread may offer one
 optional planning request. There is no per-contact/group loop of LLM calls and no
 request on opening the phone. Structured proposals are validated before narrative
 generation. Rejected proposals cannot create phone state. Accepted events are
@@ -50,10 +55,11 @@ staging. Failed/cancelled generation publishes neither provisional event nor cue
 
 The existing ContextScope/Context Builder includes at most six recent accessible
 communications, bounded message text and explicit call constraints. Unread message
-content is excluded. Phone-disabled worlds receive no phone instruction payload. Under budget pressure,
+content is excluded. Phone-disabled worlds receive explicit disabled capabilities, without the phone extraction schema. Under budget pressure,
 older communication rows are omitted while the latest cue and active call remain.
 Raw remote lifecycle audit payloads never bypass the perception-filtered projection.
-Existing extraction is not permitted to create phone lifecycle transitions.
+Extraction may end an existing answered call through the evidence-bound
+`call_lifecycle_changes` contract below; other lifecycle commands retain their owners.
 
 ## UI and portraits
 
@@ -85,7 +91,7 @@ relative dates anchor to the proposal message's canonical timestamp. The
 | 10–11 | Physical scene retained; explicit call focus; restricted audible witnesses; canonical timeout | call controls, extraction audibility, setting-neutral channel, device-choice tests |
 | 12, 14 | Bounded relevant context, no contact polling, no #43 implementation | saturated newborn-triplets world with 200 unread messages; existing context-compaction regressions |
 | 13, 29 | Existing save snapshots, History DAG receipts, original generation context | persisted replay, outage/retry, variant selection, rollback and ordinary save/reload cycle |
-| 15–17 | Existing Dialog/theme/avatar system; ordinary Narrative and Tabletop remain independent | desktop/mobile phone E2E plus complete existing Python/Playwright suites |
+| 15–17 | Existing Dialog/theme/avatar system | desktop/mobile phone E2E plus complete existing Python/Playwright suites |
 | 18–23 | Explicit direct/group containers and membership, frozen delivery recipients, no social-graph inference | late join/removal/former-member reading tests; group membership E2E |
 | 28 | Phone chat and call log derive from canonical records after reload | phone E2E and repository reload checks |
 | Later identity additions | Unresolved contacts, exact-address linking, minimal individuals, shared/service destinations | lazy identity, reply-container continuity and unavailable/blocked endpoint tests |
@@ -95,3 +101,91 @@ relative dates anchor to the proposal message's canonical timestamp. The
 A provider can still violate literary instructions; deterministic fixtures establish
 Runtime boundaries, not universal compliance of arbitrary model prose. Manual QA
 in `docs/manual_qa/narrative_v4/phone.md` covers the live-provider visual/semantic review.
+
+
+## Call continuity (#133)
+
+The normal Narrative → Extraction → Resolver → atomic History commit owns both
+surfaces. `physical_projections` reference accepted physical Event local IDs and
+exact non-overlapping literary spans containing their evidence. These become
+Event `physical_text`, stable ID/source_record_id, chronological order, minute and
+calendar date. Projection reads neither advance time nor create canonical facts.
+No accepted event means no extra physical card. Projections are optional: missing,
+malformed, overlapping or incorrectly referenced spans are dropped with diagnostics;
+accepted Events fall back to Event.text. An unambiguous exact evidence match can
+recover a wrong optional reference. No additional LLM call is needed.
+
+Unsupported optional scene hints are not canonical movements. Text changes to
+camera.situation are not structural physical transitions. Accepted Event text can
+supply the scene summary; independently validated character changes remain intact.
+Rejected physical claims produce a reconciliation audit: identifiable unsupported
+spans are excluded from committed display, the phone shows a localized notice, and
+context/memory read the reconciled presentation with an explicit Runtime annotation.
+Original prose remains in History. This does not semantically classify arbitrary
+prose: a claim omitted entirely from Extraction cannot be reliably identified by
+literal matching. WorldState remains authoritative.
+
+Critical IDs, agency, consent, Knowledge/POV, lifecycle and atomic commit guards
+remain strict. Bounded repair may remove unaccepted optional Events/projections;
+it must retain already validated physical Events, including successful validation
+in the repaired result, and cannot erase commitment/lifecycle claims to bypass their
+checks. No new required Extraction fields or save migration are introduced.
+
+Call and physical choices carry separate interaction_channel tags through filtering.
+The latest physical source remains applicable while physical_scene is unchanged;
+a mixed turn can supply current physical choices from the same extraction. Missing
+or filtered choices do not invalidate the turn. Applicable prior choices remain;
+a changed scene without suggestions exposes free input instead of stale choices.
+The next actual player action generates suggestions from current WorldState through
+the normal turn pipeline, without replaying the previous Events or clock advance.
+The main composer retains free input. Provisional streaming never publishes a physical Event.
+After commit the phone text excludes the accepted physical spans; the story shows
+those spans in order. Older ambiguous snapshots are not rewritten.
+
+`call_lifecycle_changes` accepts one completed_end with existing call_id, actual
+participant actor_id and an exact completed-narrative quote. EXTERNAL decisions also
+require player evidence. It invokes the existing Remote end transition in the same
+commit at the already-advanced clock. Goodbye/intention alone is not completed_end;
+Extraction owns semantic classification, Python validates references and evidence.
+
+Voice plans use exact `call_evidence` sources from the active call's immutable History
+lineage, including earlier turns. Both proposal and assent are required. Player
+sources must be authored input, never narrator wording; player_source_id is mandatory.
+`call_time_source_id` identifies the proposal, anchoring calendar arithmetic to its
+original minute. Reschedules require fresh sources from both participants, cancellations
+a matching decision-author cancellation proof. ScheduledEvent remains the sole plan;
+no separate transcript, calendar, Runtime or extra generation call is introduced.
+
+## Universal canonical recipients (#129)
+
+`remote.recipient_eligible` is the shared eligibility boundary for current and future
+CommunicationProfile channel flags: the sender and target exist, differ, the channel
+is enabled, and the target is not canonically dead. Unknown/missing life status is
+permissive, matching the existing life capability fallback; no death is inferred.
+Recipient capability, acquaintance, device, address and saved contact are not gates.
+
+Send/call commands may supply `character_id` instead of a contact, conversation or
+service. Exactly one route is accepted. A direct conversation is created only on an
+actual send, using the existing identity and event/history pipeline. No contacts,
+relationships or Knowledge are synthesized. Delivery is still not read/consent;
+silence and declined/missed calls remain ordinary autonomous outcomes.
+
+Phone projection adds a read-only recipient directory and Runtime-derived
+`can_send`/`can_call` flags. The directory exposes only routing identity and the
+existing visible name/portrait projection. Hidden births retain a neutral subject;
+hidden contact identity is not linked to a message author. All private conversations,
+events, drafts and reads remain controlled-actor owned, regardless of camera POV.
+
+Legacy contacts, labels, blocking/availability annotations, unresolved/service
+addresses and history remain stored. For linked canonical people those annotations
+no longer prohibit an attempt. Dead members remain in group membership/history but
+are excluded from new deliveries; live members can continue the group. New direct
+attempts to dead people fail without deleting history.
+
+Ordinary Narrative extraction can route a single canonical recipient directly.
+The existing bounded event-first planner retains its opportunity selection and
+call budget; the directory does not add polling or LLM requests. Future transport
+delivery/presentation remains #130/#131, not a parallel implementation here.
+No database migration or historical snapshot rewrite is required.
+
+The phone uses one searchable recipient list, with saved labels first and direct message/call actions. Existing contact details, service endpoints and private conversation history remain available. New worlds do not need a phonebook: initial generation and completeness prompts explicitly exclude it, and the provider schema omits contacts. The editor/import contract still accepts and validates legacy contacts, including scoped repairs. Normalization supplies only the empty collection; migration/handoff never populate it from the cast.

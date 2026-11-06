@@ -6,7 +6,7 @@ from copy import deepcopy
 import json
 from typing import Literal
 from pydantic import Field
-from backend.runtime_v3.models import StrictModel, fatal
+from backend.runtime_v3.models import StrictModel
 from backend.runtime_v3.life import capabilities
 
 
@@ -69,74 +69,45 @@ def recorded_plan(messages):
 
 
 def validate_actions(resolver, raw, events):
-    """Validate structured semantic claims; normal domain handlers own effects.
-
-    Deliberately no keyword parser pretending to verify arbitrary narrative prose.
-    Violations reject the turn atomically, not only an inconvenient audit record.
-    """
+    """Optional event annotations cannot veto independently extracted outcomes."""
     from backend.runtime_v3.resolver import normalized
-    rows = raw.records['scene_actions']
-    if not rows:
-        return
-    permit = resolver.initiative_decision or {}
-    actors = {r['actor_id']: r for r in permit.get('actors', [])}
-    def reject(code):
-        fatal('Некорректная инициатива персонажа.', code, repairable=False, section='scene_actions')
-    if len(rows) > permit.get('budget', 0):
-        reject('initiative_budget_exceeded')
-    external = resolver.before['camera']['controlled_actor_id']
-    if permit.get('external_actor_id') != external:
-        reject('initiative_control_mismatch')
+    external = resolver.protected_actor_id
     seen = set()
-    for row in rows:
+    for index, row in enumerate(raw.records['scene_actions']):
+        def warning(code):
+            resolver.warn('scene_actions', index, 'Необязательная аннотация инициативы отклонена.', code=code)
         try:
             claim = SceneAction.model_validate(row)
         except (ValueError, TypeError):
-            reject('initiative_claim_invalid')
+            warning('initiative_claim_invalid'); continue
         cid = claim.actor_id
-        if cid == external or cid == resolver.protected_actor_id or cid not in actors:
-            reject('initiative_actor_ineligible')
         event = events.get(claim.source_event_id)
-        if not event or cid not in event['participants'] or not set(claim.target_ids) <= set(event['participants']):
-            reject('initiative_event_invalid')
-        # One semantic action per Event; never overwrite another actor's audit.
-        key = claim.source_event_id
-        if key in seen:
-            reject('initiative_duplicate')
-        seen.add(key)
-        if not normalized(claim.evidence) or normalized(claim.evidence) not in normalized(resolver.narrative):
-            reject('initiative_evidence_invalid')
-        caps = capabilities(resolver.before, cid)
-        if not caps['can_act'] or claim.modality == 'speech' and not caps['can_speak'] or claim.modality == 'departure' and not caps['can_move']:
-            reject('initiative_capability_invalid')
-        if actors[cid]['channel'] != 'scene' and claim.modality in ('physical', 'departure'):
-            reject('initiative_channel_invalid')
-        if claim.modality == 'physical' and not set(claim.target_ids) <= set(resolver.before['camera']['present_character_ids']):
-            reject('initiative_target_absent')
-        if claim.adult and any(not capabilities(resolver.before, a)['adult_eligible'] for a in [cid, *claim.target_ids]):
-            reject('initiative_adult_context_required')
-        if external in claim.target_ids:
-            if claim.interruptible and claim.response not in ('open', 'player_supplied'):
-                reject('initiative_response_required')
-            if claim.response == 'player_supplied' and (not normalized(claim.player_evidence) or normalized(claim.player_evidence) not in normalized(resolver.player_input)):
-                reject('initiative_player_evidence_required')
-            if claim.response == 'involuntary':
-                # A label alone cannot grant an involuntary outcome. #68 validates
-                # the causal evidence and the domain result independently.
-                if not any(c.get('actor_id') == external and c.get('source_event_id') == claim.source_event_id for c in raw.records['consequences'] if isinstance(c, dict)):
-                    reject('initiative_consequence_required')
-        elif claim.response in ('player_supplied', 'involuntary'):
-            reject('initiative_response_target_invalid')
-        if claim.response_event_id is not None:
-            pending = (resolver.continuity_decision or {}).get('pending_response_ids', [])
-            if claim.response != 'player_supplied' or claim.response_event_id not in pending:
-                reject('initiative_response_reference_invalid')
-        for key in claim.knowledge_ids:
-            knowledge = resolver.before['knowledge'].get(key)
-            if (not knowledge or knowledge['actor_id'] != cid
-                    or knowledge['status'] not in ('known', 'suspected')
-                    or knowledge['status'] == 'suspected' and claim.knowledge_use != 'inquiry'):
-                reject('initiative_knowledge_invalid')
+        if cid == external or not event or cid not in event['participants'] or not set(claim.target_ids) <= set(event['participants']):
+            warning('initiative_event_invalid'); continue
+        if claim.source_event_id in seen:
+            warning('initiative_duplicate'); continue
+        if claim.response_event_id is not None and (claim.response != 'player_supplied' or claim.response_event_id not in (resolver.continuity_decision or {}).get('pending_response_ids', [])):
+            resolver.warn('scene_actions', index, 'Неизвестная ссылка ответа; аннотация пропущена.', code='initiative_response_reference_invalid'); continue
+        if claim.response == 'player_supplied':
+            quote = normalized(claim.player_evidence)
+            if external not in claim.target_ids or not quote or quote not in normalized(resolver.player_input):
+                warning('initiative_player_evidence_required'); continue
+        invalid_knowledge = any(
+            (k := resolver.before['knowledge'].get(key)) is None or k['actor_id'] != cid
+            or k['status'] not in ('known', 'suspected')
+            or k['status'] == 'suspected' and claim.knowledge_use != 'inquiry'
+            for key in claim.knowledge_ids)
+        if invalid_knowledge:
+            warning('initiative_knowledge_invalid'); continue
+        caps = capabilities(resolver.state, cid)
+        stages=[caps]
+        if cid in resolver.before['characters']: stages.append(capabilities(resolver.before,cid))
+        # An action can precede same-turn incapacity/death, or follow recovery.
+        # Final capabilities must not erase an accepted earlier Event.
+        if not any(stage['can_act'] and (claim.modality!='speech' or stage['can_speak'])
+                   and (claim.modality!='departure' or stage['can_move']) for stage in stages):
+            warning('initiative_capability_invalid'); continue
+        if claim.adult and any(not capabilities(resolver.state, a)['adult_eligible'] for a in [cid, *claim.target_ids]):
+            warning('initiative_adult_context_required'); continue
+        seen.add(claim.source_event_id)
         event['scene_action'] = claim.model_dump(exclude={'source_event_id', 'evidence'})
-        # Event already carries canonical identity, evidence, participants,
-        # audience, turn and time. No duplicate social state or pending-action FSM.

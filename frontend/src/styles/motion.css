@@ -46,8 +46,7 @@
 .dialog-overlay[data-state=closed] { animation:fade var(--transition-fast) ease-in reverse; }
 .dialog-content[data-state=open] { animation:dialog-in var(--transition-normal) var(--ease-out); }
 .dialog-content[data-state=closed] { animation:dialog-out var(--transition-fast) ease-in; }
-.inspector-dialog[data-state=open] { animation-name:panel-in; }
-.inspector-dialog[data-state=closed] { animation-name:panel-out; }
+
 summary::before { transition:transform var(--transition-fast); }
 .inspect-reveal[open] > .inspect-detail,.workshop-detail[open] > p { animation:fade var(--transition-fast) ease-out; }
 @media(max-width:767px) {

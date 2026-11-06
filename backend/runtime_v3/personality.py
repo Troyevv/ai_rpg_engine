@@ -24,7 +24,7 @@ class EvidenceClaim(StrictModel):
     meaning: str = Field(min_length=1, max_length=300)
     kind: Literal['behavior', 'experience', 'turning_point']
     assertion: Literal['completed']
-    evidence: str = Field(min_length=1, max_length=1000)
+    evidence: str = Field(default="", max_length=1000)
     player_evidence: str = ''
     player_assertion: Literal['completed_voluntary_behavior'] | None = None
 
@@ -44,7 +44,7 @@ class PersonalityDelta(StrictModel):
     rationale: str = Field(min_length=1, max_length=600)
     developmental_fit: Literal['established_capability']
     operations: list[Operation] = Field(min_length=1, max_length=3)
-    evidence: str = Field(min_length=1, max_length=1000)
+    evidence: str = Field(default="", max_length=1000)
 
 
 def salvage_profiles(state):
@@ -105,9 +105,7 @@ def _player_owned(resolver, claim, event):
     return (resolver.mode != 'background' and claim['actor_id'] == resolver.protected_actor_id
             and claim.get('player_assertion') == 'completed_voluntary_behavior'
             and claim['kind'] in ('behavior','turning_point') and bool(quote)
-            and quote in normalized(resolver.player_input)
-            and bool(normalized(event['evidence']))
-            and normalized(event['evidence']) in normalized(resolver.narrative))
+            and quote in normalized(resolver.player_input))
 
 
 def _record(resolver, kind, cid, before, after, **extra):

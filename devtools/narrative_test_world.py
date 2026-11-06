@@ -134,6 +134,8 @@ def _calendar_evening(state):
     scene.update(start_minute=clock,end_minute=clock,text='Вечер в доме Лариных. Кирилл, Вера и Тимур рассматривают карту.')
     for actor in state['world']['characters'].values(): actor['minute']=clock
     state['world']['characters']['qa_vera']['birth_date']='1993-10-09'
+    state['world']['facts']['qa_vera_birthday']=dict(id='qa_vera_birthday',text='Вера сообщила Кириллу дату рождения: 9 октября 1993 года.',secret=False,character_ids=['qa_vera'],claim=dict(subject_id='qa_vera',predicate='birth_date',value='1993-10-09'),evidence=[])
+    state['world']['knowledge'][ACTOR_ID+':qa_vera_birthday']=dict(actor_id=ACTOR_ID,fact_id='qa_vera_birthday',status='known')
     state['world']['scheduled_events']['qa_friday_trip'] = dict(id='qa_friday_trip',description='Поездка в сад в пятницу вечером.',
         participants=[ACTOR_ID,'qa_elena'],due_minute=0,status='pending',condition='В пятницу вечером')
     return state
@@ -155,6 +157,8 @@ def _commitments(state):
     events = state['world']['scheduled_events']
     events['qa_friday_trip'].update(commitment=True, temporal=dict(weekday=4,day_period='evening'),
         condition='После работы', evidence='Кирилл и Елена договорились о поездке.', source_turn=0)
+    state['world']['facts']['qa_school_calendar']=dict(id='qa_school_calendar',text='Кирилл прочитал школьный календарь каникул.',secret=False,character_ids=[ACTOR_ID],claim=dict(subject_id='qa_school_break',predicate='scheduled_event',value='known'),evidence=[])
+    state['world']['knowledge'][ACTOR_ID+':qa_school_calendar']=dict(actor_id=ACTOR_ID,fact_id='qa_school_calendar',status='known')
     events['qa_sunday_return'] = dict(id='qa_sunday_return', description='Возвращение из сада домой.',
         participants=[ACTOR_ID], due_minute=0, status='pending', commitment=True,
         temporal=dict(weekday=6,day_period='evening'), depends_on=['qa_friday_trip'],
@@ -410,7 +414,8 @@ def load_fixture(repository, checkpoint='base'):
     if checkpoint=='protagonist-infant':
         _seed_reproduction(repository,result['save'],'newborn')
         snapshot=repository.get_snapshot(result['save'])
-        child=next(cid for cid,c in snapshot['world_state']['characters'].items() if c.get('birth_provenance'))
+        from backend.runtime_v3.birth_identity import is_game_birth
+        child=next(cid for cid in snapshot['world_state']['characters'] if is_game_birth(snapshot['world_state'],cid))
         repository.transition_protagonist(result['save'],repository.get_save(result['save'])['revision'],
             'qa-infant-protagonist','permanent',actor_id=child)
     return dict(result, workspace=workspace['id'], fixture_version=FIXTURE_VERSION, checkpoint=checkpoint)
@@ -708,6 +713,63 @@ def _phone(state):
 CHECKPOINTS['phone'] = _phone
 
 
+def _ui_calendar(state):
+    state = _commitments(state)
+    state['world_clock']['calendar']['profile']['observances'] += [
+        dict(id='private-date',name='Скрытая личная дата',month=10,day=8,character_ids=['qa_oleg']),
+        dict(id='own-date',name='Годовщина первой восстановленной карты',month=10,day=8,character_ids=[ACTOR_ID]),
+    ]
+    for i,status in enumerate(('pending','resolved','cancelled')):
+        state['world']['scheduled_events'][f'qa_ui_{i}']=dict(id=f'qa_ui_{i}',description=['Встреча реставраторов и обсуждение очень длинного названия выставки','Получение архивных материалов','Отменённая поездка на пристань'][i],participants=[ACTOR_ID],due_minute=0,status=status,commitment=True,temporal=dict(date='2026-10-08',time='10:00'),evidence='Исходный план QA.',source_turn=0)
+    return state
+
+
+def _ui_custom_calendar(state):
+    for actor in state['world']['characters'].values():
+        actor.pop('birth_date',None)
+    state['world_clock']['calendar']=dict(start_minute=START_MINUTE,start_date='0042-02-25',start_weekday=4,profile=dict(id='qa-custom',system='custom',month_lengths=[20,25],month_names=['Свет','Тень'],weekday_names=['Первый','Второй','Третий','Четвёртый','Пятый'],observances=[dict(id='oath',name='Годовщина клятвы',month=2,day=25)]))
+    return state
+
+
+def _ui_family(state):
+    from backend.runtime_v3.models import ObjectiveRelation
+    state=_family(state);world=state['world']
+    def relation(rid,kind,a,b,status='active',certainty='known',outcome=''):
+        fid=rid+'-fact'
+        world['facts'][fid]=dict(id=fid,text=f'Семейная связь {a}, {b}.',secret=True,character_ids=[a,b],evidence=['QA'])
+        world['knowledge'][ACTOR_ID+':'+fid]=dict(actor_id=ACTOR_ID,fact_id=fid,status=certainty)
+        if kind in ('spouse','partner'):a,b=sorted((a,b))
+        world['objective_relations'][rid]=ObjectiveRelation(id=rid,kind=kind,source_id=a,target_id=b,fact_id=fid,status=status,outcome=outcome,since=0,until=1 if status=='closed' else None,closure_fact_id=fid if status=='closed' else None,evidence='QA',source_turn=0).model_dump()
+    relation('ui-ex','spouse','qa_timur','qa_marina','closed',outcome='divorced')
+    relation('ui-partner','partner','qa_timur','qa_elena')
+    relation('ui-adoption','adoptive_parent','qa_timur','qa_roman')
+    relation('ui-guardian','guardian','qa_marina','qa_roman',certainty='suspected')
+    # Oleg has no relatives; Zoya tests the public directory without Knowledge.
+    fid='ui-known-oleg'
+    world['facts'][fid]=dict(id=fid,text='Кирилл знаком с Олегом.',secret=False,character_ids=['qa_oleg'],evidence=['QA'])
+    world['knowledge'][ACTOR_ID+':'+fid]=dict(actor_id=ACTOR_ID,fact_id=fid,status='known')
+    return state
+
+
+def _ui_dense_family(state):
+    state=_ui_family(state);world=state['world']
+    from backend.runtime_v3.models import ObjectiveRelation
+    for i in range(100):
+        cid=f'qa_family_{i}'
+        card=deepcopy(state['characters'][1]);card.update(id=cid,name=f'Родственник {i+1} с длинным именем',is_player=False)
+        state['characters'].append(card)
+        world['characters'][cid]=deepcopy(world['characters']['qa_roman']);world['characters'][cid]['id']=cid
+        parent='qa_timur' if i<10 else f'qa_family_{i//10-1}'
+        fid=f'ui-dense-{i}'
+        world['facts'][fid]=dict(id=fid,text=f'Известное родство {parent} и {cid}.',secret=True,character_ids=[parent,cid],evidence=['QA'])
+        world['knowledge'][ACTOR_ID+':'+fid]=dict(actor_id=ACTOR_ID,fact_id=fid,status='known')
+        world['objective_relations'][fid]=ObjectiveRelation(id=fid,kind='parent',source_id=parent,target_id=cid,fact_id=fid,evidence='QA',source_turn=0).model_dump()
+    return state
+
+
+CHECKPOINTS.update({'ui-calendar':_ui_calendar,'ui-calendar-custom':_ui_custom_calendar,'ui-family':_ui_family,'ui-family-dense':_ui_dense_family})
+
+
 # #43 extends the same #78 fixture; original checkpoints stay unchanged.
 CHECKPOINTS['long-term'] = _pregnancy
 
@@ -724,3 +786,134 @@ def _seed_long_term(repository, save_id):
     with repository.connect() as db:
         db.execute('UPDATE saves SET state_json=? WHERE id=?', (json.dumps(snapshot, ensure_ascii=False), save_id))
     _seed_reproduction(repository, save_id, 'newborn')
+
+
+def _ui_public_directory(state):
+    state=_ui_family(state)
+    state['world']['knowledge']={}
+    state['world']['contacts']={}
+    state['world']['characters']['qa_zoya']['birth_date']='2000-10-09'
+    return state
+
+CHECKPOINTS['ui-public-directory']=_ui_public_directory
+
+
+def _ui_dossier(state):
+    """#83 dense, sparse and restricted records in the shared #78 world."""
+    from backend.runtime_v3.models import Condition
+    state=_ui_family(state)
+    world=state['world']
+    for card in state['characters']:
+        if card['id']==ACTOR_ID:
+            card['fields'].update({'Биография':'Кирилл вернулся в город после работы в архиве. '+('Он восстанавливает старые карты и ищет историю своей семьи. '*18),
+                'Характер':'Внимателен к деталям, сдержан в незнакомой компании.', 'Стиль общения':'Говорит спокойно, иногда шутит.',
+                'Внешность':'Короткие тёмные волосы, светлая рубашка, следы краски на руках.'})
+    world['characters'][ACTOR_ID]['physical_state']='Устал после дороги, промок под дождём.'
+    world['characters'][ACTOR_ID]['biological_sex']='male'
+    world['characters']['qa_vera']['biological_sex']='female'
+    world['conditions']['dossier-known']=Condition(id='dossier-known',actor_id=ACTOR_ID,description='Повреждение ноги',effects={'can_move':False},evidence='Осторожно опирается на трость.').model_dump()
+    world['facts']['dossier-hidden']=dict(id='dossier-hidden',text='PRIVATE DOSSIER CONDITION',secret=True,character_ids=['qa_vera'],evidence=['QA'])
+    world['conditions']['dossier-hidden']=Condition(id='dossier-hidden',actor_id='qa_vera',description='PRIVATE DOSSIER CONDITION',fact_id='dossier-hidden',effects={'can_speak':False},evidence='PRIVATE EVIDENCE').model_dump()
+    world['knowledge']['qa_vera:dossier-hidden']=dict(actor_id='qa_vera',fact_id='dossier-hidden',status='known')
+    return state
+
+
+CHECKPOINTS['ui-dossier']=_ui_dossier
+
+
+def _ui_personal(state):
+    """#141: known concurrent romance and a suspected relation, using #78 data."""
+    from backend.runtime_v3.models import ObjectiveRelation
+    state = _ui_dossier(state)
+    world = state['world']
+    for cid, kind, certainty in [('qa_elena', 'partner', 'known'), ('qa_marina', 'engaged', 'suspected')]:
+        rid = 'ui-personal-' + cid
+        world['facts'][rid] = dict(id=rid, text='Личные отношения установлены.', secret=True,
+                                  character_ids=[ACTOR_ID, cid], evidence=['QA'])
+        world['knowledge'][ACTOR_ID + ':' + rid] = dict(actor_id=ACTOR_ID, fact_id=rid, status=certainty)
+        a, b = sorted((ACTOR_ID, cid))
+        world['objective_relations'][rid] = ObjectiveRelation(id=rid, kind=kind, source_id=a,
+            target_id=b, fact_id=rid, since=0, evidence='QA', source_turn=0).model_dump()
+    return state
+
+
+CHECKPOINTS['ui-personal'] = _ui_personal
+
+
+
+def _ui_portrait_polish(state):
+    """#121: shared dossier/phone regression fixture, canonical identities only."""
+    from backend.runtime_v3.remote_models import Contact
+    state = _phone(_ui_dossier(state))
+    world = state['world']; now = state['world_clock']['minute']
+    ids = [ACTOR_ID, 'qa_vera', 'qa_timur']
+    for owner in ids:
+        for target in ids:
+            if owner == target:
+                continue
+            cid = f'polish-{owner}-{target}'
+            world['contacts'][cid] = Contact(id=cid, owner_id=owner, character_id=target,
+                label=next(c['name'] for c in state['characters'] if c['id']==target), address='qa-'+target,
+                identity_visible=True, provenance='QA explicit import', created_at=now).model_dump()
+    world['conversations']['qa-group']['members'].append(dict(actor_id='qa_timur', joined_at=now,
+        left_at=None, provenance='QA explicit membership'))
+    world['characters'][ACTOR_ID]['situation'] = 'Сравнивает старую карту с записями семьи. ' * 8
+    return state
+
+
+CHECKPOINTS['ui-portrait-polish'] = _ui_portrait_polish
+
+
+def _ui_inspector(state):
+    """#86 presentation checkpoint: existing canonical fields, no new mechanics."""
+    from backend.runtime_v3.models import Relationship, Thread
+    state = _ui_dossier(_commitments(state))
+    world = state['world']
+    world['relationships']['qa_vera:'+ACTOR_ID] = Relationship(
+        source_id='qa_vera', target_id=ACTOR_ID,
+        context='Вера ценит заботу Кирилла, но не согласна с его решением.',
+        dimensions={'trust': -20, 'respect': 45}).model_dump()
+    for status, text in [('developing','Подготовка выставки карт'),('dormant','Возвращение на пристань'),
+                         ('resolved','Завершённая реставрация')]:
+        tid='qa_inspector_'+status
+        world['threads'][tid]=Thread(id=tid, description=text, state='Записанное состояние линии: '+text+'.',
+            status=status, character_ids=[ACTOR_ID,'qa_vera'], relevance=.5).model_dump()
+    return state
+
+
+CHECKPOINTS['ui-inspector'] = _ui_inspector
+
+
+def _phone_office(state):
+    """#133 continuity checkpoint, retaining the #78 import/schema and stable IDs."""
+    state=_phone(state)
+    names={ACTOR_ID:'Илья','qa_vera':'Катя','qa_marina':'Виктория'}
+    for card in state['characters']:
+        if card['id'] in names:card['name']=names[card['id']]
+    scene=state['world']['scenes'][SCENE_ID]
+    scene.update(location='Кабинет Ильи',participants=[ACTOR_ID],text='Илья в кабинете. Виктория ждёт за дверью и пока не стучит.')
+    for cid,place in [(ACTOR_ID,'Кабинет Ильи'),('qa_vera',LIBRARY),('qa_marina','Коридор перед кабинетом')]:
+        state['world']['characters'][cid].update(location=place,scene_id=SCENE_ID if cid==ACTOR_ID else None)
+    state['world']['contacts']['phone-qa_kirill-qa-vera']['label']='Катя'
+    return state
+
+
+CHECKPOINTS['phone-office']=_phone_office
+
+
+def _ui_canonical_personal(state):
+    """#150: authoring canon exists without any observer knowledge fact."""
+    from backend.runtime_v3.models import ObjectiveRelation
+    state = _ui_dossier(state)
+    names = {'qa_marina': 'Марина Волкова', 'qa_timur': 'Сергей Волков'}
+    for card in state['characters']:
+        if card['id'] in names:
+            card['name'] = names[card['id']]
+    # This checkpoint intentionally starts before any marriage/closure phases.
+    state['world']['objective_relations'] = {
+        'volkov-marriage': ObjectiveRelation(id='volkov-marriage', kind='spouse',
+            source_id='qa_marina', target_id='qa_timur', since_date='1999-06-12').model_dump()}
+    return state
+
+
+CHECKPOINTS['ui-canonical-personal'] = _ui_canonical_personal

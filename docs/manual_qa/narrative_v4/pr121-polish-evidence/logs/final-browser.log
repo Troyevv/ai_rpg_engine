@@ -1,0 +1,85 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> ai-rpg-frontend@2.0.0 test:e2e
+> playwright test portrait-polish tabletop
+
+
+Running 26 tests using 1 worker
+
+(node:33) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] Semantic retrieval unavailable (ModuleNotFoundError); structural fallback
+  ✓   1 [desktop] › e2e/portrait-polish.spec.ts:18:39 › polish visual matrix 360 (6.4s)
+  ✓   2 [desktop] › e2e/portrait-polish.spec.ts:18:39 › polish visual matrix 393 (6.2s)
+  ✓   3 [desktop] › e2e/portrait-polish.spec.ts:18:39 › polish visual matrix 768 (5.7s)
+  ✓   4 [desktop] › e2e/portrait-polish.spec.ts:18:39 › polish visual matrix 1440 (6.9s)
+  ✓   5 [desktop] › e2e/portrait-polish.spec.ts:70:1 › portrait viewer, editor, error recovery, semantic tabs and resize drafts (7.2s)
+  ✓   6 [desktop] › e2e/portrait-polish.spec.ts:98:1 › temporary phone owner and real outgoing API use its portrait (3.6s)
+  ✓   7 [desktop] › e2e/portrait-polish.spec.ts:113:1 › fallback geometry, neutral identity and long text at each size (5.2s)
+  ✓   8 [desktop] › e2e/portrait-polish.spec.ts:134:1 › hidden canonical sender stays anonymous despite public directory and uploaded portrait (2.4s)
+(node:1902) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   9 [desktop] › e2e/tabletop.spec.ts:28:1 › generated campaign, quest, combat, loot, expansion and real server restart (14.2s)
+  ✓  10 [desktop] › e2e/tabletop.spec.ts:284:1 › invalid generated draft shows all diagnostics and requires explicit correction (1.4s)
+  ✓  11 [desktop] › e2e/tabletop.spec.ts:339:1 › AI DM check and choice have durable mechanical controls (3.9s)
+  ✓  12 [desktop] › e2e/tabletop.spec.ts:403:1 › point buy and AI portrait are reviewed before character creation (1.7s)
+  ✓  13 [desktop] › e2e/tabletop.spec.ts:456:1 › wizard creator and spellbook keep casting pending across reload (3.8s)
+(node:2055) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  -  14 [mobile] › e2e/portrait-polish.spec.ts:18:39 › polish visual matrix 360
+  -  15 [mobile] › e2e/portrait-polish.spec.ts:18:39 › polish visual matrix 393
+  -  16 [mobile] › e2e/portrait-polish.spec.ts:18:39 › polish visual matrix 768
+  -  17 [mobile] › e2e/portrait-polish.spec.ts:18:39 › polish visual matrix 1440
+[WebServer] Semantic retrieval unavailable (ModuleNotFoundError); structural fallback
+  ✓  18 [mobile] › e2e/portrait-polish.spec.ts:70:1 › portrait viewer, editor, error recovery, semantic tabs and resize drafts (6.7s)
+  ✘  19 [mobile] › e2e/portrait-polish.spec.ts:98:1 › temporary phone owner and real outgoing API use its portrait (1.0m)
+(node:2265) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] Semantic retrieval unavailable (ModuleNotFoundError); structural fallback
+  ✓  20 [mobile] › e2e/portrait-polish.spec.ts:113:1 › fallback geometry, neutral identity and long text at each size (6.2s)
+  ✓  21 [mobile] › e2e/portrait-polish.spec.ts:134:1 › hidden canonical sender stays anonymous despite public directory and uploaded portrait (2.5s)
+(node:3998) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  22 [mobile] › e2e/tabletop.spec.ts:28:1 › generated campaign, quest, combat, loot, expansion and real server restart (15.6s)
+  ✓  23 [mobile] › e2e/tabletop.spec.ts:284:1 › invalid generated draft shows all diagnostics and requires explicit correction (1.2s)
+  ✓  24 [mobile] › e2e/tabletop.spec.ts:339:1 › AI DM check and choice have durable mechanical controls (3.9s)
+  ✓  25 [mobile] › e2e/tabletop.spec.ts:403:1 › point buy and AI portrait are reviewed before character creation (1.6s)
+  ✓  26 [mobile] › e2e/tabletop.spec.ts:456:1 › wizard creator and spellbook keep casting pending across reload (4.3s)
+
+
+  1) [mobile] › e2e/portrait-polish.spec.ts:98:1 › temporary phone owner and real outgoing API use its portrait 
+
+    Test timeout of 60000ms exceeded.
+
+    Error: locator.selectOption: Test timeout of 60000ms exceeded.
+    Call log:
+      - waiting for getByLabel('Управляемый персонаж', { exact: true })
+
+
+      107 |  await page.screenshot({path:`${evidence}/after-${info.project.name}-temporary-owner.png`});
+      108 |  await page.keyboard.press('Escape');
+    > 109 |  for(const owner of ['qa_timur','qa_kirill']){await page.getByLabel('Управляемый персонаж',{exact:true}).selectOption(owner);await expect(page.getByLabel('Управляемый персонаж',{exact:true})).toBeEnabled();}
+          |                                                                                                          ^
+      110 |  await page.getByRole('button',{name:/^Телефон/}).click();await phone.getByRole('button',{name:'Переписки',exact:true}).click();await phone.locator('button.phone-row').filter({hasText:'Вера Ларина'}).click();await expect(phone.locator('.phone-message.outgoing img').first()).toHaveAttribute('src',/qa_kirill/);
+      111 | });
+      112 |
+        at /workspace/scratch/621c8d3da2c9/ai_rpg_engine/frontend/e2e/portrait-polish.spec.ts:109:106
+
+    attachment #1: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/portrait-polish-temporary--d7fd0-tgoing-API-use-its-portrait-mobile/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/portrait-polish-temporary--d7fd0-tgoing-API-use-its-portrait-mobile/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/portrait-polish-temporary--d7fd0-tgoing-API-use-its-portrait-mobile/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/portrait-polish-temporary--d7fd0-tgoing-API-use-its-portrait-mobile/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [mobile] › e2e/portrait-polish.spec.ts:98:1 › temporary phone owner and real outgoing API use its portrait 
+  4 skipped
+  21 passed (3.0m)

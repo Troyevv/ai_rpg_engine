@@ -1,0 +1,160 @@
+{
+  "id": 2,
+  "revision": 5,
+  "physical_choice_source": {
+    "turn_id": 9,
+    "variant_id": "1c3162eefb1c4166aeb1e846a32f0501"
+  },
+  "turns": [
+    {
+      "id": 7,
+      "sequence": 0,
+      "assistant_text": "Илья сидит в кабинете. Виктория ждёт за дверью и пока не стучит.",
+      "choices": [
+        {
+          "action": "Посмотреть на часы",
+          "speech": "",
+          "interaction_channel": "physical"
+        }
+      ],
+      "presentation": {
+        "surface": "physical",
+        "actor_id": "qa_kirill",
+        "call_id": null
+      }
+    },
+    {
+      "id": 8,
+      "sequence": 1,
+      "assistant_text": "Собеседник ответил. Разговор доступен в сцене.",
+      "choices": [],
+      "presentation": {
+        "surface": "phone",
+        "actor_id": "qa_kirill",
+        "call_id": "remote_53af69e1dafdf6db0a09",
+        "conversation_id": null
+      }
+    },
+    {
+      "id": 9,
+      "sequence": 2,
+      "assistant_text": "Катя отвечает: «Да, договорились.».\n\nВиктория трижды стучит в дверь кабинета. Деревянная створка глухо отзывается.",
+      "choices": [
+        {
+          "action": "Подойти к двери и ответить Виктории",
+          "speech": "",
+          "interaction_channel": "physical"
+        },
+        {
+          "action": "Выйти из кабинета",
+          "speech": "",
+          "interaction_channel": "physical"
+        }
+      ],
+      "presentation": {
+        "surface": "call",
+        "actor_id": "qa_kirill",
+        "call_id": "remote_53af69e1dafdf6db0a09",
+        "physical_events": [
+          {
+            "id": "event_f769bc7e9f6b4638ad24",
+            "source_record_id": "record_f272e7bcb6dc8b49e110",
+            "turn_id": 3,
+            "order": 0,
+            "minute": 543,
+            "physical_text": "Виктория трижды стучит в дверь кабинета. Деревянная створка глухо отзывается.",
+            "witnesses": [
+              "qa_kirill"
+            ]
+          }
+        ],
+        "physical_text": "Виктория трижды стучит в дверь кабинета. Деревянная створка глухо отзывается.",
+        "call_text": "Катя отвечает: «Да, договорились.»."
+      }
+    }
+  ],
+  "world_clock": {
+    "minute": 543,
+    "last_event_time": "День 1 · 2026-10-05 · Пн · 09:03",
+    "calendar": {
+      "start_minute": 540,
+      "start_weekday": 0,
+      "start_date": "2026-10-05",
+      "profile": {
+        "id": "two-shores",
+        "system": "gregorian",
+        "month_lengths": [],
+        "month_names": [],
+        "weekday_names": [],
+        "observances": [
+          {
+            "id": "map-day",
+            "name": "День старых карт",
+            "month": 10,
+            "day": 5,
+            "character_ids": []
+          }
+        ],
+        "seasons": []
+      },
+      "labels": {
+        "480": "День 1 · 2026-10-05 · Пн · 08:00",
+        "540": "День 1 · 2026-10-05 · Пн · 09:00",
+        "543": "День 1 · 2026-10-05 · Пн · 09:03"
+      }
+    },
+    "projection": {
+      "world_time": 543,
+      "day": 1,
+      "date": "2026-10-05",
+      "weekday": 0,
+      "weekday_name": "monday",
+      "time": "09:03",
+      "day_period": "morning",
+      "season": null,
+      "summary": "Day 1 / 2026-10-05 / monday / 09:03 / morning"
+    },
+    "nearby": [
+      {
+        "id": "map-day:2026-10-05",
+        "date": "2026-10-05",
+        "kind": "observance",
+        "name": "День старых карт",
+        "character_ids": []
+      },
+      {
+        "id": "birthday:qa_vera:2026-10-06",
+        "date": "2026-10-06",
+        "kind": "birthday",
+        "name": null,
+        "character_ids": [
+          "qa_vera"
+        ]
+      }
+    ]
+  },
+  "phone_events": [
+    {
+      "id": "remote_53af69e1dafdf6db0a09",
+      "channel": "VOICE_CALL",
+      "conversation_id": null,
+      "world_time": 540,
+      "status": "answered",
+      "destination": "qa-vera",
+      "outgoing": true,
+      "read_count": 0,
+      "recipient_count": 1,
+      "unread": false,
+      "content": "",
+      "subject": {
+        "id": "qa_vera",
+        "name": "Катя",
+        "portrait": null,
+        "silhouette": "neutral"
+      },
+      "label": "Катя",
+      "time_label": "День 1 · 2026-10-05 · Пн · 09:00"
+    }
+  ],
+  "scheduled_events": {}
+}

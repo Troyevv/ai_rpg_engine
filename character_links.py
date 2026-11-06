@@ -25,6 +25,16 @@ def character_aliases(characters):
 def linked_markdown(markdown, characters):
     aliases = character_aliases(characters)
     parser = MarkdownIt('commonmark', {'html': False, 'breaks': True}).enable('table')
+    default_fence = parser.renderer.rules['fence']
+
+    def render_fence(tokens, index, options, env):
+        token = tokens[index]
+        if token.level == 0 and token.info.strip() == 'letter':
+            # Literal authored prose, not executable Markdown or linked NPC names.
+            return '<blockquote class="narrative-letter" style="white-space:pre-wrap">' + escape(token.content) + '</blockquote>\n'
+        return default_fence(tokens, index, options, env)
+
+    parser.renderer.rules['fence'] = render_fence
     tokens = parser.parse(markdown)
     if not aliases:
         return parser.renderer.render(tokens, parser.options, {})

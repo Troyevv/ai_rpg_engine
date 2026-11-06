@@ -203,25 +203,15 @@ def test_migration_of_old_database_preserves_existing_save(tmp_path):
         assert {'kind', 'choices_json', 'changes_json'} <= {r['name'] for r in conn.execute('PRAGMA table_info(turns)')}
 
 
-@pytest.mark.parametrize('quote,narrative,player,valid', [
-    ('«Садись, поговорим»', '“Садись,\n  поговорим”', '', True),
-    ('Садись, поговорим', 'Садись,\u00a0поговорим', '', True),
-    ('Я сяду здесь.', NARRATIVE, 'Я сяду здесь.', True),
-    ('Садись, поговорим', 'Не садись. Поговорим потом.', '', False),
-    ('Садись поговорим', 'Садись', 'поговорим', False),
-    ('Садись… поговорим', NARRATIVE, '', False),
-    ('', NARRATIVE, '', False),
-])
-def test_evidence_formatting_without_accepting_invented_quotes(db, quote, narrative, player, valid):
+@pytest.mark.parametrize('quote', ['«Садись, поговорим»', 'Садись… поговорим', 'Пересказ', ''])
+def test_event_semantics_do_not_depend_on_exact_auxiliary_quote(db, quote):
     from backend.runtime_v3.resolver import StateResolver
     storage, _, sid = db
     before = storage.get_snapshot(sid)
-    payload = wire(result(), narrative, before)
+    payload = wire(result(), NARRATIVE, before)
     payload['events'][0]['evidence'] = quote
-    resolved = StateResolver(before['world_state'], narrative, player).resolve(payload)
-    assert bool(resolved.history['events']) == valid
-    if not valid:
-        assert any(w['section'] == 'events' for w in resolved.warnings)
+    resolved = StateResolver(before['world_state'], NARRATIVE, '').resolve(payload)
+    assert resolved.history['events'][0]['text'] == payload['events'][0]['text']
     assert storage.get_snapshot(sid) == before
 
 
@@ -241,7 +231,7 @@ def test_evidence_repair_is_bounded_atomic_and_keeps_narrative(db, outcome):
         if len(calls) == 2:
             payload['scene']['present_ids']=['missing']
         elif outcome == 'invalid':
-            payload['events'][0]['evidence'] = 'Пересказ вместо цитаты'
+            payload['scene']['present_ids']=['still-missing']
         if len(calls) == 3:
             assert any('unknown_character' in m['content'] for m in kwargs['messages'])
             assert estimate(kwargs['messages']) <= CONFIG['context_length'] - CONFIG['update_tokens'] - 256
@@ -254,10 +244,7 @@ def test_evidence_repair_is_bounded_atomic_and_keeps_narrative(db, outcome):
     assert len(calls) == 3
     assert storage.get_job(job)['narrative'] == NARRATIVE
     assert storage.get_job(job)['narrative_complete']
-    if outcome in ('fixed','invalid'):
-        if outcome == 'invalid':
-            assert json.loads(storage.get_job(job)['warnings_json'])[0]['section'] == 'events'
-            assert storage.get_save(sid)['state'].get('events',[]) == before.get('events',[])
+    if outcome == 'fixed':
         assert storage.get_job(job)['status'] == 'saved'
         assert len(storage.list_turns(sid)) == 1
         assert len(json.loads(storage.list_turns(sid)[0]['choices_json'])) == 6

@@ -1,9 +1,10 @@
 """Strict persisted models; no historical pointers in the current world."""
+import json
 from copy import deepcopy
 from dataclasses import dataclass, field
 from hashlib import sha256
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator, model_serializer
 from backend.services.relation_dimensions import RELATION_DIMENSIONS
 from backend.services.world_delta_errors import StructuralDeltaError
 
@@ -30,6 +31,30 @@ class Season(StrictModel):
     day: int = Field(ge=1, le=99)
 
 
+class HolidayOverride(StrictModel):
+    """One concrete occurrence, never an implicit rule for all future years."""
+    id: str
+    removed: bool = False
+    name: str | None = None
+    date: str | None = None
+
+    @model_validator(mode='after')
+    def valid_date(self):
+        if self.date:
+            from datetime import date
+            date.fromisoformat(self.date)
+        return self
+
+
+class RegionalCalendar(StrictModel):
+    country: str
+    subdivision: str | None = None
+    version: str
+    language: str = 'en_US'
+    observed: bool = False
+    overrides: list[HolidayOverride] = Field(default_factory=list, max_length=512)
+
+
 class CalendarProfile(StrictModel):
     id: str = 'gregorian'
     system: Literal['gregorian', 'custom'] = 'gregorian'
@@ -38,6 +63,17 @@ class CalendarProfile(StrictModel):
     weekday_names: list[str] = Field(default_factory=list, max_length=14)
     observances: list[Observance] = Field(default_factory=list, max_length=128)
     seasons: list[Season] = Field(default_factory=list, max_length=24)
+    seasons_enabled: bool = True
+    regional: RegionalCalendar | None = None
+    regional_overrides: list[HolidayOverride] = Field(default_factory=list,max_length=512)
+
+    @model_serializer(mode='wrap')
+    def serialize_profile(self,handler):
+        value=handler(self)
+        if self.seasons_enabled:value.pop('seasons_enabled',None)
+        if self.regional is None:value.pop('regional',None)
+        if not self.regional_overrides:value.pop('regional_overrides',None)
+        return value
 
     @model_validator(mode='after')
     def valid_profile(self):
@@ -77,6 +113,7 @@ class Calendar(StrictModel):
 
 
 class TemporalValue(StrictModel):
+    minute_offset: int | None = Field(default=None, ge=0, le=527040)
     date: str | None = None
     weekday: int | None = Field(default=None, ge=0, le=13)
     day_offset: int | None = Field(default=None, ge=-366, le=366)
@@ -85,8 +122,10 @@ class TemporalValue(StrictModel):
 
     @model_validator(mode='after')
     def one_temporal_basis(self):
-        if sum(v is not None for v in (self.date,self.weekday,self.day_offset)) != 1:
-            raise ValueError('temporal value requires exactly one date, weekday or day_offset')
+        if sum(v is not None for v in (self.date,self.weekday,self.day_offset,self.minute_offset)) != 1:
+            raise ValueError('temporal value requires exactly one date, weekday, day_offset or minute_offset')
+        if self.minute_offset is not None and (self.time is not None or self.day_period is not None):
+            raise ValueError('minute_offset already defines an exact relative instant')
         if self.time is not None and self.day_period is not None:
             raise ValueError('choose exact time or an imprecise period')
         return self
@@ -131,7 +170,32 @@ from backend.runtime_v3.narrative_policy_models import (NarrativePacingProfile, 
 from backend.runtime_v3.remote_models import CommunicationCapabilities, Contact, Conversation, RemoteEvent
 
 
+class WeatherRegion(StrictModel):
+    climate: Literal['temperate', 'tropical', 'arid', 'polar']
+    hemisphere: Literal['north', 'south'] | None = None
+
+
+class WeatherProfile(StrictModel):
+    since_minute: int = Field(default=0, ge=0)
+    version: Literal[1] = 1
+    enabled: bool = True
+    seed: str = Field(min_length=1, max_length=100)
+    temperature_unit: Literal['C', 'F'] = 'C'
+    regions: dict[str, WeatherRegion] = Field(default_factory=dict, max_length=100)
+
+
+from backend.runtime_v3.genre import GenreConfig
+
+
+VisualField = Literal['Внешность', 'Пол', 'Возраст']
+
+
 class Meta(StrictModel):
+    # Author-bound appearance can only be projected when its facts are known.
+    visual_field_facts: dict[str, dict[VisualField, list[str]]] = Field(default_factory=dict)
+    genre: GenreConfig | None = None
+    weather: WeatherProfile | None = None
+    npc_expressiveness: Literal["realistic", "expressive", "hyperbolized"] = "realistic"
     communication: CommunicationCapabilities = Field(default_factory=CommunicationCapabilities)
     interaction_focus: Literal["physical", "call"] = "physical"
     narrative_pacing: NarrativePacingProfile = Field(default_factory=NarrativePacingProfile)
@@ -146,6 +210,13 @@ class Meta(StrictModel):
     turn_id: int = Field(default=0, ge=0)
     world_time: int = Field(default=0, ge=0)
 
+    @model_serializer(mode='wrap')
+    def sparse_appearance_bindings(self, handler):
+        result = handler(self)
+        if not self.visual_field_facts:
+            result.pop('visual_field_facts', None)
+        return result
+
 
 class RemoteInteraction(StrictModel):
     actor_id: str
@@ -158,6 +229,7 @@ class Camera(StrictModel):
     pov_actor_id: str | None = None
     location_id: str | None = None
     present_character_ids: list[str] = Field(default_factory=list)
+    observed_character_ids: list[str] = Field(default_factory=list)
     controlled_actor_id: str | None = None
     mode: Literal['actor', 'observer'] = 'actor'
     situation: str = ''
@@ -354,6 +426,54 @@ class PortraitCrop(StrictModel):
     zoom: float = Field(default=1.0, ge=1, le=4)
 
 
+class ProceduralPortrait(StrictModel):
+    """Versioned presentation only; never evidence for Appearance or Knowledge."""
+    version: Literal[1] = 1
+    seed: str = Field(pattern=r'^[a-f0-9]{32}$')
+    form: Literal['neutral', 'human'] = 'neutral'
+    stage: Literal['unknown', 'infant', 'child', 'adolescent', 'adult'] = 'unknown'
+    face: int = Field(default=0, ge=0, le=6)
+    hair: int = Field(default=0, ge=0, le=7)
+    skin: int = Field(default=0, ge=0, le=6)
+    eyes: int = Field(default=0, ge=0, le=7)
+    clothing: int = Field(default=0, ge=0, le=7)
+    accessory: int = Field(default=0, ge=0, le=7)
+    palette: int = Field(default=0, ge=0, le=6)
+    visual_age: Literal['infant','child','adolescent','young_adult','mature_adult','elderly'] | None = None
+    # Explicit artistic intent is independent of canonical developmental stage.
+    visual_age_mode: Literal['auto','manual'] | None = None
+    # Optional material overrides. Absent keys retain the exact original v1 SVG.
+    hair_color: int | None = Field(default=None, ge=0, le=6)
+    clothing_color: int | None = Field(default=None, ge=0, le=6)
+
+    @model_serializer(mode='wrap')
+    def _sparse_colors(self, handler):
+        result=handler(self)
+        for key in ('hair_color','clothing_color','visual_age','visual_age_mode'):
+            if result.get(key) is None: result.pop(key,None)
+        return result
+
+
+FacialHair = Literal['clean_shaven', 'stubble', 'mustache', 'short_beard', 'full_beard']
+
+
+class ProceduralPortraitV2(ProceduralPortrait):
+    version: Literal[2]
+    body_frame: Literal['male', 'female', 'neutral']
+    facial_hair: FacialHair
+
+    @model_validator(mode='after')
+    def valid_facial_hair(self):
+        visual = self.visual_age or self.stage
+        if self.facial_hair != 'clean_shaven' and (
+                self.form != 'human' or visual not in ('adult','young_adult','mature_adult','elderly')):
+            raise ValueError('Растительность на лице требует взрослой человеческой иллюстрации.')
+        return self
+
+
+PortraitDescriptor = ProceduralPortrait | ProceduralPortraitV2
+
+
 class PortraitReference(StrictModel):
     id: str = Field(pattern=r'^[a-f0-9]{32}$')
     asset_id: str = Field(pattern=r'^[a-f0-9]{32}$')
@@ -390,7 +510,10 @@ class Character(StrictModel):
     biological_sex: Literal['female', 'male'] | None = None
     identity_components: dict[str, str] = Field(default_factory=dict)
     birth_provenance: dict[str, str | int | None] = Field(default_factory=dict)
+    birth_date_provenance: dict[str, str | int | None] = Field(default_factory=dict)
     appearance: AppearanceProfile = Field(default_factory=AppearanceProfile)
+    procedural_portrait: PortraitDescriptor | None = None
+    portrait_mode: Literal['auto', 'procedural'] = 'auto'
     portraits: list[PortraitReference] = Field(default_factory=list, max_length=128)
     personality: PersonalityProfile | None = None
     values: dict[str, DurableValue] | None = None
@@ -407,6 +530,7 @@ class Character(StrictModel):
         if not isinstance(value, dict): return value
         value = deepcopy(value)
         for field in ('goals', 'intentions', 'obligations'):
+            if not isinstance(value.get(field, []), list):continue  # Let Pydantic report the container's exact field.
             value[field] = [dict(id=identity(field, value.get('id'), i, item), text=item)
                 if isinstance(item, str) else item for i, item in enumerate(value.get(field, []))]
         return value
@@ -471,11 +595,19 @@ class Fact(StrictModel):
     id: str
     text: str
     visibility: Literal['public', 'secret'] = 'public'
+    story_secret: bool = False
+    secret_subject_ids: list[str] = Field(default_factory=list)
+    # Authored ownership, never a substitute for current Knowledge.
+    secret_keeper_ids: list[str] = Field(default_factory=list)
+    secret_biography_ids: list[str] = Field(default_factory=list)
+    secret_existence: Literal['hidden', 'discoverable'] = 'hidden'
+    origin_remote_event_id: str | None = None
     character_ids: list[str] = Field(default_factory=list)
     claim: Claim | None = None
 
 
 class Knowledge(StrictModel):
+    confirmed_once: bool = False
     actor_id: str
     fact_id: str
     status: Literal['known', 'suspected', 'unknown', 'outdated', 'refuted', 'superseded'] = 'known'
@@ -494,6 +626,8 @@ class Relationship(StrictModel):
 
 
 class Thread(StrictModel):
+    # None preserves authored/legacy visibility; new extracted lines are source-bound.
+    discovered_by: list[str] | None = None
     source_event_id: str | None = None
     stakes_for: list[str] = Field(default_factory=list, max_length=8)
     favorable_path: FavorablePath | None = None
@@ -505,8 +639,16 @@ class Thread(StrictModel):
     relevance: float = Field(default=0.5, ge=0, le=1)
 
 
+class CallEvidence(StrictModel):
+    source_id: str
+    actor_id: str
+    quote: str
+    assertion: Literal['proposal', 'assent', 'cancellation', 'outcome']
+
+
 class ScheduledEvent(StrictModel):
     id: str
+    time_semantics: Literal['legacy', 'explicit'] = 'legacy'
     description: str
     character_ids: list[str] = Field(default_factory=list)
     due_minute: int | None = Field(default=None, ge=0)
@@ -526,6 +668,9 @@ class ScheduledEvent(StrictModel):
     evidence: str = ''
     source_turn: int | None = Field(default=None, ge=0)
     remote_source_ids: list[str] = Field(default_factory=list, max_length=8)
+    remote_call_id: str | None = None
+    call_evidence: list[CallEvidence] = Field(default_factory=list, max_length=8)
+    call_time_source_id: str | None = None
 
 
 class SignificantPossession(StrictModel):
@@ -575,6 +720,8 @@ def fatal(message, code='current_state_invalid', repairable=False, **path):
 
 
 def assert_world_state_v3_invariants(state, before=None):
+    from backend.runtime_v3.birth_identity import compatible_state
+    state = compatible_state(state)
     from backend.runtime_v3.knowledge import salvage, slot
     state = salvage(state)
     state = salvage_calendar_data(state)
@@ -591,7 +738,10 @@ def assert_world_state_v3_invariants(state, before=None):
     try:
         value = WorldStateV3.model_validate(state).model_dump()
     except ValidationError as exc:
-        fatal(str(exc), 'current_state_schema_invalid')
+        # A nested error may contain a sealed letter (or another private fact).
+        # Keep actionable structural paths/types, never serialize input values.
+        details = [{'loc': list(e['loc']), 'type': e['type']} for e in exc.errors(include_input=False, include_context=False)]
+        fatal('Некорректная схема WorldState: ' + json.dumps(details, ensure_ascii=False), 'current_state_schema_invalid')
     actors, locations = value['characters'], value['locations']
     meta = value['meta']
     if meta['current_protagonist_id'] is not None and meta['current_protagonist_id'] not in actors:
@@ -625,11 +775,14 @@ def assert_world_state_v3_invariants(state, before=None):
         fatal('неизвестный controlled actor')
     if camera['mode'] == 'actor' and camera['controlled_actor_id'] not in present and actors.get(camera['controlled_actor_id'], {}).get('life_status') != 'dead':
         fatal('controlled actor отсутствует в камере')
+    observed = camera['observed_character_ids']
+    if len(set(observed)) != len(observed) or set(observed) & set(present) or set(observed) - actors.keys():
+        fatal('некорректные наблюдаемые участники камеры')
     remote = camera['remote_interactions']
     if len({r['actor_id'] for r in remote}) != len(remote):
         fatal('повторный участник удалённого взаимодействия')
     for interaction in remote:
-        if interaction['actor_id'] not in actors or interaction['actor_id'] in present or interaction['last_active_turn'] > value['meta']['turn_id']:
+        if interaction['actor_id'] not in actors or interaction['actor_id'] in present + observed or interaction['last_active_turn'] > value['meta']['turn_id']:
             fatal('некорректный участник удалённого взаимодействия')
     for cid, actor in actors.items():
         if actor['location_id'] is not None and actor['location_id'] not in locations:
@@ -658,8 +811,21 @@ def assert_world_state_v3_invariants(state, before=None):
         for key, item in value[section].items():
             if set(item['character_ids']) - actors.keys():
                 fatal('неизвестный связанный персонаж', section=section, entity=key)
+    for item in value['facts'].values():
+        if set(item['secret_subject_ids']) - actors.keys() or (not item['story_secret'] and item['secret_subject_ids']):
+            fatal('Некорректные субъекты сюжетной тайны', section='facts', entity=item['id'])
+        if (set(item['secret_keeper_ids']) - actors.keys() or
+                (item['secret_keeper_ids'] and not item['story_secret']) or
+                len(set(item['secret_keeper_ids'])) != len(item['secret_keeper_ids'])):
+            fatal('Некорректные хранители собственной тайны', section='facts', entity=item['id'])
+        if (set(item['secret_biography_ids']) - actors.keys() or
+                (item['secret_biography_ids'] and not item['story_secret']) or
+                len(set(item['secret_biography_ids'])) != len(item['secret_biography_ids'])):
+            fatal('Некорректные субъекты биографической тайны', section='facts', entity=item['id'])
+    from backend.runtime_v3.secrets import validate_disclosures
+    validate_disclosures(value)
     for item in value['threads'].values():
-        if set(item['stakes_for']) - actors.keys():
+        if (set(item['stakes_for']) | set(item.get('discovered_by') or [])) - actors.keys():
             fatal('неизвестный участник последствий линии', section='threads', entity=item['id'])
     for item in value['scheduled_events'].values():
         if item['location_id'] is not None and item['location_id'] not in locations:

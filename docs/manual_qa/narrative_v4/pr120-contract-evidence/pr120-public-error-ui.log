@@ -1,0 +1,13 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+Running 2 tests using 1 worker
+
+(node:44) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] Semantic retrieval unavailable (ModuleNotFoundError); structural fallback
+  ✓  1 [desktop] › frontend/e2e/phone-completion.spec.ts:149:1 › technical call failure preserves canonical time and ringing; Retry uses original call (12.3s)
+(node:148) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  2 [mobile] › frontend/e2e/phone-completion.spec.ts:149:1 › technical call failure preserves canonical time and ringing; Retry uses original call (11.7s)
+
+  2 passed (27.3s)

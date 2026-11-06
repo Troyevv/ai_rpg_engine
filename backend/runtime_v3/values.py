@@ -26,7 +26,7 @@ class ValueDelta(StrictModel):
     source_event_id: str | None = None
     player_evidence: str = ''
     player_assertion: Literal['explicit_value'] | None = None
-    evidence: str = Field(min_length=1,max_length=1000)
+    evidence: str = Field(default="",max_length=1000)
     rationale: str = Field(min_length=1,max_length=600)
 
 
@@ -104,7 +104,7 @@ def apply_values(resolver, raw, events):
         if change['basis']=='explicit_statement':
             event=events.get(change['source_event_id'])
             quote=normalized(change['player_evidence'])
-            if (not event or cid not in event['participants'] or normalized(change['evidence']) not in normalized(resolver.narrative)
+            if (not event or cid not in event['participants']
                 or external and (change['player_assertion']!='explicit_value' or not quote or quote not in normalized(resolver.player_input))):
                 reject('Нет принятого явного заявления о долговременной ценности.','value_agency');continue
             sources=[dict(id=event['id'],source_event_id=event['id'],source_turn=resolver.turn_id,

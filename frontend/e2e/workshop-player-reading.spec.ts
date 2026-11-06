@@ -1,0 +1,54 @@
+import {test,expect} from '@playwright/test';
+import {readFileSync} from 'node:fs';
+import {nav} from './navigation';
+import {workshopNav} from './workshop-navigation';
+
+test('player reads ordinary NPC and world records without receiving the hidden plot',async({page,request})=>{
+ const source=JSON.parse(readFileSync(new URL('../../tests/fixtures/initial_world/workshop188.json',import.meta.url),'utf8'));
+ const w=await(await request.post('/api/workspaces',{data:{name:'Сосновка · чтение'}})).json();
+ const url=`/api/workspaces/${w.id}/draft`;
+ const imported=await request.post(url+'/import',{data:{revision:0,format:'json',text:JSON.stringify(source)}});
+ expect(imported.ok(),await imported.text()).toBe(true);
+ const forbidden=['fact_maxim_sale','fact_sonya_love','без продажи дома','для Сони эта дружба давно стала чем-то большим','переговоры с риелтором'];
+ const fetched:string[]=[];
+ page.on('request',r=>{if(r.url().includes('/api/workspaces/'))fetched.push(r.url())});
+ await page.addInitScript(wid=>localStorage.setItem('draftWorkspace',wid),w.id);
+ const response=page.waitForResponse(r=>r.url().includes(url+'?author=false')&&r.ok());
+ await page.goto('/');await nav(page,'Создать');
+ const publicDraft=await(await response).json();
+ for(const marker of forbidden)expect(JSON.stringify(publicDraft).toLowerCase()).not.toContain(marker.toLowerCase());
+ await workshopNav(page,'Персонажи');
+ await page.getByLabel('Поиск персонажей').fill('Максим');
+ await page.getByRole('button',{name:'Досье Максим Ковалёв',exact:true}).click();
+ const dossier=page.getByRole('dialog',{name:'Досье персонажа'});
+ await dossier.getByRole('tab',{name:'Личность'}).click();
+ await expect(dossier).toContainText('Старший брат Сони, вырос в Сосновке.');
+ await dossier.getByRole('tab',{name:'Цели'}).click();
+ await expect(dossier).toContainText('Закрыть накопившиеся дела до возвращения в Тверь.');
+ await dossier.getByRole('tab',{name:'Сейчас',exact:true}).click();
+ await expect(dossier).toContainText('менеджер по закупкам',{ignoreCase:true});
+ await expect(dossier.getByRole('button',{name:/Изменить|Удалить|Добавить|Сохранить/})).toHaveCount(0);
+ if(process.env.WW_READING_CAPTURE) {
+  const role=dossier.getByRole('button',{name:/менеджер по закупкам/i});
+  await role.click();
+  await role.evaluate(el=>el.closest('section')?.scrollIntoView({block:'start',behavior:'instant'}));
+  await page.screenshot({path:process.env.WW_READING_CAPTURE+'-'+test.info().project.name+'.png'});
+ }
+ await dossier.getByRole('button',{name:'Готово',exact:true}).click();
+ await workshopNav(page,'Места и сообщества');
+ await page.getByRole('button',{name:'Роли',exact:true}).click();
+ const role=page.locator('.ww-record-card').filter({hasText:'ведущая занятий по рисованию'});
+ await role.getByRole('button',{name:/Открыть запись/}).click();
+ await expect(page.getByRole('dialog')).toContainText('школ');
+ await expect(page.getByRole('dialog').getByRole('button',{name:/Изменить|Удалить|Добавить|Сохранить/})).toHaveCount(0);
+ await page.keyboard.press('Escape');
+ await workshopNav(page,'Связи и семьи');
+ await page.getByRole('button',{name:'Семья и связи',exact:true}).click();
+ await expect(page.locator('.ww-record-card').filter({hasText:/Максим.*Соня|Соня.*Максим/})).toHaveCount(1);
+ await workshopNav(page,'Хронология');
+ await expect(page.locator('.ww-record-card')).toContainText('Вечер пятницы');
+ await workshopNav(page,'Факты и знания');
+ await expect(page.locator('.ww-record-card').filter({hasText:'дружат с детства'})).toHaveCount(1);
+ for(const marker of forbidden)expect((await page.content()).toLowerCase()).not.toContain(marker.toLowerCase());
+ expect(fetched.some(u=>new URL(u).searchParams.get('author')==='true')).toBe(false);
+});

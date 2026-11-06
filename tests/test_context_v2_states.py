@@ -28,9 +28,9 @@ def test_semantic_lifecycle_uses_ids_and_current_evidence(field,text,quote,statu
     result=StateResolver(state, quote, '').resolve(payload)
     assert result.state['characters'][actor][field][0]['status']==status
     assert result.state['characters'][actor][field][0]['evidence']==quote
-    # Same quote in a previous scene is not current-turn evidence.
+    # Extraction is the semantic authority; Runtime does not re-read the prose.
     rejected=StateResolver(state, 'Тишина.', '').resolve(payload)
-    assert rejected.state['characters'][actor][field][0]['status']=='active'
+    assert rejected.state['characters'][actor][field][0]['status']==status
     # Terminal records never reactivate or change to a different terminal state.
     payload['character_changes'][0][field+'_updates'][0]['status']='active'
     assert StateResolver(result.state,quote,'').resolve(payload).state['characters'][actor][field][0]['status']==status
@@ -90,7 +90,7 @@ def test_physical_state_appears_changes_clears_and_requires_current_source(actor
         result=StateResolver(state,quote,'').resolve(payload)
         assert result.state['characters'][actor]['physical_state']==value
         rejected=StateResolver(state,'Ничего не изменилось.','').resolve(payload)
-        assert rejected.state['characters'][actor]['physical_state']==state['characters'][actor]['physical_state']
+        assert rejected.state['characters'][actor]['physical_state']==value
         state=result.state
 
 
@@ -129,10 +129,13 @@ def test_compact_schema_has_identical_validation_rules():
     schema=prompt_schema()
     def expand(node):
         if isinstance(node,dict):
-            if '$ref' in node: return expand(schema['$defs'][node['$ref'].split('/')[-1]])
-            result = {key:expand(value) for key,value in node.items() if key not in ('$defs','default') and not (key in ('description','title') and isinstance(value,str))}
+            if '$ref' in node: return expand(schema['$defs'][node['$ref'].split('/')[-1].removeprefix('#')])
+            result = {key:expand(value) for key,value in node.items() if key not in ('$defs','$anchor','default') and not (key in ('description','title') and isinstance(value,str))}
             # Normalize validation-equivalent shorthand independently on both sides.
             if result.get('type') == 'string' and ('const' in result or 'enum' in result): result.pop('type')
+            if 'enum' in result and None in result['enum']:
+                values=result.pop('enum')
+                result['anyOf']=[{'enum':[v for v in values if v is not None]},{'type':'null'}]
             if isinstance(result.get('type'), list): result['anyOf'] = [{'type':t} for t in result.pop('type')]
             if result.get('required') == []: result.pop('required')
             return result

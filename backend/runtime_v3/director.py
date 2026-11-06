@@ -21,7 +21,7 @@ def plan(state, kind, history=None, scope=None):
     if scope.initiative_decision is None: scope.initiative_decision = scene_plan(state, scope)
     return dict(continuity=scope.continuity_decision, scene_agency=scope.initiative_decision, narrative_policy=prompt_policy(scope.pacing_decision),recent_event_ids=scope.event_ids, actors=sorted(scope.relevant_actor_ids),
         location_ids=scope.location_ids,
-        acting_actor_ids=sorted(cid for cid in scope.present_actor_ids | scope.remote_actor_ids | scope.active_actor_ids if capabilities(state,cid)['can_act']),
+        acting_actor_ids=sorted(cid for cid in scope.present_actor_ids | scope.observed_actor_ids | scope.remote_actor_ids | scope.active_actor_ids if capabilities(state,cid)['can_act']),
         referenced_actor_ids=sorted(scope.referenced_actor_ids),
         triggers=(['camera_transition'] if kind in ('pov','background') else []) + (['scheduled_event_due'] if due else []),
         thread_ids=scope.thread_ids, due_event_ids=due,
@@ -31,7 +31,7 @@ def plan(state, kind, history=None, scope=None):
 def background_candidate(before, after):
     now=after['meta']['world_time'];elapsed=now-before['meta']['world_time']
     if elapsed<=0:return None
-    camera=after['camera'];present=set(camera['present_character_ids']);controlled=camera['controlled_actor_id']
+    camera=after['camera'];present=set(camera['present_character_ids']) | set(camera.get('observed_character_ids',[]));controlled=camera['controlled_actor_id']
     def eligible(cid):
         point=after['characters'][cid]
         return capabilities(after,cid)['can_act'] and cid not in present and cid!=controlled and (camera['location_id'] is None or point['location_id']!=camera['location_id'])
@@ -55,7 +55,7 @@ def background_candidate(before, after):
 def interval_candidates(before, after, budget=6):
     """Rank causes once for an interval, group by actor, never tick every NPC."""
     now=after['meta']['world_time']; start=before['meta']['world_time']
-    protected=set(after['camera']['present_character_ids'])
+    protected=set(after['camera']['present_character_ids']) | set(after['camera'].get('observed_character_ids',[]))
     controlled=after['camera']['controlled_actor_id']
     def eligible(cid):
         return cid in after['characters'] and capabilities(after,cid)['can_act'] and cid not in protected and cid!=controlled and after['characters'][cid]['location_id']!=after['camera']['location_id']
