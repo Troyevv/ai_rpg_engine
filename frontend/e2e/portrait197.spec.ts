@@ -55,7 +55,8 @@ test('legacy illustration upgrades in preview and retains its full beard in ever
  await page.getByRole('button',{name:'Подтвердить мир и начать игру',exact:true}).click();await confirmWorkshopStart(page);
  await page.getByRole('button',{name:'Начать игру',exact:true}).click();await expect(page.locator('.choices button')).toHaveCount(6);
  await nav(page,'Персонажи');await pickCharacter(page,cid);
- const avatar=page.locator('.character-profile .portrait-control .character-avatar');
+ const avatar=page.getByRole('combobox',{name:'Персонаж',exact:true}).locator('.character-avatar');
+ await expect(avatar).toBeVisible();expect((await avatar.boundingBox())!.width).toBeLessThanOrEqual(32);
  await expect(avatar.locator('img')).toHaveAttribute('src',saved!);
  expect(await avatar.evaluate(el=>getComputedStyle(el).borderRadius)).toBe('50%');
 });

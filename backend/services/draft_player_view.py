@@ -6,7 +6,7 @@ and try to hide it with CSS. References, not guesses about Russian prose, decide
 """
 from copy import deepcopy
 
-from backend.runtime_v3.birth_identity import is_game_birth
+from backend.runtime_v3.birth_identity import is_game_birth, birth_sex_disclosed
 from backend.runtime_v3.personality import CARD_FIELDS as TRAIT_LABELS
 from backend.services.world import CARD_FIELDS, KINDS
 
@@ -201,6 +201,10 @@ def player_view(state):
             if k=='Страхи и уязвимости' and cid in reserved_people:return False
             return k in CARD_FIELDS or k in ('Ценности','Приоритеты','Пол') or not unknown
         fields={k:v for k,v in card['fields'].items() if readable(k)}
+        if not birth_sex_disclosed(world, cid, actor, known.__contains__):
+            row.pop('biological_sex', None)
+            row.pop('reproductive_capability', None)
+            fields.pop('Пол', None)
         public_card=dict(pick(card,'id','name','is_player'),fields=fields)
         # An alias can itself be an undiscovered identity in imported dossiers.
         if cid not in reserved_people:public_card.update(pick(card,'aliases'))

@@ -3,10 +3,13 @@ from copy import deepcopy
 import hashlib
 import json
 import uuid
-from backend.runtime_v3.models import ProceduralPortrait, ProceduralPortraitV2
+from pydantic import TypeAdapter
+from backend.runtime_v3.models import PortraitDescriptor, ProceduralPortrait, ProceduralPortraitV2
 from backend.runtime_v3.portraits import life_period, projection, visual_age
 from backend.repositories.portraits import mutate
 
+
+DESCRIPTORS = TypeAdapter(PortraitDescriptor)
 
 def portrait_state(state):
     # Minimal adapter to the existing portrait selector, no second calendar/POV rules.
@@ -126,12 +129,13 @@ def listing(repo,wid,cid,author=False):
             card=reader_card(state,cid)
             return dict(revision=w['revision'],portraits=[],**presentation_for(state,portrait_state(state),card,False))
         runtime=portrait_state(state)
+        actor=runtime['characters'][cid]
+        age,stage=life_period(runtime,cid)
         return dict(revision=w['revision'],portraits=[p for p in runtime['characters'][cid].get('portraits',[]) if not p['deleted']],
             **projection(runtime,cid),descriptor=runtime['characters'][cid]['procedural_portrait'],
             portrait_mode=runtime['characters'][cid].get('portrait_mode','auto'),
-            anatomy_reference=dict(body_frame=body_frame(runtime['characters'][cid]),
-                facial_hair_allowed=beard_eligible(runtime['characters'][cid],life_period(runtime,cid)[1])),
-            age_reference=dict(age=life_period(runtime,cid)[0],stage=life_period(runtime,cid)[1],visual_age=visual_age(runtime,cid)))
+            anatomy_reference=dict(body_frame=body_frame(actor),facial_hair_allowed=beard_eligible(actor,stage)),
+            age_reference=dict(age=age,stage=stage,visual_age=visual_age(runtime,cid)))
 
 
 def asset(repo,wid,cid,aid,author=False):
@@ -154,7 +158,7 @@ def edit(repo,wid,cid,revision,*,image=None,portrait_id=None,changes=None,remove
         _,record,state=load(repo,db,wid,cid,revision,editable=True)
         runtime=portrait_state(state);actor=runtime['characters'][cid]
         if descriptor is not None:
-            art=descriptor
+            art=DESCRIPTORS.validate_python(descriptor)
             if art.visual_age_mode == 'auto':
                 # Resolve once at explicit save, never silently redraw on a birthday.
                 art.stage=life_period(runtime,cid)[1]

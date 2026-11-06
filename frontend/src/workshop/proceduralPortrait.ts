@@ -74,8 +74,8 @@ const clothingColors=[
  ['#393b40','#20242a'],['#e7e1d7','#b9b2a5'],['#637c97','#35475e'],['#788673','#435448'],
  ['#876651','#533e33'],['#a4665c','#673d3c'],['#c4b395','#8d7c60'],
 ];
-function garment(body:string,swatch:string[]|undefined):string {
- if(!swatch)return body;
+function tintLayers(body:string,swatch:string[]|undefined):string {
+ if(!swatch || !body)return body;
  // Keep contrast in the trusted, illustrated collar/seams of the garment.
  const rgb=(hex:string)=>[1,3,5].map(n=>parseInt(hex.slice(n,n+2),16));
  const dark=rgb(swatch[1]),light=rgb(swatch[0]);
@@ -99,13 +99,19 @@ export function proceduralPortrait(p?:ProceduralPortrait|null):string|null {
  if(p.form==='human') {
   const face=parts[p.face] as Art, hair=parts[p.hair%7] as Art, skin=parts[p.skin] as Art;
   const clothColor=p.clothing_color==null?undefined:clothingColors[p.clothing_color];
-  const body=garment(p.clothing===0?'<path d="M173 316Q200 342 227 316L271 337Q311 349 328 402L345 500H56L73 402Q88 353 130 336Z" fill="url(#cloth)"/>':parts[(p.clothing-1)%7].body,clothColor);
+  const outfit=p.clothing===0?null:parts[p.clothing-1];
+  const tunic='<path d="M173 316Q200 342 227 316L271 337Q311 349 328 402L345 500H56L73 402Q88 353 130 336Z" fill="url(#cloth)"/>';
+  const body=p.version===1?tintLayers(outfit?outfit.body+outfit.tailoring:tunic,clothColor):'';
+  const hairColor=p.hair_color==null?undefined:hairColors[p.hair_color];
+  const lockColor=p.version===2?hairColor:undefined;
   const age=p.visual_age || p.stage;
   const juvenile=['infant','child','adolescent'].includes(age);
-  const bust=p.version===2?dressedBust(p.body_frame,juvenile,body,(skin.skin||parts[1].skin)[2],p.clothing===0):undefined;
+  const bust=p.version===2?dressedBust(p.body_frame,juvenile,tintLayers(outfit?.tailoring||'',clothColor),(skin.skin||parts[1].skin)[2],!outfit):undefined;
   const facialHair=p.version===2 && ['adult','young_adult','mature_adult','elderly'].includes(age) ? p.facial_hair : undefined;
-  svg=draw({...face,visualAge:p.visual_age || (p.version===2 && juvenile ? p.stage : undefined),artisticAge:!!p.visual_age_mode,name:'',bg,skin:skin.skin||parts[1].skin,iris:p.eyes===7?'#6f8998':parts[p.eyes].iris,
-   hair:p.hair_color==null?hair.hair:hairColors[p.hair_color],frontHair:p.hair===7?'':hair.frontHair,backHair:p.hair===7?'':hair.backHair,
+  const outline=p.version===1?face.face:p.hair===7 && !juvenile?face.baldFace:face.faceV2 || face.face;
+  svg=draw({...face,face:outline,visualAge:p.visual_age || (p.version===2 && juvenile ? p.stage : undefined),artisticAge:!!p.visual_age_mode,name:'',bg,skin:skin.skin||parts[1].skin,iris:p.eyes===7?'#6f8998':parts[p.eyes].iris,
+   hair:hairColor || hair.hair,
+   frontHair:p.hair===7?'':tintLayers(hair.frontHair,lockColor),backHair:p.hair===7?'':tintLayers(hair.backHair,lockColor),
    cloth:clothColor||parts[p.palette].cloth,
    // Plain unbranded tunic is the default in every historical setting.
    body, bust, facialHair,

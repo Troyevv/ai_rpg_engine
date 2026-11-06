@@ -24,6 +24,15 @@ def is_game_birth(state,cid):
         p.get('status')=='born' and any(c.get('id')==cid for c in p.get('children',[]))
         for p in state.get('pregnancies',{}).values())
 
+def birth_sex_disclosed(state, cid, observer, known):
+    if cid == observer or not is_game_birth(state, cid):
+        return True
+    provenance = state['characters'][cid].get('birth_provenance') or {}
+    pregnancy = state.get('pregnancies', {}).get(provenance.get('pregnancy_id'), {})
+    fid = pregnancy.get('sex_fact_ids', {}).get(cid)
+    return bool(fid and known(fid))
+
+
 def compatible_state(state):
     result=deepcopy(state)
     if not isinstance(result,dict):return result

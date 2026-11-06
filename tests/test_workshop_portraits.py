@@ -311,3 +311,19 @@ def test_gated_portrait_stays_private_after_handoff(api):
     assert client.get(f'/api/saves/{sid}/characters/{cid}/portraits').status_code>=400
     fid='fact_sonya_love';runtime['knowledge']['ilya:'+fid]={'status':'known'}
     assert projection(runtime,cid)['procedural_portrait']==art
+
+
+def test_known_birth_does_not_disclose_sex_in_reader_data_or_art():
+    from backend.services.draft_player_view import player_view
+    from backend.services.draft_portraits import presentation_map
+    state=fixture();card=state['characters'][1];cid=card['id'];observer=state['controlled_actor_id']
+    world=state['world']
+    world['characters'][cid].update(birth_provenance={'pregnancy_id':'birth'},biological_sex='male',
+                                    reproductive_capability='can_impregnate',life_fact_id='meeting')
+    world['knowledge'][observer+':meeting']=dict(actor_id=observer,fact_id='meeting',status='known')
+    card['fields']['Пол']='Мужской'
+    public=player_view(state)
+    row=public['world']['characters'][cid]
+    assert 'biological_sex' not in row and 'reproductive_capability' not in row
+    assert 'Пол' not in next(c for c in public['characters'] if c['id']==cid)['fields']
+    assert presentation_map(state,public['characters'],False)[cid]==dict(portrait=None,procedural_portrait=None,silhouette='neutral')
