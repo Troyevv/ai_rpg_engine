@@ -225,5 +225,52 @@ def recovery_operation(directory, case, index, original):
         if receipt['step'] == index:
             return receipt['operation'], folder / 'retries' / '001'
         if receipt['step'] < index and receipt['probe']:
-            operation['context_length'] = receipt['probe']['context_length']
+            operation['context_length'] = max(operation.get('context_length', 0), receipt['probe']['context_length'])
     return operation, folder
+
+
+def crisis_operations():
+    """Independent incapacity coverage, not a retry of a rejected product payload."""
+    return [dict(kind='start'), dict(kind='switch', action='qa_vera'), *[
+        dict(kind='turn', action=text) for text in (
+            'Я спрашиваю, кто уже вызвал помощь Кириллу и что точно известно о его состоянии.',
+            'Я остаюсь рядом с Кириллом и прошу сообщать мне только подтверждённые изменения.',
+            'Я спрашиваю, кто может помочь с Асей, пока Кирилл без сознания. Жду согласия.',
+            'Я предлагаю подготовить документы для врача, не принимая решения о лечении за Кирилла.',
+            'Я спрашиваю Олега о его руке и не прошу делать то, что ему сейчас недоступно.',
+            'Я предлагаю сообщить Нине подтверждённые сведения и спрашиваю, кто готов ей позвонить.',
+            'Я уточняю, какая помощь уже оказана и о чём ещё нужно договориться.',
+        )]]
+
+
+def prepare_crisis(directory, manifest):
+    from .recovery import completed
+    from backend.repositories.preparation import Repository
+    from devtools.narrative_test_world import load_fixture
+    validate(directory, manifest)
+    target = directory / 'crisis-extension.json'
+    if target.exists():
+        raise ValueError('Crisis extension already prepared')
+    if not all(completed(directory / 'crisis' / f'{i:03d}' / 'retries' / '001'
+                         if i == 3 else directory / 'crisis' / f'{i:03d}') for i in range(15)):
+        raise ValueError('Complete and review the original Crisis coverage first')
+    with closing(sqlite3.connect(directory / 'budget.sqlite')) as db:
+        if db.execute('SELECT count(*) FROM reservations WHERE settled=0').fetchone()[0]:
+            raise ValueError('Unknown paid outcome')
+    seed = load_fixture(Repository(directory / 'game.sqlite'), 'family-incapacitated')
+    write(directory / 'crisis-extension-before.json.gz', snapshot(directory / 'game.sqlite', seed['save']))
+    write(target, dict(created=now(), seed=seed, start=15, operations=crisis_operations(),
+                       reason='Independent #78 incapacity checkpoint; retain original death scenario and all spending'))
+
+
+def extend_crisis(directory, manifest, plans):
+    target = directory / 'crisis-extension.json'
+    if not target.exists():
+        return manifest
+    extension = read(target)
+    if extension['start'] != 15 or extension['operations'] != crisis_operations() or len(plans['crisis']) != 15:
+        raise ValueError('Unexpected Crisis extension plan')
+    if extension['seed']['save'] in [s['save'] for s in manifest['seeds'].values()]:
+        raise ValueError('Extension must use an isolated checkpoint')
+    plans['crisis'].extend(dict(op, context_length=65536) for op in extension['operations'])
+    return dict(manifest, seeds=dict(manifest['seeds'], crisis=extension['seed']))

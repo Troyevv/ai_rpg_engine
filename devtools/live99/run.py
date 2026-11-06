@@ -409,6 +409,10 @@ def run(args, directory, manifest):
                     report(directory, manifest)
                     return result
                 plans = read(directory / 'plan.json') if stage_b else None
+                extension_manifest = manifest
+                if stage_b:
+                    from .stage_b import extend_crisis
+                    extension_manifest = extend_crisis(directory, manifest, plans)
                 caps = {case: len(plan) for case, plan in plans.items()} if plans else dict(zip(CASES, QUOTAS[args.stage]))
                 limit = manifest['action_limit'] if stage_b else sum(QUOTAS[args.stage])
                 held = set()
@@ -430,7 +434,8 @@ def run(args, directory, manifest):
                                 held.add(case)
                         elif action_ledger(directory) >= limit:
                             held.add(case)
-                        elif not step(browser, base, directory, manifest, case, i, limit,
+                        elif not step(browser, base, directory,
+                                      extension_manifest if case == 'crisis' and i >= 15 else manifest, case, i, limit,
                                       operation=operation, attempt_folder=folder if stage_b else None):
                             held.add(case)
                         print(json.dumps(dict(case=case, step=i, held=case in held,
@@ -453,7 +458,7 @@ def run(args, directory, manifest):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['prepare','prepare-stage-b','review-stage-b','preflight','run','report','recover-unsubmitted',
+    parser.add_argument('command', choices=['prepare','prepare-stage-b','prepare-crisis-extension','review-stage-b','preflight','run','report','recover-unsubmitted',
                                           'adopt', 'recheck-saved', 'retry-extraction'])
     parser.add_argument('directory', type=Path)
     parser.add_argument('--stage', choices=list(QUOTAS), default='A')
@@ -491,6 +496,12 @@ def main():
             adopt(directory, manifest, revision())
         elif args.command == 'report':
             report(directory, manifest)
+        elif args.command == 'prepare-crisis-extension':
+            if manifest.get('stage') != 'B' or not args.reviewed:
+                parser.error('Choose reviewed Stage B')
+            validate_revision(directory, manifest, revision())
+            from .stage_b import prepare_crisis
+            prepare_crisis(directory, manifest)
         elif args.command == 'review-stage-b':
             if manifest.get('stage') != 'B' or not args.reviewed or args.case is None or args.step is None:
                 parser.error('Choose reviewed Stage B --case and --step')

@@ -189,3 +189,37 @@ def test_review_rejects_changed_save_and_unrelated_product_failure(tmp_path, mon
     monkeypatch.setattr(stage_b, 'snapshot', lambda *_: {'changed':True})
     with pytest.raises(ValueError, match='save changed'):
         stage_b.review_recovery(tmp_path, {}, 'social', 0)
+
+
+@pytest.mark.parametrize('previous,current,rejected', [('dead','alive',True), ('dead','dead',False), ('alive','alive',False)])
+def test_crisis_preserves_death_without_inventing_it_in_incapacity_fixture(previous, current, rejected):
+    from devtools.live99.evidence import scenario_checks
+    def state(status):
+        return {'snapshot': {'world_state': {'characters': {'qa_pavel': {'life_status':status}}, 'meta': {'world_time':0}}}}
+    args = ('crisis', state(previous), state(current), {'state': {'world_clock': {'minute':0}}})
+    if rejected:
+        with pytest.raises(ValueError, match='death state'):
+            scenario_checks(*args)
+    else:
+        scenario_checks(*args)
+
+
+def test_crisis_extension_cannot_replace_original_save_or_rewrite_plan(tmp_path):
+    from devtools.live99.stage_b import extend_crisis, crisis_operations
+    from devtools.live99.evidence import write
+    manifest = {'seeds': {'crisis': {'save':3}}}
+    receipt = dict(start=15, seed={'save':8}, operations=crisis_operations())
+    write(tmp_path/'crisis-extension.json', receipt)
+    plans = operations()
+    updated = extend_crisis(tmp_path, manifest, plans)
+    assert manifest['seeds']['crisis']['save'] == 3
+    assert updated['seeds']['crisis']['save'] == 8
+    assert len(plans['crisis']) == 24 and sum(map(len, plans.values())) == 99
+    receipt['seed']['save'] = 3
+    write(tmp_path/'crisis-extension.json', receipt)
+    with pytest.raises(ValueError, match='isolated'):
+        extend_crisis(tmp_path, manifest, operations())
+    receipt['start'] = 0
+    write(tmp_path/'crisis-extension.json', receipt)
+    with pytest.raises(ValueError, match='Unexpected'):
+        extend_crisis(tmp_path, manifest, operations())

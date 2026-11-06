@@ -105,7 +105,9 @@ def scenario_checks(case, before, after, projection):
     ui = projection['state']
     if ui['world_clock']['minute'] != state['meta']['world_time']:
         raise ValueError('Player calendar disagrees with the canonical clock')
-    if case == 'crisis' and state['characters']['qa_pavel']['life_status'] != 'dead':
+    if (case == 'crisis'
+            and before['snapshot']['world_state']['characters']['qa_pavel']['life_status'] == 'dead'
+            and state['characters']['qa_pavel']['life_status'] != 'dead'):
         raise ValueError('Deceased QA character lost canonical death state')
     if case == 'family':
         for pregnancy in before['snapshot']['world_state']['pregnancies'].values():
