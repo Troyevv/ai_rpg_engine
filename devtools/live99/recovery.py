@@ -24,8 +24,10 @@ def digest(path):
 
 def qa_only(old, new):
     paths = subprocess.check_output(['git', 'diff', '--name-only', old, new], cwd=ROOT, text=True).splitlines()
+    # CI budget/gate maintenance does not change the Runtime behind saved checkpoints.
+    ci_only = {'.github/workflows/verify.yml', 'tests/test_ci_backend_budget.py'}
     if any(not (p.startswith('devtools/live99/') or p.startswith('tests/test_live99_')
-                or p.startswith('docs/manual_qa/narrative_v4/live99')) for p in paths):
+                or p.startswith('docs/manual_qa/narrative_v4/live99') or p in ci_only) for p in paths):
         raise ValueError('Product changed; a QA-only adoption cannot authorize this checkout')
     if subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=normal'], cwd=ROOT, text=True).strip():
         raise ValueError('Commit the reviewed QA changes before adoption/run')

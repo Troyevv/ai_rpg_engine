@@ -49,7 +49,9 @@ jobs:
           retention-days: 7
   backend:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # #382: 77s setup + 1125s pytest exhausted the 20m job deadline at exit.
+    # Also covers the measured 1286s local full suite, report upload and 2m reserve.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:

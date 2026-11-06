@@ -16,6 +16,25 @@ from devtools.narrative_test_world import load_fixture
 from test_narrative_test_world import CONFIG, NARRATIVE
 
 
+@pytest.mark.parametrize('product_path', [None, 'backend/runtime_v3/continuity.py', 'frontend/src/Phone.tsx'])
+def test_ci_budget_adoption_keeps_product_change_guard(monkeypatch, product_path):
+    from devtools.live99 import recovery
+    paths = ['.github/workflows/verify.yml', 'tests/test_ci_backend_budget.py']
+    if product_path:
+        paths.append(product_path)
+    monkeypatch.setattr(recovery.subprocess, 'check_output',
+                        lambda command, **_: '\n'.join(paths) if command[1] == 'diff' else '')
+    if product_path:
+        with pytest.raises(ValueError, match='Product changed'):
+            recovery.qa_only('before', 'after')
+    else:
+        recovery.qa_only('before', 'after')
+        monkeypatch.setattr(recovery.subprocess, 'check_output',
+                            lambda command, **_: '\n'.join(paths) if command[1] == 'diff' else ' M dirty')
+        with pytest.raises(ValueError, match='Commit the reviewed'):
+            recovery.qa_only('before', 'after')
+
+
 def test_action_import_reservations_survive_missing_files_and_concurrency(tmp_path):
     Budget(tmp_path / 'budget.sqlite')
     for n in range(11):
