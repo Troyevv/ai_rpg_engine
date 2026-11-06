@@ -4,9 +4,9 @@ Semantic assertions come from Extraction; source, agency, CAS, references and
 idempotency are checked here. This is not a natural-language meaning verifier.
 """
 from copy import deepcopy
-from typing import Literal
+from typing import Literal, get_args
 from pydantic import Field
-from backend.runtime_v3.models import StrictModel, AppearanceProfile, AppearanceFeature, identity
+from backend.runtime_v3.models import StrictModel, AppearanceProfile, AppearanceFeature, VisualField, identity
 
 KINDS = {'intrinsic': {'eye_color','natural_hair_color','skin','face'},
          'body': {'build','height'}, 'modification': {'scar','tattoo','piercing','cosmetic'},
@@ -68,14 +68,19 @@ def salvage_profiles(state):
             actor['portraits']=valid
 
 
-def appearance_disclosed(state, cid, observer):
-    refs = state.get('meta', {}).get('appearance_fact_ids', {}).get(cid, ())
+VISUAL_FIELDS = get_args(VisualField)
+
+
+def visual_fields_disclosed(state, cid, observer, fields):
+    gates = state.get('meta', {}).get('visual_field_facts', {}).get(cid)
+    if not gates:
+        return True
     return all(fid in state['facts'] and state['knowledge'].get(f'{observer}:{fid}', {}).get('status') == 'known'
-               for fid in refs)
+               for field in fields for fid in gates.get(field, ()))
 
 
 def visible(state, cid, item, observer):
-    if not appearance_disclosed(state, cid, observer): return False
+    if not visual_fields_disclosed(state, cid, observer, ('Внешность',)): return False
     if observer == cid: return True
     fid = item.get('fact_id')
     return (not fid and not item.get('source_event_id')) or bool(fid and state['knowledge'].get(str(observer)+':'+fid,{}).get('status')=='known')
@@ -97,7 +102,7 @@ def current_items(state, cid, *, observer=None, omniscient=False):
 
 def context_profile(state, cid, *, observer=None, omniscient=False, known_actor_ids=None):
     profile=state['characters'][cid].get('appearance')
-    if profile is None or not omniscient and not appearance_disclosed(state, cid, observer): return None
+    if profile is None or not omniscient and not visual_fields_disclosed(state, cid, observer, ('Внешность',)): return None
     budget=1600; items={}
     for key,item in current_items(state,cid,observer=observer,omniscient=omniscient).items():
         row={k:item[k] for k in ('category','kind','text','revision','condition_id')}
@@ -110,7 +115,11 @@ def context_profile(state, cid, *, observer=None, omniscient=False, known_actor_
 
 def project_card(card, state, observer=None, *, omniscient=False, bounded=False, known_actor_ids=None):
     cid=card['id']; result=deepcopy(card)
-    if not omniscient and not appearance_disclosed(state, cid, observer):
+    if not omniscient:
+        for field in ('Пол','Возраст'):
+            if not visual_fields_disclosed(state, cid, observer, (field,)):
+                result['fields'].pop(field, None)
+    if not omniscient and not visual_fields_disclosed(state, cid, observer, ('Внешность',)):
         for key in ('Внешность', 'Исходное описание внешности'):
             result['fields'].pop(key, None)
         return result

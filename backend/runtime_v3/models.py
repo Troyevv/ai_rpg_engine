@@ -187,9 +187,12 @@ class WeatherProfile(StrictModel):
 from backend.runtime_v3.genre import GenreConfig
 
 
+VisualField = Literal['Внешность', 'Пол', 'Возраст']
+
+
 class Meta(StrictModel):
     # Author-bound appearance can only be projected when its facts are known.
-    appearance_fact_ids: dict[str, list[str]] = Field(default_factory=dict)
+    visual_field_facts: dict[str, dict[VisualField, list[str]]] = Field(default_factory=dict)
     genre: GenreConfig | None = None
     weather: WeatherProfile | None = None
     npc_expressiveness: Literal["realistic", "expressive", "hyperbolized"] = "realistic"
@@ -210,8 +213,8 @@ class Meta(StrictModel):
     @model_serializer(mode='wrap')
     def sparse_appearance_bindings(self, handler):
         result = handler(self)
-        if not self.appearance_fact_ids:
-            result.pop('appearance_fact_ids', None)
+        if not self.visual_field_facts:
+            result.pop('visual_field_facts', None)
         return result
 
 

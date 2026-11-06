@@ -327,3 +327,26 @@ def test_known_birth_does_not_disclose_sex_in_reader_data_or_art():
     assert 'biological_sex' not in row and 'reproductive_capability' not in row
     assert 'Пол' not in next(c for c in public['characters'] if c['id']==cid)['fields']
     assert presentation_map(state,public['characters'],False)[cid]==dict(portrait=None,procedural_portrait=None,silhouette='neutral')
+
+
+@pytest.mark.parametrize('field', ['Пол','Возраст'])
+def test_private_visual_source_cannot_be_inferred_from_body_or_beard(api,field):
+    from secret183_fixture import candidate
+    from backend.services.draft_portraits import initialize
+    client,app=api;raw=candidate();cid='maxim';fid='fact_sonya_love'
+    raw['world']['characters'][cid].update(biological_sex='male',developmental_stage='adult')
+    next(c for c in raw['characters'] if c['id']==cid)['fields'][field]='Мужской' if field=='Пол' else '35 лет'
+    raw['card_field_facts']={cid:{field:[fid]}}
+    initialize(raw,version=2)
+    url,d=create(client,raw)
+    assert d['portraits'][cid]['procedural_portrait']['body_frame']=='male'
+    public=client.get(url).json()
+    assert public['portraits'][cid]==dict(portrait=None,procedural_portrait=None,silhouette='neutral')
+    denied={'Пол':['biological_sex','reproductive_capability'],'Возраст':['birth_date','developmental_stage']}
+    assert set(denied[field]).isdisjoint(public['state']['world']['characters'][cid])
+    started=client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id'],'accept_warnings':True})
+    assert started.status_code==200,started.text
+    state=app.state.repository.get_snapshot(started.json()['save'])['world_state']
+    assert not projection(state,cid).get('procedural_portrait')
+    state['knowledge']['ilya:'+fid]={'status':'known'}
+    assert projection(state,cid)['procedural_portrait']==d['portraits'][cid]['procedural_portrait']

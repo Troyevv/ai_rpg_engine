@@ -201,7 +201,10 @@ def player_view(state):
             if k=='Страхи и уязвимости' and cid in reserved_people:return False
             return k in CARD_FIELDS or k in ('Ценности','Приоритеты','Пол') or not unknown
         fields={k:v for k,v in card['fields'].items() if readable(k)}
-        if not birth_sex_disclosed(world, cid, actor, known.__contains__):
+        if not readable('Возраст'):
+            for key in ('birth_date', 'developmental_stage'):
+                row.pop(key, None)
+        if not readable('Пол') or not birth_sex_disclosed(world, cid, actor, known.__contains__):
             row.pop('biological_sex', None)
             row.pop('reproductive_capability', None)
             fields.pop('Пол', None)

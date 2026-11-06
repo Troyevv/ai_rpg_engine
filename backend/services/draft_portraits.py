@@ -83,7 +83,8 @@ def appearance_disclosed(state, public_card):
     from backend.services.draft_player_view import BINDINGS
     bindings=state.get(BINDINGS,{})
     gates=bindings.get(public_card['id'],{}) if isinstance(bindings,dict) else None
-    return isinstance(gates,dict) and ('Внешность' not in gates or 'Внешность' in public_card['fields'])
+    from backend.runtime_v3.appearance import VISUAL_FIELDS
+    return isinstance(gates,dict) and all(field not in gates or field in public_card['fields'] for field in VISUAL_FIELDS)
 
 
 def reader_card(state,cid):

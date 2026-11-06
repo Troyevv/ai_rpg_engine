@@ -34,7 +34,7 @@ def visible_views(snapshot, turns, kind):
 
 
 def canonical_slice(state, scope, extraction=False, query=""):
-    current = dict(meta={k:v for k,v in state['meta'].items() if k not in ('appearance_fact_ids','genre','weather','calendar','current_protagonist_id','protagonist_required','protagonist_periods','narrative_pacing','narrative_risk','outcome_preference','pacing_recent','communication','interaction_focus')},
+    current = dict(meta={k:v for k,v in state['meta'].items() if k not in ('visual_field_facts','genre','weather','calendar','current_protagonist_id','protagonist_required','protagonist_periods','narrative_pacing','narrative_risk','outcome_preference','pacing_recent','communication','interaction_focus')},
         weather=weather_at(state),
         current_time=current_time(state), calendar_context=nearby_calendar(state, scope.relevant_actor_ids), camera=deepcopy(state['camera']),
         locations={lid: deepcopy(state['locations'][lid]) for lid in scope.location_ids},

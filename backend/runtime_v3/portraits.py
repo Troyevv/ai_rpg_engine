@@ -19,9 +19,9 @@ def visual_age(state, cid):
 
 def authorized(state, cid):
     from backend.runtime_v3.reproduction import known_birth
-    from backend.runtime_v3.appearance import appearance_disclosed
+    from backend.runtime_v3.appearance import VISUAL_FIELDS, visual_fields_disclosed
     observer = state['camera']['controlled_actor_id']
-    return cid in state['characters'] and known_birth(state,cid,observer) and appearance_disclosed(state,cid,observer)
+    return cid in state['characters'] and known_birth(state,cid,observer) and visual_fields_disclosed(state,cid,observer,VISUAL_FIELDS)
 
 
 def select_portrait(state, cid):
@@ -38,6 +38,8 @@ def select_portrait(state, cid):
 
 def silhouette(state,cid):
     actor=state['characters'][cid];observer=state['camera']['controlled_actor_id']
+    from backend.runtime_v3.appearance import visual_fields_disclosed
+    if not visual_fields_disclosed(state,cid,observer,('Пол',)): return 'neutral'
     sex=actor.get('biological_sex')
     def known(fid):
         return state['knowledge'].get(f'{observer}:{fid}', {}).get('status') == 'known'
