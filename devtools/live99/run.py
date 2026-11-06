@@ -131,6 +131,10 @@ def step(browser, base, directory, manifest, case, i, limit, retry=None, operati
     if retry:
         folder = folder / 'retries' / '001'
     before = snapshot(path, sid)
+    if operation and operation.get('recovery_before_path'):
+        with gzip.open(operation['recovery_before_path'], 'rt') as source:
+            if before != json.load(source):
+                raise ValueError('Save changed after reviewed unpaid recovery')
     kind, action = plan(case, i, before)
     if operation:
         kind, action = operation['kind'], operation.get('action', '')
@@ -185,7 +189,7 @@ def step(browser, base, directory, manifest, case, i, limit, retry=None, operati
                  options=operation)
         after = snapshot(path, sid)
         projected = page.request.get(f'{base}/api/saves/{sid}').json()
-        oracle(before, after, projected, 'turn' if kind == 'choice' else kind)
+        oracle(before, after, projected, 'turn' if kind == 'choice' or operation and operation.get('reuse_narrative') else kind)
         scenario_checks(case, before, after, projected)
         if kind == 'switch' and after['snapshot']['world_state']['camera']['controlled_actor_id'] != action:
             raise ValueError('Protagonist transition selected the wrong actor')
@@ -198,6 +202,11 @@ def step(browser, base, directory, manifest, case, i, limit, retry=None, operati
                 raise ValueError('Restored variant / rollback differs from its recorded snapshot')
         jobs = diagnostics(path, sid, retry[1]['job_cursor'] if retry else cursor)
         attempts = [r for j in jobs for r in j['requests']]
+        if operation and operation.get('reuse_narrative'):
+            new = [r for r in attempts if r['id'] not in operation['original_request_ids']]
+            if len(jobs) != 1 or jobs[0]['narrative'] != operation['reuse_narrative'] or not new or any(
+                    r['stage'] not in ('extraction', 'extraction_repair') for r in new):
+                raise ValueError('Recovery repeated paid Narrative or changed job identity')
         if retry:
             if len(jobs) != 1 or jobs[0]['id'] != retry[2]['id'] or jobs[0]['narrative'] != retry[2]['narrative']:
                 raise ValueError('Retry changed job identity or completed Narrative')
@@ -208,7 +217,7 @@ def step(browser, base, directory, manifest, case, i, limit, retry=None, operati
             r['status'] == 'complete' and r['provider'] == 'deepseek' and r['model'] == MODEL for r in attempts
         ):
             raise ValueError('No completed DeepSeek request for this move')
-        if kind in ('start','turn','choice','regenerate','variant'):
+        if kind in ('start','turn','choice','regenerate','variant') or operation and operation.get('reuse_narrative'):
             compare_prose(page, base, sid, seed['world'], after['last_turn']['assistant_text'])
         write(folder / 'ui.json.gz', dict(text=page.locator('body').inner_text(), projection=projected))
         page.reload()
@@ -408,7 +417,10 @@ def run(args, directory, manifest):
                         if case in held or i >= cap or args.case and case != args.case:
                             continue
                         folder = directory / case / f'{i:03d}'
+                        operation = plans[case][i] if plans else None
                         if stage_b:
+                            from .stage_b import recovery_operation
+                            operation, folder = recovery_operation(directory, case, i, operation)
                             with closing(sqlite3.connect(directory / 'budget.sqlite')) as db:
                                 if db.execute('SELECT count(*) FROM reservations WHERE settled=0').fetchone()[0]:
                                     report(directory, manifest)
@@ -419,7 +431,7 @@ def run(args, directory, manifest):
                         elif action_ledger(directory) >= limit:
                             held.add(case)
                         elif not step(browser, base, directory, manifest, case, i, limit,
-                                      operation=plans[case][i] if plans else None):
+                                      operation=operation, attempt_folder=folder if stage_b else None):
                             held.add(case)
                         print(json.dumps(dict(case=case, step=i, held=case in held,
                                               cumulative_actions=action_ledger(directory))), flush=True)
@@ -441,7 +453,7 @@ def run(args, directory, manifest):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['prepare','prepare-stage-b','preflight','run','report','recover-unsubmitted',
+    parser.add_argument('command', choices=['prepare','prepare-stage-b','review-stage-b','preflight','run','report','recover-unsubmitted',
                                           'adopt', 'recheck-saved', 'retry-extraction'])
     parser.add_argument('directory', type=Path)
     parser.add_argument('--stage', choices=list(QUOTAS), default='A')
@@ -479,6 +491,12 @@ def main():
             adopt(directory, manifest, revision())
         elif args.command == 'report':
             report(directory, manifest)
+        elif args.command == 'review-stage-b':
+            if manifest.get('stage') != 'B' or not args.reviewed or args.case is None or args.step is None:
+                parser.error('Choose reviewed Stage B --case and --step')
+            validate_revision(directory, manifest, revision())
+            from .stage_b import review_recovery
+            review_recovery(directory, manifest, args.case, args.step)
         elif args.command == 'recover-unsubmitted':
             recover_unsubmitted(directory, manifest, args.case, args.step)
         elif args.command in ('recheck-saved', 'retry-extraction') and (args.case is None or args.step is None):

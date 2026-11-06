@@ -6,7 +6,7 @@ import sqlite3
 
 from .budget import Budget, action_ledger
 from .evidence import now, snapshot, write
-from .recovery import digest, qa_only, rows
+from .recovery import digest, qa_only, rows, read, probe_context
 from .retest import backup
 
 
@@ -165,3 +165,65 @@ def validate(directory, manifest):
     for name, checksum in manifest['parent_evidence'].items():
         if digest(Path(manifest['parent']) / name) != checksum:
             raise ValueError('Historical evidence changed: '+name)
+    for path in (directory / 'recoveries').glob('*.json'):
+        receipt = read(path)
+        for name, checksum in receipt['evidence'].items():
+            if digest(directory / name) != checksum:
+                raise ValueError('Reviewed failure evidence changed: '+name)
+
+
+def review_recovery(directory, manifest, case, index):
+    """One reviewed unpaid continuation; never retry a received Extraction or product rejection."""
+    validate(directory, manifest)
+    folder = directory / case / f'{index:03d}'
+    target = directory / 'recoveries' / f'{case}-{index:03d}.json'
+    if target.exists() or (folder / 'retries').exists():
+        raise ValueError('Recovery already authorized or attempted')
+    result = read(folder / 'result.json')
+    before = read(folder / 'before.json.gz')
+    if result['status'] != 'held-for-review' or before != read(folder / 'after.json.gz') or before != snapshot(
+            directory / 'game.sqlite', result['save']):
+        raise ValueError('Held save changed; recovery is unsafe')
+    with closing(sqlite3.connect(directory / 'game.sqlite')) as db:
+        db.row_factory = sqlite3.Row
+        jobs = [dict(j) for j in db.execute('SELECT * FROM game_jobs WHERE save_id=? AND rowid>?',
+                                          (result['save'], result['job_cursor']))]
+        requests = [dict(r) for j in jobs for r in db.execute('SELECT * FROM llm_requests WHERE job_id=?', (j['id'],))]
+    original = read(directory / 'plan.json')[case][index]
+    if case == 'family' and original['kind'] == 'lta' and original['amount'] == 1 and original['unit'] == 'weeks':
+        if jobs or 'До 7 суток используй обычный пропуск времени.' not in read(folder / 'failure-ui.json.gz'):
+            raise ValueError('Not the inspected unsubmitted seven-day LTA')
+        operation = dict(original, amount=2)
+        reason = 'UI correctly rejects <=7 days; use two weeks. No prior dispatch or state mutation.'
+        probe = None
+    elif case in ('crisis', 'campaign') and original['kind'] == 'turn':
+        if len(jobs) != 1 or not jobs[0]['error'].startswith('Контекст v3 не помещается'):
+            raise ValueError('Not an unpaid context construction failure')
+        job = jobs[0]
+        if not job['narrative_complete'] or not requests or any(r['stage'] != 'narrative' or r['status'] != 'complete' for r in requests):
+            raise ValueError('Extraction already attempted or Narrative outcome unknown')
+        probe = probe_context(directory, job, 40960, stage_b=directory)
+        if probe['input_estimate'] >= probe['hard_input_limit']:
+            raise ValueError('Measured context still does not fit')
+        operation = dict(kind='retry', action=result['action'], context_length=40960,
+                         job_id=job['id'], job_cursor=result['job_cursor'],
+                         reuse_narrative=job['narrative'], original_request_ids=[r['id'] for r in requests])
+        reason = 'Reuse the completed paid Narrative; measured 40960 context; Extraction never dispatched.'
+    else:
+        raise ValueError('Product failures are held; this recovery is not authorized')
+    operation['recovery_before_path'] = str(folder / 'before.json.gz')
+    target.parent.mkdir(exist_ok=True)
+    write(target, dict(case=case, step=index, reason=reason, reviewed=now(), probe=probe, operation=operation,
+        evidence={str(p.relative_to(directory)):digest(p) for p in folder.iterdir() if p.is_file()}))
+
+
+def recovery_operation(directory, case, index, original):
+    operation = dict(original)
+    folder = directory / case / f'{index:03d}'
+    for path in sorted((directory / 'recoveries').glob(f'{case}-*.json')):
+        receipt = read(path)
+        if receipt['step'] == index:
+            return receipt['operation'], folder / 'retries' / '001'
+        if receipt['step'] < index and receipt['probe']:
+            operation['context_length'] = receipt['probe']['context_length']
+    return operation, folder

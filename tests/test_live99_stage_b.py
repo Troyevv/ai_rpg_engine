@@ -120,3 +120,72 @@ def test_prepare_links_immutable_parent_and_retains_all_old_saves(tmp_path, monk
     (parent / 'manifest.json').write_text('{}')
     with pytest.raises(ValueError, match='Historical evidence changed'):
         stage_b.validate(child, manifest)
+
+
+def recovery_fixture(tmp_path, monkeypatch, case, kind):
+    from devtools.live99 import stage_b
+    from devtools.live99.evidence import write
+    folder = tmp_path / case / '000'
+    folder.mkdir(parents=True)
+    before = {'snapshot': 'original'}
+    for name in ('before', 'after'):
+        write(folder / f'{name}.json.gz', before)
+    write(folder / 'result.json', dict(status='held-for-review', save=1, job_cursor=0, action='explicit player question'))
+    write(folder / 'intent.json', {'kind':kind})
+    write(tmp_path / 'plan.json', {case:[dict(kind=kind, amount=1, unit='weeks')]})
+    with sqlite3.connect(tmp_path / 'game.sqlite') as db:
+        db.execute('CREATE TABLE game_jobs(id TEXT,save_id INTEGER,error TEXT,narrative_complete INTEGER,narrative TEXT)')
+        db.execute('CREATE TABLE llm_requests(id TEXT,job_id TEXT,stage TEXT,status TEXT)')
+    monkeypatch.setattr(stage_b, 'validate', lambda *_: None)
+    monkeypatch.setattr(stage_b, 'snapshot', lambda *_: before)
+    return stage_b, folder, before
+
+
+@pytest.mark.parametrize('has_job', [False, True])
+def test_review_lta_only_recovers_proven_unsubmitted_attempt(tmp_path, monkeypatch, has_job):
+    from devtools.live99.evidence import write
+    stage_b, folder, _ = recovery_fixture(tmp_path, monkeypatch, 'family', 'lta')
+    write(folder / 'failure-ui.json.gz', 'До 7 суток используй обычный пропуск времени.')
+    if has_job:
+        with sqlite3.connect(tmp_path / 'game.sqlite') as db:
+            db.execute("INSERT INTO game_jobs VALUES('paid',1,'',0,'')")
+        with pytest.raises(ValueError, match='unsubmitted'):
+            stage_b.review_recovery(tmp_path, {}, 'family', 0)
+    else:
+        old = {p.name:p.read_bytes() for p in folder.iterdir()}
+        stage_b.review_recovery(tmp_path, {}, 'family', 0)
+        op, target = stage_b.recovery_operation(tmp_path, 'family', 0, {})
+        assert op['amount'] == 2 and target == folder/'retries/001'
+        assert {p.name:p.read_bytes() for p in folder.iterdir()} == old
+        with pytest.raises(ValueError, match='already'):
+            stage_b.review_recovery(tmp_path, {}, 'family', 0)
+
+
+@pytest.mark.parametrize('extra_stage', [None, 'extraction', 'extraction_repair'])
+def test_review_context_never_repeats_received_extraction(tmp_path, monkeypatch, extra_stage):
+    stage_b, _, _ = recovery_fixture(tmp_path, monkeypatch, 'crisis', 'turn')
+    with sqlite3.connect(tmp_path / 'game.sqlite') as db:
+        db.execute("INSERT INTO game_jobs VALUES('job',1,'Контекст v3 не помещается',1,'Paid narrative')")
+        db.execute("INSERT INTO llm_requests VALUES('n','job','narrative','complete')")
+        if extra_stage:
+            db.execute("INSERT INTO llm_requests VALUES('e','job',?,'complete')", (extra_stage,))
+    monkeypatch.setattr(stage_b, 'probe_context', lambda *a, **k: dict(context_length=40960,input_estimate=29076,hard_input_limit=36608))
+    if extra_stage:
+        with pytest.raises(ValueError, match='already attempted'):
+            stage_b.review_recovery(tmp_path, {}, 'crisis', 0)
+    else:
+        stage_b.review_recovery(tmp_path, {}, 'crisis', 0)
+        op, _ = stage_b.recovery_operation(tmp_path, 'crisis', 0, {})
+        assert op['reuse_narrative'] == 'Paid narrative' and op['original_request_ids'] == ['n']
+        assert op['kind'] == 'retry' and op['job_id'] == 'job'
+        later, _ = stage_b.recovery_operation(tmp_path, 'crisis', 1, {'kind':'turn'})
+        assert later['context_length'] == 40960
+
+
+def test_review_rejects_changed_save_and_unrelated_product_failure(tmp_path, monkeypatch):
+    stage_b, _, _ = recovery_fixture(tmp_path, monkeypatch, 'social', 'turn')
+    with pytest.raises(ValueError, match='Product failures are held'):
+        stage_b.review_recovery(tmp_path, {}, 'social', 0)
+    monkeypatch.setattr(stage_b, 'snapshot', lambda *_: {'changed':True})
+    with pytest.raises(ValueError, match='save changed'):
+        stage_b.review_recovery(tmp_path, {}, 'social', 0)
