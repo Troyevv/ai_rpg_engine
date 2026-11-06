@@ -256,6 +256,19 @@ def stream(**kwargs):
         return
     current_message=next((m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only\n')),None)
     current_phone=json.loads(current_message.split('\n',1)[1]) if current_message else {}
+    from pregnancy_boundary_fixture import REACTION, DELIVERY, delivery_claim
+    if current_message and REACTION in full:
+        turn = next((m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')), None)
+        if turn and json.loads(turn.split('\n', 1)[1]).get('player_input') == REACTION:
+            if kwargs.get('response_format'):
+                process = next(p for p in current_phone['pregnancies'] if p['status'] == 'due')
+                camera = current_phone['camera']
+                yield json.dumps(dict(final_scene=dict(location_id=camera['location_id'],
+                    present_character_ids=camera['present_character_ids'], elapsed_minutes=1),
+                    **delivery_claim(process, camera)), ensure_ascii=False)
+            else:
+                yield DELIVERY
+            return
     if current_phone.get('communication') and phone_mode=='narrative138':
         from narrative_phone138_fixture import response
         task=json.loads(next(m['content'].split('\n',1)[1] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')))
@@ -616,9 +629,9 @@ if __name__ == '__main__':
         return {'world':result['world'],'save':result['save']}
 
     @app.post('/test/long-term-seed')
-    def long_term_seed():
+    def long_term_seed(pregnancy: bool = False):
         from devtools.narrative_test_world import load_fixture
-        result=load_fixture(app.state.repository,'long-term')
+        result=load_fixture(app.state.repository,'pregnancy' if pregnancy else 'long-term')
         return {'world':result['world'],'save':result['save']}
 
     @app.post('/test/newborn-seed')

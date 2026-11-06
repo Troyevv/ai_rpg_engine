@@ -339,6 +339,12 @@ class ExtractionContextBuilder:
         if reproductive:
             from backend.runtime_v3.context_contract import REPRODUCTION_CONTRACT
             rules += REPRODUCTION_CONTRACT
+            compression = current.get('continuity', {}).get('compression', {})
+            if compression.get('max_minutes') == 0 and any(
+                p['id'] in compression.get('boundary_ids', []) for p in current.get('pregnancies', [])
+            ):
+                rules += ("\nAt the due birth boundary use elapsed_minutes=0 for an immediate reaction. "
+                          "Only an established delivery in the scene resolves it via births.")
         # Affected IDs and canonical runtime, plus a bounded actor-owned choice
         # projection. No other actors' card prose or old narratives are needed.
         # Include physical/emotion baseline also for referenced actors affected in completed text.

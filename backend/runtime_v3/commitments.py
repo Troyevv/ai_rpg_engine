@@ -5,7 +5,7 @@ agency and transitions. No prose parsing, clock-triggered completion or penaltie
 """
 from copy import deepcopy
 from backend.runtime_v3.models import ScheduledEvent
-from backend.runtime_v3.calendar import scheduled_window
+from backend.runtime_v3.calendar import scheduled_window, scheduled_boundary
 
 ASSERTIONS = ('agreed', 'rescheduled', 'cancelled', 'occurred', 'missed', 'blocked', 'started', 'ended')
 EDITABLE = ('id', 'description', 'character_ids', 'temporal', 'end_temporal',
@@ -222,3 +222,26 @@ def invalidate_dead_commitments(resolver, dead_ids):
     for event in resolver.state['scheduled_events'].values():
         if event['status'] == 'pending' and dead_ids.intersection(event['character_ids']):
             event.update(status='cancelled',outcome='cancelled',evidence='canonical:participant_dead',source_turn=resolver.turn_id)
+
+
+def temporal_boundaries(state):
+    """Read-only clock projection; the process owns a birth's time and participants.
+
+    The calendar reminder can name just the mother (or be absent in a save).
+    Only a completed birth closes the process. Never write these projected
+    participants to the calendar or grant them Knowledge.
+    """
+    pregnancies = state.get('pregnancies', {})
+    for event in state['scheduled_events'].values():
+        if event['id'] in pregnancies or not commitment_ready(state, event):
+            continue
+        minute = scheduled_boundary(state, event)
+        if minute is not None:
+            yield dict(event, due_minute=minute, boundary_kind="commitment")
+    for pregnancy in pregnancies.values():
+        mother = pregnancy['gestational_actor_id']
+        if pregnancy['status'] == 'born' or state['characters'][mother]['life_status'] == 'dead':
+            continue
+        yield dict(id=pregnancy['id'], type='pregnancy_due', boundary_kind='pregnancy_due',
+                   character_ids=sorted({mother, *pregnancy['parent_ids']}),
+                   due_minute=pregnancy['due_minute'])
