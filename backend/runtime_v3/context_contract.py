@@ -471,7 +471,8 @@ actors/threads. Refresh affected situation/state; unchanged summaries are invali
 Meeting ended != relationship resolved. Complete plans via #75/#66. No invented travel.
 Reopening resolved thread requires NEW source_event_id. continuity_beats: reuse canonical
 basis_ids for equivalent question/proposal/information/decision/opportunity, status and
-THIS event evidence. EXTERNAL decisions need decision_actor_id + current player_evidence.
+THIS event evidence. EXTERNAL dialogue may reuse its completed_interaction Event quote.
+EXTERNAL decisions need decision_actor_id + their own current player_evidence.
 Choices share kind/basis_ids for equivalent purposes. Omit resolved/rejected proposals.
 compression: evidenced routine, explicit elapsed_minutes within supplied bound; pending
 response needs response_event_id + actual player_evidence. Ordinary dialogue needs no beat.
