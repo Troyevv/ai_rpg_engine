@@ -7,6 +7,20 @@ from backend.runtime_v3.calendar import calendar_label, current_time, nearby_cal
 from backend.runtime_v3.lifecycle import active_texts
 
 
+def public_advance_choices(interruption, decisions):
+    """The preview and committed game view must have the same disclosure boundary."""
+    if interruption and interruption.get('kind') == 'pregnancy_due':
+        interruption = dict(kind='scene', minute=interruption['minute'])
+    result = []
+    for decision in decisions:
+        if decision.get('kind') == 'birth':
+            # The raw candidate includes canonical parents even when the POV knows none.
+            decision = dict(id=decision['id'], kind='scene', domains=[],
+                            context='Можно остаться наблюдать, помочь или не вмешиваться.')
+        result.append(decision)
+    return dict(interruption=interruption, decisions=result)
+
+
 def ui_view(snapshot, history=None):
     from backend.runtime_v3.models import assert_world_state_v3_invariants
     from backend.runtime_v3.protagonist import initialize
@@ -220,14 +234,7 @@ def ui_view(snapshot, history=None):
     result['last_long_term_advance'] = ({k: deepcopy(report[k]) for k in ('start','requested_target','actual_target','interruption','llm_calls','max_llm_calls','decisions','accepted','unresolved') if k in report} if report else None)
     visible_report = result['last_long_term_advance']
     if visible_report:
-        stop = visible_report.get('interruption') or {}
-        if stop.get('kind') == 'pregnancy_due':
-            visible_report['interruption'] = dict(kind='scene', minute=stop['minute'])
-        for i, decision in enumerate(visible_report.get('decisions', [])):
-            if decision.get('kind') == 'birth':
-                # Candidate participants include canonical parents, irrespective of Knowledge.
-                visible_report['decisions'][i] = dict(id=decision['id'], kind='scene', domains=[],
-                    context='Можно остаться наблюдать, помочь или не вмешиваться.')
+        visible_report.update(public_advance_choices(visible_report.get('interruption'), visible_report.get('decisions', [])))
     result['last_time_skip']=deepcopy(snapshot.get('last_time_skip'))
     from backend.runtime_v3.notifications import notifications
     result['notifications']=notifications(state, history)

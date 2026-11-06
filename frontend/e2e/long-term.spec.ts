@@ -41,9 +41,21 @@ test('209: father can play the delivery scene and advance again', async ({ page,
     await expect.poll(async () => (await saved()).turns.length).toBe(before.turns.length + 1);
     return (await saved()).state.last_long_term_advance;
   }
+  const previewResponse = await request.post(`/api/saves/${selected.save}/long-term/preview`, {
+    data: {amount: 2, unit: 'weeks', max_llm_calls: 0},
+  });
+  expect(previewResponse.ok()).toBeTruthy();
+  const preview = await previewResponse.json();
   const stopped = await advance();
   expect(stopped.actual_target).toBe(1980);
-  expect(stopped.interruption.kind).toBe('pregnancy_due');
+  for (const report of [preview, stopped]) {
+    expect(report.interruption).toEqual({kind: 'scene', minute: 1980});
+    expect(JSON.stringify(report)).not.toContain('pregnancy_');
+    const choice = report.decisions.find((row: {kind: string}) => row.kind === 'scene');
+    expect(choice).toBeDefined();
+    expect(choice).not.toHaveProperty('actor_ids');
+  }
+  await expect(page.locator('.advance-result')).toContainText('Можно остаться наблюдать');
   await page.reload();
   await page.getByLabel('Своё действие или реплика').fill('Я остаюсь рядом с Верой и держу её за руку.');
   await page.getByRole('button', {name: 'Отправить действие', exact: true}).click();
