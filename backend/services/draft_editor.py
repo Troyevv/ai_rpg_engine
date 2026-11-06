@@ -68,7 +68,7 @@ def messages(base, instruction):
     return [dict(role='system',content=MARKER+'\n'+RULES+'\n'+SECRET_AUTHORING_RULES),
             dict(role='user',content=json.dumps(dict(author_context=author_context(base,instruction),
                 candidate=state,candidate_hash=candidate_hash(state),
-                world_schema=compact_schema(prompt_schema(initial_portraits=True)),response_schema=Proposal.model_json_schema()),ensure_ascii=False))]
+                world_schema=compact_schema(prompt_schema(initial_portraits=True)),response_schema=Proposal.model_json_schema()),ensure_ascii=False,separators=(',',':')))]
 
 
 def rebased_path(before, after, path):

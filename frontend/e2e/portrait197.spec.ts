@@ -35,7 +35,7 @@ test('legacy illustration upgrades in preview and retains its full beard in ever
  expect(faces.size).toBe(5);
  await page.getByLabel('Визуальный возраст',{exact:true}).selectOption('child');await expect(beard).toHaveCount(0);
  await page.getByLabel('Визуальный возраст',{exact:true}).selectOption('elderly');await expect(beard).toHaveValue('clean_shaven');
- await beard.selectOption('full_beard');await page.getByLabel('Цвет волос',{exact:true}).selectOption('5');
+ await beard.selectOption('full_beard');await page.getByRole('combobox',{name:'Цвет волос',exact:true}).selectOption('5');
  const saved=await preview.getAttribute('src');
  await page.getByRole('button',{name:'Сохранить иллюстрацию',exact:true}).click();await expect(page.locator('.portrait-dialog')).toHaveCount(0);
  await editor();await expect(frame).toHaveValue('male');await expect(beard).toHaveValue('full_beard');

@@ -608,7 +608,9 @@ def test_resume_after_manual_edit_cannot_adopt_new_head(api):
 
 def test_editor_prompt_compacts_contract_without_cutting_canon(api):
     from context_builder import estimate
+    from backend.services.draft_portraits import initialize
     client,_=api;_,_,before=setup(client)
+    initialize(before['state'],version=2)
     prompt=draft_editor.messages(before,'Измени мир')
     payload=json.loads(prompt[1]['content'])
     assert payload['candidate']==before['state']
