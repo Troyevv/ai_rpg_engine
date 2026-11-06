@@ -155,3 +155,23 @@ def test_phone_unsettled_read_is_held_without_retry():
     page=SimpleNamespace(request=SimpleNamespace(get=lambda _:response),wait_for_timeout=lambda _:None)
     with pytest.raises(ValueError,match='preserve the paid job'):
         wait_phone_read(page,'http://localhost',6,'Missing')
+
+
+def test_semantic_hold_survives_saved_status_and_binds_evidence(tmp_path, monkeypatch):
+    from devtools.live99 import stage_b
+    from devtools.live99.evidence import write
+    monkeypatch.setattr(stage_b, 'validate', lambda *args: None)
+    manifest={'seeds':{'crisis':{},'social':{}}}
+    folder=tmp_path/'crisis/010';folder.mkdir(parents=True)
+    write(folder/'result.json',dict(status='recorded'))
+    notes=tmp_path/'semantic-holds';notes.mkdir()
+    write(notes/'crisis.json',dict(case='crisis',status='held',reason='Absent witness accepted in History'))
+    stage_c.record_hold(tmp_path,manifest,'crisis',10)
+    stage_c.validate(tmp_path,manifest)
+    assert stage_c.is_held(tmp_path,'crisis')
+    assert not stage_c.is_held(tmp_path,'social')
+    with pytest.raises(ValueError,match='already held'):
+        stage_c.record_hold(tmp_path,manifest,'crisis',10)
+    write(folder/'result.json',dict(status='changed'))
+    with pytest.raises(ValueError,match='evidence changed'):
+        stage_c.validate(tmp_path,manifest)

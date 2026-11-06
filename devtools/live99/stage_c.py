@@ -176,13 +176,36 @@ def prepare(parent, directory, sha, master):
 def validate(directory, manifest):
     from .stage_b import validate as validate_history
     validate_history(directory, manifest)
-    for receipt in (directory / 'retest-reviews').glob('*.json'):
-        review = read(receipt)
-        if review['case'] not in manifest['seeds'] or review['status'] != 'passed':
-            raise ValueError('Invalid retest review')
-        for name, checksum in review['evidence'].items():
-            if digest(directory / name) != checksum:
-                raise ValueError('Reviewed retest evidence changed')
+    for folder, status in (('retest-reviews', 'passed'), ('group-holds', 'held')):
+        for receipt in (directory / folder).glob('*.json'):
+            review = read(receipt)
+            if review['case'] not in manifest['seeds'] or review['status'] != status:
+                raise ValueError('Invalid semantic review')
+            for name, checksum in review['evidence'].items():
+                if digest(directory / name) != checksum:
+                    raise ValueError('Reviewed semantic evidence changed')
+
+
+def is_held(directory, case):
+    return (directory / 'group-holds' / f'{case}.json').is_file()
+
+
+def record_hold(directory, manifest, case, index):
+    """A saved HTTP result can still fail semantic review; resume must honor it."""
+    validate(directory, manifest)
+    if case not in manifest['seeds'] or is_held(directory, case):
+        raise ValueError('Unknown group or already held')
+    note = directory / 'semantic-holds' / f'{case}.json'
+    review = read(note)
+    if review.get('case') != case or review.get('status') != 'held' or not review.get('reason'):
+        raise ValueError('Explicit semantic failure evidence required')
+    folder = directory / case / f'{index:03d}'
+    read(folder / 'result.json')
+    evidence = {str(p.relative_to(directory)): digest(p) for p in folder.iterdir() if p.is_file()}
+    evidence[str(note.relative_to(directory))] = digest(note)
+    target = directory / 'group-holds' / f'{case}.json'
+    target.parent.mkdir(exist_ok=True)
+    write(target, dict(case=case, status='held', reviewed=now(), evidence=evidence))
 
 
 def expected_agency_rejection(folder, audit):

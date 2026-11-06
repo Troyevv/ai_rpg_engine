@@ -391,7 +391,7 @@ def run(args, directory, manifest):
         if live and (args.stage != 'B' or not args.reviewed):
             raise ValueError('This authorization is only for reviewed Stage B, never Stage C')
     if stage_c:
-        from .stage_c import validate
+        from .stage_c import validate, is_held
         validate(directory, manifest)
         if live and (args.stage != 'C' or not args.reviewed):
             raise ValueError('Stage C requires its explicit reviewed authorization')
@@ -444,6 +444,9 @@ def run(args, directory, manifest):
                         folder = directory / case / f'{i:03d}'
                         operation = plans[case][i] if plans else None
                         if stage_c:
+                            if is_held(directory, case):
+                                held.add(case)
+                                continue
                             if operation['phase'] != args.phase or args.step is not None and i > args.step:
                                 continue
                             if args.phase == 'continue' and not (directory / 'retest-reviews' / f'{case}.json').is_file():
