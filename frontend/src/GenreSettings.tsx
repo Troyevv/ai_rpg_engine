@@ -1,42 +1,94 @@
-import {Check,Plus} from "lucide-react";
-import {AtelierDisclosure} from "./workshop/AtelierDisclosure";
+import {useId,useRef,useState} from 'react';
+import {motion,useReducedMotion} from 'framer-motion';
+import {Check,Feather,Plus,Search,Star,Undo2,X} from 'lucide-react';
+import {AtelierDisclosure} from './workshop/AtelierDisclosure';
 import './styles/genre-settings.css';
 import {gameLocale} from './gameDate';
 import {Textarea} from './components/ui/textarea';
-export type GenreConfig={primary_genre:string|null;secondary_genres:string[];custom_genre:string};
-export const genres:Record<string,string>={slice_of_life:'Повседневность',family_saga:'Семейная сага',romance:'Романтика',drama:'Драма',detective:'Детектив',thriller:'Триллер',science_fiction:'Научная фантастика',fantasy:'Фэнтези',horror:'Ужасы',adventure:'Приключения',post_apocalyptic:'Постапокалипсис',historical:'Исторический',custom:'Свой жанр'};
-export const descriptions:Record<string,string>={
- slice_of_life:'Повседневные занятия, отношения и небольшие перемены в жизни.',
- family_saga:'История семьи на протяжении лет и поколений. Будущие браки, дети и переходы героя заранее не определены.',
- romance:'Сближение и личные отношения, когда они согласуются с желаниями персонажей и вашим замыслом.',
- drama:'Внутренние противоречия и сложные отношения без обязательной трагедии.',
- detective:'Наблюдения, улики и поиск объяснений. Преступление не обязательно.',
- thriller:'Ожидание, неопределённость и напряжение без предрешённого насилия.',
- science_fiction:'Научные идеи, технологии и их влияние на жизнь общества.',
- fantasy:'Необычный мир и возможное волшебство в пределах заданных правил.',
- horror:'Неизвестность и тревожная атмосфера. Не задаёт уровень риска или обязательные травмы.',
- adventure:'Открытия, путешествия и новые обстоятельства без обязательного героического подвига.',
- post_apocalyptic:'Жизнь после крупных перемен мира; причины и последствия определяет ваш замысел.',
- historical:'Жизнь в выбранной эпохе. Страна, даты и биографии не выводятся из названия жанра.',
- custom:'Направление задаётся вашим описанием ниже.'};
-
-const enGenres:Record<string,string>={slice_of_life:'Everyday life',family_saga:'Family saga',romance:'Romance',drama:'Drama',detective:'Detective',thriller:'Thriller',science_fiction:'Science fiction',fantasy:'Fantasy',horror:'Horror',adventure:'Adventure',post_apocalyptic:'Post-apocalyptic',historical:'Historical',custom:'Custom genre'};
-const enDescriptions:Record<string,string>={slice_of_life:'Everyday activities, relationships and small changes.',family_saga:'Family ties across generations, without predetermined marriages or children.',romance:'Closeness and relationships consistent with character intentions.',drama:'Conflicting values and relationships without mandatory tragedy.',detective:'Clues and competing explanations; crime is optional.',thriller:'Suspense and uncertainty without predetermined violence.',science_fiction:'Science, technology and their human consequences.',fantasy:'Wonder within the established rules of the world.',horror:'Unease and the unknown; does not set risk or require injuries.',adventure:'Discovery and exploration without mandatory heroism.',post_apocalyptic:'Life after major disruption; the world defines its causes.',historical:'Life in the established era, without inventing dates or biographies.',custom:'Themes from your description below.'};
-export const genreLabels=()=>gameLocale().startsWith('en')?enGenres:genres;
+import {genreCatalog,genreGroups,genreLabels,matchingGenres,selectPrimary,toggleSecondary,type GenreConfig} from './genreCatalog';
+export {genres,descriptions,genreLabels,type GenreConfig} from './genreCatalog';
 export const genreFutureHint=()=>gameLocale().startsWith('en')?'Genre changes affect new turns only. Regeneration uses the original turn settings.':'Смена жанров влияет только на новые ходы. Перегенерация использует исходные настройки хода.';
+
+/** Shared authoring/policy control. Filters are local; the parent owns the persisted policy. */
 export function GenreSettings({value,onChange,disabled=false,creation=false}:{value:GenreConfig;onChange:(value:GenreConfig)=>void;disabled?:boolean;creation?:boolean}){
- const en=gameLocale().startsWith('en'); const names=genreLabels(); const details=en?enDescriptions:descriptions;
- const change=(patch:Partial<GenreConfig>)=>onChange({...value,...patch});
+ const locale=gameLocale().startsWith('en')?'en':'ru';const en=locale==='en';const names=genreLabels();
+ const [query,setQuery]=useState('');const [group,setGroup]=useState('life');const [target,setTarget]=useState<'primary'|'secondary'>('primary');
+ const [undo,setUndo]=useState<GenreConfig|null>(null);const [announcement,setAnnouncement]=useState('');
+ const search=useRef<HTMLInputElement>(null);const primaryControl=useRef<HTMLButtonElement>(null);
+ const id=useId();const reduce=useReducedMotion();
  const custom=[value.primary_genre,...value.secondary_genres].includes('custom');
- return <fieldset disabled={disabled} className="genre-settings sp">
-  <legend>{en?'Story genres':'Жанры истории'}</legend>
-  <p className={creation?"sp-lead":undefined}>{en?'The primary genre sets the main emphasis; secondary genres add accents. Unexpected off-genre events remain possible. Genres do not change risk or character decisions.':creation?'Основной жанр задаёт тон истории. Дополнительные жанры добавляют оттенки.':'Основной жанр задаёт главный акцент, дополнительные — оттенки. Неожиданные события вне жанра возможны. Жанры не меняют риск и решения персонажей.'}</p>
-  <label>{en?'Primary genre':'Основной жанр'}<select aria-label={en?'Primary genre':'Основной жанр'} className="w-full" value={value.primary_genre||''} onChange={e=>change({primary_genre:e.target.value||null,secondary_genres:value.secondary_genres.filter(g=>g!==e.target.value)})}>
-   <option value="">{creation?(en?'From world description':'Из описания мира'):(en?'No primary genre':'Без основного жанра')}</option>{Object.entries(names).map(([id,name])=><option key={id} value={id}>{name}</option>)}
-  </select>{creation&&!value.primary_genre&&<small>Генератор опирается на настроение и события из замысла.</small>}</label>
-  {value.primary_genre&&<p aria-label={en?'Primary genre description':'Описание основного жанра'}>{details[value.primary_genre]}</p>}
-  <fieldset className="genre-secondary sp-block"><legend>{en?'Secondary genres · up to three':`Дополнительные жанры · ${value.secondary_genres.length} из 3`}</legend>{Object.entries(names).map(([id,name])=><label key={id} className={"check sp-chip"+(value.secondary_genres.includes(id)?" on":"")+(id===value.primary_genre||value.secondary_genres.length>=3&&!value.secondary_genres.includes(id)?" off":"")}><input type="checkbox" checked={value.secondary_genres.includes(id)} disabled={disabled||id===value.primary_genre||value.secondary_genres.length>=3&&!value.secondary_genres.includes(id)} onChange={e=>change({secondary_genres:e.target.checked?[...value.secondary_genres,id]:value.secondary_genres.filter(g=>g!==id)})}/>{value.secondary_genres.includes(id)?<Check size={13} className="selection-mark"/>:<Plus size={13}/>}<span>{name}</span></label>)}</fieldset>
-  {value.secondary_genres.length>0&&<AtelierDisclosure className="sp-notes" title={en?'How secondary genres influence the story':'Как дополнительные жанры повлияют на историю?'}>{value.secondary_genres.map(id=><p key={id} aria-label={(en?'Genre description ':'Описание жанра ')+names[id]}><strong>{names[id]}: </strong>{details[id]}</p>)}</AtelierDisclosure>}
-  {custom&&<label>{en?'Custom genre description':'Описание своего жанра'}<Textarea required aria-invalid={!value.custom_genre.trim()} value={value.custom_genre} maxLength={2000} onChange={e=>change({custom_genre:e.target.value})}/><small>{value.custom_genre.length} / 2000</small>{!value.custom_genre.trim()&&<span role="alert">{en?'Add a custom genre description.':'Добавьте описание своего жанра.'}</span>}</label>}
- </fieldset>
+ const primary=genreCatalog.find(g=>g.id===value.primary_genre);
+ const results=matchingGenres(query,group);
+ const t=(ru:string,english:string)=>en?english:ru;
+ const change=(next:GenreConfig,message='')=>{setUndo(null);onChange(next);setAnnouncement(message)};
+ const clearFilters=()=>{setQuery('');setGroup('all');search.current?.focus()};
+ const choose=(genre:string)=>{
+  const next=target==='primary'?selectPrimary(value,genre):toggleSecondary(value,genre);
+  if(next!==value)change(next,`${names[genre]} · ${target==='primary'?t('основной жанр','primary genre'):next.secondary_genres.includes(genre)?t('добавлен','added'):t('убран','removed')}`);
+ };
+ return <fieldset disabled={disabled} className="genre-settings" aria-describedby={`${id}-hint`}>
+  <legend>{t('Жанры истории','Story genres')}</legend>
+  <p id={`${id}-hint`} className="genre-intro">{t('Основной жанр задаёт акцент, дополнительные — оттенки истории.','The primary genre sets the emphasis; secondary genres add accents.')}</p>
+  <div className="genre-selection" aria-label={t('Выбранные жанры','Selected genres')}>
+   <div className="genre-primary">
+    <div className="genre-eyebrow"><Star size={14}/>{t('Основной жанр','Primary genre')}</div>
+    <motion.div key={value.primary_genre||'neutral'} initial={reduce?false:{opacity:.4,y:6}} animate={{opacity:1,y:0}} transition={{duration:.2}}>
+     <strong className="genre-primary-name" data-testid="primary-genre">{primary?.[locale].name||t('Из описания мира','From world description')}</strong>
+     <p>{primary?.[locale].description||t('Настроение и события определяет ваш замысел.','Your concept defines the mood and events.')}</p>
+    </motion.div>
+    {value.primary_genre&&<button type="button" className="genre-text-action" onClick={()=>{change(selectPrimary(value,null));primaryControl.current?.focus()}}>{t('Из описания мира','From world description')}</button>}
+   </div>
+   <div className="genre-secondary-summary">
+    <div className="genre-summary-heading"><span>{t('Дополнительные оттенки','Supporting accents')}</span><span className="genre-count">{value.secondary_genres.length} {t('из','of')} 3</span></div>
+    <div className="genre-chips">
+     {value.secondary_genres.map(g=><motion.div key={g} layout={reduce?false:'position'} initial={reduce?false:{opacity:.4,y:6}} animate={{opacity:1,y:0}} transition={{duration:.2}}><button type="button" className="genre-chip" aria-label={`${t('Убрать','Remove')} ${names[g]}`} onClick={e=>{
+      const buttons=Array.from(e.currentTarget.closest('.genre-chips')?.querySelectorAll<HTMLButtonElement>('button')||[]);
+      const index=buttons.indexOf(e.currentTarget);const sibling=buttons[index+1]||buttons[index-1];
+      change(toggleSecondary(value,g),`${names[g]} · ${t('убран','removed')}`);
+      if(sibling)sibling.focus();else primaryControl.current?.focus();
+     }}><span>{names[g]}</span><X size={13}/></button></motion.div>)}
+     {!value.secondary_genres.length&&<span className="genre-empty-selection">{t('Можно оставить только основной жанр','A primary genre is enough')}</span>}
+    </div>
+   </div>
+  </div>
+  {custom&&<label className="genre-custom" htmlFor={`${id}-custom`}>{t('Описание своего жанра','Custom genre description')}
+   <Textarea id={`${id}-custom`} required aria-invalid={!value.custom_genre.trim()} aria-describedby={`${id}-custom-help`} value={value.custom_genre} maxLength={2000} onChange={e=>change({...value,custom_genre:e.target.value})}/>
+   <span id={`${id}-custom-help`} className="genre-custom-help"><small>{value.custom_genre.length} / 2000</small>{!value.custom_genre.trim()&&<span role="alert">{t('Добавьте описание своего жанра.','Add a custom genre description.')}</span>}</span>
+  </label>}
+  <div className="genre-toolbar">
+   <div className="genre-target" role="group" aria-label={t('Назначение выбора','Selection role')}>
+    <button ref={primaryControl} type="button" aria-pressed={target==='primary'} onClick={()=>setTarget('primary')}><Star size={14}/>{t('Основной','Primary')}</button>
+    <button type="button" aria-pressed={target==='secondary'} onClick={()=>setTarget('secondary')}><Plus size={14}/>{t('Дополнительные','Secondary')} <span>{value.secondary_genres.length}/3</span></button>
+   </div>
+   <div className="genre-search"><Search size={17} aria-hidden="true"/><input ref={search} type="search" aria-label={t('Найти жанр','Find a genre')} placeholder={t('Название или синоним…','Name or synonym…')} value={query} onChange={e=>{setQuery(e.target.value);setGroup('all')}}/>{query&&<button type="button" aria-label={t('Очистить поиск','Clear search')} onClick={()=>{setQuery('');search.current?.focus()}}><X size={16}/></button>}</div>
+  </div>
+  <AtelierDisclosure className="genre-group-picker" title={<span className="genre-group-current"><span>{t('Группа','Group')}</span><strong>{group==='all'?t('Все жанры','All genres'):genreGroups.find(g=>g.id===group)?.[locale]}</strong></span>}>
+  <div className="genre-groups" role="group" aria-label={t('Группы жанров','Genre groups')}>
+   <button type="button" aria-pressed={group==='all'} onClick={()=>setGroup('all')}>{t('Все','All')} <span>{genreCatalog.length}</span></button>
+   {genreGroups.map(g=><button type="button" key={g.id} aria-pressed={group===g.id} onClick={()=>setGroup(g.id)}>{g[locale]}</button>)}
+  </div></AtelierDisclosure>
+  <div className="genre-result-heading"><span role="status">{t('Найдено','Found')}: {results.length}</span><span>{target==='primary'?t('Нажмите, чтобы сделать основным','Choose a primary genre'):t('Нажмите, чтобы добавить или убрать','Choose to add or remove')}</span></div>
+  {target==='secondary'&&<p id={`${id}-limit`} className="genre-limit" data-full={value.secondary_genres.length===3}>{value.secondary_genres.length===3?t('Выбраны все 3 оттенка. Уберите один, чтобы добавить другой. Основной жанр можно менять свободно.','All 3 accents are selected. Remove one to add another. You can still change the primary genre.'):t('До 3 дополнительных жанров. Уже основной жанр нельзя добавить повторно.','Up to 3 secondary genres. The primary genre cannot be added twice.')}</p>}
+  <motion.div className="genre-results" key={`${group}:${query}`} initial={reduce?false:{opacity:.4,y:8}} animate={{opacity:1,y:0}} transition={{duration:.2}}>
+   {results.length?genreGroups.filter(g=>results.some(r=>r.group===g.id)).map(g=><section key={g.id} className="genre-group-section" aria-label={g[locale]}>
+    <h3>{g[locale]}<span>{results.filter(r=>r.group===g.id).length}</span></h3>
+    <div className="genre-grid">{results.filter(r=>r.group===g.id).map(item=>{
+     const isPrimary=value.primary_genre===item.id;const isSecondary=value.secondary_genres.includes(item.id);
+     const selected=target==='primary'?isPrimary:isSecondary;
+     const blocked=target==='secondary'&&(isPrimary||value.secondary_genres.length>=3&&!isSecondary);
+     return <button type="button" key={item.id} className="genre-card" data-genre={item.id} data-selected={isPrimary?'primary':isSecondary?'secondary':'none'} aria-label={`${target==='primary'?t('Основной жанр','Primary genre'):t('Дополнительный жанр','Secondary genre')}: ${item[locale].name}`} aria-pressed={selected} aria-disabled={blocked||disabled} aria-describedby={blocked?`${id}-limit`:undefined} onClick={()=>{if(!blocked&&!disabled)choose(item.id)}}>
+      <span className="genre-card-top"><span className="genre-card-title">{item[locale].name}</span><span className="genre-card-mark">{isPrimary?<Star size={16}/>:isSecondary?<Check size={16}/>:item.id==='custom'?<Feather size={16}/>:<Plus size={16}/>}</span></span>
+      <span className="genre-card-description">{item[locale].description}</span>
+      <span className="genre-card-state">{isPrimary?t('Основной жанр','Primary genre'):isSecondary?t('Дополнительный жанр','Secondary genre'):blocked?t('Лимит: 3 из 3','Limit: 3 of 3'):target==='primary'?t('Сделать основным','Set as primary'):t('Добавить оттенок','Add an accent')}</span>
+     </button>
+    })}</div>
+   </section>):<div className="genre-no-results"><Search size={28}/><strong>{t('Жанры не найдены','No genres found')}</strong><p>{t('Попробуйте другое название или уберите фильтры. Ваш выбор сохранён.','Try another name or clear the filters. Your selection is preserved.')}</p><button type="button" onClick={clearFilters}>{t('Сбросить поиск и группы','Clear search and groups')}</button></div>}
+  </motion.div>
+  <AtelierDisclosure className="genre-guidance" title={t('Как жанры влияют на историю','How genres shape the story')}><p>{t('Это творческие ориентиры, а не обязательные события. Жанры не задают эпоху, технологии, географию, темп или риск и не принимают решения за персонажей.','These are creative preferences, not required events. Genres do not set the era, technology, geography, pacing or risk, or decide for characters.')}</p>{!creation&&<p>{genreFutureHint()}</p>}</AtelierDisclosure>
+  <div className="genre-reset">
+   <button type="button" disabled={!value.primary_genre&&!value.secondary_genres.length} onClick={()=>{setUndo({...value,secondary_genres:[...value.secondary_genres]});onChange({...value,primary_genre:null,secondary_genres:[]});setAnnouncement(t('Выбор сброшен. Его можно восстановить.','Selection cleared. You can restore it.'))}}>{t('Сбросить выбор','Clear selection')}</button>
+   {undo&&<button type="button" onClick={()=>{onChange(undo);setUndo(null);primaryControl.current?.focus()}}><Undo2 size={14}/>{t('Восстановить выбор','Restore selection')}</button>}
+  </div>
+  <span className="sr-only" role="status" aria-live="polite">{announcement}</span>
+ </fieldset>;
 }

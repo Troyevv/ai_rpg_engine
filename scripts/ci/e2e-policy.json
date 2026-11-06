@@ -10,7 +10,9 @@
     "calendar.spec.ts",
     "genealogy156.spec.ts",
     "mobile-menu126.spec.ts",
-    "idea190.spec.ts"
+    "idea190.spec.ts",
+    "genre-policy.spec.ts",
+    "genre-catalog.spec.ts"
   ],
   "domains": {
     "phone": {
@@ -94,6 +96,8 @@
     "calendar.spec.ts": "canonical date, observances and server time skip preview survive reload",
     "genealogy156.spec.ts": "six generations retain all supplied relations and fit with fixed portrait geometry",
     "mobile-menu126.spec.ts": "menu: all destinations, draft, anchor, nested Back and workspace state",
-    "idea190.spec.ts": "idea190: real generation, reload, HTTP502 review recovery and author revision"
+    "idea190.spec.ts": "idea190: real generation, reload, HTTP502 review recovery and author revision",
+    "genre-policy.spec.ts": "genre settings persist, limit selection and preserve history · graphite",
+    "genre-catalog.spec.ts": "new genres generate, hand off, edit and reload with a controlled provider"
   }
 }

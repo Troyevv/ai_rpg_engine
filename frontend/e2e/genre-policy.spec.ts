@@ -1,7 +1,8 @@
+import {chooseGenre} from './genre-navigation';
 import {test,expect} from '@playwright/test';
 import {gameAction} from './navigation';
 
-for(const skin of ['graphite','parchment'])test(`genre settings persist, limit selection and preserve history · ${skin}`,async({page,request})=>{
+for(const skin of ['graphite','parchment','cyberpunk'])test(`genre settings persist, limit selection and preserve history · ${skin}`,async({page,request},info)=>{
  const selected=await(await request.post('/test/protagonist-seed')).json();
  await request.put(`/api/worlds/${selected.world}/presentation`,{data:{theme_id:skin}});
  await page.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selected);
@@ -9,11 +10,11 @@ for(const skin of ['graphite','parchment'])test(`genre settings persist, limit s
  const before=await(await request.get(`/api/saves/${selected.save}`)).json();
  await gameAction(page,'Политика истории');
  const dialog=page.getByRole('dialog').last();
- await dialog.getByLabel('Основной жанр',{exact:true}).selectOption('romance');
- await dialog.getByRole('checkbox',{name:'Драма',exact:true}).check();
- await dialog.getByRole('checkbox',{name:'Триллер',exact:true}).check();
- await dialog.getByRole('checkbox',{name:'Свой жанр',exact:true}).check();
- await expect(dialog.getByRole('checkbox',{name:'Повседневность',exact:true})).toBeDisabled();
+ await chooseGenre(dialog,'Романтика');
+ await chooseGenre(dialog,'Драма','secondary');
+ await chooseGenre(dialog,'Триллер','secondary');
+ await chooseGenre(dialog,'Свой жанр','secondary');
+ await expect(dialog.getByRole('button',{name:'Дополнительный жанр: Повседневность',exact:true})).toHaveAttribute('aria-disabled','true');
  await dialog.getByLabel('Описание своего жанра').fill('Тихая фантастика и необычные совпадения');
  await dialog.getByRole('button',{name:'Сохранить настройки истории'}).click();
  await expect(dialog).toBeHidden();
@@ -23,15 +24,17 @@ for(const skin of ['graphite','parchment'])test(`genre settings persist, limit s
  expect(after.state.narrative_policy.genre).toEqual({primary_genre:'romance',secondary_genres:['drama','thriller','custom'],custom_genre:'Тихая фантастика и необычные совпадения'});
  expect(after.state.narrative_policy.narrative_risk).toEqual(before.state.narrative_policy.narrative_risk);
  await gameAction(page,'Политика истории');
- await expect(dialog.getByLabel('Основной жанр',{exact:true})).toHaveValue('romance');
+ await expect(dialog.getByTestId('primary-genre')).toHaveText('Романтика');
  await expect(dialog.getByLabel('Описание своего жанра')).toHaveValue('Тихая фантастика и необычные совпадения');
+ await dialog.getByTestId('primary-genre').scrollIntoViewIfNeeded();
+ const screenshot=info.outputPath(`policy-${skin}-${info.project.name}.png`);await page.screenshot({path:screenshot,animations:'disabled'});await info.attach('saved-policy',{path:screenshot,contentType:'image/png'});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
- await dialog.getByLabel('Основной жанр',{exact:true}).selectOption('custom');
+ await chooseGenre(dialog,'Свой жанр');
  await dialog.getByLabel('Описание своего жанра').fill('');
  await expect(dialog.getByRole('button',{name:'Сохранить настройки истории'})).toBeDisabled();
  await page.keyboard.press('Escape');
  await page.evaluate(()=>document.documentElement.lang='en');
  await gameAction(page,'Политика истории');
- await expect(dialog.getByLabel('Primary genre',{exact:true})).toHaveValue('romance');
+ await expect(dialog.getByTestId('primary-genre')).toHaveText('Romance');
  await expect(dialog.getByLabel('Custom genre description')).toBeVisible();
 });
