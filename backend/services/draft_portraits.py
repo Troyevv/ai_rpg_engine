@@ -14,6 +14,7 @@ DESCRIPTORS = TypeAdapter(PortraitDescriptor)
 def portrait_state(state):
     # Minimal adapter to the existing portrait selector, no second calendar/POV rules.
     return dict(characters=state['world']['characters'], knowledge=state['world'].get('knowledge',{}),
+        facts=state['world'].get('facts', {}),
         pregnancies=state['world'].get('pregnancies',{}), camera={'controlled_actor_id':state.get('controlled_actor_id')},
         meta={'world_time':state['world_clock']['minute'],'calendar':state['world_clock'].get('calendar')})
 
