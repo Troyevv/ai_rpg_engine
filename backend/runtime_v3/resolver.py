@@ -319,8 +319,17 @@ class StateResolver:
                     entry['origin_remote_event_id']=self.remote_origin_id
                 s['facts'][entry['id']] = entry
         events = {}
+        scene_start = self.before['meta']['world_time']
+        scene_end = s['meta']['world_time']
         for i, item in self.records(raw,'events'):
             eid = item.get('id')
+            if 'minute' in item:
+                minute = item['minute']
+                if type(minute) is not int or not scene_start <= minute <= scene_end:
+                    fatal(f'Event.minute: укажите абсолютную целую минуту в [{scene_start}, {scene_end}] '
+                          'или опустите поле, если точное время неизвестно.',
+                          'event_minute_invalid', repairable=True, section='events', index=i,
+                          field='minute', entity=eid if isinstance(eid, str) else None)
             if not isinstance(eid,str) or not eid or not isinstance(item.get('text'),str):
                 self.warn('events',i,'отсутствует ID или текст'); continue
             lists = {key:item.get(key,[]) for key in ('participants','witnesses','fact_ids')}
@@ -342,19 +351,21 @@ class StateResolver:
             event_id = identity('event',self.turn_id,eid,self.narrative,self.event_namespace) if self.event_namespace else identity('event',self.turn_id,eid,self.narrative)
             event = dict(id=event_id,local_id=eid,text=item['text'],
                 **lists,medium=medium,evidence=item['evidence'],turn_id=self.turn_id,
-                player_observed=self.observed,recorded_minute=s['meta']['world_time'])
+                player_observed=self.observed,recorded_minute=scene_end)
             if item.get('interaction_channel') in ('call','physical'):
                 event['interaction_channel']=item['interaction_channel']
-            for key in ('minute','order'):
-                if type(item.get(key)) is int and item[key] >= 0: event[key]=item[key]
+            if 'minute' in item:
+                from backend.runtime_v3.calendar import current_time
+                event['minute'] = item['minute']
+                event['calendar_date'] = current_time(s, item['minute'])['date']
+            if type(item.get('order')) is int and item['order'] >= 0:
+                event['order'] = item['order']
             if isinstance(item.get('location_id'),str) and item['location_id'] in s['locations']: event['location_id']=item['location_id']
             if item.get('author_id') is not None:
                 author = item['author_id']
                 if isinstance(author, str) and author in lists['participants'] and medium == 'message':
                     event['author_id'] = author
                 else: self.warn('events', i, 'неподтверждённый автор сообщения', 'author_id')
-            from backend.runtime_v3.calendar import current_time
-            if 'minute' in event: event['calendar_date'] = current_time(s,event['minute'])['date']
             # Explicit semantic classification plus independently owned input;
             # never turn a Narrative feelings assertion into interaction evidence.
             player_quote = item.get('player_evidence')

@@ -19,6 +19,7 @@ HELP = 'Я остаюсь рядом с Верой и держу её за ру�
 OBSERVE = 'Я наблюдаю и не вмешиваюсь.'
 SIGNS = 'Пальцы Веры сжимаются вокруг протянутой руки. Ещё одна потуга.'
 DELIVERY = 'Вера родила. Слышен первый крик.'
+REMOTE_SIGNS = 'Вера на миг задержала дыхание. Потуга прошла.'
 AWAY = 'В комнате тихо. За окном шелестят ветки.'
 REQUEST = dict(amount=2, unit='weeks', max_llm_calls=4)
 CONFIG = dict(BASE_CONFIG, context_length=65536)
@@ -51,7 +52,7 @@ def provider(**kwargs):
     minutes = int(narrative == NARRATIVE and block(messages, 'Текущий ввод')['kind'] != 'background')
     raw = dict(final_scene=dict(location_id=camera['location_id'],
         present_character_ids=camera['present_character_ids'], elapsed_minutes=minutes))
-    if narrative in (SIGNS, DELIVERY):
+    if narrative in (SIGNS, REMOTE_SIGNS, DELIVERY):
         mother = next(p for p in births if p['gestational_actor_id'] in camera['present_character_ids'])
         witnesses = camera['present_character_ids']
         raw['events'] = [dict(id='observed', text=narrative, evidence=narrative, medium='observation',
@@ -62,9 +63,9 @@ def provider(**kwargs):
     yield json.dumps(raw, ensure_ascii=False)
 
 
-def job(repo, sid, kind, action='', **config):
+def job(repo, sid, kind, action='', *, stream=provider, **config):
     jid = repo.begin_job(sid, action, kind, dict(CONFIG, **config))
-    with patch('engine.chat_stream', side_effect=provider), patch('engine.find_loaded_model', return_value={'config': {}}):
+    with patch('engine.chat_stream', side_effect=stream), patch('engine.find_loaded_model', return_value={'config': {}}):
         engine.run_job(repo.path, jid, engine.Worker())
     result = repo.get_job(jid)
     assert result['status'] == 'saved', result['error']
@@ -206,3 +207,101 @@ def test_observation_uses_pov_presence_capability_and_separate_facts(actor,pov,p
     assert 'pregnancy_due' not in str(messages)
     if not known:
         assert p['id'] not in str(messages)
+
+
+@pytest.mark.parametrize('elapsed', [0, 1])
+def test_remote_birth_is_independent_of_parenthood(tmp_path, elapsed):
+    repo = Repository(tmp_path/'distant.sqlite')
+    sid = load_fixture(repo, 'pregnancy')['save']
+    stopped, _ = job(repo, sid, 'long_term', long_term_advance=REQUEST)
+    p, = stopped['world_state']['pregnancies'].values()
+    actor = 'qa_pavel'
+    repo.transition_protagonist(sid, repo.get_save(sid)['revision'], 'away', 'permanent', actor)
+    start = repo.get_snapshot(sid)['world_state']
+    assert actor not in p['parent_ids'] and p['gestational_actor_id'] not in start['camera']['present_character_ids']
+    local = set(start['camera']['present_character_ids'])
+
+    def elsewhere(**kw):
+        action = block(kw['messages'], 'Текущий ввод')
+        if action['kind'] == 'background' and not kw.get('response_format') and 'потуги' in action['player_input']:
+            yield REMOTE_SIGNS
+        elif action['kind'] == 'turn' and not elapsed and not kw.get('response_format'):
+            yield AWAY
+        else:
+            yield from provider(**kw)
+
+    after, calls = job(repo, sid, 'turn', OBSERVE, stream=elsewhere)
+    world = after['world_state']
+    assert world['meta']['world_time'] == 1980 + elapsed
+    assert p['id'] not in str(calls[0]['messages'])
+    assert [c['stage'] for c in calls] == ['narrative','extraction','world_simulation','world_simulation_delta']
+    assert calls[2]['response_text'] == REMOTE_SIGNS
+    assert world['pregnancies'][p['id']]['status'] == 'due'
+    assert world['knowledge'] == start['knowledge']
+    assert p['children'][0]['id'] not in world['characters']
+    with repo.connect() as db:
+        history, _ = read_history(db, after['history_head'])
+    sign, = [e for e in history['events'] if e['text'] == REMOTE_SIGNS]
+    assert not sign['player_observed'] and local.isdisjoint(sign['participants'] + sign['witnesses'])
+
+    # This unrelated local action takes a minute; the independent NPC scene can now finish.
+    after, calls = job(Repository(repo.path), sid, 'turn', 'Осматриваюсь.')
+    world = after['world_state']
+    local_prompt = str(calls[0]['messages'])
+    assert REMOTE_SIGNS not in local_prompt and p['id'] not in local_prompt
+    assert calls[2]['response_text'] == DELIVERY
+    assert world['pregnancies'][p['id']]['birth_minute'] == 1981 + elapsed
+    assert world['camera']['controlled_actor_id'] == actor
+    assert {k:v for k,v in world['knowledge'].items() if v['actor_id'] in local} == {
+        k:v for k,v in start['knowledge'].items() if v['actor_id'] in local}
+    with repo.connect() as db:
+        history, _ = read_history(db, after['history_head'])
+    event, = [e for e in history['events'] if e['text'] == DELIVERY]
+    assert not event['player_observed'] and local.isdisjoint(event['participants'] + event['witnesses'])
+    assert event['recorded_minute'] == 1981 + elapsed
+    following, calls = job(Repository(repo.path), sid, 'turn', OBSERVE)
+    assert following['world_state']['meta']['world_time'] == 1982 + elapsed
+    assert DELIVERY not in str(calls[0]['messages']) and p['children'][0]['id'] not in str(calls[0]['messages'])
+
+
+def test_repeated_ongoing_scene_can_continue_or_end_from_witnessed_history(tmp_path):
+    repo = Repository(tmp_path/'ongoing.sqlite')
+    sid = load_fixture(repo, 'pregnancy')['save']
+    stopped, _ = job(repo, sid, 'long_term', long_term_advance=REQUEST)
+    p, = stopped['world_state']['pregnancies'].values()
+
+    for _ in range(3):
+        ongoing, _ = job(repo, sid, 'turn', HELP)
+        state = ongoing['world_state']
+        assert state['meta']['world_time'] == 1980 and state['pregnancies'][p['id']]['status'] == 'due'
+        assert state['knowledge'] == stopped['world_state']['knowledge']
+        assert p['children'][0]['id'] not in state['characters']
+    with repo.connect() as db:
+        history, _ = read_history(db, ongoing['history_head'])
+    signs = [e for e in history['events'] if e['text'] == SIGNS]
+    assert len(signs) == 3 and all(e['recorded_minute'] == 1980 for e in signs)
+    assert not any(c.get('kind') == 'birth' for c in history['state_changes'])
+    def follow_observation(**kw):
+        if not kw.get('response_format'):
+            scene = block(kw['messages'], 'Director / GM-only')['immediate_scene']
+            events = block(kw['messages'], 'Недавняя история / GM-only')
+            seen = set(scene.get('previous_observation_ids', []))
+            yield DELIVERY if any(e['id'] in seen and e['text'] == SIGNS for e in events) else SIGNS
+        else:
+            yield from provider(**kw)
+
+    born, calls = job(Repository(repo.path), sid, 'turn', OBSERVE, stream=follow_observation)
+    direction = block(calls[0]['messages'], 'Director / GM-only')['immediate_scene']
+    assert signs[-1]['id'] in direction.get('previous_observation_ids', [])
+    assert born['world_state']['pregnancies'][p['id']]['birth_minute'] == 1980
+    with repo.connect() as db:
+        history, _ = read_history(db, born['history_head'])
+    assert sum(c.get('kind') == 'birth' for c in history['state_changes']) == 1
+    later, _ = job(repo, sid, 'turn', OBSERVE)
+    assert later['world_state']['meta']['world_time'] == 1981
+    repo.rollback_last(sid)
+    repo.rollback_last(sid)
+    assert repo.get_snapshot(sid) == ongoing
+    failed, _ = ordinary(repo, sid, 1, player_input=OBSERVE, text=SIGNS, config=CONFIG)
+    assert json.loads(failed['repair_diagnostics_json'])[-1]['code'] == 'ordinary_temporal_boundary'
+    assert Repository(repo.path).get_snapshot(sid) == ongoing

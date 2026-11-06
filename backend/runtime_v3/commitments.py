@@ -238,7 +238,11 @@ def temporal_boundaries(state):
         minute = scheduled_boundary(state, event)
         if minute is not None:
             yield dict(event, due_minute=minute, boundary_kind="commitment")
-    for pregnancy in pregnancies.values():
+    yield from pregnancy_boundaries(state)
+
+
+def pregnancy_boundaries(state):
+    for pregnancy in state.get('pregnancies', {}).values():
         mother = pregnancy['gestational_actor_id']
         if pregnancy['status'] == 'born' or state['characters'][mother]['life_status'] == 'dead':
             continue

@@ -28,6 +28,14 @@ def test_optional_mutations(seed):
         assert exc.value.code == 'raw_record_invalid' and exc.value.repairable
         assert before == untouched
         return
+    event = next(row for row in p['events'] if isinstance(row, dict) and row.get('id') == 'e')
+    if type(event['minute']) is not int:
+        with pytest.raises(StructuralDeltaError) as exc:
+            resolver.resolve(p)
+        assert exc.value.code == 'event_minute_invalid' and exc.value.repairable
+        assert before == untouched
+        del event['minute']
+        resolver = StateResolver(before, QUOTE, 'Я подхожу к окну. Я доверяю ей.')
     result=resolver.resolve(p)
     assert result.state['knowledge']['a:f']['status']=='known'
     assert result.state['characters']['a']['situation']=='У двери'
