@@ -312,7 +312,13 @@ def stream(**kwargs):
             yield json.dumps(dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),events=events,choices=[dict(action='Посмотреть в окно',speech='',interaction_channel='physical')]),ensure_ascii=False)
         else: yield text
         return
-    if 'qa_meeting' in full:
+    from rejected_meeting_fixture import CONSENT, QUESTION, meeting_reply
+    turn_input = next((m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')), '')
+    action = json.loads(turn_input.split('\n', 1)[1]).get('player_input') if turn_input else None
+    if action in (QUESTION, CONSENT):
+        value = (json.dumps(meeting_reply(action, current_phone['camera']), ensure_ascii=False)
+                 if kwargs.get('response_format') else meeting_reply(action))
+    elif 'qa_meeting' in full:
         current=json.loads(next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only\n')).split('\n',1)[1])
         task=json.loads(next(m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')).split('\n',1)[1])
         depart=task['player_input']=='Разойтись.'

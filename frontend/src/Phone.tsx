@@ -2,7 +2,7 @@ import {phoneText as t} from "./lib/phone";
 import {usePhoneArrivals} from "./lib/usePhoneArrivals";
 import {phoneOperation} from "./lib/phoneRequests";
 import { formatDateLabel } from "./gameDate";
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type CSSProperties } from "react";
 import {
   Phone as PhoneIcon,
   MessageCircle,
@@ -85,7 +85,7 @@ export function Phone({
   disabled,
   onCommit,
   onBusyChange,
-  config, apiKey, onJob, job: receivedJob,
+  config, apiKey, onJob, job: receivedJob, recovery,
 }: {
   save: Save;
   disabled: boolean;
@@ -95,6 +95,7 @@ export function Phone({
   apiKey: string;
   onJob: (job: Job) => void;
   job: Job | null;
+  recovery?: ReactNode;
 }) {
   const phone = save.state.phone;
   const job=receivedJob?.presentation?.actor_id&&receivedJob.presentation.actor_id!==phone?.actor_id?null:receivedJob;
@@ -448,7 +449,7 @@ export function Phone({
             finally {requestLock.current=false;setBusy(false)}
           }}>Обновить состояние</button></div>}
           {jobHere&&active(job)&&<p className="phone-progress" role="status">{call?.status==='ringing'?t('dialing'):t('waiting')}</p>}
-          {jobHere&&job&&['error','stopped'].includes(job.status)&&job.revision===save.revision&&<div role="alert" className="phone-progress"><p>{t('reactionFailed')}</p><button disabled={busy} onClick={async()=>{try{onJob(await api<Job>(`/jobs/${job.id}/retry`,{config,api_key:apiKey}))}catch{setError(t('failed'))}}}>{t('retry')}</button></div>}
+          {jobHere&&job&&['error','stopped'].includes(job.status)&&job.revision===save.revision&&<div role="alert" className="phone-progress"><p>{t('reactionFailed')}</p>{recovery}</div>}
           {call&&tab==='messages'&&(conversation||contact||recipient)&&<button className="phone-call-link" onClick={()=>setTab('calls')}>{call.status==='ringing'?'Вызов':'Разговор'} · {call.label} →</button>}
           {call && !(tab==='messages'&&(conversation||contact||recipient)) && (
             <section className="phone-call" aria-label="Текущий звонок">
