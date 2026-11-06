@@ -204,7 +204,7 @@ def expected_agency_rejection(folder, audit):
     if not diagnostics or diagnostics[-1].get('code') != 'controlled_actor_unsupported':
         return False
     request = jobs[0]['requests'][-1]
-    if request['stage'] != 'extraction' or request['status'] != 'complete':
+    if request['stage'] not in ('extraction', 'extraction_repair') or request['status'] != 'complete':
         return False
     from backend.runtime_v3.models import TemporalValue
     payload = json.loads(request['response_text'])
