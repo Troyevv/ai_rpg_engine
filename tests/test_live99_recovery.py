@@ -118,6 +118,27 @@ def test_adoption_preserves_manifest_and_detects_evidence_or_budget_loss(tmp_pat
         db.execute('DELETE FROM reservations')
     with pytest.raises(ValueError, match='reservation'):
         validate_revision(tmp_path, manifest, 'new')
+    with pytest.raises(ValueError, match='reservation'):
+        adopt(tmp_path, manifest, 'next')
+
+
+def test_unsubmitted_recovery_keeps_action_charge(tmp_path, monkeypatch):
+    from devtools.live99 import run
+    monkeypatch.setattr(run, 'revision', lambda: 'same')
+    Budget(tmp_path / 'budget.sqlite')
+    repo = Repository(tmp_path / 'game.sqlite')
+    seed = load_fixture(repo)
+    folder = tmp_path / 'social/000'
+    folder.mkdir(parents=True)
+    intent = dict(sha='same', save=seed['save'], job_cursor=0)
+    write(folder / 'intent.json', intent)
+    write(folder / 'before.json.gz', snapshot(repo.path, seed['save']))
+    assert action_ledger(tmp_path) == 1
+    run.recover_unsubmitted(tmp_path, dict(seeds={'social': seed}), 'social', 0)
+    assert action_ledger(tmp_path) == 1
+    assert len(list((tmp_path / 'attempts').rglob('intent.json'))) == 1
+    reserve_action(tmp_path, folder, intent, 20)
+    assert action_ledger(tmp_path) == 2
 
 
 def test_recheck_receipt_does_not_erase_original_failure_or_accept_changed_evidence(tmp_path):

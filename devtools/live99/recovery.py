@@ -45,6 +45,9 @@ def adopt(directory, manifest, sha):
     if target.exists():
         validate_revision(directory, manifest, sha)
         return
+    # A later QA commit must not legitimize lost evidence or reset spending.
+    for previous in sorted((directory / 'adoptions').glob('*.json')):
+        validate_revision(directory, manifest, previous.stem)
     # Previous adoption receipts are also immutable evidence in the next receipt.
     evidence = {str(p.relative_to(directory)): digest(p) for p in directory.rglob('*')
                 if p.is_file() and (p.name in ('manifest.json', 'intent.json', 'result.json',

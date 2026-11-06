@@ -90,6 +90,10 @@ def preflight(browser, base, directory, manifest):
     if destination.exists():
         destination = directory / 'preflights' / (revision() + '.json')
         destination.parent.mkdir(exist_ok=True)
+        if destination.exists():
+            archive = destination.with_name(revision() + '-' + digest(destination) + '.json')
+            if not archive.exists():
+                archive.write_bytes(destination.read_bytes())
     for case, seed in manifest['seeds'].items():
         for mobile in (False, True):
             ctx = context_for(browser, mobile)
@@ -274,7 +278,13 @@ def recover_unsubmitted(directory, manifest, case, index):
         raise ValueError('A job or a mutation exists. Preserve this attempt for manual review.')
     archive = directory / 'attempts' / case
     archive.mkdir(parents=True, exist_ok=True)
-    folder.rename(archive / (folder.name + '-' + str(time.time_ns())))
+    target = archive / (folder.name + '-' + str(time.time_ns()))
+    action_ledger(directory)
+    with sqlite3.connect(directory / 'budget.sqlite') as db:
+        db.execute('BEGIN IMMEDIATE')
+        db.execute('UPDATE qa_actions SET path=? WHERE path=?',
+                   (str(target.relative_to(directory)), str(folder.relative_to(directory))))
+        folder.rename(target)
 
 
 def read(path):
@@ -383,7 +393,13 @@ def run(args, directory, manifest):
                         report(directory, manifest)
                 if not held and not args.case:
                     write(directory / f'{args.stage}.complete', {'finished':now()})
-                write(directory / f'{args.stage}.status.json', dict(finished=now(), sha=revision(),
+                status_file = directory / f'{args.stage}.status.json'
+                if status_file.exists():
+                    archive = directory / 'reports' / (digest(status_file) + '.json')
+                    archive.parent.mkdir(exist_ok=True)
+                    if not archive.exists():
+                        archive.write_bytes(status_file.read_bytes())
+                write(status_file, dict(finished=now(), sha=revision(),
                     held=sorted(held), actions=action_ledger(directory), complete=not held and not args.case))
                 return not held
             finally:
