@@ -1,6 +1,7 @@
 """Stage C Crisis/010 equivalent replay. Only the two provider stages are scripted."""
 from copy import deepcopy
 import json
+from unittest.mock import patch
 
 import pytest
 
@@ -162,27 +163,40 @@ def test_call_requires_answered_channel():
 
 
 @pytest.mark.parametrize('closed', [False, True])
-def test_channel_repair_cannot_invent_connection(tmp_path, closed):
-    from test_call_continuity import connected
+def test_channel_repair_cannot_invent_connection(api, closed):
+    from test_phone122 import execute as answer_call
     from runtime_v3_fixture import execute
     from test_narrative_test_world import CONFIG
-    repo, client, sid, call = connected(tmp_path)
+    client, app = api
+    repo = app.state.repository
+    sid = load_fixture(repo, 'phone-office')['save']
+    ordinary_job(repo, sid, 'start')
+    with patch('engine.launch'):
+        response = client.post(f'/api/saves/{sid}/phone/dispatch', json=dict(
+            revision=repo.get_save(sid)['revision'], config=CONFIG,
+            command=dict(action='call', contact_id='phone-qa_kirill-qa-vera', operation_id='start-226')))
+    assert response.status_code == 200, response.text
+    answer_call(repo, response.json()['job']['id'])
+    call, = repo.get_snapshot(sid)['world_state']['remote_events']
+
     if closed:
         response = client.post(f'/api/saves/{sid}/phone', json=dict(
             revision=repo.get_save(sid)['revision'], command=dict(action='end', event_id=call, operation_id='close-call-before-repair-226')))
         assert response.status_code == 200, response.text
     before = repo.get_snapshot(sid)
     camera = before['world_state']['camera']
+    assert VERA not in camera['present_character_ids']
+    assert before['world_state']['characters'][VERA]['location_id'] != camera['location_id']
     actors = [camera['controlled_actor_id'], VERA]
     bad = dict(final_scene=dict(location_id=camera['location_id'], present_character_ids=camera['present_character_ids']),
                events=[dict(id='voice', text='Я тебя слышу.', medium='conversation', participants=actors,
-                            witnesses=actors, interaction_channel='unsupported')])
+                            witnesses=actors)])
     repaired = deepcopy(bad)
     repaired['events'][0]['interaction_channel'] = 'call'
     jid = repo.begin_job(sid, 'Ты меня слышишь?', 'turn', CONFIG)
     calls = execute(repo, jid, bad, 'Вера отвечает: «Я тебя слышу».', repaired)
     assert len(calls) == 3
-    assert 'events[0].interaction_channel' in calls[-1]['messages'][0]['content']
+    assert 'events[0].participants[1]' in calls[-1]['messages'][0]['content']
     saved = Repository(repo.path).get_snapshot(sid)
     if closed:
         assert repo.get_job(jid)['status'] == 'error' and saved == before

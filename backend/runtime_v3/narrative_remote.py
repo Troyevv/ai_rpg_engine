@@ -201,10 +201,10 @@ def apply_extracted_remote(resolver, raw, events):
             if e['medium'] == 'message' and actor in e['participants'] and recipients & set(e['participants'])]
         for source in sources:
             if event['channel'] != 'VOICE_CALL' and source['medium'] == 'message':
-                previous = written_sources.get(source['local_id'])
-                if previous and previous['id'] != event['id']:
-                    reject(index, 'Неоднозначный источник сообщения.', 'source_event_id')
-                written_sources[source['local_id']] = event
+                # Inferred matches can restrict unread Knowledge, but only an
+                # explicit binding can authorize otherwise nonlocal roles.
+                if source['local_id'] == row.source_event_id:
+                    written_sources[source['local_id']] = event
                 unread = set(event['recipient_ids']) - set(event['read_by'])
                 if any(k.get('source_event_id') == source['local_id'] and k.get('actor_id') in unread
                        for k in raw.records['knowledge_gained'] if isinstance(k, dict)):

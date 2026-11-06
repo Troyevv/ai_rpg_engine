@@ -339,8 +339,14 @@ class StateResolver:
             lists = {key:item.get(key,[]) for key in ('participants','witnesses','fact_ids')}
             if any(not isinstance(v,list) or any(not isinstance(x,str) for x in v) for v in lists.values()):
                 self.warn('events',i,'повреждены ссылки Event'); continue
-            if set(lists['participants']+lists['witnesses']) - s['characters'].keys():
-                self.warn('events',i,'неизвестная ссылка необязательного Event'); continue
+            unknown = next(((role, n, cid) for role in ('participants', 'witnesses')
+                            for n, cid in enumerate(lists[role]) if cid not in s['characters']), None)
+            if unknown:
+                role, n, cid = unknown
+                self.warn('events', i, f'Неизвестный персонаж {cid} в Event {eid}.', entity=eid,
+                          code='event_character_unknown')
+                self.warnings[-1].update(path=f'events[{i}].{role}[{n}]', source_ids=[eid, cid])
+                continue
             if set(lists['fact_ids']) - s['facts'].keys():
                 self.warn('events',i,'ссылки на отсутствующие факты отброшены','fact_ids',eid,'event_fact_reference_dropped')
                 lists['fact_ids']=[fid for fid in lists['fact_ids'] if fid in s['facts']]
@@ -366,7 +372,10 @@ class StateResolver:
                 author = item['author_id']
                 if isinstance(author, str) and author in lists['participants'] and medium == 'message':
                     event['author_id'] = author
-                else: self.warn('events', i, 'неподтверждённый автор сообщения', 'author_id')
+                else:
+                    self.warn('events', i, 'Автор должен быть участником сообщения.', 'author_id', eid,
+                              'event_author_invalid')
+                    self.warnings[-1]['path'] = f'events[{i}].author_id'
             # Explicit semantic classification plus independently owned input;
             # never turn a Narrative feelings assertion into interaction evidence.
             player_quote = item.get('player_evidence')
@@ -387,8 +396,10 @@ class StateResolver:
         from backend.runtime_v3.narrative_remote import apply_extracted_remote
         remote_history, written_sources = apply_extracted_remote(self, raw, events)
         from backend.runtime_v3.event_presence import situation_supported, validate_event_presence
-        for eid, event in events.items():
-            validate_event_presence(self, event, event_indices[eid], written_sources.get(eid))
+        situation_actors = {
+            eid: validate_event_presence(self, event, event_indices[eid], written_sources.get(eid))
+            for eid, event in events.items()
+        }
         from backend.runtime_v3.knowledge import apply_knowledge
         apply_knowledge(self, raw, events)
         from backend.runtime_v3.secrets import apply_disclosures
@@ -440,7 +451,7 @@ class StateResolver:
                 if key == 'situation' and self.mode == 'background' and cid == self.protected_actor_id and value != actor[key]:
                     fatal('Фон меняет ситуацию управляемого персонажа.', 'background_agency_invalid', repairable=True,
                           section='character_changes', index=i, field=key, entity=cid)
-                if key == 'situation' and not situation_supported(self, item, events, written_sources):
+                if key == 'situation' and not situation_supported(self, item, situation_actors):
                     self.warn('character_changes', i, 'Ситуация не подтверждена сценой, перемещением или принятым Event.',
                               key, cid, 'situation_source_unconfirmed')
                     continue

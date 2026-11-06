@@ -23,6 +23,7 @@ def _places(resolver, actor, *, observed_subject=False):
 
 
 def validate_event_presence(resolver, event, index, written):
+    """Return involved actors whose end-of-turn situation this Event can support."""
     state, before = resolver.state, resolver.before
     eid, channel = event['local_id'], event.get('interaction_channel')
     medium, location = event['medium'], event.get('location_id')
@@ -58,54 +59,40 @@ def validate_event_presence(resolver, event, index, written):
                     reject(f'{role}[{n}]', f'{actor}: канал {transport["id"]} не подтверждает {role}.', actor)
         if location is not None and not any(location in _places(resolver, actor) for actor in endpoints):
             reject('location_id', f'Место {location} не связано ни с одной стороной контакта {eid}.')
-        return
+        return readers.intersection(event['participants'] + event['witnesses'])
 
     common = {location} if location is not None else None
     if medium == 'message' and location is None:
         # A local reading of an artifact has no live remote audience.
         common = {before['camera']['location_id'], state['camera']['location_id']}
+    local_actors = set()
     for role in ('participants', 'witnesses'):
         for n, actor in enumerate(event[role]):
             if medium == 'message' and channel != 'physical' and role == 'participants' and actor == event.get('author_id'):
                 # Attribution of an artifact does not establish contact or perception.
                 continue
+            local_actors.add(actor)
             places = _places(resolver, actor, observed_subject=role == 'participants' and medium in ('observation', 'conversation'))
             common = places if common is None else common & places
             if not common:
                 reject(f'{role}[{n}]', f'{actor}: присутствие в месте Event {eid} не подтверждено. '
                        'Сверьте состав сцены, принятый маршрут и источник связи.', actor)
 
+    # An encounter before departure is valid History but cannot anchor a new
+    # situation at the old location after the actor has left.
+    return {actor for actor in local_actors
+            if state['characters'][actor]['location_id'] in common
+            and (state['characters'][actor]['location_id'] is not None or actor in state['camera']['present_character_ids'])}
 
-def situation_supported(resolver, change, events, written_sources):
-    """Bind a situation to the end position or to a current accepted interaction."""
+
+def situation_supported(resolver, change, event_actors):
     actor = change['id']
-    state = resolver.state
-    location = state['characters'][actor]['location_id']
     if 'source_event_id' in change:
         ref = change['source_event_id']
-        if not isinstance(ref, str) or ref not in events:
-            return False
-        candidates = [events[ref]]
-    else:
-        camera = state['camera']
-        if actor in camera['present_character_ids'] or actor in camera['observed_character_ids']:
-            return True
-        if any(m['actor_id'] == actor and m['to_location_id'] == location for m in resolver.history.movements):
-            return True
-        candidates = events.values()
-
-    for event in candidates:
-        if actor not in event['witnesses'] and actor not in event['participants']:
-            continue
-        if event.get('interaction_channel') == 'call':
-            return True
-        written = written_sources.get(event['local_id'])
-        if written:
-            if actor == written['sender_id'] or actor in written['read_by']:
-                return True
-            continue
-        if event['medium'] == 'message' and actor not in event['witnesses']:
-            continue  # The author of a previously written artifact need not be involved now.
-        if location is not None and event.get('location_id', location) == location:
-            return True
-    return False
+        return isinstance(ref, str) and actor in event_actors.get(ref, ())
+    camera = resolver.state['camera']
+    if actor in camera['present_character_ids'] or actor in camera['observed_character_ids']:
+        return True
+    if any(move['actor_id'] == actor for move in resolver.history.movements):
+        return True
+    return any(actor in actors for actors in event_actors.values())
