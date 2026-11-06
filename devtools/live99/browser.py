@@ -83,6 +83,20 @@ def configure_context(page, context_length):
     expect(dialog).not_to_be_visible()
 
 
+def wait_phone_read(page, base, sid, action):
+    """Opening a chat performs a canonical read; await it before the reload baseline."""
+    for _ in range(40):
+        projection = page.request.get(f'{base}/api/saves/{sid}').json()
+        events = projection['state']['phone']['events']
+        outgoing = [e for e in events if e['outgoing'] and e.get('content') == action]
+        if outgoing:
+            conversation = outgoing[-1]['conversation_id']
+            if not any(e['conversation_id'] == conversation and e['unread'] for e in events):
+                return
+        page.wait_for_timeout(250)
+    raise ValueError('Selected conversation still has an unapplied read; preserve the paid job')
+
+
 def play(page, base, sid, kind, action, choice_index=None, job_id=None, options=None):
     prefix = f'{base}/api/saves/{sid}'
     endpoint = {'phone':'/phone/dispatch', 'phone-group':'/phone/dispatch', 'phone-call':'/phone/dispatch',
@@ -181,6 +195,7 @@ def play(page, base, sid, kind, action, choice_index=None, job_id=None, options=
             raise ValueError(f"Job {job['id']} status {job['status']}: {job.get('error', '')}")
     if kind in ('phone','phone-group'):
         expect(page.locator('.phone-message.outgoing').filter(has_text=action).last).to_be_visible()
+        wait_phone_read(page, base, sid, action)
 
 
 def compare_prose(page, base, sid, world, text):
