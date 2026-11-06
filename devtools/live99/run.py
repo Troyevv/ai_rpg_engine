@@ -121,10 +121,13 @@ def preflight(browser, base, directory, manifest):
     return all(row.get('ok') for row in results)
 
 
-def step(browser, base, directory, manifest, case, i, limit, retry=None, operation=None, lineage_index=0):
+def step(browser, base, directory, manifest, case, i, limit, retry=None, operation=None, lineage_index=0,
+         attempt_folder=None):
     path, seed = directory / 'game.sqlite', manifest['seeds'][case]
     sid = seed['save']
     folder = directory / case / f'{i:03d}'
+    if attempt_folder:
+        folder = attempt_folder
     if retry:
         folder = folder / 'retries' / '001'
     before = snapshot(path, sid)

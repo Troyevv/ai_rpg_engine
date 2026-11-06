@@ -10,19 +10,19 @@ import subprocess
 
 from .budget import Budget, action_ledger
 from .evidence import now, snapshot, write
-from .recovery import completed, digest, qa_only, rows
+from .recovery import completed, digest, qa_only, rows, read as evidence_read
 from .run import ROOT, preflight, read, revision, server, step
 
 FIX = '57c173d8ece34f29cb3af37e6b28beb208e9bf63'
 CAP = 'issue99-post204-20261106'
 QUESTION = 'У Веры я спрашиваю только о библиотеке. Личное письмо Олега не обсуждаю.'
 OPERATIONS = [
-    ('knowledge', dict(kind='turn', action=QUESTION)),
+    ('knowledge', dict(kind='retry', action=QUESTION)),
     ('knowledge', dict(kind='turn', action='Вера, расскажи подробнее о фонде старых карт в библиотеке.')),
     ('knowledge', dict(kind='regenerate')),
     ('knowledge', dict(kind='variant')),
     ('knowledge', dict(kind='rollback')),
-    ('phone', dict(kind='retry')),
+    ('phone', dict(kind='phone-retry')),
 ]
 
 
@@ -90,13 +90,49 @@ def validate(directory, manifest):
             raise ValueError('Additional spending cap changed')
 
 
+def review_unsubmitted(directory, manifest):
+    """One explicit review of UI failures, proven to have dispatched no paid work."""
+    validate(directory, manifest)
+    receipt = directory / 'unsubmitted-review.json'
+    if receipt.exists():
+        raise ValueError('UI recovery was already reviewed')
+    parent = Path(manifest['parent'])
+    if rows(parent) != manifest['baseline_reservations']:
+        raise ValueError('Paid work exists; UI-only recovery is unsafe')
+    with closing(sqlite3.connect(directory / 'game.sqlite')) as db:
+        with closing(sqlite3.connect(parent / 'game.sqlite')) as old:
+            for table in ('game_jobs', 'llm_requests'):
+                if db.execute(f'SELECT * FROM {table} ORDER BY rowid').fetchall() != old.execute(
+                        f'SELECT * FROM {table} ORDER BY rowid').fetchall():
+                    raise ValueError('A job or request changed')
+    evidence = {}
+    for case in ('knowledge', 'phone'):
+        folder = directory / case / '000'
+        result = read(folder / 'result.json')
+        before = evidence_read(folder / 'before.json.gz')
+        if result['status'] != 'held-for-review' or 'Locator.click: Timeout' not in result.get('error', ''):
+            raise ValueError('Only the inspected unsubmitted UI failure can be recovered')
+        if before != evidence_read(folder / 'after.json.gz') or before != snapshot(
+                directory / 'game.sqlite', manifest['seeds'][case]['save']):
+            raise ValueError('Save changed since unsubmitted attempt')
+        evidence.update({str(p.relative_to(directory)): digest(p) for p in folder.iterdir() if p.is_file()})
+    write(receipt, dict(sha=revision(), reviewed=now(), evidence=evidence,
+        action_limit=manifest['action_limit'] + 2, reason='Two proven unsubmitted UI attempts remain charged'))
+
+
 def run(directory, manifest, live):
     from playwright.sync_api import sync_playwright
     validate(directory, manifest)
     if live and not os.environ.get('DEEPSEEK_API_KEY'):
         raise ValueError('DEEPSEEK_API_KEY unavailable')
-    if live and not all(r.get('ok') for r in read(directory / 'preflight.json')):
-        raise ValueError('Complete the browser preflight first')
+    if live:
+        checks = read(directory / 'preflight.json')
+        if len(checks) != 2 * len(manifest['seeds']) or not all(r.get('ok') for r in checks):
+            raise ValueError('Complete the browser preflight first')
+    review = directory / 'unsubmitted-review.json'
+    receipt = read(review) if review.exists() else None
+    if receipt and any(digest(directory / name) != value for name, value in receipt['evidence'].items()):
+        raise ValueError('Reviewed UI failure evidence changed')
     with server(directory, live) as base:
         os.environ.pop('DEEPSEEK_API_KEY', None)
         with sync_playwright() as pw:
@@ -111,24 +147,27 @@ def run(directory, manifest, live):
                     if case in held:
                         continue
                     folder = directory / case / f'{i:03d}'
+                    if receipt and i == 0:
+                        folder = folder / 'retries/001'
                     if folder.exists():
                         if not completed(folder):
                             held.add(case)
                         continue
                     operation = dict(operation)
-                    if case == 'phone':
+                    if operation['kind'] in ('retry', 'phone-retry'):
                         # Explicit single Retry of the original rejected decision. Production
                         # reuses the accepted read frame; no outgoing message is sent twice.
                         parent = Path(manifest['parent'])
-                        old = read(parent / 'phone/001/result.json')
+                        old = read(parent / case / '001/result.json')
                         with closing(sqlite3.connect(directory / 'game.sqlite')) as db:
                             jobs = db.execute('SELECT id,status FROM game_jobs WHERE save_id=? AND rowid>?',
                                               (manifest['seeds'][case]['save'], old['job_cursor'])).fetchall()
                         if len(jobs) != 1 or jobs[0][1] != 'error':
-                            raise ValueError('Phone Retry no longer identifies the original failed job')
+                            raise ValueError('Retry no longer identifies the original failed job')
                         operation.update(job_id=jobs[0][0], job_cursor=old['job_cursor'])
-                    if not step(browser, base, directory, manifest, case, i, manifest['action_limit'],
-                                operation=operation, lineage_index=1):
+                    if not step(browser, base, directory, manifest, case, i,
+                                receipt['action_limit'] if receipt else manifest['action_limit'],
+                                operation=operation, lineage_index=1, attempt_folder=folder):
                         held.add(case)
                 target = directory / 'retest.status.json'
                 if target.exists():
@@ -143,7 +182,7 @@ def run(directory, manifest, live):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('prepare', 'preflight', 'run', 'audit'))
+    parser.add_argument('command', choices=('prepare', 'preflight', 'run', 'audit', 'review-unsubmitted'))
     parser.add_argument('directory', type=Path)
     parser.add_argument('--parent', type=Path)
     args = parser.parse_args()
@@ -159,6 +198,8 @@ def main():
             prepare(parent, directory)
         elif args.command == 'audit':
             validate(directory, read(directory / 'manifest.json'))
+        elif args.command == 'review-unsubmitted':
+            review_unsubmitted(directory, read(directory / 'manifest.json'))
         elif not run(directory, read(directory / 'manifest.json'), args.command == 'run'):
             raise SystemExit('Retest held; inspect evidence. No automatic retries.')
 

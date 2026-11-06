@@ -89,7 +89,7 @@ def play(page, base, sid, kind, action, choice_index=None, job_id=None):
                 'rollback':'/rollback', 'variant':'/variant'}.get(kind, '/turns')
 
     def matches(response):
-        if kind == 'retry':
+        if kind in ('retry', 'phone-retry'):
             return response.url == f'{base}/api/jobs/{job_id}/retry' and response.request.method == 'POST'
         return (response.url.startswith(prefix + '/') and response.url.endswith(endpoint)
                 and response.request.method == 'POST'
@@ -98,6 +98,13 @@ def play(page, base, sid, kind, action, choice_index=None, job_id=None):
     with page.expect_response(matches) as pending:
         if kind == 'retry':
             button(page, 'Повторить обработку состояния').click()
+        elif kind == 'phone-retry':
+            phone = page.get_by_role('region', name='Телефон персонажа')
+            if not phone.is_visible():
+                page.get_by_role('button', name=re.compile('^Телефон')).click()
+            button(phone, 'Переписки').click()
+            phone.get_by_role('button', name=re.compile('Вера')).first.click()
+            button(phone, 'Повторить').click()
         elif kind == 'start':
             button(page, 'Начать игру').click()
         elif kind == 'turn':
@@ -141,7 +148,7 @@ def play(page, base, sid, kind, action, choice_index=None, job_id=None):
         raise ValueError(f'{endpoint} HTTP {response.status}: {response.text()[:500]}')
     result = response.json()
     job = result.get('job') if kind == 'phone' else result
-    if kind in ('start','turn','choice','phone','regenerate','lta','retry'):
+    if kind in ('start','turn','choice','phone','regenerate','lta','retry','phone-retry'):
         deadline = time.monotonic() + 240
         while job['status'] in ('generating','extracting','validating') and time.monotonic() < deadline:
             page.wait_for_timeout(600)
