@@ -244,8 +244,11 @@ def step(browser, base, directory, manifest, case, i, limit, retry=None, operati
 def recheck_saved(browser, base, directory, manifest, case, index):
     folder = directory / case / f'{index:03d}'
     result = read(folder / 'result.json')
-    if result.get('error') != 'Wrong sequence or empty committed scene' or result['kind'] != 'start':
-        raise ValueError('Only the diagnosed zero-based start false positive can be rechecked')
+    start = result.get('error') == 'Wrong sequence or empty committed scene' and result['kind'] == 'start'
+    phone_read = (case == 'phone' and result['kind'] in ('phone', 'phone-group')
+                  and result.get('error') == 'Reload changed persistent state')
+    if not (start or phone_read):
+        raise ValueError('Only the diagnosed start/read timing false positive can be rechecked')
     seed = manifest['seeds'][case]
     with gzip.open(folder / 'before.json.gz', 'rt') as f:
         before = json.load(f)
@@ -253,6 +256,14 @@ def recheck_saved(browser, base, directory, manifest, case, index):
         after = json.load(f)
     if snapshot(directory / 'game.sqlite', seed['save']) != after:
         raise ValueError('Save changed since the held action')
+    if phone_read:
+        with gzip.open(folder / 'ui.json.gz', 'rt') as source:
+            previous_ui = json.load(source)['projection']
+        unread = [e for e in previous_ui['state']['phone']['events'] if e['unread']]
+        state = after['snapshot']['world_state']
+        actor = state['camera']['controlled_actor_id']
+        if not unread or any(actor not in state['remote_events'][e['id']]['read_by'] for e in unread):
+            raise ValueError('No captured unread-to-read transition explains this review')
     jobs = diagnostics(directory / 'game.sqlite', seed['save'], result['job_cursor'])
     if len(jobs) != 1 or jobs[0]['status'] != 'saved' or not any(
             r['status'] == 'complete' and r['model'] == MODEL for r in jobs[0]['requests']):
@@ -263,9 +274,10 @@ def recheck_saved(browser, base, directory, manifest, case, index):
         page = open_save(ctx, base, seed)
         page.on('pageerror', lambda e: errors.append(str(e)))
         projection = page.request.get(f'{base}/api/saves/{seed["save"]}').json()
-        oracle(before, after, projection, 'start')
+        oracle(before, after, projection, result['kind'])
         scenario_checks(case, before, after, projection)
-        compare_prose(page, base, seed['save'], seed['world'], after['last_turn']['assistant_text'])
+        if start:
+            compare_prose(page, base, seed['save'], seed['world'], after['last_turn']['assistant_text'])
         inspect_ui(page, case)
         page.reload()
         page.locator('.current-game-entry button').wait_for()

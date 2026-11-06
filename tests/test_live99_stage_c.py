@@ -130,3 +130,28 @@ def test_negative_agency_retest_requires_atomic_state_and_valid_temporal(tmp_pat
     with pytest.raises(ValueError):
         stage_c.expected_agency_rejection(tmp_path,audit)
     assert json.loads((tmp_path/'result.json').read_text())['status']=='held-for-review'
+
+
+def test_phone_reload_baseline_waits_for_canonical_read_without_dispatch():
+    from types import SimpleNamespace
+    from devtools.live99.browser import wait_phone_read
+    polls = []
+    def get(url):
+        polls.append(url)
+        events = [{'outgoing':True,'content':'Hello','conversation_id':'direct','unread':False},
+                  {'outgoing':False,'content':None,'conversation_id':'direct','unread':len(polls)<3},
+                  {'outgoing':False,'content':None,'conversation_id':'other','unread':True}]
+        return SimpleNamespace(json=lambda: {'state':{'phone':{'events':events}}})
+    waits=[]
+    page=SimpleNamespace(request=SimpleNamespace(get=get),wait_for_timeout=waits.append)
+    wait_phone_read(page,'http://localhost',6,'Hello')
+    assert len(polls)==3 and waits==[250,250]
+
+
+def test_phone_unsettled_read_is_held_without_retry():
+    from types import SimpleNamespace
+    from devtools.live99.browser import wait_phone_read
+    response=SimpleNamespace(json=lambda: {'state':{'phone':{'events':[]}}})
+    page=SimpleNamespace(request=SimpleNamespace(get=lambda _:response),wait_for_timeout=lambda _:None)
+    with pytest.raises(ValueError,match='preserve the paid job'):
+        wait_phone_read(page,'http://localhost',6,'Missing')
