@@ -121,7 +121,7 @@ def extraction_schema():
             expected_revision={'type':'integer','minimum':0},supersedes=dict(type='array',items=string,maxItems=16),
             source_event_id=dict(type='string',description='Event ЭТОГО extraction: actor_id входит в witnesses, fact_id входит в fact_ids, medium observation/conversation/message/testimony/discovery. Иначе запись опустить.')),
             ('actor_id','fact_id','source_event_id','evidence')),
-        'character_changes':record(dict(id=string,birth_date=string,situation=string,physical_state=string,emotion=string,goals=strings,intentions=strings,obligations=strings,
+        'character_changes':record(dict(id=string,source_event_id=string,birth_date=string,situation=string,physical_state=string,emotion=string,goals=strings,intentions=strings,obligations=strings,
             emotion_assertion={'enum':['explicit_internal_state'], 'description':'Только явно выраженное внутреннее состояние controlled actor из player_input, не жест/поведение. Runtime проверяет источник, LLM — семантику.'},
             player_evidence=obj(dict(emotion=string,goals=strings,intentions=strings,obligations=strings))), ('id',)),
         'relationship_changes':record(dict(source_id=string,target_id=string,context=string,

@@ -7,12 +7,12 @@ hypotheses and negation. Quiet scenes need no events. Evidence is provenance, no
 proof; player_evidence stays exact. final_scene owns END physical membership; movements,
 arrival claims/quotes and boundary geography are optional. observed_character_ids are visible
 OUTSIDE, disjoint from present, granting no Knowledge. Calls/messages/memories/mentions aren't
-presence. Reuse IDs/aliases; create established places/significant NPCs and dependencies.
+presence. Event cast/witnesses need a shared place or confirmed channel. Reuse canonical IDs.
 Promotions: full 11 CARD_FIELDS + character attributes; unknown=null/unknown/omitted; never
 infer sex/dates or provenance. Movements preserve meaningful routes; endpoints agree with scene.
 No invented routes/destinations. EXTERNAL voluntary movement needs explicit_choice + exact
 player_evidence; involuntary needs involuntary + source_event_id of external cause.
-POV != control. Situation is objective, not emotion; update affected NPC situations.
+POV != control. Off-scene situation needs its accepted source_event_id.
 No scene_id/last_event_id/StatePatch. Ordinary turns require elapsed_minutes >= 0;
 Time Skip/background clocks belong to Runtime.
 Lifecycle semantics belong to Extraction, not a verb dictionary: completed result ->
