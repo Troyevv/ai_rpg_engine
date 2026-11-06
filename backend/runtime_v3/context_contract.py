@@ -122,31 +122,24 @@ Scheduled temporal_projection future/unresolved не означает due или
 
 
 COMMITMENT_CONTRACT = """
-Scheduled_events — договорённости, не гарантированные будущие факты. PLAN и OVERDUE PLAN
-не означают выполнение; FACT и CANCELLED PLAN нельзя повторно инициировать.
-Исторический факт «договорились встретиться» остаётся фактом прошлого, не новым заданием.
-CURRENT STATE интервала означает установленный отпуск/каникулы, не поездку или смену дома.
-Не раскрывай GM-only планы персонажам без Knowledge. Препятствия учитывай вместе с планом.
-Окно temporal_projection.start_minute/end_minute — границы релевантности, а не точное время;
-condition «после работы» остаётся условием. Не выдумывай 18:00 из слова «вечером».
-Срок свадьбы не означает брак, приглашение не означает присутствие; используй существующих
-персонажей для установленных планов, не создавай обязательный свадебный checklist.
+Scheduled_events: PLAN и OVERDUE PLAN ещё не выполнены. Не возобновляй FACT, CANCELLED PLAN
+или старую договорённость. CURRENT STATE отпуска/каникул не меняет дом и не означает поездку.
+Учитывай препятствия и Knowledge; не раскрывай GM-only планы.
+temporal_projection.start_minute/end_minute ограничивают окно. time хранит названное HH:MM,
+day_period — только примерный период. «После работы» остаётся condition, без выдуманного часа.
+Срок свадьбы не заключает брак; приглашение не гарантирует присутствие. Используй существующих
+персонажей плана, не навязывай свадебный checklist.
 """
 NARRATIVE_CONTRACT += COMMITMENT_CONTRACT
 EXTRACTION_CONTRACT += """
-Scheduled changes require an assertion: agreed=accepted dated commitment; rescheduled=same ID/new time;
-cancelled=explicitly cancelled/irrelevant; occurred=actually performed; blocked=obstacle without outcome;
-missed=established nonperformance, never success. For personal temporal/end_temporal intervals,
-started means established/current ("on leave until ..."); ended means an already-started interval ended.
-Possibilities, dreams, unaccepted offers and past discussions are not agreed. Do not create retrospective
-plans from old facts; close only the matching ID (a cafe meeting cannot close a country trip).
-Reuse IDs on reschedule. EXTERNAL agreed/rescheduled/cancelled requires explicit_choice/player_evidence
-quoting an actual decision in player_input, never narrative. NPC cancellation uses decision_actor_id
-and needs no player consent. An offer/question is not voluntary agreement.
-Extract times structurally; unknown deadlines stay unknown. Keep series/group associations distinct
-from depends_on, which lists only explicit necessary dependencies. Cancelling a parent invalidates
-dependent plans, not unrelated group events. Leave never moves an actor; vacation never removes
-education. Time alone never starts/ends an interval. No automatic relationship penalties for deadlines/failure.
+Plans: agreed=accepted; rescheduled=same ID/new time; cancelled=explicitly off/irrelevant;
+occurred=done; missed=confirmed nonperformance; blocked=obstacle; started/ended=actual interval.
+No plans from dreams, offers, questions or old discussions. Close matching ID only.
+EXTERNAL agreed/rescheduled/cancelled: explicit_choice + exact player_input decision quote.
+NPC cancellation: decision_actor_id. temporal/end_temporal: one date/weekday/day_offset/minute_offset.
+minute_offset alone; otherwise stated HH:MM in time OR imprecise day_period OR neither for day precision.
+depends_on=necessary prerequisite, not group/series; cancellation invalidates dependents only.
+Leave changes neither location nor education. Time alone never starts/ends intervals or penalizes relationships.
 """
 
 LIFE_CONTRACT = '''
@@ -413,13 +406,11 @@ Empty omitted optional sections mean no change only when no such outcome occurre
 
 # Same calendar constraints in a compact Extraction wire form; no state omitted.
 EXTRACTION_TIME_CONTRACT = """
-current_time alone supplies Day/date/weekday/time/day_period; never derive weekday from world_time.
-Anchor relative dates to it; respect current day_period (20:42 is already evening).
-Unknown dates/birthdays stay unknown. Runtime age overrides static card age when birth_date exists.
-calendar_context establishes dates only, not holidays off work, celebrations, gifts, presence,
-Knowledge or actions. If time_skip_target exists, end narration and choices there.
-Scheduled future/unresolved is not due; even due is not happened. Supply temporal only for
-explicit deadlines; Runtime anchors relative dates. Prose/choices use the active game language.
+Use current_time for Day/date/weekday/time/day_period; never derive weekdays from world_time.
+Respect relative dates/periods (20:42 is already evening). Unknown dates/birthdays stay unknown;
+Runtime age overrides card age for known birth_date. calendar_context establishes dates only:
+no implied day off, celebration, gift, attendance, Knowledge or action. End prose/choices at time_skip_target.
+Future/unresolved != due != happened. Only explicit deadlines; Runtime anchors relative dates. Use game language.
 """
 
 NARRATIVE_CONTRACT += """

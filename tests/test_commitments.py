@@ -201,6 +201,26 @@ def test_malformed_established_commitment_requires_repair():
         assert exc.value.code=='commitment_invalid' and before==original
 
 
+@pytest.mark.parametrize('repeated', [False, True])
+@pytest.mark.parametrize('fields, path, reason', [
+    ({'temporal': {'weekday': 4, 'time': '10:60'}}, 'temporal.time', 'pattern'),
+    ({'end_temporal': {'day_offset': 1, 'time': '10:00', 'day_period': 'morning'}},
+     'end_temporal', 'mutually exclusive'),
+    ({'temporal': {'minute_offset': 20, 'day_period': 'evening'}}, 'temporal', 'minute_offset'),
+    ({'temporal': {}}, 'temporal', 'exactly one'),
+])
+def test_invalid_plan_reports_nested_path(repeated, fields, path, reason):
+    before = plans() if repeated else state()
+    original = deepcopy(before)
+    with pytest.raises(StructuralDeltaError) as exc:
+        change(before, [dict(trip(), **fields)])
+    diagnostic = exc.value.diagnostic('extraction_repair')
+    assert diagnostic['code'] == 'commitment_invalid' and diagnostic['entity'] == 'trip'
+    assert diagnostic['path'] == f'scheduled_event_changes[0].{path}'
+    assert reason in diagnostic['repair_reason']
+    assert before == original
+
+
 def test_qa_start_turn_reload_next_turn_skip_variants_and_meeting_regression(tmp_path):
     from backend.repositories.preparation import Repository
     from devtools.narrative_test_world import load_fixture, ACTOR_ID

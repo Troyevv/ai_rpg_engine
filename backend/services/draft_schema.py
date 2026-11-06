@@ -86,8 +86,8 @@ def world_state_schema():
                      'resolved_event_id':OPTIONAL_ID},('id','description','due_minute','participants','status'))
     from backend.runtime_v3.models import TemporalValue
     temporal_schema = TemporalValue.model_json_schema()
-    temporal_schema['oneOf']=[{'required':[key], 'properties':{key:{'not':{'type':'null'}},**{other:{'type':'null'} for other in ('date','weekday','day_offset') if other!=key}}} for key in ('date','weekday','day_offset')]
-    temporal_schema['not']={'required':['time','day_period'],'properties':{'time':{'type':'string'},'day_period':{'type':'string'}}}
+    # Initial-world plans use a calendar basis, with no prior turn to anchor a minute offset.
+    temporal_schema['properties']['minute_offset'] = {'type': 'null'}
     scheduled['properties'].update(
         temporal=temporal_schema, end_temporal=temporal_schema,
         commitment={'type':'boolean'}, depends_on=IDS,

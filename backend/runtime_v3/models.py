@@ -112,7 +112,18 @@ class Calendar(StrictModel):
         return self
 
 
+TEMPORAL_BASES = ('date', 'weekday', 'day_offset', 'minute_offset')
+
+
 class TemporalValue(StrictModel):
+    # A null field in a persisted model_dump is equivalent to an omitted field.
+    model_config = ConfigDict(json_schema_extra={
+        'oneOf': [{'not': {'properties': {key: {'type': 'null'}}}} for key in TEMPORAL_BASES],
+        'if': {'not': {'properties': {'minute_offset': {'type': 'null'}}}},
+        'then': {'properties': {'time': {'type': 'null'}, 'day_period': {'type': 'null'}}},
+        'else': {'anyOf': [{'properties': {key: {'type': 'null'}}} for key in ('time', 'day_period')]},
+    })
+
     minute_offset: int | None = Field(default=None, ge=0, le=527040)
     date: str | None = None
     weekday: int | None = Field(default=None, ge=0, le=13)
@@ -122,12 +133,12 @@ class TemporalValue(StrictModel):
 
     @model_validator(mode='after')
     def one_temporal_basis(self):
-        if sum(v is not None for v in (self.date,self.weekday,self.day_offset,self.minute_offset)) != 1:
+        if sum(getattr(self, key) is not None for key in TEMPORAL_BASES) != 1:
             raise ValueError('temporal value requires exactly one date, weekday, day_offset or minute_offset')
         if self.minute_offset is not None and (self.time is not None or self.day_period is not None):
-            raise ValueError('minute_offset already defines an exact relative instant')
+            raise ValueError('minute_offset defines an exact instant; omit time and day_period')
         if self.time is not None and self.day_period is not None:
-            raise ValueError('choose exact time or an imprecise period')
+            raise ValueError('time and day_period are mutually exclusive; keep the stated HH:MM in time, or day_period alone for an imprecise period')
         return self
 
 
