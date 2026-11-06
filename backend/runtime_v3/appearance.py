@@ -68,10 +68,17 @@ def salvage_profiles(state):
             actor['portraits']=valid
 
 
+def appearance_disclosed(state, cid, observer):
+    refs = state.get('meta', {}).get('appearance_fact_ids', {}).get(cid, ())
+    return all(fid in state['facts'] and state['knowledge'].get(f'{observer}:{fid}', {}).get('status') == 'known'
+               for fid in refs)
+
+
 def visible(state, cid, item, observer):
+    if not appearance_disclosed(state, cid, observer): return False
     if observer == cid: return True
     fid = item.get('fact_id')
-    return not item.get('source_event_id') or bool(fid and state['knowledge'].get(str(observer)+':'+fid,{}).get('status')=='known')
+    return (not fid and not item.get('source_event_id')) or bool(fid and state['knowledge'].get(str(observer)+':'+fid,{}).get('status')=='known')
 
 
 def current_items(state, cid, *, observer=None, omniscient=False):
@@ -90,11 +97,11 @@ def current_items(state, cid, *, observer=None, omniscient=False):
 
 def context_profile(state, cid, *, observer=None, omniscient=False, known_actor_ids=None):
     profile=state['characters'][cid].get('appearance')
-    if profile is None: return None
+    if profile is None or not omniscient and not appearance_disclosed(state, cid, observer): return None
     budget=1600; items={}
     for key,item in current_items(state,cid,observer=observer,omniscient=omniscient).items():
         row={k:item[k] for k in ('category','kind','text','revision','condition_id')}
-        row['known_by']=(sorted(a for a in (known_actor_ids if known_actor_ids is not None else {cid,observer}) if a in state['characters'] and visible(state,cid,item,a)) if item.get('source_event_id') else 'initial_baseline')
+        row['known_by']=(sorted(a for a in (known_actor_ids if known_actor_ids is not None else {cid,observer}) if a in state['characters'] and visible(state,cid,item,a)) if item.get('source_event_id') or item.get('fact_id') else 'initial_baseline')
         if len(str(row))>budget: continue
         items[key]=row;budget-=len(str(row))
     legacy=profile.get('legacy_text','')[:min(600,budget)]
@@ -103,6 +110,10 @@ def context_profile(state, cid, *, observer=None, omniscient=False, known_actor_
 
 def project_card(card, state, observer=None, *, omniscient=False, bounded=False, known_actor_ids=None):
     cid=card['id']; result=deepcopy(card)
+    if not omniscient and not appearance_disclosed(state, cid, observer):
+        for key in ('Внешность', 'Исходное описание внешности'):
+            result['fields'].pop(key, None)
+        return result
     profile=context_profile(state,cid,observer=observer,omniscient=omniscient,known_actor_ids=known_actor_ids) if bounded else None
     if not bounded:
         canonical=state['characters'][cid].get('appearance') or {}

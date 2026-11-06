@@ -19,7 +19,9 @@ def visual_age(state, cid):
 
 def authorized(state, cid):
     from backend.runtime_v3.reproduction import known_birth
-    return cid in state['characters'] and known_birth(state,cid,state['camera']['controlled_actor_id'])
+    from backend.runtime_v3.appearance import appearance_disclosed
+    observer = state['camera']['controlled_actor_id']
+    return cid in state['characters'] and known_birth(state,cid,observer) and appearance_disclosed(state,cid,observer)
 
 
 def select_portrait(state, cid):

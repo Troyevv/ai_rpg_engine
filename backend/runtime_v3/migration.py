@@ -120,6 +120,12 @@ def migrate_v2(original):
         controlled_actor_id=actor, subject_id=old.get('camera',{}).get('subject_id'),
         pov_actor_id=old.get('camera',{}).get('pov_actor_id'), mode=mode, situation=old.get('scene', '')), characters=actors,
         locations=locations, meta=dict(schema_version=3, turn_id=0, world_time=current_time(old))).model_dump()
+    appearance_bindings = {
+        cid: list(fields['Внешность']) for cid, fields in old.get('card_field_facts', {}).items()
+        if cid in actors and fields.get('Внешность')
+    }
+    if appearance_bindings:
+        state['meta']['appearance_fact_ids'] = appearance_bindings
     history = WorldHistoryV3()
     # Keep the complete legacy payload, including malformed provenance, for audit.
     history.legacy.append(dict(schema_version=2, world=deepcopy(world)))

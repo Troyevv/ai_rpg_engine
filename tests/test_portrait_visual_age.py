@@ -25,7 +25,7 @@ def test_initialize_preserves_saved_art_and_runtime_age():
 
 def test_old_descriptor_keeps_sparse_shape():
     from backend.runtime_v3.models import ProceduralPortrait
-    old=default_descriptor('old','adult')
+    old=default_descriptor('old','adult',version=1)
     assert 'visual_age' not in old
     assert ProceduralPortrait.model_validate(old).model_dump()==old
 
@@ -69,3 +69,14 @@ def test_manual_art_never_bypasses_private_birth_appearance(monkeypatch):
     monkeypatch.setattr(portraits,'authorized',lambda state,cid:True)
     monkeypatch.setattr(portraits,'is_game_birth',lambda state,cid:True)
     assert portraits.projection(runtime,cid)['procedural_portrait'] is None
+
+
+@pytest.mark.parametrize(('sex','stage','visual','body'),[
+    ('female','adult','young_adult','female'),(None,'adult','elderly','neutral'),
+    ('male','infant','infant','male'),('male','child','child','male'),
+    ('male','adolescent','adolescent','male'),('male','unknown',None,'neutral'),
+    ('male','adult','child','male'),('male','child','elderly','male'),
+])
+def test_frame_and_facial_hair_eligibility(sex,stage,visual,body):
+    art=default_descriptor('npc',stage,{'biological_sex':sex},{'facial_hair':'full_beard'},visual)
+    assert art['body_frame']==body and art['facial_hair']=='clean_shaven'

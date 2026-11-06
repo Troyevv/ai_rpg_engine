@@ -255,7 +255,7 @@ def test_exact_handoff_preserves_authored_graph_and_values(api, genres):
     from backend.runtime_v3.portraits import life_period, visual_age
     for cid, actor in old['world_state']['characters'].items():
         actor.update(portrait_mode='auto', procedural_portrait=default_descriptor(
-            cid, life_period(old['world_state'], cid)[1], age_style=visual_age(old['world_state'], cid)))
+            cid, life_period(old['world_state'], cid)[1], age_style=visual_age(old['world_state'], cid), version=1))
     assert current['world_state']==old['world_state']
     assert current['character_cards']==old['character_cards']
     assert current['authoring']==old['authoring']==source()['authoring']

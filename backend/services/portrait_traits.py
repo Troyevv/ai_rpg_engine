@@ -1,5 +1,10 @@
 """Finite vocabulary for PUBLIC portrait styling; never interpret literary prose."""
+from typing import get_args
+from backend.runtime_v3.models import FacialHair
+
+FACIAL_HAIR = get_args(FacialHair)
 STYLES = {
+    'facial_hair': FACIAL_HAIR,
     'face': ('oval', 'narrow', 'angular', 'broad', 'long', 'round', 'soft'),
     'hair': ('short', 'long', 'bob', 'curly', 'medium', 'wavy', 'fringe', 'bald'),
     'hair_color': ('black', 'brown', 'blond', 'dark_blond', 'red', 'grey', 'white'),
@@ -11,6 +16,9 @@ STYLES = {
 # Exact, unambiguous values of a *typed* initial feature, never substrings of
 # sentences, names, legacy_text, biographies or derived identity characteristics.
 _TYPED = {
+    'facial_hair': ('facial_hair', {
+        'гладко выбрит':'clean_shaven', 'гладко выбритое лицо':'clean_shaven', 'щетина':'stubble',
+        'усы':'mustache', 'короткая борода':'short_beard', 'полная борода':'full_beard'}),
     'natural_hair_color': ('hair_color', {
         'чёрные':'black', 'черные':'black', 'тёмные':'black', 'темные':'black', 'каштановые':'brown',
         'светлые':'blond', 'блонд':'blond', 'русые':'dark_blond', 'рыжие':'red',
@@ -31,11 +39,11 @@ def input_schema():
             **{k:{'enum':list(v)} for k,v in STYLES.items()}}, 'additionalProperties':False}
 
 
-def graphic_choices(actor, hints=None):
+def graphic_choices(actor, hints=None, *, facial_hair=False):
     approved = {}
     if isinstance(hints,dict):
         for field, options in STYLES.items():
-            if hints.get(field) in options:
+            if (field != 'facial_hair' or facial_hair) and hints.get(field) in options:
                 approved[field] = options.index(hints[field])
     # Existing AppearanceProfile carries open text, not typed color IDs. Handle
     # only uncomplicated public initial features that match a supported value.
@@ -45,7 +53,11 @@ def graphic_choices(actor, hints=None):
     matches = {}
     for item in items.values() if isinstance(items,dict) else ():
         if not isinstance(item,dict) or not isinstance(item.get('kind'),str): continue
+        if item['kind'] == 'facial_hair' and not facial_hair: continue
         if item.get('source_event_id') or item.get('fact_id') or item.get('condition_id') or item.get('revision',1)!=1:
+            # A hint from a model which could see private source material is
+            # insufficient evidence to publish that same facial feature.
+            if item['kind'] == 'facial_hair': approved.pop('facial_hair', None)
             continue
         spec=_TYPED.get(item.get('kind'))
         if not spec or not isinstance(item.get('text'),str): continue

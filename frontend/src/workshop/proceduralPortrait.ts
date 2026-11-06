@@ -1,7 +1,8 @@
 // Trusted vector layers from the approved #175 artwork. Version 1 is immutable.
 // Never accept SVG, paths, colors or markup from the server/user.
 import parts from './portraitParts.json';
-export type ProceduralPortrait = {version:1;seed:string;form:'neutral'|'human';stage:string;visual_age_mode?:'auto'|'manual';visual_age?:'infant'|'child'|'adolescent'|'young_adult'|'mature_adult'|'elderly';face:number;hair:number;skin:number;eyes:number;clothing:number;accessory:number;palette:number;hair_color?:number;clothing_color?:number};
+import {beardLayer, dressedBust, bodyFrames, facialHairStyles, type BodyFrame, type FacialHair} from './portraitAnatomy';
+export type ProceduralPortrait = ({version:1} | {version:2;body_frame:BodyFrame;facial_hair:FacialHair}) & {seed:string;form:'neutral'|'human';stage:string;visual_age_mode?:'auto'|'manual';visual_age?:'infant'|'child'|'adolescent'|'young_adult'|'mature_adult'|'elderly';face:number;hair:number;skin:number;eyes:number;clothing:number;accessory:number;palette:number;hair_color?:number;clothing_color?:number};
 type Art = { [key:string]: any };
 function draw(p: Art): string {
     const skin = p.skin || ['#e6b99a', '#c68b70', '#aa705a'];
@@ -28,6 +29,7 @@ function draw(p: Art): string {
     const aging = age==='elderly'?'<path d="M151 221l14 6m69-6l14-6M166 170q34-12 67 0m-65 9q31-9 63 0M178 244l-5 13m50-13l6 13M180 279q20 10 40 0" fill="none" stroke="#633e35" opacity=".4" stroke-width="2"/>':age==='mature_adult'?'<path d="M150 219l12 4m75-4l12-4M177 243l-3 9m49-9l3 9" fill="none" stroke="#633e35" opacity=".22" stroke-width="1.5"/>':'';
     const ears = `<path d="M137 195 C120 183 120 212 126 229 Q131 240 141 232Z" fill="${skin[1]}"/><path d="M263 195 C280 183 280 212 274 229 Q269 240 259 232Z" fill="${skin[2]}"/><path d="M131 203 Q127 211 134 222 M269 203 Q273 211 266 222" fill="none" stroke="${line}" stroke-opacity=".27" stroke-width="3" stroke-linecap="round"/>`;
     const facePath = age==='infant'?'M140 145 C151 115 249 115 260 145 C275 174 272 237 254 270 Q237 302 200 304 Q163 302 146 270 C128 237 125 174 140 145Z':age==='child'?'M142 145 C157 124 242 124 258 145 C270 177 265 225 252 249 Q232 295 201 297 Q169 295 148 249 C135 225 130 177 142 145Z':teen?'M144 144 C161 124 239 124 256 145 C266 174 263 219 252 247 Q232 286 201 292 Q170 286 148 247 C137 219 134 174 144 144Z':p.face || 'M144 142 C160 125 239 125 256 147 C267 175 263 220 253 247 C245 270 225 295 202 299 C177 297 155 274 146 248 C136 224 132 172 144 142Z';
+    const facialHair = p.facialHair ? beardLayer(p.facialHair, facePath, p.hair) : '';
     const face = `<path d="${facePath}" fill="url(#skin)"/>
       <path d="M245 157 Q268 199 250 247 Q235 281 207 293 Q235 276 236 247 C231 224 251 202 245 157Z" fill="${skin[2]}" opacity=".27"/>
       <path d="M149 166 C143 192 146 218 152 233 C159 222 165 221 175 219 Q156 197 161 166Z" fill="${skin[0]}" opacity=".27"/>
@@ -52,11 +54,11 @@ function draw(p: Art): string {
       <path d="M328 0 V500 M342 0 V500" stroke="#f8dfb1" stroke-opacity=".07"/>
       ${age?`<g transform="${headTransform}">${p.backHair || ''}</g>`:p.backHair || ''}
       ${age==='infant'?'<g transform="translate(56 0) scale(.72 1)">':age==='child'?'<g transform="translate(28 0) scale(.86 1)">':age==='adolescent'?'<g transform="translate(12 0) scale(.94 1)">':''}
-      <path d="M176 271 L174 322 L151 340 Q199 378 248 339 L225 323 L225 271Z" fill="url(#neck)"/>
+${p.bust ?? `      <path d="M176 271 L174 322 L151 340 Q199 378 248 339 L225 323 L225 271Z" fill="url(#neck)"/>
       <path d="M177 284 Q198 310 224 284 L225 306 Q199 321 176 299Z" fill="${skin[2]}" opacity=".38"/>
-      ${p.body}
+      ${p.body}`}
       ${['infant','child','adolescent'].includes(age)?'</g>':''}
-      ${p.visualAge?`<g transform="${headTransform}">${ears}${face}${aging}${p.frontHair || ''}${p.accessories || ''}</g>`:`${ears}${face}${p.frontHair || ''}${p.accessories || ''}`}
+      ${p.visualAge?`<g transform="${headTransform}">${ears}${face}${aging}${facialHair}${p.frontHair || ''}${p.accessories || ''}</g>`:`${ears}${face}${facialHair}${p.frontHair || ''}${p.accessories || ''}`}
       <path d="M0 499 H400" stroke="#162020" opacity=".2"/>
     </svg>`);
   };
@@ -85,10 +87,11 @@ function garment(body:string,swatch:string[]|undefined):string {
 }
 const cache=new Map<string,string>();
 export function proceduralPortrait(p?:ProceduralPortrait|null):string|null {
- if(!p || p.version!==1 || !/^[a-f0-9]{32}$/.test(p.seed))return null;
+ if(!p || (p.version!==1 && p.version!==2) || !/^[a-f0-9]{32}$/.test(p.seed))return null;
  const keys=['face','hair','skin','eyes','clothing','accessory','palette'] as const;
  if(keys.some(k=>!Number.isInteger(p[k]) || p[k]<0 || p[k]>(['hair','eyes','clothing','accessory'].includes(k)?7:6)))return null;
  if([p.hair_color,p.clothing_color].some(c=>c!=null&&(!Number.isInteger(c)||c<0||c>6)))return null;
+ if(p.version===2 && (!Object.hasOwn(bodyFrames,p.body_frame)||!Object.hasOwn(facialHairStyles,p.facial_hair)))return null;
  const key=JSON.stringify(p);const cached=cache.get(key);if(cached)return cached;
  const bg=parts[p.palette].bg;
  let svg:string;
@@ -96,12 +99,17 @@ export function proceduralPortrait(p?:ProceduralPortrait|null):string|null {
  if(p.form==='human') {
   const face=parts[p.face] as Art, hair=parts[p.hair%7] as Art, skin=parts[p.skin] as Art;
   const clothColor=p.clothing_color==null?undefined:clothingColors[p.clothing_color];
-  svg=draw({...face,visualAge:p.visual_age,artisticAge:!!p.visual_age_mode,name:'',bg,skin:skin.skin||parts[1].skin,iris:p.eyes===7?'#6f8998':parts[p.eyes].iris,
+  const body=garment(p.clothing===0?'<path d="M173 316Q200 342 227 316L271 337Q311 349 328 402L345 500H56L73 402Q88 353 130 336Z" fill="url(#cloth)"/>':parts[(p.clothing-1)%7].body,clothColor);
+  const age=p.visual_age || p.stage;
+  const juvenile=['infant','child','adolescent'].includes(age);
+  const bust=p.version===2?dressedBust(p.body_frame,juvenile,body,(skin.skin||parts[1].skin)[2],p.clothing===0):undefined;
+  const facialHair=p.version===2 && ['adult','young_adult','mature_adult','elderly'].includes(age) ? p.facial_hair : undefined;
+  svg=draw({...face,visualAge:p.visual_age || (p.version===2 && juvenile ? p.stage : undefined),artisticAge:!!p.visual_age_mode,name:'',bg,skin:skin.skin||parts[1].skin,iris:p.eyes===7?'#6f8998':parts[p.eyes].iris,
    hair:p.hair_color==null?hair.hair:hairColors[p.hair_color],frontHair:p.hair===7?'':hair.frontHair,backHair:p.hair===7?'':hair.backHair,
    cloth:clothColor||parts[p.palette].cloth,
    // Plain unbranded tunic is the default in every historical setting.
-   body:garment(p.clothing===0?'<path d="M173 316Q200 342 227 316L271 337Q311 349 328 402L345 500H56L73 402Q88 353 130 336Z" fill="url(#cloth)"/>':parts[(p.clothing-1)%7].body,clothColor),
-   accessories:p.accessory===0?'':(parts[(p.accessory-1)%7] as Art).accessories||'',extraFace:'',brows:undefined});
+   body, bust, facialHair,
+   accessories:p.accessory===0?'':(parts[(p.accessory-1)%7] as Art).accessories||'',extraFace:p.version===2 && p.face===6 ? face.extraFace : '',brows:undefined});
  } else return null;
  // Each SVG is an image document: gradient IDs cannot collide between cards.
  const url='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);

@@ -265,6 +265,10 @@ def apply_proposal(state, reply, *, editing=False):
         trial['card_field_facts']={k:v for k,v in trial['card_field_facts'].items() if k in remaining}
         if not trial['card_field_facts']:trial.pop('card_field_facts')
     normalized = validate_transition(state, trial, editing=editing)
+    new_ids = normalized['world']['characters'].keys() - state['world']['characters'].keys()
+    if new_ids:
+        from backend.services.draft_portraits import initialize
+        initialize(normalized, version=2, character_ids=new_ids)
     return normalized, proposal.model_dump()
 
 

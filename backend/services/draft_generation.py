@@ -181,6 +181,9 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
                             if event.get('time_reference_minute') is None:event['time_reference_minute']=raw['world_clock']['minute']
             state,report=draft_initial.inspect_candidate(raw)
             errors=report['diagnostics']
+            if not errors:
+                from backend.services.draft_portraits import initialize
+                initialize(state, version=2)
             if isinstance(state,dict):
                 result=json.dumps(state,ensure_ascii=False)
                 recovered_candidate=True

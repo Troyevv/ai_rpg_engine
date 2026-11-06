@@ -206,12 +206,12 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         review_messages=draft_completeness.messages(trial,author_context(base,edit['instruction']))
         from backend.services.portrait_traits import STYLES
         review_messages[0]['content'] += ('\nСравни procedural_portrait новых NPC с литературной Внешностью. '
-            'Описание первично; учитывай отрицания и контекст. Для индексов рисунка используй словарь: '
+            'Описание первично; учитывай отрицания и контекст. Для индексов рисунка используй словарь (facial_hair в v2 сохраняется строкой): '
             + json.dumps(STYLES,ensure_ascii=False) + '. Неописанные признаки могут быть условными. '
             'При противоречии поддерживаемого признака дай recommendation с path карточки и понятным message: '
             'автор должен явно проверить и настроить портрет. Не исправляй литературный текст ради рисунка '
             'и не предлагай менять защищённый procedural_portrait. Родинки, часы, медицинская форма '
-            'и телосложение не поддерживаются; их отсутствие на рисунке не ошибка канона.')
+            'и индивидуальные особенности фигуры не поддерживаются; их отсутствие на рисунке не ошибка канона.')
         signature=review_signature(review_messages,config)
         issues=obtain(trial,review_messages,signature,journal,call,save)
         if issues is None:return

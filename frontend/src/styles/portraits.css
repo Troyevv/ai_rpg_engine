@@ -30,3 +30,9 @@ html[data-skin="paper"]{--avatar-male-bg:#dcebf8;--avatar-male-ink:#315c80;--ava
 .portrait-comparison figure{margin:0 0 12px}.portrait-comparison figcaption{font-size:12px;margin-bottom:8px;color:var(--text-muted)}
 
 .portrait-initials[data-count="3"]{font-size:max(9px,18cqw)}
+
+.portrait-anatomy{margin:0 0 16px;padding:12px;border:1px solid var(--border);border-radius:var(--radius-md);min-width:0}
+.portrait-anatomy legend{padding:0 5px;font-weight:600;color:var(--text)}
+.portrait-anatomy label:last-child{margin-bottom:0}
+.portrait-comparison figure .character-avatar{width:min(100%,160px);height:auto;aspect-ratio:4/5;border-radius:var(--radius-md)}
+.portrait-comparison figure .character-avatar img.procedural-portrait{object-fit:contain}
