@@ -82,13 +82,13 @@ def apply_commitments(resolver, raw):
             reject('Изменение ссылается на неизвестный план.'); continue
         if old and assertion == 'agreed':
             # A repeat is not a reschedule and must never move a relative anchor.
-            repeated = resolver.typed(ScheduledEvent, {**old, **{k:item[k] for k in EDITABLE if k in item}}, 'scheduled_event_changes', index)
-            if repeated is None: reject('Повреждены поля повторного плана.')
+            repeated = resolver.typed(ScheduledEvent, {**old, **{k:item[k] for k in EDITABLE if k in item}},
+                                      'scheduled_event_changes', index, required_code='commitment_invalid')
             if any(repeated[k] != old.get(k) for k in EDITABLE if k != 'id'):
                 reject('Для изменения существующего плана нужен rescheduled.'); continue
             continue
-        if (old is None or assertion == 'rescheduled') and not item.get('temporal'):
-            reject('Новому плану/переносу нужна структурная temporal привязка, не LLM minute.'); continue
+        if (old is None or assertion == 'rescheduled') and item.get('temporal') is None:
+            reject('Новому плану/переносу нужна структурная temporal привязка, не LLM minute.', field='temporal'); continue
         fields = deepcopy(old or {})
         fields.update({k:item[k] for k in EDITABLE if k in item})
         fields.update(commitment=True, evidence=item['evidence'], source_turn=resolver.turn_id)
@@ -123,8 +123,8 @@ def apply_commitments(resolver, raw):
         fields['status'] = status
         fields['outcome'] = {'occurred':'fulfilled', 'ended':'fulfilled', 'cancelled':'cancelled',
                              'missed':'missed', 'blocked':'blocked'}.get(assertion, '')
-        entry = resolver.typed(ScheduledEvent, fields, 'scheduled_event_changes', index)
-        if entry is None: reject('Повреждены поля договорённости.')
+        entry = resolver.typed(ScheduledEvent, fields, 'scheduled_event_changes', index,
+                               required_code='commitment_invalid')
         if not entry['character_ids'] or len(set(entry['character_ids'])) != len(entry['character_ids']):
             reject('Нужны уникальные участники.'); continue
         if resolver.mode == 'background' and resolver.protected_actor_id in entry['character_ids'] + (old or {}).get('character_ids', []):
@@ -163,9 +163,9 @@ def apply_commitments(resolver, raw):
                 continue
         window = scheduled_window(state, entry)
         if (old is None or assertion == 'rescheduled') and (window['start_minute'] is None or window['start_minute'] < 0):
-            reject('Нужна разрешимая календарная привязка.'); continue
+            reject('Нужна разрешимая календарная привязка.', field='temporal'); continue
         if entry['end_temporal'] and (window['end_minute'] is None or window['start_minute'] is None or window['end_minute'] < window['start_minute']):
-            reject('Конец интервала должен быть не раньше начала.'); continue
+            reject('Конец интервала должен быть не раньше начала.', field='end_temporal'); continue
         if old is None and assertion == 'agreed' and window['end_minute'] < resolver.before['meta']['world_time']:
             reject('Прошедшее обсуждение не создаёт будущий план.'); continue
         if assertion in ('started', 'ended'):

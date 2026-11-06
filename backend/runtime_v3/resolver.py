@@ -123,10 +123,17 @@ class StateResolver:
             and isinstance(event.get('participants'), list) and self.protected_actor_id in event['participants']
             for event in raw.records['events'])
 
-    def typed(self, model, values, section, index):
+    def typed(self, model, values, section, index, *, required_code=None):
         try:
             return model.model_validate(values).model_dump()
-        except ValidationError:
+        except ValidationError as exc:
+            if required_code:
+                error = exc.errors(include_input=False, include_url=False, include_context=False)[0]
+                path = f'{section}[{index}]'
+                for part in error['loc']:
+                    path += f'[{part}]' if isinstance(part, int) else f'.{part}'
+                fatal(error['msg'], required_code, repairable=True, section=section,
+                      index=index, entity=values.get('id'), path=path)
             self.warn(section,index,'некорректная необязательная запись', code='optional_schema_invalid')
             return None
 
