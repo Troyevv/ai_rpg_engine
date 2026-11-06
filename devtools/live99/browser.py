@@ -74,6 +74,9 @@ def plan(case, index, before):
 
 
 def configure_context(page, context_length):
+    call = page.get_by_role('dialog', name='Сцена звонка')
+    if call.is_visible():
+        button(call, 'Свернуть звонок').click()
     if page.viewport_size['width'] < 768:
         button(page, 'Меню игры').click()
     page.get_by_role('button', name='Настройки', exact=True).filter(visible=True).last.click()

@@ -317,8 +317,10 @@ def recover_unsubmitted(directory, manifest, case, index):
     action_ledger(directory)
     with sqlite3.connect(directory / 'budget.sqlite') as db:
         db.execute('BEGIN IMMEDIATE')
+        absolute = (directory / 'budget.sqlite').is_symlink()
         db.execute('UPDATE qa_actions SET path=? WHERE path=?',
-                   (str(target.relative_to(directory)), str(folder.relative_to(directory))))
+                   (str(target.resolve()) if absolute else str(target.relative_to(directory)),
+                    str(folder.resolve()) if absolute else str(folder.relative_to(directory))))
         folder.rename(target)
 
 

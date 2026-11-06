@@ -141,10 +141,16 @@ def test_adoption_preserves_manifest_and_detects_evidence_or_budget_loss(tmp_pat
         adopt(tmp_path, manifest, 'next')
 
 
-def test_unsubmitted_recovery_keeps_action_charge(tmp_path, monkeypatch):
+@pytest.mark.parametrize('linked', [False, True])
+def test_unsubmitted_recovery_keeps_action_charge(tmp_path, monkeypatch, linked):
     from devtools.live99 import run
     monkeypatch.setattr(run, 'revision', lambda: 'same')
-    Budget(tmp_path / 'budget.sqlite')
+    if linked:
+        ledger = tmp_path / 'historical.sqlite'
+        Budget(ledger)
+        (tmp_path / 'budget.sqlite').symlink_to(ledger)
+    else:
+        Budget(tmp_path / 'budget.sqlite')
     repo = Repository(tmp_path / 'game.sqlite')
     seed = load_fixture(repo)
     folder = tmp_path / 'social/000'
@@ -152,6 +158,11 @@ def test_unsubmitted_recovery_keeps_action_charge(tmp_path, monkeypatch):
     intent = dict(sha='same', save=seed['save'], job_cursor=0)
     write(folder / 'intent.json', intent)
     write(folder / 'before.json.gz', snapshot(repo.path, seed['save']))
+    if linked:
+        # Paid stages import the ledger before creating their absolute-path intent.
+        with sqlite3.connect(tmp_path / 'budget.sqlite') as db:
+            db.execute('CREATE TABLE qa_actions(path TEXT PRIMARY KEY, intent TEXT NOT NULL)')
+        reserve_action(tmp_path, folder, intent, 20)
     assert action_ledger(tmp_path) == 1
     run.recover_unsubmitted(tmp_path, dict(seeds={'social': seed}), 'social', 0)
     assert action_ledger(tmp_path) == 1
