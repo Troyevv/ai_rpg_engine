@@ -61,11 +61,16 @@ test('scenario and summary deletion keeps restorable versions and saves',async({
   await creationMethod(page,'Со Сценаристом');
  await page.getByLabel('Подготовка',{exact:true}).selectOption(w.id);
  const summaryBefore=await(await request.get(`/api/documents/summary/${w.id}`)).json();
- await page.getByRole('button',{name:'Удалить выжимку',exact:true}).click();
- await page.getByRole('dialog').getByRole('button',{name:'Отмена',exact:true}).click();
- expect((await(await request.get(`/api/documents/summary/${w.id}`)).json()).active_id).toBe(summaryBefore.active_id);
- await page.getByRole('button',{name:'Удалить выжимку',exact:true}).click();
- await page.getByRole('dialog').getByRole('button',{name:'Удалить выжимку',exact:true}).click();
+ const deleteTrigger=page.locator('.preparation').getByRole('button',{name:'Удалить выжимку',exact:true});
+ const confirmation=page.getByRole('dialog',{name:'Удалить текущую выжимку?',exact:true});
+ await deleteTrigger.click();
+ await confirmation.getByRole('button',{name:'Отмена',exact:true}).click();
+ // Radix retains the closing dialog during its exit animation.
+ await expect(page.getByRole('dialog',{includeHidden:true})).toHaveCount(0);
+ expect(await(await request.get(`/api/documents/summary/${w.id}`)).json()).toEqual(summaryBefore);
+ await deleteTrigger.click();
+ await expect(confirmation).toBeVisible();
+ await confirmation.getByRole('button',{name:'Удалить выжимку',exact:true}).click();
  await expect(page.getByRole('button',{name:'Удалить выжимку',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'Версии выжимки'}).click();
  const dialog=page.getByRole('dialog');
@@ -74,7 +79,12 @@ test('scenario and summary deletion keeps restorable versions and saves',async({
  const completed=h.versions.find((v:{content:string})=>v.content.length>0);
  await dialog.getByRole('combobox').selectOption(String(completed.id));
  page.once('dialog',d=>d.accept());
- await dialog.getByRole('button',{name:'Откатить к выбранной'}).click();
+ const [restored]=await Promise.all([
+   page.waitForResponse(response=>response.request().method()==='POST' &&
+     new URL(response.url()).pathname===`/api/documents/summary/${w.id}`),
+   dialog.getByRole('button',{name:'Откатить к выбранной'}).click(),
+ ]);
+ expect(restored.ok()).toBe(true);
  await expect(dialog.locator('select option')).toHaveCount(h.versions.length+1);
  await dialog.getByRole('button',{name:'Закрыть',exact:true}).click();
  await expect(page.getByRole('button',{name:'Удалить выжимку',exact:true})).toBeVisible();

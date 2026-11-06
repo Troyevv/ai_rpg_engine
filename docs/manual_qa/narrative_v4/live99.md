@@ -1,5 +1,47 @@
 # #99 — браузерная регрессия с DeepSeek
 
+## Отдельно разрешённый Stage B
+
+После merge #202 Stage B использует тот же runner, browser actions, oracle и ledger.
+Новый изолированный каталог получает SQLite backup последнего retest и ссылки/хеши
+исторических результатов. Старый family-save остаётся в копии; для нового семейного
+сценария loader #78 создаёт `pregnancy` (QA gestation = 1 день, это не обычная физиология).
+План — 90 новых действий в шести группах, жёсткий предел — 100, включая отказы.
+Готовность A не выдумывается: manifest фиксирует явное разрешение B после разбора A.
+
+```bash
+python -m devtools.live99.run prepare-stage-b /private/live99-stage-b --parent /private/live99-post204 --reviewed
+python -m devtools.live99.run preflight /private/live99-stage-b
+python -m devtools.live99.run run /private/live99-stage-b --stage B --reviewed
+```
+
+Разрешение B однократно привязано к каталогу в исходном ledger: **$2 дополнительных**,
+100 новых действий и максимум 320 новых LLM attempts. Старые caps и receipts сохраняются;
+новый каталог не возобновляет allowance. Денежное ограничение даёт консервативный
+token ceiling `2e9 / 300 = 6_666_666`; весь provider input window по-прежнему резервируется
+до каждого запроса. Неизвестный paid outcome останавливает весь B, продуктовый отказ —
+только группу. Repair входит в бюджет, автоматического повтора оплаченных ошибок нет.
+Stage C этим разрешением запрещён. Shared lock исключает параллельный запуск A/retest/B.
+
+Phone начинает с одного явно разрешённого Retry прежнего held job без повторной отправки
+сообщения. Campaign проверяет новый ход → regeneration → sibling → rollback → другую ветку.
+LTA получает 4 calls: текущий Runtime использует пару Narrative/Extraction на группу;
+прежний cap=1 не мог выбрать ни одной semantic group. Это не доказательство успешного
+развития мира — проверять `unresolved`, History и реальные изменения после выполнения.
+Последние действия выбираются только из реально показанных choices, с записью текста
+до dispatch; отсутствие choices останавливает группу, а не создаёт повторные filler turns.
+
+Для диагностированных QA-ошибок B есть узкий `review-stage-b --case CASE --step N --reviewed`.
+Он не разрешает product retry. Поддерживаются: неотправленный Family LTA на 7 суток
+(UI требует более 7, receipt задаёт 2 недели) и Crisis/Campaign context overflow **до**
+Extraction. Для последних production builder должен подтвердить fit 40960; Narrative
+и её request IDs остаются прежними. Изменённый save, новый job, уже полученная Extraction
+или неизвестный ответ запрещают recovery. Исходные файлы не перемещаются/не заменяются:
+receipt хранится в `recoveries/`, новая попытка — в `retries/001`. Каждая попытка входит
+в прежний предел 100; ни allowance, ни счётчик не увеличиваются. Последующий resume
+не выполняет существующую попытку заново. После QA commit требуются обычные adopt и preflight.
+
+
 Стенд для Linux/WSL. Нужны Python 3.12, зависимости репозитория, собранный frontend и Python Playwright. Обычный E2E-сервер проекта использует тестовый провайдер. Этот стенд запускает собственный процесс с production `create_app` на свободном loopback-порту. Реальные действия отправляет Chromium. Сервер получает ключ только через окружение. Закрытие браузера и повторное открытие сохранения между шагами намеренны.
 
 Первый платный smoke: [результаты и остановки 6 ноября 2026](live99-smoke-20261106.md). Default `context_length=32768` оказался недостаточен для Extraction newborn-family; поддержку моделью 1M нельзя считать автоматически выбранной настройкой приложения. QA теперь выбирает для family окно 65536 через обычные настройки UI, сохраняя output limits 2000/4096; другие группы остаются на 32768.
@@ -126,3 +168,29 @@ python -m devtools.live99.retest audit /private/live99-post204
 запросов Knowledge; создаёт отдельный receipt и `retries/002`, добавляя одну
 резервацию действия, без возврата старых. Нельзя применять к уже полученной
 новой Extraction. Семейное окно 65536 и output caps 2000/4096 не меняются.
+
+### Дополнительный checkpoint Crisis в Stage B
+
+После полного прохождения исходных 15 Crisis шагов можно явно добавить покрытие
+недееспособности из существующей `family-incapacitated` fixture:
+
+```bash
+python -m devtools.live99.run prepare-crisis-extension /private/live99-stage-b --reviewed
+python -m devtools.live99.run run /private/live99-stage-b --stage B --case crisis --reviewed
+```
+
+`crisis-extension.json` фиксирует отдельный save и девять действий: начало сцены,
+явная смена героя на Веру и вопросы о помощи, заботе об Асе, документах и сообщении
+близким. Исходный Crisis save, plan и результаты остаются на месте. Используются
+те же `step`, browser, oracle, budget и action ledger; лимиты не обновляются.
+Death oracle требует сохранения **уже установленной** смерти, а не выдумывает её
+в fixture недееспособности. Для обеих сторон этого условия есть регрессионные тесты.
+
+Результаты Stage B: [6 ноября 2026](live99-stage-b-20261106.md).
+
+Для Stage B guard также пишет входные разрешённые поля и каждый provider chunk
+в `provider-streams/<reservation-id>.jsonl`, включая частичный ответ при остановке.
+Файл создаётся эксклюзивно; ключи/callbacks не сериализуются, запись сбрасывается
+на диск до передачи chunk. Это дополняет production diagnostics: LTA raw output
+там пока теряется (#212). Capture добавлен после live-прогона 6 ноября и не
+восстанавливает прежние ответы. Отсутствие полного stream/usage сохраняет резерв.

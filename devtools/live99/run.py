@@ -131,6 +131,10 @@ def step(browser, base, directory, manifest, case, i, limit, retry=None, operati
     if retry:
         folder = folder / 'retries' / '001'
     before = snapshot(path, sid)
+    if operation and operation.get('recovery_before_path'):
+        with gzip.open(operation['recovery_before_path'], 'rt') as source:
+            if before != json.load(source):
+                raise ValueError('Save changed after reviewed unpaid recovery')
     kind, action = plan(case, i, before)
     if operation:
         kind, action = operation['kind'], operation.get('action', '')
@@ -163,8 +167,10 @@ def step(browser, base, directory, manifest, case, i, limit, retry=None, operati
         page = open_save(ctx, base, seed)
         page.on('pageerror', lambda exc: errors.append(str(exc)))
         configure_context(page, meta['context_length'])
-        if kind == 'turn' and i >= 5 and i % 3:
+        if kind == 'observed-choice' or kind == 'turn' and not operation and i >= 5 and i % 3:
             choices = page.locator('.choices button')
+            if kind == 'observed-choice' and not choices.count():
+                raise ValueError('No observed player choice; do not invent filler actions')
             if choices.count():
                 choice_index = i % choices.count()
                 choice = choices.nth(choice_index)
@@ -179,10 +185,11 @@ def step(browser, base, directory, manifest, case, i, limit, retry=None, operati
             play(page, base, sid, 'retry', action, job_id=retry[2]['id'])
         else:
             play(page, base, sid, kind, action, choice_index,
-                 job_id=operation.get('job_id') if operation else None)
+                 job_id=operation.get('job_id') if operation else None,
+                 options=operation)
         after = snapshot(path, sid)
         projected = page.request.get(f'{base}/api/saves/{sid}').json()
-        oracle(before, after, projected, 'turn' if kind == 'choice' else kind)
+        oracle(before, after, projected, 'turn' if kind == 'choice' or operation and operation.get('reuse_narrative') else kind)
         scenario_checks(case, before, after, projected)
         if kind == 'switch' and after['snapshot']['world_state']['camera']['controlled_actor_id'] != action:
             raise ValueError('Protagonist transition selected the wrong actor')
@@ -195,6 +202,11 @@ def step(browser, base, directory, manifest, case, i, limit, retry=None, operati
                 raise ValueError('Restored variant / rollback differs from its recorded snapshot')
         jobs = diagnostics(path, sid, retry[1]['job_cursor'] if retry else cursor)
         attempts = [r for j in jobs for r in j['requests']]
+        if operation and operation.get('reuse_narrative'):
+            new = [r for r in attempts if r['id'] not in operation['original_request_ids']]
+            if len(jobs) != 1 or jobs[0]['narrative'] != operation['reuse_narrative'] or not new or any(
+                    r['stage'] not in ('extraction', 'extraction_repair') for r in new):
+                raise ValueError('Recovery repeated paid Narrative or changed job identity')
         if retry:
             if len(jobs) != 1 or jobs[0]['id'] != retry[2]['id'] or jobs[0]['narrative'] != retry[2]['narrative']:
                 raise ValueError('Retry changed job identity or completed Narrative')
@@ -205,7 +217,7 @@ def step(browser, base, directory, manifest, case, i, limit, retry=None, operati
             r['status'] == 'complete' and r['provider'] == 'deepseek' and r['model'] == MODEL for r in attempts
         ):
             raise ValueError('No completed DeepSeek request for this move')
-        if kind in ('start','turn','choice','regenerate','variant'):
+        if kind in ('start','turn','choice','regenerate','variant') or operation and operation.get('reuse_narrative'):
             compare_prose(page, base, sid, seed['world'], after['last_turn']['assistant_text'])
         write(folder / 'ui.json.gz', dict(text=page.locator('body').inner_text(), projection=projected))
         page.reload()
@@ -330,6 +342,8 @@ def report(directory, manifest):
                         logged_jobs[job['id']] = job
     # Retry keeps the same job and old receipts; count each request exactly once.
     receipts = {r['id']: r for j in logged_jobs.values() for r in j['requests']}
+    if manifest.get('stage') == 'B':
+        receipts = {key: value for key, value in receipts.items() if key not in manifest['baseline_request_ids']}
     total = sum(j['status'] == 'saved' and any(r['status'] == 'complete' and r['provider'] == 'deepseek'
                 for r in j['requests']) for j in logged_jobs.values())
     requests_count = len(receipts)
@@ -354,13 +368,19 @@ def run(args, directory, manifest):
     from playwright.sync_api import sync_playwright
     live = args.command in ('run', 'retry-extraction')
     validate_revision(directory, manifest, revision())
+    stage_b = manifest.get('stage') == 'B'
+    if stage_b:
+        from .stage_b import validate
+        validate(directory, manifest)
+        if live and (args.stage != 'B' or not args.reviewed):
+            raise ValueError('This authorization is only for reviewed Stage B, never Stage C')
     if live:
         pf = directory / 'preflights' / (revision() + '.json') if manifest['sha'] != revision() else directory / 'preflight.json'
         if not pf.exists() or len(read(pf)) != 2*len(CASES) or not all(r.get('ok') for r in read(pf)):
             raise SystemExit('Run a successful browser preflight first.')
         if not os.environ.get('DEEPSEEK_API_KEY'):
             raise SystemExit('DEEPSEEK_API_KEY required in server environment.')
-        if args.stage != 'A':
+        if args.stage != 'A' and not stage_b:
             previous = 'A' if args.stage == 'B' else 'B'
             if not (directory / f'{previous}.complete').exists() or not args.reviewed:
                 raise SystemExit('Previous stage must complete and be reviewed first.')
@@ -388,20 +408,38 @@ def run(args, directory, manifest):
                                   sum(QUOTAS[args.stage]), retry=retry)
                     report(directory, manifest)
                     return result
-                caps = dict(zip(CASES, QUOTAS[args.stage]))
+                plans = read(directory / 'plan.json') if stage_b else None
+                extension_manifest = manifest
+                if stage_b:
+                    from .stage_b import extend_crisis
+                    extension_manifest = extend_crisis(directory, manifest, plans)
+                caps = {case: len(plan) for case, plan in plans.items()} if plans else dict(zip(CASES, QUOTAS[args.stage]))
+                limit = manifest['action_limit'] if stage_b else sum(QUOTAS[args.stage])
                 held = set()
                 for i in range(max(caps.values())):
                     for case, cap in caps.items():
                         if case in held or i >= cap or args.case and case != args.case:
                             continue
                         folder = directory / case / f'{i:03d}'
+                        operation = plans[case][i] if plans else None
+                        if stage_b:
+                            from .stage_b import recovery_operation
+                            operation, folder = recovery_operation(directory, case, i, operation)
+                            with closing(sqlite3.connect(directory / 'budget.sqlite')) as db:
+                                if db.execute('SELECT count(*) FROM reservations WHERE settled=0').fetchone()[0]:
+                                    report(directory, manifest)
+                                    raise RuntimeError('Unknown paid outcome; Stage B stopped globally')
                         if folder.exists():
                             if not completed(folder):
                                 held.add(case)
-                        elif action_ledger(directory) >= sum(QUOTAS[args.stage]):
+                        elif action_ledger(directory) >= limit:
                             held.add(case)
-                        elif not step(browser, base, directory, manifest, case, i, sum(QUOTAS[args.stage])):
+                        elif not step(browser, base, directory,
+                                      extension_manifest if case == 'crisis' and i >= 15 else manifest, case, i, limit,
+                                      operation=operation, attempt_folder=folder if stage_b else None):
                             held.add(case)
+                        print(json.dumps(dict(case=case, step=i, held=case in held,
+                                              cumulative_actions=action_ledger(directory))), flush=True)
                         report(directory, manifest)
                 if not held and not args.case:
                     write(directory / f'{args.stage}.complete', {'finished':now()})
@@ -420,7 +458,7 @@ def run(args, directory, manifest):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['prepare','preflight','run','report','recover-unsubmitted',
+    parser.add_argument('command', choices=['prepare','prepare-stage-b','prepare-crisis-extension','review-stage-b','preflight','run','report','recover-unsubmitted',
                                           'adopt', 'recheck-saved', 'retry-extraction'])
     parser.add_argument('directory', type=Path)
     parser.add_argument('--stage', choices=list(QUOTAS), default='A')
@@ -428,6 +466,7 @@ def main():
     parser.add_argument('--step', type=int)
     parser.add_argument('--reviewed', action='store_true')
     parser.add_argument('--approved-full', action='store_true')
+    parser.add_argument('--parent', type=Path)
     args = parser.parse_args()
     directory = args.directory.resolve()
     if directory.is_relative_to(ROOT):
@@ -436,8 +475,20 @@ def main():
     if args.command == 'prepare':
         prepare(directory)
         return
+    if args.command == 'prepare-stage-b':
+        if not args.reviewed or not args.parent:
+            parser.error('Stage B requires the reviewed historical parent')
+        from .stage_b import prepare as prepare_b
+        parent = args.parent.resolve()
+        with ((parent / 'budget.sqlite').resolve().parent / 'run.lock').open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            master = subprocess.check_output(['git', 'rev-parse', 'origin/master'], cwd=ROOT, text=True).strip()
+            subprocess.run(['git', 'merge-base', '--is-ancestor', master, 'HEAD'], cwd=ROOT, check=True)
+            prepare_b(parent, directory, revision(), master)
+        return
     manifest = read(directory / 'manifest.json')
-    with (directory / 'run.lock').open('a') as lock:
+    lock_path = (directory / 'budget.sqlite').resolve().parent / 'run.lock' if manifest.get('stage') == 'B' else directory / 'run.lock'
+    with lock_path.open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         if args.command == 'adopt':
             if not args.reviewed:
@@ -445,6 +496,18 @@ def main():
             adopt(directory, manifest, revision())
         elif args.command == 'report':
             report(directory, manifest)
+        elif args.command == 'prepare-crisis-extension':
+            if manifest.get('stage') != 'B' or not args.reviewed:
+                parser.error('Choose reviewed Stage B')
+            validate_revision(directory, manifest, revision())
+            from .stage_b import prepare_crisis
+            prepare_crisis(directory, manifest)
+        elif args.command == 'review-stage-b':
+            if manifest.get('stage') != 'B' or not args.reviewed or args.case is None or args.step is None:
+                parser.error('Choose reviewed Stage B --case and --step')
+            validate_revision(directory, manifest, revision())
+            from .stage_b import review_recovery
+            review_recovery(directory, manifest, args.case, args.step)
         elif args.command == 'recover-unsubmitted':
             recover_unsubmitted(directory, manifest, args.case, args.step)
         elif args.command in ('recheck-saved', 'retry-extraction') and (args.case is None or args.step is None):

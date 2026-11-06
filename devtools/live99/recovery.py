@@ -25,7 +25,7 @@ def digest(path):
 def qa_only(old, new):
     paths = subprocess.check_output(['git', 'diff', '--name-only', old, new], cwd=ROOT, text=True).splitlines()
     # CI budget/gate maintenance does not change the Runtime behind saved checkpoints.
-    ci_only = {'.github/workflows/verify.yml', 'tests/test_ci_backend_budget.py'}
+    ci_only = {'.github/workflows/verify.yml', 'tests/test_ci_backend_budget.py', 'tests/e2e_server.py', 'frontend/e2e/pov.spec.ts'}
     if any(not (p.startswith('devtools/live99/') or p.startswith('tests/test_live99_')
                 or p.startswith('docs/manual_qa/narrative_v4/live99') or p in ci_only) for p in paths):
         raise ValueError('Product changed; a QA-only adoption cannot authorize this checkout')
@@ -132,7 +132,7 @@ def retry_candidate(directory, manifest, case, index, allow_pending=None):
     return folder, intent, job, [r['id'] for r in requests]
 
 
-def probe_context(directory, job, context_length=FAMILY_CONTEXT):
+def probe_context(directory, job, context_length=FAMILY_CONTEXT, stage_b=None):
     """Use the production builder and the recorded Narrative policies, no LLM."""
     from backend.repositories.preparation import Repository
     from backend.runtime_v3.repository import (read_history, restore_biographical_secrets,
@@ -165,10 +165,16 @@ def probe_context(directory, job, context_length=FAMILY_CONTEXT):
         initiative_decision=recorded_plan(recorded_messages), continuity_decision=recorded(recorded_messages),
         recent_turns=config.get('recent_turns', 6), prompts=config.get('_prompts'), world_history=history)
     reservations = rows(directory)
+    if stage_b:
+        from .budget import Budget
+        with closing(sqlite3.connect(directory / 'budget.sqlite')) as db:
+            baseline = Budget(directory / 'budget.sqlite', stage_b).stage_b_baseline(db)[1]
+        reservations = [row for row in reservations if row[0] > baseline]
     count, inp, out = len(reservations), sum(r[1] for r in reservations), sum(r[2] for r in reservations)
     reserve_out = config['update_tokens']
     ceiling = (inp + CONTEXT) * INPUT + (out + reserve_out) * OUTPUT
-    if count >= LIMIT_CALLS or inp + CONTEXT + out + reserve_out > LIMIT_TOKENS or ceiling > LIMIT_NUSD:
+    token_limit = LIMIT_NUSD // INPUT if stage_b else LIMIT_TOKENS
+    if count >= LIMIT_CALLS or inp + CONTEXT + out + reserve_out > token_limit or ceiling > LIMIT_NUSD:
         raise ValueError('Insufficient remaining budget for Extraction')
     return dict(model=MODEL, context_length=context_length, input_estimate=estimate(messages),
                 output_cap=reserve_out, hard_input_limit=context_length-reserve_out-256,

@@ -2,6 +2,8 @@
 import inspect
 import sqlite3
 import json
+import os
+from pathlib import Path
 from functools import wraps
 
 MODEL = 'deepseek-flash'
@@ -43,12 +45,39 @@ def reserve_action(directory, folder, meta, limit):
 
 
 class Budget:
-    def __init__(self, path):
+    def __init__(self, path, stage_b=None):
         self.path = path
+        self.stage_b = str(stage_b.resolve()) if stage_b else None
         with sqlite3.connect(path) as db:
             db.execute('''CREATE TABLE IF NOT EXISTS reservations
                 (id INTEGER PRIMARY KEY, input INTEGER, output INTEGER, settled INTEGER DEFAULT 0)''')
             db.execute('CREATE TABLE IF NOT EXISTS spending_caps (name TEXT PRIMARY KEY, ceiling INTEGER NOT NULL)')
+
+    def authorize_stage_b(self, directory):
+        """One explicit Stage B authorization, bound to one run; old receipts stay intact."""
+        directory = str(directory.resolve())
+        with sqlite3.connect(self.path) as db:
+            db.execute('BEGIN IMMEDIATE')
+            db.execute('''CREATE TABLE IF NOT EXISTS stage_b_authorization
+                (id INTEGER PRIMARY KEY CHECK(id=1), directory TEXT NOT NULL,
+                 baseline_id INTEGER NOT NULL, baseline_actions INTEGER NOT NULL)''')
+            prior = db.execute('SELECT directory,baseline_id,baseline_actions FROM stage_b_authorization').fetchone()
+            if prior:
+                if prior[0] != directory:
+                    raise ValueError('Stage B already belongs to another run; allowance cannot renew')
+                return prior
+            if db.execute('SELECT count(*) FROM reservations WHERE settled=0').fetchone()[0]:
+                raise ValueError('Unknown paid outcome; Stage B cannot start')
+            baseline = db.execute('SELECT coalesce(max(id),0) FROM reservations').fetchone()[0]
+            actions = db.execute('SELECT count(*) FROM qa_actions').fetchone()[0]
+            db.execute('INSERT INTO stage_b_authorization VALUES(1,?,?,?)', (directory, baseline, actions))
+            return directory, baseline, actions
+
+    def stage_b_baseline(self, db):
+        row = db.execute('SELECT directory,baseline_id,baseline_actions FROM stage_b_authorization WHERE id=1').fetchone()
+        if not row or row[0] != self.stage_b:
+            raise ValueError('Missing or mismatched Stage B authorization')
+        return row
 
     def cap_additional(self, name, allowance):
         """Persist once in the shared ledger; restarting cannot renew an allowance."""
@@ -70,14 +99,20 @@ class Budget:
             raise ValueError('Missing or excessive output cap')
         with sqlite3.connect(self.path) as db:
             db.execute('BEGIN IMMEDIATE')
+            baseline = self.stage_b_baseline(db)[1] if self.stage_b else 0
+            if self.stage_b and db.execute('SELECT count(*) FROM reservations WHERE settled=0').fetchone()[0]:
+                raise RuntimeError('Unknown paid outcome; stop Stage B before another dispatch')
             count, inp, out = db.execute(
-                'SELECT count(*), coalesce(sum(input),0), coalesce(sum(output),0) FROM reservations'
+                'SELECT count(*), coalesce(sum(input),0), coalesce(sum(output),0) FROM reservations WHERE id>?',
+                (baseline,)
             ).fetchone()
             inp += CONTEXT
             out += max_tokens
             cap = db.execute('SELECT min(ceiling) FROM spending_caps').fetchone()[0]
-            ceiling = min(LIMIT_NUSD, cap if cap is not None else LIMIT_NUSD)
-            if count >= LIMIT_CALLS or inp + out > LIMIT_TOKENS or inp * INPUT + out * OUTPUT > ceiling:
+            ceiling = LIMIT_NUSD if self.stage_b else min(LIMIT_NUSD, cap if cap is not None else LIMIT_NUSD)
+            # Stage B's separately authorized $2 bounds tokens at peak/cold prices.
+            token_limit = LIMIT_NUSD // INPUT if self.stage_b else LIMIT_TOKENS
+            if count >= LIMIT_CALLS or inp + out > token_limit or inp * INPUT + out * OUTPUT > ceiling:
                 raise RuntimeError('QA request, token or USD budget exhausted')
             return db.execute('INSERT INTO reservations(input,output) VALUES(?,?)',
                               (CONTEXT, max_tokens)).lastrowid
@@ -115,7 +150,33 @@ class Budget:
                     consumer(usage)
 
             p['on_usage'] = receipt
-            yield from stream(**p)
-            self.settle(rid, usage_receipt)
+            audit = None
+            complete = False
+            def record(value):
+                if audit:
+                    audit.write(json.dumps(value, ensure_ascii=False, allow_nan=False) + '\n')
+                    audit.flush()
+                    os.fsync(audit.fileno())
+            try:
+                if self.stage_b:
+                    # LTA's production tracker omits raw responses. Preserve every
+                    # paid chunk independently; never serialize credentials/callbacks.
+                    folder = Path(self.stage_b) / 'provider-streams'
+                    folder.mkdir(parents=True, exist_ok=True)
+                    audit = (folder / f'{rid:06d}.jsonl').open('x', encoding='utf-8')
+                    record(dict(event='request', reservation_id=rid, **{
+                        k: p[k] for k in ('provider', 'model', 'messages', 'max_tokens',
+                                         'temperature', 'thinking', 'response_format') if k in p}))
+                for chunk in stream(**p):
+                    record(dict(event='chunk', text=chunk))
+                    yield chunk
+                self.settle(rid, usage_receipt)
+                complete = True
+            finally:
+                if audit:
+                    try:
+                        record(dict(event='end', complete=complete, usage=usage_receipt))
+                    finally:
+                        audit.close()
 
         return guarded
