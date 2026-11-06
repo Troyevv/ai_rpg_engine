@@ -93,7 +93,17 @@ def test_api_jobs_meeting_retry_variants_reload_and_cost(tmp_path,silent_answer)
         if silent_answer and ms[0]['content'].startswith('Group communication reaction/') and json.loads(ms[1]['content'])['source_message']['content']==ACCEPT:
             yield '{"messages":[]}'
         else:
-            yield response(ms,bool(kwargs.get('response_format')))
+            result = response(ms, bool(kwargs.get('response_format')))
+            if ms[0]['content'].startswith('Remote semantic extraction/'):
+                raw = json.loads(result)
+                if raw.get('scheduled_event_changes') and not silent_answer:
+                    plan = raw['scheduled_event_changes'][0]
+                    raw['relationship_changes'] = [dict(source_id='qa_oleg', target_id='qa_kirill',
+                        dimensions=dict(trust=43), assertion='grounded_feelings',
+                        source_event_ids=[plan['remote_source_ids'][-1]], rationale='Кирилл подтвердил встречу.',
+                        evidence=ACCEPT)]
+                    result = json.dumps(raw, ensure_ascii=False)
+            yield result
     def execute(jid,ok=True):
         with patch('engine.find_loaded_model',return_value={'config':{'context_length':32768}}),patch('engine.chat_stream',side_effect=stream):
             engine.run_job(repo.path,jid,engine.Worker(epoch=repo.get_job(jid)['attempt_epoch']))
@@ -134,7 +144,13 @@ def test_api_jobs_meeting_retry_variants_reload_and_cost(tmp_path,silent_answer)
     assert plan['status']=='pending' and set(plan['character_ids'])=={'qa_kirill','qa_oleg'}
     assert plan['remote_source_ids'] and plan['location_id'] is None
     assert repo.get_save(sid)['state']['world']['scheduled_events']
-    saved=deepcopy(state());assert Repository(repo.path).get_snapshot(sid)['world_state']==saved
+    if not silent_answer:
+        assert state()['relationships']['qa_oleg:qa_kirill']['dimensions']['trust'] == before['relationships']['qa_oleg:qa_kirill']['dimensions']['trust'] + 3
+    saved=deepcopy(state())
+    prior_calls = len(calls)
+    execute(jid)
+    assert len(calls) == prior_calls and state() == saved
+    assert Repository(repo.path).get_snapshot(sid)['world_state']==saved
     turn();assert state()['remote_events']==saved['remote_events']
     repo.rollback_last(sid);assert state()==saved
     # Deterministic telemetry, not provider-billed tokens.

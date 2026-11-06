@@ -133,14 +133,40 @@ def test_invalid_editor_packages_never_mutate(changes):
     assert s==before
 
 
-def test_generation_editor_start_turn_save_reload(api):
+@pytest.mark.parametrize('entry', ['idea', 'json', 'md', 'txt'])
+def test_generation_editor_start_turn_save_reload(api, entry):
     client,app=api;wid=client.post('/api/workspaces',json={'name':'Полный цикл'}).json()['id'];url=f'/api/workspaces/{wid}/draft'
-    with patch('backend.services.preparation.chat_stream',side_effect=provider()):
-        generated=client.post(url+'/generate',json={'revision':0,'text':'Город после пожара','config':dict(REMOTE,context_length=131072,max_tokens=24000),'api_key':'offline'})
-        job=wait_job(client,generated.json()['id']);assert job['status']=='saved',job.get('error')
-    draft=client.get(url+'?author=true').json();_,edit=run_edit(client,url,draft)
-    draft=client.get(url+'?author=true').json();assert decide(client,url,draft,edit).status_code==200
-    draft=client.get(url+'?author=true').json()
+    if entry == 'idea':
+        with patch('backend.services.preparation.chat_stream', side_effect=provider()):
+            generated = client.post(url+'/generate', json={'revision':0, 'text':'Город после пожара',
+                'config':dict(REMOTE, context_length=131072, max_tokens=24000), 'api_key':'offline'})
+            job = wait_job(client, generated.json()['id'])
+            assert job['status'] == 'saved', job.get('error')
+    else:
+        _, source_url, source = setup(client)
+        exported = client.get(source_url+'/export', params={'version_id':source['version_id'], 'format':entry})
+        assert exported.status_code == 200, exported.text
+        imported = client.post(url+'/import', json={'revision':0, 'text':exported.text,
+            'format':'json' if entry == 'json' else 'text'})
+        assert imported.status_code == 200, imported.text
+    draft = client.get(url+'?author=true').json()
+    _, rejected = run_edit(client, url, draft, key='declined-version')
+    preview = client.get(url+'?author=true').json()
+    assert decide(client, url, preview, rejected, 'reject').status_code == 200
+    assert client.get(url+'?author=true').json()['state'] == draft['state']
+    current = client.get(url+'?author=true').json()
+    _, edit = run_edit(client, url, current)
+    preview = client.get(url+'?author=true').json()
+    assert decide(client, url, preview, edit).status_code == 200
+    accepted = client.get(url+'?author=true').json()
+    def restore(current, version):
+        response = client.patch(url, json={'revision':current['revision'], 'operation':'restore', 'source_id':version})
+        assert response.status_code == 200, response.text
+        return response.json()
+    restored = restore(accepted, draft['version_id'])
+    assert restored['state'] == draft['state']
+    draft = restore(restored, accepted['version_id'])
+    assert draft['state'] == accepted['state']
     from test_portraits import image
     cid=draft['state']['characters'][0]['id']
     first_portrait=client.post(url+f'/characters/{cid}/portraits',params={'revision':draft['revision']},content=image(),headers={'content-type':'image/png'})
@@ -155,7 +181,7 @@ def test_generation_editor_start_turn_save_reload(api):
     from test_engine import CONFIG
     from backend.runtime_v3.repository import read_history
     expected=repo.get_snapshot(sid)['world_state']
-    for kind in ('start','turn'):
+    for kind in ('start','turn','turn'):
         before=repo.get_snapshot(sid);jid=repo.begin_job(sid,'Осмотреться.' if kind=='turn' else '',kind,CONFIG)
         play(repo,jid,raw_for(before));assert repo.get_job(jid)['status']=='saved'
         repo=Repository(repo.path)

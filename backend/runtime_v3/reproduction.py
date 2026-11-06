@@ -320,12 +320,14 @@ def context_projection(state, relevant, observer, extraction=False):
 
 
 def private_fact_ids(state):
+    from backend.runtime_v3.birth_identity import birth_fact_id
     ids=set()
     for p in state.get('pregnancies',{}).values(): ids.update([p['fact_id'],p['count_fact_id'],*p['sex_fact_ids'].values()])
     born={c['id'] for p in state.get('pregnancies',{}).values() if p['status']=='born' for c in p['children']}
-    ids.update(state['characters'][cid]['life_fact_id'] for cid in born)
+    ids.update(birth_fact_id(state, cid) for cid in born)
     ids.update(r['fact_id'] for r in state['objective_relations'].values() if r['target_id'] in born)
     ids.update(n['fact_id'] for n in state.get('naming_decisions',{}).values())
+    ids.discard(None)  # Optional references are not facts.
     return ids
 
 
@@ -387,10 +389,11 @@ def validate_reproduction(state):
 
 
 def known_birth(state, cid, observer):
-    from backend.runtime_v3.birth_identity import is_game_birth
-    actor=state['characters'][cid]
-    return (not is_game_birth(state,cid) or cid==observer or
-        state['knowledge'].get(str(observer)+':'+str(actor.get('life_fact_id')),{}).get('status')=='known')
+    from backend.runtime_v3.birth_identity import birth_fact_id, is_game_birth
+    if cid == observer or not is_game_birth(state, cid):
+        return True
+    fid = birth_fact_id(state, cid)
+    return fid is not None and state['knowledge'].get(f'{observer}:{fid}', {}).get('status') == 'known'
 
 
 def birth_name(state,cid,observer):

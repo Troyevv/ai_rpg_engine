@@ -6,7 +6,7 @@ and try to hide it with CSS. References, not guesses about Russian prose, decide
 """
 from copy import deepcopy
 
-from backend.runtime_v3.birth_identity import is_game_birth, birth_sex_disclosed
+from backend.runtime_v3.birth_identity import birth_fact_id, is_game_birth, birth_sex_disclosed
 from backend.runtime_v3.personality import CARD_FIELDS as TRAIT_LABELS
 from backend.services.world import CARD_FIELDS, KINDS
 
@@ -70,8 +70,7 @@ def player_view(state):
     scene=world['scenes'].get(state.get('camera',{}).get('scene_id'),{})
     before=world['characters']
     def known_identity(c):
-        row=before.get(c['id'],{})
-        return c['id'] in before and (not is_game_birth(world,c['id']) or c['id']==actor or row.get('life_fact_id') in known)
+        return c['id'] in before and (not is_game_birth(world,c['id']) or c['id']==actor or birth_fact_id(world, c['id']) in known)
     cards={c['id']:c for c in state['characters'] if known_identity(c) and not c.get('director_only') and
            (not c.get('hidden') or c['id']==actor or actor in c.get('visible_to_ids',[]) or c['id'] in scene.get('participants',[]))}
     people=set(cards)
