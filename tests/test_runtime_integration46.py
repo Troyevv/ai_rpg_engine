@@ -3,8 +3,10 @@ from copy import deepcopy
 from unittest.mock import patch
 
 import engine
+import pytest
 from backend.repositories.preparation import Repository
 from backend.runtime_v3.life import capabilities
+from backend.runtime_v3.repository import read_history
 from backend.runtime_v3.portraits import visual_age
 from backend.runtime_v3.reproduction import known_birth
 from backend.runtime_v3.long_term_calendar import target_minute
@@ -138,7 +140,8 @@ def test_hidden_birth_recipient_directory_and_command(api):
     assert response.status_code == 409 and repo.get_snapshot(sid) == snapshot
 
 
-def test_j04_call_with_authored_hangup_death_and_succession(tmp_path):
+@pytest.mark.parametrize('initiator', ['qa_vera', ACTOR_ID])
+def test_j04_call_with_authored_hangup_death_and_succession(tmp_path, initiator):
     from test_call_continuity import connected
     repo, client, sid, call_id = connected(tmp_path)
     before = repo.get_snapshot(sid)
@@ -147,9 +150,13 @@ def test_j04_call_with_authored_hangup_death_and_succession(tmp_path):
     text = 'Мой персонаж умирает.'
     raw['life_changes'] = [dict(id=ACTOR_ID, life_status='dead', assertion='established', evidence=text,
                                 player_assertion='explicit_choice', player_evidence=text)]
-    raw['call_lifecycle_changes'] = [dict(call_id=call_id, actor_id='qa_vera',
-                                          assertion='completed_end', evidence='Вера положила трубку.')]
-    dead = turn(repo, sid, raw, text, narration='Вера положила трубку. Кирилл умер.')
+    evidence = 'Вера положила трубку.' if initiator == 'qa_vera' else 'Кирилл положил трубку.'
+    hangup = dict(call_id=call_id, actor_id=initiator, assertion='completed_end', evidence=evidence)
+    if initiator == ACTOR_ID:
+        hangup['player_evidence'] = 'Я кладу трубку.'
+        text = hangup['player_evidence'] + ' ' + text
+    raw['call_lifecycle_changes'] = [hangup]
+    dead = turn(repo, sid, raw, text, narration=evidence + ' Кирилл умер.')
     assert dead['world_state']['remote_events'][call_id]['status'] == 'ended'
     assert dead['world_state']['meta']['protagonist_required']
     assert Repository(repo.path).get_snapshot(sid) == dead
@@ -157,6 +164,19 @@ def test_j04_call_with_authored_hangup_death_and_succession(tmp_path):
     continued = turn(repo, sid)
     assert continued['world_state']['camera']['controlled_actor_id'] == 'qa_vera'
     assert continued['world_state']['remote_events'][call_id] == dead['world_state']['remote_events'][call_id]
+    with repo.connect() as db:
+        history, _ = read_history(db, continued['history_head'])
+    endings = [e for e in history['events']
+               if e.get('remote_interaction_id') == call_id and e['remote']['status'] == 'ended']
+    assert len(endings) == 1
+    assert endings[0]['acting_character_id'] == initiator
+    assert endings[0]['narrative_evidence'] == evidence
+    assert 'termination' not in endings[0]
+    transitions = [change for change in history['state_changes']
+                   if change.get('source_event_id') == endings[0]['id']]
+    assert len(transitions) == 1
+    assert transitions[0]['before']['status'] == 'answered'
+    assert transitions[0]['after'] == continued['world_state']['remote_events'][call_id]
 
 
 def test_j06_checkpoint_repair_retry_variants_and_archive(api):

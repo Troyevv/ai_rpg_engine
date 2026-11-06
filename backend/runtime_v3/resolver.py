@@ -374,6 +374,10 @@ class StateResolver:
         # Life changes are committed at this turn's boundary. Earlier postal
         # deadlines must observe the earlier life state, not a later death.
         deliver_due(s, remote_history, before=s['meta']['world_time'])
+        # A completed hang-up belongs to its initiator. Apply it while the call
+        # is open, before end-of-turn Life changes can require a system closure.
+        from backend.runtime_v3.call_continuity import apply_lifecycle
+        apply_lifecycle(self, raw, remote_history)
         from backend.runtime_v3.life import apply_life
         apply_life(self,raw)
         from backend.runtime_v3.initiative import validate_actions
@@ -503,9 +507,8 @@ class StateResolver:
         from backend.runtime_v3.group_planning import resolve_responses
         resolve_responses(self, raw)
         advance_remote(s, self.history)
-        from backend.runtime_v3.call_continuity import apply_lifecycle, project_physical
+        from backend.runtime_v3.call_continuity import project_physical
         project_physical(self, raw)
-        apply_lifecycle(self, raw)
         upserts = {section:{key:deepcopy(value) for key,value in s[section].items() if value != self.before[section].get(key)}
             for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions','residences','roles','organizations','reproductive_events','pregnancies','naming_decisions','possessions','contacts','conversations','remote_events')}
         digest = sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
