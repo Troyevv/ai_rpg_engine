@@ -406,3 +406,21 @@ def test_same_character_later_develops_through_67_and_branch_appearance_boundary
     assert evolved.state['characters'][cid]['birth_provenance']==born.state['characters'][cid]['birth_provenance']
     later=deepcopy(branch);later['world_state']=evolved.state
     assert appearance_adapter(later,cid)==boundary
+
+
+def test_later_life_fact_does_not_disclose_birth_or_replace_its_knowledge():
+    from backend.runtime_v3.models import Fact
+    from backend.runtime_v3.reproduction import known_birth, private_fact_ids
+    from backend.runtime_v3.secrets import visible_fact_ids
+    s = deliver(conceive().state).state
+    pregnancy, = s['pregnancies'].values()
+    child = pregnancy['children'][0]['id']
+    birth_id = s['characters'][child]['life_fact_id']
+    later = 'life-update'
+    s['facts'][later] = Fact(id=later, text='Обновлён жизненный статус.', character_ids=[child]).model_dump()
+    s = run(s, 'life_changes', [dict(id=child, life_status='dead', fact_id=later)]).state
+    assert s['characters'][child]['life_fact_id'] == later
+    assert {birth_id, later} <= private_fact_ids(s)
+    assert known_birth(s, child, 'a') and later not in visible_fact_ids(s)
+    s['knowledge']['c:' + later] = Knowledge(actor_id='c', fact_id=later).model_dump()
+    assert not known_birth(s, child, 'c')

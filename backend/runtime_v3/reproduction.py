@@ -348,6 +348,7 @@ def private_fact_ids(state):
     for p in state.get('pregnancies',{}).values(): ids.update([p['fact_id'],p['count_fact_id'],*p['sex_fact_ids'].values()])
     born={c['id'] for p in state.get('pregnancies',{}).values() if p['status']=='born' for c in p['children']}
     ids.update(birth_fact_id(state, cid) for cid in born)
+    ids.update(state['characters'][cid]['life_fact_id'] for cid in born)
     ids.update(r['fact_id'] for r in state['objective_relations'].values() if r['target_id'] in born)
     ids.update(n['fact_id'] for n in state.get('naming_decisions',{}).values())
     ids.discard(None)  # Optional references are not facts.

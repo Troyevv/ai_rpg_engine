@@ -17,7 +17,10 @@ from backend.runtime_v3.scope import RelevanceResolver
 from backend.runtime_v3.repository import initialize, append_history, read_history, migrate_snapshot
 from backend.runtime_v3.milestones import query
 from context_builder import estimate
-from devtools.narrative_test_world import build_fixture
+from devtools.narrative_test_world import build_fixture, load_fixture
+from test_narrative_test_world import CONFIG
+from test_npc_review import promoted
+from test_runtime_v3_engine import raw_for, run as run_job
 from test_life_social import run, state, tie
 
 
@@ -111,3 +114,36 @@ def test_dense_family_history_projections_and_lta(tmp_path):
     print('R18', dict(characters=len(world['characters']), history_window=len(history['state_changes']),
           context_estimate=estimate(messages), family_nodes=len(family['nodes']), recipients=len(directory),
           milestones=len(milestones), lta_calls=report['llm_calls'], seconds=round(perf_counter()-started,3)))
+
+
+@given(st.lists(st.sampled_from(['restore_npc', 'restore_quiet', 'reopen', 'repeat_worker']),
+                min_size=2, max_size=7))
+@settings(max_examples=5, deadline=None)
+def test_variant_replay_preserves_selected_npc_and_knowledge(operations):
+    with TemporaryDirectory() as directory:
+        repo = Repository(Path(directory) / 'variants.sqlite')
+        sid = load_fixture(repo, 'base')['save']
+        before = repo.get_snapshot(sid)
+        variants = {}
+        for kind, name, raw in [('start', 'restore_npc', promoted(before)),
+                                ('regenerate', 'restore_quiet', raw_for(before))]:
+            jid = repo.begin_job(sid, 'Я доверяю Ладе.' if kind == 'start' else '', kind, CONFIG)
+            run_job(repo, jid, raw)
+            assert repo.get_job(jid)['status'] == 'saved', repo.get_job(jid)['error']
+            turn, = repo.list_turns(sid)
+            variants[name] = (turn['active_variant_id'], repo.get_snapshot(sid))
+        selected = 'restore_quiet'
+        for operation in operations:
+            if operation == 'reopen':
+                repo = Repository(repo.path)
+            elif operation == 'repeat_worker':
+                assert run_job(repo, jid, raw) == []
+            else:
+                selected = operation
+                repo.select_variant(sid, turn['id'], variants[selected][0], repo.get_save(sid)['revision'])
+            current = repo.get_snapshot(sid)
+            assert current == variants[selected][1]
+            assert ('new_npc' in current['world_state']['characters']) == (selected == 'restore_npc')
+            assert ('qa_kirill:workshop' in current['world_state']['knowledge']) == (selected == 'restore_npc')
+        repo.rollback_last(sid)
+        assert repo.get_snapshot(sid) == before
