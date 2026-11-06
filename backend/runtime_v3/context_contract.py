@@ -38,7 +38,7 @@ Omit ended contact; physically arriving actors belong in present instead.
 Knowledge requires THIS accepted informational Event: actor in witnesses, fact in fact_ids; no GM-card acquisition. Only actual perception/reading, never delivery, time or intention. Message author_id: established participant, not inferred.
 Facts immutable; reuse IDs, new assertions need new IDs. claim={subject_id,predicate,value,scope:""} identifies an exclusive slot; scope separates roles/periods; omit uncertain slots. known is belief, not truth. knowledge_gained statuses: known/suspected/unknown/outdated/refuted/superseded. expected_revision required for revival; supersedes needs old AND new facts in Event.fact_ids. New known retires conflicting known in its slot. Retire existing beliefs only. Same-slot changes need distinct Event.order.
 story_secret=plot, not privacy/routine. secret_subject_ids=related people; secret_keeper_ids=conscious owners; secret_biography_ids=biographical subjects, not others' feelings/plans. None grants Knowledge. secret_existence:hidden(default)|discoverable(anonymous slot). Reuse IDs; rumors=suspected. secret_disclosures binds written source_event_id/artifact_id + fact_id, assertion confirmed|rumor. Only actual reading grants Knowledge; quotes/delivery aren't confirmation.
-Unknown Event minute/order may be omitted; final_scene elapsed_minutes is explicit on ordinary turns.
+Event.minute: absolute in [world_time, world_time + applied elapsed_minutes]. Omit unknown minute/order. Date testimony to the telling.
 '''
 
 NARRATIVE_CONTRACT = '''
