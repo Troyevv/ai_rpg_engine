@@ -17,7 +17,11 @@ TEXT = 'Вера закончила передачу семейного коль
 
 
 def state():
-    return migrate_v2(snapshot()).snapshot['world_state']
+    s = migrate_v2(snapshot()).snapshot['world_state']
+    # The ring changes hands at a meeting. Perception is still Event-specific.
+    for actor in s['characters'].values():
+        actor['location_id'] = s['camera']['location_id']
+    return s
 
 
 def delta(s, operation='introduce', **kw):
@@ -163,7 +167,7 @@ def test_large_world_context_bounded_and_query_prioritized():
 
 
 def test_persistence_atomic_history_siblings_migration_and_salvage():
-    snap=migrate_v2(snapshot()).snapshot;r=run(snap['world_state']);conn=db()
+    snap=snapshot(state());r=run(snap['world_state']);conn=db()
     with pytest.raises(RuntimeError),conn:
         committed_snapshot(conn,snap,r);raise RuntimeError('abort transaction')
     assert not query(conn,snap['history_head'])
@@ -205,6 +209,7 @@ def test_real_jobs_start_turn_reload_next_regenerate_variants_rollback(tmp_path)
     assert s['possessions']==initial
     c=delta(s,'return',item_id='qa_camera',expected_revision=0,decision_actor_id='qa_vera',updates=dict(holder_id='qa_timur',location_id=None))
     raw=payload(s,c,('qa_kirill','qa_vera','qa_timur'))
+    raw['events'][0]['participants']=['qa_vera','qa_timur']
     with patch('backend.runtime_v3.simulation.background_candidate',return_value=None):
         jid=repo.begin_job(sid,'Наблюдаю.','turn',CONFIG);execute(repo,jid,raw,TEXT)
         assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
