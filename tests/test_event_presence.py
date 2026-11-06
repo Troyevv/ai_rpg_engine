@@ -119,6 +119,10 @@ def test_intention_completed_arrival_and_subsequent_departure(crisis):
     lid = raw['final_scene']['location_id']
     with pytest.raises(StructuralDeltaError, match=VERA):
         StateResolver(state, 'Вера собирается прийти в библиотеку.', ACTION).resolve(raw)
+    planned = dict(raw, movements=[dict(actor_id=VERA, to_location_id=lid, assertion='planned')])
+    with pytest.raises(StructuralDeltaError) as exc:
+        StateResolver(state, 'Вера собирается прийти.', ACTION).resolve(planned)
+    assert exc.value.diagnostic('extraction')['path'] == 'movements[0].assertion'
     raw['final_scene']['present_character_ids'].append(VERA)
     raw['movements'] = [dict(actor_id=VERA, assertion='completed_arrival',
                              from_location_id=state['characters'][VERA]['location_id'], to_location_id=lid)]
@@ -134,7 +138,7 @@ def test_intention_completed_arrival_and_subsequent_departure(crisis):
     assert left.history['events'][0]['participants'] == [NINA, VERA]
 
 
-def test_repair_to_call_requires_answered_channel(tmp_path):
+def test_call_requires_answered_channel():
     snap = incoming(phone(), 'call', '')
     eid, = snap['world_state']['remote_events']
     ringing = snap['world_state']
@@ -155,3 +159,48 @@ def test_repair_to_call_requires_answered_channel(tmp_path):
         with pytest.raises(StructuralDeltaError) as exc:
             StateResolver(unavailable, '', '').resolve(raw)
         assert exc.value.diagnostic('extraction')['path'] == 'events[0].interaction_channel'
+
+
+@pytest.mark.parametrize('closed', [False, True])
+def test_channel_repair_cannot_invent_connection(tmp_path, closed):
+    from test_call_continuity import connected
+    from runtime_v3_fixture import execute
+    from test_narrative_test_world import CONFIG
+    repo, client, sid, call = connected(tmp_path)
+    if closed:
+        response = client.post(f'/api/saves/{sid}/phone', json=dict(
+            revision=repo.get_save(sid)['revision'], command=dict(action='end', event_id=call, operation_id='close-call-before-repair-226')))
+        assert response.status_code == 200, response.text
+    before = repo.get_snapshot(sid)
+    camera = before['world_state']['camera']
+    actors = [camera['controlled_actor_id'], VERA]
+    bad = dict(final_scene=dict(location_id=camera['location_id'], present_character_ids=camera['present_character_ids']),
+               events=[dict(id='voice', text='Я тебя слышу.', medium='conversation', participants=actors,
+                            witnesses=actors, interaction_channel='unsupported')])
+    repaired = deepcopy(bad)
+    repaired['events'][0]['interaction_channel'] = 'call'
+    jid = repo.begin_job(sid, 'Ты меня слышишь?', 'turn', CONFIG)
+    calls = execute(repo, jid, bad, 'Вера отвечает: «Я тебя слышу».', repaired)
+    assert len(calls) == 3
+    assert 'events[0].interaction_channel' in calls[-1]['messages'][0]['content']
+    saved = Repository(repo.path).get_snapshot(sid)
+    if closed:
+        assert repo.get_job(jid)['status'] == 'error' and saved == before
+    else:
+        assert repo.get_job(jid)['status'] == 'saved', repo.get_job(jid)['error']
+        voice, = [e for e in history(repo, saved)['events'] if e.get('local_id') == 'voice']
+        assert voice['interaction_channel'] == 'call' and voice['witnesses'] == actors
+
+
+def test_linked_message_roles_come_from_the_accepted_send():
+    from test_narrative_phone138 import resolve, message
+    snap = phone()
+    row = dict(id='delivery', text='Доставлено сообщение.', medium='message', author_id='b',
+               participants=['b', 'a'], witnesses=['b'])
+    remote = [message(source_event_id='delivery')]
+    result = resolve(snap, remote, events=[row])
+    assert next(e for e in result.history['events'] if e.get('local_id') == 'delivery')['witnesses'] == ['b']
+    for changed, field in [(dict(author_id='a'), 'author_id'), (dict(witnesses=['child']), 'witnesses[0]')]:
+        with pytest.raises(StructuralDeltaError) as exc:
+            resolve(snap, remote, events=[dict(row, **changed)])
+        assert exc.value.diagnostic('extraction')['path'] == 'events[0].' + field

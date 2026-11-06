@@ -386,7 +386,7 @@ class StateResolver:
                     fatal('Нет принятого источника непроизвольного перемещения.', 'movement_agency', repairable=True, section='movements', source_ids=[item.get('source_event_id')])
         from backend.runtime_v3.narrative_remote import apply_extracted_remote
         remote_history, written_sources = apply_extracted_remote(self, raw, events)
-        from backend.runtime_v3.event_presence import validate_event_presence
+        from backend.runtime_v3.event_presence import situation_supported, validate_event_presence
         for eid, event in events.items():
             validate_event_presence(self, event, event_indices[eid], written_sources.get(eid))
         from backend.runtime_v3.knowledge import apply_knowledge
@@ -440,15 +440,10 @@ class StateResolver:
                 if key == 'situation' and self.mode == 'background' and cid == self.protected_actor_id and value != actor[key]:
                     fatal('Фон меняет ситуацию управляемого персонажа.', 'background_agency_invalid', repairable=True,
                           section='character_changes', index=i, field=key, entity=cid)
-                if key == 'situation' and cid not in present:
-                    source = events.get(item.get('source_event_id')) if isinstance(item.get('source_event_id'), str) else None
-                    if (not source or cid not in source['participants'] + source['witnesses']
-                            or source['medium'] == 'message' and cid not in source['witnesses'] and source['local_id'] not in written_sources
-                            or source.get('interaction_channel') != 'call' and source['medium'] != 'message'
-                            and source.get('location_id', actor['location_id']) != actor['location_id']):
-                        self.warn('character_changes', i, 'Нет принятого Event для ситуации вне сцены.',
-                                  key, cid, 'situation_source_unconfirmed')
-                        continue
+                if key == 'situation' and not situation_supported(self, item, events, written_sources):
+                    self.warn('character_changes', i, 'Ситуация не подтверждена сценой, перемещением или принятым Event.',
+                              key, cid, 'situation_source_unconfirmed')
+                    continue
                 if cid == self.protected_actor_id and key in PLAYER_FIELDS:
                     if self.mode == 'background':
                         self.warn('character_changes',i,'Фон не меняет EXTERNAL мотивацию.',key,cid,'controlled_actor_unsupported'); continue

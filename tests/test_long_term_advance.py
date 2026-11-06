@@ -633,7 +633,7 @@ def test_new_character_only_committed_with_accepted_relationship():
     )
     text = "c и Новый стали друзьями."
     raw = dict(
-        final_scene=dict(location_id="home", present_character_ids=["c"]),
+        final_scene=dict(location_id="home", present_character_ids=["c", "new"]),
         promotions=[dict(id="new", name="Новый", fields={}, evidence=text)],
         events=[
             dict(

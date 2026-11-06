@@ -160,7 +160,8 @@ def test_ilya_sonya_real_jobs_reload_regenerate_rollback_branch(tmp_path):
     def run(text,phase=None,kind='turn',depart=False,finish=False):
         before=repo.get_snapshot(sid);s=before['world_state'];camera=s['camera']
         raw=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=[a] if depart else camera['present_character_ids'],elapsed_minutes=1),
-            events=[dict(id='meeting',text=text,evidence=text,participants=[a,b],witnesses=[a,b],medium='conversation')])
+            events=[dict(id='meeting',text=text,evidence=text,participants=[a,b],witnesses=[a,b],medium='conversation')]
+            if b in camera['present_character_ids'] else [])
         if phase:raw['scene_transitions']=[dict(source_event_id='meeting',phase=phase,actor_ids=[a,b],thread_ids=['qa_meeting'],evidence=text)]
         if finish:
             intention=s['characters'][a]['intentions'][0]

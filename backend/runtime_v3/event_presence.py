@@ -74,3 +74,38 @@ def validate_event_presence(resolver, event, index, written):
             if not common:
                 reject(f'{role}[{n}]', f'{actor}: присутствие в месте Event {eid} не подтверждено. '
                        'Сверьте состав сцены, принятый маршрут и источник связи.', actor)
+
+
+def situation_supported(resolver, change, events, written_sources):
+    """Bind a situation to the end position or to a current accepted interaction."""
+    actor = change['id']
+    state = resolver.state
+    location = state['characters'][actor]['location_id']
+    if 'source_event_id' in change:
+        ref = change['source_event_id']
+        if not isinstance(ref, str) or ref not in events:
+            return False
+        candidates = [events[ref]]
+    else:
+        camera = state['camera']
+        if actor in camera['present_character_ids'] or actor in camera['observed_character_ids']:
+            return True
+        if any(m['actor_id'] == actor and m['to_location_id'] == location for m in resolver.history.movements):
+            return True
+        candidates = events.values()
+
+    for event in candidates:
+        if actor not in event['witnesses'] and actor not in event['participants']:
+            continue
+        if event.get('interaction_channel') == 'call':
+            return True
+        written = written_sources.get(event['local_id'])
+        if written:
+            if actor == written['sender_id'] or actor in written['read_by']:
+                return True
+            continue
+        if event['medium'] == 'message' and actor not in event['witnesses']:
+            continue  # The author of a previously written artifact need not be involved now.
+        if location is not None and event.get('location_id', location) == location:
+            return True
+    return False
