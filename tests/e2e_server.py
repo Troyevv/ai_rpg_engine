@@ -944,4 +944,8 @@ if __name__ == '__main__':
         wid = repo.save_world('Тест вариантов и памяти',summary())
         sid = repo.create_save(wid,'Тестовое прохождение')
         return {'world':wid,'save':sid}
-    uvicorn.run(app, host='127.0.0.1', port=int(os.getenv('E2E_PORT','8011')), log_level='warning')
+    # Playwright's API pool can reuse an idle socket exactly as Uvicorn closes it
+    # (CI #387: GET 5000.6 ms after the previous response). End fixture connections
+    # explicitly after each response, including completed streams; no request retries.
+    uvicorn.run(app, host='127.0.0.1', port=int(os.getenv('E2E_PORT','8011')),
+                log_level='warning', headers=[('Connection', 'close')])
