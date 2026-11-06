@@ -59,9 +59,9 @@ test('world themes persist across reload and devices; portals inherit theme; all
   await noOverflow(page);await page.getByRole('button',{name:'Закрыть',exact:true}).click();
  }
  await page.reload();await expect(page.locator('html')).toHaveAttribute('data-theme','neon');
- const other=await browser.newContext();const p=await other.newPage();
+ const other=await browser.newContext({baseURL:new URL(page.url()).origin});const p=await other.newPage();
  await p.addInitScript(s=>localStorage.setItem('selection',JSON.stringify(s)),selection);
- await p.goto('http://127.0.0.1:8011/');await expect(p.locator('html')).toHaveAttribute('data-theme','neon');await other.close();
+ await p.goto('/');await expect(p.locator('html')).toHaveAttribute('data-theme','neon');await other.close();
  await page.getByRole('textbox',{name:'Своё действие или реплика'}).fill('Подхожу к окну');
  await page.getByRole('button',{name:'Отправить действие'}).click();await expect(page.locator('.turn')).toHaveCount(2);
  await page.locator('.choices button').first().click();await expect(page.locator('.turn')).toHaveCount(3);
