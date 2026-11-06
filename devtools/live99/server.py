@@ -1,5 +1,6 @@
 """Private subprocess. Install the guard before the engine imports the provider."""
 from pathlib import Path
+import json
 import sys
 
 import llm
@@ -12,7 +13,8 @@ def main():
     ledger = Path(directory) / 'budget.sqlite'
     if not ledger.is_file():
         raise SystemExit('Missing budget ledger; refusing to reset spending history')
-    budget = Budget(ledger)
+    manifest = json.loads((Path(directory) / 'manifest.json').read_text())
+    budget = Budget(ledger, Path(directory) if manifest.get('stage') == 'B' else None)
     if mode == 'live' and MODEL not in llm.get_deepseek_models():
         raise SystemExit('Configured model unavailable')
 

@@ -83,7 +83,7 @@ def configure_context(page, context_length):
     expect(dialog).not_to_be_visible()
 
 
-def play(page, base, sid, kind, action, choice_index=None, job_id=None):
+def play(page, base, sid, kind, action, choice_index=None, job_id=None, options=None):
     prefix = f'{base}/api/saves/{sid}'
     endpoint = {'phone':'/phone/dispatch', 'switch':'/protagonist', 'lta':'/long-term',
                 'rollback':'/rollback', 'variant':'/variant'}.get(kind, '/turns')
@@ -126,9 +126,11 @@ def play(page, base, sid, kind, action, choice_index=None, job_id=None):
             (prev if prev.is_visible() else button(turn.locator('.variant-controls'), '1')).click()
         elif kind == 'lta':
             dialog = game_action(page, 'Время', 'Длительный переход')
-            dialog.get_by_label('Количество единиц перехода').fill('2')
+            dialog.get_by_label('Количество единиц перехода').fill(str((options or {}).get('amount', 2)))
+            if (options or {}).get('unit'):
+                dialog.get_by_label('Единица перехода').select_option(options['unit'])
             dialog.get_by_text(re.compile('Подробности симуляции')).click()
-            dialog.get_by_label('Лимит обращений к модели').fill('1')
+            dialog.get_by_label('Лимит обращений к модели').fill(str((options or {}).get('model_budget', 1)))
             button(dialog, 'Подтвердить длительный переход').click()
         elif kind == 'switch':
             dialog = game_action(page, 'Персонажи', 'Сменить главного героя')
