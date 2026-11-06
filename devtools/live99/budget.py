@@ -1,6 +1,7 @@
 """Fail closed *before* dispatch, including repair, continuation and concurrent calls."""
 import inspect
 import sqlite3
+import json
 from functools import wraps
 
 MODEL = 'deepseek-flash'
@@ -11,6 +12,33 @@ LIMIT_CALLS = 320
 # Integer nano-USD per token: maximum (peak, cold input), verified 2026-11-06.
 INPUT, OUTPUT = 300, 1200
 LIMIT_NUSD = 2_000_000_000
+
+
+def action_ledger(directory):
+    """Import old intents once; reservations survive missing files and restarts."""
+    path = directory / 'budget.sqlite'
+    if not path.is_file():
+        raise ValueError('Missing original budget ledger')
+    with sqlite3.connect(path) as db:
+        db.execute('BEGIN IMMEDIATE')
+        exists = db.execute("SELECT 1 FROM sqlite_master WHERE name='qa_actions'").fetchone()
+        if not exists:
+            db.execute('CREATE TABLE qa_actions(path TEXT PRIMARY KEY, intent TEXT NOT NULL)')
+            for intent in sorted(directory.rglob('intent.json')):
+                # Includes archived unsubmitted attempts and retry attempts.
+                db.execute('INSERT INTO qa_actions VALUES(?,?)',
+                           (str(intent.parent.relative_to(directory)), intent.read_text()))
+        return db.execute('SELECT count(*) FROM qa_actions').fetchone()[0]
+
+
+def reserve_action(directory, folder, meta, limit):
+    action_ledger(directory)
+    with sqlite3.connect(directory / 'budget.sqlite') as db:
+        db.execute('BEGIN IMMEDIATE')
+        if db.execute('SELECT count(*) FROM qa_actions').fetchone()[0] >= limit:
+            raise RuntimeError('QA cumulative action budget exhausted')
+        db.execute('INSERT INTO qa_actions VALUES(?,?)',
+                   (str(folder.relative_to(directory)), json.dumps(meta, ensure_ascii=False)))
 
 
 class Budget:

@@ -69,18 +69,32 @@ def plan(case, index, before):
     return 'turn', actions[index % len(actions)]
 
 
-def play(page, base, sid, kind, action, choice_index=None):
+def configure_context(page, context_length):
+    if page.viewport_size['width'] < 768:
+        button(page, 'Меню игры').click()
+    page.get_by_role('button', name='Настройки', exact=True).filter(visible=True).last.click()
+    dialog = page.get_by_role('dialog').last
+    dialog.get_by_label('Контекст game', exact=True).fill(str(context_length))
+    button(dialog, 'Сохранить настройки').click()
+    expect(dialog).not_to_be_visible()
+
+
+def play(page, base, sid, kind, action, choice_index=None, job_id=None):
     prefix = f'{base}/api/saves/{sid}'
     endpoint = {'phone':'/phone/dispatch', 'switch':'/protagonist', 'lta':'/long-term',
                 'rollback':'/rollback', 'variant':'/variant'}.get(kind, '/turns')
 
     def matches(response):
+        if kind == 'retry':
+            return response.url == f'{base}/api/jobs/{job_id}/retry' and response.request.method == 'POST'
         return (response.url.startswith(prefix + '/') and response.url.endswith(endpoint)
                 and response.request.method == 'POST'
                 and (kind != 'switch' or not response.request.post_data_json.get('preview')))
 
     with page.expect_response(matches) as pending:
-        if kind == 'start':
+        if kind == 'retry':
+            button(page, 'Повторить обработку состояния').click()
+        elif kind == 'start':
             button(page, 'Начать игру').click()
         elif kind == 'turn':
             page.get_by_label('Своё действие или реплика').fill(action)
@@ -123,7 +137,7 @@ def play(page, base, sid, kind, action, choice_index=None):
         raise ValueError(f'{endpoint} HTTP {response.status}: {response.text()[:500]}')
     result = response.json()
     job = result.get('job') if kind == 'phone' else result
-    if kind in ('start','turn','choice','phone','regenerate','lta'):
+    if kind in ('start','turn','choice','phone','regenerate','lta','retry'):
         deadline = time.monotonic() + 240
         while job['status'] in ('generating','extracting','validating') and time.monotonic() < deadline:
             page.wait_for_timeout(600)

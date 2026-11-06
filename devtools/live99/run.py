@@ -3,6 +3,7 @@ import argparse
 from contextlib import contextmanager, closing
 import fcntl
 import gzip
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -16,8 +17,10 @@ from decimal import Decimal
 import requests
 from playwright.sync_api import sync_playwright
 
-from .budget import Budget, MODEL, INPUT, OUTPUT
-from .browser import compare_prose, inspect_ui, open_save, plan, play
+from .budget import Budget, MODEL, INPUT, OUTPUT, action_ledger, reserve_action
+from .browser import compare_prose, inspect_ui, open_save, plan, play, configure_context
+from .recovery import (adopt, validate_revision, completed, retry_candidate,
+                       probe_context, FAMILY_CONTEXT, digest)
 from .evidence import delta, diagnostics, now, oracle, scenario_checks, snapshot, write
 from .scenarios import CASES, QUOTAS
 
@@ -83,6 +86,10 @@ def context_for(browser, mobile):
 
 def preflight(browser, base, directory, manifest):
     results = []
+    destination = directory / 'preflight.json'
+    if destination.exists():
+        destination = directory / 'preflights' / (revision() + '.json')
+        destination.parent.mkdir(exist_ok=True)
     for case, seed in manifest['seeds'].items():
         for mobile in (False, True):
             ctx = context_for(browser, mobile)
@@ -107,21 +114,31 @@ def preflight(browser, base, directory, manifest):
                 results.append({'case': case, 'mobile': mobile, 'error': str(error)})
             finally:
                 ctx.close()
-                write(directory / 'preflight.json', results)
+                write(destination, results)
     return all(row.get('ok') for row in results)
 
 
-def step(browser, base, directory, manifest, case, i):
+def step(browser, base, directory, manifest, case, i, limit, retry=None):
     path, seed = directory / 'game.sqlite', manifest['seeds'][case]
     sid = seed['save']
     folder = directory / case / f'{i:03d}'
-    folder.mkdir(parents=True)
+    if retry:
+        folder = folder / 'retries' / '001'
     before = snapshot(path, sid)
     kind, action = plan(case, i, before)
+    if retry:
+        kind, action = retry[1]['kind'], retry[1]['action']
     with closing(sqlite3.connect(path)) as db:
         cursor = db.execute('SELECT coalesce(max(rowid),0) FROM game_jobs').fetchone()[0]
-    meta = dict(sha=manifest['sha'], case=case, step=i, save=sid, kind=kind, action=action,
+    meta = dict(sha=revision(), source_sha=manifest['sha'], case=case, step=i, save=sid, kind=kind, action=action,
                 started=now(), job_cursor=cursor, mobile=(list(CASES).index(case)+i)%2==1)
+    meta['context_length'] = FAMILY_CONTEXT if case == 'family' else 32768
+    if retry:
+        meta.update(operation='retry-extraction', job_id=retry[2]['id'],
+                    original_request_ids=retry[3], original_narrative_sha256=hashlib.sha256(
+                        retry[2]['narrative'].encode()).hexdigest())
+    reserve_action(directory, folder, meta, limit)
+    folder.mkdir(parents=True)
     write(folder / 'intent.json', meta)
     write(folder / 'before.json.gz', before)
     ctx = context_for(browser, meta['mobile'])
@@ -131,6 +148,7 @@ def step(browser, base, directory, manifest, case, i):
     try:
         page = open_save(ctx, base, seed)
         page.on('pageerror', lambda exc: errors.append(str(exc)))
+        configure_context(page, meta['context_length'])
         if kind == 'turn' and i >= 5 and i % 3:
             choices = page.locator('.choices button')
             if choices.count():
@@ -141,7 +159,12 @@ def step(browser, base, directory, manifest, case, i):
                 meta.update(kind='choice', action=action, choice_index=choice_index)
                 write(folder / 'intent.json', meta)
                 kind = 'choice'
-        play(page, base, sid, kind, action, choice_index)
+        if retry:
+            # Revalidate immediately before clicking the production Retry control.
+            retry_candidate(directory, manifest, case, i, allow_pending=folder)
+            play(page, base, sid, 'retry', action, job_id=retry[2]['id'])
+        else:
+            play(page, base, sid, kind, action, choice_index)
         after = snapshot(path, sid)
         projected = page.request.get(f'{base}/api/saves/{sid}').json()
         oracle(before, after, projected, 'turn' if kind == 'choice' else kind)
@@ -155,8 +178,14 @@ def step(browser, base, directory, manifest, case, i):
                 target = json.load(source)['snapshot']
             if any(after['snapshot'].get(k) != target.get(k) for k in ('world_state','history_head')):
                 raise ValueError('Restored variant / rollback differs from its recorded snapshot')
-        jobs = diagnostics(path, sid, cursor)
+        jobs = diagnostics(path, sid, retry[1]['job_cursor'] if retry else cursor)
         attempts = [r for j in jobs for r in j['requests']]
+        if retry:
+            if len(jobs) != 1 or jobs[0]['id'] != retry[2]['id'] or jobs[0]['narrative'] != retry[2]['narrative']:
+                raise ValueError('Retry changed job identity or completed Narrative')
+            new = [r for r in attempts if r['id'] not in retry[3]]
+            if not new or any(r['stage'] not in ('extraction', 'extraction_repair') for r in new):
+                raise ValueError('Retry repeated a completed provider stage')
         if kind in ('start','turn','choice','regenerate') and not any(
             r['status'] == 'complete' and r['provider'] == 'deepseek' and r['model'] == MODEL for r in attempts
         ):
@@ -180,9 +209,50 @@ def step(browser, base, directory, manifest, case, i):
         final = snapshot(path, sid)
         write(folder / 'after.json.gz', final)
         write(folder / 'delta.json', delta(before, final))
-        write(folder / 'diagnostics.json.gz', diagnostics(path, sid, cursor))
+        write(folder / 'diagnostics.json.gz', diagnostics(path, sid, retry[1]['job_cursor'] if retry else cursor))
         write(folder / 'result.json', dict(meta, finished=now()))
     return meta['status'] == 'recorded'
+
+
+def recheck_saved(browser, base, directory, manifest, case, index):
+    folder = directory / case / f'{index:03d}'
+    result = read(folder / 'result.json')
+    if result.get('error') != 'Wrong sequence or empty committed scene' or result['kind'] != 'start':
+        raise ValueError('Only the diagnosed zero-based start false positive can be rechecked')
+    seed = manifest['seeds'][case]
+    with gzip.open(folder / 'before.json.gz', 'rt') as f:
+        before = json.load(f)
+    with gzip.open(folder / 'after.json.gz', 'rt') as f:
+        after = json.load(f)
+    if snapshot(directory / 'game.sqlite', seed['save']) != after:
+        raise ValueError('Save changed since the held action')
+    jobs = diagnostics(directory / 'game.sqlite', seed['save'], result['job_cursor'])
+    if len(jobs) != 1 or jobs[0]['status'] != 'saved' or not any(
+            r['status'] == 'complete' and r['model'] == MODEL for r in jobs[0]['requests']):
+        raise ValueError('No unique saved live job to recheck')
+    ctx = context_for(browser, result['mobile'])
+    errors = []
+    try:
+        page = open_save(ctx, base, seed)
+        page.on('pageerror', lambda e: errors.append(str(e)))
+        projection = page.request.get(f'{base}/api/saves/{seed["save"]}').json()
+        oracle(before, after, projection, 'start')
+        scenario_checks(case, before, after, projection)
+        compare_prose(page, base, seed['save'], seed['world'], after['last_turn']['assistant_text'])
+        inspect_ui(page, case)
+        page.reload()
+        page.locator('.current-game-entry button').wait_for()
+        oracle(after, snapshot(directory / 'game.sqlite', seed['save']),
+               page.request.get(f'{base}/api/saves/{seed["save"]}').json(), 'reload')
+        if errors:
+            raise ValueError(errors)
+        receipt = folder / 'verified.json'
+        if not receipt.exists():
+            write(receipt, dict(status='recorded', sha=revision(), at=now(), paid_calls=0,
+                evidence={name: digest(folder / name) for name in
+                          ('intent.json', 'result.json', 'before.json.gz', 'after.json.gz', 'diagnostics.json.gz')}))
+    finally:
+        ctx.close()
 
 
 def recover_unsubmitted(directory, manifest, case, index):
@@ -212,33 +282,43 @@ def read(path):
 
 
 def report(directory, manifest):
-    lines = ['# Live Gameplay QA #99', '', 'SHA ' + manifest['sha'], '',
+    previous_report = directory / 'report.md'
+    if previous_report.exists():
+        archive = directory / 'reports' / (digest(previous_report) + '.md')
+        archive.parent.mkdir(exist_ok=True)
+        if not archive.exists():
+            archive.write_bytes(previous_report.read_bytes())
+    lines = ['# Live Gameplay QA #99', '', 'Original SHA ' + manifest['sha'],
+             'Report checkout SHA ' + revision(), '',
              '| Case | Step | Action | Result | Evidence |', '|---|---:|---|---|---|']
     total = requests_count = unknown_cost = 0
     cost = Decimal(0)
+    logged_jobs = {}
     for case in CASES:
-        for folder in sorted((directory / case).glob('[0-9]*')):
+        folders = sorted((directory / case).glob('[0-9]*'))
+        for folder in [attempt for f in folders for attempt in [f, *sorted((f / 'retries').glob('[0-9]*'))]]:
             result = folder / 'result.json'
             r = read(result) if result.exists() else {'kind': '?', 'status':'interrupted'}
             relative = folder.relative_to(directory)
-            lines.append(f"| {case} | {folder.name} | {r['kind']} | {r['status']} | [{relative}]({relative}/intent.json) |")
+            status = r['status'] + (' (browser recheck passed)' if (folder / 'verified.json').exists() else '')
+            lines.append(f"| {case} | {folder.name} | {r.get('operation', r['kind'])} | {status} | [{relative}]({relative}/intent.json) |")
             if (folder / 'diagnostics.json.gz').exists():
                 with gzip.open(folder / 'diagnostics.json.gz', 'rt') as handle:
                     jobs = json.load(handle)
                     for job in jobs:
-                        attempts = job['requests']
-                        total += int(job['status'] == 'saved' and any(
-                            a['provider'] == 'deepseek' and a['status'] == 'complete' for a in attempts))
-                        requests_count += len(attempts)
-                        for attempt in attempts:
-                            if attempt['cost_usd'] is None:
-                                unknown_cost += 1
-                            else:
-                                cost += Decimal(attempt['cost_usd'])
+                        logged_jobs[job['id']] = job
+    # Retry keeps the same job and old receipts; count each request exactly once.
+    receipts = {r['id']: r for j in logged_jobs.values() for r in j['requests']}
+    total = sum(j['status'] == 'saved' and any(r['status'] == 'complete' and r['provider'] == 'deepseek'
+                for r in j['requests']) for j in logged_jobs.values())
+    requests_count = len(receipts)
+    unknown_cost = sum(r['cost_usd'] is None for r in receipts.values())
+    cost = sum((Decimal(r['cost_usd']) for r in receipts.values() if r['cost_usd'] is not None), Decimal(0))
     with closing(sqlite3.connect((directory / 'budget.sqlite').as_uri() + '?mode=ro', uri=True)) as db:
         count, unresolved, inp, out = db.execute('SELECT count(*),count(CASE WHEN settled=0 THEN 1 END),'
             'coalesce(sum(input),0),coalesce(sum(output),0) FROM reservations').fetchone()
-    lines.extend(['', f'Dispatches {count}, outstanding worst-case reservations {unresolved}.',
+    lines.extend(['', f'Cumulative action reservations: {action_ledger(directory)}.',
+                  f'Dispatches {count}, outstanding worst-case reservations {unresolved}.',
                   f'Conservative cost ceiling including reservations: ${(inp*INPUT+out*OUTPUT)/1e9:.6f}.',
                   f'Provider attempts logged by Runtime: {requests_count}, known estimated USD: {cost}, '
                   f'attempts without a cost receipt: {unknown_cost}.',
@@ -250,11 +330,10 @@ def report(directory, manifest):
 
 
 def run(args, directory, manifest):
-    live = args.command == 'run'
-    if manifest['sha'] != revision():
-        raise SystemExit('Different checkout SHA from prepare; use the original checkout.')
+    live = args.command in ('run', 'retry-extraction')
+    validate_revision(directory, manifest, revision())
     if live:
-        pf = directory / 'preflight.json'
+        pf = directory / 'preflights' / (revision() + '.json') if manifest['sha'] != revision() else directory / 'preflight.json'
         if not pf.exists() or len(read(pf)) != 2*len(CASES) or not all(r.get('ok') for r in read(pf)):
             raise SystemExit('Run a successful browser preflight first.')
         if not os.environ.get('DEEPSEEK_API_KEY'):
@@ -271,8 +350,22 @@ def run(args, directory, manifest):
         with sync_playwright() as pw:
             browser = pw.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_EXECUTABLE_PATH') or None)
             try:
+                if args.command == 'recheck-saved':
+                    recheck_saved(browser, base, directory, manifest, args.case, args.step)
+                    report(directory, manifest)
+                    return True
                 if not live:
                     return preflight(browser, base, directory, manifest)
+                if args.command == 'retry-extraction':
+                    retry = retry_candidate(directory, manifest, args.case, args.step)
+                    probe = probe_context(directory, retry[2])
+                    destination = retry[0] / 'context-probe.json'
+                    if not destination.exists():
+                        write(destination, dict(probe, at=now(), sha=revision()))
+                    result = step(browser, base, directory, manifest, args.case, args.step,
+                                  sum(QUOTAS[args.stage]), retry=retry)
+                    report(directory, manifest)
+                    return result
                 caps = dict(zip(CASES, QUOTAS[args.stage]))
                 held = set()
                 for i in range(max(caps.values())):
@@ -281,14 +374,17 @@ def run(args, directory, manifest):
                             continue
                         folder = directory / case / f'{i:03d}'
                         if folder.exists():
-                            result = folder / 'result.json'
-                            if not result.exists() or read(result)['status'] != 'recorded':
+                            if not completed(folder):
                                 held.add(case)
-                        elif not step(browser, base, directory, manifest, case, i):
+                        elif action_ledger(directory) >= sum(QUOTAS[args.stage]):
+                            held.add(case)
+                        elif not step(browser, base, directory, manifest, case, i, sum(QUOTAS[args.stage])):
                             held.add(case)
                         report(directory, manifest)
                 if not held and not args.case:
                     write(directory / f'{args.stage}.complete', {'finished':now()})
+                write(directory / f'{args.stage}.status.json', dict(finished=now(), sha=revision(),
+                    held=sorted(held), actions=action_ledger(directory), complete=not held and not args.case))
                 return not held
             finally:
                 browser.close()
@@ -296,7 +392,8 @@ def run(args, directory, manifest):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['prepare','preflight','run','report','recover-unsubmitted'])
+    parser.add_argument('command', choices=['prepare','preflight','run','report','recover-unsubmitted',
+                                          'adopt', 'recheck-saved', 'retry-extraction'])
     parser.add_argument('directory', type=Path)
     parser.add_argument('--stage', choices=list(QUOTAS), default='A')
     parser.add_argument('--case', choices=list(CASES))
@@ -314,10 +411,16 @@ def main():
     manifest = read(directory / 'manifest.json')
     with (directory / 'run.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        if args.command == 'report':
+        if args.command == 'adopt':
+            if not args.reviewed:
+                parser.error('QA-only adoption requires --reviewed')
+            adopt(directory, manifest, revision())
+        elif args.command == 'report':
             report(directory, manifest)
         elif args.command == 'recover-unsubmitted':
             recover_unsubmitted(directory, manifest, args.case, args.step)
+        elif args.command in ('recheck-saved', 'retry-extraction') and (args.case is None or args.step is None):
+            parser.error('Choose --case and --step')
         elif not run(args, directory, manifest):
             raise SystemExit('See preflight.json or report.md; incomplete cases require review.')
 
