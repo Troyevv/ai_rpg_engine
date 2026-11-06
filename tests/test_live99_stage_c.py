@@ -1,4 +1,5 @@
 import json
+import gzip
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 
@@ -105,3 +106,27 @@ def test_review_binds_semantic_findings_and_original_failure_evidence(tmp_path, 
     assert set(result['evidence']) == {'social/000/result.json','social/000/before.json.gz','semantic-reviews/social.json'}
     with pytest.raises(ValueError, match='already reviewed'):
         stage_c.review(tmp_path, {'seeds':{'social':{}},'retest_counts':{'social':1}}, 'social')
+
+
+def test_negative_agency_retest_requires_atomic_state_and_valid_temporal(tmp_path):
+    from devtools.live99.evidence import write
+    write(tmp_path / 'result.json', {'status':'held-for-review','kind':'retry'})
+    for name in ('before', 'after'):
+        write(tmp_path / (name+'.json.gz'), {'revision':12,'history':'unchanged'})
+    request = {'stage':'extraction','status':'complete','response_text':json.dumps({
+        'scheduled_event_changes':[{'temporal':{'day_offset':1,'time':'15:00'}}]})}
+    job = {'status':'error','repair_diagnostics_json':json.dumps([{'code':'controlled_actor_unsupported'}]),
+           'requests':[request]}
+    write(tmp_path / 'diagnostics.json.gz',[job])
+    audit = {'case':'knowledge','expected_rejection':'controlled_actor_unsupported'}
+    assert stage_c.expected_agency_rejection(tmp_path,audit)
+    assert not stage_c.expected_agency_rejection(tmp_path,dict(audit,case='social'))
+    write(tmp_path / 'after.json.gz', {'revision':13,'history':'changed'})
+    assert not stage_c.expected_agency_rejection(tmp_path,audit)
+    write(tmp_path / 'after.json.gz', {'revision':12,'history':'unchanged'})
+    request['response_text'] = json.dumps({'scheduled_event_changes':[{
+        'temporal':{'day_offset':1,'time':'15:00','day_period':'afternoon'}}]})
+    write(tmp_path / 'diagnostics.json.gz',[job])
+    with pytest.raises(ValueError):
+        stage_c.expected_agency_rejection(tmp_path,audit)
+    assert json.loads((tmp_path/'result.json').read_text())['status']=='held-for-review'
