@@ -81,7 +81,9 @@ def oracle(before, after, projection, kind):
                                for t in projection['turns']):
             raise ValueError('Projected turn or active variant differs from canonical turn')
         previous = before['last_turn']
-        expected = (previous['sequence'] if previous else 0) + (kind != 'regenerate')
+        # Production starts at sequence 0; subsequent turns increment it,
+        # while regeneration retains the existing turn's sequence.
+        expected = previous['sequence'] + (kind != 'regenerate') if previous else 0
         if last['sequence'] != expected or not last['assistant_text'].strip():
             raise ValueError('Wrong sequence or empty committed scene')
 
