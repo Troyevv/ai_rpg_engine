@@ -40,8 +40,8 @@ class Compression(StrictModel):
     player_evidence: str = ''
 
 
-def reject(code):
-    fatal('Нарушена непрерывность повествования.', code, repairable=False)
+def reject(code, **path):
+    fatal('Нарушена непрерывность повествования.', code, repairable=False, **path)
 
 
 def bases(state):
@@ -186,6 +186,48 @@ def validate_compression(resolver, scene, elapsed):
         routine=claim.kind, evidence=claim.evidence, turn_id=resolver.turn_id))
 
 
+def dialogue_evidence_matches(resolver, claim, event):
+    """A completed player interaction proves dialogue, never a separate decision."""
+    from backend.runtime_v3.resolver import normalized
+
+    if event['medium'] == 'message' and event.get('author_id') != claim.actor_id:
+        return False
+    action = event.get('scene_action')
+    if action and action['actor_id'] != claim.actor_id:
+        return False
+    if not claim.evidence.strip() or not event['evidence'].strip():
+        return False
+    # The Resolver sets player_interaction only for a current-input quote on
+    # this accepted Event with the protected actor among its participants.
+    event_quote = normalized(event['player_evidence']) if event.get('player_interaction') else ''
+    if claim.player_evidence:
+        quote = normalized(claim.player_evidence)
+        return bool(quote) and quote in (event_quote or normalized(resolver.player_input))
+    return bool(event_quote)
+
+
+def player_knows_dialogue_basis(state, rows, key, actor):
+    from backend.runtime_v3.kinship import knowledge_status
+
+    row = rows[key]
+    if key in state['facts']:
+        return knowledge_status(state, actor, key) == 'known'
+    if key in state['threads']:
+        observers = state['threads'][key]['discovered_by']
+        return observers is None or actor in observers
+    if key in state['scheduled_events']:
+        return actor in state['scheduled_events'][key]['character_ids']
+    # Social state and conditions may be backed by Knowledge, including a
+    # distinct fact for a closure. Do not infer awareness from World Truth.
+    if 'fact_id' in row:
+        required = [row['fact_id']]
+        if row.get('closure_fact_id'):
+            required.append(row['closure_fact_id'])
+        return all(knowledge_status(state, actor, fid) == 'known' for fid in required)
+    return any(item['id'] == key for field in ('goals', 'intentions', 'obligations')
+               for item in state['characters'][actor][field])
+
+
 def apply(resolver, raw, events):
     """Accepted transitions invalidate stale summaries, never invent endpoints.
 
@@ -231,28 +273,41 @@ def apply(resolver, raw, events):
             new['source_event_id'] = events[row['source_event_id']]['id']
     rows = bases(state)
     prior = {beat_key(r): r for r in (resolver.continuity_decision or {}).get('recent_beats', [])}
-    for row in raw.records['continuity_beats']:
+    external = resolver.protected_actor_id
+    for index, row in enumerate(raw.records['continuity_beats']):
         try: claim = ContinuityBeat.model_validate(row)
         except (ValueError, TypeError):
-            resolver.warn('continuity_beats', 0, 'Повреждена аннотация.', code='continuity_beat_invalid'); continue
-        event = events.get(claim.source_event_id)
-        if not event or not resolver.supported(row) or not {claim.actor_id, *claim.target_ids} <= set(event['participants']):
-            resolver.warn('continuity_beats', 0, 'Нет связанного Event.', code='continuity_beat_evidence'); continue
-        if any(key not in rows for key in claim.basis_ids):
-            resolver.warn('continuity_beats', 0, 'Неизвестное основание аннотации.', code='continuity_basis_invalid'); continue
-        if claim.actor_id == resolver.protected_actor_id or claim.decision_actor_id == resolver.protected_actor_id:
+            resolver.warn('continuity_beats', index, 'Повреждена аннотация.', code='continuity_beat_invalid'); continue
+        player_owned = external is not None and external in (claim.actor_id, claim.decision_actor_id)
+        dialogue = claim.kind in ('question', 'proposal', 'information') and claim.decision_actor_id is None
+        if player_owned and (resolver.mode == 'background' or not dialogue):
             from backend.runtime_v3.resolver import normalized
-            if resolver.mode == 'background' or not normalized(claim.player_evidence) or normalized(claim.player_evidence) not in normalized(resolver.player_input):
-                reject('continuity_external_decision')
-        # Fact-based assertions must respect the speaking actor's own knowledge.
-        for key in claim.basis_ids:
-            if key in state['facts'] and state['knowledge'].get(claim.actor_id+':'+key, {}).get('status') != 'known':
-                reject('continuity_unknown_fact')
+            quote = normalized(claim.player_evidence)
+            if resolver.mode == 'background' or not quote or quote not in normalized(resolver.player_input):
+                reject('continuity_external_decision', section='continuity_beats', index=index, entity=claim.source_event_id)
+        event = events.get(claim.source_event_id)
+        actors = {claim.actor_id, *claim.target_ids}
+        if claim.decision_actor_id is not None:
+            actors.add(claim.decision_actor_id)
+        if not event or not actors.issubset(event['participants']):
+            resolver.warn('continuity_beats', index, 'Нет принятого Event с указанными участниками.', code='continuity_beat_evidence'); continue
+        if any(key not in rows for key in claim.basis_ids):
+            resolver.warn('continuity_beats', index, 'Неизвестное основание аннотации.', code='continuity_basis_invalid'); continue
+        if player_owned and dialogue:
+            if not dialogue_evidence_matches(resolver, claim, event):
+                resolver.warn('continuity_beats', index, 'Источник не подтверждает эту реплику игрока.',
+                              code='continuity_player_interaction_unconfirmed')
+                continue
+            if any(not player_knows_dialogue_basis(state, rows, key, claim.actor_id) for key in claim.basis_ids):
+                resolver.warn('continuity_beats', index, 'Основание реплики недоступно игроку.', code='continuity_basis_unavailable'); continue
+        elif any(key in state['facts'] and state['knowledge'].get(claim.actor_id+':'+key, {}).get('status') != 'known'
+                 for key in claim.basis_ids):
+            reject('continuity_unknown_fact')
         value = claim.model_dump()
         value.update(source_event_id=event['id'], basis_digest=fingerprint(rows, claim.basis_ids))
         old = prior.get(beat_key(value))
         if old and old['basis_digest'] == value['basis_digest'] and old['status'] in ('resolved', 'rejected') and claim.status == 'open':
-            resolver.warn('continuity_beats', 0, 'Повторная аннотация.', code='continuity_repeated_beat'); continue
+            resolver.warn('continuity_beats', index, 'Повторная аннотация.', code='continuity_repeated_beat'); continue
         event.setdefault('continuity', []).append(value)
         prior[beat_key(value)] = value
 
