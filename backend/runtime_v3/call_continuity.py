@@ -62,7 +62,7 @@ def commitment_sources(resolver, item):
     return result
 
 
-def apply_lifecycle(resolver, raw):
+def apply_lifecycle(resolver, raw, remote_history):
     from backend.runtime_v3.remote import apply
     if len(raw.records['call_lifecycle_changes']) > 1:
         fatal('Несколько отбоев одного хода.', 'call_end_duplicate',repairable=True)
@@ -84,7 +84,7 @@ def apply_lifecycle(resolver, raw):
         for section,values in batch.items():
             for value in values:
                 value.update(narrative_evidence=item['evidence'],acting_character_id=actor)
-            getattr(resolver.history,section).extend(values)
+            getattr(remote_history,section).extend(values)
 
 
 def reconcile(resolver, reason, quote=None):

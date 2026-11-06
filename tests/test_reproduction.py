@@ -296,12 +296,14 @@ def test_no_birth_from_due_alone_wrong_count_or_sex_cannot_override():
     assert next(iter(due.state['pregnancies'].values()))['status']=='due'
     assert len(due.state['characters'])==3
     p=next(iter(s['pregnancies'].values()))
-    premature=run(s,'births',[dict(pregnancy_id=p['id'],source_event_id='event',assertion='birth_completed',evidence=BIRTH)],text=BIRTH)
-    assert not premature.cards and premature.warnings
-    forged=run(s,'births',[dict(pregnancy_id=p['id'],source_event_id='event',assertion='birth_completed',evidence=BIRTH,
-        child_count=3,sex='male')],text=BIRTH,elapsed=1440)
-    assert not forged.cards and forged.warnings
-    assert next(iter(forged.state['pregnancies'].values()))['children']==p['children']
+    from backend.services.world_delta_errors import StructuralDeltaError
+    for elapsed, extra in [(0, {}), (1440, {'child_count': 3, 'sex': 'male'})]:
+        with pytest.raises(StructuralDeltaError) as rejected:
+            run(s, 'births', [dict(pregnancy_id=p['id'], source_event_id='event', assertion='birth_completed',
+                                   evidence=BIRTH, **extra)], text=BIRTH, elapsed=elapsed)
+        assert rejected.value.code == 'birth_claim_invalid' and rejected.value.repairable
+        assert len(s['characters']) == 3 and s['pregnancies'][p['id']]['children'] == p['children']
+
 
 
 def test_background_birth_has_no_external_knowledge_and_no_extra_call():
@@ -404,3 +406,21 @@ def test_same_character_later_develops_through_67_and_branch_appearance_boundary
     assert evolved.state['characters'][cid]['birth_provenance']==born.state['characters'][cid]['birth_provenance']
     later=deepcopy(branch);later['world_state']=evolved.state
     assert appearance_adapter(later,cid)==boundary
+
+
+def test_later_life_fact_does_not_disclose_birth_or_replace_its_knowledge():
+    from backend.runtime_v3.models import Fact
+    from backend.runtime_v3.reproduction import known_birth, private_fact_ids
+    from backend.runtime_v3.secrets import visible_fact_ids
+    s = deliver(conceive().state).state
+    pregnancy, = s['pregnancies'].values()
+    child = pregnancy['children'][0]['id']
+    birth_id = s['characters'][child]['life_fact_id']
+    later = 'life-update'
+    s['facts'][later] = Fact(id=later, text='Обновлён жизненный статус.', character_ids=[child]).model_dump()
+    s = run(s, 'life_changes', [dict(id=child, life_status='dead', fact_id=later)]).state
+    assert s['characters'][child]['life_fact_id'] == later
+    assert {birth_id, later} <= private_fact_ids(s)
+    assert known_birth(s, child, 'a') and later not in visible_fact_ids(s)
+    s['knowledge']['c:' + later] = Knowledge(actor_id='c', fact_id=later).model_dump()
+    assert not known_birth(s, child, 'c')

@@ -6,6 +6,8 @@ can recover a real birth whose metadata was overwritten by the old DOB editor.
 """
 from copy import deepcopy
 
+from backend.runtime_v3.models import identity
+
 DOB_KEYS = frozenset(('source','input_signature','twin_group','seed','algorithm'))
 DOB_SOURCES = frozenset(('authoring_automatic','automatic','manual','explicit','unknown'))
 
@@ -23,6 +25,15 @@ def is_game_birth(state,cid):
     return bool(game_metadata(actor)) or any(
         p.get('status')=='born' and any(c.get('id')==cid for c in p.get('children',[]))
         for p in state.get('pregnancies',{}).values())
+
+def birth_fact_id(state, cid):
+    # Runtime births have a stable fact independent of later life transitions.
+    # Older authored biographies may bind visibility to an explicit fact instead.
+    fid = identity('fact', cid, 'birth')
+    if fid in state['facts']:
+        return fid
+    return state['characters'][cid].get('life_fact_id')
+
 
 def birth_sex_disclosed(state, cid, observer, known):
     if cid == observer or not is_game_birth(state, cid):

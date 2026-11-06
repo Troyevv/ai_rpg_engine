@@ -34,8 +34,9 @@ def recipient_eligible(state, sender, target, channel):
     """Reachability is not consent, perception, device ownership or acquaintance.
 
     Canonical unknown/missing life status is permissive, like life.capabilities;
-    only an explicit death prohibits a new attempt.
+    unknown identity from an undisclosed birth is protected on every route.
     """
+    from backend.runtime_v3.reproduction import known_birth
     key = "courier" if channel == "COURIER_LETTER" else channel.lower()
     return (
         key in CHANNELS
@@ -44,6 +45,7 @@ def recipient_eligible(state, sender, target, channel):
         and target in state["characters"]
         and target != sender
         and state["characters"][target].get("life_status") != "dead"
+        and known_birth(state, target, sender)
     )
 
 

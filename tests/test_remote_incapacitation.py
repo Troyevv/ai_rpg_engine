@@ -118,7 +118,6 @@ def job(
             ]
     if reject:
         # Extraction incorrectly attributes a voluntary hangup to the actor.
-        # This is validated after the deterministic Life/Remote reconciliation.
         from backend.runtime_v3.remote import active_call
 
         call = active_call(repo.get_snapshot(sid)["world_state"], ACTOR_ID)
@@ -131,7 +130,7 @@ def job(
         "error" if reject else "saved"
     ), repo.get_job(jid)["error"]
     if reject:
-        assert "Не подтверждён фактический отбой" in repo.get_job(jid)["error"]
+        assert "Нет команды игрока на отбой" in repo.get_job(jid)["error"]
     else:
         assert len(calls) == 2
     return repo.get_snapshot(sid)
@@ -174,6 +173,18 @@ def test_incapacitated_actor_is_not_trapped_in_call(tmp_path):
     assert advanced["last_long_term_advance"]["interruption"] is None
     assert advanced["world_state"]["meta"]["world_time"] > state["meta"]["world_time"]
     assert not capabilities(advanced["world_state"], ACTOR_ID)["can_act"]
+    restored = Repository(repo.path).get_snapshot(sid)
+    assert restored == advanced
+    assert restored["world_state"]["knowledge"] == before["world_state"]["knowledge"]
+    assert restored["world_state"]["camera"] == before["world_state"]["camera"]
+    endings = [
+        event for event in history(repo, restored)["events"]
+        if event.get("remote_interaction_id") == eid and event["remote"]["status"] == "ended"
+    ]
+    assert len(endings) == 1
+    assert endings[0]["remote"]["provenance"] == "system:participant_incapacitated"
+    assert endings[0]["termination"]["reason"] == "participant_incapacitated"
+    assert "acting_character_id" not in endings[0]
 
 
 @pytest.mark.parametrize(

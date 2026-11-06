@@ -10,7 +10,7 @@ from typing import Literal
 from pydantic import Field
 from backend.runtime_v3.models import (StrictModel, ReproductiveEvent, Pregnancy,
     NamingDecision, Character, Fact, ObjectiveRelation, PersonalityProfile,
-    PersonalityItem, identity)
+    PersonalityItem, identity, fatal)
 from backend.runtime_v3.calendar import current_time, age_on, profile_of
 from backend.runtime_v3.life import capabilities, _proof, _transition, validate_life_state
 
@@ -219,6 +219,31 @@ def apply_identity(r,p,cid,decision):
         actor['display_name']=display
 
 
+def apply_births(resolver, raw, events):
+    for index, row in enumerate(raw.records['births']):
+        try:
+            # Parse the essential claim first. Optional appearance references
+            # cannot invalidate an otherwise accepted birth of one or more children.
+            fields = dict(row)
+            appearance = fields.pop('appearance', {})
+            claim = BirthClaim.model_validate(fields).model_dump()
+            pregnancy = resolver.state['pregnancies'].get(claim['pregnancy_id'])
+            if pregnancy is None:
+                raise ValueError('unknown pregnancy')
+            children = {child['id'] for child in pregnancy['children']}
+            if isinstance(appearance, dict):
+                claim['appearance'] = {cid: text for cid, text in appearance.items()
+                                       if cid in children and isinstance(text, str)}
+            if claim['appearance'] != appearance:
+                resolver.warn('births', index, 'Некорректные описания внешности опущены.',
+                              field='appearance', code='birth_appearance_invalid')
+            birth(resolver, claim, source(resolver, claim, events))
+            validate_life_state(resolver.state)
+        except (ValueError, TypeError, KeyError) as exc:
+            fatal(str(exc), 'birth_claim_invalid', repairable=True, section='births',
+                  index=index, path=f'births[{index}]', action='extraction_repair')
+
+
 def birth(r,c,event):
     s=r.state;p=s['pregnancies'].get(c['pregnancy_id'])
     if not p: raise ValueError('unknown pregnancy')
@@ -230,8 +255,6 @@ def birth(r,c,event):
     if not r.before['meta']['world_time']<=now<=s['meta']['world_time']: raise ValueError('birth minute outside accepted interval')
     if now<p['due_minute']: raise ValueError('pregnancy is not due under configured game policy')
     if c['location_id'] is not None and c['location_id'] not in s['locations']: raise ValueError('unknown birth location')
-    if any(not r.supported({'evidence':v}) for v in c['appearance'].values()): raise ValueError('birth appearance must be explicitly quoted')
-    if set(c['appearance'])-{x['id'] for x in p['children']}: raise ValueError('unknown appearance target')
     parents=p['parent_ids'];date=current_time(s,now)['date'];fids=[]
     if set(c['disclosed_parent_ids'])-set(parents): raise ValueError('unestablished disclosed parent')
     for ch in p['children']:
@@ -289,7 +312,7 @@ def apply_reproduction(r,raw,events):
     accepted_rows(r,raw,'reproductive_events',ServiceClaim,events,intercourse)
     advance_due(r.state)
     accepted_rows(r,raw,'naming_decisions',NameClaim,events,naming)
-    accepted_rows(r,raw,'births',BirthClaim,events,birth)
+    apply_births(r, raw, events)
 
 
 def context_projection(state, relevant, observer, extraction=False):
@@ -320,12 +343,15 @@ def context_projection(state, relevant, observer, extraction=False):
 
 
 def private_fact_ids(state):
+    from backend.runtime_v3.birth_identity import birth_fact_id
     ids=set()
     for p in state.get('pregnancies',{}).values(): ids.update([p['fact_id'],p['count_fact_id'],*p['sex_fact_ids'].values()])
     born={c['id'] for p in state.get('pregnancies',{}).values() if p['status']=='born' for c in p['children']}
+    ids.update(birth_fact_id(state, cid) for cid in born)
     ids.update(state['characters'][cid]['life_fact_id'] for cid in born)
     ids.update(r['fact_id'] for r in state['objective_relations'].values() if r['target_id'] in born)
     ids.update(n['fact_id'] for n in state.get('naming_decisions',{}).values())
+    ids.discard(None)  # Optional references are not facts.
     return ids
 
 
@@ -387,10 +413,11 @@ def validate_reproduction(state):
 
 
 def known_birth(state, cid, observer):
-    from backend.runtime_v3.birth_identity import is_game_birth
-    actor=state['characters'][cid]
-    return (not is_game_birth(state,cid) or cid==observer or
-        state['knowledge'].get(str(observer)+':'+str(actor.get('life_fact_id')),{}).get('status')=='known')
+    from backend.runtime_v3.birth_identity import birth_fact_id, is_game_birth
+    if cid == observer or not is_game_birth(state, cid):
+        return True
+    fid = birth_fact_id(state, cid)
+    return fid is not None and state['knowledge'].get(f'{observer}:{fid}', {}).get('status') == 'known'
 
 
 def birth_name(state,cid,observer):

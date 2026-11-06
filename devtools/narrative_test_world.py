@@ -711,6 +711,7 @@ def _phone(state):
 
 
 CHECKPOINTS['phone'] = _phone
+CHECKPOINTS['newborn-family'] = lambda state: _pregnancy(_phone(_family(state)))
 
 
 def _ui_calendar(state):
