@@ -35,6 +35,7 @@ def nav(page, name):
 
 
 def inspect_ui(page, case):
+    minimize_call(page)
     if case == 'phone':
         page.get_by_role('button', name=re.compile('^Телефон')).click()
         phone = page.get_by_role('region', name='Телефон персонажа')
@@ -73,10 +74,14 @@ def plan(case, index, before):
     return 'turn', actions[index % len(actions)]
 
 
-def configure_context(page, context_length):
+def minimize_call(page):
     call = page.get_by_role('dialog', name='Сцена звонка')
     if call.is_visible():
         button(call, 'Свернуть звонок').click()
+
+
+def configure_context(page, context_length):
+    minimize_call(page)
     if page.viewport_size['width'] < 768:
         button(page, 'Меню игры').click()
     page.get_by_role('button', name='Настройки', exact=True).filter(visible=True).last.click()
