@@ -43,11 +43,18 @@ def cost(inp,out,cached,pricing):
 
 def tracked_stream(storage, stream_fn, job_id, stage, config, messages, diagnostics=None, **kwargs):
     from llm import thinking_options, OutputLimitReached, ProviderHTTPError
-    effective = dict(config, thinking=thinking_options(config.get('provider','local'),config['model'],config.get('thinking','off'))[0])
+    # Persist model settings only. Credentials and transport options belong to stream_fn.
+    effective = {key: config[key] for key in (
+        'provider', 'model', 'context_length', 'max_tokens', 'update_tokens',
+        'temperature', 'private_artifacts',
+    ) if key in config}
+    effective['thinking'] = thinking_options(
+        config.get('provider', 'local'), config['model'], config.get('thinking', 'off')
+    )[0]
     effective.update({k:kwargs[k] for k in ('max_tokens','temperature','response_format') if k in kwargs})
     rid = storage.begin_request(job_id,stage,effective,messages,diagnostics or {'estimated_tokens':estimate(messages),'parts':[]})
     started=time.perf_counter()
-    response=[] if stage in ('extraction','extraction_repair','world_simulation_delta','world_simulation_repair','remote_semantics','remote_semantics_repair','remote_initiative','remote_group_semantics','remote_response_semantics') else None
+    response = []
     usage, status, finish_reason = None, 'error', None
     provider_error = None
     def received(value):
@@ -58,10 +65,13 @@ def tracked_stream(storage, stream_fn, job_id, stage, config, messages, diagnost
         finish_reason=value
     try:
         for chunk in stream_fn(messages=messages, thinking=effective['thinking'], on_usage=received, on_finish=finished, **kwargs):
-            if response is not None:response.append(chunk)
+            response.append(chunk)
             yield chunk
         if finish_reason == 'length': raise OutputLimitReached('Достигнут лимит ответа.')
         status = 'complete'
+    except GeneratorExit:
+        status = 'stopped'
+        raise
     except OutputLimitReached:
         status = 'length'
         raise
@@ -72,4 +82,7 @@ def tracked_stream(storage, stream_fn, job_id, stage, config, messages, diagnost
         event = kwargs.get('cancel_event')
         if event is not None and event.is_set():
             status = 'stopped'
-        storage.finish_request(rid,status,usage,time.perf_counter()-started,finish_reason,response_text=''.join(response) if response is not None else None,provider_error=provider_error)
+        storage.finish_request(
+            rid, status, usage, time.perf_counter() - started, finish_reason,
+            response_text=''.join(response), provider_error=provider_error,
+        )

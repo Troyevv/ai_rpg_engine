@@ -100,7 +100,7 @@ export function Diagnostics({saveId,workspaceId,jobId,open,onOpenChange,historyT
     {request.diagnostics.selection?.pacing&&<details><summary>Решения политики истории</summary><pre className="context-content">{JSON.stringify(request.diagnostics.selection.pacing,null,2)}</pre></details>}
     {request.diagnostics.provider_error&&<details open><summary>Ответ API · безопасная диагностика</summary><pre className="context-content">{JSON.stringify(request.diagnostics.provider_error,null,2)}</pre></details>}
     {communication!=null&&<details><summary>Обработка связи · журнал восстановления</summary><pre className="context-content">{JSON.stringify(communication,null,2)}</pre></details>}
-    {request.response_text!=null&&<details><summary>Фактический ответ extraction</summary><pre className="context-content">{request.response_text}</pre></details>}
+    {request.response_text!=null&&<details><summary>Фактический ответ модели</summary><pre className="context-content">{request.response_text}</pre></details>}
     {request.messages.map((m,i)=><details key={i}><summary>{i+1}. {request.diagnostics.parts?.[i]?.name||m.role} · ≈{request.diagnostics.parts?.[i]?.estimated_tokens??'—'} токенов</summary><pre className="context-content">{m.content}</pre></details>)}
    </>}
    {saveId&&<><Button variant="ghost" onClick={async()=>{try{setArchive(await api(`/saves/${saveId}/archive`))}catch(e){toast.error((e as Error).message)}}}>Показать архив откатов</Button>{archive.map(r=>{const p=JSON.parse(r.payload);return <details key={r.id}><summary>Ход {p.sequence} · {r.reason}</summary><div className="player-action">{p.user_text}</div><Markdown text={p.assistant_text}/></details>})}</>}

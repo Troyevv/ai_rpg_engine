@@ -63,7 +63,7 @@ def execute(storage, job, handle, chat_stream):
             stage,
             config,
             messages,
-            describe_context(messages),
+            dict(describe_context(messages), context_key=context_key),
             temperature=temperature,
             max_tokens=limit,
             model=config["model"],
