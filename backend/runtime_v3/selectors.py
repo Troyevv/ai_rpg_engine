@@ -218,6 +218,16 @@ def ui_view(snapshot, history=None):
     result['runtime_version']=3
     report = snapshot.get('last_long_term_advance')
     result['last_long_term_advance'] = ({k: deepcopy(report[k]) for k in ('start','requested_target','actual_target','interruption','llm_calls','max_llm_calls','decisions','accepted','unresolved') if k in report} if report else None)
+    visible_report = result['last_long_term_advance']
+    if visible_report:
+        stop = visible_report.get('interruption') or {}
+        if stop.get('kind') == 'pregnancy_due':
+            visible_report['interruption'] = dict(kind='scene', minute=stop['minute'])
+        for i, decision in enumerate(visible_report.get('decisions', [])):
+            if decision.get('kind') == 'birth':
+                # Candidate participants include canonical parents, irrespective of Knowledge.
+                visible_report['decisions'][i] = dict(id=decision['id'], kind='scene', domains=[],
+                    context='Можно остаться наблюдать, помочь или не вмешиваться.')
     result['last_time_skip']=deepcopy(snapshot.get('last_time_skip'))
     from backend.runtime_v3.notifications import notifications
     result['notifications']=notifications(state, history)

@@ -96,7 +96,7 @@ def execute(storage, job, handle, chat_stream):
         observer = state["camera"]["pov_actor_id"] or state["camera"]["controlled_actor_id"]
         if knowledge_status(state, observer, process["fact_id"]) == "known":
             text += "\nНаступил срок родов."
-        text += "\nПереход остановлен. Продолжи обычным ходом и выбери, как отреагирует твой персонаж."
+        text += "\nПереход остановлен. Продолжи обычным ходом: можно осмотреться, отреагировать или остаться в стороне."
     elif report["interruption"]:
         text += "\nПереход прерван: требуется решение игрока."
     text += f"\nРазрешено групп: {len(report['accepted'])}. Нерешённых причин: {len(report['unresolved'])}."

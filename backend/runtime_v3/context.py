@@ -144,6 +144,17 @@ def canonical_slice(state, scope, extraction=False, query=""):
     if old_phases: current['social_history'] = sorted(old_phases,key=lambda r:r['until'] or 0,reverse=True)[:8]
     from backend.runtime_v3.reproduction import context_projection, private_fact_ids, known_birth
     current.update(context_projection(state, relevant, scope.pov_actor_id or scope.controlled_actor_id, extraction))
+    if not extraction:
+        from backend.runtime_v3.kinship import knowledge_status
+        observer = scope.pov_actor_id or scope.controlled_actor_id
+        protected = private_fact_ids(state)
+        # A parent may be relevant while the newborn is unknown and absent
+        # from current.characters. Gate both projections by the edge's fact.
+        hidden_edges = {rid for rid, row in state['objective_relations'].items()
+                        if row.get('fact_id') in protected and knowledge_status(state, observer, row['fact_id']) != 'known'}
+        current['objective_relations'] = [r for r in current['objective_relations'] if r['id'] not in hidden_edges]
+        for cid, rows in current['social_knowledge'].items():
+            current['social_knowledge'][cid] = [r for r in rows if r['id'] not in hidden_edges]
     if current.get('social_knowledge'):
         # Reuse canonical relation IDs instead of repeating every full edge for
         # each parent. Current objective edges stay authoritative; certainty and
@@ -339,12 +350,14 @@ class ExtractionContextBuilder:
         if reproductive:
             from backend.runtime_v3.context_contract import REPRODUCTION_CONTRACT
             rules += REPRODUCTION_CONTRACT
-            compression = current.get('continuity', {}).get('compression', {})
-            if compression.get('max_minutes') == 0 and any(
-                p['id'] in compression.get('boundary_ids', []) for p in current.get('pregnancies', [])
-            ):
-                rules += ("\nAt the due birth boundary use elapsed_minutes=0 for an immediate reaction. "
-                          "Only an established delivery in the scene resolves it via births.")
+            # Recorded Director continuity is POV-filtered, also on retry. The
+            # Extraction contract comes from the immutable pre-turn world.
+            from backend.runtime_v3.continuity import due_births_in_scene_clock
+            if kind != 'background' and not snapshot.get('_time_skip') and due_births_in_scene_clock(snapshot['world_state']):
+                rules += ("\nAt the due birth boundary use elapsed_minutes=0 for observation, help, waiting "
+                          "or ongoing labor. Only an explicitly completed delivery in the Narrative "
+                          "can resolve it via births and its current Event. A player's assumption is not evidence. "
+                          "Record newly perceived facts only for actual witnesses via knowledge_gained.")
         # Affected IDs and canonical runtime, plus a bounded actor-owned choice
         # projection. No other actors' card prose or old narratives are needed.
         # Include physical/emotion baseline also for referenced actors affected in completed text.
@@ -460,7 +473,11 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         # private commitment, not just before rendering the final calendar list.
         from backend.runtime_v3.remote import visible_commitments
         observer = camera.get('pov_actor_id') or camera.get('controlled_actor_id')
-        state = dict(state, scheduled_events=visible_commitments(state,observer,world_history))
+        # Reproduction has a typed, Knowledge-filtered projection. Its calendar
+        # reminders are internal even when the pregnancy itself is known.
+        schedule = visible_commitments(state, observer, world_history)
+        state = dict(state, scheduled_events={
+            eid: event for eid, event in schedule.items() if eid not in state.get('pregnancies', {})})
         snapshot = dict(snapshot, world_state=state)
     all_views = visible_views(snapshot, turns, kind)
     # Respect an explicit smaller user setting, but never exceed six narrative turns.

@@ -1,6 +1,7 @@
 """Deterministic director based on present locations, obligations and due items."""
 from backend.runtime_v3.life import capabilities
 from backend.runtime_v3.lifecycle import actionable
+from backend.runtime_v3.continuity import due_births_in_scene_clock
 from backend.runtime_v3.calendar import scheduled_boundary as scheduled_due
 
 
@@ -14,6 +15,7 @@ def plan(state, kind, history=None, scope=None):
            and scheduled_due(state, state['scheduled_events'][eid]) is not None
            and scheduled_due(state, state['scheduled_events'][eid]) <= now]
     continuity = scope.continuity_decision
+    scene_direction = {}
     if kind != 'background':
         from backend.runtime_v3.kinship import knowledge_status
         observer = scope.pov_actor_id or scope.controlled_actor_id
@@ -25,11 +27,25 @@ def plan(state, kind, history=None, scope=None):
             continuity = dict(continuity, compression=dict(compression, boundary_ids=[
                 eid for eid in compression['boundary_ids'] if visible_boundary(eid)]))
         due = [eid for eid in due if visible_boundary(eid)]
+        if continuity.get('compression', {}).get('max_minutes') == 0 and (processes := due_births_in_scene_clock(state)):
+            instruction = ('Отыграй последнее действие игрока в эту же минуту, включая помощь, '
+                           'наблюдение или невмешательство. Предположение игрока само по себе не факт. '
+                           'Оставь следующий выбор игроку и не переключай сюжет.')
+            visible = scope.present_actor_ids | scope.observed_actor_ids
+            subjects = []
+            if observer in scope.present_actor_ids and capabilities(state, observer)['can_perceive']:
+                subjects = [p['gestational_actor_id'] for p in processes if p['gestational_actor_id'] in visible]
+            if subjects:
+                instruction += (' Покажи, что становится ощутимо сейчас: непроизвольное напряжение, '
+                                'потуги, паузу между ними. Для другого персонажа опиши только видимые '
+                                'или слышимые признаки. Развивай происходящее по уже показанным событиям; '
+                                'не приписывай персонажам диагноз или скрытые подробности.')
+            scene_direction['immediate_scene'] = dict(instruction=instruction, observable_actor_ids=subjects)
     from backend.runtime_v3.pacing import evaluate, prompt_policy
     scope.pacing_decision = scope.pacing_decision or evaluate(state, scope)
     from backend.runtime_v3.initiative import scene_plan
     if scope.initiative_decision is None: scope.initiative_decision = scene_plan(state, scope)
-    return dict(continuity=continuity, scene_agency=scope.initiative_decision, narrative_policy=prompt_policy(scope.pacing_decision),recent_event_ids=scope.event_ids, actors=sorted(scope.relevant_actor_ids),
+    return dict(**scene_direction, continuity=continuity, scene_agency=scope.initiative_decision, narrative_policy=prompt_policy(scope.pacing_decision),recent_event_ids=scope.event_ids, actors=sorted(scope.relevant_actor_ids),
         location_ids=scope.location_ids,
         acting_actor_ids=sorted(cid for cid in scope.present_actor_ids | scope.observed_actor_ids | scope.remote_actor_ids | scope.active_actor_ids if capabilities(state,cid)['can_act']),
         referenced_actor_ids=sorted(scope.referenced_actor_ids),
@@ -40,7 +56,24 @@ def plan(state, kind, history=None, scope=None):
 
 def background_candidate(before, after):
     now=after['meta']['world_time'];elapsed=now-before['meta']['world_time']
-    if elapsed<=0:return None
+    if elapsed == 0:
+        # An unseen delivery may develop through the normal NPC simulation at
+        # this instant. A zero-minute player reaction is never evidence of birth.
+        camera = after['camera']
+        local = set(camera['present_character_ids']) | set(camera.get('observed_character_ids', []))
+        protected = camera['controlled_actor_id']
+        for process in due_births_in_scene_clock(after):
+            mother = process['gestational_actor_id']
+            if protected not in process['parent_ids'] or mother == protected or mother in local:
+                continue
+            location = after['characters'][mother]['location_id']
+            if location and location == after['characters'][protected]['location_id']:
+                continue
+            return dict(actor_id=mother, reason='Покажи происходящее с этим персонажем: '
+                        'потуги и их наблюдаемое развитие. Роды могут остаться незавершёнными. '
+                        'Не раскрывай скрытые подробности', scheduled_id=None)
+    if elapsed <= 0:
+        return None
     camera=after['camera'];present=set(camera['present_character_ids']) | set(camera.get('observed_character_ids',[]));controlled=camera['controlled_actor_id']
     def eligible(cid):
         point=after['characters'][cid]
