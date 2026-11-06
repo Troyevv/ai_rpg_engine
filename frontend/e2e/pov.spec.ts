@@ -63,8 +63,12 @@ test('scenario and summary deletion keeps restorable versions and saves',async({
  const summaryBefore=await(await request.get(`/api/documents/summary/${w.id}`)).json();
  await page.getByRole('button',{name:'Удалить выжимку',exact:true}).click();
  await page.getByRole('dialog').getByRole('button',{name:'Отмена',exact:true}).click();
+ // Radix retains the closing dialog during its exit animation. Its confirm
+ // button has the same name as the page trigger: wait for cancellation to
+ // finish before opening a new confirmation, and scope the trigger explicitly.
+ await expect(page.getByRole('dialog')).toHaveCount(0);
  expect((await(await request.get(`/api/documents/summary/${w.id}`)).json()).active_id).toBe(summaryBefore.active_id);
- await page.getByRole('button',{name:'Удалить выжимку',exact:true}).click();
+ await page.locator('.preparation').getByRole('button',{name:'Удалить выжимку',exact:true}).click();
  await page.getByRole('dialog').getByRole('button',{name:'Удалить выжимку',exact:true}).click();
  await expect(page.getByRole('button',{name:'Удалить выжимку',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'Версии выжимки'}).click();
