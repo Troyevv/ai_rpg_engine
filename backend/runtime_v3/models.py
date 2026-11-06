@@ -187,7 +187,12 @@ class WeatherProfile(StrictModel):
 from backend.runtime_v3.genre import GenreConfig
 
 
+VisualField = Literal['Внешность', 'Пол', 'Возраст']
+
+
 class Meta(StrictModel):
+    # Author-bound appearance can only be projected when its facts are known.
+    visual_field_facts: dict[str, dict[VisualField, list[str]]] = Field(default_factory=dict)
     genre: GenreConfig | None = None
     weather: WeatherProfile | None = None
     npc_expressiveness: Literal["realistic", "expressive", "hyperbolized"] = "realistic"
@@ -204,6 +209,13 @@ class Meta(StrictModel):
     calendar: Calendar | None = None
     turn_id: int = Field(default=0, ge=0)
     world_time: int = Field(default=0, ge=0)
+
+    @model_serializer(mode='wrap')
+    def sparse_appearance_bindings(self, handler):
+        result = handler(self)
+        if not self.visual_field_facts:
+            result.pop('visual_field_facts', None)
+        return result
 
 
 class RemoteInteraction(StrictModel):
@@ -442,6 +454,26 @@ class ProceduralPortrait(StrictModel):
         return result
 
 
+FacialHair = Literal['clean_shaven', 'stubble', 'mustache', 'short_beard', 'full_beard']
+
+
+class ProceduralPortraitV2(ProceduralPortrait):
+    version: Literal[2]
+    body_frame: Literal['male', 'female', 'neutral']
+    facial_hair: FacialHair
+
+    @model_validator(mode='after')
+    def valid_facial_hair(self):
+        visual = self.visual_age or self.stage
+        if self.facial_hair != 'clean_shaven' and (
+                self.form != 'human' or visual not in ('adult','young_adult','mature_adult','elderly')):
+            raise ValueError('Растительность на лице требует взрослой человеческой иллюстрации.')
+        return self
+
+
+PortraitDescriptor = ProceduralPortrait | ProceduralPortraitV2
+
+
 class PortraitReference(StrictModel):
     id: str = Field(pattern=r'^[a-f0-9]{32}$')
     asset_id: str = Field(pattern=r'^[a-f0-9]{32}$')
@@ -480,7 +512,7 @@ class Character(StrictModel):
     birth_provenance: dict[str, str | int | None] = Field(default_factory=dict)
     birth_date_provenance: dict[str, str | int | None] = Field(default_factory=dict)
     appearance: AppearanceProfile = Field(default_factory=AppearanceProfile)
-    procedural_portrait: ProceduralPortrait | None = None
+    procedural_portrait: PortraitDescriptor | None = None
     portrait_mode: Literal['auto', 'procedural'] = 'auto'
     portraits: list[PortraitReference] = Field(default_factory=list, max_length=128)
     personality: PersonalityProfile | None = None

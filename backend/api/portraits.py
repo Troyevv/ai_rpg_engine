@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from backend.repositories import portraits
 from backend.runtime_v3.models import PortraitCrop
 from typing import Literal
-from backend.runtime_v3.models import ProceduralPortrait
+from backend.runtime_v3.models import PortraitDescriptor
 
 
 class PortraitEdit(BaseModel):
@@ -67,7 +67,7 @@ def register(app,repo):
 class ProceduralEdit(BaseModel):
     model_config=ConfigDict(extra='forbid')
     revision: int = Field(ge=0)
-    descriptor: ProceduralPortrait
+    descriptor: PortraitDescriptor
     mode: Literal['auto','procedural'] = 'procedural'
 
 
@@ -81,7 +81,7 @@ def register_drafts(app,repo):
 
     @app.put(base+'/procedural')
     def procedural(wid:str,cid:str,body:ProceduralEdit):
-        return drafts.edit(repo,wid,cid,body.revision,descriptor=body.descriptor.model_dump(),mode=body.mode)
+        return drafts.edit(repo,wid,cid,body.revision,descriptor=body.descriptor,mode=body.mode)
 
     @app.post(base)
     async def upload(wid:str,cid:str,request:Request,revision:int,replace_id:str|None=None,settings:str='{}'):

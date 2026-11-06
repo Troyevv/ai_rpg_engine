@@ -352,7 +352,11 @@ class DraftStorage(DraftEditorStorage):
             elif operation=='add':state,eid=domain.add(state,kind,value)
             elif operation=='remove':state=domain.remove(state,kind,eid)
             else:raise ValueError('Неизвестная операция.')
-            state=domain.prepare(state);after=domain.validate(state)
+            state=domain.prepare(state)
+            if operation == 'add' and kind == 'character':
+                from backend.services.draft_portraits import initialize
+                initialize(state, version=2, character_ids=[eid])
+            after=domain.validate(state)
             if operation in ('add','patch_fields'):
                 new_errors=set(after['errors'])-set(before['errors'])
                 if new_errors:raise ValueError('; '.join(sorted(new_errors)))

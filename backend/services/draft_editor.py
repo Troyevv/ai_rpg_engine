@@ -68,7 +68,7 @@ def messages(base, instruction):
     return [dict(role='system',content=MARKER+'\n'+RULES+'\n'+SECRET_AUTHORING_RULES),
             dict(role='user',content=json.dumps(dict(author_context=author_context(base,instruction),
                 candidate=state,candidate_hash=candidate_hash(state),
-                world_schema=compact_schema(prompt_schema(initial_portraits=True)),response_schema=Proposal.model_json_schema()),ensure_ascii=False))]
+                world_schema=compact_schema(prompt_schema(initial_portraits=True)),response_schema=Proposal.model_json_schema()),ensure_ascii=False,separators=(',',':')))]
 
 
 def rebased_path(before, after, path):
@@ -206,12 +206,12 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
         review_messages=draft_completeness.messages(trial,author_context(base,edit['instruction']))
         from backend.services.portrait_traits import STYLES
         review_messages[0]['content'] += ('\nСравни procedural_portrait новых NPC с литературной Внешностью. '
-            'Описание первично; учитывай отрицания и контекст. Для индексов рисунка используй словарь: '
+            'Описание первично; учитывай отрицания и контекст. Для индексов рисунка используй словарь (facial_hair в v2 сохраняется строкой): '
             + json.dumps(STYLES,ensure_ascii=False) + '. Неописанные признаки могут быть условными. '
             'При противоречии поддерживаемого признака дай recommendation с path карточки и понятным message: '
             'автор должен явно проверить и настроить портрет. Не исправляй литературный текст ради рисунка '
             'и не предлагай менять защищённый procedural_portrait. Родинки, часы, медицинская форма '
-            'и телосложение не поддерживаются; их отсутствие на рисунке не ошибка канона.')
+            'и индивидуальные особенности фигуры не поддерживаются; их отсутствие на рисунке не ошибка канона.')
         signature=review_signature(review_messages,config)
         issues=obtain(trial,review_messages,signature,journal,call,save)
         if issues is None:return

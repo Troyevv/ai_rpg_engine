@@ -131,7 +131,9 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
     if 'generation_contract' not in journal:
         from pathlib import Path
         bundled=(Path(__file__).resolve().parents[2]/'prompts/draft_world_prompt.md').read_text()
-        journal['generation_contract']={'version':'legacy' if journal.get('messages') or journal.get('responses') else 6,
+        legacy = bool(journal.get('messages') or journal.get('responses') or 'candidate_text' in journal)
+        journal['generation_contract']={'version':'legacy' if legacy else 6,
+            'portrait_version':1 if legacy else 2,
             'prompt_contract':'bundled' if config['_prompts']['draft_world_prompt.md']['content']==bundled else 'custom_unverified',
             'prompt_sha256':hashlib.sha256(config['_prompts']['draft_world_prompt.md']['content'].encode()).hexdigest()}
     messages=journal.setdefault('messages',messages_for(repo,job,config))
@@ -181,6 +183,10 @@ def run(preparation,jid,config,api_key,handle,loaded,stream_fn):
                             if event.get('time_reference_minute') is None:event['time_reference_minute']=raw['world_clock']['minute']
             state,report=draft_initial.inspect_candidate(raw)
             errors=report['diagnostics']
+            # Resume must reuse the exact versioned candidate and review signature.
+            if not errors and journal['generation_contract'].get('portrait_version', 1) == 2:
+                from backend.services.draft_portraits import initialize
+                initialize(state, version=2)
             if isinstance(state,dict):
                 result=json.dumps(state,ensure_ascii=False)
                 recovered_candidate=True

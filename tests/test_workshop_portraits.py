@@ -168,8 +168,8 @@ def test_single_primary_generation_accepts_visual_choices_not_model_owned_seeds_
     from unittest.mock import patch
     client,_=api;raw=rich();card=raw['characters'][0];cid=card['id']
     card['fields']['Возраст']='30 лет'
-    card['portrait_traits']=dict(hair='short',hair_color='black',eyes='grey',clothing='shirt',clothing_color='dark')
-    raw['world']['characters'][cid].update(birth_date=None,developmental_stage='adult',
+    card['portrait_traits']=dict(facial_hair='short_beard',hair='short',hair_color='black',eyes='grey',clothing='shirt',clothing_color='dark')
+    raw['world']['characters'][cid].update(biological_sex='male',birth_date=None,developmental_stage='adult',
         procedural_portrait={'seed':'MODEL-CANNOT-ISSUE-AN-ID'},portraits=[{'asset_id':'forged'}],portrait_mode='procedural')
     calls=[]
     @accept_semantics_unchecked
@@ -185,6 +185,7 @@ def test_single_primary_generation_accepts_visual_choices_not_model_owned_seeds_
     draft=client.get(path+'?author=true').json()
     desc=draft['portraits'][cid]['procedural_portrait']
     assert desc['form']=='human' and desc['eyes']==2 and desc['clothing']==2 and desc['hair_color']==desc['clothing_color']==0
+    assert (desc['version'],desc['body_frame'],desc['facial_hair'])==(2,'male','short_beard')
     assert 'MODEL-CANNOT-ISSUE-AN-ID' not in desc['seed']
     assert not draft['state']['world']['characters'][cid].get('portraits')
     assert draft['state']['world']['characters'][cid].get('portrait_mode','auto')=='auto'
@@ -248,3 +249,104 @@ def test_manual_age_persists_without_mutating_canon_and_auto_resolves_on_server(
     assert actual['visual_age']==ref['visual_age'] and actual['stage']==ref['stage']
     assert actual['visual_age_mode']=='auto'
     assert app.state.repository.get_snapshot(started.json()['save'])['world_state']==runtime
+
+
+def test_v1_upgrade_is_local_and_v2_survives_portable_handoff(api):
+    from backend.services.draft_portraits import default_descriptor
+    client,app=api
+    state=fixture()
+    cid,other=[c['id'] for c in state['characters'][:2]]
+    actor=state['world']['characters'][cid]
+    actor.update(biological_sex='male',developmental_stage='adult',birth_date=None)
+    legacy=default_descriptor(cid,'adult',version=1)
+    actor['procedural_portrait']=legacy
+    url,d=create(client,state)
+    path=url+f'/characters/{cid}/portraits'
+    assert d['portraits'][cid]['procedural_portrait']==legacy
+    assert d['portraits'][other]['procedural_portrait']['version']==1  # historical, unmaterialized
+    ref=client.get(path+'?author=true').json()['anatomy_reference']
+    assert ref=={'body_frame':'male','facial_hair_allowed':True}
+    assert 'anatomy_reference' not in client.get(path).json()
+    art=dict(legacy,version=2,body_frame='female',facial_hair='clean_shaven')
+    assert client.put(path+'/procedural',json={'revision':d['revision'],'descriptor':art}).status_code==200
+    d=client.get(url+'?author=true').json()
+    assert d['portraits'][other]['procedural_portrait']['version']==1
+    exported=client.get(url+f"/export?version_id={d['version_id']}&format=json").json()
+    url,d=create(client,exported)
+    assert d['portraits'][cid]['procedural_portrait']==art
+    started=client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id'],'accept_warnings':True})
+    assert started.status_code==200,started.text
+    runtime=app.state.repository.get_snapshot(started.json()['save'])['world_state']
+    assert projection(runtime,cid)['procedural_portrait']==art
+    assert runtime['characters'][cid]['biological_sex']=='male'
+    assert runtime['characters'][other]['procedural_portrait']['version']==1
+
+
+def test_ineligible_beard_cannot_be_saved_by_forging_artistic_age_or_frame(api):
+    client,_=api
+    state=fixture();cid=state['characters'][0]['id']
+    state['world']['characters'][cid].update(biological_sex='male',developmental_stage='child',birth_date=None)
+    url,d=create(client,state);path=url+f'/characters/{cid}/portraits'
+    art=dict(d['portraits'][cid]['procedural_portrait'],version=2,stage='adult',body_frame='male',
+             form='human',visual_age='elderly',visual_age_mode='manual',facial_hair='full_beard')
+    assert client.put(path+'/procedural',json={'revision':d['revision'],'descriptor':art}).status_code in (409,422)
+    assert client.get(path+'?author=true').json()['descriptor']['version']==1
+
+
+def test_gated_portrait_stays_private_after_handoff(api):
+    from secret183_fixture import candidate
+    client,app=api;raw=candidate();cid='sonya'
+    raw['card_field_facts']={cid:{'Внешность':['fact_sonya_love']}}
+    url,d=create(client,raw)
+    path=url+f'/characters/{cid}/portraits'
+    art=dict(d['portraits'][cid]['procedural_portrait'],version=2,body_frame='female',facial_hair='clean_shaven')
+    saved=client.put(path+'/procedural',json={'revision':d['revision'],'descriptor':art})
+    assert saved.status_code==200,saved.text
+    assert client.get(path).json()['procedural_portrait'] is None
+    d=client.get(url+'?author=true').json()
+    started=client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id'],'accept_warnings':True})
+    assert started.status_code==200,started.text
+    sid=started.json()['save'];runtime=app.state.repository.get_snapshot(sid)['world_state']
+    assert projection(runtime,cid).get('procedural_portrait') is None
+    assert client.get(f'/api/saves/{sid}/characters/{cid}/portraits').status_code>=400
+    fid='fact_sonya_love';runtime['knowledge']['ilya:'+fid]={'status':'known'}
+    assert projection(runtime,cid)['procedural_portrait']==art
+
+
+def test_known_birth_does_not_disclose_sex_in_reader_data_or_art():
+    from backend.services.draft_player_view import player_view
+    from backend.services.draft_portraits import presentation_map
+    state=fixture();card=state['characters'][1];cid=card['id'];observer=state['controlled_actor_id']
+    world=state['world']
+    world['characters'][cid].update(birth_provenance={'pregnancy_id':'birth'},biological_sex='male',
+                                    reproductive_capability='can_impregnate',life_fact_id='meeting')
+    world['knowledge'][observer+':meeting']=dict(actor_id=observer,fact_id='meeting',status='known')
+    card['fields']['Пол']='Мужской'
+    public=player_view(state)
+    row=public['world']['characters'][cid]
+    assert 'biological_sex' not in row and 'reproductive_capability' not in row
+    assert 'Пол' not in next(c for c in public['characters'] if c['id']==cid)['fields']
+    assert presentation_map(state,public['characters'],False)[cid]==dict(portrait=None,procedural_portrait=None,silhouette='neutral')
+
+
+@pytest.mark.parametrize('field', ['Пол','Возраст'])
+def test_private_visual_source_cannot_be_inferred_from_body_or_beard(api,field):
+    from secret183_fixture import candidate
+    from backend.services.draft_portraits import initialize
+    client,app=api;raw=candidate();cid='maxim';fid='fact_sonya_love'
+    raw['world']['characters'][cid].update(biological_sex='male',developmental_stage='adult')
+    next(c for c in raw['characters'] if c['id']==cid)['fields'][field]='Мужской' if field=='Пол' else '35 лет'
+    raw['card_field_facts']={cid:{field:[fid]}}
+    initialize(raw,version=2)
+    url,d=create(client,raw)
+    assert d['portraits'][cid]['procedural_portrait']['body_frame']=='male'
+    public=client.get(url).json()
+    assert public['portraits'][cid]==dict(portrait=None,procedural_portrait=None,silhouette='neutral')
+    denied={'Пол':['biological_sex','reproductive_capability'],'Возраст':['birth_date','developmental_stage']}
+    assert set(denied[field]).isdisjoint(public['state']['world']['characters'][cid])
+    started=client.post(url+'/confirm',json={'revision':d['revision'],'version_id':d['version_id'],'accept_warnings':True})
+    assert started.status_code==200,started.text
+    state=app.state.repository.get_snapshot(started.json()['save'])['world_state']
+    assert not projection(state,cid).get('procedural_portrait')
+    state['knowledge']['ilya:'+fid]={'status':'known'}
+    assert projection(state,cid)['procedural_portrait']==d['portraits'][cid]['procedural_portrait']

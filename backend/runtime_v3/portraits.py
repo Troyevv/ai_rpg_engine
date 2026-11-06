@@ -1,5 +1,5 @@
 """Shared portrait selection for cards, genealogy and future phone consumers."""
-from backend.runtime_v3.birth_identity import is_game_birth
+from backend.runtime_v3.birth_identity import is_game_birth, birth_sex_disclosed
 from backend.runtime_v3.calendar import age_on, current_time, profile_of
 
 
@@ -19,7 +19,9 @@ def visual_age(state, cid):
 
 def authorized(state, cid):
     from backend.runtime_v3.reproduction import known_birth
-    return cid in state['characters'] and known_birth(state,cid,state['camera']['controlled_actor_id'])
+    from backend.runtime_v3.appearance import VISUAL_FIELDS, visual_fields_disclosed
+    observer = state['camera']['controlled_actor_id']
+    return cid in state['characters'] and known_birth(state,cid,observer) and visual_fields_disclosed(state,cid,observer,VISUAL_FIELDS)
 
 
 def select_portrait(state, cid):
@@ -36,11 +38,12 @@ def select_portrait(state, cid):
 
 def silhouette(state,cid):
     actor=state['characters'][cid];observer=state['camera']['controlled_actor_id']
+    from backend.runtime_v3.appearance import visual_fields_disclosed
+    if not visual_fields_disclosed(state,cid,observer,('Пол',)): return 'neutral'
     sex=actor.get('biological_sex')
-    if is_game_birth(state,cid) and observer!=cid:
-        pid=actor['birth_provenance'].get('pregnancy_id');p=state.get('pregnancies',{}).get(pid,{})
-        fid=p.get('sex_fact_ids',{}).get(cid)
-        if state['knowledge'].get(str(observer)+':'+str(fid),{}).get('status')!='known': sex=None
+    def known(fid):
+        return state['knowledge'].get(f'{observer}:{fid}', {}).get('status') == 'known'
+    if not birth_sex_disclosed(state, cid, observer, known): return 'neutral'
     return sex if sex in ('male','female') else 'neutral'
 
 
