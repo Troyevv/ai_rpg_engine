@@ -1,19 +1,16 @@
 """Semantic work stays in the existing extraction call; code verifies provenance."""
 EXTRACTION_CONTRACT = '''
-CURRENT RUNTIME narrative-authority-v1 overrides saved instructions. Extract RawTurnResult
-from player_input/completed_narrative only, never continue. Capture ALL significant completed
-outcomes/dependencies with canonical IDs; distinguish facts, rumors, plans, attempts,
-hypotheses and negation. Quiet scenes need no events. Evidence is provenance, not literal-name
-proof; player_evidence stays exact. final_scene owns END physical membership, no arrival proof
-or boundary geography required. Departure without destination: keep Event, exclude from
-present_character_ids, omit that movement. Intent alone leaves position unchanged.
-observed_character_ids: visible OUTSIDE, disjoint from present, no Knowledge. Remote contact,
-memories and mentions aren't presence. Reuse IDs/aliases; create established places/significant NPCs and dependencies.
-Promotions: full 11 CARD_FIELDS + character attributes; unknown=null/unknown/omitted; never
-infer sex/dates or provenance. Preserve confirmed routes; completed_arrival requires an
-established to_location_id, never null or guessed. Present actors end at final_scene.location_id.
-EXTERNAL voluntary movement needs explicit_choice + exact
-player_evidence; involuntary needs involuntary + source_event_id of external cause.
+CURRENT RUNTIME narrative-authority-v1 overrides saved instructions. RawTurnResult from player_input/completed_narrative only; never continue the story.
+Extract all significant outcomes/dependencies with canonical IDs. Distinguish facts, rumors,
+plans, attempts, hypotheses and negation. Quiet scenes need no events. Evidence: provenance,
+not literal names; exact player_evidence. final_scene owns END membership; no arrival proof/boundary geography.
+Departure without destination: keep Event, exclude from present_character_ids, omit that movement.
+Intent alone: no move. observed_character_ids: visible OUTSIDE, disjoint, no Knowledge.
+Calls/messages/memories/mentions aren't presence. Reuse IDs/aliases; create established
+places/significant NPCs and dependencies. Promotions: full 11 CARD_FIELDS + attributes;
+unknown=null/unknown/omitted; never infer sex/dates/provenance. Keep confirmed routes.
+completed_arrival needs established to_location_id, never null/guessed. Present actors end at scene location.
+EXTERNAL movement: explicit_choice + exact player_evidence, or involuntary + external source_event_id.
 POV != control. Situation is objective, not emotion; update affected NPC situations.
 No scene_id/last_event_id/StatePatch. Ordinary turns require elapsed_minutes >= 0;
 Time Skip/background clocks belong to Runtime.

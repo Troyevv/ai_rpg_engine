@@ -10,6 +10,7 @@ from backend.runtime_v3.repository import read_history
 from backend.runtime_v3.resolver import StateResolver
 from backend.services.world_delta_errors import StructuralDeltaError
 from devtools.narrative_test_world import ACTOR_ID, load_fixture
+from runtime_v3_fixture import execute
 from test_api import api
 from test_extraction_revision137 import run
 from test_narrative_test_world import CONFIG, ordinary_job
@@ -127,6 +128,16 @@ def test_departure_after_answered_call(phone):
     assert repo.get_job(jid)['status'] == 'saved'
     call, = repo.get_snapshot(sid)['world_state']['remote_events'].values()
     assert call['status'] == 'answered'
+    camera = repo.get_snapshot(sid)['world_state']['camera']
+    reply = 'Вера отвечает по телефону: «Да, я тебя слышу».'
+    voice = dict(final_scene=dict(location_id=camera['location_id'],
+                                  present_character_ids=camera['present_character_ids'], elapsed_minutes=1),
+                 events=[dict(id='voice', text=reply, participants=[ACTOR_ID, 'qa_vera'],
+                              witnesses=[ACTOR_ID, 'qa_vera'], medium='conversation', interaction_channel='call')])
+    jid = repo.begin_job(sid, 'Ты меня слышишь?', 'turn', dict(CONFIG, interaction_channel='call'))
+    execute(repo, jid, voice, reply)
+    assert repo.get_job(jid)['status'] == 'saved', repo.get_job(jid)['error']
+    assert repo.list_turns(sid)[-1]['presentation']['call_text'] == reply
     result = client.post(f'/api/saves/{sid}/phone', json=dict(revision=repo.get_save(sid)['revision'],
                          command=dict(action='end', event_id=call['id'], operation_id='end-before-departure')))
     assert result.status_code == 200, result.text
