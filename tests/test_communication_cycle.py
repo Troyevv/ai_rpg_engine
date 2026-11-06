@@ -28,7 +28,7 @@ def decision(messages, outcome='answer'):
     if 'event_id' in o:
         p['event_id'] = o['event_id']
     if action == 'send':
-        p.update(o['paths'][0], content='Да, увидимся завтра.')
+        p.update(route_index=0, content='Да, увидимся завтра.')
     return json.dumps(dict(action=p), ensure_ascii=False)
 
 

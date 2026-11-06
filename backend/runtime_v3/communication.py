@@ -65,7 +65,8 @@ def options_for(snapshot, source_id, replied):
     return result[:4]
 
 
-def run(snapshot, request, generate, cancelled, checkpoint=None, resolve_source=None, legacy_group=False):
+def run(snapshot, request, generate, cancelled, checkpoint=None, resolve_source=None, legacy_group=False,
+        decision_scope=None):
     r = validate(snapshot, request)
     if cancelled.is_set():
         return None
@@ -122,7 +123,8 @@ def run(snapshot, request, generate, cancelled, checkpoint=None, resolve_source=
             raw = generate(index, messages)
             report["decisions"] += 1
             try:
-                proposal, diagnostic = parse_decision(raw)
+                scope = decision_scope(index) if decision_scope else dict(options=options)
+                proposal, diagnostic = parse_decision(raw, **scope)
                 report.setdefault("parser", []).append(diagnostic)
                 if proposal is None:
                     if checkpoint: checkpoint(index, True)

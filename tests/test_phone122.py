@@ -323,7 +323,7 @@ def test_autonomous_incoming_reply_uses_ordinary_extraction_without_recap(tmp_pa
         if ms[0]['content'].startswith('Select at most ONE'):
             options=json.loads(ms[1]['content'])['options']
             option=next(o for o in options if o['actor_id']=='qa_vera' and 'send' in o['actions'])
-            yield json.dumps(dict(action=dict(actor_id='qa_vera',action='send',basis_ids=option['basis_ids'],**option['paths'][0],content='Да, договорились.')),ensure_ascii=False);return
+            yield json.dumps(dict(action=dict(actor_id='qa_vera',action='send',basis_ids=option['basis_ids'],route_index=0,content='Да, договорились.')),ensure_ascii=False);return
         if not kw.get('response_format'):
             yield 'В комнате тихо.';return
         current=json.loads(next(m['content'].split('\n',1)[1] for m in ms if m['content'].startswith('Текущее состояние / GM-only\n')))

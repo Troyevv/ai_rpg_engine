@@ -5,7 +5,7 @@ polling. Accepted events are staged with the job's immutable original context.
 """
 
 import json
-from backend.runtime_v3.remote_decision import RemoteDecision, parse as parse_decision, VERSION
+from backend.runtime_v3.remote_decision import RemoteDecision, parse as parse_decision, permitted_option, resolve
 from copy import deepcopy
 from backend.runtime_v3.models import identity, Character, WorldHistoryV3
 from backend.runtime_v3.remote_models import RemoteCommand, RemoteProposal
@@ -224,6 +224,10 @@ def planning_context(snapshot, options):
             'Example (substitute only listed IDs): {"action":{"actor_id":"npc_1","action":"answer","event_id":"call_1","basis_ids":["call_1"]}}. '
             'No action example: {"action":null}. Outer action is the decision; inner action is the operation. '
             "Do not control the external actor. Do not invent knowledge. Use listed basis IDs and paths only. "
+            "For send or call, choose route_index from the matching option's paths (0 for the first or only path). "
+            "Never return contact_id, conversation_id or character_id. Runtime supplies the selected address. "
+            'Reply example: {"action":{"actor_id":"npc_1","action":"send","route_index":0,'
+            '"basis_ids":["message_1"],"content":"Да, удобно."}}. '
             "Message content is authored testimony in the active game language. "
             "Answer or decline only a listed actual pending incoming call; no forced answer. "
             "An endpoint may remain unavailable (action:null). Only a meaningful reached individual "
@@ -250,19 +254,12 @@ def planning_context(snapshot, options):
 
 def accept(snapshot, proposal, options, operation_id, *, response_request=None):
     p = RemoteProposal.model_validate(proposal)
-    permitted = next(
-        (
-            r
-            for r in options
-            if r["actor_id"] == p.actor_id
-            and p.action in r["actions"]
-            and set(p.basis_ids) <= set(r["basis_ids"])
-            and p.basis_ids
-        ),
-        None,
-    )
-    if not permitted:
-        raise ValueError("remote_ineligible")
+    permitted = permitted_option(options, p.actor_id, p.action, p.basis_ids)
+    state = snapshot["world_state"]
+    for key in p.knowledge_ids:
+        row = state["knowledge"].get(key)
+        if not row or row["actor_id"] != p.actor_id or row["status"] != "known":
+            raise ValueError("remote_knowledge")
     if p.action == "identify":
         if p.event_id != permitted["event_id"] or not p.speaker_name.strip():
             raise ValueError("remote_identity_evidence")
@@ -283,11 +280,6 @@ def accept(snapshot, proposal, options, operation_id, *, response_request=None):
             raise ValueError("remote_unreachable")
     elif p.event_id != permitted.get("event_id"):
         raise ValueError("remote_event_mismatch")
-    state = snapshot["world_state"]
-    for key in p.knowledge_ids:
-        row = state["knowledge"].get(key)
-        if not row or row["actor_id"] != p.actor_id or row["status"] != "known":
-            raise ValueError("remote_knowledge")
     cmd = RemoteCommand(
         operation_id=operation_id,
         action=p.action,
@@ -449,11 +441,11 @@ def stage(snapshot, generate, operation_id, *, context_limit=32768, history_even
         value = decode(answer)
         if groups and isinstance(value, dict) and 'group_series' in value:
             decision = RemoteStageDecision.model_validate(value)
-            proposed = decision.action.model_dump() if decision.action else None
+            proposed = resolve(decision.action, options)
             series = decision.group_series
             diagnostic = dict(contract='remote-group/1')
         else:
-            proposed, diagnostic = parse_decision(answer)
+            proposed, diagnostic = parse_decision(answer, options)
             series = None
         if series:
             if series.conversation_id not in {g['conversation_id'] for g in groups}:
