@@ -79,7 +79,7 @@ No daily NPC simulation or #43 implementation is introduced.
 
 Thread gains only optional source_event_id. Existing snapshot migrations/defaults and
 History lineage handle legacy saves; no database schema migration or historical snapshot
-rewrite. Tabletop code is unchanged. Original Director policy is replayed for regenerate.
+rewrite. Original Director policy is replayed for regenerate.
 Malformed legacy event metadata is ignored conservatively during projection.
 
 Under tight context limits, already-elided optional personality/value evaluation schemas

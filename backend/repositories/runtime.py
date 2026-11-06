@@ -347,8 +347,6 @@ class RuntimeStorage:
             if not row: raise ValueError('Прохождение не найдено.')
             if row['revision']!=revision: raise ValueError('Сейв изменился. Обнови страницу.')
             source=json.loads(row['state_json'])
-            if source.get('mode')=='tabletop' or source.get('runtime')=='tabletop':
-                raise ValueError('Настройки доступны только в Narrative.')
             prior,_=migrate_snapshot(db,source)
             after=deepcopy(prior);meta=after['world_state']['meta']
             previous={k:meta[k] for k in validated}
@@ -381,8 +379,6 @@ class RuntimeStorage:
         row = db.execute('SELECT * FROM saves WHERE id=?', (save_id,)).fetchone()
         if not row: raise ValueError('Прохождение не найдено.')
         source = json.loads(row['state_json'])
-        if source.get('mode')=='tabletop' or source.get('runtime')=='tabletop':
-            raise ValueError('Телефон доступен только в Narrative.')
         prior, _ = migrate_snapshot(db, source)
         receipt = db.execute("""WITH RECURSIVE lineage(id,parent_id,payload_json) AS (
             SELECT id,parent_id,payload_json FROM world_history_v3 WHERE id=?

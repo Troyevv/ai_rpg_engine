@@ -2,7 +2,7 @@
 
 This is an extension of Runtime v3. `reproduction.py` runs inside StateResolver;
 StatePatch, committed snapshots, the History DAG, #76 Knowledge and #38 genealogy
-remain the owners of persistence, lineage and projections. Tabletop is unchanged.
+remain the owners of persistence, lineage and projections.
 
 ## Authoritative data
 

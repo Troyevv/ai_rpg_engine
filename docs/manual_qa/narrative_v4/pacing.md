@@ -52,7 +52,7 @@ RPG_DEV_TOOLS=1 python scripts/narrative_test_world.py --checkpoint pacing
 поля, давление/затишье/лимиты, причинные исходы, EXTERNAL, #42, счастливый путь,
 миграцию и lineage. `frontend/e2e/narrative-pacing.spec.ts` проверяет настройки на
 desktop/mobile. Существующие reproduction, milestones, protagonist и ordinary
-Narrative тесты проверяют интеграцию; полный suite включает Tabletop.
+Narrative тесты проверяют интеграцию.
 
 Автоматические прогоны используют подмену провайдера. Художественную
 правдоподобность, правильность semantic-классификации произвольного текста и

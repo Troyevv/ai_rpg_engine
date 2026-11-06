@@ -26,8 +26,6 @@ def validate(snapshot, request):
     r = Continuation.model_validate(request)
     s = snapshot["world_state"]
     e = s["remote_events"].get(r.source_event_id)
-    if snapshot.get("runtime") == "tabletop" or snapshot.get("mode") == "tabletop":
-        raise ValueError("Связь доступна только в Narrative.")
     if s["camera"]["controlled_actor_id"] != r.owner_id or not capabilities(s, r.owner_id)["can_act"]:
         raise ValueError("Владелец телефона уже изменился или не может действовать.")
     if not e or e["sender_id"] != r.owner_id:

@@ -104,8 +104,7 @@ calls each. Provider responses are deterministic, not live literary-quality evid
 - Visual inspection: 1440×1000 graphite and 393×851 parchment, compact two-column choices, no horizontal overflow; settings save/reopen and custom input covered by Playwright. Temporary screenshots/logs remain outside committed files; no video.
 
 Limitations: no live DeepSeek run or claim of improved literary quality; primary
-emphasis is a prompt preference, not a measurable guarantee. No full unrelated
-Tabletop suite was run. Imported very long legacy genre text is bounded as described
+emphasis is a prompt preference, not a measurable guarantee. Imported very long legacy genre text is bounded as described
 above. Existing history and original source metadata are retained.
 
 ## CI regression correction: neutral snapshot identity

@@ -23,8 +23,6 @@ def install(app, repo):
     @app.get('/api/saves/{sid}/narrative-policy')
     def get_policy(sid: int):
         snapshot=repo.get_snapshot(sid)
-        if snapshot.get('mode')=='tabletop' or 'world_state' not in snapshot:
-            raise ValueError('Настройки доступны только в Narrative.')
         meta=snapshot['world_state']['meta']
         current={k:meta[k] for k in ('narrative_pacing','narrative_risk','outcome_preference')}
         # Form projection only: reads must not materialize neutral policy in canon.

@@ -102,6 +102,5 @@ whole turn's calls (existing background simulation can still run).
 
 #43 can reuse the bounded evaluator; #44 can consume canonical profile schemas;
 #45 can incorporate the current-game setting. Their other scope is not implemented.
-Tabletop does not consume these settings.
 
 See [QA protocol](manual_qa/narrative_v4/pacing.md) and `tests/test_narrative_pacing.py`.

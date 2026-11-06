@@ -107,7 +107,7 @@ or calls directly. Start Game is clicked in the browser.
 
 ## Compatibility and limits
 
-No SQL or WorldState migration. Old saves, absent extraction sections, Tabletop,
+No SQL or WorldState migration. Old saves, absent extraction sections,
 phone-only messaging, #133 physical/call continuity, commitments and #136 recovery
 keep their owners. Existing optional communication planning calls are preserved;
 this change adds no mandatory call or per-contact agent.

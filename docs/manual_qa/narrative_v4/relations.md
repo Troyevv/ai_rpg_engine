@@ -78,7 +78,7 @@ RPG_DB_PATH=/tmp/narrative-family.sqlite3 python -m uvicorn backend.main:app --h
 - malformed optional transition даёт warning, но валидный обычный ход сохраняется;
 - цикл родительства/опеки, self-edge и несуществующие endpoints отклонены локально;
 - старый мир без новых полей проходит import → start → turn → save/reload → turn;
-- Tabletop smoke и весь общий backend/E2E набор остаются зелёными.
+- Полный backend/E2E набор остаются зелёными.
 
 Детерминированные проверки: `tests/test_life_social.py`; браузер desktop/mobile:
 `frontend/e2e/family.spec.ts`. Полный контракт: `docs/canonical-life-social.md`.

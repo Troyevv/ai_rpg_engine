@@ -1,7 +1,7 @@
 # Significant possessions (#77)
 
 `WorldStateV3.possessions` is a map of stable `SignificantPossession` identities.
-It is a small continuity domain inside the existing Runtime, not Tabletop inventory.
+It is a small continuity domain inside the existing Runtime.
 Owner (title), holder (custody), location and status are independent nullable fields.
 Unknown does not mean unowned. Nothing infers custody from ownership, residence,
 Character movement, a mention, age or elapsed time. Destruction retains the identity
@@ -49,7 +49,6 @@ Old JSON/history remains untouched; old prose never generates objects.
 Structured #78/import data can supply this same model, with validated references.
 #39 remains authoritative for locations/residence; no implicit title to a residence.
 #38 remains authoritative for capabilities. Future #43/#44/#45/#46 reuse this model.
-No Tabletop models, equipment, rules or content packs are changed.
 
 ## Knowledge and bounded context
 

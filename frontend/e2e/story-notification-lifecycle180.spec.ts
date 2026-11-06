@@ -32,11 +32,11 @@ for(const theme of ['graphite','parchment']){
   expect(await acknowledged(page,s,events[0].id)).toBe(false);
   await page.getByRole('region',{name:'Телефон персонажа'}).getByRole('button',{name:'Свернуть телефон',exact:true}).click();
   await expect(toast(page)).toHaveAttribute('data-notice-id',events[0].id);
-  // This navigation actually unmounts Game and StoryNotifications, unlike a preserved workspace.
-  await page.getByRole('button',{name:'Настольная RPG',exact:true}).click();
-  await expect(page.locator('.tt-shell')).toBeVisible();await expect(toast(page)).toHaveCount(0);
+  // Leaving the app unmounts Game, including the pending presentation queue.
+  await page.goto('/offline.html');
+  await expect(toast(page)).toHaveCount(0);
   expect(await acknowledged(page,s,events[0].id)).toBe(false);
-  await page.locator('.tt-header').getByRole('button',{name:'Истории',exact:true}).click();
+  await page.goto('/');
   await expect(toast(page)).toHaveAttribute('data-notice-id',events[0].id);
   await nav(page,'Календарь');await expect(page.locator('.save-workspace')).toBeVisible();await expect(toast(page)).toHaveCount(0);
   expect(await acknowledged(page,s,events[0].id)).toBe(false);

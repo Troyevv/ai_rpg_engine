@@ -42,7 +42,7 @@ RPG_DB_PATH="$PWD/data/dev-continuity.sqlite3" python -m uvicorn backend.main:ap
    Проверить canonical world_time и календарь. Ближайшая договорённость, конец
    интервала или прерывание ограничивает ход. При открытом вопросе NPC нет молчаливого
    согласия и пропуска ответа игрока. Detailed Time Skip проверить отдельно.
-8. Убедиться в работе обычного Narrative и отсутствии изменений Tabletop. На desktop
+8. Убедиться в работе обычного Narrative. На desktop
    и mobile встреча → уход → reload → следующий ход сохраняют сцену и вёрстку.
 
 Автоматическое покрытие: tests/test_narrative_continuity.py, обновлённые проверки

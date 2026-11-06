@@ -147,8 +147,6 @@ class EngineStorage:
             before_snapshot=json.loads(before)
             from backend.runtime_v3.repository import restore_biographical_secrets
             restore_biographical_secrets(db, before_snapshot)
-            if kind == 'long_term' and (before_snapshot.get('mode') == 'tabletop' or before_snapshot.get('runtime') == 'tabletop'):
-                raise ValueError('Длительный переход доступен только в Narrative.')
             before_snapshot['world_state']=assert_world_state_v3_invariants(before_snapshot['world_state'])
             from backend.runtime_v3.protagonist import initialize
             initialize(before_snapshot)

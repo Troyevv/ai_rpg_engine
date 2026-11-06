@@ -19,8 +19,6 @@ def install(app, repo, credentials, public_job):
     def preview(sid: int, body: AdvanceRequest):
         saved = repo.get_save(sid)
         snapshot = repo.get_snapshot(sid)
-        if snapshot.get("mode") == "tabletop" or snapshot.get("runtime") == "tabletop":
-            raise ValueError("Длительный переход доступен только в Narrative.")
         from backend.runtime_v3.repository import advance_receipt_reader
         from backend.runtime_v3.milestones import reader
 

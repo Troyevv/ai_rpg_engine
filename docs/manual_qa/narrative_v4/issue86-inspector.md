@@ -21,7 +21,7 @@ Baseline: master `cd91e1b80b28ab0b74971889032341b20a385637`, including final #12
 | Threads | Description, state, status, participants, relevance order; legacy plans and original notes | Status/participant filters, bounded cards, development disclosure |
 | Memory | Player-observed vs actor witness/known-source events, minute/turn, participants; nonsecret facts, actor knowledge/evidence/replacement, retired beliefs; legacy event fallback | Searchable timeline, facts/knowledge sidebar, kind/scope/participant filters |
 | Legacy LLM memory | GM summary, per-actor summaries | Explicit archive disclosure |
-| Other entry points | Calendar, genealogy, library, workshop, settings, reading, Tabletop, phone, current-game actions | Existing destinations retained; only Inspector-owned navigation changes |
+| Other entry points | Calendar, genealogy, library, workshop, settings, reading, phone, current-game actions | Existing destinations retained; only Inspector-owned navigation changes |
 
 ## Navigation and state contract
 

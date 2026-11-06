@@ -91,7 +91,7 @@ relative dates anchor to the proposal message's canonical timestamp. The
 | 10–11 | Physical scene retained; explicit call focus; restricted audible witnesses; canonical timeout | call controls, extraction audibility, setting-neutral channel, device-choice tests |
 | 12, 14 | Bounded relevant context, no contact polling, no #43 implementation | saturated newborn-triplets world with 200 unread messages; existing context-compaction regressions |
 | 13, 29 | Existing save snapshots, History DAG receipts, original generation context | persisted replay, outage/retry, variant selection, rollback and ordinary save/reload cycle |
-| 15–17 | Existing Dialog/theme/avatar system; ordinary Narrative and Tabletop remain independent | desktop/mobile phone E2E plus complete existing Python/Playwright suites |
+| 15–17 | Existing Dialog/theme/avatar system | desktop/mobile phone E2E plus complete existing Python/Playwright suites |
 | 18–23 | Explicit direct/group containers and membership, frozen delivery recipients, no social-graph inference | late join/removal/former-member reading tests; group membership E2E |
 | 28 | Phone chat and call log derive from canonical records after reload | phone E2E and repository reload checks |
 | Later identity additions | Unresolved contacts, exact-address linking, minimal individuals, shared/service destinations | lazy identity, reply-container continuity and unavailable/blocked endpoint tests |

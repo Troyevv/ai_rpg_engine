@@ -95,7 +95,7 @@ Cache tests cover edits, deletion, rollback, stable ordering and failure cooldow
 - Focused participation/semantic suite: **26 passed**, including two-turn Yura with and without name, distinct author voices, ownership, directed relationships, soft/hard overflow and semantic-only overdue schedules.
 - Frontend: `npm run build` passed; existing Vite bundle-size warning remains.
 - General tests use injected embeddings or disable retrieval. The model benchmarks above use real sentence-transformers on CPU.
-- Existing suites cover save/load/import, POV, observer worlds, regeneration, variants, rollback, background/time skip, lifecycle, relationships and diagnostics. Tabletop code is unchanged.
+- Existing suites cover save/load/import, POV, observer worlds, regeneration, variants, rollback, background/time skip, lifecycle, relationships and diagnostics.
 - Live generated prose and extraction accuracy still require user QA. No quality claim is inferred from deterministic tests.
 - Explicit authored-output detection handles common Russian/English forms, not arbitrary natural-language instructions. Ambiguous authors should be established by structured Event metadata; old-message pronouns beyond the short continuity window may require a name.
 - Thresholds can yield irrelevant candidates; per-type caps and non-expanding neighborhoods bound the damage. No semantic result becomes truth, knowledge, physical presence or behavioral participation on its own.
