@@ -608,8 +608,19 @@ def _seed_reproduction(repository,save_id,checkpoint):
     if checkpoint.startswith('newborn'):
         p=next(iter(snapshot['world_state']['pregnancies'].values()))
         text='Роды Веры завершились в доме. Кирилл присутствовал при рождении детей. Вера и Кирилл подтвердили, что они родители.'
-        commit(text,dict(raw(text,1440),births=[dict(pregnancy_id=p['id'],source_event_id='qa_reproduction_event',
-            assertion='birth_completed',disclosed_parent_ids=p['parent_ids'],location_id=snapshot['world_state']['camera']['location_id'],evidence=text)]),'turn')
+        # This newborn checkpoint has informed parents; completion alone does
+        # not convey each child's sex. Seed the observation via normal Knowledge.
+        observed = ', '.join('девочка' if child['sex'] == 'female' else 'мальчик' for child in p['children'])
+        disclosure = 'Вера и Кирилл увидели каждого ребёнка по очереди: ' + observed + '.'
+        scene = raw(text + ' ' + disclosure, 1440)
+        event = scene['events'][0]
+        event['fact_ids'] = list(p['sex_fact_ids'].values())
+        scene['knowledge_gained'] = [dict(actor_id=cid, fact_id=fid, source_event_id=event['id'],
+            evidence=disclosure) for cid in event['witnesses'] for fid in event['fact_ids']]
+        scene['births'] = [dict(pregnancy_id=p['id'], source_event_id=event['id'],
+            assertion='birth_completed', disclosed_parent_ids=p['parent_ids'],
+            location_id=snapshot['world_state']['camera']['location_id'], evidence=text)]
+        commit(event['text'], scene, 'turn')
 
 
 def _possessions(state):
