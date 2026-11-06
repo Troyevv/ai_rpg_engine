@@ -79,7 +79,12 @@ test('scenario and summary deletion keeps restorable versions and saves',async({
  const completed=h.versions.find((v:{content:string})=>v.content.length>0);
  await dialog.getByRole('combobox').selectOption(String(completed.id));
  page.once('dialog',d=>d.accept());
- await dialog.getByRole('button',{name:'Откатить к выбранной'}).click();
+ const [restored]=await Promise.all([
+   page.waitForResponse(response=>response.request().method()==='POST' &&
+     new URL(response.url()).pathname===`/api/documents/summary/${w.id}`),
+   dialog.getByRole('button',{name:'Откатить к выбранной'}).click(),
+ ]);
+ expect(restored.ok()).toBe(true);
  await expect(dialog.locator('select option')).toHaveCount(h.versions.length+1);
  await dialog.getByRole('button',{name:'Закрыть',exact:true}).click();
  await expect(page.getByRole('button',{name:'Удалить выжимку',exact:true})).toBeVisible();
