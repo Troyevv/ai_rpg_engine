@@ -1,5 +1,6 @@
 """Reviewed Stage B retest and bounded Stage C on the existing browser runner."""
 from contextlib import closing
+import gzip
 import json
 from pathlib import Path
 import sqlite3
@@ -184,6 +185,37 @@ def validate(directory, manifest):
                 raise ValueError('Reviewed retest evidence changed')
 
 
+def expected_agency_rejection(folder, audit):
+    """A reviewed negative test is not a saved turn or permission to retry it."""
+    if audit.get('case') != 'knowledge' or audit.get('expected_rejection') != 'controlled_actor_unsupported':
+        return False
+    result = read(folder / 'result.json')
+    if result.get('status') != 'held-for-review' or result.get('kind') != 'retry':
+        return False
+    def compressed(name):
+        with gzip.open(folder / name, 'rt') as source:
+            return json.load(source)
+    if compressed('before.json.gz') != compressed('after.json.gz'):
+        return False
+    jobs = compressed('diagnostics.json.gz')
+    if len(jobs) != 1 or jobs[0]['status'] != 'error':
+        return False
+    diagnostics = json.loads(jobs[0]['repair_diagnostics_json'])
+    if not diagnostics or diagnostics[-1].get('code') != 'controlled_actor_unsupported':
+        return False
+    request = jobs[0]['requests'][-1]
+    if request['stage'] != 'extraction' or request['status'] != 'complete':
+        return False
+    from backend.runtime_v3.models import TemporalValue
+    payload = json.loads(request['response_text'])
+    changes = payload.get('scheduled_event_changes', [])
+    if not changes:
+        return False
+    for change in changes:
+        TemporalValue.model_validate(change['temporal'])
+    return True
+
+
 def review(directory, manifest, case):
     """An explicit QA review records evidence, never rewrites a failure as success."""
     validate(directory, manifest)
@@ -193,11 +225,11 @@ def review(directory, manifest, case):
     if target.exists():
         raise ValueError('Retest already reviewed')
     folders = [directory / case / f'{i:03d}' for i in range(manifest['retest_counts'][case])]
-    if not all(completed(p) for p in folders):
-        raise ValueError('Held or missing retest; do not enter associated Stage C scenarios')
     audit = read(directory / 'semantic-reviews' / f'{case}.json')
     if audit.get('status') != 'passed' or audit.get('case') != case or not audit.get('checks') or not all(audit['checks'].values()):
         raise ValueError('A semantic state/History/Knowledge/agency review is required')
+    if not all(completed(p) or expected_agency_rejection(p, audit) for p in folders):
+        raise ValueError('Held or missing retest; do not enter associated Stage C scenarios')
     evidence = {str(p.relative_to(directory)): digest(p) for folder in folders for p in folder.iterdir() if p.is_file()}
     evidence[str((directory / 'semantic-reviews' / f'{case}.json').relative_to(directory))] = digest(directory / 'semantic-reviews' / f'{case}.json')
     target.parent.mkdir(exist_ok=True)
