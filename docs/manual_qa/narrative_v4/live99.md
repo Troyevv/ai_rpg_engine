@@ -168,3 +168,22 @@ python -m devtools.live99.retest audit /private/live99-post204
 запросов Knowledge; создаёт отдельный receipt и `retries/002`, добавляя одну
 резервацию действия, без возврата старых. Нельзя применять к уже полученной
 новой Extraction. Семейное окно 65536 и output caps 2000/4096 не меняются.
+
+### Дополнительный checkpoint Crisis в Stage B
+
+После полного прохождения исходных 15 Crisis шагов можно явно добавить покрытие
+недееспособности из существующей `family-incapacitated` fixture:
+
+```bash
+python -m devtools.live99.run prepare-crisis-extension /private/live99-stage-b --reviewed
+python -m devtools.live99.run run /private/live99-stage-b --stage B --case crisis --reviewed
+```
+
+`crisis-extension.json` фиксирует отдельный save и девять действий: начало сцены,
+явная смена героя на Веру и вопросы о помощи, заботе об Асе, документах и сообщении
+близким. Исходный Crisis save, plan и результаты остаются на месте. Используются
+те же `step`, browser, oracle, budget и action ledger; лимиты не обновляются.
+Death oracle требует сохранения **уже установленной** смерти, а не выдумывает её
+в fixture недееспособности. Для обеих сторон этого условия есть регрессионные тесты.
+
+Результаты Stage B: [6 ноября 2026](live99-stage-b-20261106.md).
