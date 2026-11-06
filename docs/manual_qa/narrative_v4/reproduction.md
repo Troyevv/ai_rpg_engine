@@ -60,7 +60,7 @@ without introducing Long-term Advance (#43).
   decision provenance; never infer EXTERNAL acceptance from an NPC suggestion.
 - With an explicit later calendar/stage transition, the same Character can develop
   through #67. Age does not itself create adult personality or future life events.
-- Check ordinary legacy Narrative and Tabletop saves. No new fields are required.
+- Check ordinary legacy Narrative saves. No new fields are required.
 
 Automated coverage is in `tests/test_reproduction.py` and `frontend/e2e/newborn.spec.ts`;
 all fixtures/mock providers are deterministic and require no paid model calls.

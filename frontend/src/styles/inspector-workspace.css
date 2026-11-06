@@ -1130,7 +1130,7 @@
 }
 
 /* Workspace palette: inherit every skin unless this preset supplies an approved override.
-   Never applied to Game, Phone, Tabletop or the document root. */
+   Never applied to Game, Phone or the document root. */
 html[data-theme="graphite"] :is(.inspector-workspace, .inspector-settings, .inspector-mobile-palette, .inspector-open > .nav-rail) {
   --bg: #1c1e21;
   --surface-1: #202226;

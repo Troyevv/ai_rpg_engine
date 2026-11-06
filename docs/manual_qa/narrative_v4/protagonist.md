@@ -71,4 +71,3 @@ context/control, selecting variants restores that lineage. Branch to a saved
 variant and verify no sibling character/Knowledge/operation receipt leaks.
 Rollback before creation removes its canonical additions, preserving the archived
 historical record. Control changes between turns never rewrite older variants.
-Tabletop creation, inventory and gameplay must remain unaffected.

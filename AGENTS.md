@@ -17,7 +17,7 @@
 ## Architecture
 - The application uses a FastAPI backend, SQLite persistence, and a React + TypeScript frontend built with Vite.
 - Keep domain logic out of HTTP handlers and UI components. Preserve existing service, persistence, provider, and runtime boundaries; inspect actual module layout before choosing files.
-- Narrative and Tabletop are separate game runtimes sharing infrastructure. Never apply Narrative world-state assumptions to Tabletop mechanics or vice versa.
+- Narrative is the only playable runtime. Keep world generation, literary Extraction and canonical persistence in their existing owners.
 - Prefer existing abstractions and established dependencies to new frameworks, parallel implementations, or speculative generalization.
 - Do not implement future modes or features unless requested by the task.
 
@@ -30,12 +30,6 @@
 - Validate extracted WorldDelta before applying it. Do not silently swallow unknown or dangerous semantic errors. Keep diagnostics for rejected or repaired changes.
 - Preserve turn/variant lineage, before/after snapshots, rollback behavior, and atomic persistence. Regeneration must use the recorded original context, not silently reconstructed later context.
 - Keep existing saves compatible. Do not rewrite historical snapshots as a migration shortcut.
-
-## Tabletop invariants
-- The server-side rules and dice engines, not the LLM, decide checks, damage, resources, inventory, equipment, initiative, conditions, and combat outcomes.
-- The LLM may interpret intent, write dialogue, and narrate validated outcomes; it must not fabricate authoritative mechanical results.
-- Keep game rules deterministic and testable. Prefer structured content and validated content packs to unconstrained LLM generation unless a task explicitly changes this design.
-- Preserve existing content formats and saved campaigns or supply an explicit migration path.
 
 ## LLM integration
 - Do not add LLM calls where deterministic code suffices. Avoid redundant retries, unnecessary context, and token-expensive workflows.

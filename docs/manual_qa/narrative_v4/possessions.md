@@ -57,8 +57,6 @@ established facts and meaningful events; no general inventory panel is added.
 12. For a large map, inspect context: at most 12 selected objects / 6000 JSON characters,
     explicit named object prioritized, no ledger/full history. Hidden objects must
     not become visible just because their actual holder or place matches the scene.
-13. Switch to Tabletop and exercise existing inventory/equipment. No Narrative item
-    data appears and server-authoritative equipment behavior is unchanged.
 
 Automated: `.venv/bin/python -m pytest -q tests/test_possessions.py`.
 Real provider manual checks are exploratory; automated regressions use deterministic

@@ -65,7 +65,7 @@ state or the completed prose. Old contexts without a permit retain their normal
 legacy flow; they cannot acquire new initiative claims by regeneration. No schema
 migration or historical-snapshot rewrite is necessary. Event annotations and
 canonical effects follow existing atomic snapshots and History lineage through
-reload, variant selection, rollback and branching. Tabletop is untouched.
+reload, variant selection, rollback and branching.
 
 Normal turns still have Narrative + Extraction only. There is no per-NPC request,
 additional semantic validator, or extra mandatory retry. Diagnostics include the
@@ -79,7 +79,7 @@ refusal, EXTERNAL protection, capabilities, knowledge status, remote restriction
 observation/temporary control, pacing, involuntary outcomes and actual engine job
 lineage with exactly two provider calls. It also exercises #78's `initiative`
 checkpoint. `frontend/e2e/npc-initiative.spec.ts` checks proposal/refusal/reload on
-both viewport projects. The full suites retain ordinary Narrative and Tabletop
+both viewport projects. The full suites retain ordinary Narrative
 coverage. See [manual QA](manual_qa/narrative_v4/initiative.md).
 
 These deterministic fixtures test contracts and state effects, not a real model's

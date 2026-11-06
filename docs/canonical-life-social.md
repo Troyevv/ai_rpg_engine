@@ -94,6 +94,6 @@ or hiding a cycle. Import validation remains strict. Stored originals are not ov
 
 No age simulation, reproduction, life opportunities, future milestone service, residence
 model, phone, character dossier redesign or new control-transition UX is implemented.
-Existing Tabletop code is unchanged. The small current family/life panel is usable now;
+The small current family/life panel is usable now;
 #45/#83 may enrich it later. Current app-wide GM inspector surfaces remain existing behavior;
 the new genealogy API has no GM bypass. No extra model calls or paid test calls are needed.

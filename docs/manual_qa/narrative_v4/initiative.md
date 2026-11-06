@@ -68,7 +68,7 @@ RPG_DB_PATH="$PWD/data/dev-initiative.sqlite3" python -m uvicorn backend.main:ap
 `tests/test_npc_initiative.py` использует детерминированные ответы провайдера, включая
 многоходовой реальный engine start → reload → turn → regenerate → rollback → branch.
 `frontend/e2e/npc-initiative.spec.ts` проверяет предложение и отказ через UI.
-Полные Python/Playwright suites проверяют обычный Narrative и неизменность Tabletop.
+Полные Python/Playwright suites проверяют обычный Narrative.
 
 Для оценки естественности с реальным провайдером записывайте точный ввод, текст,
 исходный контекст, Event/evidence, модель и настройки. Сравнивайте сдержанную Веру

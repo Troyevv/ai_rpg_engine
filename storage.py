@@ -17,6 +17,8 @@ class Storage(EngineStorage, RuntimeStorage, DocumentStorage):
     def __init__(self, path=None):
         self.path = Path(path or os.environ.get('RPG_DB_PATH', DEFAULT_DB))
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        from backend.repositories.retired_schema import remove_retired_tables
+        remove_retired_tables(self)
         with self.connect() as db:
             db.executescript('''
                 CREATE TABLE IF NOT EXISTS worlds (

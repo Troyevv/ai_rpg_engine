@@ -5,6 +5,8 @@ __pycache__/
 data/
 *.sqlite3
 *.sqlite3-*
+*.pre-125-*.bak
+*.pre-125-*.pending
 
 # React build and launcher runtime
 frontend/node_modules/

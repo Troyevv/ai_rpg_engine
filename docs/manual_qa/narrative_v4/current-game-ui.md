@@ -21,7 +21,6 @@ Phone: one mounted edge device → expanded nonmodal device → same edge device
 | genealogy | Existing knowledge-filtered server projection |
 | global provider / theme | Existing Settings unchanged |
 | relationship notices | Existing local preference and key, one control in current-game settings |
-| Tabletop | No changes to its screens or rules |
 
 ## Dependency audit
 Existing Motion 12 (MIT), Radix Dialog 1 (MIT), Lucide and skin tokens are reused. No new design system.

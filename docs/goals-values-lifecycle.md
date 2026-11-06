@@ -71,6 +71,5 @@ Director, and stale initial card fields. Already-selected causal History can sup
 small historical lifecycle projection. Values have explicit known-by projections;
 changes do not broadcast Knowledge. UI value chronology follows the same witness rules.
 
-No new generation-choice feature (#73), Long-term Advance (#43), dossier redesign,
-or Tabletop behavior is implemented. Semantic model quality is not guaranteed by
+No new generation-choice feature (#73), Long-term Advance (#43), or dossier redesign is implemented. Semantic model quality is not guaranteed by
 mocked CI: real-model manual checks remain relevant. No paid calls are required by tests.

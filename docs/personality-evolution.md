@@ -2,7 +2,7 @@
 
 This extends Runtime v3's Character, RawTurnResult, Resolver, History and ContextScope.
 There is no second character-card store, psychiatric model, numerical trait score,
-per-turn psychologist call or per-NPC/year simulation. Tabletop is unchanged.
+per-turn psychologist call or per-NPC/year simulation.
 
 ## Current truth and compatibility
 

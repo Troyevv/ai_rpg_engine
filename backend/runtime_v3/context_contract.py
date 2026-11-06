@@ -534,7 +534,7 @@ NPC read: existing_event_id plus reader_id, only after delivery. EXTERNAL reads 
 
 
 # One shared prose policy, including custom prompts and background/LTA narration.
-# Extraction and Tabletop do not consume it; recorded regeneration stays verbatim.
+# Extraction does not consume it; recorded regeneration stays verbatim.
 NARRATIVE_STYLE_CONTRACT = """
 NARRATIVE STYLE CONTRACT:
 Write vivid, restrained prose in the active game language and established narrative

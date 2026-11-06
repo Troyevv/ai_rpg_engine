@@ -79,8 +79,7 @@ valid changes. Malformed persisted chronology/references are integrity errors re
 explicit repair, not silently erased history. Existing imported chronology may stay unknown.
 No new authoring editor or organization management screen is added (#45); JSON import and
 ordinary evidence-bound Narrative turns expose this issue's usable authoring surface.
-Tabletop schemas, dice/rules, UI and persistence are unchanged.
 
 Automated coverage: `tests/test_residence_roles.py`, existing Runtime/calendar/commitment/life
-and Tabletop suites, `frontend/e2e/residence.spec.ts` on desktop/mobile. Reproducible manual
+suites, `frontend/e2e/residence.spec.ts` on desktop/mobile. Reproducible manual
 scenarios: [QA #39](manual_qa/narrative_v4/residence-roles.md).

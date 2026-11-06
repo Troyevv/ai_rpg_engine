@@ -11,7 +11,7 @@ Baseline: master `fc47f6c` (GenrePolicy #110 уже merged); архитекту�
 Time Skip. `long_term.run` вызывает тот же builder с kind=background.
 `NARRATIVE_STYLE_CONTRACT` добавляется один раз в `NARRATIVE_CONTRACT` после
 выбранного builtin/custom game/background prompt. Extraction использует отдельный
-builder/контракт, Tabletop не затронут. Из старого Narrative contract убрана отдельная
+builder/контракт. Из старого Narrative contract убрана отдельная
 дублирующая инструкция диалогов; шаблон game отсылает к общему контракту.
 
 Regenerate/retry используют записанный контекст, не собирают его заново. Новый ход

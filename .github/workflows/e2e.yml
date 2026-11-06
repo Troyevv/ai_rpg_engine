@@ -23,7 +23,7 @@ jobs:
     env:
       CI: 'true'
       E2E_SHARD: ${{ inputs.artifact-prefix }}-${{ matrix.project }}-${{ matrix.shard }}
-      # Each job has a separate VM/network namespace, including legacy 8013/8014 servers.
+      # Each job has a separate VM/network namespace.
       E2E_PORT: '8011'
       E2E_OUTPUT: test-results
       E2E_SUMMARY: test-results/ci-summary.json

@@ -279,8 +279,7 @@ epoch; stale workers cannot save a journal/candidate/final result across epochs.
 The existing `tests/e2e_server.py` / `draft-v4.spec.ts` controlled-provider setup uses
 an isolated test DB and runs desktop/mobile reload, malformed-review recovery and
 Start Game without paid calls. `TEST_REVIEW_PROTOCOL` injects two malformed reports.
-It is not a claim about live DeepSeek quality. Full suite includes existing Tabletop
-and supported-save migration regressions. Exact commands/results belong in the PR.
+It is not a claim about live DeepSeek quality. Full suite includes supported-save migration regressions. Exact commands/results belong in the PR.
 
 DeepSeek JSON mode is retained (`json_object`), with application validation still
 mandatory: https://api-docs.deepseek.com/guides/json_mode/ . Beta structured output
