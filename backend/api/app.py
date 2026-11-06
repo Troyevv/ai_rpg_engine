@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 import engine
 import llm
 from character_links import linked_markdown
-from backend.api.schemas import (World, Named, Generation, Turn, Retry, Revision, Scene,
+from backend.api.schemas import (World, Named, Generation, Turn, Retry, Revision, AbandonJob, Scene,
                                  Models, Load, Preferences, Markdown, Credential, VariantSelection, Actor, DocumentChange, Camera, Motivation, RelationshipEdit, Presentation)
 from backend.repositories.preparation import Repository
 from backend.services.preparation import Preparation
@@ -203,7 +203,7 @@ def create_app(db_path=None, recover=True):
             t['changes']=visible_changes(t['changes'],canonical,owner) if canonical else t['changes']
             t['changes_json']=json.dumps(t['changes'],ensure_ascii=False)
             t['variants'] = [] if t.get('read_only_projection') else repo.variants(t['node_id'])
-        latest = repo.latest_job(sid)
+        latest = repo.latest_job(sid, value['revision'])
         value['job'] = job(latest['id']) if latest else None
         return value
 
@@ -262,6 +262,13 @@ def create_app(db_path=None, recover=True):
         else:
             repo.get_job(jid)
             engine.stop(repo, jid)
+        return job(jid)
+
+    @app.post('/api/saves/{sid}/jobs/{jid}/abandon')
+    def abandon(sid: int, jid: str, body: AbandonJob):
+        if engine.live(jid):
+            raise ValueError('Дождись завершения обработки хода.')
+        repo.abandon_job(sid, jid, body.revision, body.attempt_epoch)
         return job(jid)
 
     @app.post('/api/jobs/{jid}/retry')

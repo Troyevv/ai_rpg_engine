@@ -305,3 +305,9 @@ def test_repeated_ongoing_scene_can_continue_or_end_from_witnessed_history(tmp_p
     failed, _ = ordinary(repo, sid, 1, player_input=OBSERVE, text=SIGNS, config=CONFIG)
     assert json.loads(failed['repair_diagnostics_json'])[-1]['code'] == 'ordinary_temporal_boundary'
     assert Repository(repo.path).get_snapshot(sid) == ongoing
+    repo.abandon_job(sid, failed['id'], repo.get_save(sid)['revision'], failed['attempt_epoch'])
+    assert repo.get_snapshot(sid) == ongoing
+    resumed, _ = job(repo, sid, 'turn', HELP)
+    assert resumed['world_state']['meta']['world_time'] == 1980
+    assert resumed['world_state']['pregnancies'][p['id']]['status'] == 'due'
+    assert p['children'][0]['id'] not in resumed['world_state']['characters']
