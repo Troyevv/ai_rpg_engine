@@ -296,12 +296,14 @@ def test_no_birth_from_due_alone_wrong_count_or_sex_cannot_override():
     assert next(iter(due.state['pregnancies'].values()))['status']=='due'
     assert len(due.state['characters'])==3
     p=next(iter(s['pregnancies'].values()))
-    premature=run(s,'births',[dict(pregnancy_id=p['id'],source_event_id='event',assertion='birth_completed',evidence=BIRTH)],text=BIRTH)
-    assert not premature.cards and premature.warnings
-    forged=run(s,'births',[dict(pregnancy_id=p['id'],source_event_id='event',assertion='birth_completed',evidence=BIRTH,
-        child_count=3,sex='male')],text=BIRTH,elapsed=1440)
-    assert not forged.cards and forged.warnings
-    assert next(iter(forged.state['pregnancies'].values()))['children']==p['children']
+    from backend.services.world_delta_errors import StructuralDeltaError
+    for elapsed, extra in [(0, {}), (1440, {'child_count': 3, 'sex': 'male'})]:
+        with pytest.raises(StructuralDeltaError) as rejected:
+            run(s, 'births', [dict(pregnancy_id=p['id'], source_event_id='event', assertion='birth_completed',
+                                   evidence=BIRTH, **extra)], text=BIRTH, elapsed=elapsed)
+        assert rejected.value.code == 'birth_claim_invalid' and rejected.value.repairable
+        assert len(s['characters']) == 3 and s['pregnancies'][p['id']]['children'] == p['children']
+
 
 
 def test_background_birth_has_no_external_knowledge_and_no_extra_call():

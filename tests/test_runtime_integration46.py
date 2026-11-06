@@ -213,3 +213,44 @@ def test_j06_checkpoint_repair_retry_variants_and_archive(api):
     repo.rollback_last(sid, repo.get_save(sid)['revision'])
     assert Repository(repo.path).get_snapshot(sid) == before
     assert archives() == (variants, heads)
+
+
+def test_birth_cannot_commit_as_optional_warning(api):
+    client, app = api
+    repo = app.state.repository
+    sid = load_fixture(repo, 'pregnancy-twins')['save']
+    advance = repo.begin_job(sid, '', 'long_term', dict(CONFIG, long_term_advance={
+        'amount': 2, 'unit': 'weeks', 'max_llm_calls': 0,
+    }))
+    engine.run_job(repo.path, advance, engine.Worker())
+    assert repo.get_job(advance)['status'] == 'saved'
+    before = repo.get_snapshot(sid)
+    original_turns = repo.list_turns(sid)
+    pregnancy, = before['world_state']['pregnancies'].values()
+    child, twin = [c['id'] for c in pregnancy['children']]
+    raw = raw_for(before)
+    assert pregnancy['status'] == 'due'
+    text = 'Вера родила близнецов. У первого ребёнка тёмные волосы.'
+    raw['events'] = [dict(id='birth', text=text, participants=['qa_vera'], witnesses=['qa_vera'])]
+    raw['births'] = [dict(pregnancy_id=pregnancy['id'], source_event_id='missing', assertion='birth_completed')]
+    config = dict(CONFIG, context_length=65536)
+    jid = repo.begin_job(sid, 'Я жду.', 'turn', config)
+    execute(repo, jid, raw, text)
+    failed = repo.get_job(jid)
+    assert failed['status'] == 'error' and 'birth_claim_invalid' in failed['repair_diagnostics_json']
+    assert repo.get_snapshot(sid) == before and repo.list_turns(sid) == original_turns
+    assert len(repo.request_log(job_id=jid)) == 3
+
+    raw['births'][0].update(source_event_id='birth', appearance={child: 'Тёмные волосы', twin: [], 'wrong-id': 'описание'})
+    with patch('engine.launch'):
+        retry = client.post(f'/api/jobs/{jid}/retry', json={'config': config})
+    assert retry.status_code == 200, retry.text
+    calls = execute(repo, jid, raw, text)
+    saved = repo.get_job(jid)
+    assert saved['status'] == 'saved', saved['error']
+    assert len(calls) == 1 and calls[0]['response_format']
+    assert 'birth_appearance_invalid' in saved['warnings_json']
+    after = Repository(repo.path).get_snapshot(sid)
+    assert after['world_state']['pregnancies'][pregnancy['id']]['status'] == 'born'
+    assert after['world_state']['characters'][child]['appearance']['legacy_text'] == 'Тёмные волосы'
+    assert set(after['world_state']['characters']) - before['world_state']['characters'].keys() == {child, twin}

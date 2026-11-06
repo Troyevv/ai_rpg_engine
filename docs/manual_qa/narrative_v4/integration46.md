@@ -11,7 +11,7 @@ v4 обозначает этап интеграции существующего
 | ID | Существующий владелец и тесты | Сквозная граница или дополнительная проверка |
 |---|---|---|
 | R01 | Workspace/Initial State · draft_editor, workshop192, runtime_handoff, genre_catalog | J01, четыре входа, решения автора и независимость начатой игры |
-| R02 | RawTurnResult/StateResolver · narrative_authority136, extraction_revision137, semantic_participation | J02 наблюдение и появление, J06 bounded repair, отсутствие частичного commit |
+| R02 | RawTurnResult/StateResolver · narrative_authority136, extraction_revision137, semantic_participation | J02 наблюдение и появление, J06 bounded repair; неверный источник рождения блокирует commit, повреждённая внешность отбрасывается локально |
 | R03 | CalendarProfile/Locations · calendar_v2, holiday_localization, residence_roles | J02 чтение диапазона, J05 календарные 20 лет |
 | R04 | Commitments/remote semantics · commitments, phone122, group166 | J02–03 план появляется в календаре на основании прочитанного ответа |
 | R05 | Life/capabilities · life_social, protagonist, long_term_advance | J04–05. Открытый блокер incapacitation #109 |
@@ -48,7 +48,9 @@ git show c48e9540fa0710e8d12913a4797bebdf1b5c8597:tests/test_remote_incapacitati
 PYTHONPATH="$PWD:$PWD/tests" python -m pytest -q /tmp/test_remote_incapacitation.py::test_incapacitated_actor_is_not_trapped_in_call
 ```
 
-На базе потеря сознания принята атомарно, capabilities запрещают действие/речь/восприятие, но в SQLite после reload звонок остаётся `answered` вместо `ended`. Нужна повторная приёмка после #119. PR #118 относится к созданию мира; его код здесь не используется.
+На базе потеря сознания принята атомарно, capabilities запрещают действие/речь/восприятие, но в SQLite после reload звонок остаётся `answered` вместо `ended`. Дополнительно LTA на месяц с нулевым бюджетом вернул `remote_call` на минуте 542, часы 542 → 542. Нужна повторная приёмка после #119. PR #118 относится к созданию мира; его код здесь не используется.
+
+Проверка `birth_cannot_commit_as_optional_warning` запускает обычный ход с уже наступившим сроком рождения близнецов. Раньше неверная ссылка на Event давала успешный ход без детей. Теперь две ошибочные попытки Extraction оставляют исходный save, History и список ходов на месте. После исправления источника Retry публикует обоих детей за один Extraction, сохраняя валидное описание внешности первого ребёнка.
 
 ## Бюджеты и границы
 

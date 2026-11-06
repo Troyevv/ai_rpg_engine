@@ -52,6 +52,8 @@ class RawTurnResult:
                     fatal('повреждена существенная секция Extraction', 'raw_section_invalid', repairable=True, section=section, path=section, action='extraction_repair', severity='recoverable')
                 warnings.append(dict(section=section, code='optional_section_invalid', action='drop_section', reason='ожидался список'))
                 values = []
+            if section == 'births' and len(values) > 24:
+                fatal('Превышен лимит исходов рождения.', 'birth_budget', repairable=True, section=section, path=section)
             if section == 'knowledge_gained' and len(values) > 64:
                 fatal('Превышен лимит изменений Knowledge.', 'knowledge_budget', repairable=True, section=section, path=section)
             if section in ('development_evidence','personality_deltas','value_deltas','appearance_deltas','possession_deltas') and len(values) > 24:
