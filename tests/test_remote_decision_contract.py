@@ -199,11 +199,17 @@ def test_legacy_group_journal_replays_decisions_and_semantics_after_reload(tmp_p
     frames=[]
     def recorded(index,messages):
         value=json.loads(decision(messages))
-        if value['action']['action']=='send':value['action']['content']='Да, договорились.'
+        if value['action']['action']=='send':
+            option = json.loads(messages[1]['content'])['options'][0]
+            index = value['action'].pop('route_index')
+            value['action'].update(option['paths'][index], content='Да, договорились.')
         response=json.dumps(value['action'] if flat else value,ensure_ascii=False)
         frames.append(dict(messages=messages,response=response)) # old checkpoint: no stage/contract
         return response
-    after,_,_=run(before,request,recorded,Event(),legacy_group=True)
+    from backend.runtime_v3.remote_decision import LEGACY_VERSION
+    after,_,_=run(before,request,recorded,Event(),legacy_group=True,
+                  decision_scope=lambda index: dict(options=json.loads(frames[index]['messages'][1]['content'])['options'],
+                                                    contract=LEGACY_VERSION))
     prompts=semantic_messages(after,request['source_event_id'])
     response=json.dumps(extract(json.loads(prompts[1]['content'])),ensure_ascii=False)
     frames.append(dict(stage='remote_semantics',messages=prompts,response=response,accepted=True))
@@ -220,3 +226,89 @@ def test_legacy_group_journal_replays_decisions_and_semantics_after_reload(tmp_p
     assert [f['response'] for f in journal]==[f['response'] for f in frames]
     assert all(f['accepted'] for f in journal)
     assert all(f['parser']['normalized_flat']==flat for f in journal[:2])
+
+
+def test_route_choice_belongs_to_actor_and_evidence():
+    options = [
+        dict(actor_id='vera', actions=['send'], basis_ids=['read'],
+             paths=[{'contact_id': 'address'}, {'conversation_id': 'chat'}]),
+        dict(actor_id='timur', actions=['send'], basis_ids=['other'], paths=[{'conversation_id': 'other-chat'}]),
+    ]
+    action = dict(actor_id='vera', action='send', basis_ids=['read'], route_index=1, content='Привет')
+    proposal, _ = parse(json.dumps({'action': action}), options)
+    assert proposal['conversation_id'] == 'chat' and 'route_index' not in proposal
+    proposal, _ = parse(json.dumps({'action': dict(action, route_index=0)}), options)
+    assert proposal['contact_id'] == 'address'
+    for overrides in (
+        {'route_index': 2}, {'route_index': -1}, {'route_index': True}, {'route_index': '0'},
+        {'actor_id': 'timur'}, {'basis_ids': ['other']}, {'action': 'call'},
+        {'contact_id': 'qa_kirill'}, {'character_id': 'qa_kirill'},
+        {'conversation_id': 'other-chat'}, {'contact_id': None},
+    ):
+        with pytest.raises(ValueError):
+            parse(json.dumps({'action': dict(action, **overrides)}), options)
+
+
+def test_vera_kirill_retry_from_v1_read_without_phone_contacts(tmp_path):
+    from backend.repositories.preparation import Repository
+    from backend.runtime_v3.communication import options_for
+    from backend.runtime_v3.remote_decision import LEGACY_VERSION, VERSION
+    from backend.runtime_v3.remote_initiative import accept, planning_context
+    from test_communication_cycle import decision
+    from test_narrative_test_world import CONFIG
+
+    repo, sid = ready(tmp_path)
+    snapshot = repo.get_snapshot(sid)
+    snapshot['world_state']['contacts'].clear()
+    with repo.connect() as db:
+        db.execute('UPDATE saves SET state_json=? WHERE id=?', (json.dumps(snapshot), sid))
+
+    command = dict(action='send', character_id='qa_vera', operation_id='issue206-replay',
+                   content='Вера, когда тебе удобно созвониться?')
+    jid = repo.begin_job(sid, '', 'communication',
+                         dict(CONFIG, expected_revision=repo.get_save(sid)['revision'], remote_command=command))
+    before = repo.get_snapshot(sid)
+    original_turns = repo.list_turns(sid)
+    source, = before['world_state']['remote_events'].values()
+    read_options = options_for(before, source['id'], set())
+    messages = planning_context(before, read_options)
+    read = decision(messages)
+    # Persist the v1 accepted read, as on a #99 save opened after the upgrade.
+    frame = dict(contract=LEGACY_VERSION, messages=messages, response=read, accepted=True)
+    repo.save_communication_context(jid, [frame], before)
+    proposal, _ = parse(read, read_options, contract=LEGACY_VERSION)
+    staged, _ = accept(before, proposal, read_options, 'stage-old-read')
+    paths = options_for(staged, source['id'], set())
+    chat = source['conversation_id']
+    assert chat == 'direct_eb94ec192979a6136c3d'
+    assert paths[0]['paths'] == [{'conversation_id': chat}]
+    original = dict(actor_id='qa_vera', action='send', contact_id='qa_kirill', conversation_id=chat,
+                    basis_ids=[source['id']], content='Кирилл, привет! Сейчас удобно, давай созвонимся.',
+                    speaker_name='Вера Ларина')
+    raw = json.dumps({'action': original}, ensure_ascii=False)
+    legacy, _ = parse(raw, paths, contract=LEGACY_VERSION)
+    with pytest.raises(ValueError, match='remote_unreachable'):
+        accept(staged, legacy, paths, 'stage-bad-reply')
+
+    with patch('engine.chat_stream', return_value=iter([raw])) as provider:
+        engine.run_job(repo.path, jid, engine.Worker(epoch=repo.get_job(jid)['attempt_epoch']))
+    assert provider.call_count == 1
+    assert repo.get_job(jid)['status'] == 'error'
+    assert repo.get_snapshot(sid) == before and repo.list_turns(sid) == original_turns
+    journal = json.loads(repo.get_job(jid)['context_json'])
+    assert journal[0]['accepted'] and journal[0]['parser']['contract'] == LEGACY_VERSION
+    assert journal[1]['response'] == raw and journal[1]['category'] == 'schema'
+
+    repo = Repository(repo.path)
+    repo.retry_job(jid)
+    assert len(execute(repo, jid)) == 2  # only reply and consequence extraction
+    assert repo.get_job(jid)['status'] == 'saved', repo.get_job(jid)['error']
+    state = repo.get_snapshot(sid)['world_state']
+    sent, reply = state['remote_events'].values()
+    assert sent['id'] == source['id'] and sent['read_by'] == ['qa_vera']
+    assert reply['sender_id'] == 'qa_vera' and reply['recipient_ids'] == ['qa_kirill']
+    assert reply['conversation_id'] == chat and reply['contact_id'] is None
+    assert state['contacts'] == {}
+    journal = json.loads(repo.get_job(jid)['context_json'])
+    assert journal[0]['response'] == read and journal[1]['parser']['contract'] == VERSION
+    assert journal[1]['previous_attempt']['response'] == raw

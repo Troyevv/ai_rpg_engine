@@ -1,7 +1,7 @@
 """Communication continuation inside the existing job/usage/variant pipeline."""
 import json
 from backend.runtime_v3.communication import run
-from backend.runtime_v3.remote_decision import parse as parse_decision, VERSION
+from backend.runtime_v3.remote_decision import parse as parse_decision, VERSION, LEGACY_VERSION
 from backend.services.usage import tracked_stream
 from context_builder import describe_context, estimate
 
@@ -44,7 +44,7 @@ def execute(storage, job, handle, chat_stream):
         reusable = False
         if old and "response" in old:
             try:
-                parse_frame(old['response'], group_reaction)
+                parse_frame(old, group_reaction)
                 # Replay eligibility is not inferred from the existence of raw text.
                 # Runtime validation is repeated by run against staged state.
                 reusable = old.get('accepted') is not False
@@ -86,20 +86,27 @@ def execute(storage, job, handle, chat_stream):
         storage.save_communication_context(job["id"], captured, before)
         return response
 
-    def parse_frame(response, group_reaction):
+    def decision_scope(frame):
+        # An index addresses the paths actually shown, even after trimming or
+        # regeneration. accept() independently rechecks the canonical route.
+        return dict(options=json.loads(frame['messages'][1]['content'])['options'],
+                    contract=frame.get('contract', LEGACY_VERSION))
+
+    def parse_frame(frame, group_reaction):
+        response = frame['response']
         if group_reaction:
             from backend.runtime_v3.group_planning import GroupReaction
             from backend.runtime_v3.remote_decision import decode
             GroupReaction.model_validate(decode(response))
             return dict(contract='group-reaction/1')
-        return parse_decision(response)[1]
+        return parse_decision(response, **decision_scope(frame))[1]
 
     def checkpoint(index, accepted, error=None):
         frame = [f for f in captured if f['stage'] == 'communication'][index]
         frame['accepted'] = accepted
-        frame['validation_contract'] = VERSION
+        frame['validation_contract'] = frame.get('contract', LEGACY_VERSION)
         if accepted:
-            frame['parser'] = parse_frame(frame['response'], frame.get('group_reaction'))
+            frame['parser'] = parse_frame(frame, frame.get('group_reaction'))
         if error is not None:
             frame['error'] = str(error)
             frame['category'] = 'schema' if hasattr(error,'errors') else 'json' if isinstance(error,json.JSONDecodeError) else 'runtime'
@@ -220,6 +227,7 @@ def execute(storage, job, handle, chat_stream):
         return extract(after, source_id, batch, 'remote_response_semantics')
 
     output = run(before, config["communication"], generate, handle.cancelled, checkpoint=checkpoint, resolve_source=resolve_source,
+        decision_scope=lambda index: decision_scope(captured[index]),
         legacy_group=bool(frames and not frames[0].get('group_reaction')))
     if output is None or handle.cancelled.is_set():
         return

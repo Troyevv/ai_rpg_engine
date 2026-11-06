@@ -167,3 +167,24 @@ test('technical call failure preserves canonical time and ringing; Retry uses or
  await page.screenshot({path:info.outputPath(`retry-answered-${skin}.png`),animations:'disabled'});
  }
 });
+
+test('206 Kirill and Vera exchange messages without saved contacts', async ({page, request}) => {
+  const selected = await seed(page, request, 'incoming=false&decision=answer&strangers=true');
+  await page.getByRole('button', {name: /^Телефон/}).click();
+  const phone = screen(page);
+  await phone.getByLabel('Поиск адресата').fill('Вера');
+  await phone.getByRole('button', {name: /Написать: Вера/}).click();
+  await phone.getByLabel('Сообщение в телефоне').fill('Вера, когда тебе удобно созвониться?');
+  await phone.getByRole('button', {name: 'Отправить сообщение', exact: true}).click();
+  await expect(phone.locator('.phone-message.incoming')).toContainText('Да, увидимся завтра.');
+  await page.reload();
+
+  const save = await (await request.get(`/api/saves/${selected.save}`)).json();
+  expect(save.state.phone.contacts).toHaveLength(0);
+  expect(save.state.phone.events).toHaveLength(2);
+  const [sent, reply] = save.state.phone.events;
+  expect(sent.sender.id).toBe('qa_kirill');
+  expect(reply.sender.id).toBe('qa_vera');
+  expect(sent.conversation_id).toBe('direct_eb94ec192979a6136c3d');
+  expect(reply.conversation_id).toBe(sent.conversation_id);
+});

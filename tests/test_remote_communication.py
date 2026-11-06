@@ -326,7 +326,7 @@ def test_atomic_event_first_retry_regenerate_variants_and_rollback(
     proposal = dict(
         actor_id="qa_vera",
         action="call",
-        contact_id="phone-qa_vera-qa-kirill",
+        route_index=0,
         basis_ids=["call-reason"],
     )
 
