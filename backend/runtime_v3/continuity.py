@@ -90,6 +90,8 @@ def project(state, scope, history=None):
         for row in event.get('continuity', [])[:8]:
             if not isinstance(row, dict) or not isinstance(row.get('basis_ids'), list) or not isinstance(row.get('actor_id'), str) or row.get('kind') not in ('question','proposal','information','decision','opportunity'): continue
             if any(not isinstance(key, str) or key not in rows for key in row['basis_ids']): continue
+            if observer and any(not actor_knows_dialogue_basis(state, rows, key, observer) for key in row['basis_ids']):
+                continue
             if row.get('basis_digest') == fingerprint(rows, row['basis_ids']):
                 beats[beat_key(row)] = {key:value for key,value in row.items() if key not in ('evidence','player_evidence')}
         action = event.get('scene_action', {})
@@ -202,20 +204,43 @@ def dialogue_evidence_matches(resolver, claim, event):
     if event['medium'] == 'message' and event.get('author_id') != claim.actor_id:
         return False
     action = event.get('scene_action')
-    if action and action['actor_id'] != claim.actor_id:
+    if action and action['actor_id'] not in (claim.actor_id, claim.decision_actor_id):
         return False
     if not claim.evidence.strip() or not event['evidence'].strip():
         return False
     # The Resolver sets player_interaction only for a current-input quote on
     # this accepted Event with the protected actor among its participants.
     event_quote = normalized(event['player_evidence']) if event.get('player_interaction') else ''
+    if claim.decision_actor_id is not None and not event_quote:
+        # A two-speaker Event must itself attest to the player's part.
+        return False
     if claim.player_evidence:
         quote = normalized(claim.player_evidence)
         return bool(quote) and quote in (event_quote or normalized(resolver.player_input))
     return bool(event_quote)
 
 
-def player_knows_dialogue_basis(state, rows, key, actor):
+def npc_decision_matches(claim, event):
+    """Check who acted on the accepted Event; participant membership is insufficient."""
+    actor = claim.decision_actor_id
+    action = event.get('scene_action') or {}
+    if not claim.evidence.strip() or not event['evidence'].strip():
+        return False
+    if event['medium'] == 'message' and event.get('author_id') != actor:
+        return False
+    if claim.kind == 'decision' and claim.actor_id == actor:
+        return action.get('actor_id') == actor or event.get('author_id') == actor
+    if (actor not in claim.target_ids or action.get('actor_id') != actor
+            or claim.actor_id not in action['target_ids']):
+        return False
+    if claim.status == 'rejected':
+        return claim.kind in ('proposal', 'question') and action['phase'] == 'refuse'
+    return claim.status == 'resolved' and (claim.kind, action['phase']) in {
+        ('proposal', 'accept'), ('question', 'answer'),
+    }
+
+
+def actor_knows_dialogue_basis(state, rows, key, actor):
     from backend.runtime_v3.kinship import knowledge_status
 
     row = rows[key]
@@ -288,8 +313,9 @@ def apply(resolver, raw, events):
         except (ValueError, TypeError):
             resolver.warn('continuity_beats', index, 'Повреждена аннотация.', code='continuity_beat_invalid'); continue
         player_owned = external is not None and external in (claim.actor_id, claim.decision_actor_id)
-        dialogue = claim.kind in ('question', 'proposal', 'information') and claim.decision_actor_id is None
-        if player_owned and (resolver.mode == 'background' or not dialogue):
+        player_dialogue = (claim.actor_id == external and claim.decision_actor_id != external
+                           and claim.kind in ('question', 'proposal', 'information'))
+        if player_owned and (resolver.mode == 'background' or not player_dialogue):
             from backend.runtime_v3.resolver import normalized
             quote = normalized(claim.player_evidence)
             if resolver.mode == 'background' or not quote or quote not in normalized(resolver.player_input):
@@ -302,17 +328,30 @@ def apply(resolver, raw, events):
             resolver.warn('continuity_beats', index, 'Нет принятого Event с указанными участниками.', code='continuity_beat_evidence'); continue
         if any(key not in rows for key in claim.basis_ids):
             resolver.warn('continuity_beats', index, 'Неизвестное основание аннотации.', code='continuity_basis_invalid'); continue
-        if player_owned and dialogue:
-            if not dialogue_evidence_matches(resolver, claim, event):
-                resolver.warn('continuity_beats', index, 'Источник не подтверждает эту реплику игрока.',
-                              code='continuity_player_interaction_unconfirmed')
+        if player_dialogue and not dialogue_evidence_matches(resolver, claim, event):
+            resolver.warn('continuity_beats', index, 'Источник не подтверждает эту реплику игрока.',
+                          code='continuity_player_interaction_unconfirmed')
+            continue
+        npc_decides = claim.decision_actor_id is not None and claim.decision_actor_id != external
+        if npc_decides and not npc_decision_matches(claim, event):
+            resolver.warn('continuity_beats', index, 'Event не подтверждает решение указанного NPC.',
+                          code='continuity_npc_response_unconfirmed')
+            continue
+        if player_dialogue or npc_decides:
+            speakers = {claim.actor_id}
+            if npc_decides:
+                speakers.add(claim.decision_actor_id)
+            if any(not actor_knows_dialogue_basis(state, rows, key, actor)
+                   for actor in speakers for key in claim.basis_ids):
+                resolver.warn('continuity_beats', index, 'Основание реплики недоступно участнику.',
+                              code='continuity_basis_unavailable')
                 continue
-            if any(not player_knows_dialogue_basis(state, rows, key, claim.actor_id) for key in claim.basis_ids):
-                resolver.warn('continuity_beats', index, 'Основание реплики недоступно игроку.', code='continuity_basis_unavailable'); continue
         elif any(key in state['facts'] and state['knowledge'].get(claim.actor_id+':'+key, {}).get('status') != 'known'
                  for key in claim.basis_ids):
             reject('continuity_unknown_fact')
         value = claim.model_dump()
+        if npc_decides:
+            value['evidence'] = event['evidence']
         value.update(source_event_id=event['id'], basis_digest=fingerprint(rows, claim.basis_ids))
         old = prior.get(beat_key(value))
         if old and old['basis_digest'] == value['basis_digest'] and old['status'] in ('resolved', 'rejected') and claim.status == 'open':
@@ -355,7 +394,7 @@ def turn_signal(resolver):
         if before[section] != after[section]: progress.append(section)
     if any(before['characters'].get(cid, {}).get(field) != row[field] for cid, row in after['characters'].items()
            for field in ('goals', 'intentions', 'obligations', 'life_status')): progress.append('character_lifecycle')
-    if any(e.get('scene_transition') or e.get('continuity') or e.get('scene_action', {}).get('phase') in ('start', 'redirect', 'end', 'refuse', 'offer') for e in resolver.history.events):
+    if any(e.get('scene_transition') or e.get('continuity') or e.get('scene_action', {}).get('phase') in ('start', 'redirect', 'end', 'refuse', 'offer', 'accept', 'answer') for e in resolver.history.events):
         progress.append('interaction')
     if scene_signature(before) != scene_signature(after): progress.append('scene')
     pending = (resolver.continuity_decision or {}).get('pending_response_ids', [])

@@ -471,7 +471,11 @@ actors/threads. Refresh affected situation/state; unchanged summaries are invali
 Meeting ended != relationship resolved. Complete plans via #75/#66. No invented travel.
 Reopening resolved thread requires NEW source_event_id. continuity_beats: reuse canonical
 basis_ids for equivalent question/proposal/information/decision/opportunity, status and
-THIS event evidence. EXTERNAL dialogue may reuse its completed_interaction Event quote.
+THIS event evidence. actor_id initiates; decision_actor_id is whoever actually decided.
+EXTERNAL dialogue may reuse its completed_interaction Event quote. For an NPC reply on
+that same interaction, scene_actions records the NPC, initiator as target and actual
+phase accept/answer/refuse from completed_narrative. Silence: open, no decision_actor_id.
+If the reply belongs to another Event, keep the Events and omit the combined beat.
 EXTERNAL decisions need decision_actor_id + their own current player_evidence.
 Choices share kind/basis_ids for equivalent purposes. Omit resolved/rejected proposals.
 compression: evidenced routine, explicit elapsed_minutes within supplied bound; pending
