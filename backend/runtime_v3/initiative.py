@@ -14,7 +14,7 @@ class SceneAction(StrictModel):
     actor_id: str
     target_ids: list[str] = Field(default_factory=list, max_length=8)
     source_event_id: str
-    phase: Literal['start', 'continue', 'redirect', 'end', 'refuse', 'offer']
+    phase: Literal['start', 'continue', 'redirect', 'end', 'refuse', 'offer', 'accept', 'answer']
     modality: Literal['speech', 'physical', 'departure', 'other']
     adult: bool = False
     interruptible: bool = False
@@ -84,6 +84,15 @@ def validate_actions(resolver, raw, events):
         event = events.get(claim.source_event_id)
         if cid == external or not event or cid not in event['participants'] or not set(claim.target_ids) <= set(event['participants']):
             warning('initiative_event_invalid'); continue
+        if claim.phase in ('accept', 'answer', 'refuse', 'end', 'redirect'):
+            # These phases can attest to an NPC decision in continuity. Bind the
+            # action to this Event's evidence before discarding its duplicate.
+            # Extraction owns the phase's meaning; the Event may summarize prose.
+            evidence = normalized(claim.evidence)
+            if (not evidence or evidence != normalized(event['evidence'])
+                    or not resolver.narrative.strip()
+                    or event['medium'] == 'message' and event.get('author_id') != cid):
+                warning('initiative_response_unconfirmed'); continue
         if claim.source_event_id in seen:
             warning('initiative_duplicate'); continue
         if claim.response_event_id is not None and (claim.response != 'player_supplied' or claim.response_event_id not in (resolver.continuity_decision or {}).get('pending_response_ids', [])):

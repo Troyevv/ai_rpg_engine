@@ -435,11 +435,10 @@ Only available scene/established remote channels; referenced authors do not beco
 Keep existing literary style and active game language. Do not narrate runtime labels.
 """
 EXTRACTION_CONTRACT += """
-scene_actions: optional annotation of NPC initiative; source_event_id=THIS Event, attempt != outcome.
-adult=true for romance. Interruptible EXTERNAL response=open unless player_supplied with
-CURRENT player_evidence. response_event_id=only the answered pending_response_ids Event.
-Silence != consent; involuntary outcomes need their canonical consequences.
-knowledge_ids=actor:fact, own beliefs only; suspected requires inquiry. Offers != agreement/reciprocity.
+scene_actions: omit if uncertain. accept/answer/refuse/end/redirect: copy full evidence of THIS source_event_id.
+Offer/attempt/silence != consent. Romance: adult=true. Interruptible EXTERNAL: response=open;
+player_supplied needs current player_evidence. response_event_id=answered pending_response_ids Event.
+Involuntary: canonical consequences. knowledge_ids=own actor:fact; suspected for inquiry only.
 """
 
 NARRATIVE_CONTRACT += """
@@ -457,16 +456,15 @@ Stop at its boundary, any interruption or meaningful EXTERNAL response/decision.
 invent that response or silently skip hours/days. Detailed Time Skip remains separate.
 """
 EXTRACTION_CONTRACT += """
-scene_transitions: accepted interaction started/advanced/ended, THIS source_event_id,
-actors/threads. Refresh affected situation/state; unchanged summaries are invalidated.
-Meeting ended != relationship resolved. Complete plans via #75/#66. No invented travel.
-Reopening resolved thread requires NEW source_event_id. continuity_beats: reuse canonical
-basis_ids for equivalent question/proposal/information/decision/opportunity, status and
-THIS event evidence. EXTERNAL dialogue may reuse its completed_interaction Event quote.
-EXTERNAL decisions need decision_actor_id + their own current player_evidence.
-Choices share kind/basis_ids for equivalent purposes. Omit resolved/rejected proposals.
-compression: evidenced routine, explicit elapsed_minutes within supplied bound; pending
-response needs response_event_id + actual player_evidence. Ordinary dialogue needs no beat.
+scene_transitions: link actual start/advance/end to THIS Event, actors and threads. Refresh
+affected situation/state. Ending a meeting need not close its thread or move anyone.
+Reopen resolved threads only on a new Event. Record completed plans via scheduled_event_changes.
+continuity_beats optional: reuse kind/basis_ids with status and Event evidence. actor_id initiates.
+EXTERNAL dialogue: completed_interaction quote. NPC decision_actor_id: same Event's NPC
+scene_action toward initiator (accept/answer/refuse) in completed_narrative. No reply: open, no decider.
+EXTERNAL decision: decision_actor_id + own current player_evidence. Choices reuse kind/basis_ids;
+omit resolved/rejected proposals. Compression: evidenced routine, bounded elapsed_minutes;
+pending response needs response_event_id + player_evidence.
 """
 
 RELATIONSHIP_EVIDENCE_CONTRACT = """
