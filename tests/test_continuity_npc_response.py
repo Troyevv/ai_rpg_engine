@@ -31,7 +31,7 @@ def photo_turn(state, narrative=ASSENT, *, action=ACTION, kind='proposal', statu
     )
 
 
-def test_stage_b_proposal_keeps_event_without_inventing_an_npc_decision(state):
+def test_stage_b_proposal_keeps_event_without_inventing_npc_decision(state):
     out = StateResolver(state, ASSENT, ACTION).resolve(photo_turn(state))
     event, = out.history['events']
     assert event['player_evidence'] == ACTION and event['text'] == ASSENT
@@ -76,7 +76,7 @@ def test_grounded_npc_response(state, action, kind, phase, status, text):
     ({'player_assertion': ''}, {}, {'player_evidence': ACTION}, 'continuity_player_interaction_unconfirmed'),
 ])
 def test_unconfirmed_response_drops_only_annotation(state, event_change, reply_change, beat_change, warning):
-    text = 'Кирилл предлагает вместе разобрать фотографии. Вера молча смотрит на часы.'
+    text = ASSENT if reply_change is not None else 'Вера молча смотрит на часы.'
     raw = photo_turn(state, text)
     raw['events'][0].update(event_change)
     if reply_change is not None:
@@ -122,8 +122,12 @@ def test_response_checks_responder_and_observer_knowledge(state):
     assert out.state['knowledge'] == state['knowledge']
 
 
-@pytest.mark.parametrize('owner', [VERA, 'qa_timur', None])
-def test_npc_owned_decision_requires_attributed_event(state, owner):
+@pytest.mark.parametrize(('owner', 'phase', 'accepted'), [
+    (VERA, 'accept', True), (VERA, None, False), (VERA, 'offer', False),
+    ('qa_timur', 'accept', False), (None, None, False),
+])
+@pytest.mark.parametrize('decision_actor', [None, VERA])
+def test_npc_owned_decision_requires_attributed_event(state, owner, phase, accepted, decision_actor):
     raw = photo_turn(state)
     event = raw['events'][0]
     event.pop('player_assertion')
@@ -131,11 +135,14 @@ def test_npc_owned_decision_requires_attributed_event(state, owner):
     event['participants'].append('qa_timur')
     if owner:
         event.update(medium='message', author_id=owner)
-    raw['continuity_beats'][0].update(kind='decision', actor_id=VERA, target_ids=[ACTOR_ID])
+    if phase:
+        raw['scene_actions'] = [npc_reply(phase, ASSENT)]
+    raw['continuity_beats'][0].update(kind='decision', actor_id=VERA, decision_actor_id=decision_actor,
+                                      target_ids=[ACTOR_ID])
     out = StateResolver(state, ASSENT, ACTION).resolve(raw)
     saved, = out.history['events']
-    assert bool(saved.get('continuity')) == (owner == VERA)
-    if owner != VERA:
+    assert bool(saved.get('continuity')) is accepted
+    if not accepted:
         assert any(w['code'] == 'continuity_npc_response_unconfirmed' for w in out.warnings)
 
 

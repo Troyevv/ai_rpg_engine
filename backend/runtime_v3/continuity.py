@@ -220,18 +220,20 @@ def dialogue_evidence_matches(resolver, claim, event):
     return bool(event_quote)
 
 
-def npc_decision_matches(claim, event):
+def npc_decision_matches(claim, event, actor):
     """Check who acted on the accepted Event; participant membership is insufficient."""
-    actor = claim.decision_actor_id
     action = event.get('scene_action') or {}
     if not claim.evidence.strip() or not event['evidence'].strip():
         return False
     if event['medium'] == 'message' and event.get('author_id') != actor:
         return False
+    if action.get('actor_id') != actor:
+        return False
     if claim.kind == 'decision' and claim.actor_id == actor:
-        return action.get('actor_id') == actor or event.get('author_id') == actor
-    if (actor not in claim.target_ids or action.get('actor_id') != actor
-            or claim.actor_id not in action['target_ids']):
+        terminal_action = (claim.status == 'resolved' and action['phase'] in ('accept', 'refuse', 'redirect', 'end')
+                           or claim.status == 'rejected' and action['phase'] == 'refuse')
+        return terminal_action and set(claim.target_ids) <= set(action['target_ids'])
+    if actor not in claim.target_ids or claim.actor_id not in action['target_ids']:
         return False
     if claim.status == 'rejected':
         return claim.kind in ('proposal', 'question') and action['phase'] == 'refuse'
@@ -332,15 +334,18 @@ def apply(resolver, raw, events):
             resolver.warn('continuity_beats', index, 'Источник не подтверждает эту реплику игрока.',
                           code='continuity_player_interaction_unconfirmed')
             continue
-        npc_decides = claim.decision_actor_id is not None and claim.decision_actor_id != external
-        if npc_decides and not npc_decision_matches(claim, event):
+        decider = claim.decision_actor_id
+        if decider is None and claim.kind == 'decision':
+            decider = claim.actor_id
+        npc_decides = decider is not None and decider != external
+        if npc_decides and not npc_decision_matches(claim, event, decider):
             resolver.warn('continuity_beats', index, 'Event не подтверждает решение указанного NPC.',
                           code='continuity_npc_response_unconfirmed')
             continue
         if player_dialogue or npc_decides:
             speakers = {claim.actor_id}
             if npc_decides:
-                speakers.add(claim.decision_actor_id)
+                speakers.add(decider)
             if any(not actor_knows_dialogue_basis(state, rows, key, actor)
                    for actor in speakers for key in claim.basis_ids):
                 resolver.warn('continuity_beats', index, 'Основание реплики недоступно участнику.',
