@@ -10,7 +10,7 @@ import subprocess
 
 from .budget import Budget, action_ledger
 from .evidence import now, snapshot, write
-from .recovery import completed, digest, qa_only, rows, read as evidence_read
+from .recovery import completed, digest, qa_only, rows, read as evidence_read, probe_context
 from .run import ROOT, preflight, read, revision, server, step
 
 FIX = '57c173d8ece34f29cb3af37e6b28beb208e9bf63'
@@ -120,6 +120,32 @@ def review_unsubmitted(directory, manifest):
         action_limit=manifest['action_limit'] + 2, reason='Two proven unsubmitted UI attempts remain charged'))
 
 
+def review_context(directory, manifest):
+    validate(directory, manifest)
+    target = directory / 'knowledge-context-review.json'
+    if target.exists():
+        raise ValueError('Knowledge context recovery already reviewed')
+    folder = directory / 'knowledge/000/retries/001'
+    result = read(folder / 'result.json')
+    if result['status'] != 'held-for-review' or 'Контекст v3 не помещается' not in result.get('error', ''):
+        raise ValueError('Only the measured context construction failure can be recovered')
+    if evidence_read(folder / 'before.json.gz') != snapshot(directory / 'game.sqlite', result['save']):
+        raise ValueError('Save changed after context failure')
+    with closing(sqlite3.connect(directory / 'game.sqlite')) as db:
+        db.row_factory = sqlite3.Row
+        job = dict(db.execute('SELECT * FROM game_jobs WHERE id=?', (result['job_id'],)).fetchone())
+        requests = [r[0] for r in db.execute('SELECT id FROM llm_requests WHERE job_id=?', (job['id'],))]
+    if any(r not in manifest['baseline_request_ids'] for r in requests) or not job['narrative_complete']:
+        raise ValueError('This retest has already dispatched Knowledge work or lost Narrative')
+    probe = probe_context(directory, job, 40960)
+    if probe['input_estimate'] >= probe['hard_input_limit']:
+        raise ValueError('Measured context still does not fit')
+    write(target, dict(sha=revision(), reviewed=now(), probe=probe,
+        evidence={str(p.relative_to(directory)): digest(p) for p in folder.iterdir() if p.is_file()},
+        action_limit=read(directory / 'unsubmitted-review.json')['action_limit'] + 1,
+        reason='No new Knowledge dispatch; completed original Narrative retained, measured 40960 context'))
+
+
 def run(directory, manifest, live):
     from playwright.sync_api import sync_playwright
     validate(directory, manifest)
@@ -133,6 +159,11 @@ def run(directory, manifest, live):
     receipt = read(review) if review.exists() else None
     if receipt and any(digest(directory / name) != value for name, value in receipt['evidence'].items()):
         raise ValueError('Reviewed UI failure evidence changed')
+    context_review = directory / 'knowledge-context-review.json'
+    context_receipt = read(context_review) if context_review.exists() else None
+    if context_receipt and any(digest(directory / name) != value
+                               for name, value in context_receipt['evidence'].items()):
+        raise ValueError('Reviewed context failure evidence changed')
     with server(directory, live) as base:
         os.environ.pop('DEEPSEEK_API_KEY', None)
         with sync_playwright() as pw:
@@ -149,11 +180,15 @@ def run(directory, manifest, live):
                     folder = directory / case / f'{i:03d}'
                     if receipt and i == 0:
                         folder = folder / 'retries/001'
+                        if context_receipt and case == 'knowledge':
+                            folder = folder.with_name('002')
                     if folder.exists():
                         if not completed(folder):
                             held.add(case)
                         continue
                     operation = dict(operation)
+                    if context_receipt and case == 'knowledge':
+                        operation['context_length'] = context_receipt['probe']['context_length']
                     if operation['kind'] in ('retry', 'phone-retry'):
                         # Explicit single Retry of the original rejected decision. Production
                         # reuses the accepted read frame; no outgoing message is sent twice.
@@ -166,6 +201,7 @@ def run(directory, manifest, live):
                             raise ValueError('Retry no longer identifies the original failed job')
                         operation.update(job_id=jobs[0][0], job_cursor=old['job_cursor'])
                     if not step(browser, base, directory, manifest, case, i,
+                                context_receipt['action_limit'] if context_receipt else
                                 receipt['action_limit'] if receipt else manifest['action_limit'],
                                 operation=operation, lineage_index=1, attempt_folder=folder):
                         held.add(case)
@@ -182,7 +218,7 @@ def run(directory, manifest, live):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('prepare', 'preflight', 'run', 'audit', 'review-unsubmitted'))
+    parser.add_argument('command', choices=('prepare', 'preflight', 'run', 'audit', 'review-unsubmitted', 'review-context'))
     parser.add_argument('directory', type=Path)
     parser.add_argument('--parent', type=Path)
     args = parser.parse_args()
@@ -200,6 +236,8 @@ def main():
             validate(directory, read(directory / 'manifest.json'))
         elif args.command == 'review-unsubmitted':
             review_unsubmitted(directory, read(directory / 'manifest.json'))
+        elif args.command == 'review-context':
+            review_context(directory, read(directory / 'manifest.json'))
         elif not run(directory, read(directory / 'manifest.json'), args.command == 'run'):
             raise SystemExit('Retest held; inspect evidence. No automatic retries.')
 

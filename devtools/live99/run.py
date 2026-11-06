@@ -143,6 +143,8 @@ def step(browser, base, directory, manifest, case, i, limit, retry=None, operati
     meta = dict(sha=revision(), source_sha=manifest['sha'], case=case, step=i, save=sid, kind=kind, action=action,
                 started=now(), job_cursor=cursor, mobile=(list(CASES).index(case)+i)%2==1)
     meta['context_length'] = FAMILY_CONTEXT if case == 'family' else 32768
+    if operation:
+        meta['context_length'] = operation.get('context_length', meta['context_length'])
     if operation and operation.get('job_id'):
         meta['job_id'] = operation['job_id']
     if retry:

@@ -116,3 +116,32 @@ def test_ui_recovery_requires_unchanged_jobs_and_keeps_attempts(tmp_path, monkey
         assert (linked / 'phone/000/result.json').is_file()
         with pytest.raises(ValueError, match='already reviewed'):
             retest.review_unsubmitted(linked, manifest)
+
+
+@pytest.mark.parametrize('new_request', [False, True])
+def test_context_review_cannot_automatically_repeat_paid_extraction(tmp_path, monkeypatch, new_request):
+    folder = tmp_path / 'knowledge/000/retries/001'
+    folder.mkdir(parents=True)
+    write(folder / 'result.json', dict(status='held-for-review', error='Контекст v3 не помещается',
+                                       save=4, job_id='original'))
+    write(folder / 'before.json.gz', {'stable': True})
+    write(tmp_path / 'unsubmitted-review.json', {'action_limit': 27})
+    with sqlite3.connect(tmp_path / 'game.sqlite') as db:
+        db.execute('CREATE TABLE game_jobs(id TEXT, narrative_complete INTEGER)')
+        db.execute("INSERT INTO game_jobs VALUES('original',1)")
+        db.execute('CREATE TABLE llm_requests(id TEXT, job_id TEXT)')
+        db.execute('INSERT INTO llm_requests VALUES(?,?)', ('new' if new_request else 'old', 'original'))
+    monkeypatch.setattr(retest, 'validate', lambda *_: None)
+    monkeypatch.setattr(retest, 'snapshot', lambda *_: {'stable': True})
+    monkeypatch.setattr(retest, 'probe_context', lambda *_: dict(input_estimate=28000, hard_input_limit=36608,
+                                                                context_length=40960))
+    manifest = dict(baseline_request_ids=['old'])
+    if new_request:
+        with pytest.raises(ValueError, match='already dispatched'):
+            retest.review_context(tmp_path, manifest)
+    else:
+        retest.review_context(tmp_path, manifest)
+        receipt = json.loads((tmp_path / 'knowledge-context-review.json').read_text())
+        assert receipt['action_limit'] == 28 and receipt['probe']['context_length'] == 40960
+        with pytest.raises(ValueError, match='already reviewed'):
+            retest.review_context(tmp_path, manifest)
