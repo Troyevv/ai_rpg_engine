@@ -196,6 +196,13 @@ python -m pytest -q tests/test_live248_recovery.py
 Desktop/mobile E2E extends the existing integrated247 fixture endpoint with these
 exact #248 replies and explicit controls. Local Chromium cannot launch in this
 workspace (`socket() failed: Operation not permitted`); full CI must verify it.
+The first CI run exposed stale positive browser controls: the handoff provider
+removed movement sources and the background provider omitted its authored arrivals.
+The office control also omitted its arrival; imported starts wrongly added a
+second NPC instead of honoring the configured cast. These are corrected only in
+the fixture server. Nine subprocess tests exercise that actual provider through
+jobs, SQLite and History without a browser. The initial six checks reproduced
+five failures before their correction. Runtime validation stays unchanged.
 Detailed final counts and the tested commit belong in the PR description.
 
 ## Short repeat Live QA — proposed, NOT authorized or executed
@@ -222,8 +229,8 @@ saved/abandoned/sticky-reauthor job eligible for Extraction retry.
 | Social / #248 `social/001`, job `4141409d79ad411fad952918041a9fc7` | One eligible Extraction retry, **no new Narrative**. Preserve the addressed Vera Event and unavailable Timur action. If saved, one consent/request turn below; no invented consent or reply. | 3 | 5 |
 | Family / #245 original failed due-boundary job; #248 `family/001/before` in an independent copy | Retry the original ongoing-labor text: elapsed0, no fabricated contact/birth. Independently, one observation turn from the pre-birth checkpoint. Actual birth must retain identity/time/sex; doctor's announcement must not name Vera as source. Unknown clinician identity stays null; only actual listeners gain Knowledge. | 3 | 5 |
 | Phone / #248 `phone/001/before` and `phone/002/before`, independent copies | One original preparation/intent turn. One original noninterference/departure turn after abandoning the old hard-refusal job (it is not eligible for retry). If departure saved, one native observer/background scene following Timur to examine independent arrival/new-place creation; restore player POV without another model call. No player action is assigned to Timur. | 6 | 9 |
-| Campaign / #239 `campaign/011/before`, failed job `df90fbfbb25c4018911b4ba13c2d8f77` | One eligible Extraction retry only: same original text, absolute minute2631444, complete player provenance, no invented call/commitment. No campaign continuation. | 1 | 2 |
-| **Total** | **5 saved-text jobs + 6 authored jobs** | **17** | **28** |
+| Campaign / #248 `live248-campaign/campaign/000/before` (original #239 checkpoint, job `df90fbfbb25c4018911b4ba13c2d8f77`) | The archived job is already saved, so it is NOT retry-eligible. In an isolated copy, normal rollback restores its exact before snapshot/History; submit the original intent once for a fresh Narrative+Extraction. Check absolute minute2631444, player provenance, no invented call/commitment. Stop after this one checkpoint; no campaign continuation. | 2 | 3 |
+| **Total** | **4 saved-text jobs + 7 authored jobs** | **18** | **29** |
 
 Use `intent.json` verbatim for original inputs. Social's only additional input:
 «Я согласен сейчас сортировать фотографии по датам, оставляя оригинал карты на месте.
@@ -235,7 +242,7 @@ The observer step uses the native background operation with Timur as camera subj
 empty player input, and no Time Skip. If no real arrival/new place/room-exit occurs,
 record that contrast as **NOT OBSERVED**; do not force an outcome or reroll.
 
-Expected **17 calls without repairs**, at most **28** for listed jobs. Reserve four
+Expected **18 calls without repairs**, at most **29** for listed jobs. Reserve three
 calls for auxiliary production stages only if they actually occur: proposed total
 ceiling **32 calls / $1.00**. At verified peak/cold Flash prices of $0.30/M input and
 $1.20/M output ([official pricing](https://api-docs.deepseek.com/quick_start/pricing/)),

@@ -249,8 +249,8 @@ def scripted_stream(**kwargs):
             raw=provider_payload(kwargs)
             raw['choices']=[dict(action='Ждать ответа',speech='')]
             scenario=handoff_provider.get('scenario','retry')
-            raw['movements']=[]
             if scenario=='doorway':
+                raw['movements']=[]
                 # The shared arrival control now includes its source Event.
                 # This observed-only scene establishes no arrival at all.
                 raw['events']=[]
@@ -259,7 +259,7 @@ def scripted_stream(**kwargs):
                 raw['final_scene']['location_id']='unknown-room'
                 if scenario=='semantic-retry':raw['life_changes']=[dict(id='viktoria_solovyova',life_status='dead')]
             if scenario=='optional-annotation':
-                raw['events']=[dict(id='greeting',text='Виктория приветствует Илью.',participants=['ilya','viktoria_solovyova'],witnesses=['ilya'],medium='conversation')]
+                raw['events'].append(dict(id='greeting',text='Виктория приветствует Илью.',participants=['ilya','viktoria_solovyova'],witnesses=['ilya'],medium='conversation'))
                 raw['scene_actions']=[dict(actor_id='viktoria_solovyova',target_ids=['ilya'],source_event_id='greeting',phase='start',modality='speech',knowledge_ids=['missing'])]
             yield json.dumps(raw,ensure_ascii=False)
         else:
@@ -302,6 +302,11 @@ def scripted_stream(**kwargs):
         return
     current_message=next((m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only\n')),None)
     current_phone=json.loads(current_message.split('\n',1)[1]) if current_message else {}
+    task_message=next((m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')),None)
+    current_task=json.loads(task_message.split('\n',1)[1]) if task_message else {}
+    quiet_start=(current_task.get('kind')=='start' and not observer
+                 and current_phone.get('camera',{}).get('location_id') is not None
+                 and len(current_phone['camera']['present_character_ids'])==1)
     if current_message and phone_mode == 'departure223':
         from copy import deepcopy
         case = json.loads((Path(__file__).parent / 'fixtures/movement/phone001.json').read_text())
@@ -358,6 +363,10 @@ def scripted_stream(**kwargs):
                     value=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=present,
                         observed_character_ids=['qa_marina'] if doorway else [],elapsed_minutes=0),
                         events=[dict(id='dialogue',text=text,participants=[camera['controlled_actor_id'],'qa_marina'],witnesses=[camera['controlled_actor_id']],medium='conversation')]) if kwargs.get('response_format') else text
+                    if isinstance(value,dict) and not doorway and current_phone['characters']['qa_marina'].get('location_id') != camera['location_id']:
+                        from runtime_v3_fixture import arrival_sources
+                        value['movements']=[dict(actor_id='qa_marina',to_location_id=camera['location_id'],evidence=text)]
+                        arrival_sources(value)
             if isinstance(value,dict):yield json.dumps(value,ensure_ascii=False)
             else:
                 for i in range(0,len(value),20):
@@ -502,7 +511,7 @@ def scripted_stream(**kwargs):
         location_id=camera['location_id'];locations=[]
         # QA worlds have authored IDs/locations; generic character_1/2 belong
         # only to the original small transport fixture.
-        if (task['kind']=='start' or (observer and location_id is None)) and 'qa_kirill' not in state['characters']:
+        if location_id is None and (task['kind']=='start' or observer) and 'qa_kirill' not in state['characters']:
             from backend.runtime_v3.models import identity
             place='Подвал' if observer else 'Кухня'
             location_id=identity('location',place.casefold())
@@ -516,8 +525,15 @@ def scripted_stream(**kwargs):
         payload['events']=[dict(id='event',text='Передача ключа.' if observer else 'Собеседник предложил поговорить.',
             participants=present,witnesses=present,fact_ids=[fid] if observer else [],medium='conversation',evidence=evidence)]
         if observer:
+            # SECRET explicitly authors the NPC arrivals before the key handover.
+            # Supply their sources here, not in the generic protocol adapter.
+            from runtime_v3_fixture import arrival_sources
+            payload['movements']=[dict(actor_id=cid,to_location_id=location_id,evidence=SECRET)
+                for cid in present if state['characters'][cid].get('location_id') != location_id]
+            arrival_sources(payload)
             payload['facts']=[dict(id=fid,text='Тайный ключ передан.',character_ids=present,evidence=evidence)]
             payload['knowledge_gained']=[dict(actor_id=cid,fact_id=fid,source_event_id='event',evidence=evidence) for cid in present]
+        if quiet_start:payload['events']=[]
         value=json.dumps(payload,ensure_ascii=False)
     elif kwargs.get('response_format'):
         payload=background() if observer else result()
@@ -532,6 +548,8 @@ def scripted_stream(**kwargs):
         value=json.dumps(canonical(payload,sha256(full.encode()).hexdigest()[:12]),ensure_ascii=False)
     elif observer:
         value = SECRET
+    elif quiet_start:
+        value = 'Вокруг тихо. Пока ничего не происходит.'
     elif 'шаблон' in kwargs['messages'][-1]['content'].lower():
         value = summary()
     elif 'сценар' in kwargs['messages'][0]['content'].lower():
