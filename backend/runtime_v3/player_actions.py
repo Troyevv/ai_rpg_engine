@@ -18,8 +18,7 @@ class PlayerAction(BaseModel):
     narrative_target_ids: list[str]
     outcome: Literal['completed', 'partial', 'attempted', 'deferred', 'not_performed']
     meaning: Literal['preserved', 'changed', 'uncertain']
-    target_mode: Literal['interaction', 'reference'] = Field(
-        default='interaction', description='reference: concerning a target without contact; never dialogue/message/touch.')
+    target_mode: Literal['interaction', 'reference'] = 'interaction'
 
 
 class PlayerAgencyReview(BaseModel):
@@ -38,16 +37,13 @@ their chosen targets. NPC initiative is welcome; it never substitutes player age
 '''
 
 EXTRACTION_CONTRACT = '''
-PLAYER ACTION REVIEW: review ALL unchanged Narrative, even omitted Events. Changed act/target/consent
-or impossible completed contact: status=violated; unprovable=uncertain. Never fix prose via JSON.
-Each input act: exact player_evidence, resolved target_ids, actual narrative_target_ids/outcome/meaning.
-Untargeted=[]; attempted keeps targets; partial allows subset; deferred/not_performed allow actual=[].
-completed needs a linked Event even without player_assertion: character interaction targets participate
-with simultaneous presence, answered call, or bound delivered message. No reply needed; silence isn't delivery.
-target_mode=reference only for noncontact acts, not dialogue/touch. Noncharacters aren't participants.
-Event actor_id=initiator, player_action_id=act, target_ids=actual; completed_interaction also needs same quote.
-Repair by Narrative only: never delete Events, swap targets, invent delivery or downgrade real completion.
-NPC reactions stay independent; input quotes aren't outcome proof.
+PLAYER ACTION REVIEW: ALL Narrative vs input; changed act/target/consent or impossible completion=violated;
+unprovable=uncertain. No JSON laundering/deletion/downgrade. NPC reactions independent.
+Acts: exact player_evidence, target_ids, actual narrative_target_ids/outcome/meaning.
+Untargeted=[]; attempted keeps targets; partial=subset; deferred/not_performed allow actual=[].
+completed needs Event even without assertion: character contact via presence/call/bound delivery;
+no reply needed, silence isn't delivery. target_mode=reference only noncontact, never dialogue/touch.
+Event actor_id=initiator, player_action_id=act, target_ids=actual; completed_interaction needs same quote.
 '''
 
 
