@@ -17,7 +17,7 @@ def test_semantic_fixture_before_resolver_and_real_job(api,case):
     for section,rows in case.get('preconditions',{}).items():world_source['world'].setdefault(section,{}).update(rows)
     sid=imported(client,world_source);seen=[]
     from runtime_v3_fixture import reviewed
-    reply=reviewed(case['synthetic_provider_reply'])
+    reply=reviewed(case['synthetic_provider_reply']) if case['player_input'].strip() else case['synthetic_provider_reply']
     def provider(**kw):
         if kw.get('response_format'):
             seen.append(kw['messages'])

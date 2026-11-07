@@ -346,3 +346,25 @@ def test_target_can_be_newly_promoted_character(crisis):
     event, = [e for e in saved_events(repo, sid) if e.get('local_id') == 'meeting']
     assert event['player_interaction'] and event['target_ids'] == ['new_npc']
     assert len(calls) == 2
+
+
+@pytest.mark.parametrize('substituted', [False, True])
+def test_partial_group_action_can_reach_subset_but_never_replacement(crisis, substituted):
+    _, repo, sid = crisis
+    before = repo.get_snapshot(sid)
+    quote = 'Спрашиваю Марину и Веру о Кирилле.'
+    actual = ['qa_asya'] if substituted else [MARINA]
+    raw = payload(before['world_state'], [claim([MARINA, VERA], quote=quote, actual=actual, outcome='partial')], completed=False)
+    raw['events'][0]['participants'] = [NINA, *actual]
+    text = 'Нина спрашивает Асю.' if substituted else 'Нина обращается к Марине и Вере. Марина слушает; Веры здесь нет.'
+    job, calls = play(crisis, [raw], quote, text)
+    assert len(calls) == 2
+    if substituted:
+        assert job['status'] == 'error' and not job['retry_allowed']
+        assert Repository(repo.path).get_snapshot(sid) == before
+    else:
+        assert job['status'] == 'saved', job.get('error')
+        event, = [e for e in saved_events(repo, sid) if e.get('local_id') == 'event-input-1']
+        assert event['player_action']['outcome'] == 'partial'
+        assert not event.get('player_interaction') and event['target_ids'] == [MARINA]
+        assert Repository(repo.path).get_snapshot(sid)['world_state']['characters'][VERA] == before['world_state']['characters'][VERA]

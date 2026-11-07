@@ -125,8 +125,16 @@ def test_relationship_inertia_directed_dynamics_manual_baseline():
     assert 'Neutral talk' in RELATIONSHIP_EVIDENCE_CONTRACT and 'Absolute dimensions' in RELATIONSHIP_EVIDENCE_CONTRACT
 
 
-def test_compact_schema_has_identical_validation_rules():
-    schema=prompt_schema()
+@pytest.mark.parametrize('agency', [False, True])
+def test_compact_schema_has_identical_validation_rules(agency):
+    schema=prompt_schema(player_agency_required=agency)
+    full=extraction_schema()
+    if agency:
+        full['required'].append('player_agency')
+    else:
+        full['properties'].pop('player_agency')
+        for field in ('actor_id', 'target_ids', 'player_action_id'):
+            full['properties']['events']['items']['properties'].pop(field)
     def expand(node):
         if isinstance(node,dict):
             if '$ref' in node: return expand(schema['$defs'][node['$ref'].split('/')[-1].removeprefix('#')])
@@ -141,4 +149,4 @@ def test_compact_schema_has_identical_validation_rules():
             return result
         if isinstance(node,list):return [expand(value) for value in node]
         return node
-    assert expand(schema)==expand(extraction_schema())
+    assert expand(schema)==expand(full)

@@ -57,8 +57,9 @@ any user-authored new draft intact. Resubmission is an explicit user action.
 
 Old recorded contexts keep their original state/input on regeneration; the
 current agency safety rule is appended if absent. The normal two-stage path stays
-two calls, structural repair stays at most three, and a detected Narrative
-violation stops at two. Provider failures/manual retries retain the existing
+two calls; structural repair stays at most three. A Narrative violation found in
+the first Extraction stops at two; if discovered during structural repair, it
+stops at three. Neither case triggers another Narrative call. Provider failures/manual retries retain the existing
 usage accounting. No paid DeepSeek call was made.
 
 Mandatory review adds context tokens. Repair feedback now carries the essential
@@ -68,6 +69,8 @@ source is retained until lossless/default/schema compaction has been attempted.
 Under remaining hard pressure, the existing optional Director-schema pruning also
 applies to mandatory player provenance. Scene, Event, Knowledge and player review
 contracts stay present; optional annotations are still accepted and validated.
+Format instructions for omitted optional annotations leave the prompt together
+with their schema, avoiding duplicated dead instructions.
 Neither token limits nor canonical checks are relaxed.
 
 ## Regression coverage

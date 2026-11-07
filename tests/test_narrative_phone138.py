@@ -162,7 +162,7 @@ def test_t12_no_phone_capability_and_prompt_schema():
     import jsonschema
     s=extraction_schema();raw=payload(phone()['world_state'],[message()])
     jsonschema.Draft202012Validator(s).validate(raw)
-    jsonschema.Draft202012Validator(prompt_schema(communication=True)).validate(raw)
+    jsonschema.Draft202012Validator(prompt_schema(communication=True, player_agency_required=True)).validate(raw)
 
 
 class Provider:

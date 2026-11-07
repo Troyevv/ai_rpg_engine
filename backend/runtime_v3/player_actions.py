@@ -41,10 +41,11 @@ PLAYER ACTION REVIEW: player_agency compares ALL unchanged Narrative to input, e
 Invented/substituted act/target/consent=violated; unprovable=uncertain. Never fix prose via JSON.
 actions: each input act's exact player_evidence + target_ids; actual narrative_target_ids/outcome/meaning.
 Resolve aliases/pronouns/groups; untargeted=[]. Attempt keeps target without invented presence/channel;
-deferred/not_performed may have actual=[]. No reply alone proves no exchange.
+partial allows a target subset; deferred/not_performed allow actual=[].
+Delivered questions need no reply; silence never proves delivery.
 Event actor_id=initiator; player_action_id references act; target_ids=actual.
 completed_interaction requires matching completed act, same quote, participating targets.
-Other outcomes aren't completed; NPC reactions are independent. Quotes alone prove no correspondence.
+Other outcomes aren't completion. NPC reactions are independent; quotes aren't proof.
 '''
 
 
@@ -77,9 +78,10 @@ def review(resolver, raw):
                 or normalized(action.player_evidence) not in normalized(resolver.player_input)):
             fatal('Нет однозначного источника действия в текущем вводе игрока.',
                   'player_action_source_invalid', repairable=True, **path)
-        if (action.meaning != 'preserved'
-                or set(action.target_ids) != set(action.narrative_target_ids)
-                and not (action.outcome in ('deferred', 'not_performed') and not action.narrative_target_ids)):
+        intended, actual = set(action.target_ids), set(action.narrative_target_ids)
+        partial_subset = action.outcome == 'partial' and actual <= intended
+        deferred = action.outcome in ('deferred', 'not_performed') and not actual
+        if action.meaning != 'preserved' or (actual != intended and not (partial_subset or deferred)):
             narrative_conflict(**path)
         actions[action.id] = action
     return actions
