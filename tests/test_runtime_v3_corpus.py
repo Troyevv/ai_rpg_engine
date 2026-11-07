@@ -48,7 +48,24 @@ def test_earlier_source_backed_scenarios_on_v3(db,path):
     raw=wire(fixture['payload'],fixture['narrative'],before)
     player_movement(raw,fixture.get('config',{}).get('actor_id','character_1'))
     job=repo.begin_job(sid,PLAYER,'start',CONFIG)
-    assert len(execute(repo,job,raw,fixture['narrative']))==2
+    if path.stem == 'incomplete_order':
+        # The original extraction puts movement out of the office (order 0)
+        # before the conversation there (order 10). The prose gives the reverse.
+        repaired = deepcopy(raw)
+        repaired['events'][0].pop('minute')
+        repaired['events'][0]['order'] = 1
+        repaired['movements'][0]['order'] = 2
+        assert len(execute(repo, job, raw, fixture['narrative'], repaired=repaired)) == 3
+        repair, = repo.turn_diagnostics(sid)[0]['repairs']
+        assert repair['repair_error_code'] == 'event_presence_invalid'
+        from backend.runtime_v3.repository import read_history
+        with repo.connect() as conn:
+            history, _ = read_history(conn, repo.get_snapshot(sid)['history_head'])
+        conversation, = [e for e in history['events'] if e.get('local_id') == 'e']
+        assert conversation['order'] == 1 and 'minute' not in conversation
+        assert repo.get_snapshot(sid)['world_state']['knowledge']['character_2:f']['source_event_id'] == conversation['id']
+    else:
+        assert len(execute(repo,job,raw,fixture['narrative']))==2
     assert repo.get_job(job)['status']=='saved',repo.get_job(job)['error']
     state=repo.get_snapshot(sid)['world_state'];assert_world_state_v3_invariants(state)
     assert state['locations'][state['characters']['character_1']['location_id']]['name']=='коридор'
