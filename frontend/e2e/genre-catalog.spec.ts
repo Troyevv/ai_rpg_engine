@@ -2,6 +2,7 @@ import {test,expect,type Page,type TestInfo} from '@playwright/test';
 import {nav,gameAction} from './navigation';
 import {chooseGenre} from './genre-navigation';
 import {defaults} from '../src/types';
+import {observeGenreMotion} from './genre-motion';
 // Issue #193 requires reviewable recordings of successful transitions, not videos.
 test.use({trace:'on'});
 async function capture(page:Page,info:TestInfo,name:string){
@@ -75,13 +76,7 @@ test('genre catalog responsive, keyboard, English and motion',async({page},info)
  }
  // Real frame samples prove the entry transition moves through intermediate states.
  await page.getByLabel('Найти жанр').scrollIntoViewIfNeeded();
- await page.evaluate(()=>{
-  const samples:{opacity:number;transform:string}[]=[];(window as any).genreMotion=samples;
-  const observer=new MutationObserver(()=>{
-   const node=document.querySelector('.genre-results');if(!node)return;observer.disconnect();
-   const start=performance.now();const frame=()=>{const css=getComputedStyle(node);samples.push({opacity:Number(css.opacity),transform:css.transform});if(performance.now()-start<350)requestAnimationFrame(frame)};requestAnimationFrame(frame);
-  });observer.observe(document.querySelector('.genre-settings')!,{childList:true});
- });
+ await page.evaluate(observeGenreMotion);
  await page.getByLabel('Найти жанр').fill('сатир');await expect(page.locator('.genre-results')).toHaveCSS('opacity','1');
  await expect.poll(()=>page.evaluate(()=>(window as any).genreMotion.length)).toBeGreaterThan(4);
  const samples=await page.evaluate(()=>(window as any).genreMotion as {opacity:number;transform:string}[]);
