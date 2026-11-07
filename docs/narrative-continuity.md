@@ -42,6 +42,37 @@ terminal/answered/rejected purposes are suppressed. Legacy action/speech-only ch
 remain valid and exact duplicates are removed. Internal metadata does not reach the
 choice UI or mutate player state. EXTERNAL decisions in receipts require player proof.
 
+### Explicit player decisions and repair (#233)
+
+Every player decision beat owns `player_evidence` and an explicit
+`decision_actor_id`, even if its Event already contains the quote. Extraction
+uses the complete choice, preserving negation/refusal/deferment, in both records;
+distinct decisions use distinct Events. The linked accepted Event must attest to
+the same `completed_interaction`, participants and full `evidence`. A message must
+be authored by the controlled actor. Questions, intentions and pending offers
+are not completed decisions. A deliberate choice to defer is a decision to defer,
+never consent to perform the proposed action. NPC decisions retain their existing
+scene-action provenance and do not require a player's quote.
+
+`continuity_external_decision` on a foreground Extraction now reports the exact
+field path and permits the existing single bounded Extraction repair. Background
+claims still fail without repair. Runtime never fills the missing quote. Repair
+reinterprets the unchanged input/Narrative and replaces the rejected proposal in
+full; a repeated failure commits nothing. Identical same-Event beats are deduplicated;
+contradictory duplicates are rejected. Retry reuses paid Narrative, and abandon
+performs no generation. Old History/snapshots are neither rewritten nor revalidated.
+
+Equivalent Social/001 replay on master `25c834b` (the external exact QA JSON/archive
+was unavailable): two scripted provider calls, `error`, `continuity_external_decision`,
+`hard_conflict`, no repair. With this change: missing beat quote → one targeted
+repair → saved Event/beat, three calls total; valid initial extraction → two calls.
+`tests/test_decision_evidence.py` uses production jobs, Context Builder, StateResolver,
+History and SQLite, including recovery and immutable variant/branch lineage.
+No paid provider was used. This proves protocol/transaction behavior, not the
+real model's semantic accuracy: matching copied quotes alone cannot prove the
+truth of an incorrectly classified decision. Semantic classification remains
+Extraction's responsibility, alongside the action review in #232.
+
 HistorySelector gives bounded, decaying weight to shared experiences among current
 participants. POV visibility still filters events. NPC fact-based claims require their
 own current Knowledge. Milestone candidates expose known_by and decay both with world

@@ -461,7 +461,17 @@ Reopen resolved threads only on a new Event. Record completed plans via schedule
 continuity_beats optional: reuse kind/basis_ids with status and Event evidence. actor_id initiates.
 EXTERNAL dialogue: completed_interaction quote. NPC decision_actor_id: same Event's NPC
 scene_action toward initiator (accept/answer/refuse) in completed_narrative. No reply: open, no decider.
-EXTERNAL decision: decision_actor_id + own current player_evidence. Choices reuse kind/basis_ids;
+EXTERNAL decision: EACH beat requires decision_actor_id + its OWN current player_evidence,
+even when the linked Event already contains that quote. Use the same complete choice quote
+in beat and Event (completed_interaction); split distinct acts into separate Events/beats.
+Copy the full linked Event evidence; source_event_id must confirm THIS decision and actors.
+Extraction judges meaning, not quote presence: preserve refusal/negation/deferment.
+Questions, offers, intentions and NPC proposals are not completed player decisions.
+No player decision: leave the proposal/question open without a player decider; never
+invent consent or borrow evidence of another act. Independent NPC decisions need no player_evidence.
+Repair reinterprets the SAME Narrative/input; return one complete corrected extraction,
+not appended Events/beats. If input does not support a decision, do not assert one.
+Choices reuse kind/basis_ids;
 omit resolved/rejected proposals. Compression: evidenced routine, bounded elapsed_minutes;
 pending response needs response_event_id + player_evidence.
 """
