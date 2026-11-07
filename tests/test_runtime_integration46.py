@@ -252,6 +252,8 @@ def test_birth_cannot_commit_as_optional_warning(api):
     raw = raw_for(before)
     assert pregnancy['status'] == 'due'
     text = 'Вера родила близнецов. У первого ребёнка тёмные волосы.'
+    raw['final_scene']['due_birth_assessments'] = [dict(
+        pregnancy_id=pregnancy['id'], narrative_outcome='completed', evidence=text)]
     raw['events'] = [dict(id='birth', text=text, participants=['qa_vera'], witnesses=['qa_vera'])]
     raw['births'] = [dict(pregnancy_id=pregnancy['id'], source_event_id='missing', assertion='birth_completed')]
     config = dict(CONFIG, context_length=65536)
