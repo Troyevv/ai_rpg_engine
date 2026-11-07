@@ -17,9 +17,9 @@ QUOTE = 'По очереди спрашиваю Марину и Асю о Кир
 TEXT = 'Нина спрашивает Марину, затем обращается с тем же вопросом к Асе.'
 
 
-def group(state, *, marker=False, split=True, targets=None):
+def group(state, *, marker=False, split=True, targets=None, quote=QUOTE):
     targets = [MARINA, ASYA] if targets is None else targets
-    raw = payload(state, [claim(targets, quote=QUOTE)], completed=marker)
+    raw = payload(state, [claim(targets, quote=quote)], completed=marker)
     if split:
         template = raw['events'][0]
         raw['events'] = [dict(deepcopy(template), id=f'part-{i}', target_ids=[target],
@@ -64,6 +64,7 @@ def test_only_valid_event_targets_cover_an_action_atomically(crisis, fault):
     turns = repo.list_turns(sid)
     variants = repo.variants(turns[-1]['node_id'])
     raw = group(before['world_state'])
+    quote, narrative = QUOTE, TEXT
     if fault == 'missing':
         raw['events'].pop()
     elif fault == 'duplicate_target':
@@ -78,13 +79,15 @@ def test_only_valid_event_targets_cover_an_action_atomically(crisis, fault):
     elif fault == 'wrong_actor':
         raw['events'][1]['actor_id'] = ASYA
     else:
-        raw = group(before['world_state'], targets=[MARINA, VERA])
+        quote = 'По очереди спрашиваю Марину и Веру о Кирилле.'
+        narrative = 'Нина спрашивает Марину, затем зовёт Веру. Веры рядом нет.'
+        raw = group(before['world_state'], targets=[MARINA, VERA], quote=quote)
         if fault == 'hidden_unavailable':
             raw['events'][1]['participants'] = [NINA]
     raw['facts'] = [dict(id='group-news', text='Нина принесла документы.', visibility='secret')]
     raw['events'][0].update(fact_ids=['group-news'], witnesses=[NINA, MARINA])
     raw['knowledge_gained'] = [dict(actor_id=MARINA, fact_id='group-news', source_event_id='part-0')]
-    job, calls = play(crisis, [raw, raw], QUOTE, TEXT)
+    job, calls = play(crisis, [raw, raw], quote, narrative)
     assert job['status'] == 'error' and len(calls) == 3
     fresh = Repository(repo.path)
     assert fresh.get_snapshot(sid) == before and fresh.list_turns(sid) == turns
@@ -101,9 +104,11 @@ def test_partial_group_preserves_unreached_intended_target(crisis, split):
     _, repo, sid = crisis
     before = repo.get_snapshot(sid)
     actual = [MARINA, ASYA] if split else [MARINA]
-    raw = group(before['world_state'], targets=actual, split=split)
+    quote = 'Спрашиваю Марину, Асю и Веру о Кирилле.' if split else 'Спрашиваю Марину и Веру о Кирилле.'
+    raw = group(before['world_state'], targets=actual, split=split, quote=quote)
     raw['player_agency']['actions'][0].update(outcome='partial', target_ids=[*actual, VERA])
-    job, calls = play(crisis, [raw], QUOTE, 'Нина спрашивает Марину. Веры здесь нет.')
+    narrative = 'Нина спрашивает Марину и Асю. Веры здесь нет.' if split else 'Нина спрашивает Марину. Веры здесь нет.'
+    job, calls = play(crisis, [raw], quote, narrative)
     assert job['status'] == 'saved' and len(calls) == 2
     events = saved_events(repo, sid)[-len(raw['events']):]
     assert set().union(*(set(e['target_ids']) for e in events)) == set(actual)
