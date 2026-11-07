@@ -142,7 +142,7 @@ def extraction_schema():
     definitions['secret_disclosures'] = record(dict(source_event_id=string, **SecretDisclosure.model_json_schema()['properties']), ('source_event_id','fact_id','assertion','evidence'))
     from backend.runtime_v3.narrative_policy_models import NarrativeDevelopment, ConsequenceClaim, FavorablePath
     from backend.runtime_v3.initiative import SceneAction
-    from backend.runtime_v3.continuity import ContinuityBeat, SceneTransition, Compression
+    from backend.runtime_v3.continuity import ContinuityBeat, SceneTransition, Compression, DueBirthAssessment
     definitions['continuity_beats'] = ContinuityBeat.model_json_schema()
     definitions['scene_transitions'] = SceneTransition.model_json_schema()
     definitions['thread_changes']['properties']['source_event_id'] = dict(type='string', description='Event этого ответа, через который свидетели узнали о новой линии. Участие в character_ids/stakes_for не означает осведомлённость. Без источника новая линия остаётся скрытой.')
@@ -271,6 +271,7 @@ def extraction_schema():
         remote_interactions={'type':'array','items':record(dict(actor_id=string,
             channel={'enum':['message','phone','video','radio','other']}), ('actor_id','channel','evidence')),
             'description':'Только продолжающееся в конце хода активное удалённое взаимодействие. Старое сообщение, план позвонить и упоминание не подходят. Повторно подтверди каждый ход; отсутствие/[] завершает взаимодействие.'},
+        due_birth_assessments=dict(type='array', items=DueBirthAssessment.model_json_schema(), maxItems=24),
         compression=Compression.model_json_schema(),situation=string,situation_evidence=evidence,elapsed_minutes={'type':'integer','minimum':0,'maximum':10080}), ('location_id','present_character_ids')),
         choices={'type':'array','items':obj(dict(action=string,speech=string,basis_ids=strings,kind={'enum':['question','proposal','information','decision','opportunity']}),('action','speech'))}, **{key:{'type':'array','items':value} for key,value in definitions.items()}), ('final_scene',))
     schema['description'] = ('RawTurnResult: только наблюдения и подтверждённые изменения. Не создавай StatePatch. '
@@ -372,6 +373,8 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
         for field in ('reproductive_events','naming_decisions','births'):
             schema['properties'].pop(field)
     if not births: schema['properties'].pop('births',None)
+    if not reproduction or not births:
+        schema['properties']['final_scene']['properties'].pop('due_birth_assessments', None)
     counts = Counter()
 
     def key(node):
@@ -430,7 +433,7 @@ def repair_feedback(diagnostic, payload, before):
         except ValueError: pass  # Preserve malformed output verbatim for repair.
     # Full diagnostics remain in game_jobs; the prompt needs only repair evidence.
     rows = diagnostic if isinstance(diagnostic, list) else [diagnostic]
-    details = [{key: row[key] for key in ('code', 'path', 'source_ids', 'reason', 'repair_reason', 'action') if key in row} for row in rows]
+    details = [{key: row[key] for key in ('code', 'path', 'source_ids', 'reason', 'repair_reason', 'action', 'temporal_boundary') if key in row} for row in rows]
     detail = details[0]
     return json.dumps(dict(diagnostic=detail, diagnostics=details, original_extraction=payload,
         previous_camera=before['camera'], known_locations={lid: {key: location[key] for key in

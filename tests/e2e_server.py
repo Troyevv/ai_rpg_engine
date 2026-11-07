@@ -64,10 +64,20 @@ agency232_attempts=0
 agency237_mode=False
 agency237_extractions=0
 birth231_response=None
+due240_responses=None
 
 def scripted_stream(**kwargs):
     global provenance238_extractions
-    global phone_mode, group_semantic_fail_once, npc_review_start_payload, story168_payload, agency232_attempts, birth231_response, agency237_extractions
+    global phone_mode, group_semantic_fail_once, npc_review_start_payload, story168_payload, agency232_attempts, birth231_response, due240_responses, agency237_extractions
+    if due240_responses is not None:
+        from test_due_scene import SIGNS
+        if kwargs.get('response_format'):
+            raw = due240_responses.pop(0)
+            if not due240_responses: due240_responses = None
+            yield json.dumps(raw, ensure_ascii=False)
+        else:
+            yield SIGNS
+        return
     if birth231_response is not None:
         narrative, raw = birth231_response
         if kwargs.get('response_format'):
@@ -924,6 +934,20 @@ if __name__ == '__main__':
         from birth_sex_fixture import payload
         state = app.state.repository.get_snapshot(sid)['world_state']
         birth231_response = payload(state, sexes=['female' if wrong else 'male'])
+        return {'ready':True}
+
+    @app.post('/test/due240-response')
+    def due240_set_response(sid: int, mode: str = 'repair'):
+        global due240_responses
+        from test_due_boundary_repair import ongoing
+        state = app.state.repository.get_snapshot(sid)['world_state']
+        if mode == 'zero':
+            due240_responses = [ongoing(state)]
+        elif mode in ('repair', 'repeat'):
+            due240_responses = [ongoing(state, 2), ongoing(state,
+                2 if mode == 'repeat' else 0, assessed=True)]
+        else:
+            raise ValueError('Unknown due boundary response')
         return {'ready':True}
 
     @app.post('/test/initiative-seed')

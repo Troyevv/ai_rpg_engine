@@ -326,6 +326,22 @@ stay sparse: no mature goals/values/habits/speech or inherited personality/Knowl
 appearance accepts only explicitly quoted text by child ID, never genetic inference.
 """
 
+DUE_BIRTH_CONTRACT = """
+At the due birth boundary use elapsed_minutes=0 for observation, help, waiting
+or ongoing labor. A player's assumption is not evidence of delivery. Include
+final_scene.due_birth_assessments for each pregnancy at the current scene-clock
+boundary: pregnancy_id, narrative_outcome, evidence from completed_narrative.
+narrative_outcome=ongoing means delivery has not completed: no BirthClaim.
+completed requires an explicitly completed delivery and its births/current Event.
+unresolved_time_advance means the Narrative itself requires time to pass while
+delivery remains unresolved (e.g. an explicit later interval); report it faithfully,
+even if elapsed_minutes=0 would pass the clock guard. Do not hide that conflict or
+invent birth_completed to save a turn. Assess the original prose, never the desired
+delta. Repair reinterprets that same prose and must include these assessments.
+Labor may continue for any number of turns; waiting does not require completion.
+Record newly perceived facts only for actual witnesses via knowledge_gained.
+"""
+
 BIRTH_SEX_CONTRACT = """
 Every BirthClaim MUST include sex_observations: exactly one assessment per canonical
 child_id, including children whose sex was NOT disclosed. narrative_sex is a faithful
