@@ -418,18 +418,44 @@
               "ilya",
               "viktoria_solovyova"
             ]
+          },
+          {
+            "id": "arrival-0",
+            "text": "Виктория вошла, поговорила с Ильёй и ушла. Через пять минут она дошла до салона «Лак».",
+            "evidence": "Виктория вошла, поговорила с Ильёй и ушла. Через пять минут она дошла до салона «Лак».",
+            "participants": [
+              "viktoria_solovyova"
+            ],
+            "medium": "action",
+            "location_id": "ilya_cabinet",
+            "order": 0
+          },
+          {
+            "id": "arrival-1",
+            "text": "Виктория вошла, поговорила с Ильёй и ушла. Через пять минут она дошла до салона «Лак».",
+            "evidence": "Виктория вошла, поговорила с Ильёй и ушла. Через пять минут она дошла до салона «Лак».",
+            "participants": [
+              "viktoria_solovyova"
+            ],
+            "medium": "action",
+            "location_id": "salon_lak",
+            "order": 1
           }
         ],
         "movements": [
           {
             "actor_id": "viktoria_solovyova",
             "to_location_id": "ilya_cabinet",
-            "order": 0
+            "order": 0,
+            "assertion": "completed_arrival",
+            "source_event_id": "arrival-0"
           },
           {
             "actor_id": "viktoria_solovyova",
             "to_location_id": "salon_lak",
-            "order": 1
+            "order": 1,
+            "assertion": "completed_arrival",
+            "source_event_id": "arrival-1"
           }
         ],
         "final_scene": {
@@ -477,7 +503,9 @@
         "movements": [
           {
             "actor_id": "viktoria_solovyova",
-            "to_location_id": "mayak"
+            "to_location_id": "mayak",
+            "assertion": "completed_arrival",
+            "source_event_id": "arrival-0"
           }
         ],
         "final_scene": {
@@ -487,7 +515,19 @@
           ],
           "observed_character_ids": [],
           "elapsed_minutes": 1
-        }
+        },
+        "events": [
+          {
+            "id": "arrival-0",
+            "text": "Виктория дошла до ранее неизвестной мастерской «Маяк» и осталась там.",
+            "evidence": "Виктория дошла до ранее неизвестной мастерской «Маяк» и осталась там.",
+            "participants": [
+              "viktoria_solovyova"
+            ],
+            "medium": "action",
+            "location_id": "mayak"
+          }
+        ]
       }
     },
     {
@@ -971,7 +1011,21 @@
         "movements": [
           {
             "actor_id": "arsen",
-            "to_location_id": "salon_lak"
+            "to_location_id": "salon_lak",
+            "assertion": "completed_arrival",
+            "source_event_id": "arrival-0"
+          }
+        ],
+        "events": [
+          {
+            "id": "arrival-0",
+            "text": "На улице Виктория встретила курьера по имени Арсен. Он представился и остался ждать у салона.",
+            "evidence": "На улице Виктория встретила курьера по имени Арсен. Он представился и остался ждать у салона.",
+            "participants": [
+              "arsen"
+            ],
+            "medium": "action",
+            "location_id": "salon_lak"
           }
         ]
       }

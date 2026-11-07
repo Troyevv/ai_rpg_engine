@@ -124,7 +124,7 @@ def extraction_schema():
             location_id=string,minute={'type':'integer','minimum':0},order={'type':'integer','minimum':0}), ('id','text','evidence')),
         'knowledge_gained':record(dict(actor_id=string,fact_id=string,status={'enum':['known','suspected','unknown','outdated','refuted','superseded']},
             expected_revision={'type':'integer','minimum':0},supersedes=dict(type='array',items=string,maxItems=16),
-            source_event_id=dict(type='string',description='Event ЭТОГО extraction: actor_id входит в witnesses, fact_id входит в fact_ids, medium observation/conversation/message/testimony/discovery. Иначе запись опустить.')),
+            source_event_id=dict(type='string',description='Event ЭТОГО extraction: actor_id входит в witnesses, fact_id входит в fact_ids, medium observation/conversation/message/testimony/discovery. Для подтверждённого раскрытия согласуй Event.fact_ids; не теряй приобретение при пропущенной ссылке.')),
             ('actor_id','fact_id','source_event_id','evidence')),
         'character_changes':record(dict(id=string,source_event_id=string,birth_date=string,situation=string,physical_state=string,emotion=string,goals=strings,intentions=strings,obligations=strings,
             emotion_assertion={'enum':['explicit_internal_state'], 'description':'Только явно выраженное внутреннее состояние controlled actor из player_input, не жест/поведение. Runtime проверяет источник, LLM — семантику.'},
@@ -335,6 +335,8 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
         return node
     # Keep properties named "description"; remove only JSON Schema annotations.
     schema = structural(extraction_schema())
+    # New generation requires provenance; legacy raw/saved payloads remain readable.
+    schema['properties']['movements']['items']['required'] += ['assertion', 'source_event_id']
     if player_agency_required:
         schema['required'].append('player_agency')
     else:
@@ -438,13 +440,24 @@ def repair_feedback(diagnostic, payload, before):
         except ValueError: pass  # Preserve malformed output verbatim for repair.
     # Full diagnostics remain in game_jobs; the prompt needs only repair evidence.
     rows = diagnostic if isinstance(diagnostic, list) else [diagnostic]
-    details = [{key: row[key] for key in ('code', 'path', 'source_ids', 'reason', 'repair_reason', 'action', 'temporal_boundary') if key in row} for row in rows]
+    details = [{key: row[key] for key in ('code', 'path', 'source_ids', 'reason', 'repair_reason', 'action', 'temporal_boundary', 'related_paths') if key in row} for row in rows]
     detail = details[0]
+    # Retain topology for referenced endpoints even if relevance omitted them.
+    # The context builder removes only copies already in its canonical slice.
+    referenced = set()
+    def references(value):
+        if isinstance(value, dict):
+            for child in value.values(): references(child)
+        elif isinstance(value, list):
+            for child in value: references(child)
+        elif isinstance(value, str) and value in before['locations']:
+            referenced.add(value)
+    references(payload)
     return json.dumps(dict(diagnostic=detail, diagnostics=details, original_extraction=payload,
-        previous_camera=before['camera'], known_locations={lid: {key: location[key] for key in
-            ('id', 'name', 'aliases', 'parent_id', 'kind') if key in location}
-            for lid, location in before['locations'].items()},
-        contract='narrative-authority-v1: original_extraction — предварительный, отклонённый результат, не канон. Reinterpret the same full narrative: fix ALL diagnosed fields together and recheck every Event/action ID, actor, exact per-action player_evidence, target subset and aggregate coverage (including other actions). One Event references one action; split independent acts into separate Events, never invent a multi-ID field. Recheck dependent constraints after each correction; this is the only automatic repair. Fix structural errors and misclassifications; preserve actual outcomes and dependencies. Never delete outcomes merely to pass validation or rewrite accepted before/History. final_scene present owns physical membership; observed is outside. Do not invent movements, consent or endpoints. Recheck EVERY movement: future_intent/departure is not completed_arrival, even with an existing or newly registered endpoint. Remove only unsupported arrival, preserve departure Event and END absence; retain actual arrivals and ordered routes. New Narrative-established locations use locations[]; creation alone is not arrival. Never replace null with a plausible destination. Narrative contradicting canon requires existing refusal/reauthor, not a JSON rewrite of its meaning.'), ensure_ascii=False, separators=(',', ':'))
+        known_locations={lid:{k:v for k,v in before['locations'][lid].items()
+                             if k in ('id','name','aliases','parent_id','kind')} for lid in sorted(referenced)},
+        canonical_context='Use the supplied immutable current state/camera/locations; original_extraction is rejected, not canon.',
+        contract='narrative-authority-v1: original_extraction — предварительный, отклонённый результат, не канон. Reinterpret the same full narrative: fix ALL diagnosed fields together and recheck every Event/action ID, actor, exact per-action player_evidence, target subset and aggregate coverage (including other actions). One Event references one action; split independent acts into separate Events, never invent a multi-ID field. Recheck dependent constraints after each correction; this is the only automatic repair. Fix structural errors and misclassifications; preserve actual outcomes and dependencies. Never delete outcomes merely to pass validation or rewrite accepted before/History. final_scene present owns physical membership; observed is outside. Do not invent movements, consent or endpoints. Recheck EVERY movement: future_intent/departure is not completed_arrival, even with an existing or newly registered endpoint. Synchronize events, movements, final_scene and character_changes: preparation is not departure; leaving a room is not leaving the building. Preserve END membership at the actual scene granularity; absence requires a real departure, not a plan. Bind arrivals to source_event_id with actor/endpoint/order; retain actual arrivals and ordered routes. New Narrative-established locations use locations[]; creation alone is not arrival. Never replace null with a plausible destination. Narrative contradicting canon requires existing refusal/reauthor, not a JSON rewrite of its meaning.'), ensure_ascii=False, separators=(',', ':'))
 
 
 def prune_schema_definitions(schema):

@@ -44,7 +44,8 @@ same player_evidence; no mixed/other quotes. Split independent acts into Events.
 Targets: attempted keeps; partial=subset; deferred/not_performed may actual=[]; untargeted=[].
 Event targets=subset actual; union covers actual. completed_interaction needs completed.
 Completed contact needs presence/call/bound delivery, marker or not; no reply needed.
-reference=noncontact. Silence isn't delivery.
+reference=noncontact: watch Vera=reference; ask Vera=interaction; ask doctor to help Vera targets doctor.
+Silence isn't delivery. Impossible Narrative contact=violated; JSON-only participant error=repair JSON.
 '''
 
 
@@ -216,7 +217,9 @@ def validate_completions(resolver, actions, events, indices, written_sources):
         if missing and (requires_contact or action.id in covered):
             fatal(f'Действие {action.id}: {action.outcome} не подтверждён принятыми Events для адресатов: '
                   + ', '.join(sorted(missing)) + '. '
-                  'Не удаляйте Event для обхода проверки; классифицируйте исход по неизменному Narrative.',
+                  'Не удаляйте Event для обхода проверки; классифицируйте исход по неизменному Narrative. '
+                  'Пассивное наблюдение/упоминание использует target_mode=reference; обращение требует interaction. '
+                  'Не создавайте фиктивный контакт для наблюдения.',
                   'player_action_completion_invalid' if action.outcome == 'completed' else 'player_action_event_mismatch',
                   repairable=True, section='player_agency',
                   path=f'player_agency.actions[{i}].outcome', source_ids=[action.id, *sorted(missing)])

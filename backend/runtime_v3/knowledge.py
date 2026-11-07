@@ -63,31 +63,44 @@ def salvage(state):
     return state
 
 
-def apply_knowledge(resolver, raw, events):
+def apply_knowledge(resolver, raw, events, *, rejected_event_ids=()):
     from backend.runtime_v3.resolver import normalized
+    from backend.services.world_delta_errors import StructuralDeltaError
     r, s = resolver, resolver.state
     candidates = []
+    errors = []
     # Ground and schema-check before considering conflicts: an invalid proposal
     # must not retire a valid belief or prevent another grounded acquisition.
     for i, item in r.records(raw, 'knowledge_gained'):
-        def reject(reason, code='knowledge_path_invalid'):
+        def reject(reason, code='knowledge_path_invalid', field=None):
             r.warn('knowledge_gained', i, reason, code=code)
+            r.warnings[-1].update(path=f'knowledge_gained[{i}]' + ('.'+field if field else ''),
+                                 source_ids=[v for v in (actor, fid, eid) if isinstance(v, str)])
         actor, fid = item.get('actor_id'), item.get('fact_id')
         eid = item.get('source_event_id')
         event = events.get(eid) if isinstance(eid, str) else None
-        if (not isinstance(actor, str) or not isinstance(fid, str) or
-            actor not in s['characters'] or fid not in s['facts'] or not event or
-            actor not in event['witnesses'] or fid not in event['fact_ids'] or
-            event['medium'] not in INFORMATION_MEDIA):
-            reject('Нет подтверждённого восприятия в завершённом повествовании.'); continue
+        if not isinstance(actor, str) or actor not in s['characters']:
+            reject('Неизвестный получатель знания.', 'knowledge_actor_unknown', 'actor_id'); continue
+        if not isinstance(fid, str) or fid not in s['facts']:
+            reject('Неизвестный факт.', 'knowledge_fact_unknown', 'fact_id'); continue
+        if isinstance(eid, str) and eid in rejected_event_ids:
+            continue  # Diagnose the rejected source, not imaginary downstream failures.
+        if not event:
+            reject('Нет принятого Event этого хода.', 'knowledge_event_unknown', 'source_event_id'); continue
+        if actor not in event['witnesses']:
+            reject('Получатель не воспринимал Event.', 'knowledge_witness_missing', 'actor_id'); continue
+        if event['medium'] not in INFORMATION_MEDIA:
+            reject('Канал Event не передаёт знания.', 'knowledge_medium_invalid', 'source_event_id'); continue
         if (not r.observed or r.mode == 'background') and actor in r.protected_knowledge_actor_ids:
-            reject('Фоновое событие не меняет знания участников основной сцены.'); continue
+            reject('Фоновое событие не меняет знания участников основной сцены.', 'knowledge_actor_protected'); continue
         from backend.runtime_v3.life import capabilities
         if not capabilities(s, actor)['can_perceive']:
-            reject('Персонаж не способен воспринять источник.'); continue
+            reject('Персонаж не способен воспринять источник.', 'knowledge_perception_unavailable'); continue
         prior = s['knowledge'].get(actor+':'+fid)
         expected = item.get('expected_revision')
         if expected is not None and (type(expected) is not int or expected < 0):
+            reject('Устаревшая ревизия знания.', 'knowledge_revision_conflict'); continue
+        if fid not in event['fact_ids'] and expected is not None and expected != (prior or {}).get('revision', 0):
             reject('Устаревшая ревизия знания.', 'knowledge_revision_conflict'); continue
         status = item.get('status', 'known')
         if not isinstance(status, str):
@@ -101,8 +114,21 @@ def apply_knowledge(resolver, raw, events):
             (supersedes and status != 'known')):
             reject('Исправление требует прежних fact_id в том же событии.'); continue
         entry = r.typed(Knowledge, dict(actor_id=actor, fact_id=fid, status=status), 'knowledge_gained', i)
+        if entry and fid not in event['fact_ids']:
+            event_index = next(j for j, row in enumerate(raw.records['events'])
+                               if isinstance(row, dict) and row.get('id') == eid)
+            errors.append(StructuralDeltaError(
+                f'Получатель {actor} воспринимает Event {eid}, но fact_ids не содержит {fid}. '
+                'Сверьте раскрытие с исходным Narrative: восстановите точную связь Event→Fact '
+                'или пересмотрите неподтверждённое приобретение. Не удаляйте подтверждённые знания ради проверки.',
+                'knowledge_fact_link_missing', repairable=True, section='knowledge_gained', index=i,
+                field='source_event_id', source_ids=[actor, fid, eid],
+                related_paths=[f'events[{event_index}].fact_ids']))
+            continue
         if entry: candidates.append((i, item, event, entry))
 
+    if errors:
+        raise StructuralDeltaError.combine(errors)
     if not candidates: return
 
     # Index once, including only actors actually receiving evidence. This is

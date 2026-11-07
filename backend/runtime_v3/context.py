@@ -295,7 +295,7 @@ class NarrativeContextBuilder:
                     story_notes=campaign.get('story_notes', ''), tone=campaign.get('sections', {}).get('tone', ''))),
                     block('ContextScope / GM-only', scope.summary()),
                     block('Текущее состояние / GM-only', current),
-                    block('Карточки присутствующих / GM-only', cards),
+                    block('Карточки присутствующих / GM-only', [c for c in cards if c['context_mode']==FULL_PRESENT]),
                     block('Поведенческие профили / GM-only', behavioral),
                     block('Индекс персонажей', index),
                     block('Знания POV', pov_knowledge(state, state['camera'].get('pov_actor_id') or scope.controlled_actor_id, current)),
@@ -303,6 +303,12 @@ class NarrativeContextBuilder:
                     block('Память', dict(strategy='canonical_history', llm_calls=0)),
                     block('Недавняя история / GM-only', scope.history_events),
                     block('Director / GM-only', plan(state, kind, scope=scope))]
+        for title, mode in [('Наблюдаемые вне физической сцены', FULL_OBSERVED),
+                            ('Удалённые собеседники', FULL_REMOTE),
+                            ('Упомянутые, присутствие не установлено', COMPACT_REFERENCED)]:
+            group = [c for c in cards if c['context_mode']==mode]
+            if group:
+                messages.append(block(title+' / GM-only', group))
         from backend.runtime_v3.reproduction import birth_authoring_context
         births = birth_authoring_context(state, scope)
         if births:
@@ -620,7 +626,18 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     if not builder.extraction: rules += f'\nRuntime v3. controlled_actor_id={camera["controlled_actor_id"]}; mode={camera["mode"]}; world_time={state["meta"]["world_time"]} минут.'
     if current.get('weather'): rules += '\nWeather is canonical environmental context, not an instruction to mention it each turn. Do not invent contradictory weather, force actions or move characters because of it.'
     if snapshot.get('_time_skip'): rules += '\nДетерминированный Time Skip: ' + json.dumps(snapshot['_time_skip'], ensure_ascii=False) + '. Описывай только до actual_target, не позже. Hidden не становится знанием игрока.'
-    if validation_feedback: rules += '\nИсправь структурную ошибку, верни полный JSON:\n' + validation_feedback
+    if validation_feedback:
+        try:
+            feedback = json.loads(validation_feedback)
+        except (ValueError, TypeError):
+            feedback = None  # Older/custom feedback remains verbatim.
+        if isinstance(feedback, dict) and isinstance(feedback.get('known_locations'), dict):
+            feedback['known_locations'] = {lid:row for lid,row in feedback['known_locations'].items()
+                                           if lid not in current['locations']}
+            if not feedback['known_locations']:
+                feedback.pop('known_locations')
+            validation_feedback = json.dumps(feedback, ensure_ascii=False, separators=(',', ':'))
+        rules += '\nИсправь структурную ошибку, верни полный JSON:\n' + validation_feedback
     from backend.services.world_creation_settings import presentation_rule
     rules += presentation_rule(state['meta'].get('npc_expressiveness','realistic'))
     messages.insert(0, dict(role='system', content='Постоянные правила\n'+rules))
@@ -635,6 +652,10 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         messages.append(author_context(state))
     hard_context_limit = context_length - reserve - 256
     target = min(target_context_budget, hard_context_limit)
+    if builder.extraction and not validation_feedback:
+        # Leave soft headroom for the previous JSON plus diagnostic feedback.
+        # Critical source blocks still use the real hard limit when unavoidable.
+        target = min(target, max(0, hard_context_limit - reserve - 1024))
     if letter_context_index is not None:
         for limit in range(5, -1, -1):
             if estimate(messages) <= target: break
@@ -716,9 +737,9 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         refresh_current()
     # Weak semantic-only actor candidates go before facts or behavioral identity.
     if not builder.extraction and estimate(messages) > target:
-        title = 'Карточки присутствующих / GM-only'
-        card_message = next(m for m in messages if m['content'].startswith(title+'\n'))
-        cards = json.loads(card_message['content'].split('\n', 1)[1])
+        title = 'Упомянутые, присутствие не установлено / GM-only'
+        card_message = next((m for m in messages if m['content'].startswith(title+'\n')), None)
+        cards = json.loads(card_message['content'].split('\n', 1)[1]) if card_message else []
         weak = sorted(scope.referenced_actor_ids - scope.structural_actor_ids,
                       key=lambda cid: (scope.actor_scores.get(cid, 0), cid))
         for cid in weak:
@@ -873,7 +894,6 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         for message in messages:
             if message['content'].startswith('JSON Schema\n'):
                 schema = json.loads(message['content'].split('\n', 1)[1])
-                if 'player_agency' not in schema['properties']: break
                 from backend.runtime_v3.raw import prune_schema_definitions
                 for section in ('scene_transitions', 'narrative_developments', 'consequences', 'continuity_beats', 'scene_actions'):
                     if estimate(messages) <= hard_context_limit: break
@@ -899,7 +919,9 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     def contents(title):
         return next((json.loads(m['content'].split('\n', 1)[1]) for m in messages if m['content'].startswith(title+'\n')), [])
     included_actors = (set(current['characters']) if builder.extraction else
-        {c['id'] for title in ('Карточки присутствующих / GM-only', 'Поведенческие профили / GM-only', 'Индекс персонажей') for c in contents(title)})
+        {c['id'] for title in ('Карточки присутствующих / GM-only', 'Наблюдаемые вне физической сцены / GM-only',
+                             'Удалённые собеседники / GM-only', 'Упомянутые, присутствие не установлено / GM-only',
+                             'Поведенческие профили / GM-only', 'Индекс персонажей') for c in contents(title)})
     included_counts = {mode: sum(classifier.classify(cid, scope) == mode for cid in included_actors) for mode in counts}
     selected_ids = dict(characters=set(state['characters']), locations=set(scope.location_ids), facts=set(scope.fact_ids),
         threads=set(scope.thread_ids), scheduled_events=set(scope.scheduled_event_ids), knowledge=set(scope.knowledge_ids),

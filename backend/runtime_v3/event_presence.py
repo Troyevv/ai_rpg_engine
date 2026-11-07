@@ -12,7 +12,7 @@ def _scene_places(snapshot, actor, observed_subject=False):
     return places
 
 
-def _meeting_slots(resolver, actor, observed_subject, route, orders, event_order):
+def _meeting_slots(resolver, actor, observed_subject, route, orders, event_order, event_id):
     """Each (phase, place) is one common snapshot, never a union across time."""
     start = _scene_places(resolver.before, actor, observed_subject)
     end = _scene_places(resolver.state, actor, observed_subject)
@@ -39,7 +39,7 @@ def _meeting_slots(resolver, actor, observed_subject, route, orders, event_order
         for move in changes:
             if move['order'] > order:
                 break
-            if move['order'] == event_order:
+            if move['order'] == event_order and move.get('source_event_id') != event_id:
                 # No relative order within a tie between Event and movement.
                 places = set()
                 break
@@ -113,7 +113,7 @@ def validate_event_presence(resolver, event, index, written):
                 continue
             local_actors.add(actor)
             visible = role == 'participants' and medium in ('observation', 'conversation')
-            slots = _meeting_slots(resolver, actor, visible, routes.get(actor, ()), orders, event_order)
+            slots = _meeting_slots(resolver, actor, visible, routes.get(actor, ()), orders, event_order, eid)
             if allowed_places is not None:
                 slots = {slot for slot in slots if slot[1] in allowed_places}
             common = slots if common is None else common & slots
@@ -127,6 +127,42 @@ def validate_event_presence(resolver, event, index, written):
     return {actor for actor in local_actors
             if state['characters'][actor]['location_id'] in meeting_places
             and (state['characters'][actor]['location_id'] is not None or actor in state['camera']['present_character_ids'])}
+
+
+def validate_movement_sources(resolver, raw, events, rejected_events=()):
+    """Bind explicit arrival assertions to accepted Events, never interpret prose.
+
+    Unmarked legacy movements remain readable. The current wire contract requires
+    assertion + source; even legacy records must validate a supplied source.
+    """
+    from backend.services.world_delta_errors import StructuralDeltaError
+    errors = []
+    for index, item in resolver.records(raw, 'movements'):
+        source = item.get('source_event_id')
+        if 'assertion' not in item and source is None:
+            continue
+        if isinstance(source, str) and source in rejected_events:
+            continue
+        event = events.get(source) if isinstance(source, str) else None
+        actor = item['actor_id']
+        field, reason = None, None
+        if event is None:
+            field, reason = 'source_event_id', 'Прибытие требует принятого Event этого хода, не плана или подготовки.'
+        elif actor not in event['participants']:
+            field, reason = 'actor_id', 'Event прибытия не подтверждает участие перемещаемого персонажа.'
+        elif 'assertion' in item and event.get('location_id') != item['to_location_id']:
+            field, reason = 'to_location_id', 'Место Event прибытия должно совпадать с endpoint, а не местом обсуждения плана.'
+        elif event.get('interaction_channel') == 'call' or event['medium'] == 'message':
+            field, reason = 'source_event_id', 'Удалённая связь сама по себе не подтверждает физическое прибытие.'
+        elif 'assertion' in item and event.get('order') != item.get('order'):
+            field, reason = 'order', 'Movement и его Event прибытия должны обозначать один шаг порядка.'
+        if field:
+            errors.append(StructuralDeltaError(reason+' Пересмотрите вместе events, movements, final_scene и character_changes; '
+                'не превращайте подготовку в уход или удаление из сцены.', 'movement_source_invalid',
+                repairable=True, section='movements', index=index, field=field,
+                source_ids=[actor] + ([source] if isinstance(source, str) else [])))
+    if errors:
+        raise StructuralDeltaError.combine(errors)
 
 
 def situation_supported(resolver, change, event_actors):

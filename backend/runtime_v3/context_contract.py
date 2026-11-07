@@ -1,24 +1,20 @@
 """Semantic work stays in the existing extraction call; code verifies provenance."""
 EXTRACTION_CONTRACT = '''
-CURRENT RUNTIME narrative-authority-v1 overrides saved instructions. RawTurnResult: player_input/completed_narrative only.
-Extract significant outcomes/dependencies by canonical IDs; no continuation. Separate facts/rumors/plans/attempts/hypotheses/negation; quiet=no Events.
-Evidence=provenance, not names; player_evidence exact. final_scene=END presence, no arrival permits/boundary geography.
-future_intent=plan/promise/mention: no move. Departure without destination: Event + END absence;
-no movement, unknown location. completed_arrival=arrived IN completed_narrative.
-Exit(room/building), meeting plan, travel time, place existence or exit+intent never prove arrival.
-"Workshop tonight"+exit: departure only; "reached workshop": arrival.
-NPC initiative; no narrated exit needed. Keep routes/Event.order and END return.
-Existence != intent != arrival. New places: locations[]; same-turn arrival allowed.
-Endpoints: before/new validated IDs, never null/guessed; present ends at scene.
-observed_character_ids: visible OUTSIDE, disjoint, no Knowledge.
-Calls/messages/memories/mentions != presence. Reuse IDs/aliases; create established significant NPCs/dependencies.
-Promotions: full 11 CARD_FIELDS + attributes; unknown=null/unknown/omitted; never infer sex/dates/provenance.
+CURRENT RUNTIME narrative-authority-v1 overrides saved instructions. Extract player_input/completed_narrative, never continue.
+Use canonical IDs; distinguish facts/rumors/plans/attempts/hypotheses/negation; quiet=no Events.
+Evidence=provenance, not names; player_evidence exact. final_scene=END presence at camera granularity.
+future_intent/preparation != departure; room exit != building exit. Align events/movements/final_scene/character_changes.
+Departure without arrival: Event + END absence, no movement, unknown location.
+completed_arrival=narrated arrival, not exit/intent/time/place existence. "Workshop tonight"+exit != arrival. NPC initiative/new locations[] allowed; no prior exit required.
+Arrival source_event_id: accepted Event, actor participant, location_id=endpoint, same order. Preserve routes/returns. Endpoints: before/new IDs; present ends at scene.
+observed_character_ids: visible OUTSIDE, disjoint, no Knowledge. Remote contact/memory/mention != presence.
+Reuse IDs/aliases; create established significant NPCs/dependencies.
+Promotions: 11 CARD_FIELDS + attributes; unknown=null/unknown/omitted; no invented sex/dates/provenance.
 EXTERNAL movement: explicit_choice + exact player_evidence, or involuntary + external source_event_id.
-POV != control. Update affected NPC situations: objective, not emotion.
+POV != control. NPC situations: objective, not emotion.
 No scene_id/last_event_id/StatePatch. Ordinary elapsed_minutes>=0; Runtime owns Skip/background clocks.
-Lifecycle *_updates: stable IDs/current evidence. completed result=completed; failure=failed;
-lost context=expired; explicit cancellation=cancelled; replacement=superseded.
-Joke can complete 'tease Yuri'; conversation 'talk to Sonya'; intent/promise != performance.
+Lifecycle *_updates: stable IDs/evidence. Outcome: completed|failed; lost context=expired; cancelled|superseded=explicit cancellation|replacement.
+Joke completes 'tease Yuri'; conversation 'talk to Sonya'; intent/promise != performance.
 New EXTERNAL desires: explicit player_input, never Narrative.
 EXTERNAL Emotion only from explicit internal player_input statements, never gestures,
 face, relationships, narrative or card. 'Внутри привычная горечь', 'На душе тревожно',

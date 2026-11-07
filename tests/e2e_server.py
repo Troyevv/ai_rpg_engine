@@ -57,6 +57,9 @@ letter130_provider=None
 npc_review_start_payload=None
 story168_payload=None
 story168_gate=None
+integrated247_case=None
+integrated247_repeat=False
+integrated247_extractions=0
 provenance238_case=None
 provenance238_repeat=False
 provenance238_extractions=0
@@ -67,8 +70,18 @@ birth231_response=None
 due240_responses=None
 
 def scripted_stream(**kwargs):
-    global provenance238_extractions
+    global provenance238_extractions, integrated247_extractions
     global phone_mode, group_semantic_fail_once, npc_review_start_payload, story168_payload, agency232_attempts, birth231_response, due240_responses, agency237_extractions
+    if integrated247_case and kwargs.get('model') == 'integrated-test':
+        from test_integrated_repair247 import archived, corrected
+        data = archived(integrated247_case)
+        if kwargs.get('response_format'):
+            integrated247_extractions += 1
+            raw = data['responses'][0]['payload'] if integrated247_extractions == 1 or integrated247_repeat else corrected(data)
+            yield json.dumps(raw, ensure_ascii=False)
+        else:
+            yield data['narrative']
+        return
     if due240_responses is not None:
         from test_due_scene import SIGNS
         if kwargs.get('response_format'):
@@ -976,6 +989,22 @@ if __name__ == '__main__':
         from devtools.narrative_test_world import load_fixture
         result=load_fixture(app.state.repository,'protagonist')
         return {'world':result['world'],'save':result['save']}
+
+    @app.post('/test/integrated247-seed')
+    def integrated247_seed(case: str = 'knowledge', repeat: bool = False):
+        global integrated247_case, integrated247_repeat, integrated247_extractions
+        from test_integrated_repair247 import seed, archived
+        if case not in ('knowledge', 'family', 'phone', 'crisis'):
+            raise ValueError('Unknown replay')
+        result = seed(app.state.repository, archived(case))
+        integrated247_case, integrated247_repeat, integrated247_extractions = case, repeat, 0
+        return dict(world=result['world'], save=result['save'], action=archived(case)['player_input'])
+
+    @app.post('/test/integrated247-allow-repair')
+    def integrated247_allow_repair():
+        global integrated247_repeat
+        integrated247_repeat = False
+        return {'ok': True}
 
     @app.post('/test/provenance238-seed')
     def provenance238_seed(case: str = 'social', repeat: bool = False):

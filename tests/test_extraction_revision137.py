@@ -89,7 +89,7 @@ def test_domain_invariants_are_not_delegated_to_annotations(api, fault):
         assert job['status'] == 'saved', job.get('error')
         assert len(calls) == 2
         assert repo.get_snapshot(sid)['world_state']['knowledge'] == before['world_state']['knowledge']
-        assert any(w['code'] == 'knowledge_path_invalid' for w in json.loads(repo.get_job(job['id'])['warnings_json']))
+        assert any(w['code'] == 'knowledge_witness_missing' for w in json.loads(repo.get_job(job['id'])['warnings_json']))
     else:
         assert job['status'] == 'error' and len(calls) == 3
         assert repo.get_snapshot(sid) == before and not repo.list_turns(sid)

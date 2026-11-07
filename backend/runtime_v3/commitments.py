@@ -47,6 +47,10 @@ def apply_commitments(resolver, raw):
     accepted = {}
     for index, item in resolver.records(raw, 'scheduled_event_changes'):
         eid, assertion = item.get('id'), item.get('assertion')
+        if isinstance(eid, str) and eid in state['pregnancies']:
+            resolver.warn('scheduled_event_changes', index, 'Pregnancy schedule is Runtime-owned.',
+                          code='reproduction_schedule_owned')
+            continue
         def reject(reason, code='commitment_invalid', **details):
             from backend.runtime_v3.models import fatal
             fatal(reason, code, repairable=True, section='scheduled_event_changes', index=index, entity=eid, **details)

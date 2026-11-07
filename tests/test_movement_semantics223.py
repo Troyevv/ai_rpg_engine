@@ -2,7 +2,7 @@
 
 Phone fixtures are synthetic equivalents of the public Issue #223 cases. Exact
 archive replays were run separately on private copies, never published here.
-A structurally valid false arrival still accepts: Runtime is not NLP.
+Missing arrival provenance is rejected; structurally consistent fiction still requires semantic review.
 """
 from copy import deepcopy
 import json
@@ -32,9 +32,9 @@ def test_phone_equivalent_payload_and_omit_only_movement_control(phone, name):
     before = repo.get_snapshot(sid)['world_state']
     original = deepcopy(before)
     if name == 'phone001':
-        result = StateResolver(before, case['narrative'], case['player_input'], require_player_agency=True).resolve(case['payload'])
-        assert result.state['characters'][NPC]['location_id'] == 'location_567f2d7db666cb5e4abf'
-        assert result.history['movements'][-1]['to_location_id'] == 'location_567f2d7db666cb5e4abf'
+        with pytest.raises(StructuralDeltaError) as exc:
+            StateResolver(before, case['narrative'], case['player_input'], require_player_agency=True).resolve(case['payload'])
+        assert exc.value.code == 'movement_source_invalid'
     else:
         for raw in (case['payload'], case['repair']):
             with pytest.raises(StructuralDeltaError) as exc:
@@ -142,8 +142,8 @@ def test_completed_arrivals_and_ordered_routes_jobs(phone, legs, described_exit)
         raw['events'].append(dict(id='exit', text='Тимур попрощался и вышел.', participants=[NPC], witnesses=['qa_kirill'], medium='observation', location_id=home, order=0))
     origin = home
     for i, target in enumerate(targets):
-        raw['movements'].append(dict(actor_id=NPC, from_location_id=origin, to_location_id=target, assertion='completed_arrival', order=2*i+1, evidence=narrative))
-        raw['events'].append(dict(id=f'arrival-{i}', text='Тимур прибыл.', participants=[NPC], witnesses=[], medium='action', location_id=target, order=2*i+2))
+        raw['movements'].append(dict(actor_id=NPC, from_location_id=origin, to_location_id=target, assertion='completed_arrival', source_event_id=f'arrival-{i}', order=2*i+1, evidence=narrative))
+        raw['events'].append(dict(id=f'arrival-{i}', text='Тимур прибыл.', participants=[NPC], witnesses=[], medium='action', location_id=target, order=2*i+1))
         origin = target
     job, calls = run(client, sid, [raw], narrative, 'turn', ACTION)
     assert job['status'] == 'saved', job.get('error')
@@ -164,7 +164,8 @@ def test_unknown_departure_then_later_appearance(phone):
     assert before['world_state']['characters'][NPC]['location_id'] is None
     target = next(lid for lid in before['world_state']['locations'] if lid != camera['location_id'])
     raw = dict(final_scene=dict(location_id=camera['location_id'], present_character_ids=[c for c in camera['present_character_ids'] if c != NPC], elapsed_minutes=1),
-               movements=[dict(actor_id=NPC, from_location_id=None, to_location_id=target, assertion='completed_arrival')])
+               movements=[dict(actor_id=NPC, from_location_id=None, to_location_id=target, assertion='completed_arrival', source_event_id='arrival')],
+               events=[dict(id='arrival',text='Тимур появился в мастерской.',participants=[NPC],location_id=target,medium='action')])
     job, calls = run(client, sid, [raw], 'Тем временем Тимур появился в мастерской.', 'turn', ACTION)
     assert job['status'] == 'saved' and len(calls) == 2
     saved = Repository(repo.path).get_snapshot(sid)
@@ -205,7 +206,9 @@ def test_location_existence_intent_and_arrival_are_independent(phone, new_place,
     if new_place:
         raw['locations'] = [dict(id=target, name='Фотолаборатория «Свет»', evidence='В городе открылась фотолаборатория «Свет».')]
     if arrived:
-        raw['movements'] = [dict(actor_id=NPC, from_location_id=home, to_location_id=target, assertion='completed_arrival', evidence='Тимур добрался до фотолаборатории.')]
+        raw['movements'] = [dict(actor_id=NPC, from_location_id=home, to_location_id=target, assertion='completed_arrival', source_event_id='arrival', evidence='Тимур добрался до фотолаборатории.')]
+    if arrived:
+        raw['events'] = [dict(id='arrival',text='Тимур прибыл.',participants=[NPC],location_id=target,medium='action')]
     job, calls = run(client, sid, [raw], narrative, 'turn', ACTION)
     assert job['status'] == 'saved', job.get('error')
     assert len(calls) == 2

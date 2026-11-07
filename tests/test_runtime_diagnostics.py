@@ -40,6 +40,12 @@ def test_leaf_errors_keep_independent_changes_without_repair(db,case):
         conn.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(before),sid))
     p['relationship_changes'][0].update(source_event_ids=['prior'],assertion='grounded_feelings',rationale='Подтверждённая помощь.')
     job=repo.begin_job(sid,'','start',CONFIG)
+    if case=='fact':
+        assert len(execute(repo,job,p,NARRATIVE))==3
+        assert repo.get_job(job)['status']=='error'
+        assert repo.get_snapshot(sid)==before
+        assert 'knowledge_fact_link_missing' in repo.get_job(job)['repair_diagnostics_json']
+        return
     assert len(execute(repo,job,p,NARRATIVE))==2
     assert repo.get_job(job)['status']=='saved'
     world=repo.get_snapshot(sid)['world_state']

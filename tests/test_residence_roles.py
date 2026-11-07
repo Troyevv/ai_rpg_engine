@@ -148,7 +148,7 @@ def test_final_scene_authority_is_independent_of_residence_and_job():
     assert arrived.state['characters']['b']['location_id']=='home'
     assert arrived.state['residences']==s['residences'] and arrived.state['roles']==s['roles']
     text='b arrived at home.'
-    r=StateResolver(s,text,'').resolve(dict(final_scene=dict(location_id='home',present_character_ids=['a','b']),movements=[dict(actor_id='b',from_location_id='south',to_location_id='home',assertion='completed_arrival',actor_evidence='b',destination_evidence='home',evidence=text)]))
+    r=StateResolver(s,text,'').resolve(dict(final_scene=dict(location_id='home',present_character_ids=['a','b']),movements=[dict(actor_id='b',from_location_id='south',to_location_id='home',assertion='completed_arrival',source_event_id='arrival',actor_evidence='b',destination_evidence='home',evidence=text)],events=[dict(id='arrival',text=text,participants=['b'],location_id='home',medium='action')]))
     assert r.state['characters']['b']['location_id']=='home'
     assert r.state['residences']==s['residences']
 

@@ -32,7 +32,8 @@ def imported(client, value=None):
 
 def arrival(actor='viktoria_solovyova', evidence=NARRATIVE):
     return dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id='ilya_cabinet',present_character_ids=['ilya',actor],elapsed_minutes=1),
-                movements=[dict(actor_id=actor,from_location_id='salon_lak',to_location_id='ilya_cabinet',assertion='completed_arrival',actor_evidence='Виктория Соловьёва',destination_evidence='кабинет',evidence=evidence)])
+                movements=[dict(actor_id=actor,from_location_id='salon_lak',to_location_id='ilya_cabinet',assertion='completed_arrival',source_event_id='arrival',actor_evidence='Виктория Соловьёва',destination_evidence='кабинет',evidence=evidence)],
+                events=[dict(id='arrival',text=evidence,participants=[actor],location_id='ilya_cabinet',medium='action')])
 
 def provider_payload(kwargs):
     raw=arrival()

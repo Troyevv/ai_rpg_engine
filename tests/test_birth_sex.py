@@ -277,7 +277,7 @@ def test_malformed_unrelated_knowledge_keeps_existing_local_handling(tmp_path):
     job,calls=execute(repo,sid,text,raw)
     assert job['status']=='saved',job['error']
     assert len(calls)==2
-    assert 'knowledge_path_invalid' in job['warnings_json']
+    assert 'knowledge_fact_unknown' in job['warnings_json']
 
 
 def test_remote_birth_discloses_only_to_local_observer(tmp_path):

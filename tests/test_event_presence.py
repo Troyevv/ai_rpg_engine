@@ -126,11 +126,12 @@ def test_intention_completed_arrival_and_subsequent_departure(crisis):
     assert exc.value.diagnostic('extraction')['path'] == 'movements[0].assertion'
     raw['final_scene']['present_character_ids'].append(VERA)
     raw['movements'] = [dict(actor_id=VERA, assertion='completed_arrival',
-                             from_location_id=state['characters'][VERA]['location_id'], to_location_id=lid)]
+                             from_location_id=state['characters'][VERA]['location_id'], to_location_id=lid, source_event_id=raw['events'][0]['id'])]
     arrived = StateResolver(state, TEXT, ACTION).resolve(raw)
     assert arrived.state['characters'][VERA]['location_id'] == lid
     assert arrived.state['characters'][VERA]['situation'] == TEXT
     raw['events'][0]['order'] = 1
+    raw['movements'][0]['order'] = 1
     assert StateResolver(state, TEXT, ACTION).resolve(raw).history['events'][0]['order'] == 1
     del raw['movements']
     assert StateResolver(arrived.state, TEXT, ACTION).resolve(raw).history['events'][0]['location_id'] == lid

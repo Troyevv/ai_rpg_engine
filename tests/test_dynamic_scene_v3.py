@@ -72,7 +72,8 @@ def test_departure_and_arrival_update_presence_and_character_endpoints():
         movements=[dict(actor_id='b', to_location_id='hall', evidence=text)])
     state = world()
     state['characters']['c']['location_id'] = 'hall'
-    payload['movements'].append(dict(actor_id='c',from_location_id='hall',to_location_id='room',assertion='completed_arrival',actor_evidence='Юра',destination_evidence='Критический успех',evidence=text))
+    payload['movements'].append(dict(actor_id='c',from_location_id='hall',to_location_id='room',assertion='completed_arrival',source_event_id='arrival',actor_evidence='Юра',destination_evidence='Критический успех',evidence=text))
+    payload['events'] = [dict(id='arrival', text=text, participants=['c'], location_id='room', medium='action')]
     result = StateResolver(state, text, '',actor_names={'c':'Юра'}).resolve(payload).state
     assert result['camera']['present_character_ids'] == ['a', 'c']
     assert result['characters']['b']['location_id'] == 'hall'
@@ -125,11 +126,12 @@ def test_real_engine_repairs_once_with_original_and_full_context(db, repair_succ
     system = messages[0]['content']
     feedback = json.loads(system.split('Исправь структурную ошибку, верни полный JSON:\n', 1)[1])
     assert feedback['original_extraction'] == bad
-    assert feedback['previous_camera'] == camera
-    assert set(feedback['known_locations']) == set(before['world_state']['locations'])
-    for lid, location in feedback['known_locations'].items():
-        assert location == {k: v for k, v in before['world_state']['locations'][lid].items()
-                            if k in ('id', 'name', 'aliases', 'parent_id', 'kind')}
+    assert 'previous_camera' not in feedback
+    current = json.loads(next(m['content'].split('\n',1)[1] for m in messages if m['content'].startswith('Текущее состояние / GM-only\n')))
+    assert {key: camera[key] for key in current['camera']}==current['camera']
+    assert all(value is None for key,value in camera.items() if key not in current['camera'])
+    assert not set(current['locations']) & set(feedback.get('known_locations', {}))
+    assert feedback['canonical_context']
     assert feedback['diagnostic']['code'] == 'scene_movement_conflict'
     assert any(NARRATIVE in m['content'] for m in messages if m['content'].startswith('completed_narrative'))
     if repair_succeeds:

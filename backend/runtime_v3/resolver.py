@@ -139,6 +139,54 @@ class StateResolver:
             self.warn(section,index,'некорректная необязательная запись', code='optional_schema_invalid')
             return None
 
+    def raise_independent_errors(self, raw, events, rejected_events, elapsed, errors):
+        """Finish independent domain diagnostics on a disposable failed candidate.
+
+        No resolve retries, payload deletion or persistence. Temporal validation
+        must see accepted Life/Birth/Commitment transitions; an invalid source
+        or transition makes that dependent check inconclusive, not another error.
+        """
+        from copy import copy
+        from backend.services.world_delta_errors import StructuralDeltaError
+        from backend.runtime_v3.life import apply_life
+        from backend.runtime_v3.reproduction import apply_reproduction
+        from backend.runtime_v3.commitments import apply_commitments
+        from backend.runtime_v3.continuity import validate_temporal_boundaries
+        probe = copy(self)
+        probe.state, probe.history = deepcopy(self.state), deepcopy(self.history)
+        probe.warnings = list(self.warnings)
+        candidate = deepcopy(raw)
+        temporal_ready = not any(row['section'] in ('births', 'reproductive_events', 'naming_decisions')
+                                 for error in errors for row in error.diagnostics('preflight'))
+        try:
+            apply_life(probe, candidate)
+        except StructuralDeltaError as exc:
+            errors.append(exc)
+            temporal_ready = False
+        birth_sources_invalid = any(isinstance(row, dict) and isinstance(row.get('source_event_id'), str)
+                                    and row['source_event_id'] in rejected_events
+                                    for section in ('births', 'reproductive_events', 'naming_decisions')
+                                    for row in candidate.records[section])
+        if temporal_ready and not birth_sources_invalid:
+            try:
+                apply_reproduction(probe, candidate, events)
+            except StructuralDeltaError as exc:
+                errors.append(exc)
+                temporal_ready = False
+        else:
+            temporal_ready = False
+        try:
+            apply_commitments(probe, candidate)
+        except StructuralDeltaError as exc:
+            errors.append(exc)
+            temporal_ready = False
+        if temporal_ready:
+            try:
+                validate_temporal_boundaries(probe, elapsed)
+            except StructuralDeltaError as exc:
+                errors.append(exc)
+        raise StructuralDeltaError.combine(errors)
+
     def resolve(self, payload):
         raw = deepcopy(payload) if isinstance(payload, RawTurnResult) else RawTurnResult.parse(payload)
         self.warnings.extend(raw.warnings)
@@ -287,7 +335,8 @@ class StateResolver:
                 if 'from_location_id' in item and item['from_location_id'] != origin:
                     fatal('Исходное место маршрута противоречит канону.', 'movement_origin_invalid', repairable=True, section='movements', entity=cid)
                 self.history.movements.append(dict(actor_id=cid,from_location_id=origin,to_location_id=target,
-                    evidence=evidence,order=order,turn_id=self.turn_id))
+                    evidence=evidence,order=order,turn_id=self.turn_id,
+                    **({'source_event_id':item['source_event_id']} if item.get('source_event_id') else {})))
                 origin = target
             s['characters'][cid]['location_id'] = origin
         for cid in present:
@@ -338,7 +387,9 @@ class StateResolver:
         scene_end = s['meta']['world_time']
         from backend.services.world_delta_errors import StructuralDeltaError
         event_errors = []
+        rejected_events = set()
         for i, item in self.records(raw,'events'):
+            error_start = len(event_errors)
             eid = item.get('id')
             if 'minute' in item:
                 minute = item['minute']
@@ -394,30 +445,63 @@ class StateResolver:
                 event_provenance(self, item, event, i, player_actions)
             except StructuralDeltaError as exc:
                 event_errors.append(exc)
+                rejected_events.add(eid)
+                continue
+            if len(event_errors) != error_start:
+                rejected_events.add(eid)
                 continue
             event_indices[eid] = i
             events[eid] = event
             self.history.events.append(event)
-        if event_errors:
-            raise StructuralDeltaError.combine(event_errors)
         for _, item in self.records(raw,'movements'):
             if item.get('actor_id') == self.protected_actor_id and item.get('player_assertion') == 'involuntary':
+                if item.get('source_event_id') in rejected_events:
+                    continue
                 cause=events.get(item.get('source_event_id'))
                 if cause is None or self.protected_actor_id not in cause['participants']:
                     fatal('Нет принятого источника непроизвольного перемещения.', 'movement_agency', repairable=True, section='movements', source_ids=[item.get('source_event_id')])
         from backend.runtime_v3.narrative_remote import apply_extracted_remote
         remote_history, written_sources = apply_extracted_remote(self, raw, events)
         from backend.runtime_v3.event_presence import situation_supported, validate_event_presence
-        situation_actors = {
-            eid: validate_event_presence(self, event, event_indices[eid], written_sources.get(eid))
-            for eid, event in events.items()
-        }
+        situation_actors = {}
+        for eid, event in list(events.items()):
+            try:
+                situation_actors[eid] = validate_event_presence(self, event, event_indices[eid], written_sources.get(eid))
+            except StructuralDeltaError as exc:
+                event_errors.append(exc)
+                rejected_events.add(eid)
+                del events[eid]
+        from backend.runtime_v3.event_presence import validate_movement_sources
+        try:
+            validate_movement_sources(self, raw, events, rejected_events)
+        except StructuralDeltaError as exc:
+            event_errors.append(exc)
         from backend.runtime_v3.player_actions import validate_completions
-        validate_completions(self, player_actions, events, event_indices, written_sources)
+        # Rejected sources cannot prove completion or produce missing-coverage
+        # cascades. Actions with independent sources remain checkable.
+        rejected_actions = {row.get('player_action_id') for row in raw.records['events']
+                            if isinstance(row, dict) and row.get('id') in rejected_events}
+        if None in rejected_actions:
+            # A missing source→action reference cannot yet be assigned to one
+            # action. Coverage is inconclusive until that source is repaired.
+            rejected_actions.update(player_actions)
+        try:
+            validate_completions(self, {aid: action for aid, action in player_actions.items()
+                                       if aid not in rejected_actions},
+                                 {eid: event for eid, event in events.items()
+                                  if event.get('player_action', {}).get('id') not in rejected_actions},
+                                 event_indices, written_sources)
+        except StructuralDeltaError as exc:
+            event_errors.append(exc)
         from backend.runtime_v3.knowledge import apply_knowledge
         from backend.runtime_v3.reproduction import validate_birth_knowledge
-        validate_birth_knowledge(self, raw, events)
-        apply_knowledge(self, raw, events)
+        try:
+            validate_birth_knowledge(self, raw, events)
+            apply_knowledge(self, raw, events, rejected_event_ids=rejected_events)
+        except StructuralDeltaError as exc:
+            event_errors.append(exc)
+        if event_errors:
+            self.raise_independent_errors(raw, events, rejected_events, elapsed, event_errors)
         from backend.runtime_v3.secrets import apply_disclosures
         apply_disclosures(self, raw)
         from backend.runtime_v3.remote import deliver_due
@@ -530,13 +614,6 @@ class StateResolver:
         from backend.runtime_v3.possessions import apply_possessions
         apply_possessions(self, raw, events)
         from backend.runtime_v3.commitments import apply_commitments
-        owned = set(s['pregnancies'])
-        claims = raw.records['scheduled_event_changes']
-        for i, item in enumerate(claims):
-            if isinstance(item,dict) and isinstance(item.get('id'),str) and item['id'] in owned:
-                self.warn('scheduled_event_changes',i,'Pregnancy schedule is Runtime-owned.',code='reproduction_schedule_owned')
-        raw.records['scheduled_event_changes'] = [item for item in claims
-            if not isinstance(item,dict) or not isinstance(item.get('id'),str) or item['id'] not in owned]
         apply_commitments(self, raw)
         from backend.runtime_v3.commitments import invalidate_dead_commitments
         invalidate_dead_commitments(self,{cid for cid,c in s['characters'].items() if c['life_status']=='dead'})
@@ -603,4 +680,7 @@ class StateResolver:
             choices = [dict(c, interaction_channel=c.get('interaction_channel',self.before['meta']['interaction_focus'])) for c in choices]
             if self.before['meta']['interaction_focus']=='call' and not any(e.get('physical_text') for e in self.history.events):
                 choices = [c for c in choices if c['interaction_channel']!='physical']
+        for movement in self.history.movements:
+            if movement.get('source_event_id') in events:
+                movement['source_event_id'] = events[movement['source_event_id']]['id']
         return ResolvedTurn(state,patch,self.history.to_dict(),self.warnings,choices,self.cards,self.pending_reviews)

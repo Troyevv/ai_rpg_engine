@@ -157,7 +157,8 @@ def test_group_departure_preserves_another_confirmed_route(phone):
     good = departure(camera)
     good['final_scene']['present_character_ids'] = [ACTOR_ID]
     good['movements'] = [dict(actor_id='qa_vera', from_location_id=camera['location_id'],
-                              to_location_id=away['id'], assertion='completed_arrival', evidence=text)]
+                              to_location_id=away['id'], assertion='completed_arrival', source_event_id='arrival', evidence=text)]
+    good['events'].append(dict(id='arrival',text=text,participants=['qa_vera'],location_id=away['id'],medium='action'))
     bad = deepcopy(good)
     bad['movements'].append(null_arrival(camera))
     job, calls = run(client, sid, [bad, good], text, 'turn', ACTION)
