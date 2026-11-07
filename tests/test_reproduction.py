@@ -1,5 +1,6 @@
 """#41 deterministic domain and repository/POV regressions, no live model calls."""
 from copy import deepcopy
+from pregnancy_boundary_fixture import undisclosed_sex
 import json
 import pytest
 from hypothesis import given, strategies as st
@@ -52,7 +53,7 @@ def conceive(s=None,**kw): return run(s or state(),'reproductive_events',[servic
 
 def deliver(s,**kw):
     p=next(iter(s['pregnancies'].values()))
-    return run(s,'births',[dict(pregnancy_id=p['id'],source_event_id='event',assertion='birth_completed',
+    return run(s,'births',[dict(pregnancy_id=p['id'],source_event_id='event',assertion='birth_completed',sex_observations=undisclosed_sex(p),
         location_id='home',evidence=BIRTH,disclosed_parent_ids=p['parent_ids'],**kw)],text=BIRTH+' '+ ' '.join(kw.get('appearance',{}).values()),elapsed=max(0,p['due_minute']-s['meta']['world_time']))
 
 
@@ -263,7 +264,7 @@ def test_known_child_does_not_reveal_unknown_agreed_name():
 
 def test_birth_witness_does_not_learn_private_planned_name():
     s=naming(conceive().state).state;p=next(iter(s['pregnancies'].values()))
-    result=run(s,'births',[dict(pregnancy_id=p['id'],source_event_id='event',assertion='birth_completed',
+    result=run(s,'births',[dict(pregnancy_id=p['id'],source_event_id='event',assertion='birth_completed',sex_observations=undisclosed_sex(p),
         location_id='home',evidence=BIRTH)],text=BIRTH,elapsed=1440,witnesses=['a','b','c'])
     name=next(iter(s['naming_decisions'].values()))
     assert 'c:'+p['count_fact_id'] in result.state['knowledge']
@@ -299,7 +300,7 @@ def test_no_birth_from_due_alone_wrong_count_or_sex_cannot_override():
     from backend.services.world_delta_errors import StructuralDeltaError
     for elapsed, extra in [(0, {}), (1440, {'child_count': 3, 'sex': 'male'})]:
         with pytest.raises(StructuralDeltaError) as rejected:
-            run(s, 'births', [dict(pregnancy_id=p['id'], source_event_id='event', assertion='birth_completed',
+            run(s, 'births', [dict(pregnancy_id=p['id'], source_event_id='event', assertion='birth_completed',sex_observations=undisclosed_sex(p),
                                    evidence=BIRTH, **extra)], text=BIRTH, elapsed=elapsed)
         assert rejected.value.code == 'birth_claim_invalid' and rejected.value.repairable
         assert len(s['characters']) == 3 and s['pregnancies'][p['id']]['children'] == p['children']
@@ -310,7 +311,7 @@ def test_background_birth_has_no_external_knowledge_and_no_extra_call():
     s=conceive().state;s['meta']['world_time']=1440
     p=next(iter(s['pregnancies'].values()))
     s['camera'].update(controlled_actor_id='c',present_character_ids=['c'])
-    r=run(s,'births',[dict(pregnancy_id=p['id'],source_event_id='event',assertion='birth_completed',
+    r=run(s,'births',[dict(pregnancy_id=p['id'],source_event_id='event',assertion='birth_completed',sex_observations=undisclosed_sex(p),
         evidence=BIRTH,location_id='home')],text=BIRTH,player='',mode='background',observed=False,protected_actor_id='c')
     assert r.cards and not r.warnings
     assert all(k['actor_id']!='c' for k in r.state['knowledge'].values())
@@ -359,7 +360,7 @@ def test_birth_real_engine_regenerate_variants_and_rollback(tmp_path):
     camera=s['camera'];text='Роды Веры завершились. Кирилл присутствовал.'
     payload=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=1440),
         events=[dict(id='birth_event',text=text,evidence=text,participants=[ACTOR_ID,'qa_vera'],witnesses=[ACTOR_ID,'qa_vera'],fact_ids=[],medium='observation')],
-        births=[dict(pregnancy_id=p['id'],source_event_id='birth_event',assertion='birth_completed',evidence=text,location_id=camera['location_id'])])
+        births=[dict(pregnancy_id=p['id'],source_event_id='birth_event',assertion='birth_completed',sex_observations=undisclosed_sex(p),evidence=text,location_id=camera['location_id'])])
     jid=repo.begin_job(sid,'Остаюсь рядом.','turn',CONFIG);execute(repo,jid,payload,text)
     assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
     after=repo.get_snapshot(sid);turn=repo.list_turns(sid)[-1]

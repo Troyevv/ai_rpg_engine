@@ -16,7 +16,7 @@ def meeting_reply(action, camera=None):
                 temporal=dict(day_offset=1, time='15:00'), evidence=text)
     if agreed:
         plan.update(player_assertion='explicit_choice', player_evidence=action)
-    return dict(final_scene=dict(location_id=camera['location_id'],
+    return dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],
                                  present_character_ids=camera['present_character_ids'], elapsed_minutes=1),
                 events=[dict(id='offer', text=text, participants=actors, witnesses=actors, evidence=text)],
                 scheduled_event_changes=[plan])

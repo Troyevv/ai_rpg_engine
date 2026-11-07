@@ -84,11 +84,63 @@ separate fact IDs. Conception grants **no Knowledge**, even to participants. Exi
 Birth witnesses acquire outcomes and observable gestational parentage through that
 same pipeline. Other parentage requires explicit `disclosed_parent_ids`; prior names
 require their own grounded Knowledge path. Protected
-background observers do not. Narrative and choice projections omit hidden outcome
+background observers do not. Character and choice projections omit hidden outcome
 fields; unknown off-camera newborns do not appear in their card/index/genealogy.
-Extraction alone receives bounded canonical process records for validation. Atomic
+Extraction receives bounded canonical process records for validation. Atomic
 assertions already represented there are not repeated as fact prose in its prompt.
 Missing assertions are not permission to reveal them. No unconditional extra call.
+
+### Birth sex disclosure (#231)
+
+At an observable due birth, Narrative receives a separate **Birth authoring
+constraints / GM-only** block with stable child IDs and canonical sex. It is absent
+before the due boundary, for an absent/unperceiving POV, and for remote processes
+outside the current camera. Private background authoring uses its own camera.
+This block constrains an actual delivery; it is neither proof of delivery nor
+character Knowledge. The author may omit sex and must not reveal it before a
+grounded observation/announcement. Ordinary POV/character Knowledge stays filtered.
+
+Every new `BirthClaim.sex_observations` must assess **every canonical child once**:
+
+- `child_id` identifies the existing pregnancy slot, never a new outcome.
+- `narrative_sex` records what the authored prose actually establishes; `event_sex`
+  independently records the Event summary. Neither is a proposed canonical value.
+- `basis=not_disclosed` uses explicit null values and no recipients. Guesses,
+  hopes and player assumptions do not establish sex.
+- `observation` identifies the specific perceivers; `announcement` also identifies
+  its participant/speaker and `direct_observation` or established `prior_knowledge`.
+- `perceived_by` is a subset of accepted Event witnesses with perception capability,
+  not the entire birth audience. The existing sex Fact and canonical Event own each
+  Knowledge acquisition. A speaker explicitly sourcing the announcement from direct
+  observation also acquires Knowledge through that observation and must be a capable
+  Event witness. Generic `knowledge_gained` cannot bypass this assessment.
+
+Runtime compares the semantic assessment against the pregnancy's canonical sex;
+it never searches prose for sex words, rewrites biological sex, or creates a second
+sex Fact. The persisted sex Fact is checked against the pregnancy outcome on load.
+
+A contradictory `narrative_sex` raises **birth_narrative_sex_conflict**. The whole
+provisional scene is rejected before commit, with a durable `reauthor_narrative`
+diagnostic. Extraction-only retry is blocked even after reload, and the UI removes
+that retry action. The player can abandon the failed scene and author a new turn;
+accepted History and sibling variants remain untouched. No automatic reauthor loop
+or extra reviewer request is added. This conservatively rejects the scene even if
+the underlying cause was a mistaken semantic assessment of otherwise correct prose.
+
+A missing/malformed assessment or divergent Event summary is eligible for the
+existing **one** Extraction repair. The repair must reinterpret the same prose,
+not silently correct it to canon. Persistent failure leaves no child/Event/Knowledge
+changes. Standard delivery remains Narrative + Extraction (two calls); only failed
+structural/summary validation adds at most one automatic call per attempt.
+
+Existing saves/History need no migration. Legacy in-flight birth payloads missing
+the new assessment must be reinterpreted before acceptance; they are not given a
+fabricated `not_disclosed` default. Regeneration uses its recorded author context.
+
+The semantic trust boundary remains Extraction: a model that falsely labels both
+prose and summary as canonical can evade any structural validator. These changes
+do not claim to prove arbitrary prose correct with deterministic code or mocked
+provider tests. A paid live-model retest was not run as part of #231.
 
 The optional wire contract is included when reproductive capability, pregnancy or
 birth identity is relevant. Legacy worlds still expose the normal life_changes

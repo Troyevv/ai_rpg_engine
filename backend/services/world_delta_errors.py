@@ -1,5 +1,13 @@
 """Shared structural error with explicit repair eligibility; no catch-all salvage."""
 
+
+def requires_narrative_reauthor(diagnostics):
+    """Sticky rejection of this authored text across recovery attempts."""
+    # Older #232 jobs predate the shared action marker. Keep their rejection sticky
+    # without rewriting persisted diagnostics or allowing extraction-only recovery.
+    return any(row.get('action') == 'reauthor_narrative'
+               or row.get('code') == 'narrative_agency_conflict' for row in diagnostics)
+
 class StructuralDeltaError(ValueError):
     """No safe partial application is known."""
     recoverable = False

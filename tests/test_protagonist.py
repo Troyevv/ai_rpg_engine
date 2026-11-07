@@ -61,7 +61,7 @@ def test_infant_observation_and_incapacity_do_not_require_succession():
 
 def test_risk_seam_blocks_autonomous_death_but_allows_explicit_death_and_succession():
     s=snapshot();text='Персонаж погиб.'
-    raw=dict(final_scene=dict(location_id='home',present_character_ids=['a','b']),
+    raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id='home',present_character_ids=['a','b']),
         life_changes=[dict(id='a',life_status='dead',assertion='established',evidence=text)])
     from backend.services.world_delta_errors import StructuralDeltaError
     with pytest.raises(StructuralDeltaError): StateResolver(s['world_state'],text,'').resolve(raw)
@@ -162,7 +162,7 @@ def test_atomic_repository_preview_retry_failure_reload_and_rollback(tmp_path):
     reloaded=Repository(repo.path);assert reloaded.get_snapshot(sid)==after
     from runtime_v3_fixture import execute
     from test_narrative_test_world import CONFIG
-    camera=after['world_state']['camera'];raw=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids']))
+    camera=after['world_state']['camera'];raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids']))
     job=repo.begin_job(sid,'Смотрю вокруг.','turn',CONFIG);execute(repo,job,raw,'У двери тихо.')
     assert repo.get_job(job)['status']=='saved',repo.get_job(job)['error']
     repo.rollback_last(sid)
@@ -194,7 +194,7 @@ def test_shared_qa_checkpoints_child_and_born_in_world_observation(tmp_path,chec
         assert world['characters'][cid]['birth_provenance']
         assert world['camera']['controlled_actor_id'] is None
         action='';config=dict(CONFIG,time_skip={'duration':10,'reason':'Наблюдение за окружающими'})
-    camera=world['camera'];raw=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=10 if checkpoint.endswith('infant') else 1))
+    camera=world['camera'];raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=10 if checkpoint.endswith('infant') else 1))
     jid=repo.begin_job(sid,action,'turn',config);execute(repo,jid,raw,'В доме спокойно. Вера разговаривает с Кириллом.')
     assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
     reloaded=Repository(repo.path).get_snapshot(sid)
@@ -240,7 +240,7 @@ def test_branch_and_regeneration_use_original_control_context(tmp_path):
     repo=Repository(tmp_path/'lineage.sqlite');result=load_fixture(repo);sid=result['save'];ordinary_job(repo,sid,'start')
     s=repo.transition_protagonist(sid,repo.get_save(sid)['revision'],'first-successor','permanent','qa_vera')
     def play(kind='turn'):
-        camera=s['world_state']['camera'];raw=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids']))
+        camera=s['world_state']['camera'];raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids']))
         jid=repo.begin_job(sid,'Слушаю.' if kind=='turn' else '',kind,CONFIG);execute(repo,jid,raw,'В доме тихо.')
         assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']
         return jid

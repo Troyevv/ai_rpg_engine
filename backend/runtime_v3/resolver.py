@@ -32,11 +32,12 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, require_elapsed=False, relationship_query=None, relationship_receipts=None, remote_semantic_sources=None, call_sources=None, letter_sources=None):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, require_elapsed=False, relationship_query=None, relationship_receipts=None, remote_semantic_sources=None, call_sources=None, letter_sources=None, require_player_agency=False):
         if mode not in ("turn", "background"):
             raise ValueError("Неизвестный режим StateResolver.")
         from backend.services.letter_sources import parse, enabled
         sources = letter_sources if letter_sources is not None else parse(narrative) if enabled(before) else []
+        self.require_player_agency = require_player_agency
         self.letter_sources = {a["id"]: a for a in sources}
         self.call_sources = call_sources or {}
         self.remote_semantic_sources = remote_semantic_sources or {}
@@ -140,6 +141,8 @@ class StateResolver:
     def resolve(self, payload):
         raw = deepcopy(payload) if isinstance(payload, RawTurnResult) else RawTurnResult.parse(payload)
         self.warnings.extend(raw.warnings)
+        from backend.runtime_v3.player_actions import review
+        player_actions = review(self, raw)
         s = self.state
         from backend.runtime_v3.pacing import validate_risk
         validate_risk(self, raw)
@@ -380,15 +383,8 @@ class StateResolver:
                     self.warn('events', i, 'Автор должен быть участником сообщения.', 'author_id', eid,
                               'event_author_invalid')
                     self.warnings[-1]['path'] = f'events[{i}].author_id'
-            # Explicit semantic classification plus independently owned input;
-            # never turn a Narrative feelings assertion into interaction evidence.
-            player_quote = item.get('player_evidence')
-            if (self.mode == 'turn' and self.protected_actor_id in lists['participants']
-                    and item.get('player_assertion') == 'completed_interaction'
-                    and isinstance(player_quote, str) and normalized(player_quote)
-                    and normalized(player_quote) in normalized(self.player_input)):
-                event['player_interaction'] = True
-                event['player_evidence'] = player_quote
+            from backend.runtime_v3.player_actions import event_provenance
+            event_provenance(self, item, event, i, player_actions)
             event_indices[eid] = i
             events[eid] = event
             self.history.events.append(event)
@@ -405,6 +401,8 @@ class StateResolver:
             for eid, event in events.items()
         }
         from backend.runtime_v3.knowledge import apply_knowledge
+        from backend.runtime_v3.reproduction import validate_birth_knowledge
+        validate_birth_knowledge(self, raw, events)
         apply_knowledge(self, raw, events)
         from backend.runtime_v3.secrets import apply_disclosures
         apply_disclosures(self, raw)
@@ -554,6 +552,8 @@ class StateResolver:
         advance_remote(s, self.history)
         from backend.runtime_v3.call_continuity import project_physical
         project_physical(self, raw)
+        from backend.runtime_v3.player_actions import validate_targets
+        validate_targets(self, player_actions)
         upserts = {section:{key:deepcopy(value) for key,value in s[section].items() if value != self.before[section].get(key)}
             for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions','residences','roles','organizations','reproductive_events','pregnancies','naming_decisions','possessions','contacts','conversations','remote_events')}
         digest = sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest()

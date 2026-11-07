@@ -108,7 +108,8 @@ def test_continuity_is_protected_when_target_exceeded_and_extraction_is_isolated
     # soft target may be exceeded; the unchanged model hard limit still applies.
     # #74 adds the fixed evidence-bound appearance schema (no history/portrait bytes).
     # #68 adds bounded risk/development schemas and policy; the hard limit remains unchanged.
-    assert estimate(extraction) < 24000
+    # #232 adds fixed mandatory action provenance; no extra scene/history retrieval.
+    assert estimate(extraction) < 25000
     assert estimate(extraction) < 32768 - 4096 - 256
     assert extraction.selection['target_exceeded'] == (estimate(extraction) > 18000)
     with pytest.raises(ValueError, match='Критические данные'):

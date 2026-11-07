@@ -51,9 +51,9 @@ def simulate(before_snapshot, snapshot, history_batch, context_length, config, g
                 fatal('background меняет управляемого персонажа','background_agency_invalid',repairable=True)
             break
         except StructuralDeltaError as exc:
-            if attempt==1 or not exc.repairable:raise
-            diagnostic = exc.diagnostic('world_simulation_repair')
+            diagnostic = exc.diagnostic('world_simulation_repair' if attempt == 0 and exc.repairable else 'validation_failed')
             on_repair(diagnostic)
+            if attempt==1 or not exc.repairable:raise
             feedback = repair_feedback(diagnostic, payload, camera['world_state'])
     result=deepcopy(snapshot)
     result['world_state']=resolved.state

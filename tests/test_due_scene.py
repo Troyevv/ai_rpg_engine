@@ -1,4 +1,5 @@
 """Offline Stage C Family replay through the recorded prompts and the real job transaction."""
+from pregnancy_boundary_fixture import undisclosed_sex
 import json
 from unittest.mock import patch
 
@@ -50,7 +51,7 @@ def provider(**kwargs):
     births = state.get('pregnancies', [])
     # An unrelated 1-minute map scene reproduces the original failed delta.
     minutes = int(narrative == NARRATIVE and block(messages, 'Текущий ввод')['kind'] != 'background')
-    raw = dict(final_scene=dict(location_id=camera['location_id'],
+    raw = dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],
         present_character_ids=camera['present_character_ids'], elapsed_minutes=minutes))
     if narrative in (SIGNS, REMOTE_SIGNS, DELIVERY):
         mother = next(p for p in births if p['gestational_actor_id'] in camera['present_character_ids'])
@@ -59,7 +60,7 @@ def provider(**kwargs):
             participants=[mother['gestational_actor_id']], witnesses=witnesses)]
         if narrative == DELIVERY:
             raw['births'] = [dict(pregnancy_id=mother['id'], source_event_id='observed',
-                assertion='birth_completed', location_id=camera['location_id'], evidence=narrative)]
+                assertion='birth_completed', sex_observations=undisclosed_sex(mother), location_id=camera['location_id'], evidence=narrative)]
     yield json.dumps(raw, ensure_ascii=False)
 
 
@@ -101,7 +102,10 @@ def test_stage_c_from_lta_to_next_turn(tmp_path, remote):
         observed, calls = job(repo,sid,'turn',HELP)
         assert [c['stage'] for c in calls] == ['narrative', 'extraction']
         assert calls[0]['response_text'] == SIGNS
-        assert p['id'] not in str(calls[0]['messages'])
+        # #231 supplies a scoped author constraint, never a character fact.
+        author = block(calls[0]['messages'], 'Birth authoring constraints / GM-only')
+        assert author['pregnancies'][0]['pregnancy_id'] == p['id']
+        assert p['id'] not in str(block(calls[0]['messages'], 'Знания POV'))
         assert 'At the due birth boundary' in str(calls[1]['messages'])
         assert observed['world_state']['knowledge'] == state['knowledge']
         assert observed['world_state']['pregnancies'][p['id']]['status'] == 'due'
@@ -203,10 +207,13 @@ def test_observation_uses_pov_presence_capability_and_separate_facts(actor,pov,p
     assert block(messages, 'Director / GM-only')['immediate_scene']['observable_actor_ids'] == subjects
     projected = block(messages, 'Текущее состояние / GM-only').get('pregnancies', [])
     assert bool(projected) == known
-    assert all(ch['id'] not in str(messages) for ch in p['children'])
+    public_blocks = [m for m in messages if not m['content'].startswith('Birth authoring constraints / GM-only')]
+    assert all(ch['id'] not in str(public_blocks) for ch in p['children'])
+    author = [m for m in messages if m['content'].startswith('Birth authoring constraints / GM-only')]
+    assert bool(author) == bool(subjects)
     assert 'pregnancy_due' not in str(messages)
     if not known:
-        assert p['id'] not in str(messages)
+        assert p['id'] not in str(public_blocks)
 
 
 @pytest.mark.parametrize('elapsed', [0, 1])

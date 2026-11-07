@@ -1,6 +1,7 @@
 """#43 canonical interval regressions; providers are deterministic fakes only."""
 
 from copy import deepcopy
+from pregnancy_boundary_fixture import undisclosed_sex
 import json
 import pytest
 from hypothesis import given, strategies as st
@@ -363,6 +364,7 @@ def test_accepted_birth_then_child_ages_without_adult_personality():
                 pregnancy_id=p["id"],
                 source_event_id="birth",
                 assertion="birth_completed",
+                sex_observations=undisclosed_sex(p),
                 location_id="home",
                 evidence=text,
             )

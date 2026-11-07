@@ -22,7 +22,7 @@ class ContinuityBeat(StrictModel):
     status: Literal['open', 'resolved', 'rejected']
     evidence: str
     decision_actor_id: str | None = None
-    player_evidence: str = ''
+    player_evidence: str = Field(default='', description='EACH EXTERNAL decision needs its own full input quote.')
 
 
 class SceneTransition(StrictModel):
@@ -209,10 +209,26 @@ def validate_compression(resolver, scene, elapsed):
         routine=claim.kind, evidence=claim.evidence, turn_id=resolver.turn_id))
 
 
+def player_targets_match(resolver, claim, event):
+    """A witness in a conversation cannot become the player's chosen addressee.
+
+    New Events carry the reviewed action. Older canonical records are not rewritten;
+    their existing provenance checks remain in force. NPC-led proposals reverse the
+    initiator/recipient roles, so compare the counterparties of the player response.
+    """
+    action = event.get('player_action')
+    if action is None:
+        return True
+    counterparties = {claim.actor_id, *claim.target_ids} - {resolver.protected_actor_id}
+    return counterparties <= set(action['narrative_target_ids'])
+
+
 def dialogue_evidence_matches(resolver, claim, event):
     """A completed player interaction proves dialogue, never a separate decision."""
     from backend.runtime_v3.resolver import normalized
 
+    if not player_targets_match(resolver, claim, event):
+        return False
     if event['medium'] == 'message' and event.get('author_id') != claim.actor_id:
         return False
     action = event.get('scene_action')
@@ -252,6 +268,51 @@ def npc_decision_matches(claim, event, actor):
     return claim.status == 'resolved' and (claim.kind, action['phase']) in {
         ('proposal', 'accept'), ('question', 'answer'),
     }
+
+
+def validate_player_decision(resolver, claim, event, index):
+    """Bind Extraction's decision classification to one accepted input/Event.
+
+    Quotation proves provenance, not semantics. Extraction owns the meaning of
+    kind/status and must preserve the whole choice (including negation). Never
+    borrow a quote from another Event or fill a missing quote in Runtime.
+    """
+    from backend.runtime_v3.resolver import normalized
+
+    def invalid(field, reason):
+        fatal(reason, 'continuity_external_decision', repairable=True,
+              section='continuity_beats', index=index, field=field, entity=claim.source_event_id)
+
+    quote = normalized(claim.player_evidence)
+    if not quote or quote not in normalized(resolver.player_input):
+        invalid('player_evidence', 'Укажите собственную полную цитату текущего player_input, '
+                'подтверждающую именно это решение. Не копируйте чужое действие/согласие; '
+                'если решения нет, не утверждайте его при повторной Extraction.')
+    external = resolver.protected_actor_id
+    # Preserve the older quote-only guard on optional opportunities; the stricter
+    # Event/decider contract applies to decisions, not every annotation kind.
+    if claim.kind != 'decision' and claim.decision_actor_id != external:
+        return
+    if claim.decision_actor_id != external:
+        invalid('decision_actor_id', 'Укажите фактического автора решения; участие игрока не доказывает решение NPC.')
+    actors = {claim.actor_id, *claim.target_ids, external}
+    if not event or not actors <= set(event['participants']):
+        invalid('source_event_id', 'Решение должно ссылаться на принятый Event этого хода с теми же участниками.')
+    if (not event.get('player_interaction') or quote != normalized(event.get('player_evidence', ''))
+            or event['medium'] == 'message' and event.get('author_id') != external):
+        invalid('player_evidence', 'Цитата решения должна совпадать с player_evidence связанного '
+                'completed_interaction Event. Разные действия оформляются отдельными Events/beats.')
+    if not player_targets_match(resolver, claim, event):
+        invalid('target_ids', 'Адресат решения должен соответствовать проверенному действию Event; '
+                'присутствие другого участника разговора не делает его адресатом.')
+    # Descriptive evidence may quote just this choice inside a longer conversation.
+    # Comparing prose (even by substring) proves neither its author nor its meaning.
+    # The accepted interaction and its complete player quote above own provenance.
+    if not normalized(claim.evidence) or not normalized(event['evidence']):
+        invalid('evidence', 'Укажите evidence решения и связанного принятого Event.')
+    if claim.status == 'open':
+        invalid('status', 'Нерешённый вопрос/предложение не является завершённым решением игрока. '
+                'Сохраните ожидание ответа без выдуманного decision_actor_id.')
 
 
 def actor_knows_dialogue_basis(state, rows, key, actor):
@@ -322,19 +383,26 @@ def apply(resolver, raw, events):
     rows = bases(state)
     prior = {beat_key(r): r for r in (resolver.continuity_decision or {}).get('recent_beats', [])}
     external = resolver.protected_actor_id
+    accepted_beats = {}
     for index, row in enumerate(raw.records['continuity_beats']):
         try: claim = ContinuityBeat.model_validate(row)
         except (ValueError, TypeError):
+            if (isinstance(row, dict) and external is not None
+                    and (row.get('decision_actor_id') == external
+                         or row.get('kind') == 'decision' and row.get('actor_id') == external)):
+                fatal('Повреждена аннотация действия игрока; проверьте типы и источник решения.',
+                      'continuity_external_decision', repairable=resolver.mode != 'background',
+                      section='continuity_beats', index=index)
             resolver.warn('continuity_beats', index, 'Повреждена аннотация.', code='continuity_beat_invalid'); continue
         player_owned = external is not None and external in (claim.actor_id, claim.decision_actor_id)
         player_dialogue = (claim.actor_id == external and claim.decision_actor_id != external
                            and claim.kind in ('question', 'proposal', 'information'))
-        if player_owned and (resolver.mode == 'background' or not player_dialogue):
-            from backend.runtime_v3.resolver import normalized
-            quote = normalized(claim.player_evidence)
-            if resolver.mode == 'background' or not quote or quote not in normalized(resolver.player_input):
-                reject('continuity_external_decision', section='continuity_beats', index=index, entity=claim.source_event_id)
         event = events.get(claim.source_event_id)
+        if player_owned and (resolver.mode == 'background' or not player_dialogue):
+            if resolver.mode == 'background':
+                reject('continuity_external_decision', section='continuity_beats', index=index,
+                       field='player_evidence', entity=claim.source_event_id)
+            validate_player_decision(resolver, claim, event, index)
         actors = {claim.actor_id, *claim.target_ids}
         if claim.decision_actor_id is not None:
             actors.add(claim.decision_actor_id)
@@ -367,13 +435,24 @@ def apply(resolver, raw, events):
                  for key in claim.basis_ids):
             reject('continuity_unknown_fact')
         value = claim.model_dump()
-        if npc_decides:
+        if npc_decides or external is not None and decider == external:
+            # Same source ownership as NPC receipts: annotation prose cannot add
+            # a foreign quotation to History. Keep the separately validated,
+            # mandatory player_evidence; never synthesize or replace it here.
             value['evidence'] = event['evidence']
         value.update(source_event_id=event['id'], basis_digest=fingerprint(rows, claim.basis_ids))
+        key = (event['id'], beat_key(value), value['decision_actor_id'])
+        if key in accepted_beats:
+            if accepted_beats[key] != value:
+                fatal('Противоречащие аннотации одного решения в одном Event.',
+                      'continuity_beat_conflict', repairable=True, section='continuity_beats', index=index)
+            resolver.warn('continuity_beats', index, 'Повторная аннотация этого Event.', code='continuity_duplicate')
+            continue
         old = prior.get(beat_key(value))
         if old and old['basis_digest'] == value['basis_digest'] and old['status'] in ('resolved', 'rejected') and claim.status == 'open':
             resolver.warn('continuity_beats', index, 'Повторная аннотация.', code='continuity_repeated_beat'); continue
         event.setdefault('continuity', []).append(value)
+        accepted_beats[key] = value
         prior[beat_key(value)] = value
 
 

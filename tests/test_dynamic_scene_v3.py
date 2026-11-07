@@ -113,6 +113,7 @@ def test_real_engine_repairs_once_with_original_and_full_context(db, repair_succ
     before = repo.get_snapshot(sid)
     camera = before['world_state']['camera']
     bad = raw(camera['location_id'], camera['present_character_ids'])
+    bad['player_agency'] = dict(status='preserved', actions=[])
     bad['movements'] = [dict(actor_id=camera['controlled_actor_id'],
         to_location_id='nail', evidence=NARRATIVE)]
     fixed = deepcopy(bad)
@@ -125,8 +126,11 @@ def test_real_engine_repairs_once_with_original_and_full_context(db, repair_succ
     feedback = json.loads(system.split('Исправь структурную ошибку, верни полный JSON:\n', 1)[1])
     assert feedback['original_extraction'] == bad
     assert feedback['previous_camera'] == camera
-    assert feedback['known_locations'] == before['world_state']['locations']
-    assert feedback['diagnostic']['repair_error_code'] == 'scene_movement_conflict'
+    assert set(feedback['known_locations']) == set(before['world_state']['locations'])
+    for lid, location in feedback['known_locations'].items():
+        assert location == {k: v for k, v in before['world_state']['locations'][lid].items()
+                            if k in ('id', 'name', 'aliases', 'parent_id', 'kind')}
+    assert feedback['diagnostic']['code'] == 'scene_movement_conflict'
     assert any(NARRATIVE in m['content'] for m in messages if m['content'].startswith('completed_narrative'))
     if repair_succeeds:
         assert repo.get_job(job)['status'] == 'saved', repo.get_job(job)['error']
