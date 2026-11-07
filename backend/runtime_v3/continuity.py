@@ -286,8 +286,11 @@ def validate_player_decision(resolver, claim, event, index):
             or event['medium'] == 'message' and event.get('author_id') != external):
         invalid('player_evidence', 'Цитата решения должна совпадать с player_evidence связанного '
                 'completed_interaction Event. Разные действия оформляются отдельными Events/beats.')
-    if not normalized(claim.evidence) or normalized(claim.evidence) != normalized(event['evidence']):
-        invalid('evidence', 'Укажите полное evidence именно source_event_id; чужая реплика не подтверждает решение.')
+    # Descriptive evidence may quote just this choice inside a longer conversation.
+    # Comparing prose (even by substring) proves neither its author nor its meaning.
+    # The accepted interaction and its complete player quote above own provenance.
+    if not normalized(claim.evidence) or not normalized(event['evidence']):
+        invalid('evidence', 'Укажите evidence решения и связанного принятого Event.')
     if claim.status == 'open':
         invalid('status', 'Нерешённый вопрос/предложение не является завершённым решением игрока. '
                 'Сохраните ожидание ответа без выдуманного decision_actor_id.')
@@ -413,7 +416,10 @@ def apply(resolver, raw, events):
                  for key in claim.basis_ids):
             reject('continuity_unknown_fact')
         value = claim.model_dump()
-        if npc_decides:
+        if npc_decides or external is not None and decider == external:
+            # Same source ownership as NPC receipts: annotation prose cannot add
+            # a foreign quotation to History. Keep the separately validated,
+            # mandatory player_evidence; never synthesize or replace it here.
             value['evidence'] = event['evidence']
         value.update(source_event_id=event['id'], basis_digest=fingerprint(rows, claim.basis_ids))
         key = (event['id'], beat_key(value), value['decision_actor_id'])

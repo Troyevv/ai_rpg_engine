@@ -46,13 +46,23 @@ choice UI or mutate player state. EXTERNAL decisions in receipts require player 
 
 Every player decision beat owns `player_evidence` and an explicit
 `decision_actor_id`, even if its Event already contains the quote. Extraction
-uses the complete choice, preserving negation/refusal/deferment, in both records;
-distinct decisions use distinct Events. The linked accepted Event must attest to
-the same `completed_interaction`, participants and full `evidence`. A message must
+uses the complete choice, preserving negation/refusal/deferment, in both records.
+The linked accepted Event must attest to the same `completed_interaction`,
+participants and full `player_evidence`. A message must
 be authored by the controlled actor. Questions, intentions and pending offers
 are not completed decisions. A deliberate choice to defer is a decision to defer,
 never consent to perform the proposed action. NPC decisions retain their existing
 scene-action provenance and do not require a player's quote.
+
+Descriptive beat `evidence` may quote one decision within a longer conversation or
+describe it with different words. Neither equality nor substring matching of that
+prose proves agency. As for NPC decisions, the accepted Event owns the persisted
+descriptive evidence; the beat's mandatory, validated `player_evidence` remains
+separate. Runtime never uses annotation prose to authorize a decision or stores a
+foreign annotation quote as new canonical evidence. Multiple receipts for distinct
+bases can share one accepted interaction and its full player choice quote; unrelated
+player actions still need their own Event provenance. The existing basis identity
+and duplicate/conflict rules are unchanged.
 
 `continuity_external_decision` on a foreground Extraction now reports the exact
 field path and permits the existing single bounded Extraction repair. Background
@@ -72,6 +82,12 @@ No paid provider was used. This proves protocol/transaction behavior, not the
 real model's semantic accuracy: matching copied quotes alone cannot prove the
 truth of an incorrectly classified decision. Semantic classification remains
 Extraction's responsibility, alongside the action review in #232.
+
+PR #236 regression replay at `6abed27`: narrow consent/refusal/deferment evidence
+inside a broader Event was rejected at `continuity_beats[0].evidence` after three
+scripted calls (Narrative, Extraction, one repair), with no commit. After removing
+that prose equality check, each saves with two calls and survives SQLite reload.
+Missing player proof still requires repair; a repeated failure stays atomic.
 
 HistorySelector gives bounded, decaying weight to shared experiences among current
 participants. POV visibility still filters events. NPC fact-based claims require their

@@ -69,6 +69,9 @@ class Repository(PresentationStorage, DraftStorage, Storage):
     def public_job(job):
         from backend.runtime_v3.surfaces import job_route
         job = dict(job, presentation=job_route(job))
+        from backend.services.world_delta_errors import requires_narrative_reauthor
+        job['narrative_reauthor_required'] = requires_narrative_reauthor(
+            json.loads(job.get('repair_diagnostics_json') or '[]'))
         journal = json.loads(job.get('response_journal') or '{}')
         world=journal.get('responses',{}).get('world',{})
         assembly_error=world.get('assembly_error','')

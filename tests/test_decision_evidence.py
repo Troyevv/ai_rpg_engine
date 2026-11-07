@@ -44,6 +44,7 @@ def test_social_missing_beat_quote_repairs_without_reauthoring(tmp_path):
     sid = load_fixture(repo, 'knowledge')['save']
     before = repo.get_snapshot(sid)
     raw = social_turn(before['world_state'])
+    raw['events'][0]['evidence'] = NARRATIVE
     fixed = deepcopy(raw)
     fixed['continuity_beats'][0]['player_evidence'] = ACTION
     job = repo.begin_job(sid, ACTION, 'turn', CONFIG)
@@ -61,6 +62,7 @@ def test_social_missing_beat_quote_repairs_without_reauthoring(tmp_path):
     beat, = event['continuity']
     assert beat['source_event_id'] == event['id']
     assert beat['player_evidence'] == event['player_evidence'] == ACTION
+    assert beat['evidence'] == event['evidence'] == NARRATIVE
     assert result['narrative'] == NARRATIVE
 
 
@@ -76,6 +78,35 @@ def supported(state, quote=ACTION):
     raw['continuity_beats'][0].update(player_evidence=quote, evidence=quote)
     raw['events'][0]['evidence'] = quote
     return raw
+
+
+@pytest.mark.parametrize('action,status', [
+    ('Я согласен сортировать фотографии по датам.', 'resolved'),
+    ('Я отказываюсь передавать оригинал карты.', 'rejected'),
+    ('Я решил отложить сортировку до завтра.', 'resolved'),
+])
+def test_precise_decision_in_broad_conversation_survives_reload(game, action, status):
+    repo, sid, before = game
+    narrative = ('Вера рассказывает о старых фотографиях и предлагает разобрать папку. '
+                 f'Кирилл отвечает: «{action}» '
+                 'Вера кивает и спрашивает, где оставить пустую коробку.')
+    raw = supported(before['world_state'], action)
+    raw['events'][0].update(text=narrative, evidence=narrative)
+    raw['continuity_beats'][0]['status'] = status
+    job = repo.begin_job(sid, action, 'turn', CONFIG)
+    calls = execute(repo, job, raw, narrative)
+    result = repo.get_job(job)
+    assert result['status'] == 'saved', result['repair_diagnostics_json']
+    assert len(calls) == 2
+    assert action in str(calls[0]['messages'])
+    assert narrative in str(calls[1]['messages'])
+    repo = Repository(repo.path)
+    event, = events(repo, repo.get_snapshot(sid))
+    beat, = event['continuity']
+    assert beat['source_event_id'] == event['id']
+    assert beat['player_evidence'] == event['player_evidence'] == action
+    assert beat['status'] == status
+    assert beat['evidence'] == event['evidence'] == narrative
 
 
 @pytest.mark.parametrize('action,status', [
@@ -105,7 +136,7 @@ def test_explicit_decision_is_saved_without_extra_call(game, action, status):
     ({'decision_actor_id': 'qa_vera'}, 'decision_actor_id'),
     ({'decision_actor_id': None}, 'decision_actor_id'),
     ({'actor_id': 'qa_oleg'}, 'source_event_id'),
-    ({'evidence': 'Я согласен'}, 'evidence'),
+    ({'evidence': ''}, 'evidence'),
     ({'status': 'open'}, 'status'),
 ])
 def test_unconfirmed_decision_is_atomic_after_one_repair(game, change, path):
@@ -174,13 +205,13 @@ def test_npc_proposal_or_independent_decision_needs_no_player_quote(game, decisi
     raw['events'][0].pop('player_assertion')
     raw['events'][0].pop('player_evidence')
     text = 'Вера решила убрать свои фотографии.' if decision else 'Вера предлагает разобрать фотографии.'
-    raw['events'][0].update(text=text, evidence=text)
+    raw['events'][0].update(text=text, evidence='Разговор о фотографиях продолжается. ' + text)
     raw['continuity_beats'][0].update(actor_id='qa_vera', target_ids=[ACTOR_ID], evidence=text,
         kind='decision' if decision else 'proposal', status='resolved' if decision else 'open',
         decision_actor_id='qa_vera' if decision else None)
     if decision:
         raw['scene_actions'] = [dict(source_event_id=EVENT, actor_id='qa_vera', target_ids=[ACTOR_ID],
-                                    phase='end', modality='other', evidence=text)]
+                                    phase='end', modality='other', evidence=raw['events'][0]['evidence'])]
     job = repo.begin_job(sid, 'Слушаю.', 'turn', CONFIG)
     assert len(execute(repo, job, raw, text)) == 2
     assert repo.get_job(job)['status'] == 'saved'
@@ -213,12 +244,86 @@ def test_multiple_beats_validate_individually_and_commit_atomically(game, bad_se
 def test_duplicate_beats_are_not_committed_twice(game):
     repo, sid, before = game
     raw = supported(before['world_state'])
-    raw['continuity_beats'] *= 2
+    raw['continuity_beats'].append(dict(raw['continuity_beats'][0],
+        evidence='Кирилл соглашается сортировать фотографии, оставив карту на месте.'))
     job = repo.begin_job(sid, ACTION, 'turn', CONFIG)
     assert len(execute(repo, job, raw, NARRATIVE)) == 2
     assert repo.get_job(job)['status'] == 'saved'
     event, = events(repo, repo.get_snapshot(sid))
     assert len(event['continuity']) == 1
+
+
+@pytest.mark.parametrize('mode', ['valid', 'repair', 'repeated_error'])
+def test_independent_decisions_share_conversation_but_keep_their_bases(game, mode):
+    from backend.runtime_v3.continuity import recorded
+    from context_builder import build_context
+
+    repo, sid, before = game
+    first = 'Я согласен сортировать фотографии.'
+    second = 'А поход в библиотеку я решил отложить до завтра.'
+    action = first + ' ' + second
+    narrative = f'Вера предлагает план на день. Кирилл отвечает: «{action}» Вера убирает сумку.'
+    raw = supported(before['world_state'], action)
+    raw['events'][0].update(text=narrative, evidence=narrative)
+    raw['continuity_beats'][0]['evidence'] = first
+    raw['continuity_beats'].append(dict(raw['continuity_beats'][0],
+        basis_ids=['qa_library_open'], evidence=second))
+    fixed = deepcopy(raw)
+    if mode != 'valid':
+        raw['continuity_beats'][1]['player_evidence'] = ''
+    job = repo.begin_job(sid, action, 'turn', CONFIG)
+    calls = execute(repo, job, raw, narrative, repaired=fixed if mode == 'repair' else None)
+    assert len(calls) == (2 if mode == 'valid' else 3)
+    if mode == 'repeated_error':
+        assert repo.get_job(job)['status'] == 'error'
+        assert Repository(repo.path).get_snapshot(sid) == before
+        return
+    assert repo.get_job(job)['status'] == 'saved'
+    if mode == 'repair':
+        diagnostic, = json.loads(repo.get_job(job)['repair_diagnostics_json'])
+        assert diagnostic['path'] == 'continuity_beats[1].player_evidence'
+        assert narrative in str(calls[2]['messages'])
+    repo = Repository(repo.path)
+    snapshot = repo.get_snapshot(sid)
+    event, = events(repo, snapshot)
+    assert len(event['continuity']) == 2
+    assert {tuple(b['basis_ids']) for b in event['continuity']} == {('qa_map',), ('qa_library_open',)}
+    assert all(b['source_event_id'] == event['id'] and b['player_evidence'] == action
+               for b in event['continuity'])
+    with repo.connect() as db:
+        history, _ = read_history(db, snapshot['history_head'])
+    messages = build_context(snapshot, repo.list_turns(sid), 'Продолжаем разговор.',
+                             'turn', 32768, 2000, world_history=history)
+    projected = [b for b in recorded(messages)['recent_beats'] if b['source_event_id'] == event['id']]
+    assert len(projected) == 2
+
+
+@pytest.mark.parametrize('quote', ['', 'Да, передаю оригинал карты.'])
+def test_npc_quote_in_conversation_cannot_authorize_player_choice(game, quote):
+    repo, sid, before = game
+    action = 'Вера, где лежит оригинал карты?'
+    narrative = 'Вера отвечает: «Да, передаю оригинал карты». Кирилл ждёт.'
+    raw = supported(before['world_state'], action)
+    raw['events'][0].update(text=narrative, evidence=narrative)
+    raw['continuity_beats'][0].update(evidence='Да, передаю оригинал карты.', player_evidence=quote)
+    job = repo.begin_job(sid, action, 'turn', CONFIG)
+    assert len(execute(repo, job, raw, narrative)) == 3
+    assert repo.get_job(job)['status'] == 'error'
+    assert repo.get_snapshot(sid) == before
+    assert json.loads(repo.get_job(job)['repair_diagnostics_json'])[0]['path'] == 'continuity_beats[0].player_evidence'
+
+
+def test_annotation_prose_cannot_inject_another_quote_into_history(game):
+    repo, sid, before = game
+    raw = supported(before['world_state'])
+    foreign = 'Чужая реплика, не подтверждающая действия Кирилла.'
+    raw['continuity_beats'][0]['evidence'] = foreign
+    job = repo.begin_job(sid, ACTION, 'turn', CONFIG)
+    assert len(execute(repo, job, raw, NARRATIVE)) == 2
+    assert repo.get_job(job)['status'] == 'saved'
+    event, = events(Repository(repo.path), repo.get_snapshot(sid))
+    assert event['continuity'][0]['evidence'] == event['evidence'] == ACTION
+    assert foreign not in str(event)
 
 
 def test_background_cannot_acquire_decision_from_current_quote(game):
@@ -251,6 +356,7 @@ def test_recovery_reload_regeneration_siblings_and_new_branch(game):
     repo, sid, before = game
     raw = social_turn(before['world_state'])
     fixed = supported(before['world_state'])
+    raw['events'][0]['evidence'] = fixed['events'][0]['evidence'] = NARRATIVE
     job = repo.begin_job(sid, ACTION, 'turn', CONFIG)
     assert len(execute(repo, job, raw, NARRATIVE)) == 3
     assert repo.get_job(job)['status'] == 'error'

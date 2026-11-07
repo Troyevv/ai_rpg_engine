@@ -325,6 +325,25 @@ handles shared established family names only when policy permits. Newborn profil
 stay sparse: no mature goals/values/habits/speech or inherited personality/Knowledge.
 appearance accepts only explicitly quoted text by child ID, never genetic inference.
 """
+
+BIRTH_SEX_CONTRACT = """
+Every BirthClaim MUST include sex_observations: exactly one assessment per canonical
+child_id, including children whose sex was NOT disclosed. narrative_sex is a faithful
+semantic reading of the CURRENT NARRATIVE, NOT a desired delta or a copy of canonical
+sex. Independently set event_sex to what the linked Event text asserts. Do not correct
+the author by silently writing a canonical value in either assessment. Runtime rejects
+contradictory author prose; an Extraction repair cannot rewrite it.
+basis=not_disclosed, narrative_sex=null, event_sex=null, perceived_by=[] when no confirmed
+disclosure occurs (including a player's guess, hope, question or speculation).
+basis=observation only for actual perceived anatomy; perceived_by lists only those who
+perceived it, not all birth witnesses. basis=announcement requires source_actor_id (the
+speaker participating in this Event), source_assertion=direct_observation for explicitly
+established observation by the speaker or prior_knowledge for an already known sex Fact.
+Include evidence of that specific disclosure. A player assumption is never a source.
+Sex Knowledge uses the existing child sex Fact IDs, only for perceived_by. Do not create
+replacement child_sex Facts, change child IDs/sex, infer sex from names or automatically
+grant sex Knowledge at delivery. Runtime binds this assessment to BirthClaim.source_event_id.
+"""
 NARRATIVE_CONTRACT += """
 Intimacy never implies pregnancy, love or relationship changes. No forced fade-to-black
 or time skip. Only consenting adults; preserve EXTERNAL choice. Runtime owns conception,
@@ -457,10 +476,10 @@ invent that response or silently skip hours/days. Detailed Time Skip remains sep
 EXTRACTION_CONTRACT += """
 scene_transitions: THIS Event/actors/threads; refresh situation/state. Meeting end != closure/move.
 Thread reopen: new Event. Completed plans: scheduled_event_changes.
-continuity_beats optional: actor=initiator; kind/basis_ids/status; full Event evidence.
+continuity_beats optional: actor=initiator; kind/basis_ids/status; evidence of THIS beat.
 NPC decider: Event's scene_action toward initiator (accept/answer/refuse); no player quote.
 EXTERNAL dialogue: completed_interaction quote. EACH decision: decision_actor_id + OWN
-player_evidence=Event's full choice quote. Split acts/Events; retain negation/refusal/deferment.
+player_evidence=Event's full choice quote; retain negation/refusal/deferment. Event prose may be broader.
 Questions/offers/intentions != decisions; pending=open/no decider.
 Repair same input/Narrative: no invented choices/borrowed quotes/duplicates.
 Choices: kind/basis_ids, omit resolved/rejected. Compression: evidenced routine, bounded

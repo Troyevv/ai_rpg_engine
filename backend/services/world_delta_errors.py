@@ -1,5 +1,10 @@
 """Shared structural error with explicit repair eligibility; no catch-all salvage."""
 
+
+def requires_narrative_reauthor(diagnostics):
+    """Sticky rejection of this authored text across recovery attempts."""
+    return any(row.get('action') == 'reauthor_narrative' for row in diagnostics)
+
 class StructuralDeltaError(ValueError):
     """No safe partial application is known."""
     recoverable = False
