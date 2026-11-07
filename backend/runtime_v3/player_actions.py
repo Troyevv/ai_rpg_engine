@@ -37,15 +37,11 @@ their chosen targets. NPC initiative is welcome; it never substitutes player age
 '''
 
 EXTRACTION_CONTRACT = '''
-PLAYER ACTION REVIEW: ALL Narrative/input; changed act/target/consent or impossible completion=violated;
-unprovable=uncertain. Never launder/delete/downgrade. NPCs independent.
-Acts: IDs/exact full quotes. Event: initiator actor_id, ONE player_action_id,
-same player_evidence; no mixed/other quotes. Split independent acts into Events.
-Targets: attempted keeps; partial=subset; deferred/not_performed may actual=[]; untargeted=[].
-Event targets=subset actual; union covers actual. completed_interaction needs completed.
-Completed contact needs presence/call/bound delivery, marker or not; no reply needed.
-reference=noncontact: watch Vera=reference; ask Vera=interaction; ask doctor to help Vera targets doctor.
-Silence isn't delivery. Impossible Narrative contact=violated; JSON-only participant error=repair JSON.
+PLAYER ACTION REVIEW: ALL input/Narrative. Changed act/target/consent or impossible completion=violated; unprovable=uncertain. No laundering/deletion/downgrading. NPCs independent.
+Act=ID+exact full quote. Event=initiator actor_id+ONE player_action_id+same player_evidence; no mixed quotes. SEPARATE player-address/NPC-reply Events/actors. Restore address/action/quote/targets; retain NPC reply/fact_ids/ALL acquisitions.
+Targets: attempted=keeps; partial=subset; deferred/not_performed permits actual=[]; untargeted=[]. Event targets subset actual, union=actual. completed_interaction requires completed.
+Contact requires presence/call/bound delivery even without marker; reply optional; silence != delivery.
+reference=watch Vera; interaction=ask Vera; ask doctor about Vera targets doctor. Reference sets match without contact; JSON mismatch=repair; impossible prose contact=violated.
 '''
 
 
@@ -81,8 +77,17 @@ def review(resolver, raw):
         intended, actual = set(action.target_ids), set(action.narrative_target_ids)
         partial_subset = action.outcome == 'partial' and actual <= intended
         deferred = action.outcome in ('deferred', 'not_performed') and not actual
-        if action.meaning != 'preserved' or (actual != intended and not (partial_subset or deferred)):
+        if action.meaning != 'preserved':
             narrative_conflict(**path)
+        if actual != intended and not (partial_subset or deferred):
+            if action.target_mode != 'reference':
+                narrative_conflict(**path)
+            fatal('Extraction пометила смысл как preserved, но target_ids и narrative_target_ids противоречат друг другу. '
+                  'Перечитайте исходный ввод и неизменный Narrative, исправьте классификацию и ID целей вместе. '
+                  'Упоминание/невмешательство использует reference и не требует контакта. '
+                  'Если сама проза изменила выбранное действие или адресата, укажите meaning=changed/status=violated; '
+                  'не подменяйте цели ради сохранения.',
+                  'player_action_targets_inconsistent', repairable=True, **path)
         actions[action.id] = action
     return actions
 
@@ -221,11 +226,16 @@ def validate_completions(resolver, actions, events, indices, written_sources, *,
         if missing and (requires_contact or action.id in covered):
             errors.append(StructuralDeltaError(f'Действие {action.id}: {action.outcome} не подтверждён принятыми Events для адресатов: '
                   + ', '.join(sorted(missing)) + '. '
-                  'Не удаляйте Event для обхода проверки; классифицируйте исход по неизменному Narrative. '
+                  'Если Narrative подтверждает обращение игрока, добавьте отдельный Event этого обращения: '
+                  f'actor_id={resolver.protected_actor_id}, player_action_id={action.id}, '
+                  f'player_evidence={action.player_evidence!r}, target_ids — фактически достигнутые адресаты. '
+                  'Сохраните отдельный Event ответа NPC с его настоящим actor_id; не превращайте ответ NPC в действие игрока. '
+                  'Ответ не обязателен для доставленного обращения. Не удаляйте Event для обхода проверки; классифицируйте исход по неизменному Narrative. '
                   'Пассивное наблюдение/упоминание использует target_mode=reference; обращение требует interaction. '
                   'Не создавайте фиктивный контакт для наблюдения.',
                   'player_action_completion_invalid' if action.outcome == 'completed' else 'player_action_event_mismatch',
                   repairable=True, section='player_agency',
-                  path=f'player_agency.actions[{i}].outcome', source_ids=[action.id, *sorted(missing)]))
+                  path=f'player_agency.actions[{i}].outcome', reason='missing_player_action_event',
+                  source_ids=[action.id, *sorted(missing)]))
     if errors:
         raise StructuralDeltaError.combine(errors)

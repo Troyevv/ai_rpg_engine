@@ -1,4 +1,5 @@
 """One reviewed action can be witnessed by several independently valid Events."""
+from runtime_v3_fixture import arrival_sources
 from copy import deepcopy
 import json
 from unittest.mock import patch
@@ -87,6 +88,7 @@ def test_only_valid_event_targets_cover_an_action_atomically(crisis, fault):
     raw['facts'] = [dict(id='group-news', text='Нина принесла документы.', visibility='secret')]
     raw['events'][0].update(fact_ids=['group-news'], witnesses=[NINA, MARINA])
     raw['knowledge_gained'] = [dict(actor_id=MARINA, fact_id='group-news', source_event_id='part-0')]
+    arrival_sources(raw)
     job, calls = play(crisis, [raw, raw], quote, narrative)
     assert job['status'] == 'error' and len(calls) == 3
     fresh = Repository(repo.path)
@@ -211,12 +213,13 @@ def test_group_uses_each_events_own_physical_or_remote_delivery(api, channel, va
         if valid:
             raw['remote_events'] = [dict(sender_id=actor, recipient_ids=[VERA], channel='TEXT_MESSAGE',
                 existing_event_id=sent['id'], source_event_id=remote['id'])]
+    arrival_sources(raw)
     job, calls = play((client, repo, sid), [raw, raw], quote, 'Марина вошла. Игрок задал ей вопрос лично, а Вере по связи.')
     assert job['status'] == ('saved' if valid else 'error'), job.get('error')
     assert len(calls) == (2 if valid else 3) + (channel == 'message')
     fresh = Repository(repo.path).get_snapshot(sid)
     if valid:
-        assert [e['target_ids'] for e in saved_events(repo, sid)[-2:]] == [[MARINA], [VERA]]
+        assert [e['target_ids'] for e in saved_events(repo, sid) if e.get('player_action')][-2:] == [[MARINA], [VERA]]
         assert fresh['world_state']['knowledge'] == before['world_state']['knowledge']
     else:
         assert fresh == before
@@ -237,6 +240,7 @@ def test_continuity_uses_own_event_targets_not_group_bystanders(crisis, substitu
     raw['continuity_beats'] = [dict(source_event_id='part-0', actor_id=NINA, decision_actor_id=NINA,
         target_ids=[ASYA if substituted else MARINA], basis_ids=['group-basis'], kind='decision',
         status='resolved', evidence='Нина соглашается.', player_evidence=quote)]
+    arrival_sources(raw)
     job, calls = play(crisis, [raw, raw], quote, 'Нина соглашается помочь Марине, затем Асе.')
     assert job['status'] == ('error' if substituted else 'saved'), job.get('error')
     if substituted:

@@ -365,6 +365,18 @@ def _seed_milestones(repository, save_id):
                 events=[dict(id=event,text=text,participants=list(dict.fromkeys(actors+witnesses)),witnesses=witnesses,
                     fact_ids=[fid],medium='testimony',evidence=text)],
                 knowledge_gained=[dict(actor_id=cid,fact_id=fid,source_event_id=event,evidence=text) for cid in witnesses])
+            arrivals=[]
+            for cid in cast:
+                if snapshot['world_state']['characters'][cid]['location_id'] != camera['location_id']:
+                    arrival_id=f'{event}_arrival_{cid}'
+                    arrival_text=f'{cid} пришёл к участникам сцены перед событием.'
+                    arrivals.append(arrival_text)
+                    raw.setdefault('movements',[]).append(dict(actor_id=cid,
+                        to_location_id=camera['location_id'], assertion='completed_arrival',
+                        source_event_id=arrival_id, evidence=arrival_text))
+                    raw['events'].append(dict(id=arrival_id,text=arrival_text,participants=[cid],
+                        location_id=camera['location_id'],medium='action'))
+            text=' '.join([*arrivals,text])
             for section,rows in changes.items():
                 raw[section]=[dict(row,evidence=text,assertion='established',source_event_id=event,
                     **({'closure_fact_id':fid} if row.get('status')=='closed' else {'fact_id':fid}),
@@ -479,6 +491,12 @@ def _seed_personality(repository, save_id):
             events=[dict(id='drawing',text=text,evidence=text,participants=['qa_asya'],witnesses=['qa_vera'],fact_ids=[])],
             development_evidence=[dict(id='drawing_evidence',actor_id='qa_asya',source_event_id='drawing',
                 meaning='Самостоятельно выбирает и завершает рисование.',kind='behavior',assertion='completed',evidence=text)])
+        if index==0:
+            text='Ася пришла домой к Вере. '+text
+            raw['movements']=[dict(actor_id='qa_asya',to_location_id=camera['location_id'],
+                assertion='completed_arrival',source_event_id='drawing_arrival')]
+            raw['events'].append(dict(id='drawing_arrival',text='Ася пришла домой к Вере.',
+                participants=['qa_asya'],location_id=camera['location_id'],medium='action'))
         if index==2:
             refs=list(snapshot['world_state']['characters']['qa_asya']['personality']['evidence'])+['drawing_evidence']
             raw['personality_deltas']=[dict(actor_id='qa_asya',evidence_ids=refs,

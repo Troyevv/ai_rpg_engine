@@ -1,4 +1,4 @@
-from runtime_v3_fixture import wire
+from runtime_v3_fixture import wire, arrival_sources
 import json
 from copy import deepcopy
 from threading import Event
@@ -15,7 +15,7 @@ from test_engine import db, CONFIG, NARRATIVE, result, run
 from test_runtime import generate
 from test_worlds import summary
 
-SECRET = 'Персонаж 3 передал персонажу 4 тайный ключ от подвала.'
+SECRET = 'Персонаж 3 и персонаж 4 пришли к подвалу. Персонаж 3 передал персонажу 4 тайный ключ от подвала.'
 
 
 def background():
@@ -29,7 +29,11 @@ def background():
 def generate_background(storage,sid,kind='background'):
     job=storage.begin_job(sid,'',kind,CONFIG)
     def stream(**kw):
-        yield json.dumps(wire(canonical(background(),fixture_sequence(storage,job)),SECRET,json.loads(storage.get_job(job)['before_json'])),ensure_ascii=False) if kw.get('response_format') else SECRET
+        if kw.get('response_format'):
+            raw=wire(canonical(background(),fixture_sequence(storage,job)),SECRET,json.loads(storage.get_job(job)['before_json']))
+            raw['movements']=[dict(actor_id=c,to_location_id=raw['final_scene']['location_id']) for c in ('character_3','character_4')]
+            yield json.dumps(arrival_sources(raw),ensure_ascii=False)
+        else:yield SECRET
     with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=stream):
         engine.run_job(storage.path,job,engine.Worker())
     assert storage.get_job(job)['status']=='saved',storage.get_job(job)['error']

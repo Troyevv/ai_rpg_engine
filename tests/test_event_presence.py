@@ -1,4 +1,5 @@
 """Stage C Crisis/010 equivalent replay. Only the two provider stages are scripted."""
+from runtime_v3_fixture import arrival_sources
 from copy import deepcopy
 import json
 from unittest.mock import patch
@@ -246,10 +247,13 @@ def test_crossing_routes_cannot_publish_a_conversation_or_knowledge(crisis, repa
         knowledge_gained=[dict(actor_id=NINA, fact_id=fact, source_event_id='exchange')])
 
     # Same actors, locations, fact and scene; only the supported sequence differs.
+    arrival_sources(raw)
     ordered = deepcopy(raw)
     ordered['movements'][0]['order'] = 1
     ordered['events'][0]['order'] = 2
     ordered['movements'][1]['order'] = 3
+    ordered['events'][1]['order'] = 1
+    ordered['events'][2]['order'] = 3
     job, _ = run(client, sid, [raw, ordered if repair_order else raw], prose, 'turn', action)
     diagnostics = json.loads(repo.get_job(job['id'])['repair_diagnostics_json'])
     assert [d['path'] for d in diagnostics] == ['events[0].participants[1]'] * (1 if repair_order else 2)
@@ -283,6 +287,7 @@ def test_multiple_moves_use_the_same_phase_for_every_role(crisis, meeting_order,
                         for n, a, b in [(5, home, library), (3, library, home), (1, home, library)]]
     if meeting_order is not None:
         raw['events'][0]['order'] = meeting_order
+    arrival_sources(raw)
     if accepted:
         assert StateResolver(s, TEXT, ACTION).resolve(raw).history['events'][0]['location_id'] == library
     else:
@@ -304,6 +309,7 @@ def test_an_unordered_event_still_needs_one_shared_scene(crisis, arrival, depart
     raw['final_scene']['present_character_ids'].append(VERA)
     raw['movements'] = [dict(actor_id=cid, to_location_id=loc, **({'order': n} if n is not None else {}))
                         for cid, loc, n in [(VERA, library, arrival), ('qa_asya', home, departure)]]
+    arrival_sources(raw)
     if accepted:
         assert StateResolver(s, TEXT, ACTION).resolve(raw).history['events'][0]['witnesses'] == raw['events'][0]['witnesses']
     else:
@@ -320,6 +326,7 @@ def test_unknown_destination_does_not_keep_a_witness_for_a_later_arrival(crisis)
     raw['final_scene']['present_character_ids'].append(VERA)
     raw['movements'] = [dict(actor_id=VERA, to_location_id=s['camera']['location_id'], order=1)]
     raw['events'][0]['order'] = 2
+    arrival_sources(raw)
     with pytest.raises(StructuralDeltaError) as exc:
         StateResolver(s, TEXT, ACTION).resolve(raw)
     assert exc.value.diagnostic('extraction')['path'] == 'events[0].witnesses[2]'

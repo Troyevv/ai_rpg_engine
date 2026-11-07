@@ -1,4 +1,5 @@
 """v3 through the real job/requests/commit/variant storage path."""
+from runtime_v3_fixture import arrival_sources
 import json
 from test_api import api
 from unittest.mock import patch
@@ -108,6 +109,7 @@ def test_100_jobs_through_engine_with_pov_background_and_reload(db):
                 knowledge_gained=[dict(actor_id=current,fact_id='f'+str(step),source_event_id='missing' if step%7==0 else 'e',evidence='Разговор продолжается.')],
                 relationship_changes=[dict(source_id='b',target_id='c',context='Разговор',dimensions={'trust':step,'sympathy':10},evidence='Разговор продолжается.')])
             if kind=='turn': raw['movements']=[dict(actor_id=current,to_location_id=raw['final_scene']['location_id'],player_assertion='explicit_choice',player_evidence='Я перехожу в '+raw['final_scene']['location_id']+'.')]
+            arrival_sources(raw)
             yield json.dumps(raw)
         with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=stream):
             engine.run_job(repo.path,job,engine.Worker())

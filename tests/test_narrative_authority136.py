@@ -1,4 +1,5 @@
 """Synthetic Extraction responses; only the provider is substituted in API tests."""
+from runtime_v3_fixture import arrival_sources
 import json
 from copy import deepcopy
 from unittest.mock import patch
@@ -10,19 +11,19 @@ from backend.runtime_v3.raw import RawTurnResult
 from backend.services.world_delta_errors import StructuralDeltaError
 
 
-def test_t45_start_without_movement_reload_next_turn(api):
+def test_t45_missing_arrival_repairs_without_reauthor_and_reloads(api):
     from storage import Storage
     client, app = api
     sid = imported(client); repo = app.state.repository
     before = repo.get_snapshot(sid); calls = []
-    payload = arrival(); payload['movements'] = []
+    payload = arrival(); missing = deepcopy(payload); missing['movements'] = []
     def provider(**kw):
         calls.append(kw)
-        yield json.dumps(payload) if kw.get('response_format') else 'Виктория вошла внутрь и подошла к столу.'
+        yield json.dumps(missing if len(calls)==2 else payload) if kw.get('response_format') else 'Виктория вошла внутрь и подошла к столу.'
     with patch('engine.chat_stream', side_effect=provider):
         job = wait_job(client, submit(client, sid))
         assert job['status'] == 'saved', job.get('error')
-        assert len(calls) == 2
+        assert len(calls) == 3
         after = repo.get_snapshot(sid)
         assert after['world_state']['characters']['viktoria_solovyova']['location_id'] == 'ilya_cabinet'
         assert after['world_state']['knowledge'] == before['world_state']['knowledge']
@@ -69,7 +70,7 @@ def test_t28_optional_wrong_type_is_local(section):
 def test_t34_elapsed_is_explicit_and_typed(api, elapsed):
     client, app = api; sid = imported(client)
     before = app.state.repository.get_snapshot(sid)['world_state']
-    raw = arrival(); raw['movements']=[]
+    raw = arrival()
     if elapsed is None: raw['final_scene'].pop('elapsed_minutes')
     else: raw['final_scene']['elapsed_minutes']=elapsed
     resolver=StateResolver(before, 'Разговор.', '', require_elapsed=True)
@@ -100,8 +101,9 @@ def test_t49_structural_membership_conflict_is_atomic(api,field,value):
 
 def test_t47_history_route_retained_and_unknown_departure_not_invented(api):
     client,app=api;sid=imported(client);before=app.state.repository.get_snapshot(sid)['world_state']
-    raw=arrival();raw['movements']=[]
-    inside=StateResolver(before,'Она уже рядом.','').resolve(raw).state
+    raw=arrival()
+    inside=StateResolver(before,'Она вошла и подошла к столу.','').resolve(raw).state
+    raw['movements']=[]
     raw['final_scene']['present_character_ids']=['ilya']
     raw['events']=[dict(id='talk',text='Разговор закончился.',participants=['ilya','viktoria_solovyova'])]
     out=StateResolver(inside,'Она ответила и ушла.','').resolve(raw)
@@ -109,16 +111,17 @@ def test_t47_history_route_retained_and_unknown_departure_not_invented(api):
     assert out.history['events'][0]['local_id']=='talk'
     assert not out.history['movements']
     raw['movements']=[dict(actor_id='viktoria_solovyova',to_location_id='salon_lak')]
-    moved=StateResolver(inside,'Она ушла в салон.','').resolve(raw)
+    arrival_sources(raw)
+    moved=StateResolver(inside,'Она вернулась в салон.','').resolve(raw)
     assert moved.state['characters']['viktoria_solovyova']['location_id']=='salon_lak'
     assert moved.history['movements'][0]['to_location_id']=='salon_lak'
 
 
 def test_t01_t25_npc_death_without_permit_quote_or_classification(api):
     client,app=api;sid=imported(client);before=app.state.repository.get_snapshot(sid)['world_state']
-    raw=arrival();raw['movements']=[]
+    raw=arrival()
     raw['life_changes']=[dict(id='viktoria_solovyova',life_status='dead',assertion='established')]
-    raw['events']=[dict(id='death',text='Её дыхание оборвалось.',participants=['viktoria_solovyova'])]
+    raw['events']=[raw['events'][0],dict(id='death',text='Её дыхание оборвалось.',participants=['viktoria_solovyova'])]
     out=StateResolver(before,'Она осела на пол; дыхание оборвалось.','').resolve(raw)
     assert out.state['characters']['viktoria_solovyova']['life_status']=='dead'
     assert 'viktoria_solovyova' not in out.state['camera']['present_character_ids']
@@ -159,6 +162,9 @@ def test_required_journey_api_jobs_sqlite_phone_reload(tmp_path):
         raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=present,
             observed_character_ids=['qa_marina'] if observed else [],elapsed_minutes=0),
             events=[dict(id='conversation',text='Марина отвечает.',participants=[camera['controlled_actor_id'],'qa_marina'],witnesses=[camera['controlled_actor_id']],medium='conversation')])
+        if not observed and old['characters']['qa_marina']['location_id'] != camera['location_id']:
+            raw['movements']=[dict(actor_id='qa_marina',to_location_id=camera['location_id'])]
+            arrival_sources(raw)
         with patch('engine.launch'):
             r=client.post(f'/api/saves/{sid}/turns',json=dict(kind='turn',text='Спрашиваю, как дела.',revision=repo.get_save(sid)['revision'],config=CONFIG))
         assert r.status_code==200,r.text
@@ -191,9 +197,9 @@ def test_t17_repair_reinterprets_proposals_and_preserves_atomic_lineage(api, omi
     from storage import Storage
     client,app=api;sid=imported(client);repo=app.state.repository
     before=repo.get_snapshot(sid);calls=[]
-    raw=arrival();raw['movements']=[]
+    raw=arrival()
     raw['life_changes']=[dict(id='viktoria_solovyova',life_status='dead')]
-    raw['events']=[dict(id='death',text='Её дыхание оборвалось.',participants=['viktoria_solovyova'])]
+    raw['events']=[raw['events'][0],dict(id='death',text='Её дыхание оборвалось.',participants=['viktoria_solovyova'])]
     def provider(**kw):
         calls.append(kw)
         if not kw.get('response_format'):yield ('Она жива; смерть была слухом.' if omit else 'Её дыхание оборвалось.');return
@@ -201,7 +207,7 @@ def test_t17_repair_reinterprets_proposals_and_preserves_atomic_lineage(api, omi
         if len(calls)==2:value['final_scene']['location_id']='missing-room'
         elif omit:
             value['life_changes']=[]
-            value['events']=[dict(id='rumor',text='Сообщение о смерти было слухом.',participants=['viktoria_solovyova'])]
+            value['events']=[raw['events'][0],dict(id='rumor',text='Сообщение о смерти было слухом.',participants=['viktoria_solovyova'])]
         yield json.dumps(value)
     with patch('engine.chat_stream',side_effect=provider):job=wait_job(client,submit(client,sid))
     assert len(calls)==3
@@ -226,6 +232,7 @@ def test_t50_controlled_movement_requires_owned_source(api, authorization):
     if authorization in ('player','forged'):
         move.update(player_assertion='explicit_choice',player_evidence=player)
         if authorization=='forged':player='Смотрю в окно.'
+    if authorization=='player':arrival_sources(raw)
     if authorization=='involuntary':
         move.update(player_assertion='involuntary',source_event_id='carried')
         raw['events']=[dict(id='carried',text='Его перенесли в салон.',participants=['ilya','viktoria_solovyova'])]
@@ -246,7 +253,7 @@ def test_t31_nested_life_typo_is_visible():
 def test_retry_uses_latest_provisional_response_without_union_of_claims(api):
     from test_runtime_handoff import REMOTE
     client,app=api;sid=imported(client);repo=app.state.repository;before=repo.get_snapshot(sid)
-    bad=arrival();bad['movements']=[];bad['final_scene']['location_id']='missing'
+    bad=arrival();bad['final_scene']['location_id']='missing'
     bad['life_changes']=[dict(id='viktoria_solovyova',life_status='dead')]
     attempts=[]
     def first(**kw):
@@ -257,7 +264,7 @@ def test_retry_uses_latest_provisional_response_without_union_of_claims(api):
         yield json.dumps(value)
     with patch('engine.chat_stream',side_effect=first):job=wait_job(client,submit(client,sid))
     assert job['status']=='error'
-    calls=[];omitted=arrival();omitted['movements']=[]
+    calls=[];omitted=arrival()
     def retry(**kw):calls.append(kw);yield json.dumps(omitted)
     with patch('engine.chat_stream',side_effect=retry):
         response=client.post(f"/api/jobs/{job['id']}/retry",json=dict(config=REMOTE,api_key='test-secret'))
@@ -292,7 +299,7 @@ def test_offcamera_protected_movement_cannot_borrow_pov_agency(api):
 @pytest.mark.parametrize('damage', ['elapsed_missing','elapsed_type','life_changes','movements','scheduled_event_changes'])
 def test_structural_repair_uses_one_narrative_and_one_commit(api, damage):
     client,app=api;sid=imported(client);repo=app.state.repository;calls=[]
-    good=arrival();good['movements']=[]
+    good=arrival()
     bad=deepcopy(good)
     if damage=='elapsed_missing':bad['final_scene'].pop('elapsed_minutes')
     elif damage=='elapsed_type':bad['final_scene']['elapsed_minutes']='1'

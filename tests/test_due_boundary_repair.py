@@ -3,6 +3,7 @@
 The #239 raw archive was unpublished at implementation time. Semantic assessments
 are provider fixtures, not proof that arbitrary free-form prose is always understood.
 """
+from runtime_v3_fixture import arrival_sources
 from copy import deepcopy
 import json
 
@@ -183,10 +184,10 @@ def test_known_hidden_local_remote_repair_does_not_grant_knowledge(tmp_path, rem
     if remote:
         destination = next(lid for lid in state['locations'] if lid != state['camera']['location_id'])
         text = 'Вера перешла в другую комнату. Кирилл остался.'
-        result, _ = ordinary(repo,sid,0,text=text,config=CONFIG,extra=dict(
+        result, _ = ordinary(repo,sid,0,text=text,config=CONFIG,extra=arrival_sources(dict(
             movements=[dict(actor_id='qa_vera',to_location_id=destination,evidence=text)],
             final_scene=dict(location_id=state['camera']['location_id'],elapsed_minutes=0,
-                present_character_ids=[c for c in state['camera']['present_character_ids'] if c!='qa_vera'])))
+                present_character_ids=[c for c in state['camera']['present_character_ids'] if c!='qa_vera']))))
         assert result['status']=='saved',result['error']
     before = repo.get_snapshot(sid)
     state = before['world_state']

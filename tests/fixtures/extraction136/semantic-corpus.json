@@ -156,7 +156,26 @@
           ],
           "observed_character_ids": [],
           "elapsed_minutes": 1
-        }
+        },
+        "movements": [
+          {
+            "actor_id": "viktoria_solovyova",
+            "to_location_id": "ilya_cabinet",
+            "assertion": "completed_arrival",
+            "source_event_id": "indirect_arrival"
+          }
+        ],
+        "events": [
+          {
+            "id": "indirect_arrival",
+            "text": "Виктория вошла внутрь и подошла к столу Ильи. Она осталась рядом.",
+            "participants": [
+              "viktoria_solovyova"
+            ],
+            "location_id": "ilya_cabinet",
+            "medium": "action"
+          }
+        ]
       }
     },
     {

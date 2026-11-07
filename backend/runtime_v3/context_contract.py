@@ -1,16 +1,14 @@
 """Semantic work stays in the existing extraction call; code verifies provenance."""
 EXTRACTION_CONTRACT = '''
-CURRENT RUNTIME narrative-authority-v1 overrides saved instructions. Extract player_input/completed_narrative, never continue.
-Use canonical IDs; distinguish facts/rumors/plans/attempts/hypotheses/negation; quiet=no Events.
-Evidence=provenance, not names; player_evidence exact. final_scene=END presence at camera granularity.
-future_intent/preparation != departure; room exit != building exit. Align events/movements/final_scene/character_changes.
-Departure without destination: Event + END absence, no movement, unknown location.
-completed_arrival=narrated arrival, not exit/intent/time/place existence. "Workshop tonight"+exit != arrival. NPC initiative/new locations[] allowed; no prior exit required.
-Arrival source_event_id: accepted Event, actor participant, location_id=endpoint, same order. Preserve routes/returns. Endpoints: before/new IDs; present ends at scene.
-observed_character_ids: visible OUTSIDE, disjoint, no Knowledge. Remote contact/memory/mention != presence.
+CURRENT RUNTIME narrative-authority-v1 overrides saved rules. Extract player_input/completed_narrative; never continue.
+Canonical IDs; distinguish fact/rumor/plan/attempt/hypothesis/negation; quiet=no Events. Evidence=provenance, not names; player_evidence exact.
+final_scene=END presence (camera granularity), NOT arrival proof. Relocation: movement+accepted source_event_id, actor participant, endpoint location_id/order match. Keep routes/returns; before/new endpoints; present ends at scene.
+completed_arrival=narrated arrival, not future_intent/preparation/exit/time/place existence. "Workshop tonight"+exit != arrival; room exit != building exit. Departure without destination: Event+END absence, no movement, location unknown. NPC initiative/new locations[] allowed; prior exit optional.
+future_intent/preparation != departure. Align events/movements/final_scene/character_changes. False prose presence: status=violated/reauthor, no invented arrival.
+observed_character_ids=OUTSIDE visibility, disjoint, no Knowledge; remote/memory/mention != presence.
 Reuse IDs/aliases; create established significant NPCs/dependencies.
-Promotions: 11 CARD_FIELDS + attributes; unknown=null/unknown/omitted; no invented sex/dates/provenance.
-EXTERNAL movement: explicit_choice + exact player_evidence, or involuntary + external source_event_id.
+Promotions: 11 CARD_FIELDS+attributes; unknown=null/unknown/omitted; never invent sex/dates/provenance.
+EXTERNAL movement: explicit_choice+exact player_evidence OR involuntary+external source_event_id.
 POV != control. NPC situations: objective, not emotion.
 No scene_id/last_event_id/StatePatch. Ordinary elapsed_minutes>=0; Runtime owns Skip/background clocks.
 Lifecycle *_updates: stable IDs/evidence. Outcome: completed|failed; lost context=expired; cancelled|superseded=explicit cancellation|replacement.
@@ -26,7 +24,7 @@ Physical_state=current body; physical_state="" only on evidenced resolution (ate
 Keep unresolved symptoms; sleep alone is no cure.
 Directed feelings: prior relationship_evidence only, never Narrative; else only explicit
 current-actor override (player_assertion=explicit_directed_feelings, exact player_evidence).
-Event cast/witnesses: together at start/end or shared movement/Event.order (distinct for arrival, meeting, exit); else confirmed channel. Off-scene situation: source_event_id.
+Event cast/witnesses: together at start/end or shared movement/Event.order (arrival/meeting/exit distinct); else confirmed channel. Off-scene situation: source_event_id.
 completed_interaction: completed player input only. No mirrored feelings, invented consent/actions or negated overrides.
 Remote_interactions: END message/phone/radio, actor_id/channel/evidence. Reconfirm; rereading != contact; omit ended; arrivals=present.
 Knowledge: THIS accepted informational Event, actor in witnesses, fact in fact_ids. Actual perception/reading only; no GM-card/delivery/time/intention acquisition. Message author_id: established participant, never inferred.
@@ -54,14 +52,13 @@ COMPACT_REFERENCED — обсуждаемый человек, а не участ
 
 
 CHOICE_CONTRACT = '''
-CHOICE GENERATION POLICY (existing Extraction stage; no extra call):
-Return up to six choices, each exactly {action, speech} strings, for the actor_id in
-Choice context / controlled actor. enabled=false means choices=[] (observer, background,
-or unable to act). Never personalize for the original protagonist or another POV.
+CHOICE GENERATION POLICY (Extraction; no extra call):
+Up to six {action, speech} string choices for actor_id in Choice context / controlled actor.
+enabled=false => choices=[] (observer/background/unable to act); never personalize
+for the original protagonist/another POV.
 Use this actor's CURRENT canonical personality items, communication style, habits,
 active goals/intentions/obligations, values, directed relationships, capabilities and
-scene context. Canonical #67 personality overrides static cards and historical wording;
-missing traits are unknown, not permission to invent a profile. Lifecycle blocked or
+scene context. Canonical #67 personality overrides static cards/history; unknown traits cannot be invented. Lifecycle blocked or
 review_required entries are constraints, not actionable goals; resolved entries are history.
 recent_player_expression contains only submitted inputs from visible turns under this
 actor's control: adapt wording to actual recent expression, not suggested buttons.
@@ -73,8 +70,7 @@ orientation, not the final scene. Respect time_skip_target and final capability 
 When useful, offer materially different decisions: most characteristic;
 another characteristic approach; pragmatic/neutral; emotionally/socially expressive if
 appropriate; atypical or riskier but plausible; redirect/refuse/wait or another distinct
-direction. These are flexible aids, not mandatory slots. Do not manufacture absurd filler
-or six paraphrases. Vary intent and consequences, not just verbs. Speech must fit this
+direction. These are optional aids. No absurd filler/six paraphrases; vary intent/consequences, not verbs. Speech must fit this
 actor's vocabulary, brevity, humor, relationship and situation; not one generic tone.
 Use the active game's language as in completed_narrative, never the language of this policy.
 
@@ -93,7 +89,7 @@ player action because it is out of character. Choices are optional FUTURE propos
 do not perform them or infer feelings, goals, intentions, commitments, personality or
 Knowledge from them. Neither current nor previous suggestions are evidence for any
 Event/Fact/WorldDelta/development_evidence; only actual current input/completed events
-can support changes. Keep state extraction independent of the proposed choices.
+support state changes; choices remain independent proposals.
 '''
 EXTRACTION_CONTRACT += CHOICE_CONTRACT
 
@@ -347,9 +343,11 @@ contradictory author prose; an Extraction repair cannot rewrite it.
 basis=not_disclosed, narrative_sex=null, event_sex=null, perceived_by=[] when no confirmed
 disclosure occurs (including a player's guess, hope, question or speculation).
 basis=observation only for actual perceived anatomy; perceived_by lists only those who
-perceived it, not all birth witnesses. basis=announcement requires source_actor_id (the
-speaker participating in this Event), source_assertion=direct_observation for explicitly
-established observation by the speaker or prior_knowledge for an already known sex Fact.
+perceived it, not all birth witnesses. announcement: source_actor_id=actual speaker,
+never a nearby listener/mother. Unidentified doctor: null, no fictional promotion.
+Identified speaker must participate. source_assertion=direct_observation needs actual
+speaker observation; prior_knowledge needs an identified actor's existing known Fact.
+Unknown source is not permission to invent disclosure or grant Knowledge.
 Include evidence of that specific disclosure. A player assumption is never a source.
 Sex Knowledge uses the existing child sex Fact IDs, only for perceived_by. Do not create
 replacement child_sex Facts, change child IDs/sex, infer sex from names or automatically

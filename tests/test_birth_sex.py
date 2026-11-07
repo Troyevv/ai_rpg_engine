@@ -3,6 +3,7 @@
 The fixtures explicitly encode Extraction's semantic interpretation; these tests
 do not pretend a mock proves a real LLM can never misread arbitrary literature.
 """
+from runtime_v3_fixture import arrival_sources
 from copy import deepcopy
 import json
 
@@ -288,10 +289,10 @@ def test_remote_birth_discloses_only_to_local_observer(tmp_path):
     p,=state['pregnancies'].values()
     camera=state['camera']
     away=next(lid for lid in state['locations'] if lid!=camera['location_id'])
-    moved,_=ordinary(repo,sid,0,text='Вера ушла в соседний дом.',config=CONFIG,extra=dict(
+    moved,_=ordinary(repo,sid,0,text='Вера ушла в соседний дом.',config=CONFIG,extra=arrival_sources(dict(
         movements=[dict(actor_id='qa_vera',to_location_id=away,evidence='Вера ушла.')],
         final_scene=dict(location_id=camera['location_id'],elapsed_minutes=0,
-                         present_character_ids=[cid for cid in camera['present_character_ids'] if cid!='qa_vera'])))
+                         present_character_ids=[cid for cid in camera['present_character_ids'] if cid!='qa_vera']))))
     assert moved['status']=='saved', moved['error']
     def provider(**kwargs):
         messages=kwargs['messages']

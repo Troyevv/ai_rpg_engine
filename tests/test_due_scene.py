@@ -1,4 +1,5 @@
 """Offline Stage C Family replay through the recorded prompts and the real job transaction."""
+from runtime_v3_fixture import arrival_sources
 from pregnancy_boundary_fixture import undisclosed_sex
 import json
 from unittest.mock import patch
@@ -84,9 +85,9 @@ def test_stage_c_from_lta_to_next_turn(tmp_path, remote):
         cam = start['camera']
         target = next(lid for lid in start['locations'] if lid != cam['location_id'])
         move = dict(actor_id='qa_vera', to_location_id=target, evidence='Вера вышла.')
-        result, _ = ordinary(repo,sid,0,text=move['evidence'],extra=dict(movements=[move],
+        result, _ = ordinary(repo,sid,0,text=move['evidence'],extra=arrival_sources(dict(movements=[move],
             final_scene=dict(location_id=cam['location_id'], elapsed_minutes=0,
-                             present_character_ids=[c for c in cam['present_character_ids'] if c!='qa_vera'])))
+                             present_character_ids=[c for c in cam['present_character_ids'] if c!='qa_vera']))))
         assert result['status'] == 'saved', result['error']
     stopped, _ = job(repo,sid,'long_term',long_term_advance=REQUEST)
     state = stopped['world_state']

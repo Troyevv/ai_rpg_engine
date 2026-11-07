@@ -7,7 +7,7 @@ from backend.services.world_delta_errors import StructuralDeltaError
 from backend.services.world import CARD_FIELDS
 from test_runtime_v3_domain import initial
 from test_engine import db, CONFIG
-from runtime_v3_fixture import execute
+from runtime_v3_fixture import execute, arrival_sources
 
 PLAYER = 'Иду в кофейню.'
 NARRATIVE = 'Илья и Соня сидят за столиком у окна в кофейне «Гвоздь».'
@@ -18,10 +18,10 @@ def world():
     return state
 
 def raw(lid='nail', present=None):
-    return dict(final_scene=dict(location_id=lid, present_character_ids=present or ['a', 'b'],
+    return arrival_sources(dict(final_scene=dict(location_id=lid, present_character_ids=present or ['a', 'b'],
         situation=NARRATIVE, situation_evidence=NARRATIVE,elapsed_minutes=0),
-        movements=[dict(actor_id='a',to_location_id=lid,player_assertion='explicit_choice',player_evidence=PLAYER)] if (present is None or 'a' in present) else [],
-        locations=[dict(id='nail', name='Гвоздь', evidence=NARRATIVE)])
+        movements=([dict(actor_id=c,to_location_id=lid,**(dict(player_assertion='explicit_choice',player_evidence=PLAYER) if c=='a' else {})) for c in (present or ['a','b']) if c in ('a','b')] if lid!='room' else []),
+        locations=[dict(id='nail', name='Гвоздь', evidence=NARRATIVE)]))
 
 def test_new_location_and_situation_are_canonical_and_patch_replays():
     before = world()
@@ -39,6 +39,8 @@ def test_new_location_and_situation_are_canonical_and_patch_replays():
 def test_return_to_existing_location_keeps_identity():
     first = StateResolver(world(), NARRATIVE, PLAYER).resolve(raw()).state
     back = dict(final_scene=dict(location_id='room', present_character_ids=['a', 'b']),movements=[dict(actor_id='a',to_location_id='room',player_assertion='explicit_choice',player_evidence='Возвращаюсь.')])
+    back['movements'].append(dict(actor_id='b',to_location_id='room'))
+    arrival_sources(back)
     second = StateResolver(first, 'Они вернулись в «Критический успех».', 'Возвращаюсь.').resolve(back).state
     assert second['camera']['location_id'] == 'room'
     assert second['locations'] == first['locations']
@@ -74,6 +76,7 @@ def test_departure_and_arrival_update_presence_and_character_endpoints():
     state['characters']['c']['location_id'] = 'hall'
     payload['movements'].append(dict(actor_id='c',from_location_id='hall',to_location_id='room',assertion='completed_arrival',source_event_id='arrival',actor_evidence='Юра',destination_evidence='Критический успех',evidence=text))
     payload['events'] = [dict(id='arrival', text=text, participants=['c'], location_id='room', medium='action')]
+    arrival_sources(payload)
     result = StateResolver(state, text, '',actor_names={'c':'Юра'}).resolve(payload).state
     assert result['camera']['present_character_ids'] == ['a', 'c']
     assert result['characters']['b']['location_id'] == 'hall'
@@ -84,6 +87,9 @@ def test_ordered_route_uses_last_endpoint_and_does_not_duplicate_movement_histor
     payload['movements'] = [
         dict(actor_id='a', to_location_id='nail', order=2, evidence=NARRATIVE,player_assertion='explicit_choice',player_evidence=PLAYER),
         dict(actor_id='a', to_location_id='hall', order=1, evidence=NARRATIVE,player_assertion='explicit_choice',player_evidence=PLAYER)]
+    payload['movements'].append(dict(actor_id='b',to_location_id='nail',order=2))
+    payload['events']=[]
+    arrival_sources(payload)
     result = StateResolver(world(), NARRATIVE, PLAYER).resolve(payload)
     assert len([m for m in result.history['movements'] if m['actor_id'] == 'a']) == 2
 

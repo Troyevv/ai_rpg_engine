@@ -58,6 +58,7 @@ npc_review_start_payload=None
 story168_payload=None
 story168_gate=None
 integrated247_case=None
+integrated247_live=False
 integrated247_repeat=False
 integrated247_extractions=0
 provenance238_case=None
@@ -74,10 +75,13 @@ def scripted_stream(**kwargs):
     global phone_mode, group_semantic_fail_once, npc_review_start_payload, story168_payload, agency232_attempts, birth231_response, due240_responses, agency237_extractions
     if integrated247_case and kwargs.get('model') == 'integrated-test':
         from test_integrated_repair247 import archived, corrected
+        if integrated247_live:
+            from test_live248_recovery import live as archived, control as corrected
         data = archived(integrated247_case)
         if kwargs.get('response_format'):
             integrated247_extractions += 1
             raw = data['responses'][0]['payload'] if integrated247_extractions == 1 or integrated247_repeat else corrected(data)
+            if integrated247_live and integrated247_case=='family':raw=corrected(data)
             yield json.dumps(raw, ensure_ascii=False)
         else:
             yield data['narrative']
@@ -994,13 +998,16 @@ if __name__ == '__main__':
         return {'world':result['world'],'save':result['save']}
 
     @app.post('/test/integrated247-seed')
-    def integrated247_seed(case: str = 'knowledge', repeat: bool = False):
-        global integrated247_case, integrated247_repeat, integrated247_extractions
+    def integrated247_seed(case: str = 'knowledge', repeat: bool = False, live: bool = False):
+        global integrated247_case, integrated247_repeat, integrated247_extractions, integrated247_live
         from test_integrated_repair247 import seed, archived
-        if case not in ('knowledge', 'family', 'phone', 'crisis'):
+        if live:
+            from test_live248_recovery import live as archived
+        if case not in ('knowledge', 'family', 'phone', 'crisis', 'social'):
             raise ValueError('Unknown replay')
         result = seed(app.state.repository, archived(case))
         integrated247_case, integrated247_repeat, integrated247_extractions = case, repeat, 0
+        integrated247_live = live
         return dict(world=result['world'], save=result['save'], action=archived(case)['player_input'])
 
     @app.post('/test/integrated247-allow-repair')

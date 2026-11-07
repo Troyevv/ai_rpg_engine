@@ -93,3 +93,20 @@ def player_action(raw, actor, targets, quote, event_id, action_id='input-1'):
         id=action_id, player_evidence=quote, target_ids=targets,
         narrative_target_ids=targets, outcome='completed', meaning='preserved')])
     return raw
+
+
+def arrival_sources(raw):
+    """Complete explicitly authored synthetic routes for the current contract.
+
+    Opt-in fixture builder only: never used by provider adapters, raw archive
+    replays or negative provenance tests. Each declared leg gets its own Event.
+    """
+    for index, move in enumerate(raw.get('movements', [])):
+        if move.get('source_event_id'):
+            continue
+        source = f'fixture_arrival_{index}'
+        move.update(source_event_id=source, assertion='completed_arrival')
+        raw.setdefault('events', []).append(dict(id=source, text=move.get('evidence') or 'Подтверждённое прибытие.',
+            participants=[move['actor_id']], witnesses=[], medium='action',
+            location_id=move['to_location_id'], **({'order':move['order']} if 'order' in move else {})))
+    return raw

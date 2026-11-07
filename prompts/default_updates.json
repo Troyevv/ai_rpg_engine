@@ -23,7 +23,8 @@
   ],
   "state_update_prompt.md": [
     "3e68b42ae37e74b608db0d94a709d540e54270c6f7da132eb5206adcb5c251cc",
-    "24db48e9efac9f20ed80de02f6975fa5bbb92e9668c188d5f46baed01a17e7f8"
+    "24db48e9efac9f20ed80de02f6975fa5bbb92e9668c188d5f46baed01a17e7f8",
+    "f68bf967afef9f351dc3e098c72d1cf84492cfcae6bb1fc3b630cdabe3c46c2d"
   ],
   "world_state_prompt.md": "f1eea9331a1e600f7473b1e730720310f2bc7d418bf2be0dc1881037c59caada"
 }

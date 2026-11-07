@@ -1,7 +1,7 @@
 # #247 / #246: integrated Extraction recovery
 
 Base: master `d81a52c9980b79d1be99acfde9fc1a1452d71176`.
-No paid provider calls. No migration or changes to old snapshots/variants.
+This implementation uses no paid provider calls. The separate Live QA on b3fb833 used 20 calls; its failed semantic gate remains open. No save migration or changes to old snapshots/variants.
 
 ## Confirmed causes and changes
 
@@ -30,8 +30,8 @@ No paid provider calls. No migration or changes to old snapshots/variants.
   requires assertion/source_event_id; Runtime checks accepted current Event,
   actor, endpoint, order and physical channel. Same-order arrival Events anchor
   the route endpoint; unrelated equal-order meetings remain ambiguous. History
-  stores canonical Event IDs. Unmarked legacy payloads and historical saves
-  remain readable. final_scene still owns physical membership.
+  stores canonical Event IDs. Historical saves remain readable. Newly proposed arrivals, including unmarked
+  movements, need accepted sources; final_scene cannot supply arrival provenance.
 - Repair duplicated camera/location context. Feedback retains the original
   Extraction and diagnostics but includes only referenced canonical locations;
   the builder removes locations already supplied in current state. Initial
@@ -113,117 +113,140 @@ readable before-state/input/Narrative/selected-response fixtures remain (~560 Ki
 No SQLite, ledger, screenshots, videos or test logs are committed. Original QA
 archive and source SQLite remain unchanged. No save schema/migration changes.
 
-## Short Live QA plan — NOT authorized or executed
+## Fixes after the actual Live #248 report
 
-Purpose: test model semantics separately from deterministic recovery. Model:
-`deepseek-flash`, explicit non-thinking; no fallback/model switching. Use the
-reviewed PR head, real production jobs/Context Builder/Resolver/History/SQLite.
-No world generation, background/LTA campaign, external tools or success rerolls.
+Source: [Live report](https://github.com/Troyevv/ai_rpg_engine/pull/248#issuecomment-6713382739).
+Archive `live248-raw-evidence-20261107.tar.gz`, SHA256
+`d2b4916503a616c3058cf1afcae6a549c66d4c9b280123d5bc89c6a251028b31`.
+All three archived SQLite databases passed read-only integrity checks.
 
-### Preparation (zero paid calls)
+- **Crisis:** original final repair accepted Vera's home→library teleport. The
+  resolver built that route from final_scene, and presence then trusted its END.
+  Conflicting bundled/schema instructions explicitly allowed this. A change of
+  established location now needs an explicit movement and its accepted Event;
+  an omitted assertion marker cannot bypass provenance. Initial world placement
+  for actors with no established location and new NPC creation remain possible.
+  A missing first camera cannot erase an already known location. The error joins
+  independent diagnostics.
+  Repair must report violated prose via the existing explicit reauthor/abandon
+  path; it cannot invent an arrival to rescue the original impossible scene.
+- **Knowledge/Social:** original and repair JSON omitted the player's address
+  while retaining the NPC reply. Completion validation already refused both.
+  Feedback now names the missing action/actor/exact quote and explicitly asks for
+  a separate address Event, retaining the NPC response and all its disclosures.
+  No Runtime synthesis of a question, reply, agreement or knowledge link.
+- **Phone:** reference target-set mismatch was treated as a prose agency failure.
+  With preserved meaning, reference mismatch is now a repairable Extraction
+  inconsistency. Changed/uncertain meaning and interaction retargeting still
+  require reauthor. No contact, endpoint or player permission is required for
+  noninterference or an independently authored departure.
+- **Family:** the schema demanded a canonical speaker for every announcement,
+  encouraging substitution of a known participant for an unregistered clinician.
+  `source_actor_id=null` now represents that unknown identity when the actual
+  source's direct observation is established. No doctor Character is fabricated;
+  prior Knowledge still needs an identified source. Listeners remain distinct
+  Event witnesses; no knowledge is assigned to the unidentified speaker.
+- **Context:** existing default-prompt upgrade registry recognizes the replaced
+  bundled prompt. Retry/regeneration omit recognized historical defaults rather
+  than repeating obsolete instructions beside the current contract. Custom
+  overrides and saved prompt snapshots remain unchanged. Repeated instruction
+  wording is compacted to keep the saturated phone context within its existing
+  hard budget; no canonical data or validation is removed.
 
-- Verify original archive SHA256 above. Use SQLite backup into disposable copies;
-  retain the original DB, ledger, responses and snapshots unchanged. Restore the
-  exact six before states and History heads using the same abandon/rollback
-  sequence verified by `tests/replay_issue247_sqlite.py`, never SQL state repair.
-- Use independent copies for saved-Narrative extraction and freshly authored
-  turns. Preserve prior variants; record head/revision and state/History hashes.
-- Build all initial and repair contexts offline first. Context: 65536, Narrative
-  output cap 2000, Extraction/repair cap 8192, thinking disabled. Fail before
-  dispatch if mandatory context cannot fit; do not silently enlarge the window.
-- Saved-Narrative checks use real recorded job context and the normal Extraction
-  retry path after verifying eligibility. If an original job is not eligible,
-  mark that check blocked; do not rewrite lifecycle fields to force a retry.
-- Bind one newly authorized run directory and exact operation list to the existing
-  live99 budget/stream guard; preserve historical spending and a new-run baseline.
-  Enforce **42 additional provider dispatches / $2.00 additional spend**, including
-  repair, continuations and optional remote stages, across restarts. Sequential
-  requests only; unknown usage/timeout stops the run.
-- The current generic harness has a 320-call ceiling and larger campaign plans.
-  Its existing `prepare-campaign-retest` command is **not** this short plan.
-  Before live execution, wire the reviewed per-run 42-call ceiling and this exact
-  operation list into that harness and verify fail-closed behavior without API
-  calls. No second runtime or separate provider bypass. This plan alone does not
-  claim the short runner or fresh authorization already exists.
+The original Family claim naming Vera is **still structurally admissible**: Runtime
+cannot detect that its evidence describes a doctor without interpreting prose.
+The source-representation fix and explicit contract are tested, but whether the
+model now attributes the speaker correctly is an **open Live QA gate**. Likewise,
+scripted Knowledge/Social repair proves recoverability, not model compliance.
 
-### Ordered cases and provider-call accounting
+### Exact offline evidence and controls
 
-A saved Narrative costs one Extraction (+ at most one existing bounded repair).
-A fresh turn/regeneration costs one Narrative + one Extraction (+ at most one
-repair). No automatic reauthor of invalid prose; record the refusal and stop that
-branch. The fresh Crisis branch below is a separately planned independent run.
+`tests/fixtures/issue247/live248.json` retains the five exact input/Narrative/reply
+cases (~103 KiB), reusing unchanged #245 states and hash-checking exact subsequent
+checkpoint updates. No bulk databases, request dumps or UI captures are committed.
+Existing synthetic movement tests now explicitly declare their route Event
+sources. They are not represented as real model traces.
 
-| Case / original checkpoint | Exact work | Base calls | With one repair per job |
+On the pre-fix b3fb833 worktree, the first 13 new checks gave **10 failures / 3
+passes**. On the changed implementation, they passed. Additional tests cover
+alternate field/startup bypasses and immutable historical/default/custom prompt
+handling. The 12 original #245 SQLite replays were also repeated successfully;
+all 22 disposable replays retained the original source database hashes.
+
+`tests/replay_live248_sqlite.py` restored the exact before snapshot/History head
+through normal abandon/rollback in **10 disposable copies of the original SQLite**:
+
+| Case | Original response replay | Explicit human-reviewed control |
+| --- | --- | --- |
+| Crisis/002 | atomic refusal; no teleport | explicit reauthor, no commit |
+| Family/001 | accepted wrong speaker: characterization, **not a fix/pass** | unknown clinician identity; birth, male child, 10 acquisitions to Kirill/Vera only |
+| Knowledge/001 | atomic missing-address refusal | separate player Event; **4 acquisitions after commit/reload** |
+| Phone/002 | repairable mismatch, repeated response refused atomically | reference corrected; Timur departs, location=null |
+| Social/001 | atomic missing-address refusal | player address and NPC response retained separately |
+
+Every old sibling hash was preserved; original database hash unchanged. Additional
+job tests cover regeneration, sibling selection, rollback and reload. Controls are
+labelled and never modify the source evidence. All provider streams are mocked.
+
+```sh
+python tests/replay_live248_sqlite.py /path/to/live248 .runtime/replay248-new
+python -m pytest -q tests/test_live248_recovery.py
+```
+
+Desktop/mobile E2E extends the existing integrated247 fixture endpoint with these
+exact #248 replies and explicit controls. Local Chromium cannot launch in this
+workspace (`socket() failed: Operation not permitted`); full CI must verify it.
+Detailed final counts and the tested commit belong in the PR description.
+
+## Short repeat Live QA — proposed, NOT authorized or executed
+
+Use the reviewed final commit and isolated original SQLite checkpoints. Production
+Context Builder/jobs/Resolver/History, existing live99 harness and ledger only.
+No new budget class, baseline table or dispatch-guard implementation is required.
+Count new request receipts against this operation list; do not reset historical
+spending. The supplied ledger ends at receipt318 (318 settled, zero unknown);
+record that existing cutoff and count only later receipts for this proposed run,
+without changing its historical phase baselines. Recheck it before execution.
+No full campaign, Stage C or LTA. No success rerolls, model switching or
+extra retries beyond the existing one bounded Extraction repair per job.
+
+Settings: `deepseek-flash`, thinking off, context65536, Narrative cap2000,
+Extraction/repair cap8192. Build initial/repair contexts offline before dispatch.
+Restore only through supported rollback/abandon; never edit job status to make a
+saved/abandoned/sticky-reauthor job eligible for Extraction retry.
+
+| Case / checkpoint | Exact operations and acceptance | Base calls | With repair |
 | --- | --- | ---: | ---: |
-| Crisis / `crisis/001` | 1 saved-Narrative Extraction; 1 fresh turn using original input | 3 | 5 |
-| Family / `family/001` | 1 saved-Narrative Extraction; original-input fresh turn and 1 observation continuation | 5 | 8 |
-| Knowledge / `knowledge/002` | 1 saved-Narrative Extraction; 1 fresh original-input turn | 3 | 5 |
-| Phone / `phone/001` | 1 saved-Narrative Extraction; original-input fresh turn and 2 continuations below | 7 | 11 |
-| Social / `social/001` | 1 fresh turn with explicit two-recipient input below | 2 | 3 |
-| Campaign / `campaign/000` | 1 fresh original-input turn, then 1 regeneration from its recorded original context | 4 | 6 |
-| **Total** | **4 saved-text jobs + 10 authored jobs** | **24** | **38** |
+| Crisis / #245 failed job `e3b9501fc2494c6d9a8bb9c6a35206b6`; #248 `crisis/002/before` | Retry the eligible original failed job: impossible presence must request reauthor without commit. Independently, one fresh original-input turn from the exact before state: no inferred arrival; a real autonomous arrival requires its Event/movement. | 3 | 5 |
+| Knowledge / #248 `knowledge/001`, job `fac034db9ecb4765a81b35114edeca72` | One eligible Extraction retry, **no new Narrative**. Separate player request and Vera reply, two fact links, all four acquisitions after commit, History and reload. | 1 | 2 |
+| Social / #248 `social/001`, job `4141409d79ad411fad952918041a9fc7` | One eligible Extraction retry, **no new Narrative**. Preserve the addressed Vera Event and unavailable Timur action. If saved, one consent/request turn below; no invented consent or reply. | 3 | 5 |
+| Family / #245 original failed due-boundary job; #248 `family/001/before` in an independent copy | Retry the original ongoing-labor text: elapsed0, no fabricated contact/birth. Independently, one observation turn from the pre-birth checkpoint. Actual birth must retain identity/time/sex; doctor's announcement must not name Vera as source. Unknown clinician identity stays null; only actual listeners gain Knowledge. | 3 | 5 |
+| Phone / #248 `phone/001/before` and `phone/002/before`, independent copies | One original preparation/intent turn. One original noninterference/departure turn after abandoning the old hard-refusal job (it is not eligible for retry). If departure saved, one native observer/background scene following Timur to examine independent arrival/new-place creation; restore player POV without another model call. No player action is assigned to Timur. | 6 | 9 |
+| Campaign / #239 `campaign/011/before`, failed job `df90fbfbb25c4018911b4ba13c2d8f77` | One eligible Extraction retry only: same original text, absolute minute2631444, complete player provenance, no invented call/commitment. No campaign continuation. | 1 | 2 |
+| **Total** | **5 saved-text jobs + 6 authored jobs** | **17** | **28** |
 
-Reserve up to four further dispatches within the same **42-call hard cap** for
-production remote/continuation stages if they actually occur. They are not extra
-retries or permission to repeat a success. If a branch fails, report fewer calls
-and do not run dependent steps. A fifth auxiliary request stops at the global cap.
+Use `intent.json` verbatim for original inputs. Social's only additional input:
+«Я согласен сейчас сортировать фотографии по датам, оставляя оригинал карты на месте.
+Прошу Веру показать первую пачку.» Family observation:
+«Я остаюсь рядом и наблюдаю, что происходит с Верой, не вмешиваясь в её действия.»
+Phone noninterference:
+«Я не удерживаю Тимура и продолжаю разбирать фотографии. Не предлагаю ему место назначения.»
+The observer step uses the native background operation with Timur as camera subject,
+empty player input, and no Time Skip. If no real arrival/new place/room-exit occurs,
+record that contrast as **NOT OBSERVED**; do not force an outcome or reroll.
 
-Inputs not taken verbatim from the archived `intent.json`:
+Expected **17 calls without repairs**, at most **28** for listed jobs. Reserve four
+calls for auxiliary production stages only if they actually occur: proposed total
+ceiling **32 calls / $1.00**. At verified peak/cold Flash prices of $0.30/M input and
+$1.20/M output ([official pricing](https://api-docs.deepseek.com/quick_start/pricing/)),
+even pessimistically charging65536 input +8192 output for every one of32 calls is
+$0.9437184. This overcounts the context window intentionally; no cache/off-peak
+saving is needed. Recheck tariffs before execution. This plan grants no paid-call
+authorization and does not reuse the previous run's allowance.
 
-- Family continuation: «Я остаюсь рядом и наблюдаю, что происходит с Верой,
-  не вмешиваясь в её действия.»
-- Phone continuation 1: «Я не удерживаю Тимура и продолжаю разбирать фотографии.
-  Не предлагаю ему место назначения.»
-- Phone continuation 2: «Я продолжаю заниматься фотографиями. Если кто-то уже
-  ушёл, я не считаю, что он прибыл куда-либо, пока этого не произошло.»
-- Social: «Я спрашиваю Веру, какую пачку фотографий взять следующей, а Тимура —
-  когда он собирается позвонить Олегу. Выслушиваю каждого, не отвечая за них.»
-
-### Semantic acceptance, not merely saved status
-
-- **Crisis:** referenced Vera is not labelled physically present. Impossible
-  contact in the original prose requires explicit reauthor with no canon commit;
-  correct fresh prose must preserve control, POV and actual presence.
-- **Family:** reference/observation does not invent completed interaction. Ongoing
-  birth cannot cross an unresolved boundary; completed birth requires canonical
-  BirthClaim, sex disclosure/provenance, one child identity and no Knowledge leak.
-  If the model authors only one outcome, the other remains **not observed**.
-- **Knowledge:** saved original prose retains the two confirmed facts/four
-  acquisitions, Event links, provenance and History after reload. Fresh prose is
-  judged on what it actually disclosed; do not demand four gains if it differed.
-- **Phone:** manually compare prose against Events, movements, final_scene and
-  character_changes for preparation, room exit, departure and actual arrival.
-  New places and autonomous NPC action are allowed. If real arrival/new-place
-  creation does not occur in these three turns, mark that contrast **not observed**;
-  do not force an NPC action or claim a semantic pass from deterministic coverage.
-- **Social:** both target IDs remain attached to the original action(s). One joint
-  Event or split Events are acceptable when the authored interactions occurred;
-  refusal/defer and NPC initiative must not be rewritten as player agreement.
-- **Campaign:** absolute time, action provenance and same-Narrative repair remain
-  consistent. After regeneration, select both siblings, reload and rollback with
-  zero further model calls; original sibling content and before state must match.
-
-For each call capture existing usage/ledger receipt, original and repaired JSON,
-full diagnostics, before/after state+History+Knowledge, job revision and variant
-IDs. UI desktop/mobile checks can view/reload the same saved results without paid
-replays. Any unexpected semantic commit stops dependent branches and blocks the
-live gate; a failed but atomic rejection is not a successful semantic repair.
-
-### Conservative budget
-
-Official pricing checked 2026-11-07:
-[DeepSeek pricing](https://api-docs.deepseek.com/quick_start/pricing/).
-Use peak cache-miss rates **$0.30/M input + $1.20/M output**; ignore cache/off-peak
-savings. At 65536 input + 8192 output tokens for every dispatch (even Narrative),
-24 calls estimate at most **$0.71**, 38 **$1.13**, 42 **$1.24**. These are planning
-estimates using a local context allowance, not provider token receipts.
-
-Proposed additional hard budget: **$2.00**, not previously authorized. The existing
-guard reserves the full 1,048,576-token provider window before each request
-(~$0.3244 including 8192 output) and settles only verified usage. With ordinary
-receipts this leaves conservative headroom. At literal full-window consumption,
-42 requests would cost ~$13.63: the $2 cap must stop early, never promise all cases
-will fit or auto-increase the allowance. Recheck prices/model before dispatch.
-
-No paid calls were made for this follow-up. Deterministic passes establish
-validation/persistence behavior, not that DeepSeek's semantic mistakes are fixed.
+After every step inspect the full prose alongside both Extraction responses,
+diagnostics, Events, movements, final_scene, character_changes, Knowledge and
+History. A saved status is not semantic acceptance. Check UI/reload on desktop and
+mobile using the same saves, with no paid replay. Any semantic contradiction or
+unknown provider outcome stops dependent steps; retain every original receipt.
+Old siblings, revisions, input and source archives must remain unchanged.

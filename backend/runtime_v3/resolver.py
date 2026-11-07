@@ -190,6 +190,7 @@ class StateResolver:
         raise StructuralDeltaError.combine(errors)
 
     def resolve(self, payload):
+        from backend.services.world_delta_errors import StructuralDeltaError
         raw = deepcopy(payload) if isinstance(payload, RawTurnResult) else RawTurnResult.parse(payload)
         self.warnings.extend(raw.warnings)
         from backend.runtime_v3.continuity import validate_due_birth_assessments
@@ -315,7 +316,8 @@ class StateResolver:
                       'и опусти только неподтверждённую запись прибытия. Не угадывай ID. Сохрани подтверждённые этапы маршрута.',
                       'movement_endpoint_invalid', repairable=True, section='movements', index=i,
                       field='to_location_id', entity=cid)
-            initial_placement = self.before['meta']['turn_id'] == 0 and self.before['camera']['location_id'] is None
+            initial_placement = (self.before['meta']['turn_id'] == 0 and self.before['camera']['location_id'] is None
+                                 and self.before['characters'].get(cid, {}).get('location_id') is None)
             if cid == self.protected_actor_id and target != s['characters'][cid]['location_id'] and not initial_placement and not self.movement_authorized(item, raw):
                 fatal('Перемещение управляемого персонажа требует происхождения.', 'movement_agency', repairable=True, section='movements', index=i, entity=cid)
             order = item.get('order')
@@ -341,9 +343,11 @@ class StateResolver:
                     **({'source_event_id':item['source_event_id']} if item.get('source_event_id') else {})))
                 origin = target
             s['characters'][cid]['location_id'] = origin
+        scene_errors = []
         for cid in present:
             origin = s['characters'][cid]['location_id']
-            initial_placement = self.before['meta']['turn_id'] == 0 and self.before['camera']['location_id'] is None
+            initial_placement = (self.before['meta']['turn_id'] == 0 and self.before['camera']['location_id'] is None
+                                 and self.before['characters'].get(cid, {}).get('location_id') is None)
             if self.before['characters'].get(cid, {}).get('location_id') != lid and cid == self.protected_actor_id and not initial_placement:
                 claims = [m for m in raw.records['movements'] if isinstance(m, dict)
                           and m.get('actor_id') == cid and m.get('to_location_id') == lid]
@@ -351,6 +355,16 @@ class StateResolver:
                     fatal('Перемещение управляемого персонажа требует происхождения.', 'movement_agency', repairable=True, entity=cid)
 
             if origin != lid:
+                if not initial_placement and cid in self.before['characters']:
+                    scene_errors.append(StructuralDeltaError(
+                        f'final_scene не подтверждает прибытие {cid} из {origin} в {lid}. '
+                        'Если неизменный Narrative действительно описывает приход, добавьте Movement и его Event '
+                        'с source_event_id, actor/endpoint/order; новые локации и самостоятельный приход допустимы. '
+                        'Если только Extraction ошиблась составом сцены, исправьте её. Если сама проза изображает '
+                        'отсутствующего персонажа без установленного прихода, укажите player_agency.status=violated '
+                        'для явного reauthor/abandon. Не выдумывайте прибытие и не скрывайте противоречие удалением Events.',
+                        'scene_arrival_unproven', repairable=True, section='final_scene',
+                        field='present_character_ids', entity=cid, source_ids=[cid]))
                 self.history.movements.append(dict(actor_id=cid,from_location_id=origin,to_location_id=lid,
                     derived_from='final_scene',turn_id=self.turn_id))
             s['characters'][cid]['location_id'] = lid
@@ -387,8 +401,7 @@ class StateResolver:
         event_indices = {}
         scene_start = self.before['meta']['world_time']
         scene_end = s['meta']['world_time']
-        from backend.services.world_delta_errors import StructuralDeltaError
-        event_errors = []
+        event_errors = list(scene_errors)
         rejected_events = set()
         for i, item in self.records(raw,'events'):
             error_start = len(event_errors)

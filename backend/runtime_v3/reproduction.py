@@ -42,7 +42,10 @@ class BirthSexObservation(StrictModel):
     narrative_sex: Literal['male', 'female'] | None
     event_sex: Literal['male', 'female'] | None
     basis: Literal['not_disclosed', 'observation', 'announcement']
-    source_actor_id: str | None = None
+    source_actor_id: str | None = Field(default=None, description=(
+        'Actual speaker of the announcement, never a nearby witness or parent. '
+        'Use null if the Narrative speaker has no established canonical identity; '
+        'do not invent a Character solely to fill this field.'))
     source_assertion: Literal['direct_observation', 'prior_knowledge'] | None = None
     perceived_by: list[str] = Field(default_factory=list, max_length=64)
     evidence: str = ''
@@ -370,6 +373,13 @@ def validate_birth_sex(r, claim, event, pregnancy):
             raise ValueError('background birth cannot disclose sex to protected observers')
         if row['basis'] == 'announcement':
             actor = row['source_actor_id']
+            if actor is None:
+                # An unnamed clinician can announce an observed birth outcome.
+                # No canonical identity or Knowledge is invented for the source.
+                # Recipients still require this Event's perception/witness proof.
+                if row['source_assertion'] != 'direct_observation':
+                    raise ValueError('unidentified speaker requires established direct observation, not assumed prior Knowledge')
+                continue
             if actor not in event['participants'] or not row['source_assertion']:
                 raise ValueError('announcement requires its established speaker and information source')
             if not capabilities(r.state, actor)['can_perceive']:

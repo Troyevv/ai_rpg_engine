@@ -353,7 +353,13 @@ class ExtractionContextBuilder:
         default = (PROMPTS/'state_update_prompt.md').read_text(encoding='utf-8')
         saved = (prompts or {}).get('state_update_prompt.md', {}).get('content')
         # Preserve user overrides, but do not send the bundled generic contract twice.
-        rules = (saved + '\n' if saved and saved.strip() != default.strip() else '') + EXTRACTION_CONTRACT
+        # Retry/regeneration can retain an older default in their immutable prompt
+        # snapshot. Reuse the existing upgrade registry, without rewriting it.
+        from hashlib import sha256
+        old_defaults = json.loads((PROMPTS/'default_updates.json').read_text(encoding='utf-8')).get('state_update_prompt.md', [])
+        if isinstance(old_defaults, str): old_defaults = [old_defaults]
+        custom = saved and saved.strip() != default.strip() and sha256(saved.encode()).hexdigest() not in old_defaults
+        rules = (saved + '\n' if custom else '') + EXTRACTION_CONTRACT
         from backend.runtime_v3.player_actions import EXTRACTION_CONTRACT as action_contract, required as agency_required
         if agency_required(snapshot['world_state'], user_text, kind): rules += action_contract
         from backend.services.letter_sources import enabled as historical_enabled

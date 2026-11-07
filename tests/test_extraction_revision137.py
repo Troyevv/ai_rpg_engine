@@ -13,9 +13,9 @@ TEXT = 'Виктория молча пододвинула записку к И�
 
 
 def payload():
-    raw = arrival(); raw['movements'] = []
+    raw = arrival()
     raw['player_agency'] = dict(status='preserved', actions=[])
-    raw['events'] = [dict(id='note', text=TEXT, participants=['ilya', NPC],
+    raw['events'] += [dict(id='note', text=TEXT, participants=['ilya', NPC],
                          witnesses=['ilya'], medium='observation')]
     return raw
 
@@ -104,7 +104,7 @@ def test_bounded_repair_can_correct_provisional_semantics(api, initial_death, fi
     def interpretation(dead):
         raw = payload()
         raw['life_changes'] = [dict(id=NPC, life_status='dead')] if dead else []
-        raw['events'] = [dict(id='outcome', text='Её дыхание оборвалось.' if dead else 'Она жива.', participants=[NPC])]
+        raw['events'] = [raw['events'][0], dict(id='outcome', text='Её дыхание оборвалось.' if dead else 'Она жива.', participants=[NPC])]
         return raw
     bad = interpretation(initial_death); bad['final_scene']['location_id'] = 'missing-room'
     good = interpretation(final_death)
@@ -153,11 +153,11 @@ def test_retry_reinterprets_failed_claims_and_keeps_same_lineage(api):
 def test_committed_death_survives_repair_reload_regenerate_and_rollback(api):
     client, app = api; sid = imported(client); repo = app.state.repository
     death = payload(); death['life_changes'] = [dict(id=NPC, life_status='dead')]
-    death['events'] = [dict(id='death', text='Её дыхание оборвалось.', participants=[NPC])]
+    death['events'] = [death['events'][0],dict(id='death', text='Её дыхание оборвалось.', participants=[NPC])]
     first, _ = run(client, sid, [death], 'Её дыхание оборвалось.')
     assert first['status'] == 'saved'
     canonical = Storage(repo.path).get_snapshot(sid); accepted = history(repo, sid)
-    good = payload(); good['events'] = []
+    good = payload(); good['events'] = []; good['movements'] = []
     good['final_scene']['present_character_ids'] = ['ilya']
     bad = deepcopy(good); bad['final_scene']['location_id'] = 'missing-room'
     second, calls = run(client, sid, [bad,good], 'Илья ждёт.', 'turn', 'Жду.')

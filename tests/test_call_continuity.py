@@ -238,22 +238,21 @@ def test_text_only_situation_preserves_choices_and_clock(tmp_path):
     assert calls==['narrative','extraction']
 
 
-def test_unconfirmed_optional_arrival_is_dropped_and_disclosed(tmp_path):
-    repo,client,sid,cid=connected(tmp_path);before=repo.get_snapshot(sid)['world_state']
+def test_unconfirmed_call_scene_arrival_is_atomic(tmp_path):
+    repo,client,sid,cid=connected(tmp_path);before=repo.get_snapshot(sid)
     def arrival(value,current):
         value['events']=[];value['physical_projections']=[]
         value['final_scene']['present_character_ids'].append('qa_marina')
         value['final_scene']['situation']='Виктория вошла в кабинет.'
         value['final_scene']['situation_evidence']=KNOCK
         return value
-    jid,calls=turn(repo,client,sid,OFFER,arrival);saved(repo,jid)
-    after=repo.get_snapshot(sid)['world_state']
-    assert 'qa_marina' in after['camera']['present_character_ids']
-    assert after['characters']['qa_marina']['location_id']==after['camera']['location_id']
-    route=client.get(f'/api/saves/{sid}').json()['turns'][-1]['presentation']
-    assert ASSENT in route['call_text']
-    assert not route['physical_text']
-    assert 'call_scene_hint_dropped' not in repo.get_job(jid)['warnings_json']
+    jid,calls=turn(repo,client,sid,OFFER,arrival)
+    job=repo.get_job(jid)
+    assert job['status']=='error'
+    assert 'scene_arrival_unproven' in json.dumps(job,ensure_ascii=False)
+    assert calls==['narrative','extraction','extraction']
+    assert repo.get_snapshot(sid)==before
+    assert Repository(repo.path).get_snapshot(sid)==before
 
 
 def test_repair_may_remove_unaccepted_optional_events(tmp_path):

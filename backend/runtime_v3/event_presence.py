@@ -132,14 +132,17 @@ def validate_event_presence(resolver, event, index, written):
 def validate_movement_sources(resolver, raw, events, rejected_events=()):
     """Bind explicit arrival assertions to accepted Events, never interpret prose.
 
-    Unmarked legacy movements remain readable. The current wire contract requires
-    assertion + source; even legacy records must validate a supplied source.
+    Historical movements remain readable; every newly proposed arrival needs a
+    source, even if the producer omits the assertion marker. Initial world
+    placement is not an arrival from an established scene.
     """
     from backend.services.world_delta_errors import StructuralDeltaError
     errors = []
     for index, item in resolver.records(raw, 'movements'):
         source = item.get('source_event_id')
-        if 'assertion' not in item and source is None:
+        if (source is None and resolver.before['meta']['turn_id'] == 0
+                and resolver.before['camera']['location_id'] is None
+                and resolver.before['characters'].get(item['actor_id'], {}).get('location_id') is None):
             continue
         if isinstance(source, str) and source in rejected_events:
             continue
