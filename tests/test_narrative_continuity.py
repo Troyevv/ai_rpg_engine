@@ -231,13 +231,15 @@ def test_milestone_relevance_decays_with_established_later_scenes_and_is_actor_k
 
 
 def test_external_decision_cannot_be_fabricated_in_continuity():
-    s=setup()['world_state'];row=beat('resolved','decision');row['actor_id']='a'
+    s=setup()['world_state'];row=beat('resolved','decision');row.update(actor_id='a',target_ids=['b'])
     raw=payload(s,continuity_beats=[row])
     with pytest.raises(StructuralDeltaError):StateResolver(s,'Разговор завершён.','').resolve(raw)
     row['player_evidence']='Я решил.'
     with pytest.raises(StructuralDeltaError):StateResolver(s,'Разговор завершён.','Я решил.').resolve(raw)
     row['decision_actor_id']='a'
     raw['events'][0].update(player_assertion='completed_interaction',player_evidence='Я решил.')
+    from runtime_v3_fixture import player_action
+    player_action(raw, 'a', ['b'], 'Я решил.', 'event')
     assert StateResolver(s,'Разговор завершён.','Я решил.').resolve(raw).state
 
 
