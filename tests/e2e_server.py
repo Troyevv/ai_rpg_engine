@@ -58,10 +58,12 @@ npc_review_start_payload=None
 story168_payload=None
 story168_gate=None
 agency232_attempts=0
+agency237_mode=False
+agency237_extractions=0
 birth231_response=None
 
 def scripted_stream(**kwargs):
-    global phone_mode, group_semantic_fail_once, npc_review_start_payload, story168_payload, agency232_attempts, birth231_response
+    global phone_mode, group_semantic_fail_once, npc_review_start_payload, story168_payload, agency232_attempts, birth231_response, agency237_extractions
     if birth231_response is not None:
         narrative, raw = birth231_response
         if kwargs.get('response_format'):
@@ -327,6 +329,18 @@ def scripted_stream(**kwargs):
     action = json.loads(turn_input.split('\n', 1)[1]).get('player_input') if turn_input else None
     from test_player_action_targets import ACTION as AGENCY_ACTION, BAD_TEXT, ATTEMPT, payload as agency_payload, claim as agency_claim
     if action == AGENCY_ACTION:
+        if agency237_mode:
+            from test_player_action_completion import absent
+            if not kwargs.get('response_format'):
+                agency232_attempts += 1
+                yield ATTEMPT
+            else:
+                agency237_extractions += 1
+                raw = absent(current_phone, outcome='completed' if agency232_attempts == 1 else 'attempted')
+                if agency237_extractions == 1:
+                    raw['events'][0]['participants'].append('qa_vera')
+                yield json.dumps(raw, ensure_ascii=False)
+            return
         if not kwargs.get('response_format'):
             agency232_attempts += 1
             yield BAD_TEXT if agency232_attempts == 1 else ATTEMPT
@@ -912,9 +926,11 @@ if __name__ == '__main__':
         return {'world':result['world'],'save':result['save']}
 
     @app.post('/test/agency232-seed')
-    def agency232_seed():
-        global agency232_attempts
+    def agency232_seed(completion: bool = False):
+        global agency232_attempts, agency237_mode, agency237_extractions
         agency232_attempts = 0
+        agency237_mode = completion
+        agency237_extractions = 0
         from devtools.narrative_test_world import load_fixture
         from test_narrative_test_world import ordinary_job
         repo = app.state.repository

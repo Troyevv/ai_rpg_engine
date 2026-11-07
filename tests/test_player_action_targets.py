@@ -57,6 +57,9 @@ def play(crisis, responses, text=GOOD_INPUT, narrative=GOOD_TEXT, kind='turn'):
     calls = []
     def stream(**kw):
         calls.append(kw)
+        if kw['messages'][0]['content'].startswith('Select at most ONE optional grounded autonomous remote action.'):
+            yield json.dumps({'action': None})
+            return
         yield json.dumps(next(responses), ensure_ascii=False) if kw.get('response_format') else narrative
     with patch('engine.find_loaded_model', return_value={'config': {}}), patch('engine.chat_stream', side_effect=stream):
         engine.run_job(repo.path, jid, engine.Worker(epoch=repo.get_job(jid)['attempt_epoch']))
@@ -267,7 +270,8 @@ def test_schema_has_resolvable_typed_review():
 
 
 @pytest.mark.parametrize('channel', ['active', 'closed', 'unavailable'])
-def test_targeted_call_uses_only_existing_channel(api, channel):
+@pytest.mark.parametrize('marker', [False, True])
+def test_targeted_call_uses_only_existing_channel(api, channel, marker):
     from devtools.narrative_test_world import load_fixture
     from test_narrative_test_world import ordinary_job
     from test_phone122 import execute as answer_call
@@ -291,14 +295,14 @@ def test_targeted_call_uses_only_existing_channel(api, channel):
     state = before['world_state']
     actor = state['camera']['controlled_actor_id']
     text = 'Вера, ты меня слышишь?'
-    raw = payload(state, [claim([VERA], quote=text)])
+    raw = payload(state, [claim([VERA], quote=text)], completed=marker)
     raw['events'][0].update(actor_id=actor, participants=[actor, VERA], witnesses=[actor], interaction_channel='call')
     job, calls = play((client, repo, sid), [raw, raw], text, 'Кирилл спрашивает Веру по телефону. Вера отвечает.')
     assert len(calls) == (2 if channel == 'active' else 3), job.get('error')
     if channel == 'active':
         assert job['status'] == 'saved', job.get('error')
         event = saved_events(repo, sid)[-1]
-        assert event['player_interaction'] and event['target_ids'] == [VERA]
+        assert bool(event.get('player_interaction')) == marker and event['target_ids'] == [VERA]
         assert event['interaction_channel'] == 'call'
     else:
         assert job['status'] == 'error'
