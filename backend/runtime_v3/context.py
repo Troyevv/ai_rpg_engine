@@ -303,6 +303,17 @@ class NarrativeContextBuilder:
                     block('Память', dict(strategy='canonical_history', llm_calls=0)),
                     block('Недавняя история / GM-only', scope.history_events),
                     block('Director / GM-only', plan(state, kind, scope=scope))]
+        from backend.runtime_v3.reproduction import birth_authoring_context
+        births = birth_authoring_context(state, scope)
+        if births:
+            messages.append(block('Birth authoring constraints / GM-only', dict(
+                pregnancies=births,
+                instruction='Canonical child IDs and sex constrain only an actual delivery in this scene. '
+                'This is NOT character Knowledge, not proof of delivery, and not permission to reveal a secret. '
+                'Before delivery never mention hidden count/sex. If delivery occurs, use canonical sex only '
+                'when anatomy is actually observed or a grounded speaker reports it; otherwise omit sex. '
+                'Only characters who perceive that specific observation/announcement learn it. '
+                'Respect POV, capability and player agency. Do not invent an examination or announcement.')))
         from backend.runtime_v3.genre import guidance
         genre = guidance(state['meta'].get('genre'))
         if genre: messages.append(block('Genre / soft creative guidance', genre))
@@ -354,6 +365,9 @@ class ExtractionContextBuilder:
         if reproductive:
             from backend.runtime_v3.context_contract import REPRODUCTION_CONTRACT
             rules += REPRODUCTION_CONTRACT
+            if any(p['status'] != 'born' for p in current.get('pregnancies', [])):
+                from backend.runtime_v3.context_contract import BIRTH_SEX_CONTRACT
+                rules += BIRTH_SEX_CONTRACT
             # Recorded Director continuity is POV-filtered, also on retry. The
             # Extraction contract comes from the immutable pre-turn world.
             from backend.runtime_v3.continuity import due_births_in_scene_clock

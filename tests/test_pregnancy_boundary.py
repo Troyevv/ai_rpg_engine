@@ -1,5 +1,6 @@
 """#209: the pregnancy process, its calendar reminder and the committed clock."""
 from copy import deepcopy
+from pregnancy_boundary_fixture import undisclosed_sex
 import json
 
 import pytest
@@ -102,7 +103,7 @@ def test_background_group_cannot_deliver_a_player_required_birth():
         events=[dict(id='visit', text=text, evidence=text, participants=['a'], witnesses=['a'],
                      advance_candidate_ids=[visit.id])],
         births=[dict(pregnancy_id=process['id'], source_event_id='visit',
-                     assertion='birth_completed', location_id='home', evidence=text)])
+                     assertion='birth_completed', sex_observations=undisclosed_sex(process), location_id='home', evidence=text)])
     def generate(stage, *args, **kwargs):
         yield json.dumps(raw) if stage == 'long_term_extraction' else text
     after, history, report = run(snapshot, request, generate=generate)

@@ -221,6 +221,17 @@ def extraction_schema():
             if isinstance(node,list): return [wire_schema(v) for v in node]
             return node
         definitions[section] = wire_schema(model.model_json_schema())
+        # Pydantic refs are root-relative; this schema is embedded in an array
+        # inside RawTurnResult. Inline the small nested disclosure model here.
+        nested = definitions[section].pop('$defs', {})
+        def inline_models(node):
+            if isinstance(node, dict):
+                ref = node.get('$ref', '').removeprefix('#/$defs/')
+                if ref in nested: return inline_models(nested[ref])
+                return {k:inline_models(v) for k,v in node.items()}
+            if isinstance(node, list): return [inline_models(v) for v in node]
+            return node
+        definitions[section] = inline_models(definitions[section])
     definitions['life_changes']['properties'].update(
         reproductive_capability={'enum':['can_become_pregnant','can_impregnate','neither','unknown']},
         identity_components={'type':'object','additionalProperties':string})

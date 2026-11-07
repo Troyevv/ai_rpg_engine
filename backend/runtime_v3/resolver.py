@@ -401,6 +401,8 @@ class StateResolver:
             for eid, event in events.items()
         }
         from backend.runtime_v3.knowledge import apply_knowledge
+        from backend.runtime_v3.reproduction import validate_birth_knowledge
+        validate_birth_knowledge(self, raw, events)
         apply_knowledge(self, raw, events)
         from backend.runtime_v3.secrets import apply_disclosures
         apply_disclosures(self, raw)

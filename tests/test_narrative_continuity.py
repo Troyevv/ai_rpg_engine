@@ -235,6 +235,9 @@ def test_external_decision_cannot_be_fabricated_in_continuity():
     raw=payload(s,continuity_beats=[row])
     with pytest.raises(StructuralDeltaError):StateResolver(s,'Разговор завершён.','').resolve(raw)
     row['player_evidence']='Я решил.'
+    with pytest.raises(StructuralDeltaError):StateResolver(s,'Разговор завершён.','Я решил.').resolve(raw)
+    row['decision_actor_id']='a'
+    raw['events'][0].update(player_assertion='completed_interaction',player_evidence='Я решил.')
     assert StateResolver(s,'Разговор завершён.','Я решил.').resolve(raw).state
 
 

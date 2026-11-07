@@ -111,3 +111,25 @@ or immunity to a model misidentifying both input and Narrative. Such proof would
 require a different authority or user confirmation. Within the existing
 Extraction-owned architecture, missing, uncertain and contradictory claims are
 rejected, and an observed prose violation cannot be silently repaired in History.
+
+## Integration with #231 and #233
+
+PR #234 incorporates master `2bd13c6`, including merged #235 and #236. The shared
+`requires_narrative_reauthor` diagnostic predicate owns both birth and agency
+rejections. Public `retry_allowed` is its inverse; persisted pre-unification agency
+codes remain blocked without rewriting jobs. Both UI paths keep the unresolved
+turn locked until abandon and restore the original input into an empty composer.
+
+Combined Social/001 tests exposed an additional gap: a decision receipt could
+replace Vera with Timur if both were participants of the same accepted conversation.
+Two new real-job tests failed before the fix (the invalid receipt was accepted
+without repair). Reviewed action targets now bound player decision counterparties;
+NPC-led proposals reverse the initiator/recipient roles correctly. Wrong decision
+targets receive one structural repair; repeated errors reject the whole turn.
+Optional dialogue annotations cannot retarget a player interaction either. Broad
+Event evidence and narrower decision evidence remain compatible with #233.
+
+The integrated suites cover Crisis/001, Social/001, birth canonical/GM-only and
+Knowledge behavior, detection of a prose conflict during repair, legacy persisted
+diagnostics, refusal/deferment, independent NPC initiative, multiple actions,
+lineage and zero-call abandon. No new LLM stage or paid execution was added.

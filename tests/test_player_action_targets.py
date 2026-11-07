@@ -99,7 +99,9 @@ def test_narrative_substitution_cannot_be_laundered_through_repair(crisis, forma
     good = payload(before['world_state'], [claim([VERA], outcome='attempted')], completed=False)
     job, calls = play(crisis, [raw, good], ACTION, BAD_TEXT)
     assert job['status'] == 'error' and len(calls) == 2  # no futile extraction repair
-    assert job['retry_allowed'] is False and job['narrative'] == BAD_TEXT
+    assert job['retry_allowed'] is False and job['narrative_reauthor_required'] is True
+    assert job['narrative'] == BAD_TEXT
+    assert json.loads(repo.get_job(job['id'])['repair_diagnostics_json'])[-1]['action'] == 'reauthor_narrative'
     fresh = Repository(repo.path)
     assert fresh.get_snapshot(sid) == before and fresh.list_turns(sid) == turns
     assert fresh.variants(turns[-1]['node_id']) == variants
@@ -398,3 +400,26 @@ def test_new_object_target_requires_accepted_canonical_creation(crisis, accepted
         assert job['status'] == 'error' and len(calls) == 3
         assert Repository(repo.path).get_snapshot(sid) == before
         assert 'player_action_target_invalid' in repo.get_job(job['id'])['repair_diagnostics_json']
+
+
+def test_legacy_agency_diagnostic_blocks_retry_after_reload(crisis):
+    _, repo, sid = crisis
+    before = repo.get_snapshot(sid)
+    raw = payload(before['world_state'], [claim([VERA], actual=[MARINA])])
+    job, calls = play(crisis, [raw], ACTION, BAD_TEXT)
+    assert len(calls) == 2 and job['status'] == 'error'
+    # Pre-unification jobs only stored the code and the generic regenerate action.
+    diagnostics = json.loads(repo.get_job(job['id'])['repair_diagnostics_json'])
+    for diagnostic in diagnostics:
+        diagnostic['action'] = 'regenerate'
+    with repo.connect() as db:
+        db.execute('UPDATE game_jobs SET repair_diagnostics_json=? WHERE id=?',
+                   (json.dumps(diagnostics), job['id']))
+    fresh = Repository(repo.path)
+    public = fresh.public_job(fresh.get_job(job['id']))
+    assert public['narrative_reauthor_required'] and not public['retry_allowed']
+    with patch('engine.chat_stream', side_effect=AssertionError('No LLM')):
+        with pytest.raises(ValueError, match='новую сцену'):
+            fresh.retry_job(job['id'])
+        fresh.abandon_job(sid, job['id'], fresh.get_save(sid)['revision'], job['attempt_epoch'])
+    assert fresh.get_snapshot(sid) == before

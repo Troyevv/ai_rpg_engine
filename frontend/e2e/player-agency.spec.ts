@@ -28,15 +28,17 @@ test('Crisis/001: rejected substitution survives reload; abandon restores input 
   await send.click();
   await expect(abandon).toBeEnabled();
   await expect(retry).toHaveCount(0);
+  await expect(send).toBeDisabled();
   await expect(page.getByRole('alert').filter({hasText:'Повествование изменило или не подтвердило выбранное действие игрока.'})).toBeVisible();
   const failed = await view();
-  expect(failed.job).toMatchObject({status:'error', retry_allowed:false, user_text:action});
+  expect(failed.job).toMatchObject({status:'error', retry_allowed:false, narrative_reauthor_required:true, user_text:action});
   expect(failed.state).toEqual(before.state);
   expect(failed.turns).toEqual(before.turns);
   const spent = await requests();
   await page.reload();
   await expect(abandon).toBeEnabled();
   await expect(retry).toHaveCount(0);
+  await expect(send).toBeDisabled();
   await abandon.click();
   await expect(input).toHaveValue(action);
   await expect(send).toBeEnabled();

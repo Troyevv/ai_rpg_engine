@@ -3,7 +3,6 @@
 Extraction resolves language/aliases and reviews the *unchanged* Narrative. Runtime
 compares typed identities and outcomes; it never parses names or prose semantics.
 """
-import json
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -104,7 +103,7 @@ def validate_targets(resolver, actions):
 def narrative_conflict(**path):
     fatal('Повествование изменило или не подтвердило выбранное действие игрока. '
           'Ход не сохранён. Отмените его и отправьте исходное действие заново.',
-          'narrative_agency_conflict', repairable=False, **path)
+          'narrative_agency_conflict', repairable=False, action='reauthor_narrative', **path)
 
 
 def event_provenance(resolver, item, event, index, actions):
@@ -135,9 +134,3 @@ def event_provenance(resolver, item, event, index, actions):
                  player_action=action.model_dump())
     if completed:
         event.update(player_interaction=True, player_evidence=action.player_evidence)
-
-
-def retry_allowed(job):
-    """A proven/uncertain Narrative violation cannot be repaired by re-extraction."""
-    return not any(d.get('code') == 'narrative_agency_conflict'
-                   for d in json.loads(job.get('repair_diagnostics_json') or '[]'))

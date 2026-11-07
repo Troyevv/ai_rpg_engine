@@ -68,8 +68,10 @@ class Repository(PresentationStorage, DraftStorage, Storage):
     @staticmethod
     def public_job(job):
         from backend.runtime_v3.surfaces import job_route
-        from backend.runtime_v3.player_actions import retry_allowed
-        job = dict(job, presentation=job_route(job), retry_allowed=retry_allowed(job))
+        from backend.services.world_delta_errors import requires_narrative_reauthor
+        reauthor = requires_narrative_reauthor(json.loads(job.get('repair_diagnostics_json') or '[]'))
+        job = dict(job, presentation=job_route(job), retry_allowed=not reauthor,
+                   narrative_reauthor_required=reauthor)
         journal = json.loads(job.get('response_journal') or '{}')
         world=journal.get('responses',{}).get('world',{})
         assembly_error=world.get('assembly_error','')
