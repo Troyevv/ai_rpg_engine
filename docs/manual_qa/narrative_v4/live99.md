@@ -249,3 +249,21 @@ retry. Для удалённых родов добавляется изолир�
 `--phase continue`; подтверждённый P1 удерживает соответствующую группу.
 
 Отчёт: [post-fix Stage C, 7 ноября](live99-stage-c-retest-20261107.md).
+# Post-merge campaign retest (#219 / #230)
+
+`prepare-campaign-retest NEW_DIR --parent ORIGINAL_STAGE_C_DIR --reviewed`
+uses the existing runner and original Stage C checkpoints in a new SQLite copy.
+It requires merged #231–#233 and #230, preserves the #230 evidence separately,
+and links **the unspent #230 allowance**, without renewing either the $2 cap or
+its 120-action ceiling. The shared ledger retains all Stage A/B/C reservations.
+The near-due #78 family fixture is isolated from the historical contradictory
+birth; Campaign/Crisis use explicit UI rollback before their targeted retest.
+Historical #230 variants remain in the untouched source database and archive.
+
+Run `preflight NEW_DIR`, then `run NEW_DIR --stage C --phase retest --reviewed
+--case GROUP --step N`. Review each paid result before the next dispatch.
+Use the existing evidence-bound `review-stage-c` / semantic holds before
+`--phase continue`; a saved job alone never unlocks a group. A new directory
+cannot grant a new allowance, and unknown outcomes block every linked run.
+The plan is bounded at 69 operations, including deterministic UI transitions;
+completion remains conditional on semantic review and remaining budget.

@@ -172,6 +172,9 @@ def validate(directory, manifest):
     for name, checksum in manifest['parent_evidence'].items():
         if digest(Path(manifest['parent']) / name) != checksum:
             raise ValueError('Historical evidence changed: '+name)
+    for name, checksum in manifest.get('related_evidence', {}).items():
+        if digest(Path(name)) != checksum:
+            raise ValueError('Related historical evidence changed: '+name)
     for path in (directory / 'recoveries').glob('*.json'):
         receipt = read(path)
         for name, checksum in receipt['evidence'].items():

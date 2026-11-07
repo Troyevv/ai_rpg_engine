@@ -522,7 +522,7 @@ def run(args, directory, manifest):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['prepare','prepare-stage-b','prepare-stage-c','prepare-stage-c-followup','review-stage-c','prepare-crisis-extension','review-stage-b','preflight','run','report','recover-unsubmitted',
+    parser.add_argument('command', choices=['prepare','prepare-stage-b','prepare-stage-c','prepare-stage-c-followup','prepare-campaign-retest','review-stage-c','prepare-crisis-extension','review-stage-b','preflight','run','report','recover-unsubmitted',
                                           'adopt', 'recheck-saved', 'retry-extraction'])
     parser.add_argument('directory', type=Path)
     parser.add_argument('--stage', choices=list(QUOTAS), default='A')
@@ -540,10 +540,10 @@ def main():
     if args.command == 'prepare':
         prepare(directory)
         return
-    if args.command in ('prepare-stage-b', 'prepare-stage-c', 'prepare-stage-c-followup'):
+    if args.command in ('prepare-stage-b', 'prepare-stage-c', 'prepare-stage-c-followup', 'prepare-campaign-retest'):
         if not args.reviewed or not args.parent:
             parser.error('Stage B requires the reviewed historical parent')
-        if args.command == 'prepare-stage-c-followup':
+        if args.command in ('prepare-stage-c-followup', 'prepare-campaign-retest'):
             from .stage_c_followup import prepare as prepare_b
         elif args.command == 'prepare-stage-c':
             from .stage_c import prepare as prepare_b
@@ -554,7 +554,8 @@ def main():
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             master = subprocess.check_output(['git', 'rev-parse', 'origin/master'], cwd=ROOT, text=True).strip()
             subprocess.run(['git', 'merge-base', '--is-ancestor', master, 'HEAD'], cwd=ROOT, check=True)
-            prepare_b(parent, directory, revision(), master)
+            prepare_b(parent, directory, revision(), master,
+                      **({'campaign': True} if args.command == 'prepare-campaign-retest' else {}))
         return
     manifest = read(directory / 'manifest.json')
     lock_path = (directory / 'budget.sqlite').resolve().parent / 'run.lock' if manifest.get('stage') in ('B','C') else directory / 'run.lock'
