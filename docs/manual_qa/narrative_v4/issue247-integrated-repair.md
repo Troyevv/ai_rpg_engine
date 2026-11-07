@@ -99,6 +99,15 @@ npx playwright test e2e/integrated-repair247.spec.ts --project=desktop --project
   also exhausted `/tmp`; subsequent runs use a repository-local basetemp.
   Original failures are not evidence of a clean baseline and are not hidden.
 
+CI #472 completed the production/backend checks and all ten new desktop/mobile
+#247 scenarios successfully. Its full browser sweep found one stale test control
+on each platform: the doorway fixture removed movements but retained the newly
+inherited arrival Event. The original failure was reproduced through the real
+API (`event_presence_invalid`); removing that fictional arrival from the test
+control restored start plus two subsequent observed-only turns. Production
+presence validation and browser assertions were not weakened. See PR #248 for
+the final CI run after this fixture correction.
+
 ## Remaining live gate (not authorized or executed)
 
 Use existing `devtools/live99` harness / #245 QA checkpoint machinery, copied

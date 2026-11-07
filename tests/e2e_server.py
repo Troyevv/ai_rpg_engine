@@ -247,6 +247,9 @@ def scripted_stream(**kwargs):
             scenario=handoff_provider.get('scenario','retry')
             raw['movements']=[]
             if scenario=='doorway':
+                # The shared arrival control now includes its source Event.
+                # This observed-only scene establishes no arrival at all.
+                raw['events']=[]
                 raw['final_scene'].update(present_character_ids=['ilya'],observed_character_ids=['viktoria_solovyova'])
             if scenario in ('retry','semantic-retry') and handoff_provider['extractions']<=2:
                 raw['final_scene']['location_id']='unknown-room'
