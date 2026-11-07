@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from devtools.live99.budget import Budget
+from devtools.live99.budget import Budget, reserve_action
 from devtools.live99.postfix_budget import PostfixBudget, authorize_copy
 
 
@@ -85,6 +85,19 @@ def test_symlink_cannot_mutate_original_ledger(tmp_path):
     source=tmp_path/'source.sqlite';Budget(source)
     directory=tmp_path/'run';directory.mkdir();(directory/'budget.sqlite').symlink_to(source)
     with pytest.raises(ValueError,match='physical ledger copy'):PostfixBudget(directory)
+
+
+def test_new_actions_do_not_collide_with_historical_relative_paths(tmp_path):
+    ledger,*_=copied(tmp_path)
+    with sqlite3.connect(ledger.path) as db:
+        db.execute('CREATE TABLE qa_actions(path TEXT PRIMARY KEY,intent TEXT NOT NULL)')
+        db.execute("INSERT INTO qa_actions VALUES('crisis/000','original')")
+    directory=Path(ledger.run_directory)
+    reserve_action(directory,directory/'crisis/000',dict(kind='rollback'),2)
+    with sqlite3.connect(ledger.path) as db:
+        assert db.execute("SELECT intent FROM qa_actions WHERE path='crisis/000'").fetchone()==('original',)
+        assert db.execute('SELECT count(*) FROM qa_actions').fetchone()==(2,)
+    with pytest.raises(RuntimeError,match='action budget'):reserve_action(directory,directory/'crisis/001',{},2)
 
 
 def test_interrupted_stream_keeps_full_reservation_and_raw_evidence(tmp_path):
