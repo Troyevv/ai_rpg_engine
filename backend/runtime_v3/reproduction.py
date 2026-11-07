@@ -404,7 +404,7 @@ def validate_birth_knowledge(r, raw, events, *, rejected_event_ids=()):
             continue
         p = r.state['pregnancies'].get(claim['pregnancy_id'])
         event = events.get(claim['source_event_id'])
-        if claim['source_event_id'] in rejected_event_ids:
+        if p and claim['source_event_id'] in rejected_event_ids:
             continue
         if not p or not event:
             unvalidated_facts.update(protected_facts)

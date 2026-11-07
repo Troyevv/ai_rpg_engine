@@ -368,13 +368,14 @@ def test_diagnostic_birth_probe_has_no_observable_side_effects(tmp_path):
     assert repo.get_snapshot(sid)['world_state'] == state
 
 
-def test_independent_events_birth_and_knowledge_diagnostics(tmp_path):
+@pytest.mark.parametrize('birth_source', ['delivery', 'bad-time'])
+def test_independent_events_birth_and_knowledge_diagnostics(tmp_path, birth_source):
     from birth_sex_fixture import due_save, payload
     repo, sid = due_save(tmp_path/'independent.sqlite')
     state = repo.get_snapshot(sid)['world_state']
     narrative, raw = payload(state, sexes=[None])
     raw['births'][0]['sex_observations'][0]['event_sex'] = 'male'
-    raw['births'].append(dict(raw['births'][0], pregnancy_id='unknown-pregnancy'))
+    raw['births'].append(dict(raw['births'][0], pregnancy_id='unknown-pregnancy', source_event_id=birth_source))
     raw['events'].extend([
         dict(id='bad-time', text='Invalid time', minute=-1),
         dict(id='bad-place', text='Impossible meeting', medium='conversation',
