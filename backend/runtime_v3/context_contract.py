@@ -19,7 +19,7 @@ No scene_id/last_event_id/StatePatch. Ordinary elapsed_minutes>=0; Runtime owns 
 Lifecycle *_updates: stable IDs/current evidence. completed result=completed; failure=failed;
 lost context=expired; explicit cancellation=cancelled; replacement=superseded.
 Joke can complete 'tease Yuri'; conversation 'talk to Sonya'; intent/promise != performance.
-EXTERNAL desires need explicit input, never Narrative.
+New EXTERNAL desires: explicit player_input, never Narrative.
 EXTERNAL Emotion only from explicit internal player_input statements, never gestures,
 face, relationships, narrative or card. 'Внутри привычная горечь', 'На душе тревожно',
 'Меня это бесит', 'Настроение в ноль', 'Чувствую себя опустошённым' qualify; 'Сжимаю кулак',
@@ -31,11 +31,11 @@ Keep unresolved symptoms; sleep alone is no cure.
 Directed feelings: prior relationship_evidence only, never Narrative; else only explicit
 current-actor override (player_assertion=explicit_directed_feelings, exact player_evidence).
 Event cast/witnesses: together at start/end or shared movement/Event.order (distinct for arrival, meeting, exit); else confirmed channel. Off-scene situation: source_event_id.
-completed_interaction: completed input only. No mirrored feelings, invented consent/actions or negated overrides.
+completed_interaction: completed player input only. No mirrored feelings, invented consent/actions or negated overrides.
 Remote_interactions: ongoing END message/phone/radio, actor_id/channel/evidence.
 Reconfirm each turn; rereading != contact. Omit ended; physical arrivals belong in present.
-Knowledge: THIS accepted informational Event, actor in witnesses, fact in fact_ids. Actual perception/reading only; no GM-card/delivery/time/intention acquisition. Message author_id: established, never inferred.
-Facts immutable; reuse IDs, new assertions need new IDs. claim={subject_id,predicate,value,scope:""} identifies an exclusive slot; scope separates roles/periods; omit uncertain slots. known is belief, not truth. knowledge_gained statuses: known/suspected/unknown/outdated/refuted/superseded. expected_revision required for revival; supersedes needs old AND new facts in Event.fact_ids. New known retires conflicting known in its slot. Retire existing beliefs only. Same-slot changes need distinct Event.order.
+Knowledge: THIS accepted informational Event, actor in witnesses, fact in fact_ids. Actual perception/reading only; no GM-card/delivery/time/intention acquisition. Message author_id: established participant, never inferred.
+Facts immutable; reuse IDs, new assertions=new IDs. claim={subject_id,predicate,value,scope:""} =exclusive slot; scope=role/period; omit uncertain slots. known is belief, not truth. knowledge_gained statuses: known/suspected/unknown/outdated/refuted/superseded. expected_revision required for revival; supersedes needs old AND new facts in Event.fact_ids. New known retires conflicting known in its slot. Retire existing beliefs only. Same-slot changes need distinct Event.order.
 story_secret=plot, not privacy/routine. secret_subject_ids=related people; secret_keeper_ids=conscious owners; secret_biography_ids=biographical subjects, not others' feelings/plans. None grants Knowledge. secret_existence:hidden(default)|discoverable(anonymous slot). Reuse IDs; rumors=suspected. secret_disclosures binds written source_event_id/artifact_id + fact_id, assertion confirmed|rumor. Only actual reading grants Knowledge; quotes/delivery aren't confirmation.
 Event.minute: absolute in [world_time, world_time + applied elapsed_minutes]. Omit unknown minute/order. Date testimony to the telling.
 '''
