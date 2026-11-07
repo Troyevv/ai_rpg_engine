@@ -88,7 +88,8 @@ def test_event_never_authorizes_a_separate_player_decision(state, change):
     raw['continuity_beats'][0].update(change)
     with pytest.raises(StructuralDeltaError) as error:
         StateResolver(state, NARRATIVE, ACTION).resolve(raw)
-    assert error.value.code == 'continuity_external_decision' and not error.value.repairable
+    assert error.value.code == 'continuity_external_decision' and error.value.repairable
+    assert error.value.diagnostic('test')['path'] == 'continuity_beats[0].player_evidence'
 
 
 def test_background_cannot_borrow_player_evidence(state):
@@ -119,7 +120,7 @@ def test_retry_reload_regenerate_and_rollback_preserve_event_lineage(tmp_path):
     unsupported = deepcopy(raw)
     unsupported['continuity_beats'][0]['decision_actor_id'] = ACTOR_ID
     job = repo.begin_job(sid, ACTION, 'turn', CONFIG)
-    assert len(execute(repo, job, unsupported, NARRATIVE)) == 2
+    assert len(execute(repo, job, unsupported, NARRATIVE)) == 3  # one bounded Extraction repair
     assert repo.get_job(job)['status'] == 'error'
     assert repo.get_snapshot(sid) == before and repo.list_turns(sid) == turns
     assert repo.get_save(sid)['revision'] == revision
