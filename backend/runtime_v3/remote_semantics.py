@@ -66,6 +66,7 @@ def messages(snapshot, source_id, *, response_only=False):
         # Same source-bound Extraction contract, restricted to releasing the
         # existing wait before authoring. Consequences follow once, afterwards.
         schema = extraction_schema()
+        schema['properties']['final_scene']['properties'].pop('due_birth_assessments', None)
         schema['properties'] = {k:v for k,v in schema['properties'].items()
                                 if k in ('final_scene','group_response_changes')}
         scene=dict(location_id=state['camera']['location_id'],
@@ -85,6 +86,9 @@ def messages(snapshot, source_id, *, response_only=False):
                     for e in rows if e['sender_id']==state['camera']['controlled_actor_id'] or e.get('response_request')]),ensure_ascii=False))]
     ids = set().union(*(participants(e) for e in rows))
     schema = extraction_schema()
+    # This adapter preserves the physical scene exactly; birth/time assessments
+    # belong to ordinary Narrative Extraction, not phone message consequences.
+    schema['properties']['final_scene']['properties'].pop('due_birth_assessments', None)
     allowed = ('final_scene', 'locations', 'scheduled_event_changes', 'character_changes', 'group_response_changes','group_request_changes','thread_changes','relationship_changes','facts','secret_disclosures')
     schema['properties'] = {k:v for k,v in schema['properties'].items() if k in allowed}
     character=schema['properties']['character_changes']['items']
