@@ -37,14 +37,14 @@ their chosen targets. NPC initiative is welcome; it never substitutes player age
 '''
 
 EXTRACTION_CONTRACT = '''
-PLAYER ACTION REVIEW: ALL Narrative vs input; changed act/target/consent or impossible completion=violated;
-unprovable=uncertain. No laundering/deletion/downgrade. NPC reactions independent.
-Acts: exact player_evidence, intended target_ids, actual narrative_target_ids, outcome/meaning.
-Untargeted=[]; attempted keeps targets; partial=subset; deferred/not_performed allow actual=[].
-Event: actor_id=initiator, player_action_id=act; completed_interaction needs same quote.
-Event target_ids=own subset of actual; accepted Events jointly cover actual. Completed contact needs Events
-proving each target via presence/call/bound delivery even without assertion. No reply required;
-silence isn't delivery. target_mode=reference only noncontact, never dialogue/touch.
+PLAYER ACTION REVIEW: ALL Narrative/input; changed act/target/consent or impossible completion=violated;
+unprovable=uncertain. Never launder/delete/downgrade. NPCs independent.
+Acts: IDs/exact full quotes. Event: initiator actor_id, ONE player_action_id,
+same player_evidence; no mixed/other quotes. Split independent acts into Events.
+Targets: attempted keeps; partial=subset; deferred/not_performed may actual=[]; untargeted=[].
+Event targets=subset actual; union covers actual. completed_interaction needs completed.
+Completed contact needs presence/call/bound delivery, marker or not; no reply needed.
+reference=noncontact. Silence isn't delivery.
 '''
 
 
@@ -107,32 +107,61 @@ def narrative_conflict(**path):
 
 
 def event_provenance(resolver, item, event, index, actions):
-    """No completed player interaction from a copied quote or mere participation."""
+    """Check independent provenance fields together; never infer literary intent."""
     from backend.runtime_v3.resolver import normalized
+    from backend.services.world_delta_errors import StructuralDeltaError
     reference = item.get('player_action_id')
     completed = item.get('player_assertion') == 'completed_interaction'
     if reference is None and not completed and not (resolver.protected_actor_id and item.get('actor_id') == resolver.protected_actor_id):
         return
-    path = dict(section='events', index=index, field='player_action_id', entity=item['id'])
+    errors = []
     action = actions.get(reference) if isinstance(reference, str) else None
+    sources = [item['id']] + ([reference] if isinstance(reference, str) else [])
+
+    def invalid(field, reason, detail, *, completion=False):
+        errors.append(StructuralDeltaError(
+            f'Event {item["id"]}: {detail}',
+            'player_action_completion_invalid' if completion else 'player_action_event_mismatch',
+            repairable=True, section='events', index=index, field=field,
+            entity=item['id'], source_ids=sources, reason=reason))
+
+    if reference is None:
+        invalid('player_action_id', 'missing_player_action_id', 'отсутствует player_action_id; укажите ID исходного PlayerAction.')
+    elif action is None:
+        invalid('player_action_id', 'unknown_player_action_id', 'player_action_id не ссылается на PlayerAction этого ввода.')
+    if (resolver.mode != 'turn' or item.get('actor_id') != resolver.protected_actor_id
+            or resolver.protected_actor_id not in event['participants']):
+        invalid('actor_id', 'wrong_actor', 'actor_id и participants должны подтверждать управляемого автора действия.')
+    if event['medium'] == 'message' and event.get('author_id') != resolver.protected_actor_id:
+        invalid('author_id', 'wrong_actor', 'author_id сообщения не соответствует автору PlayerAction.')
     targets = item.get('target_ids')
-    if (action is None or resolver.mode != 'turn'
-            or item.get('actor_id') != resolver.protected_actor_id
-            or resolver.protected_actor_id not in event['participants']
-            or not isinstance(targets, list) or any(not isinstance(t, str) for t in targets)
-            or len(targets) != len(set(targets))
-            or not set(targets) <= set(action.narrative_target_ids)
-            or event['medium'] == 'message' and event.get('author_id') != resolver.protected_actor_id):
-        fatal('Event не соответствует автору/целям проверенного действия игрока.',
-              'player_action_event_mismatch', repairable=True, **path)
-    if completed and (action.outcome != 'completed'
-                      or not isinstance(item.get('player_evidence'), str)
-                      or normalized(item.get('player_evidence') or '') != normalized(action.player_evidence)
-                      or not (set(targets) & resolver.state['characters'].keys()) <= set(event['participants'])):
-        fatal('completed_interaction требует выполненного исходного действия с теми же целями.',
-              'player_action_completion_invalid', repairable=True, **path)
+    valid_targets = (isinstance(targets, list) and all(isinstance(t, str) for t in targets)
+                     and len(targets) == len(set(targets)))
+    if not valid_targets or action and not set(targets) <= set(action.narrative_target_ids):
+        invalid('target_ids', 'target_ids_mismatch', 'target_ids должны быть собственным подмножеством narrative_target_ids связанного PlayerAction.')
+    quote = item.get('player_evidence')
+    if not isinstance(quote, str) or not normalized(quote):
+        invalid('player_evidence', 'missing_player_evidence', 'отсутствует player_evidence; скопируйте точную цитату связанного PlayerAction.', completion=completed)
+    elif action and normalized(quote) != normalized(action.player_evidence):
+        value = normalized(quote)
+        other = [a for a in actions.values() if a.id != action.id]
+        if any(value == normalized(a.player_evidence) for a in other):
+            reason, detail = 'other_action_evidence', 'player_evidence принадлежит другому PlayerAction.'
+        elif (normalized(action.player_evidence) in value
+              and any(normalized(a.player_evidence) in value for a in other)):
+            reason, detail = 'multiple_action_evidence', 'player_evidence охватывает несколько отдельных PlayerActions.'
+        else:
+            reason, detail = 'action_evidence_mismatch', 'player_evidence не совпадает с цитатой связанного PlayerAction.'
+        invalid('player_evidence', reason, detail + ' Используйте только его точную цитату; несколько действий требуют отдельных Events.', completion=completed)
+    if completed and action:
+        if action.outcome != 'completed':
+            invalid('player_assertion', 'outcome_not_completed', 'completed_interaction требует outcome=completed в исходном действии; не меняйте исход ради проверки.', completion=True)
+        if valid_targets and not (set(targets) & resolver.state['characters'].keys()) <= set(event['participants']):
+            invalid('participants', 'target_participation_missing', 'completed_interaction требует участия собственных адресатов Event.', completion=True)
+    if errors:
+        raise StructuralDeltaError.combine(errors)
     event.update(actor_id=resolver.protected_actor_id, target_ids=list(targets),
-                 player_action=action.model_dump())
+                 player_action=action.model_dump(), player_evidence=action.player_evidence)
     if completed:
         event.update(player_interaction=True, player_evidence=action.player_evidence)
 
