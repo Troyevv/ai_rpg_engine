@@ -29,6 +29,12 @@ def payload(state, *, sexes=None, event_sexes=None, recipients=None, basis='anno
     if recipients is None: recipients = ['qa_vera', 'qa_kirill']
     narrative = 'Вера родила. Тимур осмотрел детей. ' + ' '.join(
         f'О ребёнке {i+1} врач сказал: «{WORDS[sex]}».' for i, sex in enumerate(sexes) if sex)
+    if basis == 'observation':
+        names = {'qa_vera':'Вера', 'qa_kirill':'Кирилл', 'qa_timur':'Тимур'}
+        observers = ' и '.join(names.get(actor, actor) for actor in recipients)
+        narrative = 'Вера родила. ' + ' '.join(
+            f'{observers} рассмотрели ребёнка {i+1}: {WORDS[sex]}.'
+            for i, sex in enumerate(sexes) if sex)
     event_text = 'Вера родила. ' + ' '.join(
         f'Ребёнок {i+1}: {WORDS[sex]}.' for i, sex in enumerate(event_sexes) if sex)
     observations = [dict(child_id=child['id'], narrative_sex=sex, event_sex=event_sex,
