@@ -82,6 +82,51 @@ def test_followup_unknown_cost_cannot_be_reauthorized_or_dispatched(tmp_path):
         old.authorize_stage_c_followup(tmp_path / 'followup', parent)
 
 
+def test_linked_retest_spends_remaining_followup_cap_without_reset(tmp_path):
+    old, original, _ = authorization(tmp_path)
+    parent, child = tmp_path/'followup', tmp_path/'retest'
+    receipt = old.authorize_stage_c_followup(parent, original)
+    paid = Budget(old.path, stage_c=parent, stage_c_followup=True)
+    for _ in range(3):
+        paid.settle(paid.reserve(32000), dict(prompt_tokens=900000, completion_tokens=32000))
+    with sqlite3.connect(old.path) as db:
+        history = db.execute('SELECT * FROM reservations ORDER BY id').fetchall()
+        authorizations = db.execute('SELECT * FROM stage_c_followup_authorization').fetchall()
+    linked = old.link_stage_c_followup(child, parent)
+    assert linked == (str(child.resolve()), *receipt[1:])
+    assert old.link_stage_c_followup(child, parent) == linked
+    current = Budget(old.path, stage_c=child, stage_c_followup=True)
+    for _ in range(3):
+        current.settle(current.reserve(32000), dict(prompt_tokens=900000, completion_tokens=32000))
+    for run in (parent, child):
+        with pytest.raises(RuntimeError, match='exhausted'):
+            Budget(old.path, stage_c=run, stage_c_followup=True).reserve(32000)
+    with pytest.raises(ValueError, match='cannot renew'):
+        old.link_stage_c_followup(tmp_path/'other', parent)
+    with pytest.raises(ValueError, match='authorized followup parent'):
+        old.link_stage_c_followup(child, original)
+    with sqlite3.connect(old.path) as db:
+        assert db.execute('SELECT * FROM reservations ORDER BY id LIMIT ?', (len(history),)).fetchall() == history
+        assert db.execute('SELECT * FROM stage_c_followup_authorization').fetchall() == authorizations
+        assert db.execute('SELECT count(*) FROM qa_actions').fetchone()[0] == linked[2]
+
+
+def test_unknown_outcome_blocks_link_and_shared_retest_dispatch(tmp_path):
+    old, original, _ = authorization(tmp_path)
+    parent, child = tmp_path/'followup', tmp_path/'retest'
+    old.authorize_stage_c_followup(parent, original)
+    paid = Budget(old.path, stage_c=parent, stage_c_followup=True)
+    rid = paid.reserve(2000)
+    with pytest.raises(ValueError, match='Unknown paid outcome'):
+        old.link_stage_c_followup(child, parent)
+    paid.settle(rid, dict(prompt_tokens=1000, completion_tokens=100))
+    old.link_stage_c_followup(child, parent)
+    current = Budget(old.path, stage_c=child, stage_c_followup=True)
+    current.reserve(2000)
+    with pytest.raises(RuntimeError, match='Unknown paid outcome'):
+        paid.reserve(2000)
+
+
 def test_unknown_stage_c_outcome_blocks_all_next_dispatches_and_reauthorization(tmp_path):
     budget, directory, _ = authorization(tmp_path)
     def dispatch(_):

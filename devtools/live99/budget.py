@@ -73,6 +73,24 @@ class Budget:
             raise ValueError('Followup must retain the original Stage C ledger')
         return self._authorize(directory, 'C_followup')
 
+    def link_stage_c_followup(self, directory, parent):
+        """Use the remaining authorization in an isolated retest, never renew it."""
+        directory, parent = str(directory.resolve()), str(parent.resolve())
+        with sqlite3.connect(self.path) as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT directory,baseline_id,baseline_actions FROM stage_c_followup_authorization WHERE id=1').fetchone()
+            if not row or row[0] != parent or directory == parent:
+                raise ValueError('Choose the original authorized followup parent')
+            if db.execute('SELECT count(*) FROM reservations WHERE settled=0').fetchone()[0]:
+                raise ValueError('Unknown paid outcome; cannot link a retest')
+            db.execute('CREATE TABLE IF NOT EXISTS stage_c_followup_link '
+                       '(directory TEXT PRIMARY KEY, parent TEXT UNIQUE NOT NULL)')
+            prior = db.execute('SELECT directory,parent FROM stage_c_followup_link').fetchall()
+            if prior and prior != [(directory, parent)]:
+                raise ValueError('Followup continuation already linked; allowance cannot renew')
+            db.execute('INSERT OR IGNORE INTO stage_c_followup_link VALUES(?,?)', (directory, parent))
+            return directory, row[1], row[2]
+
     def _authorize(self, directory, stage):
         """One explicit authorization per stage; retest shares its stage's allowance."""
         directory = str(directory.resolve())
@@ -102,6 +120,12 @@ class Budget:
         table = ('stage_c_followup_authorization' if self.stage_c_followup else
                  'stage_c_authorization' if self.stage_c else 'stage_b_authorization')
         row = db.execute(f'SELECT directory,baseline_id,baseline_actions FROM {table} WHERE id=1').fetchone()
+        if row and row[0] != self.run_directory and self.stage_c_followup:
+            exists = db.execute("SELECT 1 FROM sqlite_master WHERE name='stage_c_followup_link'").fetchone()
+            link = db.execute('SELECT parent FROM stage_c_followup_link WHERE directory=?',
+                              (self.run_directory,)).fetchone() if exists else None
+            if link == (row[0],):
+                row = (self.run_directory, row[1], row[2])
         if not row or row[0] != self.run_directory:
             raise ValueError('Missing or mismatched paid stage authorization')
         return row
