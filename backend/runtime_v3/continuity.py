@@ -174,8 +174,9 @@ def due_birth_repair_required(diagnostics, before):
     This requires an assessment; only validate_temporal_boundaries owns whether
     a failed attempt may automatically retry. The immutable before owns scope.
     """
-    return bool(due_births_in_scene_clock(before)) and any(
-        row.get('code') == 'ordinary_temporal_boundary' for row in diagnostics)
+    # A different first structural error must not let repair discard the scene
+    # assessment and fabricate a delivery either. This never grants a retry.
+    return bool(diagnostics) and bool(due_births_in_scene_clock(before))
 
 
 def validate_due_birth_assessments(resolver, raw, *, require=False):

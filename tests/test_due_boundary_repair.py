@@ -294,3 +294,31 @@ def test_repair_can_extract_delivery_only_when_narrative_assessment_completed(tm
     assert after['meta']['world_time']==1982
     assert repo.list_turns(sid)[-1]['assistant_text']==narrative
     assert sum(c.get('kind')=='birth' for c in history(repo,sid)['state_changes'])==1
+
+
+@pytest.mark.parametrize('first_error', ['assessment', 'camera'])
+@pytest.mark.parametrize('omit', [False, True])
+def test_repair_cannot_drop_a_rejected_due_assessment(tmp_path, first_error, omit):
+    repo,sid=family(tmp_path/'dropped-assessment.sqlite')
+    before=repo.get_snapshot(sid)
+    state=before['world_state']
+    _,bad=payload(state,sexes=[None])
+    assess(bad,state,'ongoing')
+    omitted=deepcopy(bad)
+    omitted['final_scene'].pop('due_birth_assessments')
+    if first_error == 'camera':
+        bad=ongoing(state, assessed=True)
+        bad['final_scene']['location_id']='unknown-place'
+    turns,hist=repo.list_turns(sid),history(repo,sid)
+    repaired=omitted if omit else ongoing(state, assessed=True)
+    rejected,calls=execute(repo,sid,SIGNS,[bad,repaired])
+    assert len(calls)==3
+    if omit:
+        assert rejected['status']=='error'
+        assert json.loads(rejected['repair_diagnostics_json'])[-1]['code']=='due_birth_assessment_invalid'
+        assert_atomic(repo,sid,before,turns,hist)
+    else:
+        assert rejected['status']=='saved', rejected['error']
+        after=Repository(repo.path).get_snapshot(sid)['world_state']
+        assert after['pregnancies']==state['pregnancies'] and after['meta']['world_time']==1980
+        assert after['knowledge']==state['knowledge']

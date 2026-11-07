@@ -24,7 +24,9 @@ test('ongoing labor repairs once, persists after reload and rejects repeated clo
     await input.fill(action);
     await send.click();
     await expect.poll(async () => (await view()).turns.length).toBe(before.turns.length+1);
-    await expect(send).toBeEnabled();
+    await expect(input).toBeEnabled();
+    await expect(input).toHaveValue('');
+    await expect(send).toBeDisabled(); // Empty actions are intentionally not submittable.
     const after = await view();
     expect(after.job.status).toBe('saved');
     expect(after.turns.slice(0,-1)).toEqual(before.turns);
