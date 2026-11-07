@@ -95,7 +95,8 @@ def test_wrong_narrative_with_canonical_event_and_knowledge_delta_is_rejected(tm
     assert_atomic(repo, sid, before, turns, hist)
     # A corrected JSON must not launder this same rejected text after reload.
     reloaded = Repository(repo.path)
-    assert reloaded.public_job(reloaded.get_job(job['id']))['narrative_reauthor_required']
+    public = reloaded.public_job(reloaded.get_job(job['id']))
+    assert public['narrative_reauthor_required'] and not public['retry_allowed']
     with pytest.raises(ValueError, match='новую сцену'):
         reloaded.retry_job(job['id'], CONFIG)
     assert len(repo.request_log(job_id=job['id']))==2
@@ -206,7 +207,7 @@ def test_birth_disclosure_lineage_and_lta_continuation(tmp_path):
 def test_schema_resolves_nested_observations_and_requires_explicit_nulls(tmp_path):
     repo, sid = due_save(tmp_path/'schema.sqlite')
     _, raw = payload(repo.get_snapshot(sid)['world_state'])
-    for schema in (extraction_schema(), prompt_schema()):
+    for schema in (extraction_schema(), prompt_schema(player_agency_required=True)):
         validator = Draft202012Validator(schema)
         validator.validate(raw)
         missing = deepcopy(raw)
@@ -302,7 +303,7 @@ def test_remote_birth_discloses_only_to_local_observer(tmp_path):
             yield 'Вера родила и сама увидела: мальчик.' if private else 'Кирилл ждёт дома.'
             return
         cam=current['camera']
-        raw=dict(final_scene=dict(location_id=cam['location_id'],present_character_ids=cam['present_character_ids'],elapsed_minutes=0))
+        raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=cam['location_id'],present_character_ids=cam['present_character_ids'],elapsed_minutes=0))
         if private:
             text=block(messages,'completed_narrative')
             raw.update(events=[dict(id='birth',text=text,evidence=text,participants=['qa_vera'],
@@ -319,3 +320,31 @@ def test_remote_birth_discloses_only_to_local_observer(tmp_path):
     event=next(e for e in history(repo,sid)['events'] if e['id']==state['knowledge']['qa_vera:'+fid]['source_event_id'])
     assert not event['player_observed']
     assert state['pregnancies'][p['id']]['status']=='born'
+
+
+@pytest.mark.parametrize('conflict', ['agency', 'birth'])
+def test_repair_cannot_clear_narrative_reauthor_requirement(tmp_path, conflict):
+    from unittest.mock import patch
+    repo, sid = due_save(tmp_path/'combined.sqlite')
+    before = repo.get_snapshot(sid)
+    narrative, raw = payload(before['world_state'], sexes=['female' if conflict == 'birth' else 'male'])
+    first = deepcopy(raw)
+    # One structural repair is legal until the immutable prose is assessed.
+    first.pop('player_agency')
+    if conflict == 'agency':
+        raw['player_agency']['status'] = 'violated'
+    job, calls = execute(repo, sid, narrative, [first, raw])
+    assert job['status'] == 'error' and len(calls) == 3
+    diagnostics = json.loads(job['repair_diagnostics_json'])
+    assert diagnostics[0]['code'] == 'player_agency_missing'
+    assert diagnostics[-1]['code'] == ('narrative_agency_conflict' if conflict == 'agency' else 'birth_narrative_sex_conflict')
+    assert diagnostics[-1]['action'] == 'reauthor_narrative'
+    fresh = Repository(repo.path)
+    public = fresh.public_job(fresh.get_job(job['id']))
+    assert public['narrative_reauthor_required'] and not public['retry_allowed']
+    assert fresh.get_snapshot(sid) == before
+    with patch('engine.chat_stream', side_effect=AssertionError('No LLM')):
+        with pytest.raises(ValueError, match='новую сцену'):
+            fresh.retry_job(job['id'])
+        fresh.abandon_job(sid, job['id'], fresh.get_save(sid)['revision'], job['attempt_epoch'])
+    assert fresh.get_snapshot(sid) == before

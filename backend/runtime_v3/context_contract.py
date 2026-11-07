@@ -452,12 +452,13 @@ Never infer consent from silence, affection scores, earlier intimacy or relation
 Only available scene/established remote channels; referenced authors do not become present.
 Keep existing literary style and active game language. Do not narrate runtime labels.
 """
-EXTRACTION_CONTRACT += """
+SCENE_ACTION_EXTRACTION_CONTRACT = """
 scene_actions: omit if uncertain. accept/answer/refuse/end/redirect: copy full evidence of THIS source_event_id.
 Offer/attempt/silence != consent. Romance: adult=true. Interruptible EXTERNAL: response=open;
 player_supplied needs current player_evidence. response_event_id=answered pending_response_ids Event.
 Involuntary: canonical consequences. knowledge_ids=own actor:fact; suspected for inquiry only.
 """
+EXTRACTION_CONTRACT += SCENE_ACTION_EXTRACTION_CONTRACT
 
 NARRATIVE_CONTRACT += """
 CONTINUITY: Director.continuity is optional pressure, never an event quota.
@@ -473,7 +474,7 @@ Routine waiting/travel/work may be summarized up to continuity.compression.max_m
 Stop at its boundary, any interruption or meaningful EXTERNAL response/decision. Never
 invent that response or silently skip hours/days. Detailed Time Skip remains separate.
 """
-EXTRACTION_CONTRACT += """
+CONTINUITY_EXTRACTION_CONTRACT = """
 scene_transitions: THIS Event/actors/threads; refresh situation/state. Meeting end != closure/move.
 Thread reopen: new Event. Completed plans: scheduled_event_changes.
 continuity_beats optional: actor=initiator; kind/basis_ids/status; evidence of THIS beat.
@@ -485,6 +486,7 @@ Repair same input/Narrative: no invented choices/borrowed quotes/duplicates.
 Choices: kind/basis_ids, omit resolved/rejected. Compression: evidenced routine, bounded
 elapsed_minutes; pending reply: response_event_id + player_evidence.
 """
+EXTRACTION_CONTRACT += CONTINUITY_EXTRACTION_CONTRACT
 
 RELATIONSHIP_EVIDENCE_CONTRACT = """
 Relationships != Emotion. Directed relationship_changes apply equally NPC->NPC,

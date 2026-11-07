@@ -209,10 +209,26 @@ def validate_compression(resolver, scene, elapsed):
         routine=claim.kind, evidence=claim.evidence, turn_id=resolver.turn_id))
 
 
+def player_targets_match(resolver, claim, event):
+    """A witness in a conversation cannot become the player's chosen addressee.
+
+    New Events carry the reviewed action. Older canonical records are not rewritten;
+    their existing provenance checks remain in force. NPC-led proposals reverse the
+    initiator/recipient roles, so compare the counterparties of the player response.
+    """
+    action = event.get('player_action')
+    if action is None:
+        return True
+    counterparties = {claim.actor_id, *claim.target_ids} - {resolver.protected_actor_id}
+    return counterparties <= set(action['narrative_target_ids'])
+
+
 def dialogue_evidence_matches(resolver, claim, event):
     """A completed player interaction proves dialogue, never a separate decision."""
     from backend.runtime_v3.resolver import normalized
 
+    if not player_targets_match(resolver, claim, event):
+        return False
     if event['medium'] == 'message' and event.get('author_id') != claim.actor_id:
         return False
     action = event.get('scene_action')
@@ -286,6 +302,9 @@ def validate_player_decision(resolver, claim, event, index):
             or event['medium'] == 'message' and event.get('author_id') != external):
         invalid('player_evidence', 'Цитата решения должна совпадать с player_evidence связанного '
                 'completed_interaction Event. Разные действия оформляются отдельными Events/beats.')
+    if not player_targets_match(resolver, claim, event):
+        invalid('target_ids', 'Адресат решения должен соответствовать проверенному действию Event; '
+                'присутствие другого участника разговора не делает его адресатом.')
     # Descriptive evidence may quote just this choice inside a longer conversation.
     # Comparing prose (even by substring) proves neither its author nor its meaning.
     # The accepted interaction and its complete player quote above own provenance.

@@ -44,7 +44,7 @@ def payload(state, *, sexes=None, event_sexes=None, recipients=None, basis='anno
         source_assertion='direct_observation' if sex and basis=='announcement' else None)
         for child, sex, event_sex in zip(p['children'], sexes, event_sexes, strict=True)]
     camera = state['camera']
-    raw = dict(final_scene=dict(location_id=camera['location_id'],
+    raw = dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],
         present_character_ids=camera['present_character_ids'], elapsed_minutes=2),
         events=[dict(id='delivery', text=event_text, evidence=narrative, medium='observation',
             participants=['qa_vera','qa_timur'], witnesses=['qa_vera','qa_kirill','qa_timur'],

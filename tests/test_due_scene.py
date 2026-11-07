@@ -51,7 +51,7 @@ def provider(**kwargs):
     births = state.get('pregnancies', [])
     # An unrelated 1-minute map scene reproduces the original failed delta.
     minutes = int(narrative == NARRATIVE and block(messages, 'Текущий ввод')['kind'] != 'background')
-    raw = dict(final_scene=dict(location_id=camera['location_id'],
+    raw = dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],
         present_character_ids=camera['present_character_ids'], elapsed_minutes=minutes))
     if narrative in (SIGNS, REMOTE_SIGNS, DELIVERY):
         mother = next(p for p in births if p['gestational_actor_id'] in camera['present_character_ids'])

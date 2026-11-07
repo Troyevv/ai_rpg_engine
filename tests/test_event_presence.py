@@ -197,7 +197,7 @@ def test_channel_repair_cannot_invent_connection(api, closed):
     repaired['events'][0]['interaction_channel'] = 'call'
     jid = repo.begin_job(sid, 'Ты меня слышишь?', 'turn', CONFIG)
     calls = execute(repo, jid, bad, 'Вера отвечает: «Я тебя слышу».', repaired)
-    assert len(calls) == 3
+    assert len(calls) == 3, repo.get_job(jid)['error']
     assert 'events[0].participants[1]' in calls[-1]['messages'][0]['content']
     saved = Repository(repo.path).get_snapshot(sid)
     if closed:

@@ -46,20 +46,20 @@ def test_t46_observed_without_boundary_or_movement(api):
 @pytest.mark.parametrize('section', ['life_changes', 'movements', 'scheduled_event_changes'])
 def test_t32_essential_wrong_type_requires_repair(section):
     with pytest.raises(StructuralDeltaError) as error:
-        RawTurnResult.parse(dict(final_scene={}, **{section:{'id':'meaningful'}}))
+        RawTurnResult.parse(dict(player_agency=dict(status='preserved', actions=[]), final_scene={}, **{section:{'id':'meaningful'}}))
     assert error.value.repairable
     assert error.value.path['section'] == section
 
 
 def test_t31_unknown_meaningful_section_diagnostic():
     with pytest.raises(StructuralDeltaError) as error:
-        RawTurnResult.parse(dict(final_scene={}, life_change={'id':'npc','life_status':'dead'}))
+        RawTurnResult.parse(dict(player_agency=dict(status='preserved', actions=[]), final_scene={}, life_change={'id':'npc','life_status':'dead'}))
     assert error.value.code == 'raw_unknown_field'
 
 
 @pytest.mark.parametrize('section', ['scene_actions','consequences'])
 def test_t28_optional_wrong_type_is_local(section):
-    raw = RawTurnResult.parse(dict(final_scene={}, **{section:{'broken':True}}))
+    raw = RawTurnResult.parse(dict(player_agency=dict(status='preserved', actions=[]), final_scene={}, **{section:{'broken':True}}))
     assert raw.records[section] == []
     assert raw.warnings[0]['section'] == section
 
@@ -155,7 +155,7 @@ def test_required_journey_api_jobs_sqlite_phone_reload(tmp_path):
         old=repo.get_snapshot(sid)['world_state'];camera=old['camera']
         present=[x for x in camera['present_character_ids'] if x!='qa_marina']
         if not observed:present.append('qa_marina')
-        raw=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=present,
+        raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=present,
             observed_character_ids=['qa_marina'] if observed else [],elapsed_minutes=0),
             events=[dict(id='conversation',text='Марина отвечает.',participants=[camera['controlled_actor_id'],'qa_marina'],witnesses=[camera['controlled_actor_id']],medium='conversation')])
         with patch('engine.launch'):
@@ -237,7 +237,7 @@ def test_t50_controlled_movement_requires_owned_source(api, authorization):
 
 def test_t31_nested_life_typo_is_visible():
     with pytest.raises(StructuralDeltaError) as exc:
-        RawTurnResult.parse(dict(final_scene={},life_changes=[dict(id='npc',life_stauts='dead')]))
+        RawTurnResult.parse(dict(player_agency=dict(status='preserved', actions=[]), final_scene={},life_changes=[dict(id='npc',life_stauts='dead')]))
     assert exc.value.path['path']=='life_changes[0].life_stauts'
 
 
@@ -281,7 +281,7 @@ def test_observed_stale_colocation_clears_only_unknown_position(api):
 def test_offcamera_protected_movement_cannot_borrow_pov_agency(api):
     client,app=api;sid=imported(client);before=app.state.repository.get_snapshot(sid)['world_state']
     before['camera'].update(mode='observer',present_character_ids=[])
-    raw=dict(final_scene=dict(location_id='salon_lak',present_character_ids=['viktoria_solovyova']),
+    raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id='salon_lak',present_character_ids=['viktoria_solovyova']),
              movements=[dict(actor_id='ilya',to_location_id='salon_lak')])
     with pytest.raises(StructuralDeltaError) as exc:StateResolver(before,'Илья теперь в салоне.','').resolve(raw)
     assert exc.value.code=='movement_agency'

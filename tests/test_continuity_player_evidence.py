@@ -24,9 +24,11 @@ def library_turn(state, kind='question', action=ACTION):
     beat = dict(source_event_id=EVENT_ID, actor_id=ACTOR_ID, target_ids=['qa_vera'],
                 basis_ids=['qa_map'], kind=kind, status='open',
                 evidence='Кирилл спрашивает Веру о библиотеке; Вера предлагает уточнить.')
-    return dict(final_scene=dict(location_id=camera['location_id'], elapsed_minutes=1,
+    from runtime_v3_fixture import player_action
+    raw = dict(final_scene=dict(location_id=camera['location_id'], elapsed_minutes=1,
                                  present_character_ids=camera['present_character_ids']),
                 events=[event], continuity_beats=[beat])
+    return player_action(raw, ACTOR_ID, ['qa_vera'], action, EVENT_ID)
 
 
 @pytest.fixture(scope='module')
@@ -70,6 +72,12 @@ def test_bad_dialogue_annotation_dropped(state, event_change, beat_change, code)
     raw['events'][0].update(event_change)
     raw['continuity_beats'][0].update(beat_change)
     before = deepcopy(state)
+    if any(key in event_change for key in ('participants', 'author_id', 'player_evidence')):
+        with pytest.raises(StructuralDeltaError) as exc:
+            StateResolver(state, NARRATIVE, ACTION).resolve(raw)
+        assert exc.value.code in ('player_action_event_mismatch', 'player_action_completion_invalid')
+        assert state == before
+        return
     out = StateResolver(state, NARRATIVE, ACTION).resolve(raw)
     warning, = [w for w in out.warnings if w['section'] == 'continuity_beats']
     assert (warning['code'], warning['action']) == (code, 'drop_record')
@@ -98,7 +106,7 @@ def test_background_cannot_borrow_player_evidence(state):
     raw['continuity_beats'][0]['player_evidence'] = ACTION
     with pytest.raises(StructuralDeltaError) as error:
         StateResolver(state, NARRATIVE, ACTION, mode='background').resolve(raw)
-    assert error.value.code == 'continuity_external_decision'
+    assert error.value.code == 'player_action_source_invalid'
 
 
 def test_retry_reload_regenerate_and_rollback_preserve_event_lineage(tmp_path):
@@ -127,7 +135,7 @@ def test_retry_reload_regenerate_and_rollback_preserve_event_lineage(tmp_path):
 
     repo.retry_job(job)
     calls = execute(repo, job, raw, NARRATIVE)
-    assert len(calls) == 1 and calls[0]['response_format']
+    assert len(calls) == 1 and calls[0]['response_format'], repo.get_job(job)['error']
     assert repo.get_job(job)['status'] == 'saved'
     assert repo.get_save(sid)['revision'] == revision + 1
     saved = repo.get_snapshot(sid)
@@ -194,3 +202,14 @@ def test_thread_membership_does_not_grant_discovery(state):
     out = StateResolver(hidden, NARRATIVE, ACTION).resolve(library_turn(hidden))
     assert 'continuity' not in out.history['events'][0]
     assert any(w['code'] == 'continuity_basis_unavailable' for w in out.warnings)
+
+
+def test_dialogue_receipt_cannot_retarget_to_a_bystander(state):
+    raw = library_turn(state)
+    raw['events'][0]['participants'].append('qa_timur')
+    raw['continuity_beats'][0]['target_ids'] = ['qa_timur']
+    out = StateResolver(state, NARRATIVE, ACTION).resolve(raw)
+    event, = out.history['events']
+    assert event['player_interaction'] and event['target_ids'] == ['qa_vera']
+    assert 'continuity' not in event
+    assert any(w['code'] == 'continuity_player_interaction_unconfirmed' for w in out.warnings)

@@ -126,7 +126,7 @@ export function Game({
   const job = snapshot?.status === 'abandoned' ? null : snapshot;
   const awaitingCommit=job?.status==='saved'&&job.revision===save?.revision&&!save?.turns.some(t=>t.variants?.some(v=>v.job_id===job.id));
   const rejected = !!job && ['error','stopped'].includes(job.status) && job.revision === save?.revision;
-  const retryable = rejected && !!job.narrative_complete && !job.narrative_reauthor_required;
+  const retryable = rejected && !!job.narrative_complete && !job.narrative_reauthor_required && job.retry_allowed !== false;
   const running = active(job)||!!job?.live&&job.status!=="saved"||!!awaitingCommit;
   const [presented,setPresented]=useState<string|null>(null);
   const streamedJob=useRef<string|null>(null);
@@ -134,7 +134,7 @@ export function Game({
   const onPresented=useStableEvent((id:string)=>{if(id===job?.id)setPresented(id)});
   const revealingCommit=(job?.presentation?.surface!=='call'||activeCall?.id===job.presentation.call_id)&&(submitted?.id===job?.id||streamedJob.current===job?.id)&&job?.kind!=='communication'&&job?.status==='saved'&&save?.turns.some(t=>t.variants?.find(v=>v.id===t.active_variant_id)?.job_id===job.id)&&presented!==job.id;
   const generating = running || !!revealingCommit;
-  const turnLocked = generating || retryable;
+  const turnLocked = generating || (rejected && !!job.narrative_complete);
   const canAct = !!save && !!actorId && !save.state.protagonist_required && save.state.actor_capabilities?.can_act!==false;
   const canSubmit = canAct && !busy && !turnLocked && !!save?.turns.length;
   useEffect(()=>{if(save?.state.protagonist_required)setProtagonistOpen(true)},[save?.id,save?.state.protagonist_required]);
@@ -205,6 +205,10 @@ export function Game({
             revision: save.revision, attempt_epoch: job.attempt_epoch ?? 0,
           });
           setSubmitted(discarded);
+          if (physical && (job.narrative_reauthor_required || job.retry_allowed === false) && !draftRef.current && job.user_text) {
+            setDraft(job.user_text);
+            sessionStorage.setItem(draftKey, job.user_text);
+          }
           if (physical) input.current?.focus({preventScroll:true});
         } finally {
           await refresh();

@@ -50,7 +50,7 @@ def stage(repo, wid, own=False):
 
 def payload(snap, reveal=True):
     s = snap['world_state']
-    return dict(final_scene=dict(location_id=s['camera']['location_id'],
+    return dict(player_agency=dict(status='preserved', actions=[]),final_scene=dict(location_id=s['camera']['location_id'],
         present_character_ids=s['camera']['present_character_ids'],elapsed_minutes=1),
         events=[dict(id='confession181',text='Соня призналась Илье.',evidence='Соня призналась Илье.',
             participants=['ilya','sonya'],witnesses=['ilya'],fact_ids=['fact_sonya_love'],medium='conversation')] if reveal else [],

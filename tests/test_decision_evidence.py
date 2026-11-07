@@ -10,7 +10,7 @@ from backend.runtime_v3.repository import read_history
 from backend.runtime_v3.resolver import StateResolver
 from backend.services.world_delta_errors import StructuralDeltaError
 from devtools.narrative_test_world import ACTOR_ID, load_fixture
-from runtime_v3_fixture import execute
+from runtime_v3_fixture import execute, player_action
 from test_narrative_test_world import CONFIG
 
 ACTION = ('Я согласен сейчас сортировать фотографии по датам, оставляя оригинал карты на месте. '
@@ -21,7 +21,7 @@ EVENT = 'event_3c1a7f0e5b2d94a6c8e1'
 
 def social_turn(state, *, quote=ACTION):
     camera = state['camera']
-    return dict(
+    raw = dict(
         final_scene=dict(location_id=camera['location_id'], elapsed_minutes=1,
                          present_character_ids=camera['present_character_ids']),
         events=[dict(id=EVENT, text=NARRATIVE, evidence=ACTION, medium='conversation',
@@ -31,6 +31,8 @@ def social_turn(state, *, quote=ACTION):
                                target_ids=['qa_vera'], basis_ids=['qa_map'], kind='decision',
                                status='resolved', decision_actor_id=ACTOR_ID, evidence=ACTION)],
     )
+
+    return player_action(raw, ACTOR_ID, ['qa_vera'], quote, EVENT)
 
 
 def events(repo, snapshot):
@@ -173,7 +175,10 @@ def test_event_quote_and_authorship_must_confirm_decision(game, event_change):
     raw['events'][0].update(event_change)
     with pytest.raises(StructuralDeltaError) as error:
         StateResolver(before['world_state'], NARRATIVE, ACTION).resolve(raw)
-    assert error.value.code == 'continuity_external_decision'
+    expected = ('player_action_event_mismatch' if 'author_id' in event_change else
+                'player_action_completion_invalid' if 'player_evidence' in event_change else
+                'continuity_external_decision')
+    assert error.value.code == expected
     assert repo.get_snapshot(sid) == before
 
 
@@ -204,6 +209,9 @@ def test_npc_proposal_or_independent_decision_needs_no_player_quote(game, decisi
     raw = social_turn(before['world_state'])
     raw['events'][0].pop('player_assertion')
     raw['events'][0].pop('player_evidence')
+    for key in ('actor_id', 'target_ids', 'player_action_id'):
+        raw['events'][0].pop(key)
+    raw['player_agency']['actions'] = []
     text = 'Вера решила убрать свои фотографии.' if decision else 'Вера предлагает разобрать фотографии.'
     raw['events'][0].update(text=text, evidence='Разговор о фотографиях продолжается. ' + text)
     raw['continuity_beats'][0].update(actor_id='qa_vera', target_ids=[ACTOR_ID], evidence=text,
@@ -229,6 +237,9 @@ def test_multiple_beats_validate_individually_and_commit_atomically(game, bad_se
     raw['events'].append(dict(raw['events'][0], id=EVENT + '_second', evidence=second, player_evidence=second))
     raw['continuity_beats'].append(dict(raw['continuity_beats'][0], source_event_id=EVENT + '_second',
         status='rejected', evidence=second, player_evidence=first if bad_second else second))
+    second_raw = player_action(deepcopy(raw), ACTOR_ID, ['qa_vera'], second, EVENT + '_second', 'input-2')
+    raw['events'][1] = second_raw['events'][1]
+    raw['player_agency']['actions'] += second_raw['player_agency']['actions']
     job = repo.begin_job(sid, first + ' ' + second, 'turn', CONFIG)
     calls = execute(repo, job, raw, NARRATIVE)
     assert len(calls) == (3 if bad_second else 2)
@@ -332,7 +343,7 @@ def test_background_cannot_acquire_decision_from_current_quote(game):
     raw['final_scene']['elapsed_minutes'] = 0
     with pytest.raises(StructuralDeltaError) as error:
         StateResolver(before['world_state'], NARRATIVE, ACTION, mode='background').resolve(raw)
-    assert error.value.code == 'continuity_external_decision' and not error.value.repairable
+    assert error.value.code == 'player_action_source_invalid'
 
 
 def test_optional_opportunity_does_not_acquire_a_decider(game):
@@ -386,3 +397,56 @@ def test_recovery_reload_regeneration_siblings_and_new_branch(game):
     assert events(repo, original) == [original_event]
     assert events(repo, sibling) == [sibling_event]
     assert len(events(Repository(repo.path), repo.get_snapshot(sid))) == 1
+
+
+@pytest.mark.parametrize('repaired', [False, True])
+def test_decision_cannot_retarget_action_to_another_conversation_participant(game, repaired):
+    repo, sid, before = game
+    raw = supported(before['world_state'])
+    # Timur hears the conversation but is not the addressee chosen in this action.
+    raw['events'][0]['participants'].append('qa_timur')
+    fixed = deepcopy(raw)
+    raw['continuity_beats'][0]['target_ids'] = ['qa_timur']
+    job = repo.begin_job(sid, ACTION, 'turn', CONFIG)
+    calls = execute(repo, job, raw, NARRATIVE, repaired=fixed if repaired else None)
+    assert len(calls) == 3
+    diagnostics = json.loads(repo.get_job(job)['repair_diagnostics_json'])
+    assert diagnostics[0]['path'] == 'continuity_beats[0].target_ids'
+    if repaired:
+        assert repo.get_job(job)['status'] == 'saved'
+        event, = events(Repository(repo.path), repo.get_snapshot(sid))
+        assert event['continuity'][0]['target_ids'] == event['player_action']['target_ids'] == ['qa_vera']
+    else:
+        assert repo.get_job(job)['status'] == 'error'
+        assert Repository(repo.path).get_snapshot(sid) == before
+
+
+def test_social_narrative_substitution_blocks_formally_correct_decision(game):
+    repo, sid, before = game
+    raw = supported(before['world_state'])
+    raw['player_agency']['actions'][0]['narrative_target_ids'] = ['qa_timur']
+    narrative = 'Кирилл обращается к Тимуру и соглашается сортировать его фотографии.'
+    job = repo.begin_job(sid, ACTION, 'turn', CONFIG)
+    calls = execute(repo, job, raw, narrative)
+    assert len(calls) == 2 and repo.get_job(job)['status'] == 'error'
+    fresh = Repository(repo.path)
+    public = fresh.public_job(fresh.get_job(job))
+    assert public['narrative_reauthor_required'] and not public['retry_allowed']
+    assert fresh.get_snapshot(sid) == before
+    with patch('engine.chat_stream', side_effect=AssertionError('No LLM')):
+        with pytest.raises(ValueError, match='новую сцену'):
+            fresh.retry_job(job)
+        fresh.abandon_job(sid, job, fresh.get_save(sid)['revision'], public['attempt_epoch'])
+    assert fresh.get_snapshot(sid) == before
+
+
+def test_player_can_accept_npc_initiated_proposal(game):
+    repo, sid, before = game
+    raw = supported(before['world_state'])
+    raw['continuity_beats'][0].update(actor_id='qa_vera', target_ids=[ACTOR_ID], kind='proposal')
+    job = repo.begin_job(sid, ACTION, 'turn', CONFIG)
+    calls = execute(repo, job, raw, NARRATIVE)
+    assert len(calls) == 2 and repo.get_job(job)['status'] == 'saved'
+    event, = events(Repository(repo.path), repo.get_snapshot(sid))
+    assert event['player_action']['target_ids'] == ['qa_vera']
+    assert event['continuity'][0]['decision_actor_id'] == ACTOR_ID
