@@ -105,7 +105,8 @@ class RuntimeStorage:
     def record_repair(self, job_id, diagnostic):
         with self.connect() as db:
             records=json.loads(db.execute('SELECT repair_diagnostics_json FROM game_jobs WHERE id=?',(job_id,)).fetchone()[0] or '[]')
-            db.execute('UPDATE game_jobs SET repair_diagnostics_json=? WHERE id=?',(dump(records+[diagnostic]),job_id))
+            batch = diagnostic if isinstance(diagnostic, list) else [diagnostic]
+            db.execute('UPDATE game_jobs SET repair_diagnostics_json=? WHERE id=?',(dump(records+batch),job_id))
 
     def begin_request(self, job_id, stage, config, messages, diagnostics, save_id=None):
         from backend.services.usage import price_snapshot

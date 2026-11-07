@@ -360,7 +360,7 @@ def run_job(path, job_id, handle):
                     diagnostics=exc.diagnostics('extraction_repair' if attempt==0 and exc.repairable else 'validation_failed')
                     for diagnostic in diagnostics:
                         diagnostic.update(attempt=attempt,attempt_epoch=job['attempt_epoch'],revision=job['revision'])
-                        storage.record_repair(job_id,diagnostic)
+                    storage.record_repair(job_id,diagnostics)
                     if attempt == 1 or not exc.repairable:raise
                     feedback = repair_feedback(diagnostics, result, before['world_state'])
                 finally:

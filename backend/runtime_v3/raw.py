@@ -262,7 +262,7 @@ def extraction_schema():
     definitions['relationship_changes']['properties']['dimensions']['description']='Закрытый набор: '+', '.join(RELATION_DIMENSIONS)+'. Не добавляй ключи; иной смысл — в context.'
     definitions['events']['dependentRequired'] = {
         'player_action_id': ['actor_id', 'target_ids', 'player_evidence'],
-        'player_assertion': ['actor_id', 'target_ids', 'player_action_id', 'player_evidence'],
+        'player_assertion': ['player_action_id'],
     }
     from backend.runtime_v3.player_actions import PlayerAgencyReview
     agency_schema = PlayerAgencyReview.model_json_schema()

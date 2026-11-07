@@ -13,13 +13,13 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from backend.repositories.preparation import Repository
-from backend.runtime_v3.raw import extraction_schema, repair_feedback
+from backend.runtime_v3.raw import extraction_schema
 from backend.runtime_v3.resolver import StateResolver
 from backend.services.world_delta_errors import StructuralDeltaError
 from devtools.narrative_test_world import load_fixture
 from test_api import api
 from test_narrative_test_world import ordinary_job, CONFIG
-from test_event_presence import crisis, NINA
+from test_event_presence import crisis
 from test_player_action_targets import claim, payload, play, saved_events, MARINA
 
 FIXTURES = Path(__file__).parent / 'fixtures' / 'issue238'
@@ -202,3 +202,30 @@ def test_schema_requires_event_link_fields_and_preserves_npc_independence():
         bad['events'][0].pop(field)
         assert list(schema.iter_errors(bad)), field
     schema.validate(raw)
+
+
+def test_manual_retry_reuses_all_latest_diagnostics_without_new_narrative(api):
+    import engine
+    client, app = api
+    repo = app.state.repository
+    data = archived('campaign')
+    sid = seed_archived(repo, 'campaign')['save']
+    job, calls = play((client, repo, sid), [data['responses']['extraction']] * 2,
+        data['player_input'], data['narrative'], config=dict(CONFIG, context_length=40960))
+    assert job['status'] == 'error' and len(calls) == 3
+    repo = Repository(repo.path)
+    original = json.loads(repo.get_job(job['id'])['repair_diagnostics_json'])
+    assert len(original) == 6
+    repo.retry_job(job['id'])
+    calls = []
+    def stream(**kw):
+        calls.append(kw)
+        assert kw.get('response_format'), 'retry must not reauthor Narrative'
+        yield json.dumps(corrected(data, 'campaign'), ensure_ascii=False)
+    with patch('engine.find_loaded_model', return_value={'config': {}}), patch('engine.chat_stream', side_effect=stream):
+        engine.run_job(repo.path, job['id'], engine.Worker(epoch=repo.get_job(job['id'])['attempt_epoch']))
+    assert repo.get_job(job['id'])['status'] == 'saved', repo.get_job(job['id'])['error']
+    assert len(calls) == 1
+    prompt = calls[0]['messages'][0]['content']
+    assert all(path in prompt for path in ('events[0].minute', 'events[0].player_action_id', 'events[0].player_evidence'))
+    assert json.loads(repo.get_job(job['id'])['repair_diagnostics_json']) == original

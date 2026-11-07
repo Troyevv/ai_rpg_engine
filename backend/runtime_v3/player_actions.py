@@ -37,20 +37,14 @@ their chosen targets. NPC initiative is welcome; it never substitutes player age
 '''
 
 EXTRACTION_CONTRACT = '''
-PLAYER ACTION REVIEW: ALL Narrative vs input; changed act/target/consent or impossible completion=violated;
-unprovable=uncertain. No laundering/deletion/downgrade. NPC reactions independent.
-Acts: one identity per independent explicit action; exact complete player_evidence for that action
-(including refusal/deferral), intended target_ids, actual narrative_target_ids, outcome/meaning.
-Untargeted=[]; attempted keeps targets; partial=subset; deferred/not_performed allow actual=[].
-Event: actor_id=initiator. Every player-authored Event needs player_action_id and player_evidence
-exactly equal to that action's quote, never the full input containing other actions or another action's quote.
-One Event has ONE action reference. A broad conversation may describe several acts, but to attest multiple
-independent player actions emit separate Events, each with its own ID/action/quote/targets; keep NPC initiative.
-Descriptive Event.evidence may be broader than a Continuity beat's evidence; player_evidence is action-specific.
-completed_interaction additionally requires outcome=completed. Never invent consent or change outcomes to pass.
-Event target_ids=own subset of actual; accepted Events jointly cover actual. Completed contact needs Events
-proving each target via presence/call/bound delivery even without assertion. No reply required;
-silence isn't delivery. target_mode=reference only noncontact, never dialogue/touch.
+PLAYER ACTION REVIEW: ALL Narrative/input; changed act/target/consent or impossible completion=violated;
+unprovable=uncertain. Never launder/delete/downgrade. NPCs independent.
+Acts: IDs/exact full quotes. Event: initiator actor_id, ONE player_action_id,
+same player_evidence; no mixed/other quotes. Split independent acts into Events.
+Targets: attempted keeps; partial=subset; deferred/not_performed may actual=[]; untargeted=[].
+Event targets=subset actual; union covers actual. completed_interaction needs completed.
+Completed contact needs presence/call/bound delivery, marker or not; no reply needed.
+reference=noncontact. Silence isn't delivery.
 '''
 
 

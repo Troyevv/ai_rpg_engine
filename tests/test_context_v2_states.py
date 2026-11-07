@@ -133,6 +133,7 @@ def test_compact_schema_has_identical_validation_rules(agency):
         full['required'].append('player_agency')
     else:
         full['properties'].pop('player_agency')
+        full['properties']['events']['items'].pop('dependentRequired')
         for field in ('actor_id', 'target_ids', 'player_action_id'):
             full['properties']['events']['items']['properties'].pop(field)
     def expand(node):
