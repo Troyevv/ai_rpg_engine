@@ -36,6 +36,14 @@ def test_optional_mutations(seed):
         assert before == untouched
         del event['minute']
         resolver = StateResolver(before, QUOTE, 'Я подхожу к окну. Я доверяю ей.')
+    if event.get('location_id') is not None:
+        with pytest.raises(StructuralDeltaError) as exc:
+            resolver.resolve(p)
+        assert exc.value.code == 'event_presence_invalid' and exc.value.repairable
+        assert exc.value.diagnostic('extraction')['path'].endswith('.location_id')
+        assert before == untouched
+        del event['location_id']
+        resolver = StateResolver(before, QUOTE, 'Я подхожу к окну. Я доверяю ей.')
     result=resolver.resolve(p)
     assert result.state['knowledge']['a:f']['status']=='known'
     assert result.state['characters']['a']['situation']=='У двери'

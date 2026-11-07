@@ -359,7 +359,8 @@ def _seed_milestones(repository, save_id):
         for fid,text,actors,changes in steps:
             camera=snapshot['world_state']['camera']
             event=fid+'_event'; witnesses=[ACTOR_ID,'qa_vera']
-            raw=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=1),
+            cast = list(dict.fromkeys([*camera['present_character_ids'], *actors]))
+            raw=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=cast,elapsed_minutes=1),
                 facts=[dict(id=fid,text=text,character_ids=actors,evidence=text)],
                 events=[dict(id=event,text=text,participants=list(dict.fromkeys(actors+witnesses)),witnesses=witnesses,
                     fact_ids=[fid],medium='testimony',evidence=text)],
@@ -474,7 +475,7 @@ def _seed_personality(repository, save_id):
            'На третьем занятии Ася закончила рисунок и сказала, что любит рисовать.']
     for index,text in enumerate(texts):
         camera=snapshot['world_state']['camera']
-        raw=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids']),
+        raw=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=list(dict.fromkeys([*camera['present_character_ids'], 'qa_asya']))),
             events=[dict(id='drawing',text=text,evidence=text,participants=['qa_asya'],witnesses=['qa_vera'],fact_ids=[])],
             development_evidence=[dict(id='drawing_evidence',actor_id='qa_asya',source_event_id='drawing',
                 meaning='Самостоятельно выбирает и завершает рисование.',kind='behavior',assertion='completed',evidence=text)])

@@ -55,6 +55,10 @@ def test_100_persisted_turns_and_history_corruption(tmp_path):
         location='hall' if turn%2 else 'room'
         p=payload();p['facts'][0]['id']=f'f{turn}';p['events'][0]['fact_ids']=[f'f{turn}'];p['knowledge_gained'][0]['fact_id']=f'f{turn}'
         p['final_scene'].update(location_id=location,present_character_ids=[actor])
+        # Each new fact is observed at the current camera destination.
+        p['events'][0].update(text='Замечено письмо', medium='observation', location_id=location,
+                              participants=[actor], witnesses=[actor])
+        p['knowledge_gained'][0]['actor_id']=actor
         p['movements']=[dict(actor_id=actor,to_location_id=location,player_assertion='explicit_choice',player_evidence='Я перехожу в '+location+'.')]
         p['relationship_changes']=[dict(source_id='b',target_id='c',dimensions=dict(trust=turn),context='Разговор',evidence=QUOTE)]
         p['thread_changes']=[dict(id='thread',description='Найти письмо',character_ids=['a'],state=str(turn),evidence=QUOTE)]

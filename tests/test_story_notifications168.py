@@ -28,7 +28,7 @@ def reveal(snap, *, new=False, status='known', actor='a', witness=True):
 
 @pytest.mark.parametrize('new,prior,kind',[(False,None,'secret_revealed'),(False,'suspected','secret_revealed'),(True,None,'secret_new')])
 def test_confirmation_requires_atomic_commit(tmp_path,new,prior,kind):
-    before=fixture()
+    before=fixture(together=True)
     if prior:before['world_state']['knowledge']['a:plot']=Knowledge(actor_id='a',fact_id='plot',status=prior).model_dump()
     result=reveal(before,new=new)
     assert not ui_view(dict(before,world_state=result.state),result.history)['notification_history']
@@ -53,13 +53,13 @@ def test_confirmation_requires_atomic_commit(tmp_path,new,prior,kind):
 
 @pytest.mark.parametrize('status,actor',[('suspected','a'),('known','b')])
 def test_no_notice_for_suspicion_or_other_mind(status,actor):
-    before=fixture();r=reveal(before,status=status,actor=actor)
+    before=fixture(together=True);r=reveal(before,status=status,actor=actor)
     record_story_changes(before['world_state'],r.state,r.history,'commit')
     assert not story_notifications(r.state,r.history['state_changes'])
 
 
 def test_control_switch_and_repeat_do_not_create_openings():
-    before=fixture();r=reveal(before)
+    before=fixture(together=True);r=reveal(before)
     record_story_changes(r.state,r.state,r.history,'repeat')
     assert not story_notifications(r.state,r.history['state_changes'])
     r.state['camera']['controlled_actor_id']='b'
@@ -69,7 +69,7 @@ def test_control_switch_and_repeat_do_not_create_openings():
 
 @pytest.mark.parametrize('source,witness,existing,expect_notice',[(True,True,False,True),(False,True,False,False),(True,False,False,False),(True,True,True,False)])
 def test_thread_needs_witnessed_origin_not_participation(source,witness,existing,expect_notice):
-    before=fixture();s=before['world_state']
+    before=fixture(together=True);s=before['world_state']
     if existing:s['threads']['t']=Thread(id='t',description='Старая линия').model_dump()
     r=StateResolver(s,'Разговор','').resolve(raw(s,
         events=[dict(id='e',text='Разговор',evidence='Разговор',participants=['a','b'],witnesses=['a'] if witness else ['b'],fact_ids=[])],
@@ -82,7 +82,7 @@ def test_thread_needs_witnessed_origin_not_participation(source,witness,existing
 
 
 def test_thread_cannot_expose_unknown_source_fact():
-    before=fixture();s=before['world_state']
+    before=fixture(together=True);s=before['world_state']
     r=StateResolver(s,'Разговор','').resolve(raw(s,
         events=[dict(id='e',text='Разговор',evidence='Разговор',participants=['a'],witnesses=['a'],fact_ids=['plot'])],
         thread_changes=[dict(id='t',description='NEVER: авторство романа',source_event_id='e',evidence='Разговор')]))
@@ -104,7 +104,7 @@ def test_remote_read_is_commit_source_and_bread_is_not(tmp_path):
 
 
 def test_history_outlives_context_tail_and_projects_only_current_actor(tmp_path):
-    db=connection(tmp_path/'db');before=fixture();r=reveal(before)
+    db=connection(tmp_path/'db');before=fixture(together=True);r=reveal(before)
     with db:after=committed_snapshot(db,before,r)
     for _ in range(70):
         with db:after['history_head']=append_history(db,after['history_head'],{})
@@ -153,7 +153,7 @@ def test_real_engine_commit_save_reload_regenerate_rollback(tmp_path):
 
 
 def test_retired_secret_retains_only_safe_acquisition_history():
-    before=fixture();r=reveal(before)
+    before=fixture(together=True);r=reveal(before)
     record_story_changes(before['world_state'],r.state,r.history,'commit')
     original=story_notifications(r.state,r.history['state_changes'])[0]
     r.state['knowledge']['a:plot']['status']='refuted'
@@ -165,7 +165,7 @@ def test_retired_secret_retains_only_safe_acquisition_history():
 
 
 def test_background_thread_cannot_grant_controlled_actor_knowledge():
-    before=fixture();s=before['world_state']
+    before=fixture(together=True);s=before['world_state']
     r=StateResolver(s,'Разговор','',observed=False,mode='background').resolve(raw(s,
         events=[dict(id='e',text='Разговор',evidence='Разговор',participants=['a','b'],witnesses=['a','b'],fact_ids=[])],
         thread_changes=[dict(id='t',description='Закулисная линия',discovered_by=['a'],source_event_id='e',evidence='Разговор')]))
@@ -176,7 +176,7 @@ def test_background_thread_cannot_grant_controlled_actor_knowledge():
 
 
 def test_unseen_thread_revision_cannot_rewrite_observed_journal_or_api(tmp_path):
-    before=fixture();db=connection(tmp_path/'threads.db')
+    before=fixture(together=True);db=connection(tmp_path/'threads.db')
     def update(snap,actor,description):
         s=snap['world_state']
         r=StateResolver(s,'Разговор','').resolve(raw(s,

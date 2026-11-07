@@ -168,7 +168,7 @@ def test_long_skip_batch_hidden_state_and_knowledge(db):
         current=json.loads(next(m['content'] for m in kw['messages'] if m['content'].startswith('Текущее состояние')).split('\n',1)[1]);camera=current['camera'];hidden=camera['mode']=='observer'
         raw=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0))
         if hidden:
-            raw.update(facts=[dict(id='secret',text='Тайна',evidence='Разговор окончен.')],events=[dict(id='e',text='Тайный разговор',participants=['b','c'],witnesses=['a','b','c'],fact_ids=['secret'],medium='conversation',evidence='Разговор окончен.')],
+            raw.update(facts=[dict(id='secret',text='Тайна',evidence='Разговор окончен.')],events=[dict(id='e',text='Тайный разговор',participants=['b','c'],witnesses=['b','c'],fact_ids=['secret'],medium='conversation',evidence='Разговор окончен.')],
                 knowledge_gained=[dict(actor_id=cid,fact_id='secret',source_event_id='e',evidence='Разговор окончен.') for cid in ['a','b','c']],
                 relationship_changes=[dict(source_id='b',target_id='c',dimensions={'trust':30},evidence='Разговор окончен.')])
         yield json.dumps(raw)

@@ -14,7 +14,7 @@ EXTERNAL movement: explicit_choice + exact player_evidence, or involuntary + ext
 POV != control. Situation is objective, not emotion; update affected NPC situations.
 No scene_id/last_event_id/StatePatch. Ordinary turns require elapsed_minutes >= 0;
 Time Skip/background clocks belong to Runtime.
-Lifecycle semantics belong to Extraction, not a verb dictionary: completed result ->
+Extraction classifies lifecycle: completed result ->
 completed; failure -> failed; lost context -> expired; explicit cancellation -> cancelled;
 replacement -> superseded. Use *_updates, stable IDs and current evidence. A joke may
 complete 'tease Yuri'; conversation may complete 'talk to Sonya'. Intent/promise is not
@@ -29,8 +29,8 @@ Physical_state is current bodily state; clear it with physical_state="" only on 
 resolution (ate/warmed/rested). Preserve unresolved symptoms; sleep alone is not a cure.
 Directed feelings: prior relationship_evidence only, never Narrative; else only explicit
 current-actor override (player_assertion=explicit_directed_feelings, exact player_evidence).
-Events: completed_interaction only for completed player-input interactions, not wishes/feelings.
-Never mirror directions or invent consent/actions. Respect negations; questions are not overrides.
+Event cast/witnesses: together at start/end or shared movement/Event.order (distinct for arrival, meeting, exit); else confirmed channel. Off-scene situation: source_event_id.
+completed_interaction: completed player input only. No mirrored feelings, invented consent/actions or negated overrides.
 Remote_interactions: only ongoing END-of-turn message/phone/radio exchanges with actor_id,
 channel, evidence. Reconfirm each turn; rereading old messages is not active contact.
 Omit ended contact; physically arriving actors belong in present instead.

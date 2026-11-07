@@ -985,36 +985,6 @@ def commitment_sources(state, record, *, delivered=False):
     return rows
 
 
-def validate_event_channel(state, item):
-    """Validate audibility against the active canonical channel, not prose."""
-    if not any(
-        state["meta"]["communication"][channel]
-        for channel in ("text_message", "voice_call")
-    ):
-        return True
-    actor = state["camera"]["controlled_actor_id"]
-    call = active_call(state, actor)
-    if not call:
-        return item.get("interaction_channel") != "call"
-    call_ids = participants(call)
-    physical = set(state["camera"]["present_character_ids"])
-    remote = call_ids - physical
-    witnesses = set(item.get("witnesses", []))
-    involved = set(item.get("participants", []))
-    channel = item.get("interaction_channel")
-    if channel == "call":
-        return (
-            call["status"] == "answered"
-            and item.get("medium") == "conversation"
-            and (witnesses | involved) <= call_ids
-        )
-    if item.get("medium") in ("conversation", "observation", "action") and remote & (
-        witnesses | involved
-    ):
-        return False
-    return True
-
-
 def commitment_visible(state, record, observer):
     """World truth never implies the observer has read the confirming message."""
     ids = record.get('remote_source_ids', [])
