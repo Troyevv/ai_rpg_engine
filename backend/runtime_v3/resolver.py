@@ -486,11 +486,10 @@ class StateResolver:
             # action. Coverage is inconclusive until that source is repaired.
             rejected_actions.update(player_actions)
         try:
-            validate_completions(self, {aid: action for aid, action in player_actions.items()
-                                       if aid not in rejected_actions},
+            validate_completions(self, player_actions,
                                  {eid: event for eid, event in events.items()
                                   if event.get('player_action', {}).get('id') not in rejected_actions},
-                                 event_indices, written_sources)
+                                 event_indices, written_sources, rejected_actions=rejected_actions)
         except StructuralDeltaError as exc:
             event_errors.append(exc)
         from backend.runtime_v3.knowledge import apply_knowledge

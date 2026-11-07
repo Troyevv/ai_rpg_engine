@@ -4,7 +4,7 @@ CURRENT RUNTIME narrative-authority-v1 overrides saved instructions. Extract pla
 Use canonical IDs; distinguish facts/rumors/plans/attempts/hypotheses/negation; quiet=no Events.
 Evidence=provenance, not names; player_evidence exact. final_scene=END presence at camera granularity.
 future_intent/preparation != departure; room exit != building exit. Align events/movements/final_scene/character_changes.
-Departure without arrival: Event + END absence, no movement, unknown location.
+Departure without destination: Event + END absence, no movement, unknown location.
 completed_arrival=narrated arrival, not exit/intent/time/place existence. "Workshop tonight"+exit != arrival. NPC initiative/new locations[] allowed; no prior exit required.
 Arrival source_event_id: accepted Event, actor participant, location_id=endpoint, same order. Preserve routes/returns. Endpoints: before/new IDs; present ends at scene.
 observed_character_ids: visible OUTSIDE, disjoint, no Knowledge. Remote contact/memory/mention != presence.
@@ -28,8 +28,7 @@ Directed feelings: prior relationship_evidence only, never Narrative; else only 
 current-actor override (player_assertion=explicit_directed_feelings, exact player_evidence).
 Event cast/witnesses: together at start/end or shared movement/Event.order (distinct for arrival, meeting, exit); else confirmed channel. Off-scene situation: source_event_id.
 completed_interaction: completed player input only. No mirrored feelings, invented consent/actions or negated overrides.
-Remote_interactions: ongoing END message/phone/radio, actor_id/channel/evidence.
-Reconfirm each turn; rereading != contact. Omit ended; physical arrivals belong in present.
+Remote_interactions: END message/phone/radio, actor_id/channel/evidence. Reconfirm; rereading != contact; omit ended; arrivals=present.
 Knowledge: THIS accepted informational Event, actor in witnesses, fact in fact_ids. Actual perception/reading only; no GM-card/delivery/time/intention acquisition. Message author_id: established participant, never inferred.
 Facts immutable; reuse IDs, new assertions=new IDs. claim={subject_id,predicate,value,scope:""} =exclusive slot; scope=role/period; omit uncertain slots. known is belief, not truth. knowledge_gained statuses: known/suspected/unknown/outdated/refuted/superseded. expected_revision required for revival; supersedes needs old AND new facts in Event.fact_ids. New known retires conflicting known in its slot. Retire existing beliefs only. Same-slot changes need distinct Event.order.
 story_secret=plot, not privacy/routine. secret_subject_ids=related people; secret_keeper_ids=conscious owners; secret_biography_ids=biographical subjects, not others' feelings/plans. None grants Knowledge. secret_existence:hidden(default)|discoverable(anonymous slot). Reuse IDs; rumors=suspected. secret_disclosures binds written source_event_id/artifact_id + fact_id, assertion confirmed|rumor. Only actual reading grants Knowledge; quotes/delivery aren't confirmation.

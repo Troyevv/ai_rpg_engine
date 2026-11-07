@@ -220,7 +220,7 @@ def arrival_control(data):
     return raw
 
 
-@pytest.mark.parametrize('fault', ['none','missing','unknown','actor','endpoint','order','channel','scene'])
+@pytest.mark.parametrize('fault', ['none','missing','unknown','actor','endpoint','order','legacy-order','channel','scene'])
 def test_arrival_provenance_and_new_location_atomicity(fault):
     data=archived('phone');raw=arrival_control(data)
     event=raw['events'][-1];move=raw['movements'][0]
@@ -229,6 +229,9 @@ def test_arrival_provenance_and_new_location_atomicity(fault):
     if fault=='actor': event['participants']=[]
     if fault=='endpoint': event['location_id']=data['before']['camera']['location_id']
     if fault=='order': event['order']=3
+    if fault=='legacy-order':
+        move.pop('assertion')
+        event['order']=3
     if fault=='channel': event['medium']='message'
     if fault=='scene': raw['final_scene']['present_character_ids'].append('qa_timur')
     before=deepcopy(data['before'])
@@ -274,3 +277,48 @@ def test_birth_completion_discharge_is_not_masked_by_independent_action_error(tm
         StateResolver(state,narrative,text).resolve(raw)
     assert {r['code'] for r in error.value.diagnostics('test')}=={'player_action_completion_invalid'}
     assert repo.get_snapshot(sid)['world_state']==state
+
+
+def test_multiple_independent_completions_and_boundary_have_original_paths():
+    data=archived('family');raw=deepcopy(data['responses'][0]['payload'])
+    second=deepcopy(raw['player_agency']['actions'][0])
+    second.update(id='second',player_evidence='Спрашиваю Веру о помощи.')
+    raw['player_agency']['actions'].append(second)
+    with pytest.raises(StructuralDeltaError) as error:
+        StateResolver(data['before'],data['narrative'],data['player_input']+' '+second['player_evidence']).resolve(raw)
+    rows=error.value.diagnostics('test')
+    assert {r['path'] for r in rows if r['code']=='player_action_completion_invalid'} == {
+        'player_agency.actions[0].outcome', 'player_agency.actions[1].outcome'}
+    assert any(r['code']=='ordinary_temporal_boundary' for r in rows)
+
+
+def test_new_arrival_event_source_survives_history_reload(tmp_path):
+    data=archived('phone')
+    data['narrative'] += '\nПозже Тимур прибыл в новую мастерскую.'
+    repo=Repository(tmp_path/'arrival.sqlite');sid=seed(repo,data)['save']
+    job,calls=execute(repo,sid,data,[arrival_control(data)])
+    assert job['status']=='saved',job['error']
+    assert len(calls)==2
+    fresh=Repository(repo.path)
+    persisted=history(fresh,sid)
+    arrival=next(e for e in persisted['events'] if e.get('local_id')=='arrival')
+    movement=persisted['movements'][-1]
+    assert movement['source_event_id']==arrival['id']
+    assert movement['to_location_id']==fresh.get_snapshot(sid)['world_state']['characters']['qa_timur']['location_id']
+
+
+@pytest.mark.parametrize('fault', ['retirement_without_belief', 'supersedes_without_belief', 'revision'])
+def test_missing_fact_link_does_not_harden_other_invalid_knowledge(fault):
+    data=archived('knowledge');raw=corrected(data)
+    raw['knowledge_gained']=raw['knowledge_gained'][:1]
+    row=raw['knowledge_gained'][0];event=raw['events'][0]
+    event['fact_ids']=[]
+    if fault=='retirement_without_belief': row['status']='refuted'
+    if fault=='revision': row['expected_revision']=99
+    if fault=='supersedes_without_belief':
+        other=next(f['id'] for f in raw['facts'] if f['id']!=row['fact_id'])
+        row['supersedes']=[other];event['fact_ids']=[other]
+    result=StateResolver(data['before'],data['narrative'],data['player_input']).resolve(raw)
+    assert not result.history['knowledge_acquisitions']
+    assert result.state['knowledge']==data['before']['knowledge']
+    assert any(w['code'] in ('knowledge_path_invalid','knowledge_revision_conflict') for w in result.warnings)

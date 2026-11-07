@@ -10,13 +10,16 @@ No paid provider calls. No migration or changes to old snapshots/variants.
   `Event.fact_ids` now produce `knowledge_fact_link_missing`, exact Knowledge
   and Event paths, and participate in the existing bounded repair. Unknown
   actors/facts/events, missing witnesses, unsupported media and protected
-  Knowledge remain separately diagnosed optional failures. No automatic links.
+  Knowledge remain separately diagnosed optional failures. Ordered revision,
+  retirement and supersession validation precede link escalation; invalid optional
+  proposals do not become hard failures. No automatic links.
 - Completion failure stopped validation before the independent birth boundary.
   The existing resolver now aggregates action/Event/presence/Knowledge errors;
   on a failed candidate, isolated calls to existing Life/Reproduction/Commitment
   validators determine whether the temporal check is independently meaningful.
   Invalid sources suppress dependent diagnostics; accepted BirthClaim can still
-  discharge the boundary. Pregnancy schedule ownership lives in its existing
+  discharge the boundary. Original action indexes remain stable after source rejection, and independent
+  completion failures are aggregated too. Pregnancy schedule ownership lives in its existing
   commitment handler so normal and diagnostic paths share the same rule.
 - Referenced cards appeared under the title “present”. Narrative blocks now
   separate ContextScope's present, observed, remote and referenced actors.
@@ -84,12 +87,13 @@ npx playwright test e2e/integrated-repair247.spec.ts --project=desktop --project
 ## Validation status
 
 - Original SQLite replay: 12/12 expected outcomes, zero paid calls.
-- Focused integration: 31 passed before final regression; final run pending.
+- Focused integrated suite covers 37 cases. Final test totals and exact CI commit
+  are recorded in [PR #248](https://github.com/Troyevv/ai_rpg_engine/pull/248).
 - Frontend unit: 151 passed. Production build passed (existing chunk-size warning).
 - Desktop/mobile E2E added: 10 scenarios. Local browser startup is blocked by
   `process_singleton_posix.cc: socket() failed: Operation not permitted`; no local
-  browser success is claimed. CI results pending.
-- Full backend final run pending. Initial implementation run had 124 failures,
+  browser success is claimed. See PR #248 for CI browser results.
+- Full backend commands/results are tracked in PR #248. Initial implementation run had 124 failures,
   3460 passes, 1 skip; these exposed legacy movement compatibility, context
   pressure and obsolete diagnostic assertions. An intermediate concurrent run
   also exhausted `/tmp`; subsequent runs use a repository-local basetemp.

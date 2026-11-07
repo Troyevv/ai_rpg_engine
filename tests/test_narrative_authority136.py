@@ -35,6 +35,7 @@ def test_t46_observed_without_boundary_or_movement(api):
     client, app = api; sid = imported(client)
     before = app.state.repository.get_snapshot(sid)['world_state']
     raw = arrival(); raw['movements'] = []
+    raw['events'] = []  # This fixture describes observation, not an arrival.
     raw['final_scene'].update(present_character_ids=['ilya'], observed_character_ids=['viktoria_solovyova'])
     out = StateResolver(before, 'Виктория стоит в проёме, не заходя.', '').resolve(raw)
     assert out.state['camera']['observed_character_ids'] == ['viktoria_solovyova']
@@ -218,6 +219,7 @@ def test_t17_repair_reinterprets_proposals_and_preserves_atomic_lineage(api, omi
 def test_t50_controlled_movement_requires_owned_source(api, authorization):
     client,app=api;sid=imported(client);before=app.state.repository.get_snapshot(sid)['world_state']
     raw=arrival();raw['final_scene'].update(location_id='salon_lak',present_character_ids=['ilya'])
+    raw['events']=[]  # No NPC arrival in this controlled-movement scenario.
     move=dict(actor_id='ilya',to_location_id='salon_lak')
     raw['movements']=[move]
     player='Иду в салон.'

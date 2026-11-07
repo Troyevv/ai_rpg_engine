@@ -76,7 +76,9 @@ def test_exact_original_payloads_reject_with_field_diagnostics(case, stage):
         assert diagnostics[0]['path'] == 'events[0].player_evidence'
     assert all(d['entity'] == data['responses'][stage]['events'][0]['id'] for d in diagnostics if d['section']=='events')
     if case != 'campaign':
-        assert any(d['path']=='player_agency.actions[0].outcome' for d in diagnostics)
+        # Keep the original payload index when another action's source failed.
+        independent_index = 0 if case == 'social' else 1
+        assert any(d['path']==f'player_agency.actions[{independent_index}].outcome' for d in diagnostics)
 
 
 @pytest.mark.parametrize('case', ['social', 'knowledge', 'campaign'])

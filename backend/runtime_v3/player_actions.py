@@ -167,7 +167,7 @@ def event_provenance(resolver, item, event, index, actions):
         event.update(player_interaction=True, player_evidence=action.player_evidence)
 
 
-def validate_completions(resolver, actions, events, indices, written_sources):
+def validate_completions(resolver, actions, events, indices, written_sources, *, rejected_actions=()):
     """Validate typed completion after canonical presence/Remote, before Knowledge.
 
     Presence owns the shared movement timeline and call endpoints. This gate only
@@ -175,7 +175,8 @@ def validate_completions(resolver, actions, events, indices, written_sources):
     second geography or interprets prose. A written artifact's author is not a
     live endpoint, so messages additionally require an explicit delivery binding.
     """
-    covered = {}
+    from backend.services.world_delta_errors import StructuralDeltaError
+    covered, errors, invalid_actions = {}, [], set()
     for eid, event in events.items():
         provenance = event.get('player_action')
         if not provenance:
@@ -187,12 +188,13 @@ def validate_completions(resolver, actions, events, indices, written_sources):
         communicative = event['medium'] in ('conversation', 'testimony', 'message') or event.get('interaction_channel') in ('physical', 'call')
 
         def reject(reason):
-            fatal(f'Действие {action.id}: {reason} Сверьте outcome с неизменным Narrative; '
+            invalid_actions.add(action.id)
+            errors.append(StructuralDeltaError(f'Действие {action.id}: {reason} Сверьте outcome с неизменным Narrative; '
                   'не удаляйте Event/адресата и не выдумывайте канал. Если Narrative явно '
                   'завершает невозможный контакт, player_agency.status=violated (нужен новый Narrative).',
                   'player_action_completion_invalid', repairable=True, section='events',
                   index=indices[eid], field='player_action_id', entity=eid,
-                  source_ids=[eid, action.id, *sorted(targets)])
+                  source_ids=[eid, action.id, *sorted(targets)]))
 
         if targets and action.target_mode == 'reference' and communicative:
             reject('target_mode=reference несовместим с Event общения/контакта.')
@@ -208,6 +210,8 @@ def validate_completions(resolver, actions, events, indices, written_sources):
                     reject('outcome=completed требует принятого источника доставки сообщения всем адресатам; ответ/чтение не обязательны.')
         covered.setdefault(action.id, set()).update(event['target_ids'])
     for i, action in enumerate(actions.values()):
+        if action.id in rejected_actions or action.id in invalid_actions:
+            continue  # Diagnose the invalid source, not its downstream coverage.
         required = set(action.narrative_target_ids)
         requires_contact = (action.outcome == 'completed' and action.target_mode == 'interaction'
                             and required & resolver.state['characters'].keys())
@@ -215,11 +219,13 @@ def validate_completions(resolver, actions, events, indices, written_sources):
         # Preserve noncontact/untargeted actions without an Event. Once Events
         # reference an action, their own targets must cover its actual scope.
         if missing and (requires_contact or action.id in covered):
-            fatal(f'Действие {action.id}: {action.outcome} не подтверждён принятыми Events для адресатов: '
+            errors.append(StructuralDeltaError(f'Действие {action.id}: {action.outcome} не подтверждён принятыми Events для адресатов: '
                   + ', '.join(sorted(missing)) + '. '
                   'Не удаляйте Event для обхода проверки; классифицируйте исход по неизменному Narrative. '
                   'Пассивное наблюдение/упоминание использует target_mode=reference; обращение требует interaction. '
                   'Не создавайте фиктивный контакт для наблюдения.',
                   'player_action_completion_invalid' if action.outcome == 'completed' else 'player_action_event_mismatch',
                   repairable=True, section='player_agency',
-                  path=f'player_agency.actions[{i}].outcome', source_ids=[action.id, *sorted(missing)])
+                  path=f'player_agency.actions[{i}].outcome', source_ids=[action.id, *sorted(missing)]))
+    if errors:
+        raise StructuralDeltaError.combine(errors)

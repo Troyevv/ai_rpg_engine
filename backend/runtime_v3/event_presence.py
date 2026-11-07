@@ -145,16 +145,20 @@ def validate_movement_sources(resolver, raw, events, rejected_events=()):
             continue
         event = events.get(source) if isinstance(source, str) else None
         actor = item['actor_id']
+        # Old involuntary records may reference a causal Event before movement.
+        # Otherwise a supplied source must actually anchor the arrival, even if
+        # an older producer omitted the newer explicit assertion marker.
+        arrival_source = 'assertion' in item or item.get('player_assertion') != 'involuntary'
         field, reason = None, None
         if event is None:
             field, reason = 'source_event_id', 'Прибытие требует принятого Event этого хода, не плана или подготовки.'
         elif actor not in event['participants']:
             field, reason = 'actor_id', 'Event прибытия не подтверждает участие перемещаемого персонажа.'
-        elif 'assertion' in item and event.get('location_id') != item['to_location_id']:
+        elif arrival_source and event.get('location_id') != item['to_location_id']:
             field, reason = 'to_location_id', 'Место Event прибытия должно совпадать с endpoint, а не местом обсуждения плана.'
         elif event.get('interaction_channel') == 'call' or event['medium'] == 'message':
             field, reason = 'source_event_id', 'Удалённая связь сама по себе не подтверждает физическое прибытие.'
-        elif 'assertion' in item and event.get('order') != item.get('order'):
+        elif arrival_source and event.get('order') != item.get('order'):
             field, reason = 'order', 'Movement и его Event прибытия должны обозначать один шаг порядка.'
         if field:
             errors.append(StructuralDeltaError(reason+' Пересмотрите вместе events, movements, final_scene и character_changes; '

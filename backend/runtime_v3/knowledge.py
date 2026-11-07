@@ -100,8 +100,6 @@ def apply_knowledge(resolver, raw, events, *, rejected_event_ids=()):
         expected = item.get('expected_revision')
         if expected is not None and (type(expected) is not int or expected < 0):
             reject('Устаревшая ревизия знания.', 'knowledge_revision_conflict'); continue
-        if fid not in event['fact_ids'] and expected is not None and expected != (prior or {}).get('revision', 0):
-            reject('Устаревшая ревизия знания.', 'knowledge_revision_conflict'); continue
         status = item.get('status', 'known')
         if not isinstance(status, str):
             reject('Некорректный статус знания.'); continue
@@ -114,21 +112,8 @@ def apply_knowledge(resolver, raw, events, *, rejected_event_ids=()):
             (supersedes and status != 'known')):
             reject('Исправление требует прежних fact_id в том же событии.'); continue
         entry = r.typed(Knowledge, dict(actor_id=actor, fact_id=fid, status=status), 'knowledge_gained', i)
-        if entry and fid not in event['fact_ids']:
-            event_index = next(j for j, row in enumerate(raw.records['events'])
-                               if isinstance(row, dict) and row.get('id') == eid)
-            errors.append(StructuralDeltaError(
-                f'Получатель {actor} воспринимает Event {eid}, но fact_ids не содержит {fid}. '
-                'Сверьте раскрытие с исходным Narrative: восстановите точную связь Event→Fact '
-                'или пересмотрите неподтверждённое приобретение. Не удаляйте подтверждённые знания ради проверки.',
-                'knowledge_fact_link_missing', repairable=True, section='knowledge_gained', index=i,
-                field='source_event_id', source_ids=[actor, fid, eid],
-                related_paths=[f'events[{event_index}].fact_ids']))
-            continue
         if entry: candidates.append((i, item, event, entry))
 
-    if errors:
-        raise StructuralDeltaError.combine(errors)
     if not candidates: return
 
     # Index once, including only actors actually receiving evidence. This is
@@ -185,6 +170,18 @@ def apply_knowledge(resolver, raw, events, *, rejected_event_ids=()):
             r.warn('knowledge_gained', i, 'Ревизия изменилась в ходе.', code='knowledge_revision_conflict'); continue
         if prior and prior['status'] in RETIRED and entry['status'] in CURRENT and item.get('expected_revision') is None:
             r.warn('knowledge_gained', i, 'Повторное установление требует ревизии.', code='knowledge_revision_conflict'); continue
+        if fid not in event['fact_ids']:
+            eid = item['source_event_id']
+            event_index = next(j for j, row in enumerate(raw.records['events'])
+                               if isinstance(row, dict) and row.get('id') == eid)
+            errors.append(StructuralDeltaError(
+                f'Получатель {actor} воспринимает Event {eid}, но fact_ids не содержит {fid}. '
+                'Сверьте раскрытие с исходным Narrative: восстановите точную связь Event→Fact '
+                'или пересмотрите неподтверждённое приобретение. Не удаляйте подтверждённые знания ради проверки.',
+                'knowledge_fact_link_missing', repairable=True, section='knowledge_gained', index=i,
+                field='source_event_id', source_ids=[actor, fid, eid],
+                related_paths=[f'events[{event_index}].fact_ids']))
+            continue
         if prior and prior['status'] == entry['status'] and not item.get('supersedes'):
             continue  # Replay does not manufacture a new historical transition.
         claim_slot = slot(s['facts'][fid])
@@ -203,6 +200,9 @@ def apply_knowledge(resolver, raw, events, *, rejected_event_ids=()):
         if claim_slot:
             known[index].discard(key)
             if entry['status'] == 'known': known[index].add(key)
+
+    if errors:
+        raise StructuralDeltaError.combine(errors)
 
 
 def context_rows(state, keys, *, extraction=False):
