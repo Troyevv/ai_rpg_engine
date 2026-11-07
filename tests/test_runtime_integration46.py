@@ -2,6 +2,7 @@
 from copy import deepcopy
 from unittest.mock import patch
 
+from pregnancy_boundary_fixture import undisclosed_sex
 import engine
 import pytest
 from backend.repositories.preparation import Repository
@@ -261,7 +262,7 @@ def test_birth_cannot_commit_as_optional_warning(api):
     assert repo.get_snapshot(sid) == before and repo.list_turns(sid) == original_turns
     assert len(repo.request_log(job_id=jid)) == 3
 
-    raw['births'][0].update(source_event_id='birth', appearance={child: 'Тёмные волосы', twin: [], 'wrong-id': 'описание'})
+    raw['births'][0].update(source_event_id='birth', sex_observations=undisclosed_sex(pregnancy), appearance={child: 'Тёмные волосы', twin: [], 'wrong-id': 'описание'})
     with patch('engine.launch'):
         retry = client.post(f'/api/jobs/{jid}/retry', json={'config': config})
     assert retry.status_code == 200, retry.text

@@ -57,9 +57,18 @@ letter130_provider=None
 npc_review_start_payload=None
 story168_payload=None
 story168_gate=None
+birth231_response=None
 
 def stream(**kwargs):
-    global phone_mode, group_semantic_fail_once, npc_review_start_payload, story168_payload
+    global phone_mode, group_semantic_fail_once, npc_review_start_payload, story168_payload, birth231_response
+    if birth231_response is not None:
+        narrative, raw = birth231_response
+        if kwargs.get('response_format'):
+            birth231_response = None
+            yield json.dumps(raw, ensure_ascii=False)
+        else:
+            yield narrative
+        return
     if idea190_provider is not None and idea190_provider.matches(kwargs):
         yield from idea190_provider.stream(kwargs);return
     if story168_payload is not None:
@@ -833,6 +842,20 @@ if __name__ == '__main__':
         if checkpoint.startswith('ui-family') or checkpoint=='ui-public-directory':
             ordinary_job(app.state.repository,result['save'],'start')
         return {'world':result['world'],'save':result['save']}
+
+    @app.post('/test/birth231-seed')
+    def birth231_seed():
+        from birth_sex_fixture import due_save
+        repo, sid = due_save(app.state.repository.path)
+        return {'world':repo.get_save(sid)['world_id'], 'save':sid}
+
+    @app.post('/test/birth231-response')
+    def birth231_set_response(sid: int, wrong: bool = False):
+        global birth231_response
+        from birth_sex_fixture import payload
+        state = app.state.repository.get_snapshot(sid)['world_state']
+        birth231_response = payload(state, sexes=['female' if wrong else 'male'])
+        return {'ready':True}
 
     @app.post('/test/initiative-seed')
     def initiative_seed():
