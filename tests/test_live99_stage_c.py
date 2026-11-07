@@ -52,6 +52,36 @@ def test_stage_c_retest_and_continuation_share_one_two_dollar_cap(tmp_path):
         Budget(budget.path, stage_c=directory).reserve(32000)
 
 
+def test_postfix_followup_keeps_old_stage_c_and_has_one_bound_allowance(tmp_path):
+    old, parent, _ = authorization(tmp_path)
+    old.settle(old.reserve(2000), dict(prompt_tokens=3000, completion_tokens=300))
+    with sqlite3.connect(old.path) as db:
+        history = db.execute('SELECT * FROM reservations').fetchall()
+        original_c = db.execute('SELECT * FROM stage_c_authorization').fetchall()
+    child = tmp_path / 'followup'
+    receipt = old.authorize_stage_c_followup(child, parent)
+    budget = Budget(old.path, stage_c=child, stage_c_followup=True)
+    assert old.authorize_stage_c_followup(child, parent) == receipt
+    for _ in range(6):
+        budget.settle(budget.reserve(32000), dict(prompt_tokens=900000, completion_tokens=32000))
+    with pytest.raises(RuntimeError, match='exhausted'):
+        Budget(old.path, stage_c=child, stage_c_followup=True).reserve(32000)
+    with pytest.raises(ValueError, match='cannot renew'):
+        old.authorize_stage_c_followup(tmp_path / 'other', parent)
+    with pytest.raises(ValueError, match='original Stage C ledger'):
+        old.authorize_stage_c_followup(child, tmp_path / 'wrong-parent')
+    with sqlite3.connect(old.path) as db:
+        assert db.execute('SELECT * FROM reservations WHERE id<=?', (receipt[1],)).fetchall() == history
+        assert db.execute('SELECT * FROM stage_c_authorization').fetchall() == original_c
+
+
+def test_followup_unknown_cost_cannot_be_reauthorized_or_dispatched(tmp_path):
+    old, parent, _ = authorization(tmp_path)
+    old.reserve(2000)
+    with pytest.raises(ValueError, match='Unknown paid outcome'):
+        old.authorize_stage_c_followup(tmp_path / 'followup', parent)
+
+
 def test_unknown_stage_c_outcome_blocks_all_next_dispatches_and_reauthorization(tmp_path):
     budget, directory, _ = authorization(tmp_path)
     def dispatch(_):

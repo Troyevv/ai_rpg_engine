@@ -45,12 +45,15 @@ def reserve_action(directory, folder, meta, limit):
 
 
 class Budget:
-    def __init__(self, path, stage_b=None, *, stage_c=None):
+    def __init__(self, path, stage_b=None, *, stage_c=None, stage_c_followup=False):
         if stage_b and stage_c:
             raise ValueError('Choose exactly one paid stage')
         self.path = path
         self.stage_b = str(stage_b.resolve()) if stage_b else None
         self.stage_c = str(stage_c.resolve()) if stage_c else None
+        if stage_c_followup and not stage_c:
+            raise ValueError('A followup requires its Stage C directory')
+        self.stage_c_followup = stage_c_followup
         self.run_directory = self.stage_c or self.stage_b
         with sqlite3.connect(path) as db:
             db.execute('''CREATE TABLE IF NOT EXISTS reservations
@@ -63,10 +66,18 @@ class Budget:
     def authorize_stage_c(self, directory):
         return self._authorize(directory, 'C')
 
+    def authorize_stage_c_followup(self, directory, parent):
+        with sqlite3.connect(self.path) as db:
+            original = db.execute('SELECT directory FROM stage_c_authorization WHERE id=1').fetchone()
+        if original != (str(parent.resolve()),):
+            raise ValueError('Followup must retain the original Stage C ledger')
+        return self._authorize(directory, 'C_followup')
+
     def _authorize(self, directory, stage):
         """One explicit authorization per stage; retest shares its stage's allowance."""
         directory = str(directory.resolve())
-        table = 'stage_b_authorization' if stage == 'B' else 'stage_c_authorization'
+        table = {'B': 'stage_b_authorization', 'C': 'stage_c_authorization',
+                 'C_followup': 'stage_c_followup_authorization'}[stage]
         with sqlite3.connect(self.path) as db:
             db.execute('BEGIN IMMEDIATE')
             db.execute(f'''CREATE TABLE IF NOT EXISTS {table}
@@ -88,7 +99,8 @@ class Budget:
         return self.phase_baseline(db)
 
     def phase_baseline(self, db):
-        table = 'stage_c_authorization' if self.stage_c else 'stage_b_authorization'
+        table = ('stage_c_followup_authorization' if self.stage_c_followup else
+                 'stage_c_authorization' if self.stage_c else 'stage_b_authorization')
         row = db.execute(f'SELECT directory,baseline_id,baseline_actions FROM {table} WHERE id=1').fetchone()
         if not row or row[0] != self.run_directory:
             raise ValueError('Missing or mismatched paid stage authorization')
