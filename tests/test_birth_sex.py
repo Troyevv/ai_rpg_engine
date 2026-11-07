@@ -57,7 +57,9 @@ def test_narrative_canonical_matrix_sqlite(tmp_path, target, wrong):
         assert state['facts'][fid] == before['world_state']['facts'][fid]
         for actor in ('qa_vera', 'qa_kirill', 'qa_timur', 'qa_oleg'):
             known = state['knowledge'].get(actor+':'+fid)
-            assert bool(known) == (i==target and actor in ('qa_vera','qa_kirill'))
+            # The speaker's explicit direct observation is also a source of
+            # Knowledge, even if Extraction listed only listeners in perceived_by.
+            assert bool(known) == (i==target and actor in ('qa_vera','qa_kirill','qa_timur'))
             if known:
                 event = next(e for e in history(repo, sid)['events'] if e['id']==known['source_event_id'])
                 assert fid in event['fact_ids'] and actor in event['witnesses']
@@ -163,7 +165,7 @@ def test_provenance_rejections_are_atomic_and_bounded(tmp_path, invalid):
         p, = before['world_state']['pregnancies'].values()
         fid = next(iter(p['sex_fact_ids'].values()))
         raw['events'][0]['fact_ids']=[fid]
-        raw['knowledge_gained']=[dict(actor_id='qa_timur', fact_id=fid, source_event_id='delivery')]
+        raw['knowledge_gained']=[dict(actor_id='qa_oleg', fact_id=fid, source_event_id='delivery')]
     turns, hist = repo.list_turns(sid), history(repo, sid)
     job, calls = execute(repo, sid, narrative, raw)
     assert job['status']=='error' and len(calls)==3

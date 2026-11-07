@@ -354,6 +354,12 @@ def validate_birth_sex(r, claim, event, pregnancy):
             if row['narrative_sex'] is not None or recipients or row['source_actor_id'] or row['source_assertion']:
                 raise ValueError('undisclosed/speculative sex grants no observation or Knowledge')
             continue
+        if (row['basis'] == 'announcement' and row['source_assertion'] == 'direct_observation'
+                and row['source_actor_id'] in event['participants']
+                and row['source_actor_id'] not in recipients):
+            # The typed source explicitly observed the outcome. A list of only
+            # listeners must not leave the examining speaker unaware of it.
+            recipients.append(row['source_actor_id'])
         if row['narrative_sex'] is None or not row['evidence'].strip() or not recipients:
             raise ValueError('sex disclosure needs an established narrative observation and actual recipients')
         if len(recipients) != len(set(recipients)) or not set(recipients) <= set(event['witnesses']):

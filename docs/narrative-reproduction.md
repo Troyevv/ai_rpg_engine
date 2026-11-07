@@ -111,7 +111,9 @@ Every new `BirthClaim.sex_observations` must assess **every canonical child once
   its participant/speaker and `direct_observation` or established `prior_knowledge`.
 - `perceived_by` is a subset of accepted Event witnesses with perception capability,
   not the entire birth audience. The existing sex Fact and canonical Event own each
-  Knowledge acquisition. Generic `knowledge_gained` cannot bypass this assessment.
+  Knowledge acquisition. A speaker explicitly sourcing the announcement from direct
+  observation also acquires Knowledge through that observation and must be a capable
+  Event witness. Generic `knowledge_gained` cannot bypass this assessment.
 
 Runtime compares the semantic assessment against the pregnancy's canonical sex;
 it never searches prose for sex words, rewrites biological sex, or creates a second
