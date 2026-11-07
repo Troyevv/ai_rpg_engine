@@ -252,6 +252,9 @@ def test_assessment_schema_and_future_or_mixed_boundaries_are_strict(tmp_path):
     repo,sid=due_save(tmp_path/'strict.sqlite')
     state=repo.get_snapshot(sid)['world_state']
     raw=ongoing(state,assessed=True)
+    # Evidence is optional metadata in the existing schema; the semantic outcome is mandatory.
+    raw['final_scene']['due_birth_assessments'][0].pop('evidence')
+    assert StateResolver(state,SIGNS,REACTION,require_due_birth_assessment=True).resolve(raw).state['meta']['world_time']==1980
     for schema in (extraction_schema(),prompt_schema(player_agency_required=True)):
         Draft202012Validator(schema).validate(raw)
     # A coincident non-birth boundary does not acquire a birth-only repair.
@@ -265,3 +268,21 @@ def test_assessment_schema_and_future_or_mixed_boundaries_are_strict(tmp_path):
     with pytest.raises(StructuralDeltaError) as error:
         StateResolver(state,SIGNS,REACTION).resolve(ongoing(state,2))
     assert error.value.code=='ordinary_temporal_boundary' and not error.value.repairable
+
+
+def test_repair_can_extract_delivery_only_when_narrative_assessment_completed(tmp_path):
+    repo,sid=family(tmp_path/'missing-birth.sqlite')
+    state=repo.get_snapshot(sid)['world_state']
+    narrative,good=payload(state,sexes=[None])
+    bad=deepcopy(good)
+    bad['births']=[]
+    assess(good,state,'completed',narrative)
+    saved,calls=execute(repo,sid,narrative,[bad,good])
+    assert saved['status']=='saved',saved['error']
+    assert len(calls)==3
+    after=Repository(repo.path).get_snapshot(sid)['world_state']
+    p,=after['pregnancies'].values()
+    assert p['status']=='born' and p['birth_minute']==1980
+    assert after['meta']['world_time']==1982
+    assert repo.list_turns(sid)[-1]['assistant_text']==narrative
+    assert sum(c.get('kind')=='birth' for c in history(repo,sid)['state_changes'])==1

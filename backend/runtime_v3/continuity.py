@@ -44,7 +44,7 @@ class DueBirthAssessment(StrictModel):
     """Extraction's reading of immutable prose, not a second birth mechanism."""
     pregnancy_id: str
     narrative_outcome: Literal['ongoing', 'completed', 'unresolved_time_advance']
-    evidence: str = Field(min_length=1)
+    evidence: str = ''
 
 
 def reject(code, **path):

@@ -30,9 +30,11 @@ test('ongoing labor repairs once, persists after reload and rejects repeated clo
     expect(after.turns.slice(0,-1)).toEqual(before.turns);
     const turn = after.turns.at(-1);
     expect(turn.assistant_text).toContain('Ещё одна потуга.');
-    expect(turn.requests.map((r: {stage: string}) => r.stage).sort()).toEqual(
+    const log = await (await request.get(path+'/accounting')).json();
+    const diagnostics = log.turns.find((t: {id: number}) => t.id===turn.id);
+    expect(diagnostics.requests.map((r: {stage: string}) => r.stage).sort()).toEqual(
       mode==='zero' ? ['extraction','narrative'] : ['extraction','extraction_repair','narrative']);
-    if (mode==='repair') expect(turn.repairs[0].code).toBe('ordinary_temporal_boundary');
+    if (mode==='repair') expect(diagnostics.repairs[0].code).toBe('ordinary_temporal_boundary');
     await page.reload();
     expect((await view()).state).toEqual(after.state);
   }
