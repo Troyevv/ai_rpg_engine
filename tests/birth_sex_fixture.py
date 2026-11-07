@@ -54,14 +54,17 @@ def payload(state, *, sexes=None, event_sexes=None, recipients=None, basis='anno
     return narrative, raw
 
 
-def execute(repo, sid, narrative, responses, *, kind='turn', retry=None):
+def execute(repo, sid, narrative, responses, *, kind='turn', retry=None, player_input=REACTION, background_provider=None):
     if isinstance(responses, dict): responses = [responses]
     pending = [deepcopy(row) for row in responses]
     calls = []
     if retry: repo.retry_job(retry, CONFIG)
-    jid = retry or repo.begin_job(sid, REACTION if kind=='turn' else '', kind, CONFIG)
+    jid = retry or repo.begin_job(sid, player_input if kind=='turn' else '', kind, CONFIG)
     def stream(**kwargs):
         calls.append(kwargs)
+        if background_provider and any('Фоновая симуляция:' in m['content'] for m in kwargs['messages']):
+            yield from background_provider(**kwargs)
+            return
         if kwargs.get('response_format'):
             yield json.dumps(pending.pop(0) if len(pending)>1 else pending[0], ensure_ascii=False)
         else:

@@ -372,10 +372,8 @@ class ExtractionContextBuilder:
             # Extraction contract comes from the immutable pre-turn world.
             from backend.runtime_v3.continuity import due_births_in_scene_clock
             if kind != 'background' and not snapshot.get('_time_skip') and due_births_in_scene_clock(snapshot['world_state']):
-                rules += ("\nAt the due birth boundary use elapsed_minutes=0 for observation, help, waiting "
-                          "or ongoing labor. Only an explicitly completed delivery in the Narrative "
-                          "can resolve it via births and its current Event. A player's assumption is not evidence. "
-                          "Record newly perceived facts only for actual witnesses via knowledge_gained.")
+                from backend.runtime_v3.context_contract import DUE_BIRTH_CONTRACT
+                rules += DUE_BIRTH_CONTRACT
         # Affected IDs and canonical runtime, plus a bounded actor-owned choice
         # projection. No other actors' card prose or old narratives are needed.
         # Include physical/emotion baseline also for referenced actors affected in completed text.

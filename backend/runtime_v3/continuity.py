@@ -40,6 +40,13 @@ class Compression(StrictModel):
     player_evidence: str = ''
 
 
+class DueBirthAssessment(StrictModel):
+    """Extraction's reading of immutable prose, not a second birth mechanism."""
+    pregnancy_id: str
+    narrative_outcome: Literal['ongoing', 'completed', 'unresolved_time_advance']
+    evidence: str = Field(min_length=1)
+
+
 def reject(code, **path):
     fatal('Нарушена непрерывность повествования.', code, repairable=False, **path)
 
@@ -161,6 +168,41 @@ def due_births_in_scene_clock(state):
     return [state['pregnancies'][pid] for pid in due_ids if pid in state['pregnancies']]
 
 
+def due_birth_repair_required(diagnostics):
+    """Keep the repair obligation across a saved job's extraction-only retry."""
+    return any(row.get('code') == 'ordinary_temporal_boundary'
+               and row.get('temporal_boundary', {}).get('due_birth_repair') for row in diagnostics)
+
+
+def validate_due_birth_assessments(resolver, raw, *, require=False):
+    if resolver.mode == 'background' or resolver.runtime_time_skip:
+        return
+    rows = raw.final_scene.get('due_birth_assessments')
+    if rows is None and not require:
+        return  # Older payloads/saved contexts remain compatible.
+    path = dict(section='final_scene', path='final_scene.due_birth_assessments')
+    try:
+        if not isinstance(rows, list):
+            raise ValueError('Due birth repair requires a Narrative assessment.')
+        claims = [DueBirthAssessment.model_validate(row) for row in rows]
+        expected = {p['id'] for p in due_births_in_scene_clock(resolver.before)}
+        if len(claims) != len(expected) or {c.pregnancy_id for c in claims} != expected:
+            raise ValueError('Assess each current due pregnancy exactly once.')
+        births = {b.get('pregnancy_id') for b in raw.records['births'] if isinstance(b, dict)}
+        for claim in claims:
+            if claim.narrative_outcome == 'unresolved_time_advance':
+                fatal('Narrative требует продвижения времени через неразрешённые роды; Extraction не может переписать сцену.',
+                      'narrative_temporal_conflict', repairable=False, action='reauthor_narrative',
+                      entity=claim.pregnancy_id, **path)
+            if (claim.narrative_outcome == 'completed') != (claim.pregnancy_id in births):
+                raise ValueError('BirthClaim must agree with the Narrative assessment; ongoing labor is not birth_completed.')
+    except (ValueError, TypeError) as exc:
+        from backend.services.world_delta_errors import StructuralDeltaError
+        if isinstance(exc, StructuralDeltaError):
+            raise
+        fatal(str(exc), 'due_birth_assessment_invalid', repairable=True, **path)
+
+
 def validate_temporal_boundaries(resolver, elapsed):
     """Ordinary-turn guard, independent of Extraction's compression claim.
 
@@ -168,7 +210,8 @@ def validate_temporal_boundaries(resolver, elapsed):
     pending responses must be addressed by accepted canonical changes before
     time advances. Validate after domain handlers, before returning a patch.
     Time Skip has a Runtime-owned target; background/LTA own their clock outside
-    this ordinary-turn path. Never repair only elapsed time under unchanged prose.
+    this ordinary-turn path. Only an already-due birth boundary permits bounded
+    reinterpretation; the repair must assess the unchanged Narrative explicitly.
     """
     if resolver.mode == 'background' or resolver.runtime_time_skip or not elapsed:
         return
@@ -193,8 +236,19 @@ def validate_temporal_boundaries(resolver, elapsed):
     boundary = compression_limit(dict(state, scheduled_events=boundaries, pregnancies=pregnancies),
                                  actors, elapsed)
     if elapsed > boundary['max_minutes']:
-        fatal('Обычный ход пересекает временную границу договорённости.',
-              'ordinary_temporal_boundary', repairable=False)
+        rows = [event for event in temporal_boundaries(dict(state,
+            scheduled_events=boundaries, pregnancies=pregnancies))
+            if event['id'] in boundary['boundary_ids']]
+        repairable = bool(rows) and all(event['id'] in pregnancies
+            and pregnancies[event['id']]['status'] != 'born'
+            and event['due_minute'] <= now for event in rows)
+        detail = dict(world_time=now, elapsed_minutes=elapsed,
+            max_minutes=boundary['max_minutes'], due_birth_repair=repairable,
+            boundaries=[dict(id=e['id'], kind=e.get('type'), due_minute=e['due_minute']) for e in rows])
+        fatal('Обычный ход пересекает неразрешённую временную границу. '
+              'Повторно интерпретируй исходный Narrative; не выдумывай рождение или длительность.',
+              'ordinary_temporal_boundary', repairable=repairable, section='final_scene',
+              path='final_scene.elapsed_minutes', source_ids=boundary['boundary_ids'], temporal_boundary=detail)
 
 
 def validate_compression(resolver, scene, elapsed):

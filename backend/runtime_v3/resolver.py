@@ -32,12 +32,13 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, require_elapsed=False, relationship_query=None, relationship_receipts=None, remote_semantic_sources=None, call_sources=None, letter_sources=None, require_player_agency=False):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, require_elapsed=False, relationship_query=None, relationship_receipts=None, remote_semantic_sources=None, call_sources=None, letter_sources=None, require_player_agency=False, require_due_birth_assessment=False):
         if mode not in ("turn", "background"):
             raise ValueError("Неизвестный режим StateResolver.")
         from backend.services.letter_sources import parse, enabled
         sources = letter_sources if letter_sources is not None else parse(narrative) if enabled(before) else []
         self.require_player_agency = require_player_agency
+        self.require_due_birth_assessment = require_due_birth_assessment
         self.letter_sources = {a["id"]: a for a in sources}
         self.call_sources = call_sources or {}
         self.remote_semantic_sources = remote_semantic_sources or {}
@@ -141,6 +142,8 @@ class StateResolver:
     def resolve(self, payload):
         raw = deepcopy(payload) if isinstance(payload, RawTurnResult) else RawTurnResult.parse(payload)
         self.warnings.extend(raw.warnings)
+        from backend.runtime_v3.continuity import validate_due_birth_assessments
+        validate_due_birth_assessments(self, raw)
         from backend.runtime_v3.player_actions import review
         player_actions = review(self, raw)
         s = self.state
@@ -544,6 +547,8 @@ class StateResolver:
         from backend.runtime_v3.continuity import apply as apply_continuity, turn_signal, filter_choices
         apply_continuity(self, raw, events)
         validate_temporal_boundaries(self, elapsed)
+        if self.require_due_birth_assessment:
+            validate_due_birth_assessments(self, raw, require=True)
         from backend.runtime_v3.remote import advance as advance_remote
         for section, values in remote_history.to_dict().items():
             getattr(self.history, section).extend(values)
