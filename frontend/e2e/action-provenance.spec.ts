@@ -15,7 +15,7 @@ for (const scenario of [
     const before = await view();
     const profile = `provenance-${selection.save}`;
     await request.put(`/api/settings/${profile}`, {data: {...defaults, game: {
-      ...defaults.game, model: 'local-model', context_length: 40960, update_tokens: 4096,
+      ...defaults.game, model: 'provenance-test', context_length: 40960, update_tokens: 4096,
     }}});
     await page.addInitScript(({selection, profile}) => {
       localStorage.setItem('selection', JSON.stringify(selection));

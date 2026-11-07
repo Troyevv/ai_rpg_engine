@@ -565,7 +565,9 @@ def generation_fixture(prep, jid, config, *args):
     return _generation_run(prep, jid, config, *args)
 draft_generation.run = generation_fixture
 
-engine.find_loaded_model = preparation.find_loaded_model = lambda model: {'config': {'context_length':131072 if model=='handoff-test' else 32768}}
+engine.find_loaded_model = preparation.find_loaded_model = lambda model: {
+    'config': {'context_length': {'handoff-test': 131072, 'provenance-test': 40960}.get(model, 32768)}
+}
 def authoring_stream(**kwargs):
     if kwargs["messages"][0]["content"].startswith("Ты дополняешь предложенную карточку"):
         yield json.dumps({"value":"Выросла у моря. Работала в мастерской, затем открыла своё дело."},ensure_ascii=False)
