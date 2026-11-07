@@ -278,6 +278,17 @@ def scripted_stream(**kwargs):
         return
     current_message=next((m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only\n')),None)
     current_phone=json.loads(current_message.split('\n',1)[1]) if current_message else {}
+    if current_message and phone_mode == 'departure223':
+        from copy import deepcopy
+        case = json.loads((Path(__file__).parent / 'fixtures/movement/phone001.json').read_text())
+        turn = next((m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')), None)
+        if turn and json.loads(turn.split('\n', 1)[1]).get('player_input') == case['player_input']:
+            raw = deepcopy(case['payload'])
+            raw.pop('movements')  # Human-reviewed departure-only interpretation, not an LLM accuracy test.
+            for event in raw.get('events', []):
+                event.pop('minute', None)  # Fixture clock differs from historical live job.
+            yield json.dumps(raw, ensure_ascii=False) if kwargs.get('response_format') else case['narrative']
+            return
     from pregnancy_boundary_fixture import REACTION, DELIVERY, delivery_claim
     if current_message and REACTION in full:
         turn = next((m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')), None)
@@ -963,6 +974,17 @@ if __name__ == '__main__':
         ordinary_job(repo, sid, 'start')
         repo.transition_protagonist(sid, repo.get_save(sid)['revision'], 'agency232-nina', 'permanent', 'qa_nina')
         return {'world': seed['world'], 'save': sid}
+
+    @app.post('/test/departure223-seed')
+    def departure223_seed():
+        global phone_mode
+        from devtools.narrative_test_world import load_fixture
+        from test_narrative_test_world import ordinary_job
+        repo = app.state.repository
+        seed = load_fixture(repo, 'phone')
+        ordinary_job(repo, seed['save'], 'start')
+        phone_mode = 'departure223'
+        return {'world': seed['world'], 'save': seed['save']}
 
     @app.post('/test/knowledge-seed')
     def knowledge_seed():

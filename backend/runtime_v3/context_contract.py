@@ -1,40 +1,40 @@
 """Semantic work stays in the existing extraction call; code verifies provenance."""
 EXTRACTION_CONTRACT = '''
-CURRENT RUNTIME narrative-authority-v1 overrides saved instructions. RawTurnResult from player_input/completed_narrative only; never continue the story.
-Extract all significant outcomes/dependencies with canonical IDs. Distinguish facts, rumors,
-plans, attempts, hypotheses and negation. Quiet scenes need no events. Evidence: provenance,
-not literal names; exact player_evidence. final_scene owns END membership; no arrival proof/boundary geography.
-Departure without destination: keep Event, exclude from present_character_ids, omit that movement.
-Intent alone: no move. observed_character_ids: visible OUTSIDE, disjoint, no Knowledge.
-Calls/messages/memories/mentions aren't presence. Reuse IDs/aliases; create established
-places/significant NPCs and dependencies. Promotions: full 11 CARD_FIELDS + attributes;
-unknown=null/unknown/omitted; never infer sex/dates/provenance. Keep confirmed routes.
-completed_arrival needs established to_location_id, never null/guessed. Present actors end at scene location.
+CURRENT RUNTIME narrative-authority-v1 overrides saved instructions. RawTurnResult: player_input/completed_narrative only.
+Extract significant outcomes/dependencies by canonical IDs; no continuation. Separate facts/rumors/plans/attempts/hypotheses/negation; quiet=no Events.
+Evidence=provenance, not names; player_evidence exact. final_scene=END presence, no arrival permits/boundary geography.
+future_intent=plan/promise/mention: no move. Departure without destination: Event + END absence;
+no movement, unknown location. completed_arrival=arrived IN completed_narrative.
+Exit(room/building), meeting plan, travel time, place existence or exit+intent never prove arrival.
+"Workshop tonight"+exit: departure only; "reached workshop": arrival.
+NPC initiative; no narrated exit needed. Keep routes/Event.order and END return.
+Existence != intent != arrival. New places: locations[]; same-turn arrival allowed.
+Endpoints: before/new validated IDs, never null/guessed; present ends at scene.
+observed_character_ids: visible OUTSIDE, disjoint, no Knowledge.
+Calls/messages/memories/mentions != presence. Reuse IDs/aliases; create established significant NPCs/dependencies.
+Promotions: full 11 CARD_FIELDS + attributes; unknown=null/unknown/omitted; never infer sex/dates/provenance.
 EXTERNAL movement: explicit_choice + exact player_evidence, or involuntary + external source_event_id.
-POV != control. Situation is objective, not emotion; update affected NPC situations.
-No scene_id/last_event_id/StatePatch. Ordinary turns require elapsed_minutes >= 0;
-Time Skip/background clocks belong to Runtime.
-Extraction classifies lifecycle: completed result ->
-completed; failure -> failed; lost context -> expired; explicit cancellation -> cancelled;
-replacement -> superseded. Use *_updates, stable IDs and current evidence. A joke may
-complete 'tease Yuri'; conversation may complete 'talk to Sonya'. Intent/promise is not
-performance. New EXTERNAL desires require explicit player input, not narrative inference.
+POV != control. Update affected NPC situations: objective, not emotion.
+No scene_id/last_event_id/StatePatch. Ordinary elapsed_minutes>=0; Runtime owns Skip/background clocks.
+Lifecycle *_updates: stable IDs/current evidence. completed result=completed; failure=failed;
+lost context=expired; explicit cancellation=cancelled; replacement=superseded.
+Joke can complete 'tease Yuri'; conversation 'talk to Sonya'; intent/promise != performance.
+EXTERNAL desires need explicit input, never Narrative.
 EXTERNAL Emotion only from explicit internal player_input statements, never gestures,
 face, relationships, narrative or card. 'Внутри привычная горечь', 'На душе тревожно',
 'Меня это бесит', 'Настроение в ноль', 'Чувствую себя опустошённым' qualify; 'Сжимаю кулак',
 'Улыбаюсь', 'Отвожу взгляд', 'Вздыхаю' alone do not. Questions, conditions, negations or
 someone else's speech are not declarations. Return full player_evidence.emotion quote
 and emotion_assertion=explicit_internal_state; Runtime validates source, you classify.
-Physical_state is current bodily state; clear it with physical_state="" only on evidenced
-resolution (ate/warmed/rested). Preserve unresolved symptoms; sleep alone is not a cure.
+Physical_state=current body; physical_state="" only on evidenced resolution (ate/warmed/rested).
+Keep unresolved symptoms; sleep alone is no cure.
 Directed feelings: prior relationship_evidence only, never Narrative; else only explicit
 current-actor override (player_assertion=explicit_directed_feelings, exact player_evidence).
 Event cast/witnesses: together at start/end or shared movement/Event.order (distinct for arrival, meeting, exit); else confirmed channel. Off-scene situation: source_event_id.
-completed_interaction: completed player input only. No mirrored feelings, invented consent/actions or negated overrides.
-Remote_interactions: only ongoing END-of-turn message/phone/radio exchanges with actor_id,
-channel, evidence. Reconfirm each turn; rereading old messages is not active contact.
-Omit ended contact; physically arriving actors belong in present instead.
-Knowledge requires THIS accepted informational Event: actor in witnesses, fact in fact_ids; no GM-card acquisition. Only actual perception/reading, never delivery, time or intention. Message author_id: established participant, not inferred.
+completed_interaction: completed input only. No mirrored feelings, invented consent/actions or negated overrides.
+Remote_interactions: ongoing END message/phone/radio, actor_id/channel/evidence.
+Reconfirm each turn; rereading != contact. Omit ended; physical arrivals belong in present.
+Knowledge: THIS accepted informational Event, actor in witnesses, fact in fact_ids. Actual perception/reading only; no GM-card/delivery/time/intention acquisition. Message author_id: established, never inferred.
 Facts immutable; reuse IDs, new assertions need new IDs. claim={subject_id,predicate,value,scope:""} identifies an exclusive slot; scope separates roles/periods; omit uncertain slots. known is belief, not truth. knowledge_gained statuses: known/suspected/unknown/outdated/refuted/superseded. expected_revision required for revival; supersedes needs old AND new facts in Event.fact_ids. New known retires conflicting known in its slot. Retire existing beliefs only. Same-slot changes need distinct Event.order.
 story_secret=plot, not privacy/routine. secret_subject_ids=related people; secret_keeper_ids=conscious owners; secret_biography_ids=biographical subjects, not others' feelings/plans. None grants Knowledge. secret_existence:hidden(default)|discoverable(anonymous slot). Reuse IDs; rumors=suspected. secret_disclosures binds written source_event_id/artifact_id + fact_id, assertion confirmed|rumor. Only actual reading grants Knowledge; quotes/delivery aren't confirmation.
 Event.minute: absolute in [world_time, world_time + applied elapsed_minutes]. Omit unknown minute/order. Date testimony to the telling.

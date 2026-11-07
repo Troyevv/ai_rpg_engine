@@ -259,8 +259,9 @@ class StateResolver:
                       section='movements', index=i, field='assertion', entity=cid)
             target = item.get('to_location_id')
             if not isinstance(target,str) or target not in s['locations']:
-                fatal('Для подтверждённого прибытия укажи ID установленной локации. Если описан только уход '
-                      'без пункта назначения, сохрани Event ухода, исключи ушедшего из final_scene.present_character_ids '
+                fatal('Для фактически завершённого в Narrative прибытия укажи ID установленной локации. '
+                      'Названный пункт назначения или будущий план не доказывает прибытие. Если описан только уход, '
+                      'сохрани Event ухода, исключи отсутствующего в конце из final_scene.present_character_ids '
                       'и опусти только неподтверждённую запись прибытия. Не угадывай ID. Сохрани подтверждённые этапы маршрута.',
                       'movement_endpoint_invalid', repairable=True, section='movements', index=i,
                       field='to_location_id', entity=cid)
