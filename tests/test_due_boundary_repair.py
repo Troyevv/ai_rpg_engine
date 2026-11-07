@@ -217,12 +217,20 @@ def test_known_hidden_local_remote_repair_does_not_grant_knowledge(tmp_path, rem
         assert child['id'] not in after['characters']
 
 
-def test_retry_retains_assessment_requirement_and_saved_narrative(tmp_path):
+@pytest.mark.parametrize('legacy', [False, True])
+def test_retry_retains_assessment_requirement_and_saved_narrative(tmp_path, legacy):
     repo,sid = family(tmp_path/'retry.sqlite')
     before=repo.get_snapshot(sid)
     state=before['world_state']
     failed,calls=execute(repo,sid,SIGNS,ongoing(state,2))
     assert failed['status']=='error' and len(calls)==3
+    if legacy:
+        # Model the old #240 persisted refusal, without rewriting any accepted turn.
+        old = [dict(code='ordinary_temporal_boundary', action='regenerate',
+                    stage='validation_failed', attempt=0, attempt_epoch=0)]
+        with repo.connect() as db:
+            db.execute('UPDATE game_jobs SET repair_diagnostics_json=? WHERE id=?',
+                       (json.dumps(old), failed['id']))
     # Explicit retry is still bounded, reuses Narrative, and cannot omit assessment.
     failed,calls=execute(Repository(repo.path),sid,'MUST NOT BE GENERATED',ongoing(state),retry=failed['id'])
     assert failed['status']=='error' and len(calls)==2

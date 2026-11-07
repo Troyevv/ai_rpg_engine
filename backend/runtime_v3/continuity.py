@@ -168,10 +168,14 @@ def due_births_in_scene_clock(state):
     return [state['pregnancies'][pid] for pid in due_ids if pid in state['pregnancies']]
 
 
-def due_birth_repair_required(diagnostics):
-    """Keep the repair obligation across a saved job's extraction-only retry."""
-    return any(row.get('code') == 'ordinary_temporal_boundary'
-               and row.get('temporal_boundary', {}).get('due_birth_repair') for row in diagnostics)
+def due_birth_repair_required(diagnostics, before):
+    """Also cover pre-fix jobs, whose diagnostic has no boundary detail yet.
+
+    This requires an assessment; only validate_temporal_boundaries owns whether
+    a failed attempt may automatically retry. The immutable before owns scope.
+    """
+    return bool(due_births_in_scene_clock(before)) and any(
+        row.get('code') == 'ordinary_temporal_boundary' for row in diagnostics)
 
 
 def validate_due_birth_assessments(resolver, raw, *, require=False):

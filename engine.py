@@ -267,7 +267,7 @@ def run_job(path, job_id, handle):
             initiative_plan = recorded_plan(recorded_messages)
             from backend.runtime_v3.continuity import recorded as recorded_continuity, due_birth_repair_required
             continuity_plan = recorded_continuity(recorded_messages)
-            require_due_birth_assessment = due_birth_repair_required(json.loads(job.get('repair_diagnostics_json') or '[]'))
+            require_due_birth_assessment = due_birth_repair_required(json.loads(job.get('repair_diagnostics_json') or '[]'), before['world_state'])
             feedback = None
             previous_extraction = None
             if job['attempt_epoch']:
@@ -360,7 +360,7 @@ def run_job(path, job_id, handle):
                     diagnostic=exc.diagnostic('extraction_repair' if attempt==0 and exc.repairable else 'validation_failed')
                     diagnostic.update(attempt=attempt,attempt_epoch=job['attempt_epoch'],revision=job['revision'])
                     storage.record_repair(job_id,diagnostic)
-                    require_due_birth_assessment = require_due_birth_assessment or due_birth_repair_required([diagnostic])
+                    require_due_birth_assessment = require_due_birth_assessment or due_birth_repair_required([diagnostic], before['world_state'])
                     if attempt == 1 or not exc.repairable:raise
                     feedback = repair_feedback(diagnostic, result, before['world_state'])
                 finally:
