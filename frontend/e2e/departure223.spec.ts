@@ -28,6 +28,8 @@ test('Phone #223: future plan plus departure saves unknown location and survives
   const accounting = async () => (await (await request.get(path + '/accounting')).json()).requests;
   const requests = await accounting();
   await page.reload();
+  await expect(page.getByText('Дверь закрывается.', {exact: false}).first()).toBeVisible();
+  await page.getByLabel('Своё действие или реплика').fill('Продолжаю заниматься фотографиями.');
   await expect(page.getByRole('button', {name: 'Отправить действие', exact: true})).toBeEnabled();
   const reloaded = await view();
   expect(reloaded.state).toEqual(saved.state);
