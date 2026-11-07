@@ -472,11 +472,12 @@
     }
   },
   "public_raw_evidence": false,
-  "publication_status": "Blocked by automatic approval review pending explicit public-payload consent; no upload performed",
+  "publication_status": "Explicit user public-payload consent received; GitHub uploads.github.com returned HTTP401; release object absent (404), no assets published. Browser fallback navigation failed. Needs authenticated asset upload, not new consent.",
   "issues": [
     237,
     238,
     240,
     223
-  ]
+  ],
+  "public_upload_authorized": true
 }

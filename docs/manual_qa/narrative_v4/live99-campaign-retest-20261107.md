@@ -180,14 +180,24 @@ Archive members and nested gzip payloads were scanned for current environment
 credentials and common secret formats: zero matches. This does not by itself
 establish that every payload is appropriate for public distribution.
 
-Automatic approval review blocked publication of the full historical/current QA
-payload to a **public GitHub Release**, requiring explicit consent for that
-exposure. Proposed durable destination: a non-latest QA evidence prerelease in
-this repository, with append-only assets and SHA256 verification after download;
-a private artifact store with controlled access is an alternative. No upload was
-performed or bypassed. `/workspace/work/...` is an ephemeral location, not an
-artifact URL. Until storage approval and upload verification, long-term raw
-availability remains an acceptance limitation.
+The user explicitly approved public publication of the six full archives (this
+archive plus five historical Stage B/C packages), resolving the initial automatic
+approval rejection. The authorized GitHub Release upload then failed with
+**HTTP401 Bad credentials on uploads.github.com**. The attempted release object
+was subsequently absent (API404); no downloadable assets/release are claimed.
+The GitHub connector has no asset-upload operation; browser fallback could not
+navigate to GitHub (tool requirements error). No credential/access bypass was
+attempted, and no secret was printed.
+
+Durable raw storage therefore remains a technical blocker, **not pending user
+consent**. The intended destination is the repository's non-latest QA evidence
+prerelease `qa-99-evidence-20261107`, using the six unchanged files and checksum
+verification after download. Restore authenticated release-asset upload access,
+then run the prepared upload command; do not regenerate gameplay or renew budget.
+The embedded archive README retains its truthful pre-approval status at packaging
+time; this report supersedes only that storage note. `/workspace/work/...` is an
+ephemeral location, not an artifact URL. Public minimal evidence is available in
+the Issues/index, while long-term availability of the full raw payload is unproven.
 
 ## Readiness and next retest
 
