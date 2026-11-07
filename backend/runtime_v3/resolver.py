@@ -328,8 +328,6 @@ class StateResolver:
                 if entry['id'] not in s['facts'] and getattr(self,'remote_origin_id',None):
                     entry['origin_remote_event_id']=self.remote_origin_id
                 s['facts'][entry['id']] = entry
-        from backend.runtime_v3.player_actions import validate_targets
-        validate_targets(self, player_actions)
         events = {}
         event_indices = {}
         scene_start = self.before['meta']['world_time']
@@ -552,6 +550,8 @@ class StateResolver:
         advance_remote(s, self.history)
         from backend.runtime_v3.call_continuity import project_physical
         project_physical(self, raw)
+        from backend.runtime_v3.player_actions import validate_targets
+        validate_targets(self, player_actions)
         upserts = {section:{key:deepcopy(value) for key,value in s[section].items() if value != self.before[section].get(key)}
             for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions','residences','roles','organizations','reproductive_events','pregnancies','naming_decisions','possessions','contacts','conversations','remote_events')}
         digest = sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest()

@@ -305,7 +305,8 @@ def test_targeted_call_uses_only_existing_channel(api, channel):
 
 
 @pytest.mark.parametrize('mutate,code', [
-    (lambda raw: raw['player_agency']['actions'][0].update(target_ids=['missing'], narrative_target_ids=['missing']), 'player_action_target_invalid'),
+    (lambda raw: (raw['player_agency']['actions'][0].update(target_ids=['missing'], narrative_target_ids=['missing']),
+                  raw['events'][0].update(target_ids=['missing'])), 'player_action_target_invalid'),
     (lambda raw: raw['player_agency']['actions'][0].update(player_evidence='Чужой ввод'), 'player_action_source_invalid'),
     (lambda raw: raw['events'][0].pop('player_action_id'), 'player_action_event_mismatch'),
     (lambda raw: raw['events'][0].update(actor_id=MARINA), 'player_action_event_mismatch'),
@@ -368,3 +369,32 @@ def test_partial_group_action_can_reach_subset_but_never_replacement(crisis, sub
         assert event['player_action']['outcome'] == 'partial'
         assert not event.get('player_interaction') and event['target_ids'] == [MARINA]
         assert Repository(repo.path).get_snapshot(sid)['world_state']['characters'][VERA] == before['world_state']['characters'][VERA]
+
+
+@pytest.mark.parametrize('accepted', [True, False])
+def test_new_object_target_requires_accepted_canonical_creation(crisis, accepted):
+    _, repo, sid = crisis
+    before = repo.get_snapshot(sid)
+    state = before['world_state']
+    quote = 'Рассматриваю старый атлас на столе.'
+    text = 'Нина рассматривает старый атлас. На столе лежит старый атлас с картами.'
+    raw = payload(state, [claim(['atlas232'], quote=quote)])
+    raw['facts'] = [dict(id='atlas-fact', text='На столе лежит старый атлас с картами.',
+                         character_ids=[NINA], evidence=text)]
+    raw['events'][0].update(fact_ids=['atlas-fact'], text=text, medium='observation')
+    raw['possession_deltas'] = [dict(item_id='atlas232', operation='introduce', expected_revision=0,
+        updates=dict(owner_id=None, holder_id=None, location_id=state['camera']['location_id'], status='available'),
+        assertion='completed_outcome', significance='continuity_required' if accepted else 'incidental',
+        transition='established', source_event_id=raw['events'][0]['id'], fact_id='atlas-fact',
+        name='Старый атлас', kind='book', evidence=text)]
+    job, calls = play(crisis, [raw, raw], quote, text)
+    if accepted:
+        assert job['status'] == 'saved', job.get('error')
+        assert len(calls) == 2
+        assert 'atlas232' in Repository(repo.path).get_snapshot(sid)['world_state']['possessions']
+        event, = [e for e in saved_events(repo, sid) if e.get('local_id') == 'event-input-1']
+        assert event['player_interaction'] and event['target_ids'] == ['atlas232']
+    else:
+        assert job['status'] == 'error' and len(calls) == 3
+        assert Repository(repo.path).get_snapshot(sid) == before
+        assert 'player_action_target_invalid' in repo.get_job(job['id'])['repair_diagnostics_json']

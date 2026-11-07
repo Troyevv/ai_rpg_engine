@@ -89,8 +89,8 @@ def review(resolver, raw):
 
 
 def validate_targets(resolver, actions):
-    # Promotions/locations/facts have now passed their canonical handlers. A first
-    # interaction with a newly established NPC must use that same accepted ID.
+    # All domain handlers have finished, including newly established objects,
+    # threads and NPCs. Only accepted canonical entities can prove a target.
     known = set().union(*(set(resolver.state.get(section, {})) for section in
                          ('characters', 'locations', 'possessions', 'organizations', 'facts', 'threads', 'scheduled_events')))
     for i, action in enumerate(actions.values()):

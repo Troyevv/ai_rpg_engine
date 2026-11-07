@@ -34,6 +34,9 @@ Events reference these actions through `player_action_id`, actual `actor_id` and
 `target_ids`. Runtime compares identities, source ownership and completion. A
 copied quote alone cannot create `player_interaction`. Failed/partial/deferred acts
 retain their intended targets without turning absent addressees into participants.
+Target IDs are checked after all domain handlers, so a newly introduced NPC or
+significant object can be addressed only if its canonical creation was accepted.
+A rejected introduction cannot leave a completed player Event in History.
 NPC reactions remain separate Events. Multiple actions and group targets do not
 collapse into one undifferentiated participant set. Aliases/pronouns are resolved
 by Extraction; Python does not inspect names or compare literary wording.
