@@ -230,6 +230,23 @@ def test_background_cannot_acquire_decision_from_current_quote(game):
     assert error.value.code == 'continuity_external_decision' and not error.value.repairable
 
 
+def test_optional_opportunity_does_not_acquire_a_decider(game):
+    _, _, before = game
+    raw = supported(before['world_state'])
+    raw['continuity_beats'][0].update(kind='opportunity', status='open', decision_actor_id=None)
+    out = StateResolver(before['world_state'], NARRATIVE, ACTION).resolve(raw)
+    assert out.history['events'][0]['continuity'][0]['decision_actor_id'] is None
+
+
+def test_conflicting_duplicate_decision_is_rejected(game):
+    _, _, before = game
+    raw = supported(before['world_state'])
+    raw['continuity_beats'].append(dict(raw['continuity_beats'][0], status='rejected'))
+    with pytest.raises(StructuralDeltaError) as error:
+        StateResolver(before['world_state'], NARRATIVE, ACTION).resolve(raw)
+    assert error.value.code == 'continuity_beat_conflict'
+
+
 def test_recovery_reload_regeneration_siblings_and_new_branch(game):
     repo, sid, before = game
     raw = social_turn(before['world_state'])

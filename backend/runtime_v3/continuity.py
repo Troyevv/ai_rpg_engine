@@ -273,6 +273,10 @@ def validate_player_decision(resolver, claim, event, index):
                 'подтверждающую именно это решение. Не копируйте чужое действие/согласие; '
                 'если решения нет, не утверждайте его при повторной Extraction.')
     external = resolver.protected_actor_id
+    # Preserve the older quote-only guard on optional opportunities; the stricter
+    # Event/decider contract applies to decisions, not every annotation kind.
+    if claim.kind != 'decision' and claim.decision_actor_id != external:
+        return
     if claim.decision_actor_id != external:
         invalid('decision_actor_id', 'Укажите фактического автора решения; участие игрока не доказывает решение NPC.')
     actors = {claim.actor_id, *claim.target_ids, external}
@@ -361,7 +365,9 @@ def apply(resolver, raw, events):
     for index, row in enumerate(raw.records['continuity_beats']):
         try: claim = ContinuityBeat.model_validate(row)
         except (ValueError, TypeError):
-            if isinstance(row, dict) and external is not None and external in (row.get('actor_id'), row.get('decision_actor_id')):
+            if (isinstance(row, dict) and external is not None
+                    and (row.get('decision_actor_id') == external
+                         or row.get('kind') == 'decision' and row.get('actor_id') == external)):
                 fatal('Повреждена аннотация действия игрока; проверьте типы и источник решения.',
                       'continuity_external_decision', repairable=resolver.mode != 'background',
                       section='continuity_beats', index=index)
