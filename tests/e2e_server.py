@@ -57,12 +57,16 @@ letter130_provider=None
 npc_review_start_payload=None
 story168_payload=None
 story168_gate=None
+provenance238_case=None
+provenance238_repeat=False
+provenance238_extractions=0
 agency232_attempts=0
 agency237_mode=False
 agency237_extractions=0
 birth231_response=None
 
 def scripted_stream(**kwargs):
+    global provenance238_extractions
     global phone_mode, group_semantic_fail_once, npc_review_start_payload, story168_payload, agency232_attempts, birth231_response, agency237_extractions
     if birth231_response is not None:
         narrative, raw = birth231_response
@@ -327,6 +331,17 @@ def scripted_stream(**kwargs):
     from rejected_meeting_fixture import CONSENT, QUESTION, meeting_reply
     turn_input = next((m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')), '')
     action = json.loads(turn_input.split('\n', 1)[1]).get('player_input') if turn_input else None
+    if provenance238_case:
+        from test_action_provenance_repair import archived, corrected
+        data = archived(provenance238_case)
+        if action == data['player_input']:
+            if kwargs.get('response_format'):
+                provenance238_extractions += 1
+                raw = data['responses']['extraction'] if provenance238_extractions == 1 or provenance238_repeat else corrected(data, provenance238_case)
+                yield json.dumps(raw, ensure_ascii=False)
+            else:
+                yield data['narrative']
+            return
     from test_player_action_targets import ACTION as AGENCY_ACTION, BAD_TEXT, ATTEMPT, payload as agency_payload, claim as agency_claim
     if action == AGENCY_ACTION:
         if agency237_mode:
@@ -924,6 +939,16 @@ if __name__ == '__main__':
         from devtools.narrative_test_world import load_fixture
         result=load_fixture(app.state.repository,'protagonist')
         return {'world':result['world'],'save':result['save']}
+
+    @app.post('/test/provenance238-seed')
+    def provenance238_seed(case: str = 'social', repeat: bool = False):
+        global provenance238_case, provenance238_repeat, provenance238_extractions
+        from test_action_provenance_repair import seed_archived
+        if case not in ('social', 'knowledge', 'campaign'):
+            raise ValueError('Unknown replay')
+        result = seed_archived(app.state.repository, case)
+        provenance238_case, provenance238_repeat, provenance238_extractions = case, repeat, 0
+        return {'world': result['world'], 'save': result['save']}
 
     @app.post('/test/agency232-seed')
     def agency232_seed(completion: bool = False):
