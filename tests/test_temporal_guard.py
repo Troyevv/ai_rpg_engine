@@ -11,7 +11,7 @@ import engine
 
 def run(repo, sid, minutes, *, kind='turn', compression='missing', text='Рассматриваю карту.', config=None, extra=None, player_input='Рассматриваю карту.',retry=None):
     s = repo.get_snapshot(sid)['world_state']
-    raw = dict(final_scene=dict(location_id=s['camera']['location_id'],
+    raw = dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=s['camera']['location_id'],
         present_character_ids=s['camera']['present_character_ids'], elapsed_minutes=minutes))
     if compression != 'missing':
         raw['final_scene']['compression'] = compression

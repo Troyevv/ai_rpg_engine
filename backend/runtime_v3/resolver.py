@@ -328,6 +328,8 @@ class StateResolver:
                 if entry['id'] not in s['facts'] and getattr(self,'remote_origin_id',None):
                     entry['origin_remote_event_id']=self.remote_origin_id
                 s['facts'][entry['id']] = entry
+        from backend.runtime_v3.player_actions import validate_targets
+        validate_targets(self, player_actions)
         events = {}
         event_indices = {}
         scene_start = self.before['meta']['world_time']

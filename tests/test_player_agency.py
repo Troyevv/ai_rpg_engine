@@ -19,7 +19,7 @@ def seed(repo,sid):
 def character_payload(fields,evidence=NARRATIVE,player_evidence=None):
     c=dict(id='character_1',situation='Стоит напротив Люды',evidence=evidence);c.update(fields)
     if player_evidence is not None:c['player_evidence']=player_evidence
-    return dict(final_scene=dict(location_id=identity('location','кухня'),present_character_ids=['character_1','character_2']),character_changes=[c])
+    return dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=identity('location','кухня'),present_character_ids=['character_1','character_2']),character_changes=[c])
 
 
 @pytest.mark.parametrize('text,fields',[

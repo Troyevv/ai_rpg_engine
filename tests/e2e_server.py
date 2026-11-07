@@ -459,6 +459,16 @@ def scripted_stream(**kwargs):
         value = '# Вечер в общем доме\n\nКомпания друзей собирается на кухне после долгого дня. Современная драмеди: живые разговоры, дружба и открытые линии.'
     else:
         value = NARRATIVE
+    # Apply the protocol envelope before fragmenting the scripted JSON stream.
+    if kwargs.get('response_format') and runtime_v3_request(kwargs['messages']):
+        from runtime_v3_fixture import reviewed
+        try:
+            parsed = json.loads(value)
+        except ValueError:
+            pass  # Deliberately malformed/partial fixtures retain their transport.
+        else:
+            if isinstance(parsed, dict) and 'final_scene' in parsed:
+                value = json.dumps(reviewed(parsed), ensure_ascii=False)
     if kwargs.get('on_usage'):
         kwargs['on_usage']({'prompt_tokens':1000,'completion_tokens':100,'prompt_cache_hit_tokens':800})
     chunk_size=512 if 'Каноническая JSON Schema WorldState' in full else 60

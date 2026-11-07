@@ -302,3 +302,47 @@ def test_targeted_call_uses_only_existing_channel(api, channel):
         assert job['status'] == 'error'
         assert Repository(repo.path).get_snapshot(sid) == before
     assert repo.get_snapshot(sid)['world_state']['characters'][VERA]['location_id'] == state['characters'][VERA]['location_id']
+
+
+@pytest.mark.parametrize('mutate,code', [
+    (lambda raw: raw['player_agency']['actions'][0].update(target_ids=['missing'], narrative_target_ids=['missing']), 'player_action_target_invalid'),
+    (lambda raw: raw['player_agency']['actions'][0].update(player_evidence='Чужой ввод'), 'player_action_source_invalid'),
+    (lambda raw: raw['events'][0].pop('player_action_id'), 'player_action_event_mismatch'),
+    (lambda raw: raw['events'][0].update(actor_id=MARINA), 'player_action_event_mismatch'),
+    (lambda raw: raw['events'][0].update(player_evidence=123), 'player_action_completion_invalid'),
+])
+def test_invalid_provenance_is_repairable_not_silently_dropped(crisis, mutate, code):
+    _, repo, sid = crisis
+    state = repo.get_snapshot(sid)['world_state']
+    raw = payload(state, [claim([MARINA], quote=GOOD_INPUT)])
+    mutate(raw)
+    with pytest.raises(StructuralDeltaError) as error:
+        StateResolver(state, GOOD_TEXT, GOOD_INPUT).resolve(raw)
+    assert error.value.code == code and error.value.repairable
+
+
+def test_player_actor_cannot_omit_both_reference_and_completion_marker(crisis):
+    _, repo, sid = crisis
+    state = repo.get_snapshot(sid)['world_state']
+    raw = payload(state, [claim([MARINA], quote=GOOD_INPUT)], completed=False)
+    raw['events'][0].pop('player_action_id')
+    with pytest.raises(StructuralDeltaError) as error:
+        StateResolver(state, GOOD_TEXT, GOOD_INPUT).resolve(raw)
+    assert error.value.code == 'player_action_event_mismatch'
+
+
+def test_target_can_be_newly_promoted_character(crisis):
+    from test_npc_review import promoted
+    _, repo, sid = crisis
+    raw = promoted(repo.get_snapshot(sid))
+    raw.pop('relationship_changes')
+    quote = 'Спрашиваю Ладу о мастерской.'
+    action = claim(['new_npc'], quote=quote)
+    raw['player_agency'] = dict(status='preserved', actions=[action])
+    raw['events'][0].update(actor_id=NINA, target_ids=['new_npc'], player_action_id=action['id'],
+                            player_assertion='completed_interaction', player_evidence=quote)
+    job, calls = play(crisis, [raw], quote, 'Лада пришла. Нина спрашивает её о мастерской. Лада рассказала о мастерской.')
+    assert job['status'] == 'saved', job.get('error')
+    event, = [e for e in saved_events(repo, sid) if e.get('local_id') == 'meeting']
+    assert event['player_interaction'] and event['target_ids'] == ['new_npc']
+    assert len(calls) == 2

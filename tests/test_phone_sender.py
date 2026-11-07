@@ -120,7 +120,7 @@ def test_real_api_upload_sender_branch_reload_and_rollback(tmp_path):
         if kwargs['messages'][0]['content'].startswith('Select at most ONE'):
             yield json.dumps({'action':None})
         elif kwargs.get('response_format'):
-            yield json.dumps(dict(final_scene=dict(location_id=camera['location_id'],
+            yield json.dumps(dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],
                 present_character_ids=camera['present_character_ids'],elapsed_minutes=1), choices=[]))
         else:
             yield NARRATIVE

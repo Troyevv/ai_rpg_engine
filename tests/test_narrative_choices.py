@@ -55,7 +55,7 @@ def turn(actor='a', text='PLAYER_a', **kwargs):
 
 
 def raw(s, **kwargs):
-    return dict(final_scene=dict({k:s['camera'][k] for k in ('location_id','present_character_ids')},elapsed_minutes=0),**kwargs)
+    return dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict({k:s['camera'][k] for k in ('location_id','present_character_ids')},elapsed_minutes=0),**kwargs)
 
 
 def test_canonical_profile_context_policy_and_no_mutation():

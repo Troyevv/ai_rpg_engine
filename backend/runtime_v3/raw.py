@@ -94,12 +94,16 @@ def repair_revision_warnings(previous, current):
     """
     if previous is None: return []
     sections = ['final_scene'] + [name for name in SECTIONS if name not in OPTIONAL_SECTIONS]
-    return [dict(type='extraction_revision', section=section, code='extraction_revised',
+    warnings = [dict(type='extraction_revision', section=section, code='extraction_revised',
                  action='use_revised_extraction',
                  reason='Изменён предварительный результат Extraction; различие JSON не доказывает правильность интерпретации.')
             for section in sections
             if (previous.final_scene if section == 'final_scene' else previous.records[section]) !=
                (current.final_scene if section == 'final_scene' else current.records[section])]
+    if previous.player_agency != current.player_agency:
+        warnings.append(dict(type='extraction_revision', section='player_agency', code='extraction_revised',
+                             action='use_revised_extraction', reason='Пересмотрена проверка действий игрока.'))
+    return warnings
 
 
 def extraction_schema():
@@ -408,8 +412,12 @@ def repair_feedback(diagnostic, payload, before):
     if isinstance(payload, str):
         try: payload = json.loads(payload)
         except ValueError: pass  # Preserve malformed output verbatim for repair.
-    return json.dumps(dict(diagnostic=diagnostic, original_extraction=payload,
-        previous_camera=before['camera'], known_locations=before['locations'],
+    # Full diagnostics remain in game_jobs; the prompt needs only repair evidence.
+    detail = {key: diagnostic[key] for key in ('code', 'path', 'source_ids', 'repair_reason', 'action') if key in diagnostic}
+    return json.dumps(dict(diagnostic=detail, original_extraction=payload,
+        previous_camera=before['camera'], known_locations={lid: {key: location[key] for key in
+            ('id', 'name', 'aliases', 'parent_id', 'kind') if key in location}
+            for lid, location in before['locations'].items()},
         contract='narrative-authority-v1: original_extraction — предварительный, отклонённый результат, не канон. Reinterpret the same full narrative: fix structural errors and misclassifications; preserve actual outcomes and dependencies. Never delete outcomes merely to pass validation or rewrite accepted before/History. final_scene present owns physical membership; observed is outside. Do not invent movements, consent or endpoints.'), ensure_ascii=False, separators=(',', ':'))
 
 

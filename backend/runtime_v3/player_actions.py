@@ -44,7 +44,7 @@ Never fix prose via JSON or relabel player acts as NPC initiative.
 actions: id per input act; full player_evidence; target_ids from INPUT;
 narrative_target_ids/outcome/meaning from actual act. Resolve aliases/pronouns/groups from context. Unresolved=uncertain; untargeted=[]; no player act=actions[].
 Absent addressee: attempt keeps intended target, no invented participant/channel.
-Deferred/not_performed may have narrative_target_ids=[]. No reply is no completed exchange.
+Deferred/not_performed may have narrative_target_ids=[]. A delivered question may complete without reply; no reply alone proves no exchange.
 Events reference player_action_id + actual actor_id/target_ids. completed_interaction
 requires completed matching act + same player_evidence, all targets participating.
 Other outcomes must not claim completion. Split different acts. NPC initiative: own Event, no player_action_id/assertion.
@@ -81,19 +81,26 @@ def review(resolver, raw):
                 or normalized(action.player_evidence) not in normalized(resolver.player_input)):
             fatal('Нет однозначного источника действия в текущем вводе игрока.',
                   'player_action_source_invalid', repairable=True, **path)
-        for ids in (action.target_ids, action.narrative_target_ids):
-            # Targets can be characters, items, locations, etc., not just addressees.
-            known = set().union(*(set(resolver.before.get(section, {})) for section in
-                                  ('characters', 'locations', 'items', 'organizations', 'facts', 'threads', 'scheduled_events')))
-            if len(ids) != len(set(ids)) or any(cid not in known for cid in ids):
-                fatal('Цель действия должна ссылаться на известную каноническую сущность.',
-                      'player_action_target_invalid', repairable=True, **path)
         if (action.meaning != 'preserved'
                 or set(action.target_ids) != set(action.narrative_target_ids)
                 and not (action.outcome in ('deferred', 'not_performed') and not action.narrative_target_ids)):
             narrative_conflict(**path)
         actions[action.id] = action
     return actions
+
+
+
+def validate_targets(resolver, actions):
+    # Promotions/locations/facts have now passed their canonical handlers. A first
+    # interaction with a newly established NPC must use that same accepted ID.
+    known = set().union(*(set(resolver.state.get(section, {})) for section in
+                         ('characters', 'locations', 'possessions', 'organizations', 'facts', 'threads', 'scheduled_events')))
+    for i, action in enumerate(actions.values()):
+        for ids in (action.target_ids, action.narrative_target_ids):
+            if len(ids) != len(set(ids)) or any(cid not in known for cid in ids):
+                fatal('Цель действия должна ссылаться на принятую каноническую сущность.',
+                      'player_action_target_invalid', repairable=True,
+                      section='player_agency', path=f'player_agency.actions[{i}]')
 
 
 def narrative_conflict(**path):
@@ -107,7 +114,7 @@ def event_provenance(resolver, item, event, index, actions):
     from backend.runtime_v3.resolver import normalized
     reference = item.get('player_action_id')
     completed = item.get('player_assertion') == 'completed_interaction'
-    if reference is None and not completed:
+    if reference is None and not completed and not (resolver.protected_actor_id and item.get('actor_id') == resolver.protected_actor_id):
         return
     path = dict(section='events', index=index, field='player_action_id', entity=item['id'])
     action = actions.get(reference) if isinstance(reference, str) else None

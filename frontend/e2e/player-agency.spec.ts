@@ -48,7 +48,7 @@ test('Crisis/001: rejected substitution survives reload; abandon restores input 
   const after = await view();
   expect(after.turns.at(-1).user_text).toBe(action);
   expect(after.turns).toHaveLength(before.turns.length + 1);
-  expect(after.turns.at(-1).narrative).not.toContain('окликает Марину');
+  expect(after.turns.at(-1).assistant_text).not.toContain('окликает Марину');
   const old = await (await request.get(`/api/jobs/${failed.job.id}`)).json();
   expect(old.status).toBe('abandoned');
 });
