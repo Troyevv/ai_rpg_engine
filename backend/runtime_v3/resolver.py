@@ -32,11 +32,12 @@ class ResolvedTurn:
 
 
 class StateResolver:
-    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, require_elapsed=False, relationship_query=None, relationship_receipts=None, remote_semantic_sources=None, call_sources=None, letter_sources=None):
+    def __init__(self, before, narrative, player_input, *, turn_id=None, observed=True, actor_names=None, protected_actor_id=None, mode: Literal["turn", "background"] = "turn", protected_knowledge_actor_ids=None, milestone_query=None, development_query=None, death_policy=None, pacing_decision=None, initiative_decision=None, continuity_decision=None, minimal_promotion_ids=None, event_namespace=None, runtime_time_skip=False, require_elapsed=False, relationship_query=None, relationship_receipts=None, remote_semantic_sources=None, call_sources=None, letter_sources=None, require_player_agency=False):
         if mode not in ("turn", "background"):
             raise ValueError("Неизвестный режим StateResolver.")
         from backend.services.letter_sources import parse, enabled
         sources = letter_sources if letter_sources is not None else parse(narrative) if enabled(before) else []
+        self.require_player_agency = require_player_agency
         self.letter_sources = {a["id"]: a for a in sources}
         self.call_sources = call_sources or {}
         self.remote_semantic_sources = remote_semantic_sources or {}
@@ -140,6 +141,8 @@ class StateResolver:
     def resolve(self, payload):
         raw = deepcopy(payload) if isinstance(payload, RawTurnResult) else RawTurnResult.parse(payload)
         self.warnings.extend(raw.warnings)
+        from backend.runtime_v3.player_actions import review
+        player_actions = review(self, raw)
         s = self.state
         from backend.runtime_v3.pacing import validate_risk
         validate_risk(self, raw)
@@ -248,9 +251,16 @@ class StateResolver:
         moves = {}
         for i, item in self.records(raw,'movements'):
             cid = self.actor(item.get('actor_id'),'movements',i)
+            if 'assertion' in item and item['assertion'] != 'completed_arrival':
+                fatal('Перемещение требует завершённого прибытия.', 'movement_assertion_invalid', repairable=True,
+                      section='movements', index=i, field='assertion', entity=cid)
             target = item.get('to_location_id')
             if not isinstance(target,str) or target not in s['locations']:
-                fatal('неизвестное конечное место перемещения','movement_endpoint_invalid',repairable=True,index=i)
+                fatal('Для подтверждённого прибытия укажи ID установленной локации. Если описан только уход '
+                      'без пункта назначения, сохрани Event ухода, исключи ушедшего из final_scene.present_character_ids '
+                      'и опусти только неподтверждённую запись прибытия. Не угадывай ID. Сохрани подтверждённые этапы маршрута.',
+                      'movement_endpoint_invalid', repairable=True, section='movements', index=i,
+                      field='to_location_id', entity=cid)
             initial_placement = self.before['meta']['turn_id'] == 0 and self.before['camera']['location_id'] is None
             if cid == self.protected_actor_id and target != s['characters'][cid]['location_id'] and not initial_placement and not self.movement_authorized(item, raw):
                 fatal('Перемещение управляемого персонажа требует происхождения.', 'movement_agency', repairable=True, section='movements', index=i, entity=cid)
@@ -319,15 +329,31 @@ class StateResolver:
                     entry['origin_remote_event_id']=self.remote_origin_id
                 s['facts'][entry['id']] = entry
         events = {}
+        event_indices = {}
+        scene_start = self.before['meta']['world_time']
+        scene_end = s['meta']['world_time']
         for i, item in self.records(raw,'events'):
             eid = item.get('id')
+            if 'minute' in item:
+                minute = item['minute']
+                if type(minute) is not int or not scene_start <= minute <= scene_end:
+                    fatal(f'Event.minute: укажите абсолютную целую минуту в [{scene_start}, {scene_end}] '
+                          'или опустите поле, если точное время неизвестно.',
+                          'event_minute_invalid', repairable=True, section='events', index=i,
+                          field='minute', entity=eid if isinstance(eid, str) else None)
             if not isinstance(eid,str) or not eid or not isinstance(item.get('text'),str):
                 self.warn('events',i,'отсутствует ID или текст'); continue
             lists = {key:item.get(key,[]) for key in ('participants','witnesses','fact_ids')}
             if any(not isinstance(v,list) or any(not isinstance(x,str) for x in v) for v in lists.values()):
                 self.warn('events',i,'повреждены ссылки Event'); continue
-            if set(lists['participants']+lists['witnesses']) - s['characters'].keys():
-                self.warn('events',i,'неизвестная ссылка необязательного Event'); continue
+            unknown = next(((role, n, cid) for role in ('participants', 'witnesses')
+                            for n, cid in enumerate(lists[role]) if cid not in s['characters']), None)
+            if unknown:
+                role, n, cid = unknown
+                self.warn('events', i, f'Неизвестный персонаж {cid} в Event {eid}.', entity=eid,
+                          code='event_character_unknown')
+                self.warnings[-1].update(path=f'events[{i}].{role}[{n}]', source_ids=[eid, cid])
+                continue
             if set(lists['fact_ids']) - s['facts'].keys():
                 self.warn('events',i,'ссылки на отсутствующие факты отброшены','fact_ids',eid,'event_fact_reference_dropped')
                 lists['fact_ids']=[fid for fid in lists['fact_ids'] if fid in s['facts']]
@@ -336,34 +362,30 @@ class StateResolver:
             medium=item.get('medium','action')
             if not isinstance(medium,str) or medium not in INFORMATION_MEDIA | {'action'}:
                 self.warn('events',i,'неизвестный канал Event');continue
-            from backend.runtime_v3.remote import validate_event_channel
-            if not validate_event_channel(self.before,item):
-                self.warn('events',i,'Свидетели или участники недоступны в этом канале.',code='remote_channel_boundary');continue
             event_id = identity('event',self.turn_id,eid,self.narrative,self.event_namespace) if self.event_namespace else identity('event',self.turn_id,eid,self.narrative)
             event = dict(id=event_id,local_id=eid,text=item['text'],
                 **lists,medium=medium,evidence=item['evidence'],turn_id=self.turn_id,
-                player_observed=self.observed,recorded_minute=s['meta']['world_time'])
-            if item.get('interaction_channel') in ('call','physical'):
+                player_observed=self.observed,recorded_minute=scene_end)
+            if item.get('interaction_channel') is not None:
                 event['interaction_channel']=item['interaction_channel']
-            for key in ('minute','order'):
-                if type(item.get(key)) is int and item[key] >= 0: event[key]=item[key]
-            if isinstance(item.get('location_id'),str) and item['location_id'] in s['locations']: event['location_id']=item['location_id']
+            if 'minute' in item:
+                from backend.runtime_v3.calendar import current_time
+                event['minute'] = item['minute']
+                event['calendar_date'] = current_time(s, item['minute'])['date']
+            if type(item.get('order')) is int and item['order'] >= 0:
+                event['order'] = item['order']
+            if item.get('location_id') is not None: event['location_id']=item['location_id']
             if item.get('author_id') is not None:
                 author = item['author_id']
                 if isinstance(author, str) and author in lists['participants'] and medium == 'message':
                     event['author_id'] = author
-                else: self.warn('events', i, 'неподтверждённый автор сообщения', 'author_id')
-            from backend.runtime_v3.calendar import current_time
-            if 'minute' in event: event['calendar_date'] = current_time(s,event['minute'])['date']
-            # Explicit semantic classification plus independently owned input;
-            # never turn a Narrative feelings assertion into interaction evidence.
-            player_quote = item.get('player_evidence')
-            if (self.mode == 'turn' and self.protected_actor_id in lists['participants']
-                    and item.get('player_assertion') == 'completed_interaction'
-                    and isinstance(player_quote, str) and normalized(player_quote)
-                    and normalized(player_quote) in normalized(self.player_input)):
-                event['player_interaction'] = True
-                event['player_evidence'] = player_quote
+                else:
+                    self.warn('events', i, 'Автор должен быть участником сообщения.', 'author_id', eid,
+                              'event_author_invalid')
+                    self.warnings[-1]['path'] = f'events[{i}].author_id'
+            from backend.runtime_v3.player_actions import event_provenance
+            event_provenance(self, item, event, i, player_actions)
+            event_indices[eid] = i
             events[eid] = event
             self.history.events.append(event)
         for _, item in self.records(raw,'movements'):
@@ -372,8 +394,15 @@ class StateResolver:
                 if cause is None or self.protected_actor_id not in cause['participants']:
                     fatal('Нет принятого источника непроизвольного перемещения.', 'movement_agency', repairable=True, section='movements', source_ids=[item.get('source_event_id')])
         from backend.runtime_v3.narrative_remote import apply_extracted_remote
-        remote_history = apply_extracted_remote(self, raw, events)
+        remote_history, written_sources = apply_extracted_remote(self, raw, events)
+        from backend.runtime_v3.event_presence import situation_supported, validate_event_presence
+        situation_actors = {
+            eid: validate_event_presence(self, event, event_indices[eid], written_sources.get(eid))
+            for eid, event in events.items()
+        }
         from backend.runtime_v3.knowledge import apply_knowledge
+        from backend.runtime_v3.reproduction import validate_birth_knowledge
+        validate_birth_knowledge(self, raw, events)
         apply_knowledge(self, raw, events)
         from backend.runtime_v3.secrets import apply_disclosures
         apply_disclosures(self, raw)
@@ -421,6 +450,13 @@ class StateResolver:
                 valid_type = isinstance(value,str) if key in ('situation','physical_state','emotion') else isinstance(value,list) and all(isinstance(v,str) for v in value)
                 if not valid_type:
                     self.warn('character_changes',i,'неправильный тип поля',key,cid); continue
+                if key == 'situation' and self.mode == 'background' and cid == self.protected_actor_id and value != actor[key]:
+                    fatal('Фон меняет ситуацию управляемого персонажа.', 'background_agency_invalid', repairable=True,
+                          section='character_changes', index=i, field=key, entity=cid)
+                if key == 'situation' and not situation_supported(self, item, situation_actors):
+                    self.warn('character_changes', i, 'Ситуация не подтверждена сценой, перемещением или принятым Event.',
+                              key, cid, 'situation_source_unconfirmed')
+                    continue
                 if cid == self.protected_actor_id and key in PLAYER_FIELDS:
                     if self.mode == 'background':
                         self.warn('character_changes',i,'Фон не меняет EXTERNAL мотивацию.',key,cid,'controlled_actor_unsupported'); continue
@@ -516,6 +552,8 @@ class StateResolver:
         advance_remote(s, self.history)
         from backend.runtime_v3.call_continuity import project_physical
         project_physical(self, raw)
+        from backend.runtime_v3.player_actions import validate_targets
+        validate_targets(self, player_actions)
         upserts = {section:{key:deepcopy(value) for key,value in s[section].items() if value != self.before[section].get(key)}
             for section in ('characters','locations','facts','knowledge','relationships','threads','scheduled_events','objective_relations','conditions','residences','roles','organizations','reproductive_events','pregnancies','naming_decisions','possessions','contacts','conversations','remote_events')}
         digest = sha256(json.dumps(self.before,sort_keys=True,ensure_ascii=False).encode()).hexdigest()

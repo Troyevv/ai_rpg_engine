@@ -53,6 +53,9 @@ class World(Named):
 class Revision(DTO):
     revision: int = Field(ge=0)
 
+class AbandonJob(Revision):
+    attempt_epoch: int = Field(ge=0)
+
 class Scene(DTO):
     time: str = Field(max_length=120)
     location: str = Field(max_length=200)

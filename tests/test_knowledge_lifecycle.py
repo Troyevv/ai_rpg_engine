@@ -20,6 +20,9 @@ TEXT = 'Борис рассказал Анне: теперь он работае
 def initial():
     snap = migrate_v2(snapshot()).snapshot
     s = snap['world_state']
+    # The testimony fixtures describe a shared conversation.
+    for cid in ('b', 'c'):
+        s['characters'][cid]['location_id'] = s['camera']['location_id']
     for fid, value in (('bank', 'bank_a'), ('hospital', 'hospital_b')):
         s['facts'][fid] = Fact(id=fid, text='Борис работает в '+value,
             character_ids=['b'], claim=dict(subject_id='b', predicate='primary_employment', value=value)).model_dump()

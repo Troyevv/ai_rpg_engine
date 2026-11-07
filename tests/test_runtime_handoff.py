@@ -31,7 +31,7 @@ def imported(client, value=None):
     return r.json()['save']
 
 def arrival(actor='viktoria_solovyova', evidence=NARRATIVE):
-    return dict(final_scene=dict(location_id='ilya_cabinet',present_character_ids=['ilya',actor],elapsed_minutes=1),
+    return dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id='ilya_cabinet',present_character_ids=['ilya',actor],elapsed_minutes=1),
                 movements=[dict(actor_id=actor,from_location_id='salon_lak',to_location_id='ilya_cabinet',assertion='completed_arrival',actor_evidence='Виктория Соловьёва',destination_evidence='кабинет',evidence=evidence)])
 
 def provider_payload(kwargs):
@@ -153,7 +153,11 @@ def test_failed_extraction_retry_after_repository_reopen_is_atomic(api):
 def test_arrival_evidence_boundaries_are_atomic(api,change):
     client,app=api;sid=imported(client);snap=app.state.repository.get_snapshot(sid);before=deepcopy(snap)
     raw=arrival();raw['movements'][0].update(change)
-    if 'to_location_id' in change or 'from_location_id' in change:
+    if 'assertion' in change:
+        with pytest.raises(StructuralDeltaError) as exc:
+            StateResolver(snap['world_state'],NARRATIVE,'').resolve(raw)
+        assert exc.value.code == 'movement_assertion_invalid' and exc.value.repairable
+    elif 'to_location_id' in change or 'from_location_id' in change:
         with pytest.raises(StructuralDeltaError): StateResolver(snap['world_state'],NARRATIVE,'').resolve(raw)
     else:
         out=StateResolver(snap['world_state'],NARRATIVE,'').resolve(raw)

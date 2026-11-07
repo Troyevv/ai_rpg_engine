@@ -15,6 +15,7 @@ from backend.runtime_v3.remote import (
     advance,
 )
 from backend.runtime_v3.remote_initiative import accept, opportunities
+from backend.services.world_delta_errors import StructuralDeltaError
 from backend.runtime_v3.protagonist import transition
 
 
@@ -354,6 +355,7 @@ def test_atomic_event_first_retry_regenerate_variants_and_rollback(
                 raise RuntimeError("Deterministic extraction outage")
             yield json.dumps(
                 dict(
+                    player_agency=dict(status='preserved', actions=[]),
                     final_scene=dict(
                         location_id=camera["location_id"],
                         present_character_ids=camera["present_character_ids"],
@@ -399,6 +401,7 @@ def test_atomic_event_first_retry_regenerate_variants_and_rollback(
         yield (
             json.dumps(
                 dict(
+                    player_agency=dict(status='preserved', actions=[]),
                     final_scene=dict(
                         location_id=camera["location_id"],
                         present_character_ids=camera["present_character_ids"],
@@ -634,14 +637,16 @@ def test_extraction_call_audibility_cannot_create_physical_witness_knowledge():
             )
         ],
     )
-    denied = StateResolver(s["world_state"], narrative, "Слушаю.").resolve(raw)
-    assert not denied.history["events"]
+    with pytest.raises(StructuralDeltaError) as exc:
+        StateResolver(s["world_state"], narrative, "Слушаю.").resolve(raw)
+    assert exc.value.code == "event_presence_invalid"
     raw["events"][0]["witnesses"] = []
     accepted = StateResolver(s["world_state"], narrative, "Слушаю.").resolve(raw)
     assert accepted.history["events"][0]["interaction_channel"] == "call"
     raw["events"][0]["interaction_channel"] = "physical"
-    denied = StateResolver(s["world_state"], narrative, "Слушаю.").resolve(raw)
-    assert not denied.history["events"]
+    with pytest.raises(StructuralDeltaError) as exc:
+        StateResolver(s["world_state"], narrative, "Слушаю.").resolve(raw)
+    assert exc.value.code == "event_presence_invalid"
 
 
 def test_saturated_context_keeps_phone_bounded_without_unread_payload(tmp_path):
@@ -785,7 +790,8 @@ def test_rejected_remote_proposal_has_no_cue_payload_or_side_effect():
 
 
 def test_remote_channel_is_setting_neutral_not_a_phone_presentation():
-    from backend.runtime_v3.remote import validate_event_channel
+    from backend.runtime_v3.resolver import StateResolver
+    from backend.services.world_delta_errors import StructuralDeltaError
 
     snap = phone()
     snap["world_state"]["meta"]["communication"]["presentation"] = "none"
@@ -794,9 +800,11 @@ def test_remote_channel_is_setting_neutral_not_a_phone_presentation():
     snap = command(snap, "answer", event_id=eid)
     assert projection(snap) is None
     assert context_projection(snap["world_state"])["active_call"] == eid
-    assert not validate_event_channel(
-        snap["world_state"], dict(medium="observation", participants=["a", "b"])
-    )
+    state = snap["world_state"]
+    with pytest.raises(StructuralDeltaError, match="присутствие"):
+        StateResolver(state, "", "").resolve(dict(
+            final_scene=state["camera"],
+            events=[dict(id="physical", text="Наблюдение", medium="observation", participants=["a", "b"])]))
 
 
 def test_lazy_identity_reply_reuses_original_direct_conversation():

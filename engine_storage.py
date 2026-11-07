@@ -4,6 +4,7 @@ import sqlite3
 import uuid
 
 ACTIVE = ('generating', 'extracting', 'validating')
+UNAPPLIED = "narrative_complete=1 AND status IN ('error','stopped')"
 
 
 class ExistingJob(Exception):
@@ -34,12 +35,19 @@ class EngineStorage:
             columns={r['name'] for r in db.execute('PRAGMA table_info(game_jobs)')}
             if 'attempt_epoch' not in columns: db.execute('ALTER TABLE game_jobs ADD COLUMN attempt_epoch INTEGER NOT NULL DEFAULT 0')
             db.execute("CREATE UNIQUE INDEX IF NOT EXISTS active_game_job ON game_jobs(save_id) WHERE status IN ('generating','extracting','validating')")
+            db.execute(f"CREATE INDEX IF NOT EXISTS unapplied_game_job ON game_jobs(save_id, revision) WHERE {UNAPPLIED}")
             db.execute('''CREATE TABLE IF NOT EXISTS archived_turns (
                 id INTEGER PRIMARY KEY, save_id INTEGER NOT NULL, reason TEXT NOT NULL, payload TEXT NOT NULL)''')
 
-    def latest_job(self, save_id):
+    def latest_job(self, save_id, revision=None):
         with self.connect() as db:
-            row = db.execute('SELECT * FROM game_jobs WHERE save_id=? ORDER BY rowid DESC LIMIT 1', (save_id,)).fetchone()
+            # Regeneration can leave multiple previews at one revision. An older
+            # retry may be active, or a complete rejected scene may still block play.
+            row = db.execute(f"""SELECT * FROM game_jobs WHERE id=COALESCE(
+                (SELECT id FROM game_jobs WHERE save_id=? AND status IN ('generating','extracting','validating')),
+                (SELECT id FROM game_jobs WHERE save_id=? AND revision=? AND {UNAPPLIED} ORDER BY rowid DESC LIMIT 1),
+                (SELECT id FROM game_jobs WHERE save_id=? ORDER BY rowid DESC LIMIT 1))""",
+                (save_id, save_id, revision, save_id)).fetchone()
             return dict(row) if row else None
 
     def get_job(self, job_id):
@@ -66,8 +74,8 @@ class EngineStorage:
                     if command['action'] not in ('send', 'call'):
                         raise ValueError('Продолжение доступно для отправки сообщения или вызова.')
                     is_duplicate = any(e['operation_id']==command['operation_id'] for e in json.loads(save['state_json'])['world_state']['remote_events'].values())
-                    if not is_duplicate and db.execute("SELECT 1 FROM game_jobs WHERE save_id=? AND revision=? AND narrative_complete=1 AND status IN ('error','stopped')",(save_id,save['revision'])).fetchone():
-                        raise ValueError('Предыдущее действие ещё не обработано. Повтори его обработку.')
+                    if not is_duplicate and db.execute(f"SELECT 1 FROM game_jobs WHERE save_id=? AND revision=? AND {UNAPPLIED}", (save_id, save['revision'])).fetchone():
+                        raise ValueError('Предыдущее действие ещё не обработано. Повтори обработку или отмени неудачный ход.')
                     # Command + registration are atomic; provider work happens after commit.
                     prior_revision = save['revision']
                     snap = self._remote_action(db, save_id, config.get('expected_revision'), command)
@@ -109,9 +117,9 @@ class EngineStorage:
                 raise ValueError('Игра уже начата.')
             if kind not in ('start','pov') and last is None:
                 raise ValueError('Сначала начни игру.')
-            pending=db.execute("SELECT 1 FROM game_jobs WHERE save_id=? AND revision=? AND narrative_complete=1 AND status IN ('error','stopped')",(save_id,save['revision'])).fetchone()
+            pending=db.execute(f"SELECT 1 FROM game_jobs WHERE save_id=? AND revision=? AND {UNAPPLIED}", (save_id, save['revision'])).fetchone()
             if pending and kind!='regenerate':
-                raise ValueError('Текст сцены уже сохранён, состояние ещё не применено. Повтори обработку состояния.')
+                raise ValueError('Текст сцены уже сохранён, состояние ещё не применено. Повтори обработку состояния или отмени неудачный ход.')
             before, replaces = save['state_json'], None
             if kind=='pov':
                 from backend.runtime_v3.camera import transition
@@ -209,12 +217,35 @@ class EngineStorage:
                         WHERE id=? AND status IN ('generating','extracting','validating') AND (? IS NULL OR attempt_epoch=?)""",
                        (status, narrative, int(complete), error, job_id, getattr(self,'worker_epoch',None),getattr(self,'worker_epoch',None)))
 
+    def abandon_job(self, save_id, job_id, revision, attempt_epoch):
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            job = db.execute("""SELECT j.status, j.revision, j.attempt_epoch, s.revision AS save_revision
+                                FROM game_jobs j JOIN saves s ON s.id=j.save_id
+                                WHERE j.save_id=? AND j.id=?""", (save_id, job_id)).fetchone()
+            if not job:
+                raise ValueError('Ход не найден в этом прохождении.')
+            if job['revision'] != revision or job['attempt_epoch'] != attempt_epoch:
+                raise ValueError('Попытка обработки изменилась. Обнови игру.')
+            if job['status'] == 'abandoned':
+                return
+            if job['save_revision'] != revision:
+                raise ValueError('Сейв изменился. Этот черновик устарел.')
+            self._assert_idle(db, save_id)
+            if job['status'] not in ('error', 'stopped'):
+                raise ValueError('Отменить можно только неудачный или остановленный ход.')
+            db.execute("UPDATE game_jobs SET status='abandoned' WHERE id=?", (job_id,))
+
     def retry_job(self, job_id, config=None):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             job = db.execute('SELECT * FROM game_jobs WHERE id=?', (job_id,)).fetchone()
             if job is None or not job['narrative_complete'] or job['status'] not in ('error', 'stopped'):
                 raise ValueError('Нет завершённого текста для повторной обработки.')
+            from backend.services.world_delta_errors import requires_narrative_reauthor
+            if requires_narrative_reauthor(json.loads(job['repair_diagnostics_json'] or '[]')):
+                raise ValueError('Этот текст противоречит канону или выбору игрока. '
+                                 'Отмените неудачный ход и создайте новую сцену.')
             self._assert_idle(db, job['save_id'])
             revision = db.execute('SELECT revision FROM saves WHERE id=?', (job['save_id'],)).fetchone()[0]
             if revision != job['revision']:

@@ -144,6 +144,17 @@ def canonical_slice(state, scope, extraction=False, query=""):
     if old_phases: current['social_history'] = sorted(old_phases,key=lambda r:r['until'] or 0,reverse=True)[:8]
     from backend.runtime_v3.reproduction import context_projection, private_fact_ids, known_birth
     current.update(context_projection(state, relevant, scope.pov_actor_id or scope.controlled_actor_id, extraction))
+    if not extraction:
+        from backend.runtime_v3.kinship import knowledge_status
+        observer = scope.pov_actor_id or scope.controlled_actor_id
+        protected = private_fact_ids(state)
+        # A parent may be relevant while the newborn is unknown and absent
+        # from current.characters. Gate both projections by the edge's fact.
+        hidden_edges = {rid for rid, row in state['objective_relations'].items()
+                        if row.get('fact_id') in protected and knowledge_status(state, observer, row['fact_id']) != 'known'}
+        current['objective_relations'] = [r for r in current['objective_relations'] if r['id'] not in hidden_edges]
+        for cid, rows in current['social_knowledge'].items():
+            current['social_knowledge'][cid] = [r for r in rows if r['id'] not in hidden_edges]
     if current.get('social_knowledge'):
         # Reuse canonical relation IDs instead of repeating every full edge for
         # each parent. Current objective edges stay authoritative; certainty and
@@ -251,6 +262,8 @@ class NarrativeContextBuilder:
         prompt_name = 'background_prompt.md' if kind == 'background' else 'game_system_prompt.md'
         rules = (prompts or {}).get(prompt_name, {}).get('content') or (PROMPTS/prompt_name).read_text(encoding='utf-8')
         rules += '\n' + NARRATIVE_CONTRACT
+        from backend.runtime_v3.player_actions import NARRATIVE_CONTRACT as action_contract, required as agency_required
+        if agency_required(snapshot['world_state'], user_text, kind): rules += action_contract
         if current.get('communication'): rules += REMOTE_NARRATIVE_CONTRACT
         cards, index, behavioral = [], [], []
         classifier = CharacterContextClassifier()
@@ -290,6 +303,17 @@ class NarrativeContextBuilder:
                     block('Память', dict(strategy='canonical_history', llm_calls=0)),
                     block('Недавняя история / GM-only', scope.history_events),
                     block('Director / GM-only', plan(state, kind, scope=scope))]
+        from backend.runtime_v3.reproduction import birth_authoring_context
+        births = birth_authoring_context(state, scope)
+        if births:
+            messages.append(block('Birth authoring constraints / GM-only', dict(
+                pregnancies=births,
+                instruction='Canonical child IDs and sex constrain only an actual delivery in this scene. '
+                'This is NOT character Knowledge, not proof of delivery, and not permission to reveal a secret. '
+                'Before delivery never mention hidden count/sex. If delivery occurs, use canonical sex only '
+                'when anatomy is actually observed or a grounded speaker reports it; otherwise omit sex. '
+                'Only characters who perceive that specific observation/announcement learn it. '
+                'Respect POV, capability and player agency. Do not invent an examination or announcement.')))
         from backend.runtime_v3.genre import guidance
         genre = guidance(state['meta'].get('genre'))
         if genre: messages.append(block('Genre / soft creative guidance', genre))
@@ -324,6 +348,8 @@ class ExtractionContextBuilder:
         saved = (prompts or {}).get('state_update_prompt.md', {}).get('content')
         # Preserve user overrides, but do not send the bundled generic contract twice.
         rules = (saved + '\n' if saved and saved.strip() != default.strip() else '') + EXTRACTION_CONTRACT
+        from backend.runtime_v3.player_actions import EXTRACTION_CONTRACT as action_contract, required as agency_required
+        if agency_required(snapshot['world_state'], user_text, kind): rules += action_contract
         from backend.services.letter_sources import enabled as historical_enabled
         historical = historical_enabled(snapshot['world_state'])
         if current.get('communication'): rules += REMOTE_EXTRACTION_CONTRACT
@@ -339,12 +365,17 @@ class ExtractionContextBuilder:
         if reproductive:
             from backend.runtime_v3.context_contract import REPRODUCTION_CONTRACT
             rules += REPRODUCTION_CONTRACT
-            compression = current.get('continuity', {}).get('compression', {})
-            if compression.get('max_minutes') == 0 and any(
-                p['id'] in compression.get('boundary_ids', []) for p in current.get('pregnancies', [])
-            ):
-                rules += ("\nAt the due birth boundary use elapsed_minutes=0 for an immediate reaction. "
-                          "Only an established delivery in the scene resolves it via births.")
+            if any(p['status'] != 'born' for p in current.get('pregnancies', [])):
+                from backend.runtime_v3.context_contract import BIRTH_SEX_CONTRACT
+                rules += BIRTH_SEX_CONTRACT
+            # Recorded Director continuity is POV-filtered, also on retry. The
+            # Extraction contract comes from the immutable pre-turn world.
+            from backend.runtime_v3.continuity import due_births_in_scene_clock
+            if kind != 'background' and not snapshot.get('_time_skip') and due_births_in_scene_clock(snapshot['world_state']):
+                rules += ("\nAt the due birth boundary use elapsed_minutes=0 for observation, help, waiting "
+                          "or ongoing labor. Only an explicitly completed delivery in the Narrative "
+                          "can resolve it via births and its current Event. A player's assumption is not evidence. "
+                          "Record newly perceived facts only for actual witnesses via knowledge_gained.")
         # Affected IDs and canonical runtime, plus a bounded actor-owned choice
         # projection. No other actors' card prose or old narratives are needed.
         # Include physical/emotion baseline also for referenced actors affected in completed text.
@@ -355,7 +386,7 @@ class ExtractionContextBuilder:
                        block('Choice context / controlled actor', choice_context(snapshot, scope, current, views, kind)),
                        block('Entity IDs', [dict(id=c['id'], name=c['name'], aliases=c.get('aliases', []))
                             for c in snapshot['character_cards'] if c['id'] in scope.relevant_actor_ids]),
-                       block('JSON Schema', prompt_schema(historical=historical, elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), groups=any(c['group'] for c in snapshot['world_state']['conversations'].values()), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
+                       block('JSON Schema', prompt_schema(player_agency_required=agency_required(snapshot['world_state'], user_text, kind), historical=historical, elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), groups=any(c['group'] for c in snapshot['world_state']['conversations'].values()), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
 
 
 def choice_context(snapshot, scope, current, views, kind):
@@ -460,7 +491,11 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
         # private commitment, not just before rendering the final calendar list.
         from backend.runtime_v3.remote import visible_commitments
         observer = camera.get('pov_actor_id') or camera.get('controlled_actor_id')
-        state = dict(state, scheduled_events=visible_commitments(state,observer,world_history))
+        # Reproduction has a typed, Knowledge-filtered projection. Its calendar
+        # reminders are internal even when the pregnancy itself is known.
+        schedule = visible_commitments(state, observer, world_history)
+        state = dict(state, scheduled_events={
+            eid: event for eid, event in schedule.items() if eid not in state.get('pregnancies', {})})
         snapshot = dict(snapshot, world_state=state)
     all_views = visible_views(snapshot, turns, kind)
     # Respect an explicit smaller user setting, but never exceed six narrative turns.
@@ -608,6 +643,16 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
             messages[letter_context_index] = author_context(state, limit)
 
 
+    def replace_schema(schema):
+        # Do not pay for format instructions for omitted optional annotations.
+        # Core Event/state/agency rules remain in the mandatory contract.
+        from backend.runtime_v3.context_contract import SCENE_ACTION_EXTRACTION_CONTRACT, CONTINUITY_EXTRACTION_CONTRACT
+        for fields, contract in [(('scene_actions',), SCENE_ACTION_EXTRACTION_CONTRACT),
+                                 (('scene_transitions', 'continuity_beats'), CONTINUITY_EXTRACTION_CONTRACT)]:
+            if all(field not in schema['properties'] for field in fields):
+                messages[0]['content'] = messages[0]['content'].replace(contract, '')
+        replace_block('JSON Schema', schema)
+
     def replace_block(title, value):
         for i, message in enumerate(messages):
             if message['content'].startswith(title+'\n'): messages[i] = block(title, value); return
@@ -654,9 +699,6 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                 refresh_current()
     while estimate(messages) > target and len(current.get('relationship_evidence', [])) > 1:
         current['relationship_evidence'].pop(0)
-        refresh_current()
-    if estimate(messages) > hard_context_limit and current.get('relationship_evidence'):
-        current.pop('relationship_evidence')
         refresh_current()
     if estimate(messages) > target and 'social_history' in current:
         current.pop('social_history')
@@ -769,7 +811,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                 # not need to remain in the wire schema.
                 from backend.runtime_v3.raw import prune_schema_definitions
                 prune_schema_definitions(schema)
-                replace_block('JSON Schema', schema)
+                replace_schema(schema)
                 break
     # New phone outcomes are essential; optional Director attribution must not
     # crowd them out of a tight extraction request. The parser/Resolver still
@@ -783,7 +825,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                     schema['properties'].pop(section, None)
                     from backend.runtime_v3.raw import prune_schema_definitions
                     prune_schema_definitions(schema)
-                    replace_block('JSON Schema', schema)
+                    replace_schema(schema)
                 break
     if builder.extraction and estimate(messages) > target:
         # Optional structured profile enrichment duplicates the eleven descriptive
@@ -801,7 +843,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                     character['properties'].pop(field,None)
                 from backend.runtime_v3.raw import prune_schema_definitions
                 prune_schema_definitions(schema)
-                replace_block('JSON Schema',schema)
+                replace_schema(schema)
                 break
     # Possession support is bounded by both its own cap and the request budget.
     # Keep explicitly named objects; omit lower-ranked incidental property first.
@@ -826,6 +868,26 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                     messages[0]['content'] = messages[0]['content'].replace(
                         'Постоянные правила\n', 'Постоянные правила' + instruction + '\n', 1)
                 break
+    if builder.extraction and estimate(messages) > hard_context_limit:
+        # Mandatory action provenance takes priority over optional Director
+        # annotations, just as communication outcomes do above. Domain Events,
+        # state, agency and presence contracts remain complete and validated.
+        for message in messages:
+            if message['content'].startswith('JSON Schema\n'):
+                schema = json.loads(message['content'].split('\n', 1)[1])
+                if 'player_agency' not in schema['properties']: break
+                from backend.runtime_v3.raw import prune_schema_definitions
+                for section in ('scene_transitions', 'narrative_developments', 'consequences', 'continuity_beats', 'scene_actions'):
+                    if estimate(messages) <= hard_context_limit: break
+                    schema['properties'].pop(section, None)
+                    prune_schema_definitions(schema)
+                    replace_schema(schema)
+                break
+    # Give lossless/default/schema compaction a chance before discarding the last
+    # canonical relationship source to make room for the mandatory agency review.
+    if estimate(messages) > hard_context_limit and current.get('relationship_evidence'):
+        current.pop('relationship_evidence')
+        replace_block('Текущее состояние / GM-only', current if builder.extraction else dict(current, knowledge=[]))
     if estimate(messages) > hard_context_limit:
         raise ValueError(f'Контекст v3 не помещается в выбранную модель ({estimate(messages)} / {hard_context_limit}). Увеличь контекст или уменьши лимит ответа. Критические данные сцены и последние narrative сохранены.')
     classifier = CharacterContextClassifier()

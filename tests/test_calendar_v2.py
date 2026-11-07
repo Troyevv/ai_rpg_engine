@@ -144,7 +144,7 @@ def test_time_skip_interrupts_at_resolved_time_and_context_is_updated():
 
 def test_birth_date_requires_explicit_evidence_and_cannot_rewrite_known_date():
     s=state(); text='Дата рождения Ильи 2000-10-09.'
-    raw=dict(final_scene=dict(location_id='home',present_character_ids=['ilya']),
+    raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id='home',present_character_ids=['ilya']),
         character_changes=[dict(id='ilya',birth_date='2000-10-09',evidence=text)])
     result=StateResolver(s,text,'').resolve(raw)
     assert result.state['characters']['ilya']['birth_date']=='2000-10-09'
@@ -215,7 +215,7 @@ def test_real_engine_leap_skip_reload_next_turn_and_rollback(tmp_path):
     def stream(**kwargs):
         current=json.loads(next(m['content'].split('\n',1)[1] for m in kwargs['messages'] if m['content'].startswith('Текущее состояние / GM-only\n')))
         seen.append(current)
-        yield json.dumps(dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),choices=[])) if kwargs.get('response_format') else 'Прошла минута.'
+        yield json.dumps(dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),choices=[])) if kwargs.get('response_format') else 'Прошла минута.'
     def run(kind, config):
         jid=repo.begin_job(sid,'Жду одну минуту.' if kind=='turn' else '',kind,config)
         with patch('engine.find_loaded_model',return_value={'config':{'context_length':32768}}),patch('engine.chat_stream',side_effect=stream):
@@ -241,7 +241,7 @@ def test_structured_temporal_claim_is_runtime_anchored_and_survives_reload():
     from backend.runtime_v3.migration import migrate_v2
     s=state(clock=1257)
     text='В пятницу вечером едем на дачу.'
-    raw=dict(final_scene=dict(location_id='home',present_character_ids=['ilya'],elapsed_minutes=1),
+    raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id='home',present_character_ids=['ilya'],elapsed_minutes=1),
         scheduled_event_changes=[dict(id='trip',description='Поездка',character_ids=['ilya','sonya'],due_minute=0,
             temporal=dict(weekday=4,day_period='evening'),time_reference_minute=999999,evidence=text,assertion='agreed',player_assertion='explicit_choice',player_evidence=text)])
     result=StateResolver(s,text,text).resolve(raw)
@@ -285,7 +285,7 @@ def test_bad_optional_temporal_does_not_break_load_or_activate_unknown_event():
 def test_repeated_unchanged_schedule_claim_does_not_roll_relative_deadline():
     s=state()
     text='Завтра вечером едем на дачу.'
-    raw=dict(final_scene=dict(location_id='home',present_character_ids=['ilya'],elapsed_minutes=1),
+    raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id='home',present_character_ids=['ilya'],elapsed_minutes=1),
         scheduled_event_changes=[dict(id='trip',description='Поездка',character_ids=['ilya','sonya'],
             temporal=dict(day_offset=1,day_period='evening'),evidence=text,assertion='agreed',player_assertion='explicit_choice',player_evidence=text)])
     first=StateResolver(s,text,text).resolve(raw).state

@@ -359,7 +359,8 @@ def _seed_milestones(repository, save_id):
         for fid,text,actors,changes in steps:
             camera=snapshot['world_state']['camera']
             event=fid+'_event'; witnesses=[ACTOR_ID,'qa_vera']
-            raw=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=1),
+            cast = list(dict.fromkeys([*camera['present_character_ids'], *actors]))
+            raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=cast,elapsed_minutes=1),
                 facts=[dict(id=fid,text=text,character_ids=actors,evidence=text)],
                 events=[dict(id=event,text=text,participants=list(dict.fromkeys(actors+witnesses)),witnesses=witnesses,
                     fact_ids=[fid],medium='testimony',evidence=text)],
@@ -432,7 +433,7 @@ def _seed_choices(repository, save_id):
     config = dict(model='deterministic-fixture',context_length=32768,max_tokens=2000,update_tokens=4096)
     for index, text in enumerate(texts):
         s = snapshot['world_state']; camera = s['camera']
-        raw = dict(final_scene={k:camera[k] for k in ('location_id','present_character_ids')},
+        raw = dict(player_agency=dict(status='preserved', actions=[]), final_scene={k:camera[k] for k in ('location_id','present_character_ids')},
             choices=CHOICE_EXAMPLES,
             events=[dict(id='qa_expression',text=text,evidence=text,participants=[ACTOR_ID],
                          witnesses=list(PRESENT),fact_ids=[])],
@@ -474,7 +475,7 @@ def _seed_personality(repository, save_id):
            'На третьем занятии Ася закончила рисунок и сказала, что любит рисовать.']
     for index,text in enumerate(texts):
         camera=snapshot['world_state']['camera']
-        raw=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids']),
+        raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=list(dict.fromkeys([*camera['present_character_ids'], 'qa_asya']))),
             events=[dict(id='drawing',text=text,evidence=text,participants=['qa_asya'],witnesses=['qa_vera'],fact_ids=[])],
             development_evidence=[dict(id='drawing_evidence',actor_id='qa_asya',source_event_id='drawing',
                 meaning='Самостоятельно выбирает и завершает рисование.',kind='behavior',assertion='completed',evidence=text)])
@@ -508,7 +509,7 @@ def _seed_goals(repository, save_id):
         conn.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(snapshot,ensure_ascii=False),save_id))
     text='Илья ждёт у входа. Соня ещё не пришла.'
     camera=snapshot['world_state']['camera']
-    raw=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids']))
+    raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids']))
     r=StateResolver(snapshot['world_state'],text,'').resolve(raw)
     config=dict(model='deterministic-fixture',context_length=32768,max_tokens=2000,update_tokens=4096)
     jid=repository.begin_job(save_id,'','start',config)
@@ -523,7 +524,7 @@ def knowledge_correction(snapshot, actor=ACTOR_ID):
     """Deterministic semantic output for manual/browser/ordinary-job regression."""
     camera=snapshot['world_state']['camera']
     text='Олег сообщил Кириллу: «Теперь я работаю в Академии двух берегов, из Мастерской карт я ушёл».'
-    return text, dict(final_scene={k:camera[k] for k in ('location_id','present_character_ids')},
+    return text, dict(player_agency=dict(status='preserved', actions=[]), final_scene={k:camera[k] for k in ('location_id','present_character_ids')},
         events=[dict(id='qa_job_message',text=text,evidence=text,participants=['qa_oleg',actor],
             witnesses=[actor],fact_ids=['qa_oleg_academy'],medium='message',author_id='qa_oleg')],
         knowledge_gained=[dict(actor_id=actor,fact_id='qa_oleg_academy',source_event_id='qa_job_message',evidence=text)])
@@ -550,7 +551,7 @@ def _seed_knowledge(repository, save_id):
     with repository.connect() as conn:
         conn.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(snapshot,ensure_ascii=False),save_id))
     text='Кирилл дома с Верой и Тимуром. Новостей о работе Олега они ещё не получали.'
-    camera=s['camera'];raw=dict(final_scene={k:camera[k] for k in ('location_id','present_character_ids')})
+    camera=s['camera'];raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene={k:camera[k] for k in ('location_id','present_character_ids')})
     r=StateResolver(s,text,'').resolve(raw)
     config=dict(model='deterministic-fixture',context_length=32768,max_tokens=2000,update_tokens=4096)
     jid=repository.begin_job(save_id,'','start',config)
@@ -585,31 +586,44 @@ def _seed_reproduction(repository,save_id,checkpoint):
     snapshot=repository.get_snapshot(save_id)
     config=dict(model='deterministic-fixture',context_length=32768,max_tokens=2000,update_tokens=4096)
     text='Кирилл и Вера подтвердили взаимное согласие; интимная встреча взрослых состоялась.'
-    def commit(text,raw,kind):
+    def commit(text,raw,kind,player_input):
         nonlocal snapshot
-        r=StateResolver(snapshot['world_state'],text,text).resolve(raw)
+        r=StateResolver(snapshot['world_state'],text,player_input).resolve(raw)
         if r.warnings: raise ValueError('Reproduction QA replay: '+str(r.warnings))
-        jid=repository.begin_job(save_id,text,kind,config)
-        repository.save_context(jid,build_context(snapshot,repository.list_turns(save_id),text,kind,32768,2000),snapshot)
+        jid=repository.begin_job(save_id,player_input,kind,config)
+        repository.save_context(jid,build_context(snapshot,repository.list_turns(save_id),player_input,kind,32768,2000),snapshot)
         repository.job_progress(jid,'validating',narrative=text,complete=True)
         snapshot['world_state']=r.state;snapshot['character_cards'].extend(r.cards)
         repository.commit_job(jid,snapshot,[],{},history_batch=r.history)
         snapshot=repository.get_snapshot(save_id)
     def raw(text,elapsed=0):
         camera=snapshot['world_state']['camera']
-        return dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=elapsed),
+        return dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=elapsed),
             events=[dict(id='qa_reproduction_event',text=text,evidence=text,participants=[ACTOR_ID,'qa_vera'],
                 witnesses=[ACTOR_ID,'qa_vera'],fact_ids=[],medium='observation')])
     claim=dict(id='qa_encounter',kind='sexual_intercourse',source_event_id='qa_reproduction_event',
         gestational_actor_id='qa_vera',impregnating_actor_id=ACTOR_ID,protection='unprotected',
         consent_actor_ids=[ACTOR_ID,'qa_vera'],parent_ids=[ACTOR_ID,'qa_vera'],
         assertion='completed_consensual_adult_event',evidence=text,player_evidence=text,player_assertion='explicit_choice')
-    commit(text,dict(raw(text),reproductive_events=[claim]),'start')
+    commit(text,dict(raw(text),reproductive_events=[claim]),'start',text)
     if checkpoint.startswith('newborn'):
         p=next(iter(snapshot['world_state']['pregnancies'].values()))
         text='Роды Веры завершились в доме. Кирилл присутствовал при рождении детей. Вера и Кирилл подтвердили, что они родители.'
-        commit(text,dict(raw(text,1440),births=[dict(pregnancy_id=p['id'],source_event_id='qa_reproduction_event',
-            assertion='birth_completed',disclosed_parent_ids=p['parent_ids'],location_id=snapshot['world_state']['camera']['location_id'],evidence=text)]),'turn')
+        # This newborn checkpoint has informed parents; completion alone does
+        # not convey each child's sex. Seed the observation via normal Knowledge.
+        observed = ', '.join('девочка' if child['sex'] == 'female' else 'мальчик' for child in p['children'])
+        disclosure = 'Вера и Кирилл увидели каждого ребёнка по очереди: ' + observed + '.'
+        scene = raw(text + ' ' + disclosure, 1440)
+        event = scene['events'][0]
+        event['fact_ids'] = list(p['sex_fact_ids'].values())
+        scene['knowledge_gained'] = [dict(actor_id=cid, fact_id=fid, source_event_id=event['id'],
+            evidence=disclosure) for cid in event['witnesses'] for fid in event['fact_ids']]
+        scene['births'] = [dict(pregnancy_id=p['id'], source_event_id=event['id'],
+            assertion='birth_completed', disclosed_parent_ids=p['parent_ids'],
+            sex_observations=[dict(child_id=child['id'], narrative_sex=child['sex'], event_sex=child['sex'],
+                basis='observation', perceived_by=event['witnesses'], evidence=disclosure) for child in p['children']],
+            location_id=snapshot['world_state']['camera']['location_id'], evidence=text)]
+        commit(event['text'], scene, 'turn', 'Я остаюсь рядом с Верой.')
 
 
 def _possessions(state):

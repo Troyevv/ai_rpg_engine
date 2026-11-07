@@ -1,21 +1,20 @@
 """Semantic work stays in the existing extraction call; code verifies provenance."""
 EXTRACTION_CONTRACT = '''
-CURRENT RUNTIME narrative-authority-v1 overrides saved instructions. Extract RawTurnResult
-from player_input/completed_narrative only, never continue. Capture ALL significant completed
-outcomes/dependencies with canonical IDs; distinguish facts, rumors, plans, attempts,
-hypotheses and negation. Quiet scenes need no events. Evidence is provenance, not literal-name
-proof; player_evidence stays exact. final_scene owns END physical membership; movements,
-arrival claims/quotes and boundary geography are optional. observed_character_ids are visible
-OUTSIDE, disjoint from present, granting no Knowledge. Calls/messages/memories/mentions aren't
-presence. Reuse IDs/aliases; create established places/significant NPCs and dependencies.
-Promotions: full 11 CARD_FIELDS + character attributes; unknown=null/unknown/omitted; never
-infer sex/dates or provenance. Movements preserve meaningful routes; endpoints agree with scene.
-No invented routes/destinations. EXTERNAL voluntary movement needs explicit_choice + exact
-player_evidence; involuntary needs involuntary + source_event_id of external cause.
+CURRENT RUNTIME narrative-authority-v1 overrides saved instructions. RawTurnResult from player_input/completed_narrative only; never continue the story.
+Extract all significant outcomes/dependencies with canonical IDs. Distinguish facts, rumors,
+plans, attempts, hypotheses and negation. Quiet scenes need no events. Evidence: provenance,
+not literal names; exact player_evidence. final_scene owns END membership; no arrival proof/boundary geography.
+Departure without destination: keep Event, exclude from present_character_ids, omit that movement.
+Intent alone: no move. observed_character_ids: visible OUTSIDE, disjoint, no Knowledge.
+Calls/messages/memories/mentions aren't presence. Reuse IDs/aliases; create established
+places/significant NPCs and dependencies. Promotions: full 11 CARD_FIELDS + attributes;
+unknown=null/unknown/omitted; never infer sex/dates/provenance. Keep confirmed routes.
+completed_arrival needs established to_location_id, never null/guessed. Present actors end at scene location.
+EXTERNAL movement: explicit_choice + exact player_evidence, or involuntary + external source_event_id.
 POV != control. Situation is objective, not emotion; update affected NPC situations.
 No scene_id/last_event_id/StatePatch. Ordinary turns require elapsed_minutes >= 0;
 Time Skip/background clocks belong to Runtime.
-Lifecycle semantics belong to Extraction, not a verb dictionary: completed result ->
+Extraction classifies lifecycle: completed result ->
 completed; failure -> failed; lost context -> expired; explicit cancellation -> cancelled;
 replacement -> superseded. Use *_updates, stable IDs and current evidence. A joke may
 complete 'tease Yuri'; conversation may complete 'talk to Sonya'. Intent/promise is not
@@ -30,15 +29,15 @@ Physical_state is current bodily state; clear it with physical_state="" only on 
 resolution (ate/warmed/rested). Preserve unresolved symptoms; sleep alone is not a cure.
 Directed feelings: prior relationship_evidence only, never Narrative; else only explicit
 current-actor override (player_assertion=explicit_directed_feelings, exact player_evidence).
-Events: completed_interaction only for completed player-input interactions, not wishes/feelings.
-Never mirror directions or invent consent/actions. Respect negations; questions are not overrides.
+Event cast/witnesses: together at start/end or shared movement/Event.order (distinct for arrival, meeting, exit); else confirmed channel. Off-scene situation: source_event_id.
+completed_interaction: completed player input only. No mirrored feelings, invented consent/actions or negated overrides.
 Remote_interactions: only ongoing END-of-turn message/phone/radio exchanges with actor_id,
 channel, evidence. Reconfirm each turn; rereading old messages is not active contact.
 Omit ended contact; physically arriving actors belong in present instead.
 Knowledge requires THIS accepted informational Event: actor in witnesses, fact in fact_ids; no GM-card acquisition. Only actual perception/reading, never delivery, time or intention. Message author_id: established participant, not inferred.
 Facts immutable; reuse IDs, new assertions need new IDs. claim={subject_id,predicate,value,scope:""} identifies an exclusive slot; scope separates roles/periods; omit uncertain slots. known is belief, not truth. knowledge_gained statuses: known/suspected/unknown/outdated/refuted/superseded. expected_revision required for revival; supersedes needs old AND new facts in Event.fact_ids. New known retires conflicting known in its slot. Retire existing beliefs only. Same-slot changes need distinct Event.order.
 story_secret=plot, not privacy/routine. secret_subject_ids=related people; secret_keeper_ids=conscious owners; secret_biography_ids=biographical subjects, not others' feelings/plans. None grants Knowledge. secret_existence:hidden(default)|discoverable(anonymous slot). Reuse IDs; rumors=suspected. secret_disclosures binds written source_event_id/artifact_id + fact_id, assertion confirmed|rumor. Only actual reading grants Knowledge; quotes/delivery aren't confirmation.
-Unknown Event minute/order may be omitted; final_scene elapsed_minutes is explicit on ordinary turns.
+Event.minute: absolute in [world_time, world_time + applied elapsed_minutes]. Omit unknown minute/order. Date testimony to the telling.
 '''
 
 NARRATIVE_CONTRACT = '''
@@ -326,6 +325,25 @@ handles shared established family names only when policy permits. Newborn profil
 stay sparse: no mature goals/values/habits/speech or inherited personality/Knowledge.
 appearance accepts only explicitly quoted text by child ID, never genetic inference.
 """
+
+BIRTH_SEX_CONTRACT = """
+Every BirthClaim MUST include sex_observations: exactly one assessment per canonical
+child_id, including children whose sex was NOT disclosed. narrative_sex is a faithful
+semantic reading of the CURRENT NARRATIVE, NOT a desired delta or a copy of canonical
+sex. Independently set event_sex to what the linked Event text asserts. Do not correct
+the author by silently writing a canonical value in either assessment. Runtime rejects
+contradictory author prose; an Extraction repair cannot rewrite it.
+basis=not_disclosed, narrative_sex=null, event_sex=null, perceived_by=[] when no confirmed
+disclosure occurs (including a player's guess, hope, question or speculation).
+basis=observation only for actual perceived anatomy; perceived_by lists only those who
+perceived it, not all birth witnesses. basis=announcement requires source_actor_id (the
+speaker participating in this Event), source_assertion=direct_observation for explicitly
+established observation by the speaker or prior_knowledge for an already known sex Fact.
+Include evidence of that specific disclosure. A player assumption is never a source.
+Sex Knowledge uses the existing child sex Fact IDs, only for perceived_by. Do not create
+replacement child_sex Facts, change child IDs/sex, infer sex from names or automatically
+grant sex Knowledge at delivery. Runtime binds this assessment to BirthClaim.source_event_id.
+"""
 NARRATIVE_CONTRACT += """
 Intimacy never implies pregnancy, love or relationship changes. No forced fade-to-black
 or time skip. Only consenting adults; preserve EXTERNAL choice. Runtime owns conception,
@@ -434,12 +452,13 @@ Never infer consent from silence, affection scores, earlier intimacy or relation
 Only available scene/established remote channels; referenced authors do not become present.
 Keep existing literary style and active game language. Do not narrate runtime labels.
 """
-EXTRACTION_CONTRACT += """
+SCENE_ACTION_EXTRACTION_CONTRACT = """
 scene_actions: omit if uncertain. accept/answer/refuse/end/redirect: copy full evidence of THIS source_event_id.
 Offer/attempt/silence != consent. Romance: adult=true. Interruptible EXTERNAL: response=open;
 player_supplied needs current player_evidence. response_event_id=answered pending_response_ids Event.
 Involuntary: canonical consequences. knowledge_ids=own actor:fact; suspected for inquiry only.
 """
+EXTRACTION_CONTRACT += SCENE_ACTION_EXTRACTION_CONTRACT
 
 NARRATIVE_CONTRACT += """
 CONTINUITY: Director.continuity is optional pressure, never an event quota.
@@ -455,17 +474,19 @@ Routine waiting/travel/work may be summarized up to continuity.compression.max_m
 Stop at its boundary, any interruption or meaningful EXTERNAL response/decision. Never
 invent that response or silently skip hours/days. Detailed Time Skip remains separate.
 """
-EXTRACTION_CONTRACT += """
-scene_transitions: link actual start/advance/end to THIS Event, actors and threads. Refresh
-affected situation/state. Ending a meeting need not close its thread or move anyone.
-Reopen resolved threads only on a new Event. Record completed plans via scheduled_event_changes.
-continuity_beats optional: reuse kind/basis_ids with status and Event evidence. actor_id initiates.
-EXTERNAL dialogue: completed_interaction quote. NPC decision_actor_id: same Event's NPC
-scene_action toward initiator (accept/answer/refuse) in completed_narrative. No reply: open, no decider.
-EXTERNAL decision: decision_actor_id + own current player_evidence. Choices reuse kind/basis_ids;
-omit resolved/rejected proposals. Compression: evidenced routine, bounded elapsed_minutes;
-pending response needs response_event_id + player_evidence.
+CONTINUITY_EXTRACTION_CONTRACT = """
+scene_transitions: THIS Event/actors/threads; refresh situation/state. Meeting end != closure/move.
+Thread reopen: new Event. Completed plans: scheduled_event_changes.
+continuity_beats optional: actor=initiator; kind/basis_ids/status; evidence of THIS beat.
+NPC decider: Event's scene_action toward initiator (accept/answer/refuse); no player quote.
+EXTERNAL dialogue: completed_interaction quote. EACH decision: decision_actor_id + OWN
+player_evidence=Event's full choice quote; retain negation/refusal/deferment. Event prose may be broader.
+Questions/offers/intentions != decisions; pending=open/no decider.
+Repair same input/Narrative: no invented choices/borrowed quotes/duplicates.
+Choices: kind/basis_ids, omit resolved/rejected. Compression: evidenced routine, bounded
+elapsed_minutes; pending reply: response_event_id + player_evidence.
 """
+EXTRACTION_CONTRACT += CONTINUITY_EXTRACTION_CONTRACT
 
 RELATIONSHIP_EVIDENCE_CONTRACT = """
 Relationships != Emotion. Directed relationship_changes apply equally NPC->NPC,

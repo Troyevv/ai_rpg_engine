@@ -31,7 +31,7 @@ def test_stage_b_repair(tmp_path, scenario, fix_shape):
     source = 'event_13_timur_call_plan' if campaign else 'event_vera_offer'
     eid = 'sched_timur_call_oleg' if campaign else 'sched_vera_meeting'
     camera = before['world_state']['camera']
-    raw = dict(final_scene=dict(location_id=camera['location_id'],
+    raw = dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],
                                 present_character_ids=camera['present_character_ids'], elapsed_minutes=1),
                events=[dict(id=source, text=narrative, participants=[ACTOR_ID, actor],
                             witnesses=[ACTOR_ID, actor], evidence=narrative)],

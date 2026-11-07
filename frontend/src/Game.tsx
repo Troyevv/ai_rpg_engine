@@ -122,18 +122,21 @@ export function Game({
     setDraft(sessionStorage.getItem(draftKey) || "");
     setSubmitted(null);
   }, [draftKey]);
-  const { job, reconnecting } = useJob(submitted ?? save?.job, refresh);
+  const { job: snapshot, reconnecting } = useJob(submitted ?? save?.job, refresh);
+  const job = snapshot?.status === 'abandoned' ? null : snapshot;
   const awaitingCommit=job?.status==='saved'&&job.revision===save?.revision&&!save?.turns.some(t=>t.variants?.some(v=>v.job_id===job.id));
-  const unapplied = !!job && ['error','stopped'].includes(job.status) && !!job.narrative_complete && job.revision === save?.revision;
+  const rejected = !!job && ['error','stopped'].includes(job.status) && job.revision === save?.revision;
+  const retryable = rejected && !!job.narrative_complete && !job.narrative_reauthor_required && job.retry_allowed !== false;
   const running = active(job)||!!job?.live&&job.status!=="saved"||!!awaitingCommit;
   const [presented,setPresented]=useState<string|null>(null);
   const streamedJob=useRef<string|null>(null);
   if(active(job))streamedJob.current=job?.id||null;
   const onPresented=useStableEvent((id:string)=>{if(id===job?.id)setPresented(id)});
   const revealingCommit=(job?.presentation?.surface!=='call'||activeCall?.id===job.presentation.call_id)&&(submitted?.id===job?.id||streamedJob.current===job?.id)&&job?.kind!=='communication'&&job?.status==='saved'&&save?.turns.some(t=>t.variants?.find(v=>v.id===t.active_variant_id)?.job_id===job.id)&&presented!==job.id;
-  const pending = running||unapplied||!!revealingCommit;
+  const generating = running || !!revealingCommit;
+  const turnLocked = generating || (rejected && !!job.narrative_complete);
   const canAct = !!save && !!actorId && !save.state.protagonist_required && save.state.actor_capabilities?.can_act!==false;
-  const canSubmit = canAct && !busy && !pending && !!save?.turns.length;
+  const canSubmit = canAct && !busy && !turnLocked && !!save?.turns.length;
   useEffect(()=>{if(save?.state.protagonist_required)setProtagonistOpen(true)},[save?.id,save?.state.protagonist_required]);
 
   const requestLock=useRef(false);
@@ -193,8 +196,30 @@ export function Game({
   }));
   const allEntries=presentationEntries(save,job);
   const entries=surfaceEntries(allEntries,'physical');
-  const renderEntry=(entry:typeof allEntries[number],toolsOnly=false)=>world&&save?<NarrativeTurn toolsOnly={toolsOnly} showTools={toolsOnly||entry.turn.presentation?.surface!=='call'} key={entry.identity} identity={entry.identity} t={entry.turn} i={save.turns.findIndex(t=>t.id===entry.turn.id)} save={save} world={world} prefs={prefs} mobile={mobile} busy={busy} running={pending} mainActor={mainActor} turn={stableTurn} run={stableRun} setSubmitted={setSubmitted} refresh={refresh} setDiagnosticJob={setDiagnosticJob} setDiagnostics={setDiagnostics} openCharacter={openCharacter} job={entry.job} reconnecting={entry.job?reconnecting:false} stop={stopJob} committed={entry.committed} onPresented={onPresented}/>:null;
-  const retry=job&&unapplied?<Button disabled={busy||job.live} onClick={()=>void run(async()=>{setSubmitted(await api<Job>(`/jobs/${job.id}/retry`,{config:prefs.game,api_key:apiKey}))})}>{t('retry')}</Button>:null;
+  const renderEntry=(entry:typeof allEntries[number],toolsOnly=false)=>world&&save?<NarrativeTurn toolsOnly={toolsOnly} showTools={toolsOnly||entry.turn.presentation?.surface!=='call'} key={entry.identity} identity={entry.identity} t={entry.turn} i={save.turns.findIndex(t=>t.id===entry.turn.id)} save={save} world={world} prefs={prefs} mobile={mobile} busy={busy} running={turnLocked} mainActor={mainActor} turn={stableTurn} run={stableRun} setSubmitted={setSubmitted} refresh={refresh} setDiagnosticJob={setDiagnosticJob} setDiagnostics={setDiagnostics} openCharacter={openCharacter} job={entry.job} reconnecting={entry.job?reconnecting:false} stop={stopJob} committed={entry.committed} onPresented={onPresented}/>:null;
+  const recovery = (physical: boolean) => rejected && job && save && (
+    <div className="flex flex-wrap gap-2" aria-busy={busy}>
+      <Button disabled={busy || running} onClick={() => void run(async () => {
+        try {
+          const discarded = await api<Job>(`/saves/${save.id}/jobs/${job.id}/abandon`, {
+            revision: save.revision, attempt_epoch: job.attempt_epoch ?? 0,
+          });
+          setSubmitted(discarded);
+          if (physical && (job.narrative_reauthor_required || job.retry_allowed === false) && !draftRef.current && job.user_text) {
+            setDraft(job.user_text);
+            sessionStorage.setItem(draftKey, job.user_text);
+          }
+          if (physical) input.current?.focus({preventScroll:true});
+        } finally {
+          await refresh();
+          setSubmitted(null);
+        }
+      })}>{physical ? 'Отменить неудачный ход' : t('abandonTurn')}</Button>
+      {retryable && <Button variant="outline" disabled={busy || running} onClick={() => void run(async () => {
+        setSubmitted(await api<Job>(`/jobs/${job.id}/retry`, {config:prefs.game, api_key:apiKey}));
+      })}>{physical ? 'Повторить обработку состояния' : t('retry')}</Button>}
+    </div>
+  );
   const meta = save?.scene_meta ?? world?.scene_meta;
   const state = save?.state ?? world?.state;
   if (!world)
@@ -222,7 +247,7 @@ export function Game({
     );
   return (
     <main className="game">
-      {save&&selectedCall&&<CallScene key={`${viewScope}:${selectedCall}`} save={save} callId={selectedCall} onSelect={setSelectedCall} obscured={diagnostics} job={job?.presentation?.call_id===selectedCall?job:null} reconnecting={reconnecting} stop={stopJob} stopping={busy} disabled={busy||pending||!canAct} recovery={job?.presentation?.call_id===selectedCall?retry:null} submit={async text=>{
+      {save&&selectedCall&&<CallScene key={`${viewScope}:${selectedCall}`} save={save} callId={selectedCall} onSelect={setSelectedCall} obscured={diagnostics} job={job?.presentation?.call_id===selectedCall?job:null} reconnecting={reconnecting} stop={stopJob} stopping={busy} disabled={busy||turnLocked||!canAct} recovery={job?.presentation?.call_id===selectedCall?recovery(false):null} submit={async text=>{
         let sent=false;
         await run(async()=>{const j=await api<Job>(`/saves/${save.id}/turns`,{kind:'turn',text,interaction_channel:'call',config:prefs.game,revision:save.revision,api_key:apiKey});setSubmitted(j);sent=true});
         if(!sent)throw new Error('Не удалось отправить реплику');
@@ -230,10 +255,10 @@ export function Game({
         {surfaceEntries(allEntries,'call',actorId,selectedCall).map(e=>renderEntry(e))}
       </CallScene>}
       {save&&<div className="narrative-toolbar" role="group" aria-label="Действия истории">
-        <CurrentGame refresh={refreshControl} save={save} disabled={busy||pending} notices={notices} onNotices={v=>{setNotices(v);localStorage.setItem('relationship-notices',v?'on':'off')}} policy={()=>setPolicyOpen(true)} protagonist={()=>setProtagonistOpen(true)} camera={()=>setCameraOpen(true)} openCharacter={openCharacter} timeSkip={()=>setTimeSkipOpen(true)} longTerm={()=>setLongTermOpen(true)}/>
+        <CurrentGame refresh={refreshControl} save={save} disabled={busy||turnLocked} notices={notices} onNotices={v=>{setNotices(v);localStorage.setItem('relationship-notices',v?'on':'off')}} policy={()=>setPolicyOpen(true)} protagonist={()=>setProtagonistOpen(true)} camera={()=>setCameraOpen(true)} openCharacter={openCharacter} timeSkip={()=>setTimeSkipOpen(true)} longTerm={()=>setLongTermOpen(true)}/>
         <StoryNotifications key={`${save.id}:${actorId}`} save={save} active={presentationActive} enabled={notices} onOpen={openStory}/>
       </div>}
-      {save&&<> <LongTermAdvance open={longTermOpen} onOpenChange={setLongTermOpen} save={save} disabled={busy||pending||!save.turns.length||!!save.state.protagonist_required} submit={async request=>{
+      {save&&<> <LongTermAdvance open={longTermOpen} onOpenChange={setLongTermOpen} save={save} disabled={busy||turnLocked||!save.turns.length||!!save.state.protagonist_required} submit={async request=>{
                       if(requestLock.current)throw new Error('Дождись завершения текущего действия.');
                       requestLock.current=true;setBusy(true);
                       try {
@@ -242,19 +267,19 @@ export function Game({
                       } catch(e) {refresh();throw e}
                       finally {requestLock.current=false;setBusy(false)}
                     }}/>
-                    <TimeSkip open={timeSkipOpen} onOpenChange={setTimeSkipOpen} save={save} disabled={busy||pending||!save.turns.length||!!save.state.protagonist_required} submit={(duration,reason)=>void turn('turn',actorId===null||save.state.actor_capabilities?.can_act===false?'':`Жду ${duration} минут.${reason?' '+reason:''}`,undefined,false,{duration,reason})}/>
+                    <TimeSkip open={timeSkipOpen} onOpenChange={setTimeSkipOpen} save={save} disabled={busy||turnLocked||!save.turns.length||!!save.state.protagonist_required} submit={(duration,reason)=>void turn('turn',actorId===null||save.state.actor_capabilities?.can_act===false?'':`Жду ${duration} минут.${reason?' '+reason:''}`,undefined,false,{duration,reason})}/>
 </>}
       <RuntimeNotifications save={save} job={submitted?job:null} enabled={notices}/>
       {save&&<>{save.state.protagonist_required&&<p role="alert">Главный герой умер. История продолжается: выбери или создай нового героя.</p>}<Protagonist save={save} open={protagonistOpen} onOpenChange={setProtagonistOpen} refresh={refreshControl} prefs={prefs} apiKey={apiKey}/></>}
       {save&&<><NarrativePolicy save={save} open={policyOpen} onOpenChange={setPolicyOpen} refresh={refreshControl}/></>}
-      {save&&<WorldCamera save={save} open={cameraOpen} onOpenChange={setCameraOpen} busy={busy||pending} observe={observe} control={switchActor}/>}
-      {save&&<NpcReview key={save.id} save={save} locked={busy||pending} prefs={prefs} apiKey={apiKey} onCommit={refreshControl}/>}
-      {save&&<Diagnostics saveId={save.id} jobId={diagnosticJob} open={diagnostics} onOpenChange={setDiagnostics} historyTools={<>{allEntries.filter(e=>e.committed&&e.turn.presentation?.surface!=='physical').map(e=>renderEntry(e,true))}{job&&['error','stopped'].includes(job.status)&&<><p role="alert">{job.error}</p>{retry}</>}</>}/>}
-      {mobile&&save?<MobileScene save={save} meta={meta} busy={busy||pending} switchActor={switchActor} background={()=>void turn("background","")} openCharacter={openCharacter} openCamera={()=>setCameraOpen(true)}/>:<>{save&&<div className="pov-controls">
-        <label>Управляемый персонаж<select aria-label="Управляемый персонаж" value={actorId||""} disabled={busy||pending} onChange={e=>switchActor(e.target.value)}>{!actorId&&<option value="">Камера наблюдателя</option>}{save.state.characters.map(c=><option key={c.id} value={c.id}>{c.name}{c.id===mainActor?" · основной герой":""}</option>)}</select></label>
-        {actorId!==mainActor&&<Button variant="ghost" size="sm" disabled={busy||pending} onClick={()=>switchActor(mainActor!)}>Вернуться к {save.state.characters.find(c=>c.id===mainActor)?.name.replace(" (ГГ)","")}</Button>}
+      {save&&<WorldCamera save={save} open={cameraOpen} onOpenChange={setCameraOpen} busy={busy||turnLocked} observe={observe} control={switchActor}/>}
+      {save&&<NpcReview key={save.id} save={save} locked={busy||turnLocked} prefs={prefs} apiKey={apiKey} onCommit={refreshControl}/>}
+      {save&&<Diagnostics saveId={save.id} jobId={diagnosticJob} open={diagnostics} onOpenChange={setDiagnostics} historyTools={<>{allEntries.filter(e=>e.committed&&e.turn.presentation?.surface!=='physical').map(e=>renderEntry(e,true))}{job&&['error','stopped'].includes(job.status)&&<><p role="alert">{job.error}</p>{recovery(false)}</>}</>}/>}
+      {mobile&&save?<MobileScene save={save} meta={meta} busy={busy||turnLocked} switchActor={switchActor} background={()=>void turn("background","")} openCharacter={openCharacter} openCamera={()=>setCameraOpen(true)}/>:<>{save&&<div className="pov-controls">
+        <label>Управляемый персонаж<select aria-label="Управляемый персонаж" value={actorId||""} disabled={busy||turnLocked} onChange={e=>switchActor(e.target.value)}>{!actorId&&<option value="">Камера наблюдателя</option>}{save.state.characters.map(c=><option key={c.id} value={c.id}>{c.name}{c.id===mainActor?" · основной герой":""}</option>)}</select></label>
+        {actorId!==mainActor&&<Button variant="ghost" size="sm" disabled={busy||turnLocked} onClick={()=>switchActor(mainActor!)}>Вернуться к {save.state.characters.find(c=>c.id===mainActor)?.name.replace(" (ГГ)","")}</Button>}
         <Button variant="ghost" size="sm" onClick={()=>setCameraOpen(true)}>Камера · Журнал</Button>
-        <Button variant="outline" size="sm" disabled={busy||pending||!save.turns.length} onClick={()=>void turn("background","")}>Мир без ГГ</Button>
+        <Button variant="outline" size="sm" disabled={busy||turnLocked||!save.turns.length} onClick={()=>void turn("background","")}>Мир без ГГ</Button>
       </div>}
       <div className="scene-bar">
         <button className="scene-calendar-entry" aria-label="Открыть календарь" disabled={!save} onClick={()=>window.dispatchEvent(new CustomEvent('save-workspace',{detail:{section:'calendar'}}))}>
@@ -335,28 +360,11 @@ export function Game({
                   </p>
                 </div>
               )}
-              {unapplied && (!job?.presentation||job.presentation.surface==='physical') && <p role="status">{job?.kind==='communication'?'Действие связи сохранено. Повтори обработку, чтобы завершить цикл.':'Текст сцены сохранён, состояние ещё не применено. Повтори обработку состояния.'}</p>}
-              {job && (!job.presentation||job.presentation.surface==='physical') &&
-                ["error", "stopped"].includes(job.status) &&
-                job.narrative_complete &&
-                job.revision === save.revision && (
-                  <Button
-                    variant="outline"
-                    disabled={busy || job.live}
-                    onClick={() =>
-                      run(async () => {
-                        const j = await api<Job>(`/jobs/${job.id}/retry`, {
-                          config: prefs.game,
-                          api_key: apiKey,
-                        });
-                        setSubmitted(j);
-                      })
-                    }
-                  >
-                    Повторить обработку состояния
-                  </Button>
-                )}
-              {!save.turns.length && !pending && (
+              {rejected && (!job.presentation || job.presentation.surface === 'physical') && <>
+                <p role="status">Ход не вошёл в историю. Можно отменить его и продолжить игру.</p>
+                {recovery(true)}
+              </>}
+              {!save.turns.length && !turnLocked && (
                 <Button size="lg" disabled={busy} onClick={() => turn("start")}>
                   Начать игру
                 </Button>
@@ -364,11 +372,11 @@ export function Game({
               {save.turns.length > 0 && (
                 <>
                   {actorId===null&&<div className="background-exit">
-                    <Button variant="outline" disabled={busy||pending} onClick={()=>observe(undefined,save.state.camera?.scene_id)}>Продолжить наблюдать</Button>
-                    <Button disabled={busy||pending} onClick={()=>switchActor(mainActor!)}>Вернуться к {save.state.characters.find(c=>c.id===mainActor)?.name.replace(' (ГГ)','')}</Button>
-                    <label>Продолжить за персонажа…<select aria-label="Участник фоновой сцены" value="" disabled={busy||pending} onChange={e=>switchActor(e.target.value,save.turns.at(-1)!.id)}><option value="">Выбрать участника</option>{save.state.characters.filter(c=>JSON.parse(save.turns.at(-1)?.audience_json||'[]').includes(c.id)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+                    <Button variant="outline" disabled={busy||turnLocked} onClick={()=>observe(undefined,save.state.camera?.scene_id)}>Продолжить наблюдать</Button>
+                    <Button disabled={busy||turnLocked} onClick={()=>switchActor(mainActor!)}>Вернуться к {save.state.characters.find(c=>c.id===mainActor)?.name.replace(' (ГГ)','')}</Button>
+                    <label>Продолжить за персонажа…<select aria-label="Участник фоновой сцены" value="" disabled={busy||turnLocked} onChange={e=>switchActor(e.target.value,save.turns.at(-1)!.id)}><option value="">Выбрать участника</option>{save.state.characters.filter(c=>JSON.parse(save.turns.at(-1)?.audience_json||'[]').includes(c.id)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
                   </div>}
-                  {save.state.actor_capabilities?.can_act===false&&<div><p role="status">Персонаж сейчас не может действовать. Можно продолжить течение времени или наблюдать за миром.</p>{actorId&&<Button disabled={busy||pending} onClick={()=>observe(actorId)}>Продолжить наблюдать за героем</Button>}</div>}
+                  {save.state.actor_capabilities?.can_act===false&&<div><p role="status">Персонаж сейчас не может действовать. Можно продолжить течение времени или наблюдать за миром.</p>{actorId&&<Button disabled={busy||turnLocked} onClick={()=>observe(actorId)}>Продолжить наблюдать за героем</Button>}</div>}
                   <motion.div className="choices" key={choiceKey} variants={choicesMotion} initial={reduced||initialChoice.current===choiceKey?false:"hidden"} animate="visible">
                     {(save.state.actor_capabilities?.can_act!==false&&(choiceTurn?.pov_actor_id||mainActor)===actorId?choiceTurn?.choices:[])?.filter(c=>(c.interaction_channel||"physical")==="physical").map((c, i) => (
                       <motion.button
@@ -391,11 +399,11 @@ export function Game({
                       </motion.button>
                     ))}
                   </motion.div>
-                  {!pending&&entries.at(-1)?.turn.id===save.turns.at(-1)?.id&&<div className="turn-actions">
+                  {!generating&&entries.filter(e=>e.committed).at(-1)?.turn.id===save.turns.at(-1)?.id&&<div className="turn-actions">
                     <Button
                       variant="ghost"
                       size="sm"
-                      disabled={busy||!save.turns.at(-1)?.variants?.some(v=>v.can_regenerate)}
+                      disabled={busy||retryable||!save.turns.at(-1)?.variants?.some(v=>v.can_regenerate)}
                       onClick={() => turn("regenerate", "")}
                     >
                       <RotateCcw size={14} />
@@ -432,7 +440,7 @@ export function Game({
       </div>
       {save && (
         <div className="composer">
-          <Phone save={save} onBusyChange={setPhoneBusy} disabled={busy||pending} onCommit={refreshControl} config={prefs.game} apiKey={apiKey} onJob={setSubmitted} job={job}/>
+          <Phone recovery={recovery(false)} save={save} onBusyChange={setPhoneBusy} disabled={busy||turnLocked} onCommit={refreshControl} config={prefs.game} apiKey={apiKey} onJob={setSubmitted} job={job}/>
           <div className="composer-inner">
             <Textarea
               ref={input}

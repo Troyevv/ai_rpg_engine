@@ -1,6 +1,7 @@
 """#43 canonical interval regressions; providers are deterministic fakes only."""
 
 from copy import deepcopy
+from pregnancy_boundary_fixture import undisclosed_sex
 import json
 import pytest
 from hypothesis import given, strategies as st
@@ -180,8 +181,8 @@ def test_month_end_and_time_skip_boundary():
         AdvanceRequest(amount=True, unit="years")
 
 
-@pytest.mark.parametrize("custom_prompt", [False, True])
-def test_accepted_role_and_secret_residence_use_resolver_without_broadcast(custom_prompt):
+@pytest.mark.parametrize("custom_prompt,misdated", [(False, False), (True, False), (False, True)])
+def test_accepted_role_and_secret_residence_use_resolver_without_broadcast(custom_prompt, misdated):
     before = fixture()
     s = before["world_state"]
     s["threads"]["education"] = Thread(
@@ -222,13 +223,11 @@ def test_accepted_role_and_secret_residence_use_resolver_without_broadcast(custo
             )
         ],
     )
-    raw["events"][0]["advance_candidate_ids"] = [
-        next(
-            c.id
-            for c in plan(before, dict(amount=5, unit="years")).candidates
-            if c.source_id == "education"
-        )
-    ]
+    candidate = next(c for c in plan(before, dict(amount=5, unit="years")).candidates
+                     if c.source_id == "education")
+    raw["events"][0]["advance_candidate_ids"] = [candidate.id]
+    if misdated:
+        raw["events"][0]["minute"] = candidate.minute + 1
 
     from test_narrative_style import assert_style
     stages = []
@@ -245,7 +244,13 @@ def test_accepted_role_and_secret_residence_use_resolver_without_broadcast(custo
     )
     assert stages == ["long_term_narrative", "long_term_extraction"]
     assert report["llm_calls"] == 2
+    if misdated:
+        assert not report["accepted"] and not batch["events"]
+        assert any(d.get("code") == "event_minute_invalid" for d in report["diagnostics"])
+        assert "study" not in after["world_state"]["roles"]
+        return
     assert report["accepted"], report["diagnostics"]
+    assert batch["events"][0]["minute"] == batch["events"][0]["recorded_minute"] == candidate.minute
     assert after["world_state"]["roles"]["study"]["status"] == "active"
     assert after["world_state"]["residences"]["secret-home"]["status"] == "active"
     assert after["world_state"]["knowledge"] == before["world_state"]["knowledge"]
@@ -359,6 +364,7 @@ def test_accepted_birth_then_child_ages_without_adult_personality():
                 pregnancy_id=p["id"],
                 source_event_id="birth",
                 assertion="birth_completed",
+                sex_observations=undisclosed_sex(p),
                 location_id="home",
                 evidence=text,
             )
@@ -629,7 +635,7 @@ def test_new_character_only_committed_with_accepted_relationship():
     )
     text = "c и Новый стали друзьями."
     raw = dict(
-        final_scene=dict(location_id="home", present_character_ids=["c"]),
+        final_scene=dict(location_id="home", present_character_ids=["c", "new"]),
         promotions=[dict(id="new", name="Новый", fields={}, evidence=text)],
         events=[
             dict(

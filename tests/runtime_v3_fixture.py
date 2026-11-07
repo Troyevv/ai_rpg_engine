@@ -9,7 +9,8 @@ from backend.services.timeline import parse_time
 
 
 def wire(payload,narrative,before=None):
-    if not isinstance(payload,dict) or 'final_scene' in payload:return deepcopy(payload)
+    if not isinstance(payload,dict):return deepcopy(payload)
+    if 'final_scene' in payload:return reviewed(payload)
     if 'scene' not in payload:return deepcopy(payload)
     from canonical_fixture import canonical
     p=canonical(payload);scene=p['scene'];delta=p['world_delta']
@@ -32,7 +33,7 @@ def wire(payload,narrative,before=None):
     for fact in result.get('facts',[]):fact['visibility']='secret' if fact.get('secret') else 'public'
     for scheduled in result.get('scheduled_event_changes',[]):
         if 'participants' in scheduled:scheduled['character_ids']=scheduled['participants']
-    return result
+    return reviewed(result)
 
 
 def setup_scenario(repo,sid,present=None,observer=False):
@@ -57,11 +58,11 @@ def execute(repo,job,payload,narrative,repaired=None):
     import json
     from unittest.mock import patch
     import engine
-    payload=deepcopy(payload)
+    payload=reviewed(payload)
     if isinstance(payload,dict) and 'final_scene' in payload:
         payload['final_scene'].setdefault('elapsed_minutes',0)
     if isinstance(repaired,dict) and 'final_scene' in repaired:
-        repaired=deepcopy(repaired);repaired['final_scene'].setdefault('elapsed_minutes',0)
+        repaired=reviewed(repaired);repaired['final_scene'].setdefault('elapsed_minutes',0)
     calls=[]
     def stream(**kw):
         calls.append(kw)
@@ -70,3 +71,25 @@ def execute(repo,job,payload,narrative,repaired=None):
     with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=stream):
         engine.run_job(repo.path,job,engine.Worker())
     return calls
+
+
+def reviewed(payload):
+    """Protocol adapter for pre-232 scripted scenarios reviewed by their authors.
+
+    These fixtures do not claim completed player interactions. New agency tests
+    supply the review explicitly and never use this adapter to test omission.
+    """
+    raw = deepcopy(payload)
+    if isinstance(raw, dict) and 'final_scene' in raw:
+        raw.setdefault('player_agency', dict(status='preserved', actions=[]))
+    return raw
+
+
+def player_action(raw, actor, targets, quote, event_id, action_id='input-1'):
+    """Explicit fixture declaration, no parsing of language or inferred targets."""
+    event = next(e for e in raw['events'] if e['id'] == event_id)
+    event.update(actor_id=actor, target_ids=targets, player_action_id=action_id)
+    raw['player_agency'] = dict(status='preserved', actions=[dict(
+        id=action_id, player_evidence=quote, target_ids=targets,
+        narrative_target_ids=targets, outcome='completed', meaning='preserved')])
+    return raw

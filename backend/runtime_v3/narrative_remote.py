@@ -14,10 +14,11 @@ from backend.runtime_v3.remote_models import ExtractedRemoteEvent, HISTORICAL_CH
 def apply_extracted_remote(resolver, raw, events):
     records = raw.records.get('remote_events', [])
     batch_history = WorldHistoryV3()
+    written_sources = {}
     if not records and resolver.letter_sources:
         fatal("Authored letter has no accepted send.", "letter_source_unbound", repairable=True)
     if not records:
-        return batch_history
+        return batch_history, written_sources
     state = resolver.state
     resolver.disclosure_source_ids = {}
     start = resolver.before['meta']['world_time']
@@ -200,6 +201,10 @@ def apply_extracted_remote(resolver, raw, events):
             if e['medium'] == 'message' and actor in e['participants'] and recipients & set(e['participants'])]
         for source in sources:
             if event['channel'] != 'VOICE_CALL' and source['medium'] == 'message':
+                # Inferred matches can restrict unread Knowledge, but only an
+                # explicit binding can authorize otherwise nonlocal roles.
+                if source['local_id'] == row.source_event_id:
+                    written_sources[source['local_id']] = event
                 unread = set(event['recipient_ids']) - set(event['read_by'])
                 if any(k.get('source_event_id') == source['local_id'] and k.get('actor_id') in unread
                        for k in raw.records['knowledge_gained'] if isinstance(k, dict)):
@@ -212,4 +217,4 @@ def apply_extracted_remote(resolver, raw, events):
     if used_artifacts != resolver.letter_sources.keys():
         fatal('Authored letter has no accepted send.', 'letter_source_unbound', repairable=True)
     settle_endings(finish)
-    return batch_history
+    return batch_history, written_sources

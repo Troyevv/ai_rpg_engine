@@ -160,7 +160,8 @@ def test_ilya_sonya_real_jobs_reload_regenerate_rollback_branch(tmp_path):
     def run(text,phase=None,kind='turn',depart=False,finish=False):
         before=repo.get_snapshot(sid);s=before['world_state'];camera=s['camera']
         raw=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=[a] if depart else camera['present_character_ids'],elapsed_minutes=1),
-            events=[dict(id='meeting',text=text,evidence=text,participants=[a,b],witnesses=[a,b],medium='conversation')])
+            events=[dict(id='meeting',text=text,evidence=text,participants=[a,b],witnesses=[a,b],medium='conversation')]
+            if b in camera['present_character_ids'] else [])
         if phase:raw['scene_transitions']=[dict(source_event_id='meeting',phase=phase,actor_ids=[a,b],thread_ids=['qa_meeting'],evidence=text)]
         if finish:
             intention=s['characters'][a]['intentions'][0]
@@ -230,10 +231,15 @@ def test_milestone_relevance_decays_with_established_later_scenes_and_is_actor_k
 
 
 def test_external_decision_cannot_be_fabricated_in_continuity():
-    s=setup()['world_state'];row=beat('resolved','decision');row['actor_id']='a'
+    s=setup()['world_state'];row=beat('resolved','decision');row.update(actor_id='a',target_ids=['b'])
     raw=payload(s,continuity_beats=[row])
     with pytest.raises(StructuralDeltaError):StateResolver(s,'Разговор завершён.','').resolve(raw)
     row['player_evidence']='Я решил.'
+    with pytest.raises(StructuralDeltaError):StateResolver(s,'Разговор завершён.','Я решил.').resolve(raw)
+    row['decision_actor_id']='a'
+    raw['events'][0].update(player_assertion='completed_interaction',player_evidence='Я решил.')
+    from runtime_v3_fixture import player_action
+    player_action(raw, 'a', ['b'], 'Я решил.', 'event')
     assert StateResolver(s,'Разговор завершён.','Я решил.').resolve(raw).state
 
 

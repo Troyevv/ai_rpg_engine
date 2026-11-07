@@ -11,7 +11,7 @@ import engine
 
 def run(repo, sid, minutes, *, kind='turn', compression='missing', text='Рассматриваю карту.', config=None, extra=None, player_input='Рассматриваю карту.',retry=None):
     s = repo.get_snapshot(sid)['world_state']
-    raw = dict(final_scene=dict(location_id=s['camera']['location_id'],
+    raw = dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=s['camera']['location_id'],
         present_character_ids=s['camera']['present_character_ids'], elapsed_minutes=minutes))
     if compression != 'missing':
         raw['final_scene']['compression'] = compression
@@ -137,6 +137,27 @@ def test_runtime_owned_skip_reaches_boundary_and_regenerates(tmp_path):
     assert repo.get_snapshot(sid)['world_state']['meta']['world_time'] == 6840
     repo.rollback_last(sid)
     assert repo.get_snapshot(sid) == before
+
+
+@pytest.mark.parametrize('minute,accepted', [(6840, True), (6841, False)])
+def test_skip_event_uses_actual_interruption_not_requested_target(tmp_path, minute, accepted):
+    from backend.runtime_v3.repository import read_history
+    repo = Repository(tmp_path/'skip-event.sqlite')
+    sid = load_fixture(repo, 'commitments')['save']
+    assert run(repo, sid, 1, kind='start')[0]['status'] == 'saved'
+    before = repo.get_snapshot(sid)
+    job, _ = run(repo, sid, 10080, config=dict(CONFIG, time_skip=dict(duration=2880)),
+                 extra=dict(events=[dict(id='wait', text='Жду.', minute=minute)]))
+    if accepted:
+        assert job['status'] == 'saved', job['error']
+        with repo.connect() as conn:
+            history, _ = read_history(conn, repo.get_snapshot(sid)['history_head'])
+        event, = [e for e in history['events'] if e.get('local_id') == 'wait']
+        assert event['minute'] == event['recorded_minute'] == minute
+    else:
+        assert job['status'] == 'error'
+        assert json.loads(job['repair_diagnostics_json'])[-1]['code'] == 'event_minute_invalid'
+        assert repo.get_snapshot(sid) == before
 
 
 def test_real_response_remains_unanswered_without_blocking_history(tmp_path):

@@ -3,8 +3,14 @@ REACTION = 'Я остаюсь рядом с Верой и держу её за �
 DELIVERY = 'Вера родила. Врач передал ей ребёнка.'
 
 
+def undisclosed_sex(process):
+    return [dict(child_id=child['id'], narrative_sex=None, event_sex=None,
+                 basis='not_disclosed', perceived_by=[]) for child in process['children']]
+
+
 def delivery_claim(process, camera):
     return dict(events=[dict(id='delivery', text=DELIVERY, evidence=DELIVERY, participants=['qa_vera'],
                              witnesses=['qa_vera', 'qa_kirill'], medium='observation', minute=process['due_minute'])],
                 births=[dict(pregnancy_id=process['id'], source_event_id='delivery', assertion='birth_completed',
-                             location_id=camera['location_id'], evidence=DELIVERY)])
+                             location_id=camera['location_id'], evidence=DELIVERY,
+                             sex_observations=undisclosed_sex(process))])

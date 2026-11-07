@@ -16,7 +16,7 @@ def intro(storage,sid,actor,source=None,bad=False,retry=None):
         if kw.get('response_format'):
             block=next(m['content'] for m in kw['messages'] if m['content'].startswith('Текущее состояние / GM-only'))
             current=json.loads(block.split('\n',1)[1]);camera=current['camera']
-            payload=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=['missing'] if bad else camera['present_character_ids'],situation=camera['situation'],elapsed_minutes=0),
+            payload=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=['missing'] if bad else camera['present_character_ids'],situation=camera['situation'],elapsed_minutes=0),
                 choices=[dict(action='Действие '+str(i),speech='') for i in range(6)])
             yield json.dumps(payload,ensure_ascii=False)
         else:yield NARRATIVE

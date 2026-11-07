@@ -588,8 +588,6 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                     )
                 if not set(event.get("participants", [])) & allowed:
                     raise ValueError("Событие не связано с выбранной причиной.")
-                if event.get("minute", minute) != minute:
-                    raise ValueError("Событие выходит за выбранную временную границу.")
                 links = event.get("advance_candidate_ids", [])
                 if (
                     not isinstance(links, list)
@@ -598,7 +596,8 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                     or set(links) - {c.id for c in group}
                 ):
                     raise ValueError("Событие не указывает выбранную причину исхода.")
-                event["minute"] = minute
+                # The group occurs at a known instant. StateResolver checks explicit claims.
+                event.setdefault("minute", minute)
             resolved = StateResolver(
                 camera["world_state"],
                 narrative,

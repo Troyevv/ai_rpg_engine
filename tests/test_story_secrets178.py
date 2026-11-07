@@ -13,8 +13,11 @@ from test_goals_values import raw
 from backend.runtime_v3.resolver import StateResolver
 
 
-def fixture():
+def fixture(*, together=False):
     snap=phone();s=snap['world_state']
+    if together:
+        s['camera']['present_character_ids'].append('b')
+        s['characters']['b']['location_id'] = s['camera']['location_id']
     s['facts']['plot']=Fact(id='plot',text='Соня скрывает авторство романа.',visibility='secret',story_secret=True,
         secret_subject_ids=['b'],secret_existence='discoverable').model_dump()
     s['knowledge']['b:plot']=Knowledge(actor_id='b',fact_id='plot').model_dump()
@@ -123,7 +126,7 @@ def test_legacy_is_conservative_and_structural_not_text():
 
 
 def test_existing_narrative_acquisition_and_world_secret():
-    snap=fixture();s=snap['world_state'];s['facts']['plot']['secret_subject_ids']=[]
+    snap=fixture(together=True);s=snap['world_state'];s['facts']['plot']['secret_subject_ids']=[]
     p=raw(s,events=[dict(id='disclosure',text='Признание',evidence='Признание',participants=['a','b'],witnesses=['a'],fact_ids=['plot'],medium='conversation')],
           knowledge_gained=[dict(actor_id='a',fact_id='plot',source_event_id='disclosure',evidence='Признание')])
     r=StateResolver(s,'Признание','').resolve(p)
