@@ -24,17 +24,22 @@ test('Crisis #237: false completion after repair refuses atomically; reload and 
   await expect(abandon).toBeEnabled();
   const failed = await view();
   expect(failed.job.status).toBe('error');
+  expect(failed.job.user_text).toBe(action);
   expect(failed.state).toEqual(before.state);
   expect(failed.turns).toEqual(before.turns);
   const accounting = async () => (await (await request.get(path + '/accounting')).json()).requests;
   const spent = await accounting();
   await page.reload();
   await expect(abandon).toBeEnabled();
+  // Retryable Extraction failures do not auto-restore the original input.
+  // A draft prepared while the rejected job is held must survive abandon.
+  await input.fill(action);
   await expect(send).toBeDisabled();
   await abandon.click();
   await expect(input).toHaveValue(action);
   await expect(send).toBeEnabled();
   expect(await accounting()).toEqual(spent);
+  expect((await (await request.get(`/api/jobs/${failed.job.id}`)).json()).user_text).toBe(action);
   await send.click();
   await expect.poll(async () => (await view()).job.status).toBe('saved');
   expect((await view()).turns).toHaveLength(before.turns.length + 1);
