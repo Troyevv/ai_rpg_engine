@@ -87,7 +87,7 @@ npx playwright test e2e/integrated-repair247.spec.ts --project=desktop --project
 ## Validation status
 
 - Original SQLite replay: 12/12 expected outcomes, zero paid calls.
-- Focused integrated suite covers 37 cases. Final test totals and exact CI commit
+- Focused integrated suite covers 39 cases. Final test totals and exact CI commit
   are recorded in [PR #248](https://github.com/Troyevv/ai_rpg_engine/pull/248).
 - Frontend unit: 151 passed. Production build passed (existing chunk-size warning).
 - Desktop/mobile E2E added: 10 scenarios. Local browser startup is blocked by

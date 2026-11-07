@@ -322,3 +322,18 @@ def test_missing_fact_link_does_not_harden_other_invalid_knowledge(fault):
     assert not result.history['knowledge_acquisitions']
     assert result.state['knowledge']==data['before']['knowledge']
     assert any(w['code'] in ('knowledge_path_invalid','knowledge_revision_conflict') for w in result.warnings)
+
+
+@pytest.mark.parametrize('reference', [[], {}])
+def test_malformed_action_reference_reaches_bounded_repair(tmp_path, reference):
+    data=archived('knowledge');good=corrected(data);bad=deepcopy(good)
+    bad['events'][0]['player_action_id']=reference
+    # An unrelated invalid optional ID must not break diagnostic bookkeeping.
+    bad['events'].append(dict(id=[],text='Invalid optional Event'))
+    repo=Repository(tmp_path/'malformed.sqlite');sid=seed(repo,data)['save']
+    before_count=len(history(repo,sid)['knowledge_acquisitions'])
+    job,calls=execute(repo,sid,data,[bad,good])
+    assert job['status']=='saved',job['error']
+    assert len(calls)==3
+    assert len(history(repo,sid)['knowledge_acquisitions'])==before_count+4
+    assert 'events[0].player_action_id' in job['repair_diagnostics_json']

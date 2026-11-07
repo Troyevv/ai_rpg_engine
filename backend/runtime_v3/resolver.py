@@ -479,8 +479,9 @@ class StateResolver:
         from backend.runtime_v3.player_actions import validate_completions
         # Rejected sources cannot prove completion or produce missing-coverage
         # cascades. Actions with independent sources remain checkable.
-        rejected_actions = {row.get('player_action_id') for row in raw.records['events']
-                            if isinstance(row, dict) and row.get('id') in rejected_events}
+        rejected_actions = {row.get('player_action_id') if isinstance(row.get('player_action_id'), str) else None
+                            for row in raw.records['events']
+                            if isinstance(row, dict) and isinstance(row.get('id'), str) and row['id'] in rejected_events}
         if None in rejected_actions:
             # A missing source→action reference cannot yet be assigned to one
             # action. Coverage is inconclusive until that source is repaired.
