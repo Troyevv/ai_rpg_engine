@@ -213,11 +213,11 @@ def step(browser, base, directory, manifest, case, i, limit, retry=None, operati
             new = [r for r in attempts if r['id'] not in retry[3]]
             if not new or any(r['stage'] not in ('extraction', 'extraction_repair') for r in new):
                 raise ValueError('Retry repeated a completed provider stage')
-        if kind in ('start','turn','choice','regenerate') and not any(
+        if kind in ('start','turn','choice','regenerate','background') and not any(
             r['status'] == 'complete' and r['provider'] == 'deepseek' and r['model'] == MODEL for r in attempts
         ):
             raise ValueError('No completed DeepSeek request for this move')
-        if kind in ('start','turn','choice','regenerate','variant') or operation and operation.get('reuse_narrative'):
+        if kind in ('start','turn','choice','regenerate','variant','background') or operation and operation.get('reuse_narrative'):
             compare_prose(page, base, sid, seed['world'], after['last_turn']['assistant_text'])
         write(folder / 'ui.json.gz', dict(text=page.locator('body').inner_text(), projection=projected))
         page.reload()
@@ -244,8 +244,11 @@ def step(browser, base, directory, manifest, case, i, limit, retry=None, operati
 def recheck_saved(browser, base, directory, manifest, case, index):
     folder = directory / case / f'{index:03d}'
     result = read(folder / 'result.json')
-    if result.get('error') != 'Wrong sequence or empty committed scene' or result['kind'] != 'start':
-        raise ValueError('Only the diagnosed zero-based start false positive can be rechecked')
+    start = result.get('error') == 'Wrong sequence or empty committed scene' and result['kind'] == 'start'
+    phone_read = (case == 'phone' and result['kind'] in ('phone', 'phone-group')
+                  and result.get('error') == 'Reload changed persistent state')
+    if not (start or phone_read):
+        raise ValueError('Only the diagnosed start/read timing false positive can be rechecked')
     seed = manifest['seeds'][case]
     with gzip.open(folder / 'before.json.gz', 'rt') as f:
         before = json.load(f)
@@ -253,6 +256,14 @@ def recheck_saved(browser, base, directory, manifest, case, index):
         after = json.load(f)
     if snapshot(directory / 'game.sqlite', seed['save']) != after:
         raise ValueError('Save changed since the held action')
+    if phone_read:
+        with gzip.open(folder / 'ui.json.gz', 'rt') as source:
+            previous_ui = json.load(source)['projection']
+        unread = [e for e in previous_ui['state']['phone']['events'] if e['unread']]
+        state = after['snapshot']['world_state']
+        actor = state['camera']['controlled_actor_id']
+        if not unread or any(actor not in state['remote_events'][e['id']]['read_by'] for e in unread):
+            raise ValueError('No captured unread-to-read transition explains this review')
     jobs = diagnostics(directory / 'game.sqlite', seed['save'], result['job_cursor'])
     if len(jobs) != 1 or jobs[0]['status'] != 'saved' or not any(
             r['status'] == 'complete' and r['model'] == MODEL for r in jobs[0]['requests']):
@@ -263,9 +274,10 @@ def recheck_saved(browser, base, directory, manifest, case, index):
         page = open_save(ctx, base, seed)
         page.on('pageerror', lambda e: errors.append(str(e)))
         projection = page.request.get(f'{base}/api/saves/{seed["save"]}').json()
-        oracle(before, after, projection, 'start')
+        oracle(before, after, projection, result['kind'])
         scenario_checks(case, before, after, projection)
-        compare_prose(page, base, seed['save'], seed['world'], after['last_turn']['assistant_text'])
+        if start:
+            compare_prose(page, base, seed['save'], seed['world'], after['last_turn']['assistant_text'])
         inspect_ui(page, case)
         page.reload()
         page.locator('.current-game-entry button').wait_for()
@@ -305,8 +317,10 @@ def recover_unsubmitted(directory, manifest, case, index):
     action_ledger(directory)
     with sqlite3.connect(directory / 'budget.sqlite') as db:
         db.execute('BEGIN IMMEDIATE')
+        absolute = (directory / 'budget.sqlite').is_symlink()
         db.execute('UPDATE qa_actions SET path=? WHERE path=?',
-                   (str(target.relative_to(directory)), str(folder.relative_to(directory))))
+                   (str(target.resolve()) if absolute else str(target.relative_to(directory)),
+                    str(folder.resolve()) if absolute else str(folder.relative_to(directory))))
         folder.rename(target)
 
 
@@ -342,7 +356,7 @@ def report(directory, manifest):
                         logged_jobs[job['id']] = job
     # Retry keeps the same job and old receipts; count each request exactly once.
     receipts = {r['id']: r for j in logged_jobs.values() for r in j['requests']}
-    if manifest.get('stage') == 'B':
+    if manifest.get('stage') in ('B', 'C'):
         receipts = {key: value for key, value in receipts.items() if key not in manifest['baseline_request_ids']}
     total = sum(j['status'] == 'saved' and any(r['status'] == 'complete' and r['provider'] == 'deepseek'
                 for r in j['requests']) for j in logged_jobs.values())
@@ -369,18 +383,25 @@ def run(args, directory, manifest):
     live = args.command in ('run', 'retry-extraction')
     validate_revision(directory, manifest, revision())
     stage_b = manifest.get('stage') == 'B'
+    stage_c = manifest.get('stage') == 'C'
+    paid_stage = stage_b or stage_c
     if stage_b:
         from .stage_b import validate
         validate(directory, manifest)
         if live and (args.stage != 'B' or not args.reviewed):
             raise ValueError('This authorization is only for reviewed Stage B, never Stage C')
+    if stage_c:
+        from .stage_c import validate, is_held
+        validate(directory, manifest)
+        if live and (args.stage != 'C' or not args.reviewed):
+            raise ValueError('Stage C requires its explicit reviewed authorization')
     if live:
         pf = directory / 'preflights' / (revision() + '.json') if manifest['sha'] != revision() else directory / 'preflight.json'
         if not pf.exists() or len(read(pf)) != 2*len(CASES) or not all(r.get('ok') for r in read(pf)):
             raise SystemExit('Run a successful browser preflight first.')
         if not os.environ.get('DEEPSEEK_API_KEY'):
             raise SystemExit('DEEPSEEK_API_KEY required in server environment.')
-        if args.stage != 'A' and not stage_b:
+        if args.stage != 'A' and not paid_stage:
             previous = 'A' if args.stage == 'B' else 'B'
             if not (directory / f'{previous}.complete').exists() or not args.reviewed:
                 raise SystemExit('Previous stage must complete and be reviewed first.')
@@ -408,13 +429,13 @@ def run(args, directory, manifest):
                                   sum(QUOTAS[args.stage]), retry=retry)
                     report(directory, manifest)
                     return result
-                plans = read(directory / 'plan.json') if stage_b else None
+                plans = read(directory / 'plan.json') if paid_stage else None
                 extension_manifest = manifest
                 if stage_b:
                     from .stage_b import extend_crisis
                     extension_manifest = extend_crisis(directory, manifest, plans)
                 caps = {case: len(plan) for case, plan in plans.items()} if plans else dict(zip(CASES, QUOTAS[args.stage]))
-                limit = manifest['action_limit'] if stage_b else sum(QUOTAS[args.stage])
+                limit = manifest['action_limit'] if paid_stage else sum(QUOTAS[args.stage])
                 held = set()
                 for i in range(max(caps.values())):
                     for case, cap in caps.items():
@@ -422,35 +443,52 @@ def run(args, directory, manifest):
                             continue
                         folder = directory / case / f'{i:03d}'
                         operation = plans[case][i] if plans else None
+                        if stage_c:
+                            if is_held(directory, case):
+                                held.add(case)
+                                continue
+                            if operation['phase'] != args.phase or args.step is not None and i > args.step:
+                                continue
+                            if args.phase == 'continue' and not (directory / 'retest-reviews' / f'{case}.json').is_file():
+                                held.add(case)
+                                continue
                         if stage_b:
                             from .stage_b import recovery_operation
                             operation, folder = recovery_operation(directory, case, i, operation)
+                        if paid_stage:
                             with closing(sqlite3.connect(directory / 'budget.sqlite')) as db:
                                 if db.execute('SELECT count(*) FROM reservations WHERE settled=0').fetchone()[0]:
                                     report(directory, manifest)
-                                    raise RuntimeError('Unknown paid outcome; Stage B stopped globally')
+                                    raise RuntimeError('Unknown paid outcome; paid stage stopped globally')
                         if folder.exists():
                             if not completed(folder):
                                 held.add(case)
                         elif action_ledger(directory) >= limit:
                             held.add(case)
-                        elif not step(browser, base, directory,
-                                      extension_manifest if case == 'crisis' and i >= 15 else manifest, case, i, limit,
-                                      operation=operation, attempt_folder=folder if stage_b else None):
-                            held.add(case)
+                        else:
+                            current_manifest = extension_manifest if stage_b and case == 'crisis' and i >= 15 else manifest
+                            if stage_c and operation.get('seed_ref'):
+                                current_manifest = dict(manifest, seeds=dict(manifest['seeds'], **{
+                                    case: manifest['extra_seeds'][operation['seed_ref']]}))
+                            if not step(browser, base, directory, current_manifest, case, i, limit,
+                                        operation=operation, attempt_folder=folder if paid_stage else None,
+                                        lineage_index=operation.get('lineage_index', 0) if operation else 0):
+                                held.add(case)
                         print(json.dumps(dict(case=case, step=i, held=case in held,
                                               cumulative_actions=action_ledger(directory))), flush=True)
                         report(directory, manifest)
-                if not held and not args.case:
-                    write(directory / f'{args.stage}.complete', {'finished':now()})
-                status_file = directory / f'{args.stage}.status.json'
+                complete = not held and not args.case and args.step is None
+                label = 'C-retest' if stage_c and args.phase == 'retest' else args.stage
+                if complete:
+                    write(directory / f'{label}.complete', {'finished':now()})
+                status_file = directory / f'{label}.status.json'
                 if status_file.exists():
                     archive = directory / 'reports' / (digest(status_file) + '.json')
                     archive.parent.mkdir(exist_ok=True)
                     if not archive.exists():
                         archive.write_bytes(status_file.read_bytes())
                 write(status_file, dict(finished=now(), sha=revision(),
-                    held=sorted(held), actions=action_ledger(directory), complete=not held and not args.case))
+                    held=sorted(held), actions=action_ledger(directory), complete=complete))
                 return not held
             finally:
                 browser.close()
@@ -458,7 +496,7 @@ def run(args, directory, manifest):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['prepare','prepare-stage-b','prepare-crisis-extension','review-stage-b','preflight','run','report','recover-unsubmitted',
+    parser.add_argument('command', choices=['prepare','prepare-stage-b','prepare-stage-c','review-stage-c','prepare-crisis-extension','review-stage-b','preflight','run','report','recover-unsubmitted',
                                           'adopt', 'recheck-saved', 'retry-extraction'])
     parser.add_argument('directory', type=Path)
     parser.add_argument('--stage', choices=list(QUOTAS), default='A')
@@ -467,6 +505,7 @@ def main():
     parser.add_argument('--reviewed', action='store_true')
     parser.add_argument('--approved-full', action='store_true')
     parser.add_argument('--parent', type=Path)
+    parser.add_argument('--phase', choices=('retest', 'continue'), default='retest')
     args = parser.parse_args()
     directory = args.directory.resolve()
     if directory.is_relative_to(ROOT):
@@ -475,10 +514,13 @@ def main():
     if args.command == 'prepare':
         prepare(directory)
         return
-    if args.command == 'prepare-stage-b':
+    if args.command in ('prepare-stage-b', 'prepare-stage-c'):
         if not args.reviewed or not args.parent:
             parser.error('Stage B requires the reviewed historical parent')
-        from .stage_b import prepare as prepare_b
+        if args.command == 'prepare-stage-c':
+            from .stage_c import prepare as prepare_b
+        else:
+            from .stage_b import prepare as prepare_b
         parent = args.parent.resolve()
         with ((parent / 'budget.sqlite').resolve().parent / 'run.lock').open('a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -487,7 +529,7 @@ def main():
             prepare_b(parent, directory, revision(), master)
         return
     manifest = read(directory / 'manifest.json')
-    lock_path = (directory / 'budget.sqlite').resolve().parent / 'run.lock' if manifest.get('stage') == 'B' else directory / 'run.lock'
+    lock_path = (directory / 'budget.sqlite').resolve().parent / 'run.lock' if manifest.get('stage') in ('B','C') else directory / 'run.lock'
     with lock_path.open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         if args.command == 'adopt':
@@ -496,6 +538,12 @@ def main():
             adopt(directory, manifest, revision())
         elif args.command == 'report':
             report(directory, manifest)
+        elif args.command == 'review-stage-c':
+            if manifest.get('stage') != 'C' or not args.reviewed:
+                parser.error('Choose reviewed Stage C retest')
+            validate_revision(directory, manifest, revision())
+            from .stage_c import review
+            review(directory, manifest, args.case)
         elif args.command == 'prepare-crisis-extension':
             if manifest.get('stage') != 'B' or not args.reviewed:
                 parser.error('Choose reviewed Stage B')
