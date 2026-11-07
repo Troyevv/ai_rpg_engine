@@ -218,6 +218,15 @@ def run_job(path, job_id, handle):
                         before['_interaction_input_channel'] = before['world_state']['meta']['interaction_focus']
                         before = stage_remote(before, generate, 'job-' + job_id, context_limit=context, history_events=world_history.get('events', []))
                     messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
+                from backend.runtime_v3.player_actions import NARRATIVE_CONTRACT as action_contract
+                if not any('PLAYER ACTION AGENCY:' in m.get('content', '') for m in messages):
+                    from copy import copy
+                    messages = copy(messages)
+                    # Old recorded contexts keep their original world/input. Only
+                    # the current agency safety contract is added, as for letters.
+                    messages.append({'role': 'system', 'content': action_contract})
+                    if estimate(messages) > context-config['max_tokens']-256:
+                        raise ValueError('Сохранённый контекст с проверкой agency не помещается в выбранную модель.')
                 last_write = 0.0
                 stage_started=time.perf_counter()
                 from backend.services.letter_sources import enabled, CONTRACT
@@ -306,7 +315,8 @@ def run_job(path, job_id, handle):
                     if skip_result: raw.final_scene['elapsed_minutes'] = skip_result['elapsed_minutes']
                     from backend.runtime_v3.remote_semantics import staged_sources
                     from backend.runtime_v3.call_continuity import sources as call_sources
-                    resolver=StateResolver(before['world_state'],narrative,job['user_text'],pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_plan,continuity_decision=continuity_plan,runtime_time_skip=bool(skip_result),require_elapsed=job['kind']=='turn' and not skip_result,turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),relationship_query=relationship_reader(storage, before.get('history_head'), candidates=remote_relationship_sources(before, staged_sources(before))),actor_names={c['id']:c['name'] for c in before['character_cards']},letter_sources=letter_sources,remote_semantic_sources=staged_sources(before),call_sources=call_sources(before['world_state'],world_history,narrative,job['user_text'],sequence+1))
+                    from backend.runtime_v3.player_actions import required as agency_required
+                    resolver=StateResolver(before['world_state'],narrative,job['user_text'],require_player_agency=agency_required(before['world_state'], job['user_text'], job['kind']),pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_plan,continuity_decision=continuity_plan,runtime_time_skip=bool(skip_result),require_elapsed=job['kind']=='turn' and not skip_result,turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),relationship_query=relationship_reader(storage, before.get('history_head'), candidates=remote_relationship_sources(before, staged_sources(before))),actor_names={c['id']:c['name'] for c in before['character_cards']},letter_sources=letter_sources,remote_semantic_sources=staged_sources(before),call_sources=call_sources(before['world_state'],world_history,narrative,job['user_text'],sequence+1))
                     resolved=resolver.resolve(raw)
                     if before['world_state']['meta'].get('interaction_focus')=='call':
                         rejected=[w for w in resolved.warnings if w.get('section')=='scheduled_events']

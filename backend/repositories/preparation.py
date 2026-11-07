@@ -68,7 +68,8 @@ class Repository(PresentationStorage, DraftStorage, Storage):
     @staticmethod
     def public_job(job):
         from backend.runtime_v3.surfaces import job_route
-        job = dict(job, presentation=job_route(job))
+        from backend.runtime_v3.player_actions import retry_allowed
+        job = dict(job, presentation=job_route(job), retry_allowed=retry_allowed(job))
         journal = json.loads(job.get('response_journal') or '{}')
         world=journal.get('responses',{}).get('world',{})
         assembly_error=world.get('assembly_error','')

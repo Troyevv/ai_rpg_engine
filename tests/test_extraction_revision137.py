@@ -14,6 +14,7 @@ TEXT = 'Виктория молча пододвинула записку к И�
 
 def payload():
     raw = arrival(); raw['movements'] = []
+    raw['player_agency'] = dict(status='preserved', actions=[])
     raw['events'] = [dict(id='note', text=TEXT, participants=['ilya', NPC],
                          witnesses=['ilya'], medium='observation')]
     return raw
@@ -21,9 +22,10 @@ def payload():
 
 def run(client, sid, responses, narrative=TEXT, kind='start', text=''):
     calls = []; responses = iter(responses)
+    from runtime_v3_fixture import reviewed
     def provider(**kw):
         calls.append(kw)
-        yield json.dumps(next(responses), ensure_ascii=False) if kw.get('response_format') else narrative
+        yield json.dumps(reviewed(next(responses)), ensure_ascii=False) if kw.get('response_format') else narrative
     with patch('engine.chat_stream', side_effect=provider):
         job = wait_job(client, submit(client, sid, kind, text))
     return job, calls

@@ -57,9 +57,10 @@ letter130_provider=None
 npc_review_start_payload=None
 story168_payload=None
 story168_gate=None
+agency232_attempts=0
 
-def stream(**kwargs):
-    global phone_mode, group_semantic_fail_once, npc_review_start_payload, story168_payload
+def scripted_stream(**kwargs):
+    global phone_mode, group_semantic_fail_once, npc_review_start_payload, story168_payload, agency232_attempts
     if idea190_provider is not None and idea190_provider.matches(kwargs):
         yield from idea190_provider.stream(kwargs);return
     if story168_payload is not None:
@@ -315,6 +316,17 @@ def stream(**kwargs):
     from rejected_meeting_fixture import CONSENT, QUESTION, meeting_reply
     turn_input = next((m['content'] for m in kwargs['messages'] if m['content'].startswith('Текущий ввод\n')), '')
     action = json.loads(turn_input.split('\n', 1)[1]).get('player_input') if turn_input else None
+    from test_player_action_targets import ACTION as AGENCY_ACTION, BAD_TEXT, ATTEMPT, payload as agency_payload, claim as agency_claim
+    if action == AGENCY_ACTION:
+        if not kwargs.get('response_format'):
+            agency232_attempts += 1
+            yield BAD_TEXT if agency232_attempts == 1 else ATTEMPT
+        else:
+            bad = agency232_attempts == 1
+            raw = agency_payload(current_phone, [agency_claim(['qa_vera'], actual=['qa_marina'] if bad else ['qa_vera'],
+                                  outcome='completed' if bad else 'attempted')], completed=bad)
+            yield json.dumps(raw, ensure_ascii=False)
+        return
     if action in (QUESTION, CONSENT):
         value = (json.dumps(meeting_reply(action, current_phone['camera']), ensure_ascii=False)
                  if kwargs.get('response_format') else meeting_reply(action))
@@ -455,6 +467,22 @@ def stream(**kwargs):
         if kwargs.get('cancel_event') and kwargs['cancel_event'].is_set():
             raise RuntimeError('Генерация остановлена.')
         yield value[i:i+chunk_size]
+
+
+def stream(**kwargs):
+    # Upgrade old scripted provider fixtures to the mandatory #232 review envelope.
+    # Preserve malformed/partial transport output and explicit negative reviews.
+    from runtime_v3_fixture import reviewed
+    for chunk in scripted_stream(**kwargs):
+        if kwargs.get('response_format') and runtime_v3_request(kwargs['messages']):
+            try:
+                value = json.loads(chunk)
+            except (ValueError, TypeError):
+                pass
+            else:
+                if isinstance(value, dict) and 'final_scene' in value:
+                    chunk = json.dumps(reviewed(value), ensure_ascii=False)
+        yield chunk
 
 
 engine.chat_stream = stream
@@ -849,6 +877,19 @@ if __name__ == '__main__':
         from devtools.narrative_test_world import load_fixture
         result=load_fixture(app.state.repository,'protagonist')
         return {'world':result['world'],'save':result['save']}
+
+    @app.post('/test/agency232-seed')
+    def agency232_seed():
+        global agency232_attempts
+        agency232_attempts = 0
+        from devtools.narrative_test_world import load_fixture
+        from test_narrative_test_world import ordinary_job
+        repo = app.state.repository
+        seed = load_fixture(repo)
+        sid = seed['save']
+        ordinary_job(repo, sid, 'start')
+        repo.transition_protagonist(sid, repo.get_save(sid)['revision'], 'agency232-nina', 'permanent', 'qa_nina')
+        return {'world': seed['world'], 'save': sid}
 
     @app.post('/test/knowledge-seed')
     def knowledge_seed():

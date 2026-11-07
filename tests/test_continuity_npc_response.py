@@ -1,5 +1,6 @@
 """Deterministic StateResolver replay of Stage B Social/005 (#207)."""
 import pytest
+from backend.services.world_delta_errors import StructuralDeltaError
 
 from backend.repositories.preparation import Repository
 from backend.runtime_v3.resolver import StateResolver
@@ -19,7 +20,8 @@ def state(tmp_path_factory):
 
 def photo_turn(state, narrative=ASSENT, *, action=ACTION, kind='proposal', status='resolved'):
     camera = state['camera']
-    return dict(
+    from runtime_v3_fixture import player_action
+    raw = dict(
         final_scene=dict(location_id=camera['location_id'], elapsed_minutes=1,
                          present_character_ids=camera['present_character_ids']),
         events=[dict(id=EVENT, text=narrative, evidence=narrative, medium='conversation',
@@ -29,6 +31,7 @@ def photo_turn(state, narrative=ASSENT, *, action=ACTION, kind='proposal', statu
                                basis_ids=['qa_map'], kind=kind, status=status,
                                decision_actor_id=VERA, evidence=ASSENT)],
     )
+    return player_action(raw, ACTOR_ID, [VERA], action, EVENT)
 
 
 def test_stage_b_proposal_keeps_event_without_inventing_npc_decision(state):
@@ -142,6 +145,11 @@ def test_unconfirmed_response_drops_only_annotation(state, event_change, reply_c
     if reply_change is not None:
         raw['scene_actions'] = [dict(npc_reply('accept', text), **reply_change)]
     raw['continuity_beats'][0].update(beat_change)
+    if 'author_id' in event_change:
+        with pytest.raises(StructuralDeltaError) as exc:
+            StateResolver(state, text, ACTION).resolve(raw)
+        assert exc.value.code == 'player_action_event_mismatch'
+        return
     out = StateResolver(state, text, ACTION).resolve(raw)
     event, = out.history['events']
     assert 'continuity' not in event and event['local_id'] == EVENT
@@ -192,6 +200,9 @@ def test_npc_owned_decision_requires_attributed_event(state, owner, phase, accep
     event = raw['events'][0]
     event.pop('player_assertion')
     event.pop('player_evidence')
+    event.pop('player_action_id')
+    event.pop('actor_id')
+    event.pop('target_ids')
     event['participants'].append('qa_timur')
     if owner:
         event.update(medium='message', author_id=owner)
@@ -228,7 +239,7 @@ def test_proposal_job_is_atomic_and_regenerates_from_the_original_branch(tmp_pat
 
     repo.retry_job(job)
     execute(repo, job, raw, ASSENT)
-    assert repo.get_job(job)['status'] == 'saved'
+    assert repo.get_job(job)['status'] == 'saved', repo.get_job(job)['error']
     assert repo.get_save(sid)['revision'] == revision + 1
     saved = repo.get_snapshot(sid)
     turn = repo.list_turns(sid)[-1]

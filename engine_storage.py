@@ -242,6 +242,9 @@ class EngineStorage:
             job = db.execute('SELECT * FROM game_jobs WHERE id=?', (job_id,)).fetchone()
             if job is None or not job['narrative_complete'] or job['status'] not in ('error', 'stopped'):
                 raise ValueError('Нет завершённого текста для повторной обработки.')
+            from backend.runtime_v3.player_actions import retry_allowed
+            if not retry_allowed(dict(job)):
+                raise ValueError('Повествование нарушает выбор игрока. Отмените ход и отправьте исходное действие заново.')
             self._assert_idle(db, job['save_id'])
             revision = db.execute('SELECT revision FROM saves WHERE id=?', (job['save_id'],)).fetchone()[0]
             if revision != job['revision']:

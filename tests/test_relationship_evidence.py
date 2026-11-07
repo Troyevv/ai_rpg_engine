@@ -16,6 +16,7 @@ def run(repo, sid, extra=None, *, player='Смотрю на карту.', narrat
     camera = repo.get_snapshot(sid)['world_state']['camera']
     raw = dict(final_scene=dict(location_id=camera['location_id'],
         present_character_ids=camera['present_character_ids'], elapsed_minutes=0), **(extra or {}))
+    raw.setdefault('player_agency', dict(status='preserved', actions=[]))
     job = repo.begin_job(sid, '' if kind == 'start' else player, kind, CONFIG)
     calls = []
     def stream(**kw):
@@ -57,6 +58,8 @@ def event(repo, sid, *, npc=False):
             phase='continue', modality='speech', response='none', evidence=text)]
     else:
         row.update(player_evidence=text, player_assertion='completed_interaction')
+        from runtime_v3_fixture import player_action
+        player_action(extra, A, [B], text, 'help')
     snap = run(repo, sid, extra, player='Слушаю.' if npc else text, narrative=text)
     from backend.runtime_v3.repository import read_history
     with repo.connect() as db:
@@ -229,7 +232,7 @@ def test_shared_resolver_background_contract_and_pending_receipts(tmp_path, mode
     state=deepcopy(before['world_state'])
     if mode=='background':
         state['camera'].update(mode='observer',controlled_actor_id=None,present_character_ids=[B])
-    raw=dict(final_scene=dict(location_id=state['camera']['location_id'],present_character_ids=state['camera']['present_character_ids']))
+    raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=state['camera']['location_id'],present_character_ids=state['camera']['present_character_ids']))
     query=relationship_reader(repo,before['history_head'])
     args=dict(mode=mode,protected_actor_id=A,relationship_query=query)
     first=StateResolver(state,LOVE,'',**args).resolve(dict(raw,relationship_changes=[proposal([e1],73)]))
@@ -261,7 +264,7 @@ def test_real_long_term_job_uses_same_evidence_reader_and_drops_narrative_only(t
     candidates=plan(before,request).candidates
     cause=next(c for c in candidates if c.source_id=='qa_course')
     text='Вера завершила обучение.'
-    raw=dict(final_scene=dict(location_id=state['camera']['location_id'],present_character_ids=[B],elapsed_minutes=0),
+    raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=state['camera']['location_id'],present_character_ids=[B],elapsed_minutes=0),
         events=[dict(id='completed',text=text,evidence=text,participants=[B],witnesses=[B],medium='observation',advance_candidate_ids=[cause.id])],
         relationship_changes=[proposal([eid],72),dict(source_id=B,target_id=A,dimensions={'trust':100},context='Безграничное доверие.',evidence=text)])
     calls=[]
@@ -284,7 +287,7 @@ def test_extraction_repair_applies_evidence_once_and_override_regenerate(tmp_pat
     eid=event(repo,sid)
     before=repo.get_snapshot(sid)
     camera=before['world_state']['camera']
-    good=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),
+    good=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0),
               relationship_changes=[proposal([eid])])
     bad=deepcopy(good);bad['final_scene']['location_id']='missing'
     count=0
@@ -326,7 +329,7 @@ def test_real_background_job_cannot_reuse_main_turn_evidence(tmp_path):
             yield 'Тихо.';return
         current=json.loads(next(m['content'].split('\n',1)[1] for m in kw['messages'] if m['content'].startswith('Текущее состояние / GM-only')))
         camera=current['camera'];hidden=camera['controlled_actor_id'] is None
-        raw=dict(final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0 if hidden else 1),
+        raw=dict(player_agency=dict(status='preserved', actions=[]), final_scene=dict(location_id=camera['location_id'],present_character_ids=camera['present_character_ids'],elapsed_minutes=0 if hidden else 1),
             relationship_changes=[proposal([eid],75 if hidden else 72)])
         yield json.dumps(raw)
     job=repo.begin_job(sid,'Рассматриваю карту.','turn',CONFIG)

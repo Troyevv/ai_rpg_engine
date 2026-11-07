@@ -262,6 +262,8 @@ class NarrativeContextBuilder:
         prompt_name = 'background_prompt.md' if kind == 'background' else 'game_system_prompt.md'
         rules = (prompts or {}).get(prompt_name, {}).get('content') or (PROMPTS/prompt_name).read_text(encoding='utf-8')
         rules += '\n' + NARRATIVE_CONTRACT
+        from backend.runtime_v3.player_actions import NARRATIVE_CONTRACT as action_contract
+        rules += action_contract
         if current.get('communication'): rules += REMOTE_NARRATIVE_CONTRACT
         cards, index, behavioral = [], [], []
         classifier = CharacterContextClassifier()
@@ -335,6 +337,8 @@ class ExtractionContextBuilder:
         saved = (prompts or {}).get('state_update_prompt.md', {}).get('content')
         # Preserve user overrides, but do not send the bundled generic contract twice.
         rules = (saved + '\n' if saved and saved.strip() != default.strip() else '') + EXTRACTION_CONTRACT
+        from backend.runtime_v3.player_actions import EXTRACTION_CONTRACT as action_contract, required as agency_required
+        if agency_required(snapshot['world_state'], user_text, kind): rules += action_contract
         from backend.services.letter_sources import enabled as historical_enabled
         historical = historical_enabled(snapshot['world_state'])
         if current.get('communication'): rules += REMOTE_EXTRACTION_CONTRACT
@@ -368,7 +372,7 @@ class ExtractionContextBuilder:
                        block('Choice context / controlled actor', choice_context(snapshot, scope, current, views, kind)),
                        block('Entity IDs', [dict(id=c['id'], name=c['name'], aliases=c.get('aliases', []))
                             for c in snapshot['character_cards'] if c['id'] in scope.relevant_actor_ids]),
-                       block('JSON Schema', prompt_schema(historical=historical, elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), groups=any(c['group'] for c in snapshot['world_state']['conversations'].values()), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
+                       block('JSON Schema', prompt_schema(player_agency_required=agency_required(snapshot['world_state'], user_text, kind), historical=historical, elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), groups=any(c['group'] for c in snapshot['world_state']['conversations'].values()), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
 
 
 def choice_context(snapshot, scope, current, views, kind):
@@ -672,9 +676,6 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
     while estimate(messages) > target and len(current.get('relationship_evidence', [])) > 1:
         current['relationship_evidence'].pop(0)
         refresh_current()
-    if estimate(messages) > hard_context_limit and current.get('relationship_evidence'):
-        current.pop('relationship_evidence')
-        refresh_current()
     if estimate(messages) > target and 'social_history' in current:
         current.pop('social_history')
         refresh_current()
@@ -843,6 +844,11 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                     messages[0]['content'] = messages[0]['content'].replace(
                         'Постоянные правила\n', 'Постоянные правила' + instruction + '\n', 1)
                 break
+    # Give lossless/default/schema compaction a chance before discarding the last
+    # canonical relationship source to make room for the mandatory agency review.
+    if estimate(messages) > hard_context_limit and current.get('relationship_evidence'):
+        current.pop('relationship_evidence')
+        refresh_current()
     if estimate(messages) > hard_context_limit:
         raise ValueError(f'Контекст v3 не помещается в выбранную модель ({estimate(messages)} / {hard_context_limit}). Увеличь контекст или уменьши лимит ответа. Критические данные сцены и последние narrative сохранены.')
     classifier = CharacterContextClassifier()

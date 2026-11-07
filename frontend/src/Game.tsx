@@ -205,13 +205,17 @@ export function Game({
             revision: save.revision, attempt_epoch: job.attempt_epoch ?? 0,
           });
           setSubmitted(discarded);
+          if (physical && job.retry_allowed === false && !draftRef.current && job.user_text) {
+            setDraft(job.user_text);
+            sessionStorage.setItem(draftKey, job.user_text);
+          }
           if (physical) input.current?.focus({preventScroll:true});
         } finally {
           await refresh();
           setSubmitted(null);
         }
       })}>{physical ? 'Отменить неудачный ход' : t('abandonTurn')}</Button>
-      {retryable && <Button variant="outline" disabled={busy || running} onClick={() => void run(async () => {
+      {retryable && job.retry_allowed !== false && <Button variant="outline" disabled={busy || running} onClick={() => void run(async () => {
         setSubmitted(await api<Job>(`/jobs/${job.id}/retry`, {config:prefs.game, api_key:apiKey}));
       })}>{physical ? 'Повторить обработку состояния' : t('retry')}</Button>}
     </div>

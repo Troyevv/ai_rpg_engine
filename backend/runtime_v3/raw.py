@@ -22,6 +22,7 @@ class RawTurnResult:
     records: dict
     choices: list
     warnings: list
+    player_agency: dict | None = None
 
     @classmethod
     def parse(cls, payload):
@@ -40,7 +41,7 @@ class RawTurnResult:
             warnings.append(dict(section='final_scene', path='final_scene.'+field,
                                  code='raw_unknown_field', action='ignore_field'))
         for key, value in payload.items():
-            if key not in (*SECTIONS, 'final_scene', 'choices', 'metadata'):
+            if key not in (*SECTIONS, 'final_scene', 'choices', 'metadata', 'player_agency'):
                 if value not in (None, '', [], {}):
                     fatal('неизвестное непустое поле Extraction', 'raw_unknown_field', repairable=True,
                           section=key, path=key, severity='recoverable', action='extraction_repair')
@@ -80,7 +81,7 @@ class RawTurnResult:
         if not isinstance(choices, list):
             choices = []
         choices = [c for c in choices if isinstance(c, dict) and isinstance(c.get('action'),str) and isinstance(c.get('speech',''),str)][:6]
-        return cls(deepcopy(payload['final_scene']), records, choices, warnings)
+        return cls(deepcopy(payload['final_scene']), records, choices, warnings, deepcopy(payload.get('player_agency')))
 
 
 def repair_revision_warnings(previous, current):
@@ -114,7 +115,7 @@ def extraction_schema():
         'promotions':record(dict(id=string,name=string,fields={'type':'object','additionalProperties':string}), ('id','name','fields','evidence')),
         'facts':record(dict(id=string,text=string,claim=obj(dict(subject_id=string,predicate=string,value=string,scope=string),('subject_id','predicate','value')),visibility={'enum':['public','secret']},story_secret={'type':'boolean'},secret_subject_ids=strings,secret_keeper_ids=strings,secret_biography_ids=strings,secret_existence={'enum':['hidden','discoverable']},character_ids=strings), ('id','text','evidence')),
         'events':record(dict(id=string,text=string,advance_candidate_ids=dict(type='array',items=string,maxItems=3,description='Only for Long-term Advance: selected cause IDs whose outcome this event establishes.'),participants=strings,witnesses=strings,fact_ids=strings,
-            author_id=string, player_evidence=string, player_assertion={'enum':['completed_interaction']},
+            author_id=string, actor_id=string, target_ids=strings, player_action_id=string, player_evidence=string, player_assertion={'enum':['completed_interaction']},
             medium={'enum':['observation','conversation','message','testimony','discovery','action']},
             location_id=string,minute={'type':'integer','minimum':0},order={'type':'integer','minimum':0}), ('id','text','evidence')),
         'knowledge_gained':record(dict(actor_id=string,fact_id=string,status={'enum':['known','suspected','unknown','outdated','refuted','superseded']},
@@ -244,7 +245,10 @@ def extraction_schema():
     for field in ('emotion','goals','intentions','obligations'):
         definitions['character_changes']['properties'][field]=dict(definitions['character_changes']['properties'][field],description=PLAYER_SOURCE_DESCRIPTION)
     definitions['relationship_changes']['properties']['dimensions']['description']='Закрытый набор: '+', '.join(RELATION_DIMENSIONS)+'. Не добавляй ключи; иной смысл — в context.'
-    schema = obj(dict(metadata={'type':'object','additionalProperties':True},final_scene=obj(dict(location_id={'type':['string','null']},present_character_ids=strings,observed_character_ids=strings,
+    from backend.runtime_v3.player_actions import PlayerAgencyReview
+    agency_schema = PlayerAgencyReview.model_json_schema()
+    agency_schema['properties']['actions']['items'] = agency_schema.pop('$defs')['PlayerAction']
+    schema = obj(dict(player_agency=agency_schema, metadata={'type':'object','additionalProperties':True},final_scene=obj(dict(location_id={'type':['string','null']},present_character_ids=strings,observed_character_ids=strings,
         remote_interactions={'type':'array','items':record(dict(actor_id=string,
             channel={'enum':['message','phone','video','radio','other']}), ('actor_id','channel','evidence')),
             'description':'Только продолжающееся в конце хода активное удалённое взаимодействие. Старое сообщение, план позвонить и упоминание не подходят. Повторно подтверди каждый ход; отсутствие/[] завершает взаимодействие.'},
@@ -278,7 +282,7 @@ def input_fields():
     return fields
 
 
-def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=None, groups=True, voice=False, elapsed_required=False, historical=True):
+def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=None, groups=True, voice=False, elapsed_required=False, historical=True, player_agency_required=False):
     """Validation-equivalent schema; prose lives once in the extraction contract."""
     from collections import Counter
     def structural(node):
@@ -306,6 +310,12 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
         return node
     # Keep properties named "description"; remove only JSON Schema annotations.
     schema = structural(extraction_schema())
+    if player_agency_required:
+        schema['required'].append('player_agency')
+    else:
+        schema['properties'].pop('player_agency')
+        for field in ('actor_id', 'target_ids', 'player_action_id'):
+            schema['properties']['events']['items']['properties'].pop(field)
     if elapsed_required:
         schema['properties']['final_scene']['required'].append('elapsed_minutes')
     if not relationship_evidence:

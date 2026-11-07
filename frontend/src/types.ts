@@ -174,6 +174,7 @@ export interface Job {
   narrative: string;
   error: string;
   narrative_complete?: boolean;
+  retry_allowed?: boolean;
   kind: string;
   revision: number;
   live?: boolean;
