@@ -45,12 +45,16 @@ test('ongoing labor repairs once, persists after reload and rejects repeated clo
   await expect(abandon).toBeVisible();
   const failed = await view();
   expect(failed.job.status).toBe('error');
+  expect(failed.job.user_text).toBe(action);
   expect(failed.job.repairs).toHaveLength(2);
   expect(failed.state).toEqual(before.state);
   expect(failed.turns).toEqual(before.turns);
   await page.reload();
   await expect(abandon).toBeVisible();
   const accounting = await (await request.get(path+'/accounting')).json();
+  // Retryable Extraction does not restore input automatically. Preserve a draft
+  // authored while the failed job is held, as in the existing recovery flow.
+  await input.fill(action);
   await abandon.click();
   await expect(abandon).toHaveCount(0);
   await expect(input).toHaveValue(action);
