@@ -30,7 +30,7 @@ Physical_state is current bodily state; clear it with physical_state="" only on 
 resolution (ate/warmed/rested). Preserve unresolved symptoms; sleep alone is not a cure.
 Directed feelings: prior relationship_evidence only, never Narrative; else only explicit
 current-actor override (player_assertion=explicit_directed_feelings, exact player_evidence).
-Event cast/witnesses: shared place or confirmed channel. Link off-scene situation to source_event_id.
+Event cast/witnesses: together at start/end or shared movement/Event.order (distinct for arrival, meeting, exit); else confirmed channel. Off-scene situation: source_event_id.
 completed_interaction: completed player input only. No mirrored feelings, invented consent/actions or negated overrides.
 Remote_interactions: only ongoing END-of-turn message/phone/radio exchanges with actor_id,
 channel, evidence. Reconfirm each turn; rereading old messages is not active contact.

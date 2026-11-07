@@ -130,6 +130,8 @@ def test_intention_completed_arrival_and_subsequent_departure(crisis):
     arrived = StateResolver(state, TEXT, ACTION).resolve(raw)
     assert arrived.state['characters'][VERA]['location_id'] == lid
     assert arrived.state['characters'][VERA]['situation'] == TEXT
+    raw['events'][0]['order'] = 1
+    assert StateResolver(state, TEXT, ACTION).resolve(raw).history['events'][0]['order'] == 1
     del raw['movements']
     assert StateResolver(arrived.state, TEXT, ACTION).resolve(raw).history['events'][0]['location_id'] == lid
     raw['final_scene']['present_character_ids'].remove(VERA)
@@ -151,7 +153,7 @@ def test_call_requires_answered_channel():
     state = answered['world_state']
     with pytest.raises(StructuralDeltaError):
         StateResolver(state, '', '').resolve(raw)
-    raw['events'][0]['interaction_channel'] = 'call'
+    raw['events'][0].update(interaction_channel='call', order=2)
     row, = StateResolver(state, '', '').resolve(raw).history['events']
     assert row['interaction_channel'] == 'call' and row['witnesses'] == ['a', 'b']
     disabled = deepcopy(state)
@@ -218,3 +220,109 @@ def test_linked_message_roles_come_from_the_accepted_send():
         with pytest.raises(StructuralDeltaError) as exc:
             resolve(snap, remote, events=[dict(row, **changed)])
         assert exc.value.diagnostic('extraction')['path'] == 'events[0].' + field
+
+
+@pytest.mark.parametrize('repair_order', [False, True])
+def test_crossing_routes_cannot_publish_a_conversation_or_knowledge(crisis, repair_order):
+    client, repo, sid = crisis
+    before = repo.get_snapshot(sid)
+    original = history(repo, before)
+    state = before['world_state']
+    library = state['camera']['location_id']
+    home = state['characters'][VERA]['location_id']
+    action = 'Я иду домой к Вере.'
+    fact = 'qa_news_at_meeting'
+    prose = 'Нина приходит домой к Вере. Вера говорит о письме и уходит в библиотеку.'
+    raw = dict(
+        final_scene=dict(location_id=home, present_character_ids=[NINA], elapsed_minutes=2),
+        movements=[
+            dict(actor_id=NINA, from_location_id=library, to_location_id=home,
+                 player_assertion='explicit_choice', player_evidence=action),
+            dict(actor_id=VERA, from_location_id=home, to_location_id=library)],
+        facts=[dict(id=fact, text='В письме есть новости.', visibility='secret')],
+        events=[dict(id='exchange', text='Они говорят о письме.', medium='conversation',
+                     location_id=home, participants=[NINA, VERA], witnesses=[NINA, VERA], fact_ids=[fact])],
+        knowledge_gained=[dict(actor_id=NINA, fact_id=fact, source_event_id='exchange')])
+
+    # Same actors, locations, fact and scene; only the supported sequence differs.
+    ordered = deepcopy(raw)
+    ordered['movements'][0]['order'] = 1
+    ordered['events'][0]['order'] = 2
+    ordered['movements'][1]['order'] = 3
+    job, _ = run(client, sid, [raw, ordered if repair_order else raw], prose, 'turn', action)
+    diagnostics = json.loads(repo.get_job(job['id'])['repair_diagnostics_json'])
+    assert [d['path'] for d in diagnostics] == ['events[0].participants[1]'] * (1 if repair_order else 2)
+    fresh = Repository(repo.path)
+    assert history(fresh, before) == original
+    saved = fresh.get_snapshot(sid)
+    if not repair_order:
+        assert job['status'] == 'error' and saved == before
+        return
+    assert job['status'] == 'saved', job.get('error')
+    row, = [e for e in history(fresh, saved)['events'] if e.get('local_id') == 'exchange']
+    assert row['order'] == 2 and row['location_id'] == home
+    assert saved['world_state']['knowledge'][NINA + ':' + fact]['source_event_id'] == row['id']
+    assert saved['world_state']['characters'][VERA]['location_id'] == library
+    fresh.rollback_last(sid)
+    assert Repository(repo.path).get_snapshot(sid) == before
+    assert history(fresh, before) == original
+
+
+@pytest.mark.parametrize('meeting_order,accepted', [(0, False), (1, False), (2, True), (3, False),
+                                                     (4, False), (5, False), (6, True), (None, True)])
+def test_multiple_moves_use_the_same_phase_for_every_role(crisis, meeting_order, accepted):
+    _, repo, sid = crisis
+    s = repo.get_snapshot(sid)['world_state']
+    library = s['camera']['location_id']
+    home = s['characters'][VERA]['location_id']
+    # Vera visits, leaves, then visits again. Input array deliberately reversed.
+    raw = physical(s)
+    raw['final_scene']['present_character_ids'].append(VERA)
+    raw['movements'] = [dict(actor_id=VERA, from_location_id=a, to_location_id=b, order=n)
+                        for n, a, b in [(5, home, library), (3, library, home), (1, home, library)]]
+    if meeting_order is not None:
+        raw['events'][0]['order'] = meeting_order
+    if accepted:
+        assert StateResolver(s, TEXT, ACTION).resolve(raw).history['events'][0]['location_id'] == library
+    else:
+        with pytest.raises(StructuralDeltaError) as exc:
+            StateResolver(s, TEXT, ACTION).resolve(raw)
+        assert exc.value.code == 'event_presence_invalid'
+
+
+@pytest.mark.parametrize('arrival,departure,accepted', [(3, 1, False), (2, 2, False), (1, 3, True),
+                                                       (None, None, False), (None, 3, False)])
+def test_an_unordered_event_still_needs_one_shared_scene(crisis, arrival, departure, accepted):
+    _, repo, sid = crisis
+    s = repo.get_snapshot(sid)['world_state']
+    raw = physical(s)
+    library = s['camera']['location_id']
+    home = s['characters'][VERA]['location_id']
+    # Asya only witnesses. She leaves for home while Vera comes from there.
+    raw['final_scene']['present_character_ids'].remove('qa_asya')
+    raw['final_scene']['present_character_ids'].append(VERA)
+    raw['movements'] = [dict(actor_id=cid, to_location_id=loc, **({'order': n} if n is not None else {}))
+                        for cid, loc, n in [(VERA, library, arrival), ('qa_asya', home, departure)]]
+    if accepted:
+        assert StateResolver(s, TEXT, ACTION).resolve(raw).history['events'][0]['witnesses'] == raw['events'][0]['witnesses']
+    else:
+        with pytest.raises(StructuralDeltaError) as exc:
+            StateResolver(s, TEXT, ACTION).resolve(raw)
+        assert exc.value.diagnostic('extraction')['path'] == 'events[0].witnesses[2]'
+
+
+def test_unknown_destination_does_not_keep_a_witness_for_a_later_arrival(crisis):
+    _, repo, sid = crisis
+    s = repo.get_snapshot(sid)['world_state']
+    raw = physical(s)
+    raw['final_scene']['present_character_ids'].remove('qa_asya')
+    raw['final_scene']['present_character_ids'].append(VERA)
+    raw['movements'] = [dict(actor_id=VERA, to_location_id=s['camera']['location_id'], order=1)]
+    raw['events'][0]['order'] = 2
+    with pytest.raises(StructuralDeltaError) as exc:
+        StateResolver(s, TEXT, ACTION).resolve(raw)
+    assert exc.value.diagnostic('extraction')['path'] == 'events[0].witnesses[2]'
+    raw['events'][0]['witnesses'].remove('qa_asya')
+    result = StateResolver(s, TEXT, ACTION).resolve(raw)
+    assert result.state['characters']['qa_asya']['location_id'] is None
+    assert all(m['actor_id'] != 'qa_asya' for m in result.history['movements'])
