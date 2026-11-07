@@ -203,6 +203,9 @@ def test_npc_owned_decision_requires_attributed_event(state, owner, phase, accep
     event.pop('player_action_id')
     event.pop('actor_id')
     event.pop('target_ids')
+    # This fixture now describes only the NPC decision, not a completed player
+    # action with its source Event deliberately removed (#237).
+    raw['player_agency']['actions'] = []
     event['participants'].append('qa_timur')
     if owner:
         event.update(medium='message', author_id=owner)
