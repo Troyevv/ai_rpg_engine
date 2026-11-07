@@ -31,7 +31,7 @@ Stage C. Issue #99 остаётся открытой; merge выполняет �
   usage $0.098414214; [исходный отчёт](live99-stage-c-20261107.md).
 - #230: live HEAD `9f83354de54488111ea9840475046d32be581234`, отчётный HEAD
   `454d4948cafc7a97f801ea3d1fd07c9672ed2a38`, baseline `25c834b094a9047471406d7166111c8b6b755f75`,
-  28 действий / 42 calls, usage $0.062982108; [исходный отчёт](live99-stage-c-retest-20261107.md)
+  28 действий / 42 calls, usage $0.062982108; [исходный отчёт](https://github.com/Troyevv/ai_rpg_engine/blob/454d4948cafc7a97f801ea3d1fd07c9672ed2a38/docs/manual_qa/narrative_v4/live99-stage-c-retest-20261107.md)
   добавляется только следующим PR #230.
 
 Исторические commits сохраняются через merge, без rebase/force-push.
