@@ -1,0 +1,54 @@
+{
+  "source": "Synthetic equivalent of public Issue #223; no private QA archive data.",
+  "narrative": "Кирилл остаётся за столом с фотографиями. Тимур убирает фотоаппарат в сумку. «Сегодня буду проявлять плёнку, вечером занесу фотографии Олегу», — говорит он. Тимур прощается и уходит. Дверь закрывается. Вера остаётся рядом с Кириллом.",
+  "player_input": "Я остаюсь на месте, занимаюсь своими фотографиями и даю другим возможность связаться со мной.",
+  "payload": {
+    "player_agency": {
+      "status": "preserved",
+      "actions": [
+        {
+          "id": "stay-photos",
+          "player_evidence": "Я остаюсь на месте, занимаюсь своими фотографиями и даю другим возможность связаться со мной.",
+          "target_ids": [],
+          "narrative_target_ids": [],
+          "outcome": "completed",
+          "meaning": "preserved"
+        }
+      ]
+    },
+    "final_scene": {
+      "location_id": "location_9ff4b311a7fb45cb4b93",
+      "present_character_ids": [
+        "qa_kirill",
+        "qa_vera"
+      ],
+      "elapsed_minutes": 3
+    },
+    "events": [
+      {
+        "id": "departure",
+        "text": "Тимур попрощался и ушёл.",
+        "participants": [
+          "qa_timur"
+        ],
+        "witnesses": [
+          "qa_kirill",
+          "qa_vera"
+        ],
+        "medium": "observation",
+        "location_id": "location_9ff4b311a7fb45cb4b93"
+      }
+    ],
+    "movements": [
+      {
+        "actor_id": "qa_timur",
+        "from_location_id": "location_9ff4b311a7fb45cb4b93",
+        "to_location_id": "location_567f2d7db666cb5e4abf",
+        "assertion": "completed_arrival",
+        "evidence": "Тимур ушёл.",
+        "actor_evidence": "Тимур прощается и уходит.",
+        "destination_evidence": "Вечером занесу фотографии Олегу."
+      }
+    ]
+  }
+}

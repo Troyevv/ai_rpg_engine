@@ -251,6 +251,11 @@ def extraction_schema():
         definitions[section]['properties']['consequence_outcome'] = {'enum':['loss','constructive']}
     for section in ('life_changes','condition_changes','social_relation_changes','residence_changes','role_changes'):
         definitions[section]['required'].remove('assertion')
+    movement = definitions['movements']
+    movement['description'] = ('Only arrivals actually completed in completed_narrative; future_intent and departure alone are NOT movements. '
+        'Keep departure Event and END absence without inventing an endpoint. Preserve confirmed route legs/order.')
+    movement['properties']['to_location_id'] = dict(string, description='ID from canonical locations or validated locations[] in THIS response, reached in this Narrative; never null or merely planned.')
+    movement['properties']['destination_evidence'] = dict(string, description='Evidence of completed arrival, not a destination named in a plan/promise. Exit evidence alone is insufficient.')
     from backend.services.world import CARD_FIELDS
     definitions['promotions']['properties']['fields']=obj({key:string for key in CARD_FIELDS},CARD_FIELDS)
     from backend.runtime_v3.npc_identity import initial_schema
@@ -439,7 +444,7 @@ def repair_feedback(diagnostic, payload, before):
         previous_camera=before['camera'], known_locations={lid: {key: location[key] for key in
             ('id', 'name', 'aliases', 'parent_id', 'kind') if key in location}
             for lid, location in before['locations'].items()},
-        contract='narrative-authority-v1: original_extraction — предварительный, отклонённый результат, не канон. Reinterpret the same full narrative: fix ALL diagnosed fields together and recheck every Event/action ID, actor, exact per-action player_evidence, target subset and aggregate coverage (including other actions). One Event references one action; split independent acts into separate Events, never invent a multi-ID field. Recheck dependent constraints after each correction; this is the only automatic repair. Fix structural errors and misclassifications; preserve actual outcomes and dependencies. Never delete outcomes merely to pass validation or rewrite accepted before/History. final_scene present owns physical membership; observed is outside. Do not invent movements, consent or endpoints.'), ensure_ascii=False, separators=(',', ':'))
+        contract='narrative-authority-v1: original_extraction — предварительный, отклонённый результат, не канон. Reinterpret the same full narrative: fix ALL diagnosed fields together and recheck every Event/action ID, actor, exact per-action player_evidence, target subset and aggregate coverage (including other actions). One Event references one action; split independent acts into separate Events, never invent a multi-ID field. Recheck dependent constraints after each correction; this is the only automatic repair. Fix structural errors and misclassifications; preserve actual outcomes and dependencies. Never delete outcomes merely to pass validation or rewrite accepted before/History. final_scene present owns physical membership; observed is outside. Do not invent movements, consent or endpoints. Recheck EVERY movement: future_intent/departure is not completed_arrival, even with an existing or newly registered endpoint. Remove only unsupported arrival, preserve departure Event and END absence; retain actual arrivals and ordered routes. New Narrative-established locations use locations[]; creation alone is not arrival. Never replace null with a plausible destination. Narrative contradicting canon requires existing refusal/reauthor, not a JSON rewrite of its meaning.'), ensure_ascii=False, separators=(',', ':'))
 
 
 def prune_schema_definitions(schema):

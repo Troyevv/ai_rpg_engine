@@ -1,0 +1,103 @@
+{
+  "source": "Synthetic equivalent of public Issue #223; no private QA archive data.",
+  "narrative": "Кирилл занимается фотографиями. Тимур складывает вещи, прощается и выходит из дома. Вера остаётся рядом с Кириллом.",
+  "player_input": "Я остаюсь на месте, занимаюсь своими фотографиями и даю другим возможность связаться со мной.",
+  "payload": {
+    "player_agency": {
+      "status": "preserved",
+      "actions": [
+        {
+          "id": "stay-photos",
+          "player_evidence": "Я остаюсь на месте, занимаюсь своими фотографиями и даю другим возможность связаться со мной.",
+          "target_ids": [],
+          "narrative_target_ids": [],
+          "outcome": "completed",
+          "meaning": "preserved"
+        }
+      ]
+    },
+    "final_scene": {
+      "location_id": "location_9ff4b311a7fb45cb4b93",
+      "present_character_ids": [
+        "qa_kirill",
+        "qa_vera"
+      ],
+      "elapsed_minutes": 3
+    },
+    "events": [
+      {
+        "id": "departure",
+        "text": "Тимур попрощался и ушёл.",
+        "participants": [
+          "qa_timur"
+        ],
+        "witnesses": [
+          "qa_kirill",
+          "qa_vera"
+        ],
+        "medium": "observation",
+        "location_id": "location_9ff4b311a7fb45cb4b93"
+      }
+    ],
+    "movements": [
+      {
+        "actor_id": "qa_timur",
+        "from_location_id": "location_9ff4b311a7fb45cb4b93",
+        "to_location_id": null,
+        "assertion": "completed_arrival",
+        "evidence": "Тимур ушёл.",
+        "actor_evidence": "Тимур прощается и уходит.",
+        "destination_evidence": ""
+      }
+    ]
+  },
+  "repair": {
+    "player_agency": {
+      "status": "preserved",
+      "actions": [
+        {
+          "id": "stay-photos",
+          "player_evidence": "Я остаюсь на месте, занимаюсь своими фотографиями и даю другим возможность связаться со мной.",
+          "target_ids": [],
+          "narrative_target_ids": [],
+          "outcome": "completed",
+          "meaning": "preserved"
+        }
+      ]
+    },
+    "final_scene": {
+      "location_id": "location_9ff4b311a7fb45cb4b93",
+      "present_character_ids": [
+        "qa_kirill",
+        "qa_vera"
+      ],
+      "elapsed_minutes": 3
+    },
+    "events": [
+      {
+        "id": "departure",
+        "text": "Тимур попрощался и ушёл.",
+        "participants": [
+          "qa_timur"
+        ],
+        "witnesses": [
+          "qa_kirill",
+          "qa_vera"
+        ],
+        "medium": "observation",
+        "location_id": "location_9ff4b311a7fb45cb4b93"
+      }
+    ],
+    "movements": [
+      {
+        "actor_id": "qa_timur",
+        "from_location_id": "location_9ff4b311a7fb45cb4b93",
+        "to_location_id": null,
+        "assertion": "completed_arrival",
+        "evidence": "Тимур ушёл.",
+        "actor_evidence": "Тимур прощается и уходит.",
+        "destination_evidence": ""
+      }
+    ]
+  }
+}
