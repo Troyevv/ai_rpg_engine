@@ -144,6 +144,14 @@ def step(browser, base, directory, manifest, case, i, limit, retry=None, operati
         cursor = db.execute('SELECT coalesce(max(rowid),0) FROM game_jobs').fetchone()[0]
     if operation and 'job_cursor' in operation:
         cursor = operation['job_cursor']
+    abandon_before = None
+    if kind == 'abandon':
+        with closing(sqlite3.connect(path)) as db:
+            abandon_before = dict(requests=db.execute('SELECT id,status,response_text FROM llm_requests ORDER BY id').fetchall(),
+                job=db.execute('SELECT id,status,attempt_epoch,narrative,error FROM game_jobs WHERE id=?',
+                               (operation['job_id'],)).fetchone())
+        with closing(sqlite3.connect(directory / 'budget.sqlite')) as db:
+            abandon_before['reservations'] = db.execute('SELECT * FROM reservations ORDER BY id').fetchall()
     meta = dict(sha=revision(), source_sha=manifest['sha'], case=case, step=i, save=sid, kind=kind, action=action,
                 started=now(), job_cursor=cursor, mobile=(list(CASES).index(case)+i)%2==1)
     meta['context_length'] = FAMILY_CONTEXT if case == 'family' else 32768
@@ -159,6 +167,8 @@ def step(browser, base, directory, manifest, case, i, limit, retry=None, operati
     folder.mkdir(parents=True)
     write(folder / 'intent.json', meta)
     write(folder / 'before.json.gz', before)
+    if abandon_before:
+        write(folder / 'abandon-before.json.gz', abandon_before)
     ctx = context_for(browser, meta['mobile'])
     page = None
     errors = []
@@ -189,19 +199,35 @@ def step(browser, base, directory, manifest, case, i, limit, retry=None, operati
                  options=operation)
         after = snapshot(path, sid)
         projected = page.request.get(f'{base}/api/saves/{sid}').json()
-        oracle(before, after, projected, 'turn' if kind == 'choice' or operation and operation.get('reuse_narrative') else kind)
+        oracle(before, after, projected, 'reload' if kind == 'abandon' else
+               'turn' if kind == 'choice' or operation and operation.get('reuse_narrative') else kind)
         scenario_checks(case, before, after, projected)
         if kind == 'switch' and after['snapshot']['world_state']['camera']['controlled_actor_id'] != action:
             raise ValueError('Protagonist transition selected the wrong actor')
         if kind in ('variant','rollback'):
             # The immediately preceding regeneration used step 0 as its parent turn.
             filename = 'after.json.gz' if kind == 'variant' else 'before.json.gz'
-            with gzip.open(directory / case / f'{lineage_index:03d}' / filename, 'rt') as source:
+            target_path = (operation or {}).get('restore_snapshot_path') or directory / case / f'{lineage_index:03d}' / filename
+            with gzip.open(target_path, 'rt') as source:
                 target = json.load(source)['snapshot']
             if any(after['snapshot'].get(k) != target.get(k) for k in ('world_state','history_head')):
                 raise ValueError('Restored variant / rollback differs from its recorded snapshot')
         jobs = diagnostics(path, sid, retry[1]['job_cursor'] if retry else cursor)
         attempts = [r for j in jobs for r in j['requests']]
+        if kind == 'abandon' and (jobs or before != after):
+            raise ValueError('Abandon created a job or changed canonical state')
+        if kind == 'abandon':
+            with closing(sqlite3.connect(path)) as db:
+                if db.execute('SELECT id,status,response_text FROM llm_requests ORDER BY id').fetchall() != abandon_before['requests']:
+                    raise ValueError('Abandon changed provider requests')
+                job = db.execute('SELECT id,status,attempt_epoch,narrative,error FROM game_jobs WHERE id=?',
+                                 (operation['job_id'],)).fetchone()
+            with closing(sqlite3.connect(directory / 'budget.sqlite')) as db:
+                if db.execute('SELECT * FROM reservations ORDER BY id').fetchall() != abandon_before['reservations']:
+                    raise ValueError('Abandon incurred provider charges')
+            if not job or job[1] != 'abandoned' or job[3:] != abandon_before['job'][3:]:
+                raise ValueError('Abandon lost paid Narrative or diagnostics')
+            write(folder / 'abandon-after.json', dict(job=job, new_llm_calls=0, canonical_unchanged=True))
         if operation and operation.get('reuse_narrative'):
             new = [r for r in attempts if r['id'] not in operation['original_request_ids']]
             if len(jobs) != 1 or jobs[0]['narrative'] != operation['reuse_narrative'] or not new or any(
@@ -496,7 +522,7 @@ def run(args, directory, manifest):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['prepare','prepare-stage-b','prepare-stage-c','review-stage-c','prepare-crisis-extension','review-stage-b','preflight','run','report','recover-unsubmitted',
+    parser.add_argument('command', choices=['prepare','prepare-stage-b','prepare-stage-c','prepare-stage-c-followup','review-stage-c','prepare-crisis-extension','review-stage-b','preflight','run','report','recover-unsubmitted',
                                           'adopt', 'recheck-saved', 'retry-extraction'])
     parser.add_argument('directory', type=Path)
     parser.add_argument('--stage', choices=list(QUOTAS), default='A')
@@ -514,10 +540,12 @@ def main():
     if args.command == 'prepare':
         prepare(directory)
         return
-    if args.command in ('prepare-stage-b', 'prepare-stage-c'):
+    if args.command in ('prepare-stage-b', 'prepare-stage-c', 'prepare-stage-c-followup'):
         if not args.reviewed or not args.parent:
             parser.error('Stage B requires the reviewed historical parent')
-        if args.command == 'prepare-stage-c':
+        if args.command == 'prepare-stage-c-followup':
+            from .stage_c_followup import prepare as prepare_b
+        elif args.command == 'prepare-stage-c':
             from .stage_c import prepare as prepare_b
         else:
             from .stage_b import prepare as prepare_b

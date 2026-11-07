@@ -15,7 +15,8 @@ def main():
         raise SystemExit('Missing budget ledger; refusing to reset spending history')
     manifest = json.loads((Path(directory) / 'manifest.json').read_text())
     budget = Budget(ledger, Path(directory) if manifest.get('stage') == 'B' else None,
-                    stage_c=Path(directory) if manifest.get('stage') == 'C' else None)
+                    stage_c=Path(directory) if manifest.get('stage') == 'C' else None,
+                    stage_c_followup=manifest.get('followup', False))
     if mode == 'live' and MODEL not in llm.get_deepseek_models():
         raise SystemExit('Configured model unavailable')
 
