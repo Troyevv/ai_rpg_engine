@@ -72,7 +72,7 @@ def test_bad_dialogue_annotation_dropped(state, event_change, beat_change, code)
     raw['events'][0].update(event_change)
     raw['continuity_beats'][0].update(beat_change)
     before = deepcopy(state)
-    if any(key in event_change for key in ('participants', 'author_id', 'player_evidence')):
+    if event_change.get('medium') == 'invalid' or any(key in event_change for key in ('participants', 'author_id', 'player_evidence')):
         with pytest.raises(StructuralDeltaError) as exc:
             StateResolver(state, NARRATIVE, ACTION).resolve(raw)
         assert exc.value.code in ('player_action_event_mismatch', 'player_action_completion_invalid')

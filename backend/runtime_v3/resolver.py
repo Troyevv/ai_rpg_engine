@@ -403,6 +403,8 @@ class StateResolver:
             eid: validate_event_presence(self, event, event_indices[eid], written_sources.get(eid))
             for eid, event in events.items()
         }
+        from backend.runtime_v3.player_actions import validate_completions
+        validate_completions(self, player_actions, events, event_indices, written_sources)
         from backend.runtime_v3.knowledge import apply_knowledge
         from backend.runtime_v3.reproduction import validate_birth_knowledge
         validate_birth_knowledge(self, raw, events)
