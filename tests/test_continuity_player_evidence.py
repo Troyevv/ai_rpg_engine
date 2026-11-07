@@ -189,7 +189,8 @@ def test_another_accepted_event_cannot_lend_its_quote(state):
 def test_legacy_beat_with_own_quote_still_works(state):
     raw = library_turn(state)
     raw['events'][0].pop('player_assertion')
-    raw['events'][0].pop('player_evidence')
+    # A legacy optional beat still uses its own quote. A newly proposed typed
+    # PlayerAction Event must retain its explicit quote even without the marker.
     raw['continuity_beats'][0]['player_evidence'] = ACTION
     out = StateResolver(state, NARRATIVE, ACTION).resolve(raw)
     event, = out.history['events']

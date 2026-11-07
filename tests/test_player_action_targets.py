@@ -41,7 +41,7 @@ def payload(state, actions, *, completed=True):
                                  if action['outcome'] == 'completed' else [])
         event = dict(id='event-'+action['id'], text='Исход действия', medium='conversation',
                      participants=participants, witnesses=[NINA], actor_id=NINA,
-                     target_ids=targets, player_action_id=action['id'])
+                     target_ids=targets, player_action_id=action['id'], player_evidence=action['player_evidence'])
         if completed:
             event.update(player_assertion='completed_interaction', player_evidence=action['player_evidence'])
         events.append(event)
@@ -50,9 +50,9 @@ def payload(state, actions, *, completed=True):
                 player_agency=dict(status='preserved', actions=actions), events=events)
 
 
-def play(crisis, responses, text=GOOD_INPUT, narrative=GOOD_TEXT, kind='turn'):
+def play(crisis, responses, text=GOOD_INPUT, narrative=GOOD_TEXT, kind='turn', config=None):
     client, repo, sid = crisis
-    jid = repo.begin_job(sid, text, kind, CONFIG)
+    jid = repo.begin_job(sid, text, kind, config or CONFIG)
     responses = iter(responses)
     calls = []
     def stream(**kw):
@@ -148,7 +148,9 @@ def test_uncompleted_actions_cannot_claim_completion(crisis, outcome):
     assert job['status'] == 'error' and len(calls) == 3
     assert Repository(repo.path).get_snapshot(sid) == before
     diagnostics = json.loads(repo.get_job(job['id'])['repair_diagnostics_json'])
-    assert [d['code'] for d in diagnostics] == ['player_action_completion_invalid'] * 2
+    assert [(d['reason'], d['attempt']) for d in diagnostics] == [
+        (reason, attempt) for attempt in (0, 1)
+        for reason in ('outcome_not_completed', 'target_participation_missing')]
 
 
 @pytest.mark.parametrize('corrected', [False, True])
@@ -160,7 +162,7 @@ def test_correct_narrative_wrong_extraction_bounded_repair(crisis, corrected):
     bad['events'][0].update(target_ids=['qa_zoya'], participants=[NINA, 'qa_zoya'])
     job, calls = play(crisis, [bad, good if corrected else bad])
     assert len(calls) == 3
-    assert 'events[0].player_action_id' in calls[-1]['messages'][0]['content']
+    assert 'events[0].target_ids' in calls[-1]['messages'][0]['content']
     assert job['status'] == ('saved' if corrected else 'error')
     if corrected:
         event = saved_events(repo, sid)[-1]

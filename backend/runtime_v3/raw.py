@@ -260,6 +260,10 @@ def extraction_schema():
     for field in ('emotion','goals','intentions','obligations'):
         definitions['character_changes']['properties'][field]=dict(definitions['character_changes']['properties'][field],description=PLAYER_SOURCE_DESCRIPTION)
     definitions['relationship_changes']['properties']['dimensions']['description']='Закрытый набор: '+', '.join(RELATION_DIMENSIONS)+'. Не добавляй ключи; иной смысл — в context.'
+    definitions['events']['dependentRequired'] = {
+        'player_action_id': ['actor_id', 'target_ids', 'player_evidence'],
+        'player_assertion': ['player_action_id'],
+    }
     from backend.runtime_v3.player_actions import PlayerAgencyReview
     agency_schema = PlayerAgencyReview.model_json_schema()
     agency_schema['properties']['actions']['items'] = agency_schema.pop('$defs')['PlayerAction']
@@ -330,6 +334,7 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
         schema['required'].append('player_agency')
     else:
         schema['properties'].pop('player_agency')
+        schema['properties']['events']['items'].pop('dependentRequired', None)
         for field in ('actor_id', 'target_ids', 'player_action_id'):
             schema['properties']['events']['items']['properties'].pop(field)
     if elapsed_required:
@@ -427,12 +432,14 @@ def repair_feedback(diagnostic, payload, before):
         try: payload = json.loads(payload)
         except ValueError: pass  # Preserve malformed output verbatim for repair.
     # Full diagnostics remain in game_jobs; the prompt needs only repair evidence.
-    detail = {key: diagnostic[key] for key in ('code', 'path', 'source_ids', 'repair_reason', 'action', 'temporal_boundary') if key in diagnostic}
-    return json.dumps(dict(diagnostic=detail, original_extraction=payload,
+    rows = diagnostic if isinstance(diagnostic, list) else [diagnostic]
+    details = [{key: row[key] for key in ('code', 'path', 'source_ids', 'reason', 'repair_reason', 'action', 'temporal_boundary') if key in row} for row in rows]
+    detail = details[0]
+    return json.dumps(dict(diagnostic=detail, diagnostics=details, original_extraction=payload,
         previous_camera=before['camera'], known_locations={lid: {key: location[key] for key in
             ('id', 'name', 'aliases', 'parent_id', 'kind') if key in location}
             for lid, location in before['locations'].items()},
-        contract='narrative-authority-v1: original_extraction — предварительный, отклонённый результат, не канон. Reinterpret the same full narrative: fix structural errors and misclassifications; preserve actual outcomes and dependencies. Never delete outcomes merely to pass validation or rewrite accepted before/History. final_scene present owns physical membership; observed is outside. Do not invent movements, consent or endpoints.'), ensure_ascii=False, separators=(',', ':'))
+        contract='narrative-authority-v1: original_extraction — предварительный, отклонённый результат, не канон. Reinterpret the same full narrative: fix ALL diagnosed fields together and recheck every Event/action ID, actor, exact per-action player_evidence, target subset and aggregate coverage (including other actions). One Event references one action; split independent acts into separate Events, never invent a multi-ID field. Recheck dependent constraints after each correction; this is the only automatic repair. Fix structural errors and misclassifications; preserve actual outcomes and dependencies. Never delete outcomes merely to pass validation or rewrite accepted before/History. final_scene present owns physical membership; observed is outside. Do not invent movements, consent or endpoints.'), ensure_ascii=False, separators=(',', ':'))
 
 
 def prune_schema_definitions(schema):

@@ -335,15 +335,17 @@ class StateResolver:
         event_indices = {}
         scene_start = self.before['meta']['world_time']
         scene_end = s['meta']['world_time']
+        from backend.services.world_delta_errors import StructuralDeltaError
+        event_errors = []
         for i, item in self.records(raw,'events'):
             eid = item.get('id')
             if 'minute' in item:
                 minute = item['minute']
                 if type(minute) is not int or not scene_start <= minute <= scene_end:
-                    fatal(f'Event.minute: укажите абсолютную целую минуту в [{scene_start}, {scene_end}] '
+                    event_errors.append(StructuralDeltaError(f'Event.minute: укажите абсолютную целую минуту в [{scene_start}, {scene_end}] '
                           'или опустите поле, если точное время неизвестно.',
                           'event_minute_invalid', repairable=True, section='events', index=i,
-                          field='minute', entity=eid if isinstance(eid, str) else None)
+                          field='minute', entity=eid if isinstance(eid, str) else None))
             if not isinstance(eid,str) or not eid or not isinstance(item.get('text'),str):
                 self.warn('events',i,'отсутствует ID или текст'); continue
             lists = {key:item.get(key,[]) for key in ('participants','witnesses','fact_ids')}
@@ -371,7 +373,7 @@ class StateResolver:
                 player_observed=self.observed,recorded_minute=scene_end)
             if item.get('interaction_channel') is not None:
                 event['interaction_channel']=item['interaction_channel']
-            if 'minute' in item:
+            if 'minute' in item and type(item['minute']) is int and scene_start <= item['minute'] <= scene_end:
                 from backend.runtime_v3.calendar import current_time
                 event['minute'] = item['minute']
                 event['calendar_date'] = current_time(s, item['minute'])['date']
@@ -387,10 +389,16 @@ class StateResolver:
                               'event_author_invalid')
                     self.warnings[-1]['path'] = f'events[{i}].author_id'
             from backend.runtime_v3.player_actions import event_provenance
-            event_provenance(self, item, event, i, player_actions)
+            try:
+                event_provenance(self, item, event, i, player_actions)
+            except StructuralDeltaError as exc:
+                event_errors.append(exc)
+                continue
             event_indices[eid] = i
             events[eid] = event
             self.history.events.append(event)
+        if event_errors:
+            raise StructuralDeltaError.combine(event_errors)
         for _, item in self.records(raw,'movements'):
             if item.get('actor_id') == self.protected_actor_id and item.get('player_assertion') == 'involuntary':
                 cause=events.get(item.get('source_event_id'))

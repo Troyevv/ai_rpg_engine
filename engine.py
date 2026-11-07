@@ -283,7 +283,8 @@ def run_job(path, job_id, handle):
                         pass  # Invalid raw text is still useful repair feedback.
                     diagnostics = json.loads(job.get('repair_diagnostics_json') or '[]')
                     if diagnostics:
-                        feedback = repair_feedback(diagnostics[-1], request['response_text'], before['world_state'])
+                        latest = diagnostics[-1]
+                        feedback = repair_feedback([d for d in diagnostics if (d.get('attempt_epoch'), d.get('attempt')) == (latest.get('attempt_epoch'), latest.get('attempt'))], request['response_text'], before['world_state'])
                     break
             for attempt in range(2):
                 if handle.cancelled.is_set() or storage.get_job(job_id)['status'] not in ('extracting', 'validating'):
@@ -357,12 +358,13 @@ def run_job(path, job_id, handle):
                             db.execute('UPDATE game_jobs SET warnings_json=? WHERE id=?', (json.dumps(previous+warnings,ensure_ascii=False),job_id))
                     break
                 except StructuralDeltaError as exc:
-                    diagnostic=exc.diagnostic('extraction_repair' if attempt==0 and exc.repairable else 'validation_failed')
-                    diagnostic.update(attempt=attempt,attempt_epoch=job['attempt_epoch'],revision=job['revision'])
-                    storage.record_repair(job_id,diagnostic)
-                    require_due_birth_assessment = require_due_birth_assessment or due_birth_repair_required([diagnostic], before['world_state'])
+                    diagnostics=exc.diagnostics('extraction_repair' if attempt==0 and exc.repairable else 'validation_failed')
+                    for diagnostic in diagnostics:
+                        diagnostic.update(attempt=attempt,attempt_epoch=job['attempt_epoch'],revision=job['revision'])
+                    storage.record_repair(job_id,diagnostics)
+                    require_due_birth_assessment = require_due_birth_assessment or due_birth_repair_required(diagnostics, before['world_state'])
                     if attempt == 1 or not exc.repairable:raise
-                    feedback = repair_feedback(diagnostic, result, before['world_state'])
+                    feedback = repair_feedback(diagnostics, result, before['world_state'])
                 finally:
                     timings['validation_apply']=timings.get('validation_apply',0)+time.perf_counter()-stage_started
             from backend.runtime_v3.simulation import simulate
