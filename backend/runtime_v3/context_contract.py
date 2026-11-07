@@ -455,25 +455,16 @@ Stop at its boundary, any interruption or meaningful EXTERNAL response/decision.
 invent that response or silently skip hours/days. Detailed Time Skip remains separate.
 """
 EXTRACTION_CONTRACT += """
-scene_transitions: link actual start/advance/end to THIS Event, actors and threads. Refresh
-affected situation/state. Ending a meeting need not close its thread or move anyone.
-Reopen resolved threads only on a new Event. Record completed plans via scheduled_event_changes.
-continuity_beats optional: reuse kind/basis_ids with status and Event evidence. actor_id initiates.
-EXTERNAL dialogue: completed_interaction quote. NPC decision_actor_id: same Event's NPC
-scene_action toward initiator (accept/answer/refuse) in completed_narrative. No reply: open, no decider.
-EXTERNAL decision: EACH beat requires decision_actor_id + its OWN current player_evidence,
-even when the linked Event already contains that quote. Use the same complete choice quote
-in beat and Event (completed_interaction); split distinct acts into separate Events/beats.
-Copy the full linked Event evidence; source_event_id must confirm THIS decision and actors.
-Extraction judges meaning, not quote presence: preserve refusal/negation/deferment.
-Questions, offers, intentions and NPC proposals are not completed player decisions.
-No player decision: leave the proposal/question open without a player decider; never
-invent consent or borrow evidence of another act. Independent NPC decisions need no player_evidence.
-Repair reinterprets the SAME Narrative/input; return one complete corrected extraction,
-not appended Events/beats. If input does not support a decision, do not assert one.
-Choices reuse kind/basis_ids;
-omit resolved/rejected proposals. Compression: evidenced routine, bounded elapsed_minutes;
-pending response needs response_event_id + player_evidence.
+scene_transitions: THIS Event/actors/threads; refresh situation/state. Meeting end != closure/move.
+Thread reopen: new Event. Completed plans: scheduled_event_changes.
+continuity_beats optional: actor=initiator; kind/basis_ids/status; full Event evidence.
+NPC decider: Event's scene_action toward initiator (accept/answer/refuse); no player quote.
+EXTERNAL dialogue: completed_interaction quote. EACH decision: decision_actor_id + OWN
+player_evidence=Event's full choice quote. Split acts/Events; retain negation/refusal/deferment.
+Questions/offers/intentions != decisions; pending=open/no decider.
+Repair same input/Narrative: no invented choices/borrowed quotes/duplicates.
+Choices: kind/basis_ids, omit resolved/rejected. Compression: evidenced routine, bounded
+elapsed_minutes; pending reply: response_event_id + player_evidence.
 """
 
 RELATIONSHIP_EVIDENCE_CONTRACT = """

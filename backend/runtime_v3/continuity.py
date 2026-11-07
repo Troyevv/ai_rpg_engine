@@ -21,8 +21,8 @@ class ContinuityBeat(StrictModel):
     kind: Literal['question', 'proposal', 'information', 'decision', 'opportunity']
     status: Literal['open', 'resolved', 'rejected']
     evidence: str
-    decision_actor_id: str | None = Field(default=None, description='Actual decider; required for an EXTERNAL decision, never inferred from participants.')
-    player_evidence: str = Field(default='', description='Required on EACH EXTERNAL decision: complete current-input quote for this decision, identical to its source Event player_evidence. Event evidence is not a substitute.')
+    decision_actor_id: str | None = None
+    player_evidence: str = Field(default='', description='EACH EXTERNAL decision needs its own full input quote.')
 
 
 class SceneTransition(StrictModel):
