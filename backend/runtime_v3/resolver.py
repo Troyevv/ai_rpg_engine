@@ -154,7 +154,9 @@ class StateResolver:
         from backend.runtime_v3.continuity import validate_temporal_boundaries
         probe = copy(self)
         probe.state, probe.history = deepcopy(self.state), deepcopy(self.history)
-        probe.warnings = list(self.warnings)
+        probe.warnings = deepcopy(self.warnings)
+        probe.cards, probe.pending_reviews = deepcopy(self.cards), deepcopy(self.pending_reviews)
+        errors = list(errors)
         candidate = deepcopy(raw)
         temporal_ready = not any(row['section'] in ('births', 'reproductive_events', 'naming_decisions')
                                  for error in errors for row in error.diagnostics('preflight'))
@@ -481,7 +483,10 @@ class StateResolver:
         # cascades. Actions with independent sources remain checkable.
         rejected_actions = {row.get('player_action_id') if isinstance(row.get('player_action_id'), str) else None
                             for row in raw.records['events']
-                            if isinstance(row, dict) and isinstance(row.get('id'), str) and row['id'] in rejected_events}
+                            if isinstance(row, dict) and isinstance(row.get('id'), str) and row['id'] in rejected_events
+                            and (row.get('player_action_id') is not None
+                                 or row.get('player_assertion') == 'completed_interaction'
+                                 or self.protected_actor_id and row.get('actor_id') == self.protected_actor_id)}
         if None in rejected_actions:
             # A missing source→action reference cannot yet be assigned to one
             # action. Coverage is inconclusive until that source is repaired.
@@ -495,9 +500,17 @@ class StateResolver:
             event_errors.append(exc)
         from backend.runtime_v3.knowledge import apply_knowledge
         from backend.runtime_v3.reproduction import validate_birth_knowledge
+        unvalidated_facts = set()
         try:
-            validate_birth_knowledge(self, raw, events)
-            apply_knowledge(self, raw, events, rejected_event_ids=rejected_events)
+            validate_birth_knowledge(self, raw, events, rejected_event_ids=rejected_events)
+        except StructuralDeltaError as exc:
+            event_errors.append(exc)
+            # Birth disclosure is a prerequisite only for its protected facts.
+            # Diagnose unrelated acquisitions without applying dependent claims.
+            unvalidated_facts = exc.unvalidated_fact_ids
+        try:
+            apply_knowledge(self, raw, events, rejected_event_ids=rejected_events,
+                            unvalidated_fact_ids=unvalidated_facts)
         except StructuralDeltaError as exc:
             event_errors.append(exc)
         if event_errors:

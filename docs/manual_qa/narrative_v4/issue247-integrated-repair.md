@@ -84,51 +84,146 @@ npm run build
 npx playwright test e2e/integrated-repair247.spec.ts --project=desktop --project=mobile
 ```
 
-## Validation status
+## PR #248 follow-up audit
 
-- Original SQLite replay: 12/12 expected outcomes, zero paid calls.
-- Focused integrated suite covers 39 cases. Final test totals and exact CI commit
-  are recorded in [PR #248](https://github.com/Troyevv/ai_rpg_engine/pull/248).
-- Frontend unit: 151 passed. Production build passed (existing chunk-size warning).
-- Desktop/mobile E2E added: 10 scenarios. Local browser startup is blocked by
-  `process_singleton_posix.cc: socket() failed: Operation not permitted`; no local
-  browser success is claimed. See PR #248 for CI browser results.
-- Full backend commands/results are tracked in PR #248. Initial implementation run had 124 failures,
-  3460 passes, 1 skip; these exposed legacy movement compatibility, context
-  pressure and obsolete diagnostic assertions. An intermediate concurrent run
-  also exhausted `/tmp`; subsequent runs use a repository-local basetemp.
-  Original failures are not evidence of a clean baseline and are not hidden.
+Three reproduced defects were fixed in the same PR:
 
-CI #472 completed the production/backend checks and all ten new desktop/mobile
-#247 scenarios successfully. Its full browser sweep found one stale test control
-on each platform: the doorway fixture removed movements but retained the newly
-inherited arrival Event. The original failure was reproduced through the real
-API (`event_presence_invalid`); removing that fictional arrival from the test
-control restored start plus two subsequent observed-only turns. Production
-presence validation and browser assertions were not weakened. See PR #248 for
-the final CI run after this fixture correction.
+1. A diagnostic birth could append a child card to the original resolver because
+   the probe shared `cards`. Probe state, History, warnings, cards and pending
+   reviews are isolated; the caller's error list is no longer appended to.
+   The regression snapshots mutable resolver fields and input arguments around
+   the real probe. No mutation of the passed Events was observed.
+2. A birth disclosure error stopped unrelated Knowledge diagnostics. Birth checks
+   now aggregate independent claims with original indexes, then the existing
+   Knowledge handler checks unrelated facts. Facts whose typed birth disclosure
+   failed are not applied or diagnosed as independent acquisitions. Invalid
+   source Events suppress their dependent claims, not unrelated ones.
+3. An unrelated rejected NPC Event suppressed completion checks for every player
+   action. Only Events declaring player-action provenance can make that coverage
+   inconclusive. Agency validation itself remains mandatory.
 
-## Remaining live gate (not authorized or executed)
+New regressions include mixed Event/BirthClaim/Knowledge failures, probe isolation,
+multiple actors moving through two new locations with unsorted input rows,
+wrong actor/source/order, canonical source IDs in History, reload, rollback and
+sibling selection. Full results and exact tested commit are in
+[PR #248](https://github.com/Troyevv/ai_rpg_engine/pull/248).
 
-Use existing `devtools/live99` harness / #245 QA checkpoint machinery, copied
-original saves and a new explicit calls/cost authorization. The previous QA
-budget does not authorize this run. Do not run a campaign or LTA1/5 first.
+Artifact audit: unused intermediate Knowledge/Campaign replies removed. Six exact
+readable before-state/input/Narrative/selected-response fixtures remain (~560 KiB).
+No SQLite, ledger, screenshots, videos or test logs are committed. Original QA
+archive and source SQLite remain unchanged. No save schema/migration changes.
 
-1. Crisis/001: inspect all physical/referenced context groups, then the generated
-   prose and agency review. Correct prose with an Extraction-only cast mistake
-   must repair; impossible prose must require explicit reauthor, preserve input,
-   and prohibit an automatic Narrative retry.
-2. Knowledge/002: one repair must receive both independent diagnoses and retain
-   two facts/four acquisitions, Event fact links, History and reload consistency.
-3. Family/001: observation/reference plus ongoing zero elapsed; separately test
-   a genuinely completed BirthClaim, including remote/non-parent control.
-4. Phone/001: inspect Events, movements, final_scene and character_changes as a
-   whole. Contrast preparation, room exit, departure with unknown destination,
-   intention to visit a new place and genuine arrival at a newly created place.
-5. Social compound/split action and Campaign targeted recovery: preserve action
-   identity, absolute time, the original Narrative and one repair limit.
+## Short Live QA plan — NOT authorized or executed
 
-Record original/repair responses, all diagnostics, call counts/cost, before/after
-state, History, Knowledge, variants and reload. A saved job alone is insufficient;
-review semantics against the prose. Never repeat successes to select favorable
-output. #99/Stage C/multiyear campaign reliability is not established here.
+Purpose: test model semantics separately from deterministic recovery. Model:
+`deepseek-flash`, explicit non-thinking; no fallback/model switching. Use the
+reviewed PR head, real production jobs/Context Builder/Resolver/History/SQLite.
+No world generation, background/LTA campaign, external tools or success rerolls.
+
+### Preparation (zero paid calls)
+
+- Verify original archive SHA256 above. Use SQLite backup into disposable copies;
+  retain the original DB, ledger, responses and snapshots unchanged. Restore the
+  exact six before states and History heads using the same abandon/rollback
+  sequence verified by `tests/replay_issue247_sqlite.py`, never SQL state repair.
+- Use independent copies for saved-Narrative extraction and freshly authored
+  turns. Preserve prior variants; record head/revision and state/History hashes.
+- Build all initial and repair contexts offline first. Context: 65536, Narrative
+  output cap 2000, Extraction/repair cap 8192, thinking disabled. Fail before
+  dispatch if mandatory context cannot fit; do not silently enlarge the window.
+- Saved-Narrative checks use real recorded job context and the normal Extraction
+  retry path after verifying eligibility. If an original job is not eligible,
+  mark that check blocked; do not rewrite lifecycle fields to force a retry.
+- Bind one newly authorized run directory and exact operation list to the existing
+  live99 budget/stream guard; preserve historical spending and a new-run baseline.
+  Enforce **42 additional provider dispatches / $2.00 additional spend**, including
+  repair, continuations and optional remote stages, across restarts. Sequential
+  requests only; unknown usage/timeout stops the run.
+- The current generic harness has a 320-call ceiling and larger campaign plans.
+  Its existing `prepare-campaign-retest` command is **not** this short plan.
+  Before live execution, wire the reviewed per-run 42-call ceiling and this exact
+  operation list into that harness and verify fail-closed behavior without API
+  calls. No second runtime or separate provider bypass. This plan alone does not
+  claim the short runner or fresh authorization already exists.
+
+### Ordered cases and provider-call accounting
+
+A saved Narrative costs one Extraction (+ at most one existing bounded repair).
+A fresh turn/regeneration costs one Narrative + one Extraction (+ at most one
+repair). No automatic reauthor of invalid prose; record the refusal and stop that
+branch. The fresh Crisis branch below is a separately planned independent run.
+
+| Case / original checkpoint | Exact work | Base calls | With one repair per job |
+| --- | --- | ---: | ---: |
+| Crisis / `crisis/001` | 1 saved-Narrative Extraction; 1 fresh turn using original input | 3 | 5 |
+| Family / `family/001` | 1 saved-Narrative Extraction; original-input fresh turn and 1 observation continuation | 5 | 8 |
+| Knowledge / `knowledge/002` | 1 saved-Narrative Extraction; 1 fresh original-input turn | 3 | 5 |
+| Phone / `phone/001` | 1 saved-Narrative Extraction; original-input fresh turn and 2 continuations below | 7 | 11 |
+| Social / `social/001` | 1 fresh turn with explicit two-recipient input below | 2 | 3 |
+| Campaign / `campaign/000` | 1 fresh original-input turn, then 1 regeneration from its recorded original context | 4 | 6 |
+| **Total** | **4 saved-text jobs + 10 authored jobs** | **24** | **38** |
+
+Reserve up to four further dispatches within the same **42-call hard cap** for
+production remote/continuation stages if they actually occur. They are not extra
+retries or permission to repeat a success. If a branch fails, report fewer calls
+and do not run dependent steps. A fifth auxiliary request stops at the global cap.
+
+Inputs not taken verbatim from the archived `intent.json`:
+
+- Family continuation: «Я остаюсь рядом и наблюдаю, что происходит с Верой,
+  не вмешиваясь в её действия.»
+- Phone continuation 1: «Я не удерживаю Тимура и продолжаю разбирать фотографии.
+  Не предлагаю ему место назначения.»
+- Phone continuation 2: «Я продолжаю заниматься фотографиями. Если кто-то уже
+  ушёл, я не считаю, что он прибыл куда-либо, пока этого не произошло.»
+- Social: «Я спрашиваю Веру, какую пачку фотографий взять следующей, а Тимура —
+  когда он собирается позвонить Олегу. Выслушиваю каждого, не отвечая за них.»
+
+### Semantic acceptance, not merely saved status
+
+- **Crisis:** referenced Vera is not labelled physically present. Impossible
+  contact in the original prose requires explicit reauthor with no canon commit;
+  correct fresh prose must preserve control, POV and actual presence.
+- **Family:** reference/observation does not invent completed interaction. Ongoing
+  birth cannot cross an unresolved boundary; completed birth requires canonical
+  BirthClaim, sex disclosure/provenance, one child identity and no Knowledge leak.
+  If the model authors only one outcome, the other remains **not observed**.
+- **Knowledge:** saved original prose retains the two confirmed facts/four
+  acquisitions, Event links, provenance and History after reload. Fresh prose is
+  judged on what it actually disclosed; do not demand four gains if it differed.
+- **Phone:** manually compare prose against Events, movements, final_scene and
+  character_changes for preparation, room exit, departure and actual arrival.
+  New places and autonomous NPC action are allowed. If real arrival/new-place
+  creation does not occur in these three turns, mark that contrast **not observed**;
+  do not force an NPC action or claim a semantic pass from deterministic coverage.
+- **Social:** both target IDs remain attached to the original action(s). One joint
+  Event or split Events are acceptable when the authored interactions occurred;
+  refusal/defer and NPC initiative must not be rewritten as player agreement.
+- **Campaign:** absolute time, action provenance and same-Narrative repair remain
+  consistent. After regeneration, select both siblings, reload and rollback with
+  zero further model calls; original sibling content and before state must match.
+
+For each call capture existing usage/ledger receipt, original and repaired JSON,
+full diagnostics, before/after state+History+Knowledge, job revision and variant
+IDs. UI desktop/mobile checks can view/reload the same saved results without paid
+replays. Any unexpected semantic commit stops dependent branches and blocks the
+live gate; a failed but atomic rejection is not a successful semantic repair.
+
+### Conservative budget
+
+Official pricing checked 2026-11-07:
+[DeepSeek pricing](https://api-docs.deepseek.com/quick_start/pricing/).
+Use peak cache-miss rates **$0.30/M input + $1.20/M output**; ignore cache/off-peak
+savings. At 65536 input + 8192 output tokens for every dispatch (even Narrative),
+24 calls estimate at most **$0.71**, 38 **$1.13**, 42 **$1.24**. These are planning
+estimates using a local context allowance, not provider token receipts.
+
+Proposed additional hard budget: **$2.00**, not previously authorized. The existing
+guard reserves the full 1,048,576-token provider window before each request
+(~$0.3244 including 8192 output) and settles only verified usage. With ordinary
+receipts this leaves conservative headroom. At literal full-window consumption,
+42 requests would cost ~$13.63: the $2 cap must stop early, never promise all cases
+will fit or auto-increase the allowance. Recheck prices/model before dispatch.
+
+No paid calls were made for this follow-up. Deterministic passes establish
+validation/persistence behavior, not that DeepSeek's semantic mistakes are fixed.

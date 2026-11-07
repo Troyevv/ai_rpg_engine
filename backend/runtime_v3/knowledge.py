@@ -63,7 +63,7 @@ def salvage(state):
     return state
 
 
-def apply_knowledge(resolver, raw, events, *, rejected_event_ids=()):
+def apply_knowledge(resolver, raw, events, *, rejected_event_ids=(), unvalidated_fact_ids=()):
     from backend.runtime_v3.resolver import normalized
     from backend.services.world_delta_errors import StructuralDeltaError
     r, s = resolver, resolver.state
@@ -83,6 +83,8 @@ def apply_knowledge(resolver, raw, events, *, rejected_event_ids=()):
             reject('Неизвестный получатель знания.', 'knowledge_actor_unknown', 'actor_id'); continue
         if not isinstance(fid, str) or fid not in s['facts']:
             reject('Неизвестный факт.', 'knowledge_fact_unknown', 'fact_id'); continue
+        if fid in unvalidated_fact_ids:
+            continue  # Its typed disclosure failed; do not infer dependent errors.
         if isinstance(eid, str) and eid in rejected_event_ids:
             continue  # Diagnose the rejected source, not imaginary downstream failures.
         if not event:

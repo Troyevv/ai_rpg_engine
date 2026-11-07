@@ -337,3 +337,137 @@ def test_malformed_action_reference_reaches_bounded_repair(tmp_path, reference):
     assert len(calls)==3
     assert len(history(repo,sid)['knowledge_acquisitions'])==before_count+4
     assert 'events[0].player_action_id' in job['repair_diagnostics_json']
+
+
+def test_diagnostic_birth_probe_has_no_observable_side_effects(tmp_path):
+    from birth_sex_fixture import due_save, payload
+    repo, sid = due_save(tmp_path/'probe.sqlite')
+    state = repo.get_snapshot(sid)['world_state']
+    narrative, raw = payload(state, sexes=[None])
+    text = 'Спрашиваю Веру о помощи.'
+    raw['player_agency']['actions'] = [dict(id='ask', player_evidence=text,
+        target_ids=['qa_vera'], narrative_target_ids=['qa_vera'], outcome='completed', meaning='preserved')]
+    resolver = StateResolver(state, narrative, text)
+    original = resolver.raise_independent_errors
+    def audited(*args):
+        def mutable_state():
+            return {k:v for k,v in vars(resolver).items() if isinstance(v, (dict, list, set))} | {
+                'history': vars(resolver.history)}
+        before = deepcopy(mutable_state())
+        arguments = deepcopy(args[:-1])
+        errors = list(args[-1])
+        with pytest.raises(StructuralDeltaError) as caught:
+            original(*args)
+        assert mutable_state() == before
+        assert args[:-1] == arguments
+        assert args[-1] == errors
+        raise caught.value
+    with patch.object(resolver, 'raise_independent_errors', side_effect=audited):
+        with pytest.raises(StructuralDeltaError):
+            resolver.resolve(raw)
+    assert repo.get_snapshot(sid)['world_state'] == state
+
+
+def test_independent_events_birth_and_knowledge_diagnostics(tmp_path):
+    from birth_sex_fixture import due_save, payload
+    repo, sid = due_save(tmp_path/'independent.sqlite')
+    state = repo.get_snapshot(sid)['world_state']
+    narrative, raw = payload(state, sexes=[None])
+    raw['births'][0]['sex_observations'][0]['event_sex'] = 'male'
+    raw['births'].append(dict(raw['births'][0], pregnancy_id='unknown-pregnancy'))
+    raw['events'].extend([
+        dict(id='bad-time', text='Invalid time', minute=-1),
+        dict(id='bad-place', text='Impossible meeting', medium='conversation',
+             participants=['qa_kirill', 'qa_nina']),
+        dict(id='information', text='Независимое сообщение.', medium='conversation',
+             participants=['qa_vera'], witnesses=['qa_kirill'])])
+    raw['facts'] = [dict(id='independent-fact', text='Новое сообщение.', character_ids=['qa_vera'])]
+    raw['knowledge_gained'] = [dict(actor_id='qa_kirill', fact_id='independent-fact', source_event_id=e)
+                              for e in ('bad-time', 'bad-place', 'information')]
+    with pytest.raises(StructuralDeltaError) as caught:
+        StateResolver(state, narrative, '').resolve(raw)
+    rows = caught.value.diagnostics('test')
+    assert {r['code'] for r in rows} == {'event_minute_invalid', 'event_presence_invalid',
+        'birth_event_sex_conflict', 'birth_claim_invalid', 'knowledge_fact_link_missing'}
+    assert {r['path'] for r in rows if r['section']=='births'} == {
+        'births[0].sex_observations', 'births[1]'}
+    assert [r['path'] for r in rows if r['code']=='knowledge_fact_link_missing'] == [
+        'knowledge_gained[2].source_event_id']
+    # Repair all independent causes together through the real job boundary.
+    good = deepcopy(raw)
+    good['births'] = good['births'][:1]
+    good['births'][0]['sex_observations'][0]['event_sex'] = None
+    good['events'][1]['minute'] = state['meta']['world_time']
+    good['events'][2]['participants'] = ['qa_kirill']
+    good['events'][3]['fact_ids'] = ['independent-fact']
+    # Only the actual informational source grants this test-authored fact.
+    good['knowledge_gained'] = good['knowledge_gained'][2:]
+    from birth_sex_fixture import execute as birth_job
+    job, calls = birth_job(repo, sid, narrative, [raw, good])
+    assert job['status']=='saved', job['error']
+    assert len(calls)==3 and sum(not c.get('response_format') for c in calls)==1
+    persisted = Repository(repo.path).get_snapshot(sid)['world_state']
+    assert persisted['knowledge']['qa_kirill:independent-fact']['status']=='known'
+    assert all(p['status']=='born' for p in persisted['pregnancies'].values())
+
+
+def test_unrelated_rejected_event_does_not_mask_action_completion():
+    data = archived('family'); raw = deepcopy(data['responses'][0]['payload'])
+    raw['events'].append(dict(id='unrelated', text='Other event', minute=-1, participants=['qa_timur']))
+    with pytest.raises(StructuralDeltaError) as caught:
+        StateResolver(data['before'], data['narrative'], data['player_input']).resolve(raw)
+    assert {d['code'] for d in caught.value.diagnostics('test')} == {
+        'event_minute_invalid', 'player_action_completion_invalid', 'ordinary_temporal_boundary'}
+
+
+def multiple_arrivals(data):
+    raw = arrival_control(data)
+    raw['final_scene']['present_character_ids'].remove('qa_vera')
+    raw['events'][-1]['participants'].append('qa_vera')
+    raw['locations'].append(dict(id='second-new-place', name='Новый причал'))
+    raw['events'].append(dict(id='second-arrival', text='Оба прибыли на причал.', medium='action',
+        participants=['qa_vera', 'qa_timur'], location_id='second-new-place', order=4))
+    raw['movements'].append(dict(raw['movements'][0], actor_id='qa_vera'))
+    raw['movements'].extend(dict(actor_id=actor, from_location_id='new-arrival-place',
+        to_location_id='second-new-place', assertion='completed_arrival', source_event_id='second-arrival', order=4)
+        for actor in ('qa_vera', 'qa_timur'))
+    # Input order is not the timeline; each actor's explicit route is sorted.
+    raw['movements'].reverse()
+    return raw
+
+
+@pytest.mark.parametrize('fault', ['none', 'earlier-source', 'other-actor', 'same-order'])
+def test_multiple_arrival_sources_and_participants(fault):
+    data = archived('phone'); raw = multiple_arrivals(data)
+    if fault=='earlier-source': raw['movements'][0]['source_event_id']='arrival'
+    if fault=='other-actor': raw['events'][-1]['participants'].remove('qa_timur')
+    if fault=='same-order': raw['movements'][0]['order']=2
+    if fault!='none':
+        with pytest.raises(StructuralDeltaError):
+            StateResolver(data['before'], data['narrative'], data['player_input']).resolve(raw)
+        return
+    result = StateResolver(data['before'], data['narrative'], data['player_input']).resolve(raw)
+    events = {e['id']:e for e in result.history['events']}
+    assert len(result.history['movements'])==4
+    for movement in result.history['movements']:
+        event = events[movement['source_event_id']]
+        assert event['location_id']==movement['to_location_id']
+        assert event['order']==movement['order']
+        assert movement['actor_id'] in event['participants']
+
+
+def test_multiple_arrival_history_rollback_and_siblings(tmp_path):
+    data = archived('phone'); repo=Repository(tmp_path/'routes.sqlite'); sid=seed(repo,data)['save']
+    before, old_history = repo.get_snapshot(sid), history(repo, sid)
+    raw = multiple_arrivals(data)
+    job, _ = execute(repo, sid, data, [raw])
+    assert job['status']=='saved', job['error']
+    saved = repo.get_snapshot(sid); saved_history = history(repo, sid)
+    turn = repo.list_turns(sid)[-1]
+    sibling, _ = execute(repo, sid, data, [raw], kind='regenerate')
+    assert sibling['status']=='saved', sibling['error']
+    repo.select_variant(sid, turn['id'], turn['active_variant_id'], repo.get_save(sid)['revision'])
+    fresh=Repository(repo.path)
+    assert fresh.get_snapshot(sid)==saved and history(fresh,sid)==saved_history
+    repo.rollback_last(sid)
+    assert Repository(repo.path).get_snapshot(sid)==before and history(repo,sid)==old_history
