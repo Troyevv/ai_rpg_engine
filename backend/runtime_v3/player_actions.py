@@ -125,7 +125,8 @@ def event_provenance(resolver, item, event, index, actions):
               'player_action_event_mismatch', repairable=True, **path)
     if completed and (action.outcome != 'completed'
                       or not isinstance(item.get('player_evidence'), str)
-                      or normalized(item.get('player_evidence') or '') != normalized(action.player_evidence)):
+                      or normalized(item.get('player_evidence') or '') != normalized(action.player_evidence)
+                      or not (set(targets) & resolver.state['characters'].keys()) <= set(event['participants'])):
         fatal('completed_interaction требует выполненного исходного действия с теми же целями.',
               'player_action_completion_invalid', repairable=True, **path)
     event.update(actor_id=resolver.protected_actor_id, target_ids=list(targets),
