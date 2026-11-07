@@ -28,7 +28,7 @@ test('Crisis/001: rejected substitution survives reload; abandon restores input 
   await send.click();
   await expect(abandon).toBeEnabled();
   await expect(retry).toHaveCount(0);
-  await expect(page.getByText('Повествование изменило или не подтвердило выбранное действие игрока.', {exact:false})).toBeVisible();
+  await expect(page.getByRole('alert').filter({hasText:'Повествование изменило или не подтвердило выбранное действие игрока.'})).toBeVisible();
   const failed = await view();
   expect(failed.job).toMatchObject({status:'error', retry_allowed:false, user_text:action});
   expect(failed.state).toEqual(before.state);

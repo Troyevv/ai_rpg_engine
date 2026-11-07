@@ -218,8 +218,8 @@ def run_job(path, job_id, handle):
                         before['_interaction_input_channel'] = before['world_state']['meta']['interaction_focus']
                         before = stage_remote(before, generate, 'job-' + job_id, context_limit=context, history_events=world_history.get('events', []))
                     messages = build_context(before, history, job['user_text'], job['kind'], context, config['max_tokens'], recent_turns=config.get('recent_turns',6),prompts=config.get('_prompts'),world_history=world_history)
-                from backend.runtime_v3.player_actions import NARRATIVE_CONTRACT as action_contract
-                if not any('PLAYER ACTION AGENCY:' in m.get('content', '') for m in messages):
+                from backend.runtime_v3.player_actions import NARRATIVE_CONTRACT as action_contract, required as agency_required
+                if agency_required(before['world_state'], job['user_text'], job['kind']) and not any('PLAYER ACTION AGENCY:' in m.get('content', '') for m in messages):
                     from copy import copy
                     messages = copy(messages)
                     # Old recorded contexts keep their original world/input. Only

@@ -16,11 +16,13 @@ def test_semantic_fixture_before_resolver_and_real_job(api,case):
     client,app=api;world_source=source()
     for section,rows in case.get('preconditions',{}).items():world_source['world'].setdefault(section,{}).update(rows)
     sid=imported(client,world_source);seen=[]
+    from runtime_v3_fixture import reviewed
+    reply=reviewed(case['synthetic_provider_reply'])
     def provider(**kw):
         if kw.get('response_format'):
             seen.append(kw['messages'])
             assert case['narrative'] in '\n'.join(m['content'] for m in kw['messages'])
-            yield json.dumps(case['synthetic_provider_reply'])
+            yield json.dumps(reply)
         else:yield case['narrative']
     # Score the raw provider answer separately; a saved job is not semantic proof.
     metrics=score(case['synthetic_provider_reply'],case['expected'])
@@ -30,7 +32,7 @@ def test_semantic_fixture_before_resolver_and_real_job(api,case):
     assert job['status']=='saved',job.get('error')
     assert len(seen)==1
     schema=json.loads(next(m['content'].split('\n',1)[1] for m in seen[0] if m['content'].startswith('JSON Schema\n')))
-    Draft202012Validator(schema).validate(case['synthetic_provider_reply'])
+    Draft202012Validator(schema).validate(reply)
     world=app.state.repository.get_snapshot(sid)['world_state']
     assert world['camera']['present_character_ids']==case['expected']['present']
     if case['id']=='death_ellipsis':assert world['characters']['viktoria_solovyova']['life_status']=='dead'

@@ -262,8 +262,8 @@ class NarrativeContextBuilder:
         prompt_name = 'background_prompt.md' if kind == 'background' else 'game_system_prompt.md'
         rules = (prompts or {}).get(prompt_name, {}).get('content') or (PROMPTS/prompt_name).read_text(encoding='utf-8')
         rules += '\n' + NARRATIVE_CONTRACT
-        from backend.runtime_v3.player_actions import NARRATIVE_CONTRACT as action_contract
-        rules += action_contract
+        from backend.runtime_v3.player_actions import NARRATIVE_CONTRACT as action_contract, required as agency_required
+        if agency_required(snapshot['world_state'], user_text, kind): rules += action_contract
         if current.get('communication'): rules += REMOTE_NARRATIVE_CONTRACT
         cards, index, behavioral = [], [], []
         classifier = CharacterContextClassifier()
@@ -629,6 +629,16 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
             messages[letter_context_index] = author_context(state, limit)
 
 
+    def replace_schema(schema):
+        # Do not pay for format instructions for omitted optional annotations.
+        # Core Event/state/agency rules remain in the mandatory contract.
+        from backend.runtime_v3.context_contract import SCENE_ACTION_EXTRACTION_CONTRACT, CONTINUITY_EXTRACTION_CONTRACT
+        for fields, contract in [(('scene_actions',), SCENE_ACTION_EXTRACTION_CONTRACT),
+                                 (('scene_transitions', 'continuity_beats'), CONTINUITY_EXTRACTION_CONTRACT)]:
+            if all(field not in schema['properties'] for field in fields):
+                messages[0]['content'] = messages[0]['content'].replace(contract, '')
+        replace_block('JSON Schema', schema)
+
     def replace_block(title, value):
         for i, message in enumerate(messages):
             if message['content'].startswith(title+'\n'): messages[i] = block(title, value); return
@@ -787,7 +797,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                 # not need to remain in the wire schema.
                 from backend.runtime_v3.raw import prune_schema_definitions
                 prune_schema_definitions(schema)
-                replace_block('JSON Schema', schema)
+                replace_schema(schema)
                 break
     # New phone outcomes are essential; optional Director attribution must not
     # crowd them out of a tight extraction request. The parser/Resolver still
@@ -801,7 +811,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                     schema['properties'].pop(section, None)
                     from backend.runtime_v3.raw import prune_schema_definitions
                     prune_schema_definitions(schema)
-                    replace_block('JSON Schema', schema)
+                    replace_schema(schema)
                 break
     if builder.extraction and estimate(messages) > target:
         # Optional structured profile enrichment duplicates the eleven descriptive
@@ -819,7 +829,7 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                     character['properties'].pop(field,None)
                 from backend.runtime_v3.raw import prune_schema_definitions
                 prune_schema_definitions(schema)
-                replace_block('JSON Schema',schema)
+                replace_schema(schema)
                 break
     # Possession support is bounded by both its own cap and the request budget.
     # Keep explicitly named objects; omit lower-ranked incidental property first.
@@ -844,11 +854,26 @@ def build_context(snapshot, turns, user_text, kind, context_length, reserve, ext
                     messages[0]['content'] = messages[0]['content'].replace(
                         'Постоянные правила\n', 'Постоянные правила' + instruction + '\n', 1)
                 break
+    if builder.extraction and estimate(messages) > hard_context_limit:
+        # Mandatory action provenance takes priority over optional Director
+        # annotations, just as communication outcomes do above. Domain Events,
+        # state, agency and presence contracts remain complete and validated.
+        for message in messages:
+            if message['content'].startswith('JSON Schema\n'):
+                schema = json.loads(message['content'].split('\n', 1)[1])
+                if 'player_agency' not in schema['properties']: break
+                from backend.runtime_v3.raw import prune_schema_definitions
+                for section in ('scene_transitions', 'narrative_developments', 'consequences', 'continuity_beats', 'scene_actions'):
+                    if estimate(messages) <= hard_context_limit: break
+                    schema['properties'].pop(section, None)
+                    prune_schema_definitions(schema)
+                    replace_schema(schema)
+                break
     # Give lossless/default/schema compaction a chance before discarding the last
     # canonical relationship source to make room for the mandatory agency review.
     if estimate(messages) > hard_context_limit and current.get('relationship_evidence'):
         current.pop('relationship_evidence')
-        refresh_current()
+        replace_block('Текущее состояние / GM-only', current if builder.extraction else dict(current, knowledge=[]))
     if estimate(messages) > hard_context_limit:
         raise ValueError(f'Контекст v3 не помещается в выбранную модель ({estimate(messages)} / {hard_context_limit}). Увеличь контекст или уменьши лимит ответа. Критические данные сцены и последние narrative сохранены.')
     classifier = CharacterContextClassifier()

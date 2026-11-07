@@ -37,18 +37,14 @@ their chosen targets. NPC initiative is welcome; it never substitutes player age
 '''
 
 EXTRACTION_CONTRACT = '''
-PLAYER ACTION REVIEW: player_agency reviews input + controlled actor.
-Review ALL acts in unchanged Narrative, even without Events.
-Substitution/invented decision/consent: status=violated; ambiguity=uncertain.
-Never fix prose via JSON or relabel player acts as NPC initiative.
-actions: id per input act; full player_evidence; target_ids from INPUT;
-narrative_target_ids/outcome/meaning from actual act. Resolve aliases/pronouns/groups from context. Unresolved=uncertain; untargeted=[]; no player act=actions[].
-Absent addressee: attempt keeps intended target, no invented participant/channel.
-Deferred/not_performed may have narrative_target_ids=[]. A delivered question may complete without reply; no reply alone proves no exchange.
-Events reference player_action_id + actual actor_id/target_ids. completed_interaction
-requires completed matching act + same player_evidence, all targets participating.
-Other outcomes must not claim completion. Split different acts. NPC initiative: own Event, no player_action_id/assertion.
-Quotes prove source, not meaning. Narrative violations reject the whole turn.
+PLAYER ACTION REVIEW: player_agency compares ALL unchanged Narrative to input, even omitted Events.
+Invented/substituted act/target/consent=violated; unprovable=uncertain. Never fix prose via JSON.
+actions: each input act's exact player_evidence + target_ids; actual narrative_target_ids/outcome/meaning.
+Resolve aliases/pronouns/groups; untargeted=[]. Attempt keeps target without invented presence/channel;
+deferred/not_performed may have actual=[]. No reply alone proves no exchange.
+Event actor_id=initiator; player_action_id references act; target_ids=actual.
+completed_interaction requires matching completed act, same quote, participating targets.
+Other outcomes aren't completed; NPC reactions are independent. Quotes alone prove no correspondence.
 '''
 
 

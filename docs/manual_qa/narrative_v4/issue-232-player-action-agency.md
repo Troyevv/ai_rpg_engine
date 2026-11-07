@@ -65,6 +65,9 @@ Mandatory review adds context tokens. Repair feedback now carries the essential
 code/path/source/reason instead of duplicate diagnostic fields and redundant
 location descriptions; full diagnostics remain stored. The final relationship
 source is retained until lossless/default/schema compaction has been attempted.
+Under remaining hard pressure, the existing optional Director-schema pruning also
+applies to mandatory player provenance. Scene, Event, Knowledge and player review
+contracts stay present; optional annotations are still accepted and validated.
 Neither token limits nor canonical checks are relaxed.
 
 ## Regression coverage

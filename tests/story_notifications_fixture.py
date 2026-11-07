@@ -25,7 +25,7 @@ def seed(repo):
 
 def payload(snap, reveal=True):
     s=snap['world_state']
-    return dict(final_scene=dict(location_id=s['camera']['location_id'],present_character_ids=s['camera']['present_character_ids'],elapsed_minutes=1),
+    return dict(player_agency=dict(status='preserved', actions=[]),final_scene=dict(location_id=s['camera']['location_id'],present_character_ids=s['camera']['present_character_ids'],elapsed_minutes=1),
         facts=[dict(id='new168',text='Подмена рукописи связана с закрытым литературным обществом.',visibility='secret',story_secret=True,secret_subject_ids=[],secret_existence='hidden',character_ids=[],evidence=TEXT)],
         events=[dict(id='confession168',text=TEXT,evidence=TEXT,participants=['qa_kirill','qa_vera'],witnesses=['qa_kirill'],fact_ids=['plot178','new168'] if reveal else [],medium='conversation')],
         knowledge_gained=[dict(actor_id='qa_kirill',fact_id=fid,source_event_id='confession168',evidence=TEXT) for fid in (['plot178','new168'] if reveal else [])],

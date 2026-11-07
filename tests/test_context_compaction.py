@@ -87,6 +87,15 @@ def test_saturated_world_repeated_reload_preserves_choice_and_scene_context(tmp_
             return json.loads(next(m['content'].split('\n', 1)[1] for m in messages
                                    if m['content'].startswith(title+'\n')))
         assert content('completed_narrative') == NARRATIVE
+        schema = content('JSON Schema')
+        assert 'player_agency' in schema['required']
+        assert {'events', 'final_scene', 'knowledge_gained'} <= schema['properties'].keys()
+        assert 'PLAYER ACTION REVIEW:' in messages[0]['content']
+        from backend.runtime_v3.context_contract import SCENE_ACTION_EXTRACTION_CONTRACT, CONTINUITY_EXTRACTION_CONTRACT
+        if 'scene_actions' not in schema['properties']:
+            assert SCENE_ACTION_EXTRACTION_CONTRACT not in messages[0]['content']
+        if not {'scene_transitions', 'continuity_beats'} & schema['properties'].keys():
+            assert CONTINUITY_EXTRACTION_CONTRACT not in messages[0]['content']
         assert estimate(messages) <= 32768 - 4096 - 256
         current = content('Текущее состояние / GM-only')
         choice = expand(current, content('Choice context / controlled actor'))
