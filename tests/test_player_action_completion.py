@@ -283,3 +283,36 @@ def test_message_requires_accepted_delivery_but_not_a_reply(api, linked):
     else:
         assert saved_events(repo, sid)[-1]['player_action']['outcome'] == 'completed'
         assert fresh['world_state']['remote_events'][sent['id']]['read_by'] == []
+
+
+def test_canonical_send_in_transit_is_not_completed_delivery(api):
+    from devtools.narrative_test_world import load_fixture
+    from test_narrative_test_world import ordinary_job
+    client, app = api
+    repo = app.state.repository
+    sid = load_fixture(repo, 'phone-office')['save']
+    # Seed the world's historical communication capability before its first job.
+    with repo.connect() as db:
+        snapshot = repo.get_snapshot(sid)
+        snapshot['world_state']['meta']['communication'].update(letter=True, delivery_minutes={'letter': 30})
+        db.execute('UPDATE saves SET state_json=? WHERE id=?', (json.dumps(snapshot), sid))
+    ordinary_job(repo, sid, 'start')
+    quote = 'Письмом спрашиваю Веру о Кирилле.'
+    response = client.post(f'/api/saves/{sid}/phone', json=dict(revision=repo.get_save(sid)['revision'],
+        command=dict(action='send', channel='LETTER', character_id=VERA, content=quote, operation_id='post-237-delivery')))
+    assert response.status_code == 200, response.text
+    before = repo.get_snapshot(sid)
+    s = before['world_state']
+    actor = s['camera']['controlled_actor_id']
+    sent = next(e for e in s['remote_events'].values() if e['operation_id'] == 'post-237-delivery')
+    assert sent['status'] == 'in_transit' and sent['delivered_to'] == []
+    raw = payload(s, [claim([VERA], quote=quote)], completed=False)
+    raw['events'][0].update(medium='message', actor_id=actor, author_id=actor,
+                            participants=[actor, VERA], witnesses=[actor])
+    raw['remote_events'] = [dict(sender_id=actor, recipient_ids=[VERA], channel='LETTER',
+                                 existing_event_id=sent['id'], source_event_id='event-input-1')]
+    job, calls = play((client, repo, sid), [raw, raw], quote, 'Письмо ещё в пути.')
+    assert job['status'] == 'error' and len(calls) == 3, job.get('error')
+    diagnostics = json.loads(repo.get_job(job['id'])['repair_diagnostics_json'])
+    assert [d['code'] for d in diagnostics] == ['player_action_completion_invalid'] * 2
+    assert Repository(repo.path).get_snapshot(sid) == before
