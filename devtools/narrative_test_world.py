@@ -620,6 +620,8 @@ def _seed_reproduction(repository,save_id,checkpoint):
             evidence=disclosure) for cid in event['witnesses'] for fid in event['fact_ids']]
         scene['births'] = [dict(pregnancy_id=p['id'], source_event_id=event['id'],
             assertion='birth_completed', disclosed_parent_ids=p['parent_ids'],
+            sex_observations=[dict(child_id=child['id'], narrative_sex=child['sex'], event_sex=child['sex'],
+                basis='observation', perceived_by=event['witnesses'], evidence=disclosure) for child in p['children']],
             location_id=snapshot['world_state']['camera']['location_id'], evidence=text)]
         commit(event['text'], scene, 'turn', 'Я остаюсь рядом с Верой.')
 

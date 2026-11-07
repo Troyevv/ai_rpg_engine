@@ -126,7 +126,7 @@ export function Game({
   const job = snapshot?.status === 'abandoned' ? null : snapshot;
   const awaitingCommit=job?.status==='saved'&&job.revision===save?.revision&&!save?.turns.some(t=>t.variants?.some(v=>v.job_id===job.id));
   const rejected = !!job && ['error','stopped'].includes(job.status) && job.revision === save?.revision;
-  const retryable = rejected && !!job.narrative_complete;
+  const retryable = rejected && !!job.narrative_complete && !job.narrative_reauthor_required;
   const running = active(job)||!!job?.live&&job.status!=="saved"||!!awaitingCommit;
   const [presented,setPresented]=useState<string|null>(null);
   const streamedJob=useRef<string|null>(null);
