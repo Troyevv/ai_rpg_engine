@@ -38,12 +38,13 @@ their chosen targets. NPC initiative is welcome; it never substitutes player age
 
 EXTRACTION_CONTRACT = '''
 PLAYER ACTION REVIEW: ALL Narrative vs input; changed act/target/consent or impossible completion=violated;
-unprovable=uncertain. No JSON laundering/deletion/downgrade. NPC reactions independent.
-Acts: exact player_evidence, target_ids, actual narrative_target_ids/outcome/meaning.
+unprovable=uncertain. No laundering/deletion/downgrade. NPC reactions independent.
+Acts: exact player_evidence, intended target_ids, actual narrative_target_ids, outcome/meaning.
 Untargeted=[]; attempted keeps targets; partial=subset; deferred/not_performed allow actual=[].
-completed needs Event even without assertion: character contact via presence/call/bound delivery;
-no reply needed, silence isn't delivery. target_mode=reference only noncontact, never dialogue/touch.
-Event actor_id=initiator, player_action_id=act, target_ids=actual; completed_interaction needs same quote.
+Event: actor_id=initiator, player_action_id=act; completed_interaction needs same quote.
+Event target_ids=own subset of actual; accepted Events jointly cover actual. Completed contact needs Events
+proving each target via presence/call/bound delivery even without assertion. No reply required;
+silence isn't delivery. target_mode=reference only noncontact, never dialogue/touch.
 '''
 
 
@@ -119,7 +120,8 @@ def event_provenance(resolver, item, event, index, actions):
             or item.get('actor_id') != resolver.protected_actor_id
             or resolver.protected_actor_id not in event['participants']
             or not isinstance(targets, list) or any(not isinstance(t, str) for t in targets)
-            or len(targets) != len(set(targets)) or set(targets) != set(action.narrative_target_ids)
+            or len(targets) != len(set(targets))
+            or not set(targets) <= set(action.narrative_target_ids)
             or event['medium'] == 'message' and event.get('author_id') != resolver.protected_actor_id):
         fatal('Event не соответствует автору/целям проверенного действия игрока.',
               'player_action_event_mismatch', repairable=True, **path)
@@ -143,13 +145,15 @@ def validate_completions(resolver, actions, events, indices, written_sources):
     second geography or interprets prose. A written artifact's author is not a
     live endpoint, so messages additionally require an explicit delivery binding.
     """
-    supported = set()
+    covered = {}
     for eid, event in events.items():
         provenance = event.get('player_action')
         if not provenance:
             continue
         action = actions[provenance['id']]
-        targets = set(action.narrative_target_ids) & resolver.state['characters'].keys()
+        # Only this Event's explicit targets count. Other participants/witnesses
+        # cannot supply delivery for a different part of the grouped action.
+        targets = set(event['target_ids']) & resolver.state['characters'].keys()
         communicative = event['medium'] in ('conversation', 'testimony', 'message') or event.get('interaction_channel') in ('physical', 'call')
 
         def reject(reason):
@@ -162,23 +166,28 @@ def validate_completions(resolver, actions, events, indices, written_sources):
 
         if targets and action.target_mode == 'reference' and communicative:
             reject('target_mode=reference несовместим с Event общения/контакта.')
-        if action.outcome != 'completed' or not targets or action.target_mode == 'reference':
-            continue
-        missing = targets - set(event['participants'])
-        if missing:
-            reject('outcome=completed не подтверждён участием адресатов: '+', '.join(sorted(missing))+'.')
-        if event['medium'] == 'message' and event.get('interaction_channel') != 'physical':
-            written = written_sources.get(eid)
-            if (not written or written['sender_id'] != resolver.protected_actor_id
-                    or written['status'] != 'delivered'
-                    or not targets <= set(written['delivered_to'])):
-                reject('outcome=completed требует принятого источника доставки сообщения всем адресатам; ответ/чтение не обязательны.')
-        supported.add(action.id)
+        if action.outcome == 'completed' and targets and action.target_mode == 'interaction':
+            missing = targets - set(event['participants'])
+            if missing:
+                reject('outcome=completed не подтверждён участием адресатов: '+', '.join(sorted(missing))+'.')
+            if event['medium'] == 'message' and event.get('interaction_channel') != 'physical':
+                written = written_sources.get(eid)
+                if (not written or written['sender_id'] != resolver.protected_actor_id
+                        or written['status'] != 'delivered'
+                        or not targets <= set(written['delivered_to'])):
+                    reject('outcome=completed требует принятого источника доставки сообщения всем адресатам; ответ/чтение не обязательны.')
+        covered.setdefault(action.id, set()).update(event['target_ids'])
     for i, action in enumerate(actions.values()):
-        if (action.outcome == 'completed' and action.target_mode == 'interaction'
-                and set(action.narrative_target_ids) & resolver.state['characters'].keys()
-                and action.id not in supported):
-            fatal(f'Действие {action.id}: completed interaction не имеет принятого Event. '
+        required = set(action.narrative_target_ids)
+        requires_contact = (action.outcome == 'completed' and action.target_mode == 'interaction'
+                            and required & resolver.state['characters'].keys())
+        missing = required - covered.get(action.id, set())
+        # Preserve noncontact/untargeted actions without an Event. Once Events
+        # reference an action, their own targets must cover its actual scope.
+        if missing and (requires_contact or action.id in covered):
+            fatal(f'Действие {action.id}: {action.outcome} не подтверждён принятыми Events для адресатов: '
+                  + ', '.join(sorted(missing)) + '. '
                   'Не удаляйте Event для обхода проверки; классифицируйте исход по неизменному Narrative.',
-                  'player_action_completion_invalid', repairable=True, section='player_agency',
-                  path=f'player_agency.actions[{i}].outcome', source_ids=[action.id])
+                  'player_action_completion_invalid' if action.outcome == 'completed' else 'player_action_event_mismatch',
+                  repairable=True, section='player_agency',
+                  path=f'player_agency.actions[{i}].outcome', source_ids=[action.id, *sorted(missing)])

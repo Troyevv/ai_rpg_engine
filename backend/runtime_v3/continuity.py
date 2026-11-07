@@ -220,7 +220,9 @@ def player_targets_match(resolver, claim, event):
     if action is None:
         return True
     counterparties = {claim.actor_id, *claim.target_ids} - {resolver.protected_actor_id}
-    return counterparties <= set(action['narrative_target_ids'])
+    # A grouped action may span Events. Its other recipients are not evidence
+    # for this Event, even when present as bystanders. Keep legacy fallback.
+    return counterparties <= set(event.get('target_ids', action['narrative_target_ids']))
 
 
 def dialogue_evidence_matches(resolver, claim, event):
