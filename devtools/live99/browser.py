@@ -44,6 +44,9 @@ def inspect_ui(page, case):
     elif case in ('campaign', 'family'):
         nav(page, 'Календарь' if case == 'campaign' else 'Родословная')
         expect(page.locator('.save-workspace:visible')).to_be_visible()
+        # The lazy workspace shell appears before its API data. Inspect real
+        # fixture content, not a transient "Loading" screen.
+        expect(page.locator('.calendar-day-number' if case == 'campaign' else '.family-node').first).to_be_visible()
     else:
         nav(page, {'knowledge': 'Персонажи', 'social': 'Отношения', 'crisis': 'Мир'}[case])
         expect(page.locator('.inspector-workspace')).to_be_visible()
