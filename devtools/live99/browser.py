@@ -44,6 +44,9 @@ def inspect_ui(page, case):
     elif case in ('campaign', 'family'):
         nav(page, 'Календарь' if case == 'campaign' else 'Родословная')
         expect(page.locator('.save-workspace:visible')).to_be_visible()
+        # The lazy workspace shell appears before its API data. Inspect real
+        # fixture content, not a transient "Loading" screen.
+        expect(page.locator('.calendar-day-number' if case == 'campaign' else '.family-node').first).to_be_visible()
     else:
         nav(page, {'knowledge': 'Персонажи', 'social': 'Отношения', 'crisis': 'Мир'}[case])
         expect(page.locator('.inspector-workspace')).to_be_visible()
@@ -112,6 +115,8 @@ def play(page, base, sid, kind, action, choice_index=None, job_id=None, options=
                 'rollback':'/rollback', 'variant':'/variant'}.get(kind, '/turns')
 
     def matches(response):
+        if kind == 'abandon':
+            return response.url == f'{prefix}/jobs/{job_id}/abandon' and response.request.method == 'POST'
         if kind in ('retry', 'phone-retry'):
             return response.url == f'{base}/api/jobs/{job_id}/retry' and response.request.method == 'POST'
         return (response.url.startswith(prefix + '/') and response.url.endswith(endpoint)
@@ -119,7 +124,10 @@ def play(page, base, sid, kind, action, choice_index=None, job_id=None, options=
                 and (kind != 'switch' or not response.request.post_data_json.get('preview')))
 
     with page.expect_response(matches) as pending:
-        if kind == 'retry':
+        if kind == 'abandon':
+            page.get_by_label('Своё действие или реплика').fill(action)
+            button(page, 'Отменить неудачный ход').click()
+        elif kind == 'retry':
             button(page, 'Повторить обработку состояния').click()
         elif kind == 'phone-retry':
             phone = page.get_by_role('region', name='Телефон персонажа')
@@ -191,6 +199,11 @@ def play(page, base, sid, kind, action, choice_index=None, job_id=None, options=
     if not response.ok:
         raise ValueError(f'{endpoint} HTTP {response.status}: {response.text()[:500]}')
     result = response.json()
+    if kind == 'abandon':
+        if result.get('status') != 'abandoned':
+            raise ValueError('Abandon did not terminate the selected rejected job')
+        expect(page.get_by_label('Своё действие или реплика')).to_have_value(action)
+        expect(button(page, 'Отправить действие')).to_be_enabled()
     job = result.get('job') if kind in ('phone','phone-call','phone-group') else result
     if kind in ('start','turn','choice','phone','phone-call','phone-group','call-speech','background','regenerate','lta','retry','phone-retry'):
         deadline = time.monotonic() + 240

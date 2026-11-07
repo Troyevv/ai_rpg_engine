@@ -155,7 +155,8 @@ def validate(directory, manifest):
     with closing(sqlite3.connect(ledger)) as db:
         if manifest.get('stage') == 'C':
             from .stage_c import MAX_ACTIONS
-            auth = Budget(ledger, stage_c=directory).phase_baseline(db)
+            auth = Budget(ledger, stage_c=directory,
+                          stage_c_followup=manifest.get('followup', False)).phase_baseline(db)
             ceiling = auth[2] + MAX_ACTIONS
         else:
             auth = Budget(ledger, directory).stage_b_baseline(db)

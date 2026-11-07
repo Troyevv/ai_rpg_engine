@@ -225,3 +225,27 @@ Death oracle требует сохранения **уже установленн
 на диск до передачи chunk. Это дополняет production diagnostics: LTA raw output
 там пока теряется (#212). Capture добавлен после live-прогона 6 ноября и не
 восстанавливает прежние ответы. Отсутствие полного stream/usage сохраняет резерв.
+
+### Stage C после #220–#226
+
+`prepare-stage-c-followup` создаёт изолированную копию исходного Stage C, проверяет
+совместимость семи checkpoints и привязывает новый дополнительный предел $2 к
+прежнему ledger. Старые авторизации, расходы и evidence не меняются. Повторная
+подготовка не выдаёт ещё $2. Требуются merged #224/#225/#227/#228/#229 и явное
+разрешение на этот post-fix прогон.
+
+```bash
+python -m devtools.live99.run prepare-stage-c-followup /private/live99-stage-c-followup --parent /private/live99-stage-c --reviewed
+python -m devtools.live99.run preflight /private/live99-stage-c-followup --stage C
+python -m devtools.live99.run run /private/live99-stage-c-followup --stage C --reviewed --phase retest --case knowledge --step 1
+```
+
+Retest начинается с UI-abandon отклонённых jobs и с UI-rollback повреждённых
+активных ветвей Campaign/Crisis. Исходные DAG и варианты сохраняются. Abandon
+сверяет оплаченный Narrative, requests, ledger, canonical snapshot и draft; новые
+LLM-вызовы запрещены. Следующее действие — отдельный явный ход, не автоматический
+retry. Для удалённых родов добавляется изолированная pregnancy fixture; она не
+подменяет результат live-рождения. Каждая группа требует semantic review перед
+`--phase continue`; подтверждённый P1 удерживает соответствующую группу.
+
+Отчёт: [post-fix Stage C, 7 ноября](live99-stage-c-retest-20261107.md).
