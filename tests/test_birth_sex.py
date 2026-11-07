@@ -269,6 +269,16 @@ def test_player_speculation_does_not_become_disclosure(tmp_path):
     assert not any(k['fact_id'] in p['sex_fact_ids'].values() for k in after['knowledge'].values())
 
 
+def test_malformed_unrelated_knowledge_keeps_existing_local_handling(tmp_path):
+    repo,sid=due_save(tmp_path/'malformed-knowledge.sqlite')
+    text,raw=payload(repo.get_snapshot(sid)['world_state'])
+    raw['knowledge_gained']=[dict(actor_id='qa_kirill', fact_id=[], source_event_id='delivery')]
+    job,calls=execute(repo,sid,text,raw)
+    assert job['status']=='saved',job['error']
+    assert len(calls)==2
+    assert 'knowledge_path_invalid' in job['warnings_json']
+
+
 def test_remote_birth_discloses_only_to_local_observer(tmp_path):
     from test_temporal_guard import run as ordinary
     from test_due_scene import block, job as run_job

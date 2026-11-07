@@ -372,8 +372,8 @@ def validate_birth_sex(r, claim, event, pregnancy):
             actor = row['source_actor_id']
             if actor not in event['participants'] or not row['source_assertion']:
                 raise ValueError('announcement requires its established speaker and information source')
-            if not capabilities(r.state, actor)['can_speak'] or not capabilities(r.state, actor)['can_perceive']:
-                raise ValueError('announcer cannot perceive or communicate the birth source')
+            if not capabilities(r.state, actor)['can_perceive']:
+                raise ValueError('announcer cannot perceive the birth source')
             if row['source_assertion'] == 'prior_knowledge':
                 key = actor + ':' + pregnancy['sex_fact_ids'][cid]
                 if r.before['knowledge'].get(key, {}).get('status') != 'known':
@@ -408,10 +408,15 @@ def validate_birth_knowledge(r, raw, events):
                    for actor in o['perceived_by'] if o['basis'] != 'not_disclosed'}
         for fid in p['sex_fact_ids'].values():
             guarded.setdefault(fid, set()).update((actor, event['local_id']) for actor, fact_id in allowed if fact_id == fid)
+    if not guarded:
+        return
     for item in raw.records['knowledge_gained']:
         if not isinstance(item, dict): continue
         fid = item.get('fact_id')
-        if fid in guarded and (item.get('actor_id'), item.get('source_event_id')) not in guarded[fid]:
+        if not isinstance(fid, str) or fid not in guarded:
+            continue  # Ordinary malformed Knowledge keeps its existing local diagnostics.
+        actor, source_id = item.get('actor_id'), item.get('source_event_id')
+        if not isinstance(actor, str) or not isinstance(source_id, str) or (actor, source_id) not in guarded[fid]:
             fatal('Знание пола не подтверждено наблюдением этого свидетеля.',
                   'birth_sex_knowledge_invalid', repairable=True, section='knowledge_gained')
 
