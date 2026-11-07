@@ -265,8 +265,9 @@ def run_job(path, job_id, handle):
             narrative_policy = recorded_policy(recorded_messages, before['world_state'])
             from backend.runtime_v3.initiative import recorded_plan
             initiative_plan = recorded_plan(recorded_messages)
-            from backend.runtime_v3.continuity import recorded as recorded_continuity
+            from backend.runtime_v3.continuity import recorded as recorded_continuity, due_birth_repair_required
             continuity_plan = recorded_continuity(recorded_messages)
+            require_due_birth_assessment = due_birth_repair_required(json.loads(job.get('repair_diagnostics_json') or '[]'), before['world_state'])
             feedback = None
             previous_extraction = None
             if job['attempt_epoch']:
@@ -316,7 +317,7 @@ def run_job(path, job_id, handle):
                     from backend.runtime_v3.remote_semantics import staged_sources
                     from backend.runtime_v3.call_continuity import sources as call_sources
                     from backend.runtime_v3.player_actions import required as agency_required
-                    resolver=StateResolver(before['world_state'],narrative,job['user_text'],require_player_agency=agency_required(before['world_state'], job['user_text'], job['kind']),pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_plan,continuity_decision=continuity_plan,runtime_time_skip=bool(skip_result),require_elapsed=job['kind']=='turn' and not skip_result,turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),relationship_query=relationship_reader(storage, before.get('history_head'), candidates=remote_relationship_sources(before, staged_sources(before))),actor_names={c['id']:c['name'] for c in before['character_cards']},letter_sources=letter_sources,remote_semantic_sources=staged_sources(before),call_sources=call_sources(before['world_state'],world_history,narrative,job['user_text'],sequence+1))
+                    resolver=StateResolver(before['world_state'],narrative,job['user_text'],require_due_birth_assessment=require_due_birth_assessment,require_player_agency=agency_required(before['world_state'], job['user_text'], job['kind']),pacing_decision=getattr(messages,'selection',{}).get('pacing'),initiative_decision=initiative_plan,continuity_decision=continuity_plan,runtime_time_skip=bool(skip_result),require_elapsed=job['kind']=='turn' and not skip_result,turn_id=sequence+1,milestone_query=world_history.get('_milestone_query'),development_query=world_history.get('_development_query'),relationship_query=relationship_reader(storage, before.get('history_head'), candidates=remote_relationship_sources(before, staged_sources(before))),actor_names={c['id']:c['name'] for c in before['character_cards']},letter_sources=letter_sources,remote_semantic_sources=staged_sources(before),call_sources=call_sources(before['world_state'],world_history,narrative,job['user_text'],sequence+1))
                     resolved=resolver.resolve(raw)
                     if before['world_state']['meta'].get('interaction_focus')=='call':
                         rejected=[w for w in resolved.warnings if w.get('section')=='scheduled_events']
@@ -359,6 +360,7 @@ def run_job(path, job_id, handle):
                     diagnostic=exc.diagnostic('extraction_repair' if attempt==0 and exc.repairable else 'validation_failed')
                     diagnostic.update(attempt=attempt,attempt_epoch=job['attempt_epoch'],revision=job['revision'])
                     storage.record_repair(job_id,diagnostic)
+                    require_due_birth_assessment = require_due_birth_assessment or due_birth_repair_required([diagnostic], before['world_state'])
                     if attempt == 1 or not exc.repairable:raise
                     feedback = repair_feedback(diagnostic, result, before['world_state'])
                 finally:
