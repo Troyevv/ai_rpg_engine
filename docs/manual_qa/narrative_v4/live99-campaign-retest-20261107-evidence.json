@@ -1,0 +1,482 @@
+{
+  "master_sha": "40bc3da23b44a025954a6b050fe71a08a2ce4a2d",
+  "live_qa_sha": "a37d2d54a066dcd90aac076aaf53167757b77b17",
+  "qa_pr": 239,
+  "status": "partial_all_groups_held",
+  "summary": {
+    "new_actions": 23,
+    "new_requests": 36,
+    "stages": {
+      "narrative": 12,
+      "extraction": 12,
+      "extraction_repair": 4,
+      "long_term_narrative": 4,
+      "long_term_extraction": 4
+    },
+    "input_tokens": 479419,
+    "cached_tokens": 180608,
+    "output_tokens": 24285,
+    "usage_estimated_usd": "0.059934474",
+    "peak_cold_usd": 0.1729677,
+    "outstanding": 0,
+    "raw_exact_matches": 36,
+    "step_status": {
+      "recorded": 19,
+      "held-for-review": 4
+    },
+    "chronology_flags": []
+  },
+  "budget": {
+    "historical_prefix_rows": 247,
+    "prefix_unchanged": true,
+    "all_calls": 283,
+    "all_actions": 175,
+    "new_calls": 36,
+    "new_actions": 23,
+    "unknown": 0,
+    "shared_peak_cold_usd": "0.3586539",
+    "new_peak_cold_usd": "0.1729677",
+    "remaining_usd": "1.6413461"
+  },
+  "steps": [
+    {
+      "case": "campaign",
+      "step": 0,
+      "kind": "rollback",
+      "status": "recorded",
+      "atomic": false,
+      "before_minute": 2631442,
+      "after_minute": 2105842,
+      "siblings_preserved": true
+    },
+    {
+      "case": "campaign",
+      "step": 1,
+      "kind": "rollback",
+      "status": "recorded",
+      "atomic": false,
+      "before_minute": 2105842,
+      "after_minute": 2105840,
+      "siblings_preserved": true
+    },
+    {
+      "case": "campaign",
+      "step": 2,
+      "kind": "turn",
+      "status": "recorded",
+      "atomic": false,
+      "before_minute": 2105840,
+      "after_minute": 2105842,
+      "siblings_preserved": true
+    },
+    {
+      "case": "campaign",
+      "step": 3,
+      "kind": "turn",
+      "status": "recorded",
+      "atomic": false,
+      "before_minute": 2105842,
+      "after_minute": 2105844,
+      "siblings_preserved": true
+    },
+    {
+      "case": "campaign",
+      "step": 4,
+      "kind": "regenerate",
+      "status": "recorded",
+      "atomic": false,
+      "before_minute": 2105842,
+      "after_minute": 2105844,
+      "siblings_preserved": true
+    },
+    {
+      "case": "campaign",
+      "step": 5,
+      "kind": "variant",
+      "status": "recorded",
+      "atomic": false,
+      "before_minute": 2105844,
+      "after_minute": 2105844,
+      "siblings_preserved": true
+    },
+    {
+      "case": "campaign",
+      "step": 6,
+      "kind": "rollback",
+      "status": "recorded",
+      "atomic": false,
+      "before_minute": 2105844,
+      "after_minute": 2105842,
+      "siblings_preserved": true
+    },
+    {
+      "case": "campaign",
+      "step": 7,
+      "kind": "turn",
+      "status": "recorded",
+      "atomic": false,
+      "before_minute": 2105842,
+      "after_minute": 2105844,
+      "siblings_preserved": true
+    },
+    {
+      "case": "campaign",
+      "step": 8,
+      "kind": "background",
+      "status": "recorded",
+      "atomic": false,
+      "before_minute": 2105844,
+      "after_minute": 2105844,
+      "siblings_preserved": true
+    },
+    {
+      "case": "campaign",
+      "step": 9,
+      "kind": "lta",
+      "status": "recorded",
+      "atomic": false,
+      "before_minute": 2105844,
+      "after_minute": 2631444,
+      "siblings_preserved": true
+    },
+    {
+      "case": "campaign",
+      "step": 10,
+      "kind": "switch",
+      "status": "recorded",
+      "atomic": false,
+      "before_minute": 2631444,
+      "after_minute": 2631444,
+      "siblings_preserved": true
+    },
+    {
+      "case": "campaign",
+      "step": 11,
+      "kind": "turn",
+      "status": "held-for-review",
+      "atomic": true,
+      "before_minute": 2631444,
+      "after_minute": 2631444,
+      "siblings_preserved": true
+    },
+    {
+      "case": "crisis",
+      "step": 0,
+      "kind": "rollback",
+      "status": "recorded",
+      "atomic": false,
+      "before_minute": 560,
+      "after_minute": 558,
+      "siblings_preserved": true
+    },
+    {
+      "case": "crisis",
+      "step": 1,
+      "kind": "turn",
+      "status": "recorded",
+      "atomic": false,
+      "before_minute": 558,
+      "after_minute": 559,
+      "siblings_preserved": true
+    },
+    {
+      "case": "family",
+      "step": 0,
+      "kind": "lta",
+      "status": "recorded",
+      "atomic": false,
+      "before_minute": 540,
+      "after_minute": 1980,
+      "siblings_preserved": true
+    },
+    {
+      "case": "family",
+      "step": 1,
+      "kind": "turn",
+      "status": "recorded",
+      "atomic": false,
+      "before_minute": 1980,
+      "after_minute": 1980,
+      "siblings_preserved": true
+    },
+    {
+      "case": "family",
+      "step": 2,
+      "kind": "turn",
+      "status": "held-for-review",
+      "atomic": true,
+      "before_minute": 1980,
+      "after_minute": 1980,
+      "siblings_preserved": true
+    },
+    {
+      "case": "knowledge",
+      "step": 0,
+      "kind": "abandon",
+      "status": "recorded",
+      "atomic": true,
+      "before_minute": 553,
+      "after_minute": 553,
+      "siblings_preserved": true
+    },
+    {
+      "case": "knowledge",
+      "step": 1,
+      "kind": "turn",
+      "status": "held-for-review",
+      "atomic": true,
+      "before_minute": 553,
+      "after_minute": 553,
+      "siblings_preserved": true
+    },
+    {
+      "case": "phone",
+      "step": 0,
+      "kind": "abandon",
+      "status": "recorded",
+      "atomic": true,
+      "before_minute": 548,
+      "after_minute": 548,
+      "siblings_preserved": true
+    },
+    {
+      "case": "phone",
+      "step": 1,
+      "kind": "turn",
+      "status": "recorded",
+      "atomic": false,
+      "before_minute": 548,
+      "after_minute": 551,
+      "siblings_preserved": true
+    },
+    {
+      "case": "social",
+      "step": 0,
+      "kind": "abandon",
+      "status": "recorded",
+      "atomic": true,
+      "before_minute": 567,
+      "after_minute": 567,
+      "siblings_preserved": true
+    },
+    {
+      "case": "social",
+      "step": 1,
+      "kind": "turn",
+      "status": "held-for-review",
+      "atomic": true,
+      "before_minute": 567,
+      "after_minute": 567,
+      "siblings_preserved": true
+    }
+  ],
+  "integrity": {
+    "sqlite": {
+      "game.sqlite": "ok",
+      "budget.sqlite": "ok",
+      "budget-before.sqlite": "ok"
+    },
+    "all_checkpoint_invariants": true,
+    "active_history": [
+      {
+        "save": 1,
+        "history_nodes": 14,
+        "events": 33,
+        "provenance_warnings": []
+      },
+      {
+        "save": 10,
+        "history_nodes": 4,
+        "events": 5,
+        "provenance_warnings": []
+      },
+      {
+        "save": 3,
+        "history_nodes": 112,
+        "events": 129,
+        "provenance_warnings": []
+      },
+      {
+        "save": 4,
+        "history_nodes": 9,
+        "events": 13,
+        "provenance_warnings": []
+      },
+      {
+        "save": 5,
+        "history_nodes": 19,
+        "events": 15,
+        "provenance_warnings": []
+      },
+      {
+        "save": 6,
+        "history_nodes": 16,
+        "events": 28,
+        "provenance_warnings": []
+      },
+      {
+        "save": 8,
+        "history_nodes": 14,
+        "events": 20,
+        "provenance_warnings": []
+      },
+      {
+        "save": 11,
+        "history_nodes": 2,
+        "events": 3,
+        "provenance_warnings": []
+      }
+    ],
+    "no_duplicate_active_event_ids": true,
+    "all_sibling_hashes_preserved": true,
+    "parent_evidence_and_ledger_prefix_unchanged": true
+  },
+  "resume": {
+    "exit_codes": [
+      1,
+      1
+    ],
+    "new_calls": 0,
+    "new_actions": 0,
+    "all_checkpoints_unchanged": true,
+    "all_original_step_evidence_unchanged": true,
+    "ledger_unchanged": true,
+    "held_groups": [
+      "social",
+      "family",
+      "crisis",
+      "knowledge",
+      "phone",
+      "campaign"
+    ],
+    "knowledge_completed": false
+  },
+  "browser": [
+    {
+      "name": "social-desktop",
+      "save": 1,
+      "unchanged": true,
+      "paid_calls": 0,
+      "mobile": false
+    },
+    {
+      "name": "social-mobile",
+      "save": 1,
+      "unchanged": true,
+      "paid_calls": 0,
+      "mobile": true
+    },
+    {
+      "name": "family-desktop",
+      "save": 10,
+      "unchanged": true,
+      "paid_calls": 0,
+      "mobile": false
+    },
+    {
+      "name": "family-mobile",
+      "save": 10,
+      "unchanged": true,
+      "paid_calls": 0,
+      "mobile": true
+    },
+    {
+      "name": "crisis-desktop",
+      "save": 8,
+      "unchanged": true,
+      "paid_calls": 0,
+      "mobile": false
+    },
+    {
+      "name": "crisis-mobile",
+      "save": 8,
+      "unchanged": true,
+      "paid_calls": 0,
+      "mobile": true
+    },
+    {
+      "name": "knowledge-desktop",
+      "save": 4,
+      "unchanged": true,
+      "paid_calls": 0,
+      "mobile": false
+    },
+    {
+      "name": "knowledge-mobile",
+      "save": 4,
+      "unchanged": true,
+      "paid_calls": 0,
+      "mobile": true
+    },
+    {
+      "name": "campaign-desktop",
+      "save": 5,
+      "unchanged": true,
+      "paid_calls": 0,
+      "mobile": false
+    },
+    {
+      "name": "campaign-mobile",
+      "save": 5,
+      "unchanged": true,
+      "paid_calls": 0,
+      "mobile": true
+    },
+    {
+      "name": "phone-desktop",
+      "save": 6,
+      "unchanged": true,
+      "paid_calls": 0,
+      "mobile": false
+    },
+    {
+      "name": "phone-mobile",
+      "save": 6,
+      "unchanged": true,
+      "paid_calls": 0,
+      "mobile": true
+    }
+  ],
+  "current_archive": {
+    "archive": "live99-campaign-evidence-20261107.tar.gz",
+    "bytes": 29089712,
+    "sha256": "3979c8b87ce923ccf21737c8a7cd17718f218b36535997b752c5118d4d15a277",
+    "files_verified": 353,
+    "secret_matches": 0,
+    "publicly_uploaded": false
+  },
+  "historical_archives": {
+    "live99-stage-c-validation-20261107.tar.gz": {
+      "bytes": 18719872,
+      "sha256": "396e36dcd7ed2d3ddde84e8ec2d9bbc06908328ec3fe8d4bb3b319c029a297d4"
+    },
+    "live99-stage-c-retest-validation-20261107.tar.gz": {
+      "bytes": 4949,
+      "sha256": "ea14936550c27e375057c37828e6f1df33dfbbbc76282bc3379a1c47ac2e317b"
+    },
+    "live99-stage-c-evidence-20261107.tar.gz": {
+      "bytes": 26465225,
+      "sha256": "1d4b5119bc20f11e66ec5384e6c8717ae48744c3e25dc23b4a3402bad9d74b13"
+    },
+    "live99-stage-b-final-evidence-20261106.tar.gz": {
+      "bytes": 29857056,
+      "sha256": "851ae08b06d39b912c0e629bf430d5547516712662adf0ef520d0a9d8182056c"
+    },
+    "live99-stage-c-retest-evidence-20261107.tar.gz": {
+      "bytes": 31446864,
+      "sha256": "966c43030151625858b947607dc809a4e4a7b91e30505931a8aa2094562f24fe"
+    },
+    "live99-stage-b-evidence-20261106.tar.gz": {
+      "bytes": 22925152,
+      "sha256": "3a6c2cd30eed062c8465bb446364de3edcdfdac2482193893ab7e89e519e2628"
+    }
+  },
+  "public_raw_evidence": false,
+  "publication_status": "Blocked by automatic approval review pending explicit public-payload consent; no upload performed",
+  "issues": [
+    237,
+    238,
+    240,
+    223
+  ]
+}
