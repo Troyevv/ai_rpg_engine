@@ -566,6 +566,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 raise ValueError("Пустой результат длительного перехода.")
             feedback = None
             for attempt in range(2):
+                payload = None
                 try:
                     messages = build_context(
                         camera,
@@ -690,7 +691,8 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 except (StructuralDeltaError, ValueError) as exc:
                     if not isinstance(exc, StructuralDeltaError):
                         exc = StructuralDeltaError(str(exc), 'long_term_outcome_invalid', repairable=True)
-                    can_repair = attempt == 0 and exc.repairable and report['llm_calls'] < request.max_llm_calls
+                    can_repair = (payload is not None and attempt == 0 and exc.repairable
+                                  and report['llm_calls'] < request.max_llm_calls)
                     report['diagnostics'].extend(exc.diagnostics('long_term_repair' if can_repair else 'unresolved_group'))
                     if not can_repair:
                         raise exc

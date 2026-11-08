@@ -28,7 +28,9 @@ for (const scenario of ['knowledge', 'family', 'phone', 'crisis', 'retry', 'live
     const after = await view();
     const accounting = async () => (await (await request.get(path + '/accounting')).json()).requests;
     const spent = await accounting();
-    expect(spent.filter((r: {job_id: string}) => r.job_id === after.job.id)).toHaveLength(live && base === 'family' ? 2 : 3);
+    // #250: optional inventory/audit no longer purchases repair for these originals.
+    const firstPass = live && ['family', 'phone', 'social'].includes(base);
+    expect(spent.filter((r: {job_id: string}) => r.job_id === after.job.id)).toHaveLength(firstPass ? 2 : 3);
     await page.reload();
     await expect(input).toBeVisible();
     expect((await view()).state).toEqual(after.state);

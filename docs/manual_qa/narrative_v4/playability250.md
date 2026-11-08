@@ -67,7 +67,9 @@ those dependencies.
    debited from the same `max_llm_calls` cap. Regeneration pins the original
    recorded group IDs and Narrative contexts across selection-policy changes. Unattempted later groups are reported
    separately. A group with discarded declared Events is rejected, not called
-   calm. Empty accepted groups must not hide a domain state change.
+   calm. Empty accepted groups must not hide a domain state change. Extraction
+   context failure rejects only that group: repair requires an actual response
+   from the current attempt, never an unset/stale payload from another group.
 6. Existing report/API/UI now distinguish `developed`, `quiet`, `incomplete`,
    `calendar_only`, with accepted/quiet groups, rejected causes and budget misses.
    Public projection retains existing privacy filtering. Calendar-only with zero
@@ -97,7 +99,8 @@ scripted. It covers:
   revision without saving, no partial background Events or character mutations;
 - mixed independent LTA groups, repair success/failure, total cap, unattempted
   causes, quiet versus rejected versus zero-budget outcomes; SQLite report reload
-  and rollback; no player participant or unsolicited knowledge;
+  and rollback; no player participant or unsolicited knowledge; real Context
+  Builder overflow on the first group's Narrative followed by an accepted group;
 - exact latest D/005 original error/repair, optional rejected choices and next input.
 
 Existing birth, pregnancy boundaries, life/social, personality, relationship,
@@ -118,6 +121,14 @@ the original context test limit; no context/test limit was raised. World generat
 already allowed rejected optional creative proposals to preserve a structurally
 valid base; the API test now checks that existing behavior. Historical rejected
 creative-journal revalidation retains its separate test.
+
+The first GitHub full browser run exposed the corresponding old phone/social
+three-call expectations and the creative browser fixture returning an entire
+world instead of a semantic-review response. These are updated to assert first-pass
+acceptance and review/confirmation of the unchanged valid base respectively;
+no rejected creative changes or secret Knowledge are applied. The exact browser
+fixture is also exercised through the API before resubmission. The initial CI
+failures are retained as diagnostic evidence, not called a successful run.
 
 Frontend unit tests and TypeScript/production build pass locally. Targeted
 Chromium E2E could not launch locally: AF_UNIX socket creation is denied by this

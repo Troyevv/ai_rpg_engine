@@ -329,3 +329,27 @@ def test_optional_background_context_failure_keeps_foreground_without_provider_r
     assert job['status']=='saved' and len(calls)==2,job['error']
     assert repo.get_snapshot(sid)['world_state']['characters']==before['world_state']['characters']
     assert any(d['code']=='background_context_invalid' for d in json.loads(job['warnings_json']))
+
+
+def test_lta_extraction_context_overflow_rejects_only_its_group():
+    before=lta_fixture();request=dict(amount=1,unit='months',max_llm_calls=4)
+    calls=[]
+    def generate(stage,messages,*args,context_key,**kwargs):
+        calls.append((stage,context_key))
+        if stage=='long_term_narrative':
+            return ['Сцена. '*60000 if len(calls)==1 else 'NPC продолжил работу.']
+        camera=json.loads(next(m['content'].split('\n',1)[1] for m in messages
+            if m['content'].startswith('Текущее состояние / GM-only\n')))['camera']
+        actor=camera['present_character_ids'][0]
+        return [json.dumps(dict(final_scene=dict(location_id=camera['location_id'],
+            present_character_ids=[actor],elapsed_minutes=0),events=[dict(id='work',
+            text='NPC продолжил работу.',participants=[actor],witnesses=[actor],
+            medium='observation',advance_candidate_ids=context_key)]))]
+    after,batch,report=run(before,request,generate=generate)
+    assert report['status']=='incomplete'
+    assert report['coverage']['rejected_causes']==report['coverage']['accepted_groups']==1
+    assert report['llm_calls']==len(calls)==3
+    assert all(stage!='long_term_repair' for stage,_ in calls)
+    assert any('Контекст v3 не помещается' in d.get('message','') for d in report['diagnostics'])
+    assert len(batch['events'])==1
+    assert after['world_state']['knowledge']==before['world_state']['knowledge']
