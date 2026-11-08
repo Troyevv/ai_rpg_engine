@@ -1,8 +1,8 @@
 import {expect, test} from '@playwright/test';
 import {defaults} from '../src/types';
 
-for (const mode of ['saved', 'missing', 'reauthor']) {
-  test(`#249 ${mode}: audit survives reload and recovery`, async ({page, request}) => {
+for (const mode of ['saved', 'missing', 'uncertain', 'invalid', 'reauthor']) {
+  test(`#250 ${mode}: optional audit and genuine recovery survive reload`, async ({page, request}) => {
     const seed = await request.post(`/test/agency249-seed?mode=${mode}`);
     expect(seed.ok()).toBe(true);
     const selection = await seed.json();
@@ -21,10 +21,10 @@ for (const mode of ['saved', 'missing', 'reauthor']) {
     const input = page.getByLabel('Своё действие или реплика');
     await input.fill(selection.action);
     await page.getByRole('button', {name: 'Отправить действие', exact: true}).click();
-    await expect.poll(async () => (await view()).job.status).toBe(mode === 'saved' ? 'saved' : 'error');
+    await expect.poll(async () => (await view()).job.status).toBe(['reauthor','invalid'].includes(mode) ? 'error' : 'saved');
     const after = await view();
     const requests = (await (await request.get(path + '/accounting')).json()).requests;
-    expect(requests.filter((r: {job_id: string}) => r.job_id === after.job.id)).toHaveLength(mode === 'missing' ? 3 : 2);
+    expect(requests.filter((r: {job_id: string}) => r.job_id === after.job.id)).toHaveLength(mode === 'invalid' ? 3 : 2);
     await page.reload();
     await expect(input).toBeVisible();
     expect((await view()).state).toEqual(after.state);
@@ -36,7 +36,7 @@ for (const mode of ['saved', 'missing', 'reauthor']) {
       await expect(retry).toHaveCount(0);
       await page.getByRole('button', {name: 'Отменить неудачный ход', exact: true}).click();
       await expect(input).toHaveValue(selection.action);
-    } else if (mode === 'missing') {
+    } else if (mode === 'invalid') {
       expect(after.state).toEqual(before.state);
       await request.post('/test/agency249-allow');
       await retry.click();
@@ -46,6 +46,12 @@ for (const mode of ['saved', 'missing', 'reauthor']) {
       expect(recovered.filter((r: {job_id: string; stage: string}) => r.job_id === after.job.id && r.stage === 'narrative')).toHaveLength(1);
     } else {
       expect(after.turns).toHaveLength(before.turns.length + 1);
+      await expect(input).toBeEnabled();
+      await expect(page.getByRole('button', {name: /Посмотреть в окно/})).toBeVisible();
+      await input.fill(selection.action);
+      await page.getByRole('button', {name: 'Отправить действие', exact: true}).click();
+      await expect.poll(async () => (await view()).turns.length).toBe(after.turns.length + 1);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
     }
   });
 }

@@ -128,9 +128,11 @@ def test_real_invalid_changes_still_trigger_repair(damage,code):
     assert after['world_state']['characters'][ACTOR_ID]==before['world_state']['characters'][ACTOR_ID]
     assert after['world_state']['meta']['world_time']==before['world_state']['meta']['world_time']
     assert len(history['events'])==1 and len(history['turns'])==1
-    with pytest.raises(StructuralDeltaError) as exc:
-        simulate_skip(15,damage,always_bad=True)
-    assert exc.value.code==code  # Never silently accept protected-actor mutations.
+    original, rejected, batch, calls, repairs, warnings = simulate_skip(15,damage,always_bad=True)
+    assert rejected['world_state'] == original['world_state']
+    assert not batch['events'] and not batch['knowledge_acquisitions']
+    assert any(w['code']==code and w['action']=='discard_background' for w in warnings)
+    assert batch['state_changes'][-1]['outcome']=='rejected'
 
 
 @pytest.mark.parametrize('elapsed',[0,15])

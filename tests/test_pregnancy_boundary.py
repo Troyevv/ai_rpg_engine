@@ -108,7 +108,8 @@ def test_background_group_cannot_deliver_a_player_required_birth():
         yield json.dumps(raw) if stage == 'long_term_extraction' else text
     after, history, report = run(snapshot, request, generate=generate)
     assert report['llm_calls'] == 2 and not report['accepted']
-    assert report['diagnostics'][0]['message'] == 'Рождение не входит в причины выбранной фоновой группы.'
+    assert any(d.get('message') == 'Рождение не входит в причины выбранной фоновой группы.' for d in report['diagnostics'])
+    assert report['status']=='incomplete' and report['coverage']['rejected_causes']==1
     assert not history['events']
     assert after['world_state']['pregnancies'][process['id']]['status'] == 'due'
     assert after['world_state']['knowledge'] == state['knowledge']

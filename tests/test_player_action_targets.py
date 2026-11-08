@@ -197,7 +197,7 @@ def test_present_alias_pronoun_group_and_untargeted_actions(crisis, text, target
     assert event['player_interaction'] and event['target_ids'] == targets
     assert text in json.dumps(calls[1]['messages'], ensure_ascii=False)
     assert 'PLAYER ACTION AGENCY' in calls[0]['messages'][0]['content']
-    assert 'PLAYER ACTION REVIEW' in calls[1]['messages'][0]['content']
+    assert 'PLAYER AGENCY:' in calls[1]['messages'][0]['content']
 
 
 @pytest.mark.parametrize('npc_text', ['Марина сама предлагает помочь.', 'Марина отвечает на вопрос, обращённый к Вере.'])
@@ -227,12 +227,14 @@ def test_multiple_input_actions_remain_separate(crisis):
 
 
 @pytest.mark.parametrize('review', [None, {}, {'status':'uncertain','actions':[]}, {'status':'violated','actions':[]}])
-def test_missing_or_unsafe_review_cannot_hide_prose_by_omitting_events(crisis, review):
+def test_legacy_review_policy_remains_pinned_for_old_jobs(crisis, review):
     _, repo, sid = crisis
     before = repo.get_snapshot(sid)
     raw = payload(before['world_state'], [])
     raw['player_agency'] = review
-    job, calls = play(crisis, [raw, raw], ACTION, BAD_TEXT)
+    # Emulate an existing v2 producer; v3 optional audit is covered in #250 tests.
+    with patch('backend.runtime_v3.player_actions.EXTRACTION_VERSION', 2):
+        job, calls = play(crisis, [raw, raw], ACTION, BAD_TEXT)
     assert job['status'] == 'error'
     assert len(calls) == (2 if review and review.get('status') in ('violated', 'uncertain') else 3)
     assert Repository(repo.path).get_snapshot(sid) == before

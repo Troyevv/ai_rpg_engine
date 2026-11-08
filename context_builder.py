@@ -27,7 +27,7 @@ def describe_context(messages):
 
 
 def build_context(state, history, user_text, kind, context_length, reserve, extraction_text=None,
-                  validation_feedback=None, recent_turns=6, prompts=None, world_history=None, target_context_budget=18000, pacing_decision=None, initiative_decision=None, continuity_decision=None, extraction_contract=2):
+                  validation_feedback=None, recent_turns=6, prompts=None, world_history=None, target_context_budget=18000, pacing_decision=None, initiative_decision=None, continuity_decision=None, extraction_contract=3):
     from backend.runtime_v3.context import build_context as build_v3
     if state.get('schema_version') != 3:
         # Explicit read-only draft preview boundary. Saved runtime jobs enter as v3.

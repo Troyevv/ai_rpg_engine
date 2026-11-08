@@ -331,13 +331,13 @@ def test_repair_cannot_clear_narrative_reauthor_requirement(tmp_path, conflict):
     narrative, raw = payload(before['world_state'], sexes=['female' if conflict == 'birth' else 'male'])
     first = deepcopy(raw)
     # One structural repair is legal until the immutable prose is assessed.
-    first.pop('player_agency')
+    first['unknown_canonical_outcome'] = {'id': 'unsupported'}
     if conflict == 'agency':
         raw['player_agency']['status'] = 'violated'
     job, calls = execute(repo, sid, narrative, [first, raw])
     assert job['status'] == 'error' and len(calls) == 3
     diagnostics = json.loads(job['repair_diagnostics_json'])
-    assert diagnostics[0]['code'] == 'player_agency_missing'
+    assert diagnostics[0]['code'] == 'raw_unknown_field'
     assert diagnostics[-1]['code'] == ('narrative_agency_conflict' if conflict == 'agency' else 'birth_narrative_sex_conflict')
     assert diagnostics[-1]['action'] == 'reauthor_narrative'
     fresh = Repository(repo.path)

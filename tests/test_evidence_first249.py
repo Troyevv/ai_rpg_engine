@@ -47,6 +47,10 @@ def test_preserved_cannot_override_negative_audit_even_outside_events(tmp_path, 
     repo=Repository(tmp_path/'game.sqlite');sid=seed(repo,data)['save']
     before,hist=repo.get_snapshot(sid),history(repo,sid)
     job,calls=execute(repo,sid,data,[raw],legacy=False)
+    if classification == 'uncertain':
+        assert job['status']=='saved' and len(calls)==2
+        assert any(w['code']=='player_agency_audit_advisory' for w in json.loads(job['warnings_json']))
+        return
     assert job['status']=='error' and len(calls)==2
     diagnostics=json.loads(job['repair_diagnostics_json'])
     assert diagnostics[0]['code']=='narrative_agency_conflict'
@@ -74,9 +78,10 @@ def test_missing_or_bad_new_fields_are_repairable_and_cannot_choose_legacy(tmp_p
     repo=Repository(tmp_path/'game.sqlite');sid=seed(repo,data)['save']
     # Caller configuration cannot downgrade a newly created producer either.
     job,calls=execute(repo,sid,data,[bad,good],legacy=False,config=dict(CONFIG,_extraction_contract=1))
-    assert json.loads(job['config_json'])['_extraction_contract']==2
-    assert job['status']=='saved' and len(calls)==3,job['error']
-    assert json.loads(job['repair_diagnostics_json'])[0]['code']==code
+    assert json.loads(job['config_json'])['_extraction_contract']==3
+    # This archived action is unreferenced bookkeeping; it cannot authorize a domain.
+    assert job['status']=='saved' and len(calls)==2,job['error']
+    assert not json.loads(job['repair_diagnostics_json'])
 
 
 def test_empty_audit_is_not_an_independent_semantic_proof():
@@ -98,11 +103,11 @@ def test_new_job_retry_regeneration_and_siblings_keep_contract_and_provenance(tm
     # This test proves persistence only, not correct classification of the original prose.
     repo=Repository(tmp_path/'game.sqlite');sid=seed(repo,data)['save']
     before,hist=repo.get_snapshot(sid),history(repo,sid)
-    bad=deepcopy(raw);bad['player_agency'].pop('narrative_audit')
+    bad=deepcopy(raw);bad['final_scene']['location_id']='unknown'
     failed,calls=execute(repo,sid,data,[bad,bad],legacy=False)
     assert failed['status']=='error' and len(calls)==3
     repo.retry_job(failed['id'],dict(CONFIG,_extraction_contract=1))
-    assert json.loads(repo.get_job(failed['id'])['config_json'])['_extraction_contract']==2
+    assert json.loads(repo.get_job(failed['id'])['config_json'])['_extraction_contract']==3
     # Already reset to extracting: run using the recorded job without retrying again.
     import engine
     def stream(**kwargs):yield json.dumps(raw,ensure_ascii=False)
@@ -112,7 +117,7 @@ def test_new_job_retry_regeneration_and_siblings_keep_contract_and_provenance(tm
     after=repo.get_snapshot(sid);turn=repo.list_turns(sid)[-1]
     sibling,_=execute(repo,sid,data,[raw],kind='regenerate',legacy=False)
     assert sibling['status']=='saved',sibling['error']
-    assert json.loads(sibling['config_json'])['_extraction_contract']==2
+    assert json.loads(sibling['config_json'])['_extraction_contract']==3
     assert sibling['context_json']==saved['context_json']
     assert len(repo.variants(turn['node_id']))==2
     repo.select_variant(sid,turn['id'],turn['active_variant_id'],repo.get_save(sid)['revision'])

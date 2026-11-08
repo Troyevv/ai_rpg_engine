@@ -74,10 +74,15 @@ due240_responses=None
 def scripted_stream(**kwargs):
     global provenance238_extractions, integrated247_extractions
     global phone_mode, group_semantic_fail_once, npc_review_start_payload, story168_payload, agency232_attempts, birth231_response, due240_responses, agency237_extractions
+    if kwargs.get('model') == 'lta250-test':
+        yield '{}' if kwargs.get('response_format') else 'NPC занимается своим делом.'
+        return
     if agency249 and kwargs.get('model') == 'agency249-test':
         from copy import deepcopy
         raw=deepcopy(agency249['raw'])
         if agency249['mode']=='missing':raw['player_agency'].pop('narrative_audit')
+        if agency249['mode']=='invalid':raw['final_scene']['location_id']='unknown'
+        if agency249['mode']=='uncertain':raw['player_agency']['status']='uncertain'
         yield json.dumps(raw,ensure_ascii=False) if kwargs.get('response_format') else agency249['narrative']
         return
     if integrated247_case and kwargs.get('model') == 'integrated-test':
@@ -1059,7 +1064,8 @@ if __name__ == '__main__':
             present_character_ids=state['camera']['present_character_ids'],elapsed_minutes=1),
             player_agency=dict(actions=[dict(id='sort',player_evidence=action,target_ids=[],
                 narrative_target_ids=[],target_mode='reference',outcome='completed',meaning='preserved')],
-                narrative_audit=audit,status='preserved'))
+                narrative_audit=audit,status='preserved'),
+            choices=[dict(action='Посмотреть в окно.',speech=''),dict(action='Продолжить работу.',speech='')])
         agency249=dict(raw=raw,narrative=narrative,mode=mode)
         return dict(world=selection['world'],save=selection['save'],action=action)
 

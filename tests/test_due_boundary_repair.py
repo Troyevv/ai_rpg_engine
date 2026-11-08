@@ -205,6 +205,7 @@ def test_known_hidden_local_remote_repair_does_not_grant_knowledge(tmp_path, rem
             yield from provider(**kw)
     job, calls = execute(repo,sid,narrative,[bad,good],background_provider=background)
     assert job['status']=='saved', job['error']
+    # A due birth can freeze the scene clock: a NEW turn must still develop it.
     assert len(calls)==(5 if remote else 3)
     after = Repository(repo.path).get_snapshot(sid)['world_state']
     assert after['knowledge']==state['knowledge']

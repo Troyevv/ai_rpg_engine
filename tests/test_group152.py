@@ -177,7 +177,8 @@ def test_t12_real_api_jobs_sqlite_reload_rollback_regenerate_cost(tmp_path):
     before=repo.get_snapshot(sid)
     jid=turn();state=repo.get_snapshot(sid)['world_state']
     assert [e['content'] for e in state['remote_events'].values()]==[FIRST,QUESTION]
-    assert pending(state,'qa-group') and len(calls)==6 # start 2 + author/semantic/narrative/extraction 4
+    assert pending(state,'qa-group') and len(calls)==8 # start 2 + group/foreground 4 + accumulated-time background 2
+    assert [r['stage'] for r in reversed(repo.request_log(job_id=jid))][-2:]==['world_simulation','world_simulation_delta']
     assert state['camera']==before['world_state']['camera']
     assert Repository(repo.path).get_snapshot(sid)==repo.get_snapshot(sid)
     count=len(calls);execute(jid);assert len(calls)==count # duplicate completed job is no-op

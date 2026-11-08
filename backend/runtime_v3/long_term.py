@@ -159,7 +159,7 @@ def plan(snapshot, request, history=None):
             score,
             tuple(signals),
             context[:600],
-            controlled in actors,
+            controlled in actors and (kind not in ('thread', 'communication') or not any(c != controlled for c in actors)),
             tuple(domains),
         )
 
@@ -377,8 +377,8 @@ def advance_clock(snapshot, minute, batch):
     return snapshot
 
 
-def run(snapshot, request, *, generate=None, config=None, history=None, cancelled=None):
-    """Two provider attempts per group (narrative + normal extraction), no repairs.
+def run(snapshot, request, *, generate=None, config=None, history=None, cancelled=None, recorded_groups=None):
+    """Narrative + Extraction, optionally one repair within the same total budget.
 
     Failed/unselected groups remain unresolved. Deterministic transitions are
     independent of the budget. The enclosing job owns atomic publication.
@@ -388,11 +388,14 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
     from backend.runtime_v3.context import build_context
     from backend.runtime_v3.camera import observe
     from backend.runtime_v3.resolver import StateResolver
-    from backend.runtime_v3.raw import RawTurnResult
+    from backend.runtime_v3.raw import RawTurnResult, repair_feedback
+    from backend.runtime_v3.simulation import optional_generate, BackgroundGenerationError
     from backend.services.world_delta_errors import StructuralDeltaError
 
     request = AdvanceRequest.model_validate(request)
     config = config or {}
+    if generate:
+        generate = optional_generate(generate)
     result = deepcopy(snapshot)
     result["world_state"] = assert_world_state_v3_invariants(result["world_state"])
     original = deepcopy(result["world_state"])
@@ -415,6 +418,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
         max_llm_calls=request.max_llm_calls,
         llm_calls=0,
         accepted=[],
+        quiet=[],
         unresolved=[],
         decisions=[asdict(c) for c in projection.candidates if c.requires_player],
         calendar=projection.calendar,
@@ -435,7 +439,20 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
             groups[key].append(candidate)
         else:
             report["unresolved"].append(dict(id=candidate.id, reason="group_limit"))
-    chosen = list(groups.values())[: request.max_llm_calls // 2] if generate else []
+    if recorded_groups is not None and generate:
+        # Regeneration owns the original paid Narrative contexts, including jobs
+        # predating a selection-policy change. Never substitute a newly ranked cause.
+        available = {c.id: c for c in projection.candidates if not c.requires_player}
+        chosen = []
+        seen = set()
+        for ids in recorded_groups:
+            if (not ids or len(ids) > 3 or any(cid not in available or cid in seen for cid in ids)
+                    or len(set(ids)) != len(ids)):
+                raise ValueError("Сохранённые группы длительного перехода не соответствуют исходному миру.")
+            chosen.append([available[cid] for cid in ids])
+            seen.update(ids)
+    else:
+        chosen = list(groups.values())[: request.max_llm_calls // 2] if generate else []
     chosen_ids = {c.id for group in chosen for c in group}
     report["unresolved"].extend(
         dict(id=c.id, reason="budget")
@@ -447,6 +464,9 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
     for group_index, group in enumerate(chosen):
         if cancelled is not None and cancelled.is_set():
             return None
+        if report['llm_calls'] + 2 > request.max_llm_calls:
+            report['unresolved'].extend(dict(id=c.id, reason='budget') for c in group)
+            continue
         minute = group[0].minute
         if minute > report["actual_target"]:
             report["unresolved"].extend(
@@ -458,7 +478,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
             (
                 cid
                 for cid in group[0].actor_ids
-                if result["world_state"]["characters"][cid]["life_status"] != "dead"
+                if cid != protected and result["world_state"]["characters"][cid]["life_status"] != "dead"
             ),
             None,
         )
@@ -473,7 +493,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
         camera["world_state"]["camera"]["present_character_ids"] = [actor]
         camera["world_state"]["camera"]["remote_interactions"] = []
         camera["_background_actor_ids"] = sorted(
-            {cid for c in group for cid in c.actor_ids}
+            {cid for c in group for cid in c.actor_ids if cid != protected}
         )
         # Ephemeral scene descriptions date from the interval start, not from
         # this future NPC resolution. Retain them as dated context, never mutate
@@ -544,120 +564,137 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 return None
             if not narrative.strip():
                 raise ValueError("Пустой результат длительного перехода.")
-            messages = build_context(
-                camera,
-                [],
-                instruction,
-                "background",
-                config.get("context_length", 32768),
-                config.get("update_tokens", 4096),
-                extraction_text=narrative,
-                pacing_decision=messages.selection["pacing"],
-                initiative_decision=messages.selection["initiative"],
-                prompts=config.get("_prompts"),
-                world_history=history,
-            )
-            report["llm_calls"] += 1
-            payload = "".join(
-                generate(
-                    "long_term_extraction",
-                    messages,
-                    config.get("update_tokens", 4096),
-                    0.1,
-                    context_key=[c.id for c in group],
-                    response_format={"type": "json_object"},
-                )
-            )
-            raw = RawTurnResult.parse(payload)
-            if raw.final_scene.get("elapsed_minutes", 0) != 0:
-                raise ValueError("Время группы задаётся Runtime, а не Extraction.")
-            from backend.runtime_v3.long_term_promotions import prepare
+            feedback = None
+            for attempt in range(2):
+                try:
+                    messages = build_context(
+                        camera,
+                        [],
+                        instruction,
+                        "background",
+                        config.get("context_length", 32768),
+                        config.get("update_tokens", 4096),
+                        extraction_text=narrative,
+                        validation_feedback=feedback,
+                        pacing_decision=messages.selection["pacing"],
+                        initiative_decision=messages.selection["initiative"],
+                        prompts=config.get("_prompts"),
+                        world_history=history,
+                    )
+                    report["llm_calls"] += 1
+                    payload = "".join(
+                        generate(
+                            "long_term_extraction" if attempt == 0 else "long_term_repair",
+                            messages,
+                            config.get("update_tokens", 4096),
+                            0.1,
+                            context_key=[c.id for c in group],
+                            response_format={"type": "json_object"},
+                        )
+                    )
+                    raw = RawTurnResult.parse(payload)
+                    if raw.final_scene.get("elapsed_minutes", 0) != 0:
+                        raise ValueError("Время группы задаётся Runtime, а не Extraction.")
+                    from backend.runtime_v3.long_term_promotions import prepare
 
-            birth_sources = [c.source_id for c in group if c.kind == "birth"]
-            if any(not isinstance(row, dict) or row.get("pregnancy_id") not in birth_sources
-                   for row in raw.records["births"]):
-                raise ValueError("Рождение не входит в причины выбранной фоновой группы.")
-            promotions = prepare(raw, result, [c.id for c in group])
-            allowed = {cid for c in group for cid in c.actor_ids}
-            # Prevent arbitrary remote facets and unscheduled player choices from
-            # hitchhiking on an accepted NPC group. Knowledge still needs #76 proof.
-            if len(raw.records["events"]) > 8:
-                raise ValueError("Лимит событий группы превышен.")
-            for event in raw.records["events"]:
-                if not isinstance(event, dict):
-                    continue
-                if any(
-                    not isinstance(event.get(key, []), list)
-                    or any(not isinstance(cid, str) for cid in event.get(key, []))
-                    for key in ("participants", "witnesses")
-                ):
-                    raise ValueError("Повреждены участники события.")
-                if (
-                    len(set(event.get("participants", []) + event.get("witnesses", [])))
-                    > 16
-                ):
-                    raise ValueError("Лимит участников события превышен.")
-                if protected and protected in event.get("participants", []) + event.get(
-                    "witnesses", []
-                ):
-                    raise ValueError(
-                        "Фоновое событие использует управляемого персонажа."
-                    )
-                if not set(event.get("participants", [])) & allowed:
-                    raise ValueError("Событие не связано с выбранной причиной.")
-                links = event.get("advance_candidate_ids", [])
-                if (
-                    not isinstance(links, list)
-                    or not links
-                    or any(not isinstance(link, str) for link in links)
-                    or set(links) - {c.id for c in group}
-                ):
-                    raise ValueError("Событие не указывает выбранную причину исхода.")
-                # The group occurs at a known instant. StateResolver checks explicit claims.
-                event.setdefault("minute", minute)
-            resolved = StateResolver(
-                resolution_state,
-                narrative,
-                "",
-                letter_sources=artifacts,
-                turn_id=turn,
-                observed=False,
-                mode="background",
-                protected_actor_id=protected,
-                protected_knowledge_actor_ids=[protected] if protected else [],
-                pacing_decision=messages.selection["pacing"],
-                initiative_decision=messages.selection["initiative"],
-                milestone_query=(history or {}).get("_milestone_query"),
-                development_query=(history or {}).get("_development_query"),
-                relationship_query=(history or {}).get("_relationship_query"),
-                relationship_receipts=batch["relationship_changes"],
-                actor_names={c["id"]: c["name"] for c in result["character_cards"]},
-                minimal_promotion_ids=promotions,
-                event_namespace=identity("advance-group", sorted(c.id for c in group)),
-            ).resolve(raw)
-            if resolved.state["meta"]["world_time"] != minute:
-                raise ValueError("Исход изменяет установленную временную границу.")
-            if (
-                protected
-                and resolved.state["characters"][protected]
-                != result["world_state"]["characters"][protected]
-            ):
-                raise ValueError("Фоновый исход изменяет управляемого персонажа.")
-            for cid in promotions:
-                continued = any(
-                    r.get("actor_id") == cid
-                    for section in ("roles", "residences")
-                    for r in resolved.state[section].values()
-                ) or any(
-                    cid in (r["source_id"], r["target_id"])
-                    for r in resolved.state["objective_relations"].values()
-                )
-                if cid not in resolved.state["characters"] or not continued:
-                    raise ValueError(
-                        "Создание персонажа не подтверждено принятой ролью или связью."
-                    )
-            if not resolved.history["events"]:
-                raise ValueError("Нет принятого события, подтверждающего исход.")
+                    birth_sources = [c.source_id for c in group if c.kind == "birth"]
+                    if any(not isinstance(row, dict) or row.get("pregnancy_id") not in birth_sources
+                           for row in raw.records["births"]):
+                        raise ValueError("Рождение не входит в причины выбранной фоновой группы.")
+                    promotions = prepare(raw, result, [c.id for c in group])
+                    allowed = {cid for c in group for cid in c.actor_ids if cid != protected}
+                    # Prevent arbitrary remote facets and unscheduled player choices from
+                    # hitchhiking on an accepted NPC group. Knowledge still needs #76 proof.
+                    if len(raw.records["events"]) > 8:
+                        raise ValueError("Лимит событий группы превышен.")
+                    for event in raw.records["events"]:
+                        if not isinstance(event, dict):
+                            continue
+                        if any(
+                            not isinstance(event.get(key, []), list)
+                            or any(not isinstance(cid, str) for cid in event.get(key, []))
+                            for key in ("participants", "witnesses")
+                        ):
+                            raise ValueError("Повреждены участники события.")
+                        if (
+                            len(set(event.get("participants", []) + event.get("witnesses", [])))
+                            > 16
+                        ):
+                            raise ValueError("Лимит участников события превышен.")
+                        if protected and protected in event.get("participants", []) + event.get(
+                            "witnesses", []
+                        ):
+                            raise ValueError(
+                                "Фоновое событие использует управляемого персонажа."
+                            )
+                        if not set(event.get("participants", [])) & allowed:
+                            raise ValueError("Событие не связано с выбранной причиной.")
+                        links = event.get("advance_candidate_ids", [])
+                        if (
+                            not isinstance(links, list)
+                            or not links
+                            or any(not isinstance(link, str) for link in links)
+                            or set(links) - {c.id for c in group}
+                        ):
+                            raise ValueError("Событие не указывает выбранную причину исхода.")
+                        # The group occurs at a known instant. StateResolver checks explicit claims.
+                        event.setdefault("minute", minute)
+                    resolved = StateResolver(
+                        resolution_state,
+                        narrative,
+                        "",
+                        letter_sources=artifacts,
+                        turn_id=turn,
+                        observed=False,
+                        mode="background",
+                        protected_actor_id=protected,
+                        protected_knowledge_actor_ids=[protected] if protected else [],
+                        pacing_decision=messages.selection["pacing"],
+                        initiative_decision=messages.selection["initiative"],
+                        milestone_query=(history or {}).get("_milestone_query"),
+                        development_query=(history or {}).get("_development_query"),
+                        relationship_query=(history or {}).get("_relationship_query"),
+                        relationship_receipts=batch["relationship_changes"],
+                        actor_names={c["id"]: c["name"] for c in result["character_cards"]},
+                        minimal_promotion_ids=promotions,
+                        event_namespace=identity("advance-group", sorted(c.id for c in group)),
+                    ).resolve(raw)
+                    if resolved.state["meta"]["world_time"] != minute:
+                        raise ValueError("Исход изменяет установленную временную границу.")
+                    if (
+                        protected
+                        and resolved.state["characters"][protected]
+                        != result["world_state"]["characters"][protected]
+                    ):
+                        raise ValueError("Фоновый исход изменяет управляемого персонажа.")
+                    for cid in promotions:
+                        continued = any(
+                            r.get("actor_id") == cid
+                            for section in ("roles", "residences")
+                            for r in resolved.state[section].values()
+                        ) or any(
+                            cid in (r["source_id"], r["target_id"])
+                            for r in resolved.state["objective_relations"].values()
+                        )
+                        if cid not in resolved.state["characters"] or not continued:
+                            raise ValueError(
+                                "Создание персонажа не подтверждено принятой ролью или связью."
+                            )
+                    if not resolved.history["events"]:
+                        if raw.records["events"]:
+                            raise ValueError("Заявленные события группы не приняты Runtime.")
+                        # A calm outcome is valid only when no domain change was lost.
+                        if any(resolved.state[k] != resolution_state[k] for k in resolution_state if k not in ('meta', 'camera')):
+                            raise ValueError("Изменение мира без принятого события исхода.")
+                    break
+                except (StructuralDeltaError, ValueError) as exc:
+                    if not isinstance(exc, StructuralDeltaError):
+                        exc = StructuralDeltaError(str(exc), 'long_term_outcome_invalid', repairable=True)
+                    can_repair = attempt == 0 and exc.repairable and report['llm_calls'] < request.max_llm_calls
+                    report['diagnostics'].extend(exc.diagnostics('long_term_repair' if can_repair else 'unresolved_group'))
+                    if not can_repair:
+                        raise exc
+                    feedback = repair_feedback(exc.diagnostics('long_term_repair'), payload, resolution_state)
             # Restore camera only; off-camera location changes remain canonical.
             resolved.state["camera"] = deepcopy(result["world_state"]["camera"])
             from backend.runtime_v3.remote import release_call_channel
@@ -690,16 +727,16 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
             report["unresolved"].extend(
                 dict(id=c.id, reason="no_outcome")
                 for c in group
-                if c.id not in accepted_ids
+                if c.id not in accepted_ids and resolved.history["events"]
             )
             result["world_state"] = resolved.state
             from backend.services.npc_review import publish_cards
             publish_cards(result, resolved)
             for section, rows in resolved.history.items():
                 batch[section].extend(rows)
-            report["accepted"].append(
+            report["accepted" if resolved.history["events"] else "quiet"].append(
                 dict(
-                    candidate_ids=sorted(accepted_ids),
+                    candidate_ids=sorted(accepted_ids) if resolved.history["events"] else sorted(c.id for c in group),
                     minute=minute,
                     event_ids=[e["id"] for e in resolved.history["events"]],
                     summaries=[e["text"] for e in resolved.history["events"] if not e.get("remote_interaction_id")],
@@ -723,7 +760,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                     for c in later
                 )
                 break
-        except (ValueError, StructuralDeltaError) as exc:
+        except (ValueError, StructuralDeltaError, BackgroundGenerationError) as exc:
             report["diagnostics"].append(
                 dict(
                     kind="unresolved_group",
@@ -732,7 +769,7 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
                 )
             )
             report["unresolved"].extend(
-                dict(id=c.id, reason="unresolved") for c in group
+                dict(id=c.id, reason="rejected") for c in group
             )
     if cancelled is not None and cancelled.is_set():
         return None
@@ -751,6 +788,13 @@ def run(snapshot, request, *, generate=None, config=None, history=None, cancelle
         report["decisions"] = [
             c for c in report["decisions"] if c["minute"] <= report["actual_target"]
         ]
+    report['coverage'] = dict(accepted_groups=len(report['accepted']), quiet_groups=len(report['quiet']),
+        rejected_causes=sum(r['reason'] == 'rejected' for r in report['unresolved']),
+        budget_unattempted=sum(r['reason'] == 'budget' for r in report['unresolved']))
+    report['status'] = ('calendar_only' if request.max_llm_calls == 0 else
+                        'incomplete' if report['unresolved'] else
+                        'developed' if report['accepted'] else
+                        'calendar_only' if not report['llm_calls'] else 'quiet')
     batch["state_changes"].append(
         dict(
             kind="long_term_advance",

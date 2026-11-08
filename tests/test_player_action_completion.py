@@ -87,7 +87,12 @@ def test_completion_repair_and_abandon_are_bounded_and_atomic(crisis, recovery):
     assert 'input-1' in calls[-1]['messages'][0]['content']
     assert 'outcome=completed' in calls[-1]['messages'][0]['content']
     fresh = Repository(repo.path)
-    if recovery == 'attempt':
+    if recovery == 'deleted':
+        # ATTEMPT never completed contact; removing its false optional claim is legal.
+        assert job['status'] == 'saved'
+        assert history(fresh, fresh.get_snapshot(sid))['events'] == history(repo, before)['events']
+        assert fresh.get_snapshot(sid)['world_state']['characters']==before['world_state']['characters']
+    elif recovery == 'attempt':
         assert job['status'] == 'saved', job.get('error')
         assert saved_events(repo, sid)[-1]['player_action']['outcome'] == 'attempted'
     else:

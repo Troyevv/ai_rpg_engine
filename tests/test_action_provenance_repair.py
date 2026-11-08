@@ -53,6 +53,7 @@ def seed_archived(repo, case):
     data = archived(case)
     snapshot = repo.get_snapshot(sid)
     snapshot['world_state'] = deepcopy(data['before'])
+    snapshot.pop('background_considerations', None)  # Clock belongs to the imported checkpoint.
     with repo.connect() as db:
         db.execute('UPDATE saves SET state_json=? WHERE id=?', (json.dumps(snapshot), sid))
         db.execute('UPDATE turns SET sequence=? WHERE save_id=?', (data['before']['meta']['turn_id'], sid))

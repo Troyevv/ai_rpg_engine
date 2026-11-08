@@ -41,6 +41,10 @@ class RawTurnResult:
             warnings.append(dict(section='final_scene', path='final_scene.'+field,
                                  code='raw_unknown_field', action='ignore_field'))
         for key, value in payload.items():
+            if key in ('diagnostic', 'diagnostics'):
+                warnings.append(dict(section=key, path=key, code='raw_feedback_ignored',
+                                     action='ignore_field'))
+                continue  # Input-only feedback is never executable world data.
             if key not in (*SECTIONS, 'final_scene', 'choices', 'metadata', 'player_agency'):
                 if value not in (None, '', [], {}):
                     fatal('неизвестное непустое поле Extraction', 'raw_unknown_field', repairable=True,
@@ -310,7 +314,7 @@ def input_fields():
     return fields
 
 
-def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=None, groups=True, voice=False, elapsed_required=False, historical=True, player_agency_required=False, agency_audit_required=True):
+def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True, favorable_paths=True, communication=None, groups=True, voice=False, elapsed_required=False, historical=True, player_agency_required=False, agency_audit_required=True, consequence_first=False):
     """Model-facing projection of canonical types, with focused field guidance."""
     from collections import Counter
     def structural(node):
@@ -341,10 +345,12 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
     # New generation requires provenance; legacy raw/saved payloads remain readable.
     schema['properties']['movements']['items']['required'] += ['assertion', 'source_event_id']
     if player_agency_required:
-        schema['required'].append('player_agency')
+        if not consequence_first:
+            schema['required'].append('player_agency')
         agency = schema['properties']['player_agency']
         if agency_audit_required:
-            agency['required'].append('narrative_audit')
+            if not consequence_first:
+                agency['required'].append('narrative_audit')
             agency['properties']['narrative_audit'] = agency['properties']['narrative_audit']['anyOf'][0]
             action = agency['properties']['actions']['items']
             action['required'].append('target_mode')
@@ -352,7 +358,7 @@ def prompt_schema(*, relationship_evidence=True, reproduction=True, births=True,
             action['properties']['target_ids']['description'] = 'Intended canonical targets, not witnesses; noncanonical objects=[].'
             action['properties']['narrative_target_ids']['description'] = 'Actual targets; partial=subset, deferred may be [].'
             action['properties']['target_mode']['description'] = 'interaction=contact; reference=observe/mention, no delivery.'
-            agency['properties']['narrative_audit']['description'] = 'Significant controlled acts across WHOLE prose, even outside Events.'
+            agency['properties']['narrative_audit']['description'] = ('Optional findings; incidental_detail/uncertain grant no canonical authority.' if consequence_first else 'Significant controlled acts across WHOLE prose, even outside Events.')
             event = schema['properties']['events']['items']
             event['dependentRequired']['player_action_id'] = ['actor_id', 'target_ids']
             event['properties']['player_action_id']['description'] = 'Reviewed action ID; quote inherited. NPC reply stays separate.'

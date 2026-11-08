@@ -58,6 +58,7 @@ def seed(repo, data):
     ordinary_job(repo, sid, 'start')
     snapshot = repo.get_snapshot(sid)
     snapshot['world_state'] = deepcopy(data['before'])
+    snapshot.pop('background_considerations', None)  # Imported checkpoint owns its own clock.
     # Import the exact before state into test-only lineage; never modify evidence.
     with repo.connect() as db:
         db.execute('UPDATE saves SET state_json=? WHERE id=?', (json.dumps(snapshot), sid))

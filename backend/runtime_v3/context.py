@@ -363,7 +363,8 @@ class ExtractionContextBuilder:
         from backend.runtime_v3.player_actions import EXTRACTION_CONTRACT as action_contract, required as agency_required
         if agency_required(snapshot['world_state'], user_text, kind):
             from backend.runtime_v3.player_actions import LEGACY_EXTRACTION_CONTRACT
-            rules += action_contract if self.contract_version >= 2 else LEGACY_EXTRACTION_CONTRACT
+            from backend.runtime_v3.player_actions import CONSEQUENCE_CONTRACT
+            rules += CONSEQUENCE_CONTRACT if self.contract_version >= 3 else action_contract if self.contract_version >= 2 else LEGACY_EXTRACTION_CONTRACT
         from backend.services.letter_sources import enabled as historical_enabled
         historical = historical_enabled(snapshot['world_state'])
         if current.get('communication'): rules += REMOTE_EXTRACTION_CONTRACT
@@ -398,7 +399,7 @@ class ExtractionContextBuilder:
                        block('Choice context / controlled actor', choice_context(snapshot, scope, current, views, kind)),
                        block('Entity IDs', [dict(id=c['id'], name=c['name'], aliases=c.get('aliases', []))
                             for c in snapshot['character_cards'] if c['id'] in scope.relevant_actor_ids]),
-                       block('JSON Schema', prompt_schema(agency_audit_required=self.contract_version >= 2, player_agency_required=agency_required(snapshot['world_state'], user_text, kind), historical=historical, elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), groups=any(c['group'] for c in snapshot['world_state']['conversations'].values()), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
+                       block('JSON Schema', prompt_schema(consequence_first=self.contract_version >= 3, agency_audit_required=self.contract_version >= 2, player_agency_required=agency_required(snapshot['world_state'], user_text, kind), historical=historical, elapsed_required=kind=='turn' and not snapshot.get('_time_skip'), relationship_evidence=bool(current.get('relationship_evidence')), communication=bool(current.get('communication')), groups=any(c['group'] for c in snapshot['world_state']['conversations'].values()), voice=bool(current.get('communication',{}).get('active_call')), reproduction=reproductive, births=any(p['status']!='born' for p in current.get('pregnancies',[])), favorable_paths=state_outcome(snapshot)=='guaranteed_happy_path'))]
 
 
 def choice_context(snapshot, scope, current, views, kind):
@@ -495,7 +496,7 @@ def actor_knowledge(state, scope, current):
 
 def build_context(snapshot, turns, user_text, kind, context_length, reserve, extraction_text=None,
                   validation_feedback=None, recent_turns=6, prompts=None, world_history=None,
-                  target_context_budget=18000, pacing_decision=None, initiative_decision=None, continuity_decision=None, extraction_contract=2):
+                  target_context_budget=18000, pacing_decision=None, initiative_decision=None, continuity_decision=None, extraction_contract=3):
     from context_builder import estimate
     state = snapshot['world_state']; camera = state['camera']
     if extraction_text is None:

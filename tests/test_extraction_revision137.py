@@ -85,16 +85,13 @@ def test_domain_invariants_are_not_delegated_to_annotations(api, fault):
     else:
         raw['condition_changes'] = [dict(id='grant', actor_id=NPC, description='Нельзя выдать способность условием.', effects={'can_speak':True})]
     job, calls = run(client, sid, [raw, raw])
-    if fault == 'knowledge':
-        assert job['status'] == 'saved', job.get('error')
-        assert len(calls) == 2
-        assert repo.get_snapshot(sid)['world_state']['knowledge'] == before['world_state']['knowledge']
-        assert any(w['code'] == 'knowledge_witness_missing' for w in json.loads(repo.get_job(job['id'])['warnings_json']))
-    else:
-        assert job['status'] == 'error' and len(calls) == 3
-        assert repo.get_snapshot(sid) == before and not repo.list_turns(sid)
-        codes = {r['repair_error_code'] for r in json.loads(repo.get_job(job['id'])['repair_diagnostics_json'])}
-        assert ('movement_agency' if fault == 'agency' else 'life_transition_invalid') in codes
+    assert job['status'] == 'error' and len(calls) == 3
+    assert repo.get_snapshot(sid) == before and not repo.list_turns(sid)
+    codes = {r['repair_error_code'] for r in json.loads(repo.get_job(job['id'])['repair_diagnostics_json'])}
+    expected = {'agency':'movement_agency', 'knowledge':'knowledge_witness_missing',
+                'capability_grant':'life_transition_invalid'}[fault]
+    assert expected in codes
+
 
 
 @pytest.mark.parametrize('initial_death,final_death', [(True,False), (False,True), (True,True)])

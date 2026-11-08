@@ -31,11 +31,13 @@ def test_original_real_successful_repair_is_accepted(case):
         assert result.state['characters']['char_galina']['location_id']=='loc_home_galina'
 
 
-def test_repair_envelope_is_not_output_and_stays_invalid():
+def test_repair_feedback_is_ignored_but_real_event_conflict_stays_invalid():
     d=DATA['003'];payload=d['responses'][1]['payload']
     assert 'diagnostic' in json.loads(payload)
     with pytest.raises(StructuralDeltaError) as e:resolve(d,payload)
-    assert e.value.code=='raw_unknown_field'
+    assert e.value.code=='player_action_event_mismatch'
+    from backend.runtime_v3.raw import RawTurnResult
+    assert any(w['code']=='raw_feedback_ignored' for w in RawTurnResult.parse(payload).warnings)
     feedback=json.loads(repair_feedback(e.value.diagnostics('validation_failed'),payload,d['before']))
     assert 'NOT output fields' in feedback['contract']
     assert feedback['original_extraction']==json.loads(payload)
@@ -80,24 +82,27 @@ def test_real_accepted_response_job_history_reload_rollback(tmp_path,repair):
     if repair:replies.insert(0,json.loads(d['responses'][0]['payload']))
     job,calls=execute(repo,sid,d,replies,legacy=False,config=dict(model='test',context_length=131072,max_tokens=2400,update_tokens=8192))
     assert job['status']=='saved',job['error']
-    assert len(calls)==2+int(repair)
+    assert len(calls)==2  # First original response no longer needs question coverage repair.
     assert history(repo,sid)['events']
     assert Repository(repo.path).get_snapshot(sid)==repo.get_snapshot(sid)
     repo.rollback_last(sid, repo.get_save(sid)['revision'])
     assert repo.get_snapshot(sid)['world_state']==before['world_state']
 
 
-def test_real_failed_visit_then_real_retry_preserves_narrative(tmp_path):
-    from test_integrated_repair247 import execute
+def test_original_visit_now_saves_without_formal_farewell_event(tmp_path):
+    from test_integrated_repair247 import execute, history
+    from backend.repositories.preparation import Repository
     repo,sid,d=repository_case(tmp_path,'005');before=repo.get_snapshot(sid)
     cfg=dict(model='test',context_length=131072,max_tokens=2400,update_tokens=8192)
-    job,_=execute(repo,sid,d,[json.loads(r['payload']) for r in d['responses']],legacy=False,config=cfg)
-    assert job['status']=='error' and repo.get_snapshot(sid)==before
-    fixed=DATA['006']['responses'][-1]['payload']
-    result,calls=execute(repo,sid,d,[json.loads(fixed)],retry=job['id'],legacy=False,config=cfg)
-    assert result['status']=='saved',result['error']
-    assert result['narrative']==d['narrative'] and len(calls)==1
-    assert repo.get_snapshot(sid)['world_state']['characters']['char_alexey']['location_id']=='loc_home_viktor'
+    job,calls=execute(repo,sid,d,[json.loads(r['payload']) for r in d['responses']],legacy=False,config=cfg)
+    assert job['status']=='saved',job['error']
+    assert job['narrative']==d['narrative']
+    assert len(calls)==2  # Independent movement source is valid; no question inventory needed.
+    after=Repository(repo.path).get_snapshot(sid)
+    assert after['world_state']['characters']['char_alexey']['location_id']=='loc_home_viktor'
+    assert any(e.get('local_id')=='ev_galina_farewell' for e in history(repo,sid)['events'])
+    repo.rollback_last(sid)
+    assert repo.get_snapshot(sid)==before
 
 
 def test_galina_failure_abandon_keeps_history_and_can_reload(tmp_path):

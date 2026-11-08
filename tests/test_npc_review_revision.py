@@ -129,7 +129,7 @@ def test_profile_acknowledgement_cannot_cover_a_later_revision(db):
     edit(repo,sid,'new_npc',**command(repo,sid,'save',fields,profile_acknowledgements=acknowledgements))
     raw=raw_for(snapshot);observer=snapshot['world_state']['camera']['controlled_actor_id']
     raw.update(facts=[dict(id='hair_change',text='Волосы стали синими.',character_ids=['new_npc'],evidence='Покрасила волосы.')],
-        events=[dict(id='hair_change_event',text='Покрасила волосы.',participants=['new_npc'],witnesses=[observer],fact_ids=['hair_change'],evidence='Покрасила волосы.')],
+        events=[dict(id='hair_change_event',text='Покрасила волосы.',medium='observation',participants=['new_npc'],witnesses=[observer],fact_ids=['hair_change'],evidence='Покрасила волосы.')],
         knowledge_gained=[dict(actor_id=observer,fact_id='hair_change',source_event_id='hair_change_event',evidence='Увидел.')],
         appearance_deltas=[dict(actor_id='new_npc',item_id='hair',operation='update',category='presentation',kind='hairstyle',text='Синие короткие волосы',expected_revision=1,source_event_id='hair_change_event',fact_id='hair_change',assertion='established_visual_outcome',transition='voluntary',evidence='Покрасила волосы.')])
     jid=repo.begin_job(sid,'Смотрю.','turn',CONFIG);run(repo,jid,raw);assert repo.get_job(jid)['status']=='saved',repo.get_job(jid)['error']

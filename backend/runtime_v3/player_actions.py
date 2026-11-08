@@ -22,7 +22,7 @@ class PlayerAction(BaseModel):
 
 
 # Producer version is recorded by the server, never selected by model output.
-EXTRACTION_VERSION = 2
+EXTRACTION_VERSION = 3
 
 
 class NarrativeAgencyItem(BaseModel):
@@ -30,7 +30,7 @@ class NarrativeAgencyItem(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     narrative_evidence: str = Field(min_length=1)
     classification: Literal['authorized', 'execution_detail', 'involuntary',
-                            'npc_interpretation', 'unauthorized_choice', 'uncertain']
+                            'npc_interpretation', 'unauthorized_choice', 'uncertain', 'incidental_detail']
     player_action_id: str | None
 
 
@@ -95,6 +95,18 @@ NarrativeAgencyItem examples: a=verified "Open folder" action:
 {"narrative_evidence":"Agrees to travel","classification":"unauthorized_choice","player_action_id":null}
 """
 
+CONSEQUENCE_CONTRACT = """
+PLAYER AGENCY: preserve input meaning/targets; no unchosen substantial decisions.
+Review/audit optional; uncertain/incidental_detail advisory, never domain authority.
+No Event per everyday act; NPC replies support ALL heard Knowledge.
+Unlinked inventory proves nothing. Canonical player Events require verified PlayerAction;
+use schema provenance/targets/delivery/coverage. Omit duplicate quotes; conflicts reject.
+Arrival Event.order=Movement.order. unauthorized_choice/violated means SIGNIFICANT choice,
+not a gesture. Report unsupported substantial outcomes, never delete them to fake success.
+NPC acts grant no player consent.
+"""
+
+
 
 
 def required(state, player_input, kind='turn'):
@@ -106,6 +118,7 @@ def resolver_options(state, player_input, kind='turn', contract_version=1, *, ti
     """The ordinary production/QA boundary; no caller guesses agency by mode."""
     needed = required(state, player_input, kind)
     return dict(require_player_agency=needed, agency_audit_required=needed and contract_version >= 2,
+                consequence_first=contract_version >= 3,
                 require_elapsed=kind == 'turn' and not time_skip)
 
 
@@ -113,23 +126,60 @@ def review(resolver, raw):
     """Run before any domain application, including optional Event salvage."""
     from backend.runtime_v3.resolver import normalized
     value = raw.player_agency
+    referenced = {row.get('player_action_id') for row in raw.records['events']
+                  if isinstance(row, dict) and isinstance(row.get('player_action_id'), str)}
     if value is None:
-        if resolver.require_player_agency:
+        if resolver.require_player_agency and not resolver.consequence_first:
             fatal('Extraction не проверил соответствие Narrative действию игрока.',
                   'player_agency_missing', repairable=True, section='player_agency')
         return {}
+    if resolver.consequence_first and isinstance(value, dict):
+        # Audit has no canonical consumers and never grants authority. Parse its
+        # entries independently so malformed annotations cannot suppress actions.
+        value = dict(value)
+        if value.get('status') == 'violated':
+            narrative_conflict()
+        audit = value.pop('narrative_audit', None)
+        valid = []
+        for i, item in enumerate(audit if isinstance(audit, list) else []):
+            if isinstance(item, dict) and item.get('classification') == 'unauthorized_choice':
+                narrative_conflict(reason='audit_status_conflict', section='player_agency',
+                                   path=f'player_agency.narrative_audit[{i}]')
+            try:
+                valid.append(NarrativeAgencyItem.model_validate(item).model_dump())
+            except ValidationError:
+                resolver.warn('player_agency', i, 'Некорректная вспомогательная запись аудита.',
+                              code='player_agency_audit_ignored')
+        value['narrative_audit'] = valid
+        if isinstance(value.get('actions'), list):
+            linked = []
+            for i, action in enumerate(value['actions']):
+                if isinstance(action, dict) and action.get('meaning') == 'changed':
+                    narrative_conflict(section='player_agency', path=f'player_agency.actions[{i}]')
+                if isinstance(action, dict) and isinstance(action.get('id'), str) and action['id'] in referenced:
+                    linked.append(action)
+                else:
+                    resolver.warn('player_agency', i, 'Неподтверждённая запись action-list не даёт полномочий.',
+                                  code='player_action_unattested')
+            value['actions'] = linked
     try:
         parsed = PlayerAgencyReview.model_validate(value)
     except ValidationError:
         fatal('Некорректная типизированная проверка действий игрока.',
               'player_agency_invalid', repairable=True, section='player_agency')
-    if parsed.status != 'preserved':
+    if parsed.status == 'violated' or (parsed.status == 'uncertain' and not resolver.consequence_first):
         narrative_conflict()
+    if parsed.status == 'uncertain':
+        resolver.warn('player_agency', 0, 'Общее сомнение аудита; последствия проверяются отдельно.',
+                      code='player_agency_uncertain')
     for i, finding in enumerate(parsed.narrative_audit or []):
-        if finding.classification in ('unauthorized_choice', 'uncertain'):
+        if finding.classification == 'unauthorized_choice' or (finding.classification == 'uncertain' and not resolver.consequence_first):
             narrative_conflict(reason='audit_status_conflict', section='player_agency',
                                path=f'player_agency.narrative_audit[{i}]')
-    if resolver.agency_audit_required and parsed.narrative_audit is None:
+        if finding.classification in ('uncertain', 'incidental_detail') and resolver.consequence_first:
+            resolver.warn('player_agency', i, 'Вспомогательное замечание к повествованию, без полномочий на изменения.',
+                          code='player_agency_audit_advisory')
+    if resolver.agency_audit_required and not resolver.consequence_first and parsed.narrative_audit is None:
         fatal('Новый Extraction требует narrative_audit всего Narrative, даже вне Events.',
               'player_agency_audit_missing', repairable=True, section='player_agency')
     actions = {}
@@ -164,6 +214,10 @@ def review(resolver, raw):
         if ((reference is not None and reference not in actions)
                 or (finding.classification in ('authorized', 'execution_detail') and reference is None)
                 or (finding.classification == 'npc_interpretation' and reference is not None)):
+            if resolver.consequence_first:
+                resolver.warn('player_agency', i, 'Ссылка вспомогательного аудита не подтверждена.',
+                              code='player_agency_audit_reference_ignored')
+                continue
             fatal('Audit должен ссылаться на проверенный PlayerAction текущего ввода; '
                   'интерпретация NPC не является разрешением игрока.',
                   'player_agency_audit_reference_invalid', repairable=True, **path)

@@ -106,7 +106,7 @@ def test_100_jobs_through_engine_with_pov_background_and_reload(db):
                 character_changes=[dict(id=current,situation='У окна',emotion='ревнует',evidence='Разговор продолжается.')],
                 facts=[dict(id='f'+str(step),text='Факт '+str(step),evidence='Разговор продолжается.')],
                 events=[dict(id='e',text='Разговор',participants=[current],witnesses=[current],fact_ids=['f'+str(step)],medium='conversation',evidence='Разговор продолжается.')],
-                knowledge_gained=[dict(actor_id=current,fact_id='f'+str(step),source_event_id='missing' if step%7==0 else 'e',evidence='Разговор продолжается.')],
+                knowledge_gained=[dict(actor_id=current,fact_id='f'+str(step),source_event_id='missing' if step%7==0 and len(calls)==2 else 'e',evidence='Разговор продолжается.')],
                 relationship_changes=[dict(source_id='b',target_id='c',context='Разговор',dimensions={'trust':step,'sympathy':10},evidence='Разговор продолжается.')])
             if kind=='turn': raw['movements']=[dict(actor_id=current,to_location_id=raw['final_scene']['location_id'],player_assertion='explicit_choice',player_evidence='Я перехожу в '+raw['final_scene']['location_id']+'.')]
             arrival_sources(raw)
@@ -114,7 +114,8 @@ def test_100_jobs_through_engine_with_pov_background_and_reload(db):
         with patch('engine.find_loaded_model',return_value={'config':{}}),patch('engine.chat_stream',side_effect=stream):
             engine.run_job(repo.path,job,engine.Worker())
         assert repo.get_job(job)['status']=='saved',(step,repo.get_job(job)['error'])
-        assert len(calls)==2
+        # A declared acquisition with a broken source needs one bounded repair.
+        assert len(calls)==(3 if step%7==0 else 2)
         snapshot=repo.get_snapshot(sid);assert_world_state_v3_invariants(snapshot['world_state'])
         if step==50:
             with repo.connect() as conn:conn.execute("UPDATE world_history_v3 SET payload_json='corrupted' WHERE id=?",(snapshot['history_head'],))

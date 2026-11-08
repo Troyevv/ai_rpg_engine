@@ -73,6 +73,15 @@ def apply_knowledge(resolver, raw, events, *, rejected_event_ids=(), unvalidated
     # must not retire a valid belief or prevent another grounded acquisition.
     for i, item in r.records(raw, 'knowledge_gained'):
         def reject(reason, code='knowledge_path_invalid', field=None):
+            if (r.consequence_first and r.mode == 'turn' and r.observed
+                    and isinstance(actor, str) and actor in s['characters']
+                    and isinstance(fid, str) and fid in s['facts']):
+                # A declared acquisition is a canonical consequence, not audit.
+                # Repair its source instead of saving prose with lost learning.
+                errors.append(StructuralDeltaError(reason, code, repairable=True,
+                    section='knowledge_gained', index=i, field=field,
+                    source_ids=[v for v in (actor, fid, eid) if isinstance(v, str)]))
+                return
             r.warn('knowledge_gained', i, reason, code=code)
             r.warnings[-1].update(path=f'knowledge_gained[{i}]' + ('.'+field if field else ''),
                                  source_ids=[v for v in (actor, fid, eid) if isinstance(v, str)])
@@ -116,7 +125,10 @@ def apply_knowledge(resolver, raw, events, *, rejected_event_ids=(), unvalidated
         entry = r.typed(Knowledge, dict(actor_id=actor, fact_id=fid, status=status), 'knowledge_gained', i)
         if entry: candidates.append((i, item, event, entry))
 
-    if not candidates: return
+    if not candidates:
+        if errors:
+            raise StructuralDeltaError.combine(errors)
+        return
 
     # Index once, including only actors actually receiving evidence. This is
     # O(K + proposals), never facts × NPCs. Suspicions may coexist.

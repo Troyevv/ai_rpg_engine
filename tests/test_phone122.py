@@ -23,6 +23,11 @@ def setup(tmp_path):
     ordinary_job(repo,sid,'start')
     scene=repo.get_save(sid)['state']['scene_meta']
     repo.update_scene_meta(sid,dict(time='завтра 09:00',location=scene['location'],present_ids=scene['present_ids']))
+    # This checkpoint starts tomorrow; its setup clock jump is not a played interval.
+    snapshot=repo.get_snapshot(sid)
+    snapshot['background_considerations']=dict(since_minute=snapshot['world_state']['meta']['world_time'],attempts={})
+    with repo.connect() as conn:
+        conn.execute('UPDATE saves SET state_json=? WHERE id=?',(json.dumps(snapshot),sid))
     return repo,client,sid
 
 
