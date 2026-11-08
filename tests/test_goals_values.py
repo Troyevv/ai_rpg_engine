@@ -69,7 +69,9 @@ def test_extraction_supplies_existing_ids_status_revision_not_terminal_entries()
     current=json.loads(next(m['content'].split('\n',1)[1] for m in msgs if m['content'].startswith('Текущее состояние')))
     row=current['characters']['a']['intentions'][0]
     assert row['id']==ILYA and row['status']=='active' and row['revision']==0
-    assert 'Live regression' in str(msgs)
+    rules=msgs[0]['content']
+    assert 'completed needs actual narrated result' in rules
+    assert 'offering, NOT relationship/weekend goals' in rules
 
 
 @pytest.mark.parametrize('bad', ['future','missing_event','stale_revision','unknown_id'])
